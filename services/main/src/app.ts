@@ -437,7 +437,7 @@ const cargoIndexFile = t.Object({ name: t.String({ minLength: 1, maxLength: 64 }
   sha256: t.String({ pattern: '^[0-9a-f]{64}$' }) }, { additionalProperties: false });
 const cargoTriple = t.Union([t.Literal('x86_64-unknown-linux-gnu'),
   t.Literal('x86_64-pc-windows-msvc')]);
-const cargoRequest = t.Object({ profile: t.Literal('cargo-index-exact-resolver2-v1'),
+const cargoRequestV1 = t.Object({ profile: t.Literal('cargo-index-exact-resolver2-v1'),
   registryIndexUrl: t.String({ minLength: 10, maxLength: 300 }),
   manifestBase64: t.String({ maxLength: 87_384 }),
   manifestSha256: t.String({ pattern: '^[0-9a-f]{64}$' }),
@@ -446,6 +446,9 @@ const cargoRequest = t.Object({ profile: t.Literal('cargo-index-exact-resolver2-
   features: t.Array(t.String({ minLength: 1, maxLength: 64 }), { maxItems: 32 }),
   defaultFeatures: t.Boolean(),
 }, { additionalProperties: false });
+const cargoRequestV2 = t.Object({ ...cargoRequestV1.properties,
+  profile: t.Literal('cargo-index-exact-resolver2-v2') }, { additionalProperties: false });
+const cargoRequest = t.Union([cargoRequestV1, cargoRequestV2]);
 const cargoSelected = t.Object({ id: t.String(), source: t.String(),
   name: t.String(), version: t.String() });
 const cargoInstance = t.Object({ ...cargoSelected.properties,
@@ -462,9 +465,29 @@ const cargoOutcome = t.Object({ status: t.Union([t.Literal('solved'),
   edges: t.Array(cargoEdge), missing: t.Array(t.String()),
   unsupportedClauses: t.Array(t.String()), releaseCount: t.Number(),
   edgeCount: t.Number(), featureActivationCount: t.Number() });
-const cargoResolution = t.Object({ profile: t.Literal('cargo-index-exact-resolution-v1'),
-  resolution: t.String(), requestDigest: t.String(), request: cargoRequest,
+const cargoLinksConflict = t.Object({ kind: t.Literal('native-links'),
+  links: t.String({ minLength: 1, maxLength: 64 }),
+  packages: t.Array(t.Object({ ...cargoSelected.properties,
+    roles: t.Array(cargoInstance.properties.role, { maxItems: 2 }) }),
+  { minItems: 2, maxItems: 128 }) });
+const cargoOutcomeV2 = t.Union([
+  t.Object({ ...cargoOutcome.properties,
+    linksConflicts: t.Array(cargoLinksConflict, { maxItems: 0 }) }),
+  t.Object({ ...cargoOutcome.properties, status: t.Literal('unsatisfiable'),
+    selected: t.Array(cargoSelected, { maxItems: 0 }),
+    instances: t.Array(cargoInstance, { maxItems: 0 }),
+    edges: t.Array(cargoEdge, { maxItems: 0 }),
+    missing: t.Array(t.String(), { maxItems: 0 }),
+    unsupportedClauses: t.Array(t.String(), { maxItems: 0 }),
+    linksConflicts: t.Array(cargoLinksConflict, { minItems: 1, maxItems: 64 }) }),
+]);
+const cargoResolutionV1 = t.Object({ profile: t.Literal('cargo-index-exact-resolution-v1'),
+  resolution: t.String(), requestDigest: t.String(), request: cargoRequestV1,
   outcome: cargoOutcome, createdAt: t.String() });
+const cargoResolutionV2 = t.Object({ ...cargoResolutionV1.properties,
+  profile: t.Literal('cargo-index-exact-resolution-v2'), request: cargoRequestV2,
+  outcome: cargoOutcomeV2 });
+const cargoResolution = t.Union([cargoResolutionV1, cargoResolutionV2]);
 const cargoResolutionWrite = t.Object({ resolution: cargoResolution, replayed: t.Boolean() });
 const goProxyCaptureV1Request = t.Object({ profile: t.Literal('go-module-proxy-capture-v1'),
   path: goModuleRequirement.properties.path,

@@ -58,13 +58,25 @@ The solved response keeps a lock selection by source/name/version and a separate
 active host/target instance graph with features and typed edges. The API returns
 explicit incomplete, unsupported and budget outcomes with empty graph fields.
 Malformed bytes or duplicate source identities return 422; a changed request on
-an existing key returns 409. It makes no artifact availability, checksum
+an existing key returns 409. The same routes accept the separately versioned
+`cargo-index-exact-resolver2-v2` request and return
+`cargo-index-exact-resolution-v2` receipts. Their `linksConflicts` witnesses
+identify exact selected native-library owners on `unsatisfiable`; all other
+v2 outcomes contain an empty witness array. The v1 receipt profile and outcome
+shape remain unchanged. Both profiles use the existing immutable owner table;
+the request profile binds the re-solve semantics on replay and restored reads.
+Changing profiles under an existing idempotency key is a changed intent (409).
+It makes no artifact availability, checksum
 verification, installation or build claim.
 
 The Cargo operation reads no provider data at execution time. Its upper bound is
-O(B + V + E + F·E) work for B supplied bytes, V at most 128 releases, E at most
-256 dependency edges and F at most 512 feature activations; feature expansion
-may inspect each release's bounded dependency list. It performs one bounded
+O(B + V log V + E log E + F·(E + F log F)) work for B supplied bytes, V at most
+128 releases, E at most 256 dependency edges per pass and F at most 512 feature
+activations; feature expansion may inspect each release's bounded dependency
+list and sort accumulated requests. V2 shares the activation budget across its
+lock and active feature processing; lock traversal and the active graph each
+retain their edge limit. The conflict pass groups at most V selected owners by
+native name and sorts the bounded witnesses. It performs one bounded
 insert and one indexed PostgreSQL read on create/replay, or one indexed read for
 exact private retrieval, followed by a bounded re-solve. Request and response
 bytes grow with the supplied snapshot and graph. Native Cargo comparison is a

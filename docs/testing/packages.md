@@ -44,9 +44,35 @@ immutable exact replay, changed-key conflict and inactive-principal fencing.
 The selected API integration run `20260926t052109-b15e57` passed; its 11
 reported IDs are partial evidence only. The oracle result is retained locally
 at `.temp/package-cargo-oracle/result.json`.
-PKG01/PKG02/PKG12/PKG13 remain partial: general semver selection, native
+At G-008, PKG01/PKG02/PKG12/PKG13 remained partial: general semver selection, native
 conflict and yanked-lock eligibility, broader target predicates, provider
 capture, artifact checks and installation are still separate work.
+
+G-011 adds `cargo-index-exact-resolver2-v2` and an exact native `links` conflict
+witness. `yarn package:cargo-oracle` retains G-008's comparison and adds ten
+local-registry scenarios: incompatible selected versions sharing a native
+name, distinct names, one owner across roles, Linux/Windows and default-feature
+variants, different package names sharing `links`, inactive target/root-optional
+owners, and inactive versus enabled transitive optional owners. Cargo 1.98.1
+and REZICS agree on conflict versus solved outcomes, exact solvable lock/source
+identities, active edges and feature unions. Each native `links` crate includes
+a build script that would fail if run; metadata resolution does not execute it.
+The extra oracle result is `.temp/package-cargo-oracle/links-result.json`.
+
+Unit cases preserve v1's exact unsupported receipt shape, deterministic sorted
+v2 witnesses and role identities, unselected-release isolation and separate
+malformed/missing/unsupported/budget outcomes. Small 1/8/24-release additions
+leave selected-graph counters unchanged; this is bounded complexity evidence,
+not deployment capacity. Real Account/Access/PostgreSQL API run
+`20260926t054414-5ce654` passed private reads, distinct scopes, concurrent same-key
+convergence, v1/v2 replay, changed-profile refusal, immutable rows and revoked
+principals. Isolated physical restore `20260926t054502-d24a52` preserved exact
+v1/v2 stored receipts and replay. That worker run used the pre-integration
+recovery coverage; the manager owns adding the Cargo table to the signed
+coverage and repeating the restore check on merged source.
+PKG02/PKG12/PKG13 remain partial. General semver/backtracking, other Cargo
+constraints, yanked fresh/locked eligibility, provider capture, artifact checks
+and installation remain separate requirements.
 
 G-005's local-replacement slice passed `yarn package:go-oracle` on pinned
 Go 1.27.1 with `go 1.16` files and a generated local module directory. Its

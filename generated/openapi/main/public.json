@@ -31433,272 +31433,548 @@
           "content": {
             "application/json": {
               "schema": {
-                "additionalProperties": false,
-                "properties": {
-                  "defaultFeatures": {
-                    "type": "boolean"
-                  },
-                  "features": {
-                    "items": {
-                      "maxLength": 64,
-                      "minLength": 1,
-                      "type": "string"
-                    },
-                    "maxItems": 32,
-                    "type": "array"
-                  },
-                  "host": {
-                    "enum": [
-                      "x86_64-unknown-linux-gnu",
-                      "x86_64-pc-windows-msvc"
-                    ],
-                    "type": "string"
-                  },
-                  "indexFiles": {
-                    "items": {
-                      "additionalProperties": false,
-                      "properties": {
-                        "bytesBase64": {
-                          "maxLength": 87384,
-                          "type": "string"
-                        },
-                        "name": {
+                "anyOf": [
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "defaultFeatures": {
+                        "type": "boolean"
+                      },
+                      "features": {
+                        "items": {
                           "maxLength": 64,
                           "minLength": 1,
                           "type": "string"
                         },
-                        "sha256": {
-                          "pattern": "^[0-9a-f]{64}$",
-                          "type": "string"
-                        }
+                        "maxItems": 32,
+                        "type": "array"
                       },
-                      "required": [
-                        "name",
-                        "bytesBase64",
-                        "sha256"
-                      ],
-                      "type": "object"
+                      "host": {
+                        "enum": [
+                          "x86_64-unknown-linux-gnu",
+                          "x86_64-pc-windows-msvc"
+                        ],
+                        "type": "string"
+                      },
+                      "indexFiles": {
+                        "items": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "bytesBase64": {
+                              "maxLength": 87384,
+                              "type": "string"
+                            },
+                            "name": {
+                              "maxLength": 64,
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "sha256": {
+                              "pattern": "^[0-9a-f]{64}$",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "name",
+                            "bytesBase64",
+                            "sha256"
+                          ],
+                          "type": "object"
+                        },
+                        "maxItems": 32,
+                        "type": "array"
+                      },
+                      "manifestBase64": {
+                        "maxLength": 87384,
+                        "type": "string"
+                      },
+                      "manifestSha256": {
+                        "pattern": "^[0-9a-f]{64}$",
+                        "type": "string"
+                      },
+                      "profile": {
+                        "const": "cargo-index-exact-resolver2-v1",
+                        "type": "string"
+                      },
+                      "registryIndexUrl": {
+                        "maxLength": 300,
+                        "minLength": 10,
+                        "type": "string"
+                      },
+                      "target": {
+                        "enum": [
+                          "x86_64-unknown-linux-gnu",
+                          "x86_64-pc-windows-msvc"
+                        ],
+                        "type": "string"
+                      }
                     },
-                    "maxItems": 32,
-                    "type": "array"
-                  },
-                  "manifestBase64": {
-                    "maxLength": 87384,
-                    "type": "string"
-                  },
-                  "manifestSha256": {
-                    "pattern": "^[0-9a-f]{64}$",
-                    "type": "string"
-                  },
-                  "profile": {
-                    "const": "cargo-index-exact-resolver2-v1",
-                    "type": "string"
-                  },
-                  "registryIndexUrl": {
-                    "maxLength": 300,
-                    "minLength": 10,
-                    "type": "string"
-                  },
-                  "target": {
-                    "enum": [
-                      "x86_64-unknown-linux-gnu",
-                      "x86_64-pc-windows-msvc"
+                    "required": [
+                      "profile",
+                      "registryIndexUrl",
+                      "manifestBase64",
+                      "manifestSha256",
+                      "indexFiles",
+                      "host",
+                      "target",
+                      "features",
+                      "defaultFeatures"
                     ],
-                    "type": "string"
+                    "type": "object"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "defaultFeatures": {
+                        "type": "boolean"
+                      },
+                      "features": {
+                        "items": {
+                          "maxLength": 64,
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "maxItems": 32,
+                        "type": "array"
+                      },
+                      "host": {
+                        "enum": [
+                          "x86_64-unknown-linux-gnu",
+                          "x86_64-pc-windows-msvc"
+                        ],
+                        "type": "string"
+                      },
+                      "indexFiles": {
+                        "items": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "bytesBase64": {
+                              "maxLength": 87384,
+                              "type": "string"
+                            },
+                            "name": {
+                              "maxLength": 64,
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "sha256": {
+                              "pattern": "^[0-9a-f]{64}$",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "name",
+                            "bytesBase64",
+                            "sha256"
+                          ],
+                          "type": "object"
+                        },
+                        "maxItems": 32,
+                        "type": "array"
+                      },
+                      "manifestBase64": {
+                        "maxLength": 87384,
+                        "type": "string"
+                      },
+                      "manifestSha256": {
+                        "pattern": "^[0-9a-f]{64}$",
+                        "type": "string"
+                      },
+                      "profile": {
+                        "const": "cargo-index-exact-resolver2-v2",
+                        "type": "string"
+                      },
+                      "registryIndexUrl": {
+                        "maxLength": 300,
+                        "minLength": 10,
+                        "type": "string"
+                      },
+                      "target": {
+                        "enum": [
+                          "x86_64-unknown-linux-gnu",
+                          "x86_64-pc-windows-msvc"
+                        ],
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "profile",
+                      "registryIndexUrl",
+                      "manifestBase64",
+                      "manifestSha256",
+                      "indexFiles",
+                      "host",
+                      "target",
+                      "features",
+                      "defaultFeatures"
+                    ],
+                    "type": "object"
                   }
-                },
-                "required": [
-                  "profile",
-                  "registryIndexUrl",
-                  "manifestBase64",
-                  "manifestSha256",
-                  "indexFiles",
-                  "host",
-                  "target",
-                  "features",
-                  "defaultFeatures"
-                ],
-                "type": "object"
+                ]
               }
             },
             "application/x-www-form-urlencoded": {
               "schema": {
-                "additionalProperties": false,
-                "properties": {
-                  "defaultFeatures": {
-                    "type": "boolean"
-                  },
-                  "features": {
-                    "items": {
-                      "maxLength": 64,
-                      "minLength": 1,
-                      "type": "string"
-                    },
-                    "maxItems": 32,
-                    "type": "array"
-                  },
-                  "host": {
-                    "enum": [
-                      "x86_64-unknown-linux-gnu",
-                      "x86_64-pc-windows-msvc"
-                    ],
-                    "type": "string"
-                  },
-                  "indexFiles": {
-                    "items": {
-                      "additionalProperties": false,
-                      "properties": {
-                        "bytesBase64": {
-                          "maxLength": 87384,
-                          "type": "string"
-                        },
-                        "name": {
+                "anyOf": [
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "defaultFeatures": {
+                        "type": "boolean"
+                      },
+                      "features": {
+                        "items": {
                           "maxLength": 64,
                           "minLength": 1,
                           "type": "string"
                         },
-                        "sha256": {
-                          "pattern": "^[0-9a-f]{64}$",
-                          "type": "string"
-                        }
+                        "maxItems": 32,
+                        "type": "array"
                       },
-                      "required": [
-                        "name",
-                        "bytesBase64",
-                        "sha256"
-                      ],
-                      "type": "object"
+                      "host": {
+                        "enum": [
+                          "x86_64-unknown-linux-gnu",
+                          "x86_64-pc-windows-msvc"
+                        ],
+                        "type": "string"
+                      },
+                      "indexFiles": {
+                        "items": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "bytesBase64": {
+                              "maxLength": 87384,
+                              "type": "string"
+                            },
+                            "name": {
+                              "maxLength": 64,
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "sha256": {
+                              "pattern": "^[0-9a-f]{64}$",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "name",
+                            "bytesBase64",
+                            "sha256"
+                          ],
+                          "type": "object"
+                        },
+                        "maxItems": 32,
+                        "type": "array"
+                      },
+                      "manifestBase64": {
+                        "maxLength": 87384,
+                        "type": "string"
+                      },
+                      "manifestSha256": {
+                        "pattern": "^[0-9a-f]{64}$",
+                        "type": "string"
+                      },
+                      "profile": {
+                        "const": "cargo-index-exact-resolver2-v1",
+                        "type": "string"
+                      },
+                      "registryIndexUrl": {
+                        "maxLength": 300,
+                        "minLength": 10,
+                        "type": "string"
+                      },
+                      "target": {
+                        "enum": [
+                          "x86_64-unknown-linux-gnu",
+                          "x86_64-pc-windows-msvc"
+                        ],
+                        "type": "string"
+                      }
                     },
-                    "maxItems": 32,
-                    "type": "array"
-                  },
-                  "manifestBase64": {
-                    "maxLength": 87384,
-                    "type": "string"
-                  },
-                  "manifestSha256": {
-                    "pattern": "^[0-9a-f]{64}$",
-                    "type": "string"
-                  },
-                  "profile": {
-                    "const": "cargo-index-exact-resolver2-v1",
-                    "type": "string"
-                  },
-                  "registryIndexUrl": {
-                    "maxLength": 300,
-                    "minLength": 10,
-                    "type": "string"
-                  },
-                  "target": {
-                    "enum": [
-                      "x86_64-unknown-linux-gnu",
-                      "x86_64-pc-windows-msvc"
+                    "required": [
+                      "profile",
+                      "registryIndexUrl",
+                      "manifestBase64",
+                      "manifestSha256",
+                      "indexFiles",
+                      "host",
+                      "target",
+                      "features",
+                      "defaultFeatures"
                     ],
-                    "type": "string"
+                    "type": "object"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "defaultFeatures": {
+                        "type": "boolean"
+                      },
+                      "features": {
+                        "items": {
+                          "maxLength": 64,
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "maxItems": 32,
+                        "type": "array"
+                      },
+                      "host": {
+                        "enum": [
+                          "x86_64-unknown-linux-gnu",
+                          "x86_64-pc-windows-msvc"
+                        ],
+                        "type": "string"
+                      },
+                      "indexFiles": {
+                        "items": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "bytesBase64": {
+                              "maxLength": 87384,
+                              "type": "string"
+                            },
+                            "name": {
+                              "maxLength": 64,
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "sha256": {
+                              "pattern": "^[0-9a-f]{64}$",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "name",
+                            "bytesBase64",
+                            "sha256"
+                          ],
+                          "type": "object"
+                        },
+                        "maxItems": 32,
+                        "type": "array"
+                      },
+                      "manifestBase64": {
+                        "maxLength": 87384,
+                        "type": "string"
+                      },
+                      "manifestSha256": {
+                        "pattern": "^[0-9a-f]{64}$",
+                        "type": "string"
+                      },
+                      "profile": {
+                        "const": "cargo-index-exact-resolver2-v2",
+                        "type": "string"
+                      },
+                      "registryIndexUrl": {
+                        "maxLength": 300,
+                        "minLength": 10,
+                        "type": "string"
+                      },
+                      "target": {
+                        "enum": [
+                          "x86_64-unknown-linux-gnu",
+                          "x86_64-pc-windows-msvc"
+                        ],
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "profile",
+                      "registryIndexUrl",
+                      "manifestBase64",
+                      "manifestSha256",
+                      "indexFiles",
+                      "host",
+                      "target",
+                      "features",
+                      "defaultFeatures"
+                    ],
+                    "type": "object"
                   }
-                },
-                "required": [
-                  "profile",
-                  "registryIndexUrl",
-                  "manifestBase64",
-                  "manifestSha256",
-                  "indexFiles",
-                  "host",
-                  "target",
-                  "features",
-                  "defaultFeatures"
-                ],
-                "type": "object"
+                ]
               }
             },
             "multipart/form-data": {
               "schema": {
-                "additionalProperties": false,
-                "properties": {
-                  "defaultFeatures": {
-                    "type": "boolean"
-                  },
-                  "features": {
-                    "items": {
-                      "maxLength": 64,
-                      "minLength": 1,
-                      "type": "string"
-                    },
-                    "maxItems": 32,
-                    "type": "array"
-                  },
-                  "host": {
-                    "enum": [
-                      "x86_64-unknown-linux-gnu",
-                      "x86_64-pc-windows-msvc"
-                    ],
-                    "type": "string"
-                  },
-                  "indexFiles": {
-                    "items": {
-                      "additionalProperties": false,
-                      "properties": {
-                        "bytesBase64": {
-                          "maxLength": 87384,
-                          "type": "string"
-                        },
-                        "name": {
+                "anyOf": [
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "defaultFeatures": {
+                        "type": "boolean"
+                      },
+                      "features": {
+                        "items": {
                           "maxLength": 64,
                           "minLength": 1,
                           "type": "string"
                         },
-                        "sha256": {
-                          "pattern": "^[0-9a-f]{64}$",
-                          "type": "string"
-                        }
+                        "maxItems": 32,
+                        "type": "array"
                       },
-                      "required": [
-                        "name",
-                        "bytesBase64",
-                        "sha256"
-                      ],
-                      "type": "object"
+                      "host": {
+                        "enum": [
+                          "x86_64-unknown-linux-gnu",
+                          "x86_64-pc-windows-msvc"
+                        ],
+                        "type": "string"
+                      },
+                      "indexFiles": {
+                        "items": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "bytesBase64": {
+                              "maxLength": 87384,
+                              "type": "string"
+                            },
+                            "name": {
+                              "maxLength": 64,
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "sha256": {
+                              "pattern": "^[0-9a-f]{64}$",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "name",
+                            "bytesBase64",
+                            "sha256"
+                          ],
+                          "type": "object"
+                        },
+                        "maxItems": 32,
+                        "type": "array"
+                      },
+                      "manifestBase64": {
+                        "maxLength": 87384,
+                        "type": "string"
+                      },
+                      "manifestSha256": {
+                        "pattern": "^[0-9a-f]{64}$",
+                        "type": "string"
+                      },
+                      "profile": {
+                        "const": "cargo-index-exact-resolver2-v1",
+                        "type": "string"
+                      },
+                      "registryIndexUrl": {
+                        "maxLength": 300,
+                        "minLength": 10,
+                        "type": "string"
+                      },
+                      "target": {
+                        "enum": [
+                          "x86_64-unknown-linux-gnu",
+                          "x86_64-pc-windows-msvc"
+                        ],
+                        "type": "string"
+                      }
                     },
-                    "maxItems": 32,
-                    "type": "array"
-                  },
-                  "manifestBase64": {
-                    "maxLength": 87384,
-                    "type": "string"
-                  },
-                  "manifestSha256": {
-                    "pattern": "^[0-9a-f]{64}$",
-                    "type": "string"
-                  },
-                  "profile": {
-                    "const": "cargo-index-exact-resolver2-v1",
-                    "type": "string"
-                  },
-                  "registryIndexUrl": {
-                    "maxLength": 300,
-                    "minLength": 10,
-                    "type": "string"
-                  },
-                  "target": {
-                    "enum": [
-                      "x86_64-unknown-linux-gnu",
-                      "x86_64-pc-windows-msvc"
+                    "required": [
+                      "profile",
+                      "registryIndexUrl",
+                      "manifestBase64",
+                      "manifestSha256",
+                      "indexFiles",
+                      "host",
+                      "target",
+                      "features",
+                      "defaultFeatures"
                     ],
-                    "type": "string"
+                    "type": "object"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "defaultFeatures": {
+                        "type": "boolean"
+                      },
+                      "features": {
+                        "items": {
+                          "maxLength": 64,
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "maxItems": 32,
+                        "type": "array"
+                      },
+                      "host": {
+                        "enum": [
+                          "x86_64-unknown-linux-gnu",
+                          "x86_64-pc-windows-msvc"
+                        ],
+                        "type": "string"
+                      },
+                      "indexFiles": {
+                        "items": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "bytesBase64": {
+                              "maxLength": 87384,
+                              "type": "string"
+                            },
+                            "name": {
+                              "maxLength": 64,
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "sha256": {
+                              "pattern": "^[0-9a-f]{64}$",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "name",
+                            "bytesBase64",
+                            "sha256"
+                          ],
+                          "type": "object"
+                        },
+                        "maxItems": 32,
+                        "type": "array"
+                      },
+                      "manifestBase64": {
+                        "maxLength": 87384,
+                        "type": "string"
+                      },
+                      "manifestSha256": {
+                        "pattern": "^[0-9a-f]{64}$",
+                        "type": "string"
+                      },
+                      "profile": {
+                        "const": "cargo-index-exact-resolver2-v2",
+                        "type": "string"
+                      },
+                      "registryIndexUrl": {
+                        "maxLength": 300,
+                        "minLength": 10,
+                        "type": "string"
+                      },
+                      "target": {
+                        "enum": [
+                          "x86_64-unknown-linux-gnu",
+                          "x86_64-pc-windows-msvc"
+                        ],
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "profile",
+                      "registryIndexUrl",
+                      "manifestBase64",
+                      "manifestSha256",
+                      "indexFiles",
+                      "host",
+                      "target",
+                      "features",
+                      "defaultFeatures"
+                    ],
+                    "type": "object"
                   }
-                },
-                "required": [
-                  "profile",
-                  "registryIndexUrl",
-                  "manifestBase64",
-                  "manifestSha256",
-                  "indexFiles",
-                  "host",
-                  "target",
-                  "features",
-                  "defaultFeatures"
-                ],
-                "type": "object"
+                ]
               }
             }
           },
@@ -31714,277 +31990,846 @@
                       "type": "boolean"
                     },
                     "resolution": {
-                      "properties": {
-                        "createdAt": {
-                          "type": "string"
-                        },
-                        "outcome": {
+                      "anyOf": [
+                        {
                           "properties": {
-                            "edgeCount": {
-                              "type": "number"
-                            },
-                            "edges": {
-                              "items": {
-                                "properties": {
-                                  "defaultFeatures": {
-                                    "type": "boolean"
-                                  },
-                                  "from": {
-                                    "type": "string"
-                                  },
-                                  "kind": {
-                                    "enum": [
-                                      "normal",
-                                      "build"
-                                    ],
-                                    "type": "string"
-                                  },
-                                  "requestedFeatures": {
-                                    "items": {
-                                      "type": "string"
-                                    },
-                                    "type": "array"
-                                  },
-                                  "target": {
-                                    "~elyTyp": 7,
-                                    "nullable": true,
-                                    "type": [
-                                      "string",
-                                      "null"
-                                    ]
-                                  },
-                                  "to": {
-                                    "type": "string"
-                                  }
-                                },
-                                "required": [
-                                  "from",
-                                  "to",
-                                  "kind",
-                                  "target",
-                                  "requestedFeatures",
-                                  "defaultFeatures"
-                                ],
-                                "type": "object"
-                              },
-                              "type": "array"
-                            },
-                            "featureActivationCount": {
-                              "type": "number"
-                            },
-                            "instances": {
-                              "items": {
-                                "properties": {
-                                  "features": {
-                                    "items": {
-                                      "type": "string"
-                                    },
-                                    "type": "array"
-                                  },
-                                  "id": {
-                                    "type": "string"
-                                  },
-                                  "name": {
-                                    "type": "string"
-                                  },
-                                  "role": {
-                                    "enum": [
-                                      "host",
-                                      "target"
-                                    ],
-                                    "type": "string"
-                                  },
-                                  "source": {
-                                    "type": "string"
-                                  },
-                                  "version": {
-                                    "type": "string"
-                                  }
-                                },
-                                "required": [
-                                  "id",
-                                  "source",
-                                  "name",
-                                  "version",
-                                  "role",
-                                  "features"
-                                ],
-                                "type": "object"
-                              },
-                              "type": "array"
-                            },
-                            "missing": {
-                              "items": {
-                                "type": "string"
-                              },
-                              "type": "array"
-                            },
-                            "releaseCount": {
-                              "type": "number"
-                            },
-                            "selected": {
-                              "items": {
-                                "properties": {
-                                  "id": {
-                                    "type": "string"
-                                  },
-                                  "name": {
-                                    "type": "string"
-                                  },
-                                  "source": {
-                                    "type": "string"
-                                  },
-                                  "version": {
-                                    "type": "string"
-                                  }
-                                },
-                                "required": [
-                                  "id",
-                                  "source",
-                                  "name",
-                                  "version"
-                                ],
-                                "type": "object"
-                              },
-                              "type": "array"
-                            },
-                            "status": {
-                              "enum": [
-                                "solved",
-                                "unsupported-semantics",
-                                "incomplete-source-data",
-                                "budget-exhausted"
-                              ],
+                            "createdAt": {
                               "type": "string"
                             },
-                            "unsupportedClauses": {
-                              "items": {
-                                "type": "string"
-                              },
-                              "type": "array"
-                            }
-                          },
-                          "required": [
-                            "status",
-                            "selected",
-                            "instances",
-                            "edges",
-                            "missing",
-                            "unsupportedClauses",
-                            "releaseCount",
-                            "edgeCount",
-                            "featureActivationCount"
-                          ],
-                          "type": "object"
-                        },
-                        "profile": {
-                          "const": "cargo-index-exact-resolution-v1",
-                          "type": "string"
-                        },
-                        "request": {
-                          "additionalProperties": false,
-                          "properties": {
-                            "defaultFeatures": {
-                              "type": "boolean"
-                            },
-                            "features": {
-                              "items": {
-                                "maxLength": 64,
-                                "minLength": 1,
-                                "type": "string"
-                              },
-                              "maxItems": 32,
-                              "type": "array"
-                            },
-                            "host": {
-                              "enum": [
-                                "x86_64-unknown-linux-gnu",
-                                "x86_64-pc-windows-msvc"
-                              ],
-                              "type": "string"
-                            },
-                            "indexFiles": {
-                              "items": {
-                                "additionalProperties": false,
-                                "properties": {
-                                  "bytesBase64": {
-                                    "maxLength": 87384,
+                            "outcome": {
+                              "properties": {
+                                "edgeCount": {
+                                  "type": "number"
+                                },
+                                "edges": {
+                                  "items": {
+                                    "properties": {
+                                      "defaultFeatures": {
+                                        "type": "boolean"
+                                      },
+                                      "from": {
+                                        "type": "string"
+                                      },
+                                      "kind": {
+                                        "enum": [
+                                          "normal",
+                                          "build"
+                                        ],
+                                        "type": "string"
+                                      },
+                                      "requestedFeatures": {
+                                        "items": {
+                                          "type": "string"
+                                        },
+                                        "type": "array"
+                                      },
+                                      "target": {
+                                        "~elyTyp": 7,
+                                        "nullable": true,
+                                        "type": [
+                                          "string",
+                                          "null"
+                                        ]
+                                      },
+                                      "to": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "from",
+                                      "to",
+                                      "kind",
+                                      "target",
+                                      "requestedFeatures",
+                                      "defaultFeatures"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  "type": "array"
+                                },
+                                "featureActivationCount": {
+                                  "type": "number"
+                                },
+                                "instances": {
+                                  "items": {
+                                    "properties": {
+                                      "features": {
+                                        "items": {
+                                          "type": "string"
+                                        },
+                                        "type": "array"
+                                      },
+                                      "id": {
+                                        "type": "string"
+                                      },
+                                      "name": {
+                                        "type": "string"
+                                      },
+                                      "role": {
+                                        "enum": [
+                                          "host",
+                                          "target"
+                                        ],
+                                        "type": "string"
+                                      },
+                                      "source": {
+                                        "type": "string"
+                                      },
+                                      "version": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "id",
+                                      "source",
+                                      "name",
+                                      "version",
+                                      "role",
+                                      "features"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  "type": "array"
+                                },
+                                "missing": {
+                                  "items": {
                                     "type": "string"
                                   },
-                                  "name": {
+                                  "type": "array"
+                                },
+                                "releaseCount": {
+                                  "type": "number"
+                                },
+                                "selected": {
+                                  "items": {
+                                    "properties": {
+                                      "id": {
+                                        "type": "string"
+                                      },
+                                      "name": {
+                                        "type": "string"
+                                      },
+                                      "source": {
+                                        "type": "string"
+                                      },
+                                      "version": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "id",
+                                      "source",
+                                      "name",
+                                      "version"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  "type": "array"
+                                },
+                                "status": {
+                                  "enum": [
+                                    "solved",
+                                    "unsupported-semantics",
+                                    "incomplete-source-data",
+                                    "budget-exhausted"
+                                  ],
+                                  "type": "string"
+                                },
+                                "unsupportedClauses": {
+                                  "items": {
+                                    "type": "string"
+                                  },
+                                  "type": "array"
+                                }
+                              },
+                              "required": [
+                                "status",
+                                "selected",
+                                "instances",
+                                "edges",
+                                "missing",
+                                "unsupportedClauses",
+                                "releaseCount",
+                                "edgeCount",
+                                "featureActivationCount"
+                              ],
+                              "type": "object"
+                            },
+                            "profile": {
+                              "const": "cargo-index-exact-resolution-v1",
+                              "type": "string"
+                            },
+                            "request": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "defaultFeatures": {
+                                  "type": "boolean"
+                                },
+                                "features": {
+                                  "items": {
                                     "maxLength": 64,
                                     "minLength": 1,
                                     "type": "string"
                                   },
-                                  "sha256": {
-                                    "pattern": "^[0-9a-f]{64}$",
-                                    "type": "string"
-                                  }
+                                  "maxItems": 32,
+                                  "type": "array"
                                 },
-                                "required": [
-                                  "name",
-                                  "bytesBase64",
-                                  "sha256"
-                                ],
-                                "type": "object"
+                                "host": {
+                                  "enum": [
+                                    "x86_64-unknown-linux-gnu",
+                                    "x86_64-pc-windows-msvc"
+                                  ],
+                                  "type": "string"
+                                },
+                                "indexFiles": {
+                                  "items": {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "bytesBase64": {
+                                        "maxLength": 87384,
+                                        "type": "string"
+                                      },
+                                      "name": {
+                                        "maxLength": 64,
+                                        "minLength": 1,
+                                        "type": "string"
+                                      },
+                                      "sha256": {
+                                        "pattern": "^[0-9a-f]{64}$",
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "name",
+                                      "bytesBase64",
+                                      "sha256"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  "maxItems": 32,
+                                  "type": "array"
+                                },
+                                "manifestBase64": {
+                                  "maxLength": 87384,
+                                  "type": "string"
+                                },
+                                "manifestSha256": {
+                                  "pattern": "^[0-9a-f]{64}$",
+                                  "type": "string"
+                                },
+                                "profile": {
+                                  "const": "cargo-index-exact-resolver2-v1",
+                                  "type": "string"
+                                },
+                                "registryIndexUrl": {
+                                  "maxLength": 300,
+                                  "minLength": 10,
+                                  "type": "string"
+                                },
+                                "target": {
+                                  "enum": [
+                                    "x86_64-unknown-linux-gnu",
+                                    "x86_64-pc-windows-msvc"
+                                  ],
+                                  "type": "string"
+                                }
                               },
-                              "maxItems": 32,
-                              "type": "array"
-                            },
-                            "manifestBase64": {
-                              "maxLength": 87384,
-                              "type": "string"
-                            },
-                            "manifestSha256": {
-                              "pattern": "^[0-9a-f]{64}$",
-                              "type": "string"
-                            },
-                            "profile": {
-                              "const": "cargo-index-exact-resolver2-v1",
-                              "type": "string"
-                            },
-                            "registryIndexUrl": {
-                              "maxLength": 300,
-                              "minLength": 10,
-                              "type": "string"
-                            },
-                            "target": {
-                              "enum": [
-                                "x86_64-unknown-linux-gnu",
-                                "x86_64-pc-windows-msvc"
+                              "required": [
+                                "profile",
+                                "registryIndexUrl",
+                                "manifestBase64",
+                                "manifestSha256",
+                                "indexFiles",
+                                "host",
+                                "target",
+                                "features",
+                                "defaultFeatures"
                               ],
+                              "type": "object"
+                            },
+                            "requestDigest": {
+                              "type": "string"
+                            },
+                            "resolution": {
                               "type": "string"
                             }
                           },
                           "required": [
                             "profile",
-                            "registryIndexUrl",
-                            "manifestBase64",
-                            "manifestSha256",
-                            "indexFiles",
-                            "host",
-                            "target",
-                            "features",
-                            "defaultFeatures"
+                            "resolution",
+                            "requestDigest",
+                            "request",
+                            "outcome",
+                            "createdAt"
                           ],
                           "type": "object"
                         },
-                        "requestDigest": {
-                          "type": "string"
-                        },
-                        "resolution": {
-                          "type": "string"
+                        {
+                          "properties": {
+                            "createdAt": {
+                              "type": "string"
+                            },
+                            "outcome": {
+                              "anyOf": [
+                                {
+                                  "properties": {
+                                    "edgeCount": {
+                                      "type": "number"
+                                    },
+                                    "edges": {
+                                      "items": {
+                                        "properties": {
+                                          "defaultFeatures": {
+                                            "type": "boolean"
+                                          },
+                                          "from": {
+                                            "type": "string"
+                                          },
+                                          "kind": {
+                                            "enum": [
+                                              "normal",
+                                              "build"
+                                            ],
+                                            "type": "string"
+                                          },
+                                          "requestedFeatures": {
+                                            "items": {
+                                              "type": "string"
+                                            },
+                                            "type": "array"
+                                          },
+                                          "target": {
+                                            "~elyTyp": 7,
+                                            "nullable": true,
+                                            "type": [
+                                              "string",
+                                              "null"
+                                            ]
+                                          },
+                                          "to": {
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "from",
+                                          "to",
+                                          "kind",
+                                          "target",
+                                          "requestedFeatures",
+                                          "defaultFeatures"
+                                        ],
+                                        "type": "object"
+                                      },
+                                      "type": "array"
+                                    },
+                                    "featureActivationCount": {
+                                      "type": "number"
+                                    },
+                                    "instances": {
+                                      "items": {
+                                        "properties": {
+                                          "features": {
+                                            "items": {
+                                              "type": "string"
+                                            },
+                                            "type": "array"
+                                          },
+                                          "id": {
+                                            "type": "string"
+                                          },
+                                          "name": {
+                                            "type": "string"
+                                          },
+                                          "role": {
+                                            "enum": [
+                                              "host",
+                                              "target"
+                                            ],
+                                            "type": "string"
+                                          },
+                                          "source": {
+                                            "type": "string"
+                                          },
+                                          "version": {
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "id",
+                                          "source",
+                                          "name",
+                                          "version",
+                                          "role",
+                                          "features"
+                                        ],
+                                        "type": "object"
+                                      },
+                                      "type": "array"
+                                    },
+                                    "linksConflicts": {
+                                      "items": {
+                                        "properties": {
+                                          "kind": {
+                                            "const": "native-links",
+                                            "type": "string"
+                                          },
+                                          "links": {
+                                            "maxLength": 64,
+                                            "minLength": 1,
+                                            "type": "string"
+                                          },
+                                          "packages": {
+                                            "items": {
+                                              "properties": {
+                                                "id": {
+                                                  "type": "string"
+                                                },
+                                                "name": {
+                                                  "type": "string"
+                                                },
+                                                "roles": {
+                                                  "items": {
+                                                    "enum": [
+                                                      "host",
+                                                      "target"
+                                                    ],
+                                                    "type": "string"
+                                                  },
+                                                  "maxItems": 2,
+                                                  "type": "array"
+                                                },
+                                                "source": {
+                                                  "type": "string"
+                                                },
+                                                "version": {
+                                                  "type": "string"
+                                                }
+                                              },
+                                              "required": [
+                                                "id",
+                                                "source",
+                                                "name",
+                                                "version",
+                                                "roles"
+                                              ],
+                                              "type": "object"
+                                            },
+                                            "maxItems": 128,
+                                            "minItems": 2,
+                                            "type": "array"
+                                          }
+                                        },
+                                        "required": [
+                                          "kind",
+                                          "links",
+                                          "packages"
+                                        ],
+                                        "type": "object"
+                                      },
+                                      "maxItems": 0,
+                                      "type": "array"
+                                    },
+                                    "missing": {
+                                      "items": {
+                                        "type": "string"
+                                      },
+                                      "type": "array"
+                                    },
+                                    "releaseCount": {
+                                      "type": "number"
+                                    },
+                                    "selected": {
+                                      "items": {
+                                        "properties": {
+                                          "id": {
+                                            "type": "string"
+                                          },
+                                          "name": {
+                                            "type": "string"
+                                          },
+                                          "source": {
+                                            "type": "string"
+                                          },
+                                          "version": {
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "id",
+                                          "source",
+                                          "name",
+                                          "version"
+                                        ],
+                                        "type": "object"
+                                      },
+                                      "type": "array"
+                                    },
+                                    "status": {
+                                      "enum": [
+                                        "solved",
+                                        "unsupported-semantics",
+                                        "incomplete-source-data",
+                                        "budget-exhausted"
+                                      ],
+                                      "type": "string"
+                                    },
+                                    "unsupportedClauses": {
+                                      "items": {
+                                        "type": "string"
+                                      },
+                                      "type": "array"
+                                    }
+                                  },
+                                  "required": [
+                                    "status",
+                                    "selected",
+                                    "instances",
+                                    "edges",
+                                    "missing",
+                                    "unsupportedClauses",
+                                    "releaseCount",
+                                    "edgeCount",
+                                    "featureActivationCount",
+                                    "linksConflicts"
+                                  ],
+                                  "type": "object"
+                                },
+                                {
+                                  "properties": {
+                                    "edgeCount": {
+                                      "type": "number"
+                                    },
+                                    "edges": {
+                                      "items": {
+                                        "properties": {
+                                          "defaultFeatures": {
+                                            "type": "boolean"
+                                          },
+                                          "from": {
+                                            "type": "string"
+                                          },
+                                          "kind": {
+                                            "enum": [
+                                              "normal",
+                                              "build"
+                                            ],
+                                            "type": "string"
+                                          },
+                                          "requestedFeatures": {
+                                            "items": {
+                                              "type": "string"
+                                            },
+                                            "type": "array"
+                                          },
+                                          "target": {
+                                            "~elyTyp": 7,
+                                            "nullable": true,
+                                            "type": [
+                                              "string",
+                                              "null"
+                                            ]
+                                          },
+                                          "to": {
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "from",
+                                          "to",
+                                          "kind",
+                                          "target",
+                                          "requestedFeatures",
+                                          "defaultFeatures"
+                                        ],
+                                        "type": "object"
+                                      },
+                                      "maxItems": 0,
+                                      "type": "array"
+                                    },
+                                    "featureActivationCount": {
+                                      "type": "number"
+                                    },
+                                    "instances": {
+                                      "items": {
+                                        "properties": {
+                                          "features": {
+                                            "items": {
+                                              "type": "string"
+                                            },
+                                            "type": "array"
+                                          },
+                                          "id": {
+                                            "type": "string"
+                                          },
+                                          "name": {
+                                            "type": "string"
+                                          },
+                                          "role": {
+                                            "enum": [
+                                              "host",
+                                              "target"
+                                            ],
+                                            "type": "string"
+                                          },
+                                          "source": {
+                                            "type": "string"
+                                          },
+                                          "version": {
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "id",
+                                          "source",
+                                          "name",
+                                          "version",
+                                          "role",
+                                          "features"
+                                        ],
+                                        "type": "object"
+                                      },
+                                      "maxItems": 0,
+                                      "type": "array"
+                                    },
+                                    "linksConflicts": {
+                                      "items": {
+                                        "properties": {
+                                          "kind": {
+                                            "const": "native-links",
+                                            "type": "string"
+                                          },
+                                          "links": {
+                                            "maxLength": 64,
+                                            "minLength": 1,
+                                            "type": "string"
+                                          },
+                                          "packages": {
+                                            "items": {
+                                              "properties": {
+                                                "id": {
+                                                  "type": "string"
+                                                },
+                                                "name": {
+                                                  "type": "string"
+                                                },
+                                                "roles": {
+                                                  "items": {
+                                                    "enum": [
+                                                      "host",
+                                                      "target"
+                                                    ],
+                                                    "type": "string"
+                                                  },
+                                                  "maxItems": 2,
+                                                  "type": "array"
+                                                },
+                                                "source": {
+                                                  "type": "string"
+                                                },
+                                                "version": {
+                                                  "type": "string"
+                                                }
+                                              },
+                                              "required": [
+                                                "id",
+                                                "source",
+                                                "name",
+                                                "version",
+                                                "roles"
+                                              ],
+                                              "type": "object"
+                                            },
+                                            "maxItems": 128,
+                                            "minItems": 2,
+                                            "type": "array"
+                                          }
+                                        },
+                                        "required": [
+                                          "kind",
+                                          "links",
+                                          "packages"
+                                        ],
+                                        "type": "object"
+                                      },
+                                      "maxItems": 64,
+                                      "minItems": 1,
+                                      "type": "array"
+                                    },
+                                    "missing": {
+                                      "items": {
+                                        "type": "string"
+                                      },
+                                      "maxItems": 0,
+                                      "type": "array"
+                                    },
+                                    "releaseCount": {
+                                      "type": "number"
+                                    },
+                                    "selected": {
+                                      "items": {
+                                        "properties": {
+                                          "id": {
+                                            "type": "string"
+                                          },
+                                          "name": {
+                                            "type": "string"
+                                          },
+                                          "source": {
+                                            "type": "string"
+                                          },
+                                          "version": {
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "id",
+                                          "source",
+                                          "name",
+                                          "version"
+                                        ],
+                                        "type": "object"
+                                      },
+                                      "maxItems": 0,
+                                      "type": "array"
+                                    },
+                                    "status": {
+                                      "const": "unsatisfiable",
+                                      "type": "string"
+                                    },
+                                    "unsupportedClauses": {
+                                      "items": {
+                                        "type": "string"
+                                      },
+                                      "maxItems": 0,
+                                      "type": "array"
+                                    }
+                                  },
+                                  "required": [
+                                    "status",
+                                    "selected",
+                                    "instances",
+                                    "edges",
+                                    "missing",
+                                    "unsupportedClauses",
+                                    "releaseCount",
+                                    "edgeCount",
+                                    "featureActivationCount",
+                                    "linksConflicts"
+                                  ],
+                                  "type": "object"
+                                }
+                              ]
+                            },
+                            "profile": {
+                              "const": "cargo-index-exact-resolution-v2",
+                              "type": "string"
+                            },
+                            "request": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "defaultFeatures": {
+                                  "type": "boolean"
+                                },
+                                "features": {
+                                  "items": {
+                                    "maxLength": 64,
+                                    "minLength": 1,
+                                    "type": "string"
+                                  },
+                                  "maxItems": 32,
+                                  "type": "array"
+                                },
+                                "host": {
+                                  "enum": [
+                                    "x86_64-unknown-linux-gnu",
+                                    "x86_64-pc-windows-msvc"
+                                  ],
+                                  "type": "string"
+                                },
+                                "indexFiles": {
+                                  "items": {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "bytesBase64": {
+                                        "maxLength": 87384,
+                                        "type": "string"
+                                      },
+                                      "name": {
+                                        "maxLength": 64,
+                                        "minLength": 1,
+                                        "type": "string"
+                                      },
+                                      "sha256": {
+                                        "pattern": "^[0-9a-f]{64}$",
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "name",
+                                      "bytesBase64",
+                                      "sha256"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  "maxItems": 32,
+                                  "type": "array"
+                                },
+                                "manifestBase64": {
+                                  "maxLength": 87384,
+                                  "type": "string"
+                                },
+                                "manifestSha256": {
+                                  "pattern": "^[0-9a-f]{64}$",
+                                  "type": "string"
+                                },
+                                "profile": {
+                                  "const": "cargo-index-exact-resolver2-v2",
+                                  "type": "string"
+                                },
+                                "registryIndexUrl": {
+                                  "maxLength": 300,
+                                  "minLength": 10,
+                                  "type": "string"
+                                },
+                                "target": {
+                                  "enum": [
+                                    "x86_64-unknown-linux-gnu",
+                                    "x86_64-pc-windows-msvc"
+                                  ],
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "profile",
+                                "registryIndexUrl",
+                                "manifestBase64",
+                                "manifestSha256",
+                                "indexFiles",
+                                "host",
+                                "target",
+                                "features",
+                                "defaultFeatures"
+                              ],
+                              "type": "object"
+                            },
+                            "requestDigest": {
+                              "type": "string"
+                            },
+                            "resolution": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "profile",
+                            "resolution",
+                            "requestDigest",
+                            "request",
+                            "outcome",
+                            "createdAt"
+                          ],
+                          "type": "object"
                         }
-                      },
-                      "required": [
-                        "profile",
-                        "resolution",
-                        "requestDigest",
-                        "request",
-                        "outcome",
-                        "createdAt"
-                      ],
-                      "type": "object"
+                      ]
                     }
                   },
                   "required": [
@@ -32006,277 +32851,846 @@
                       "type": "boolean"
                     },
                     "resolution": {
-                      "properties": {
-                        "createdAt": {
-                          "type": "string"
-                        },
-                        "outcome": {
+                      "anyOf": [
+                        {
                           "properties": {
-                            "edgeCount": {
-                              "type": "number"
-                            },
-                            "edges": {
-                              "items": {
-                                "properties": {
-                                  "defaultFeatures": {
-                                    "type": "boolean"
-                                  },
-                                  "from": {
-                                    "type": "string"
-                                  },
-                                  "kind": {
-                                    "enum": [
-                                      "normal",
-                                      "build"
-                                    ],
-                                    "type": "string"
-                                  },
-                                  "requestedFeatures": {
-                                    "items": {
-                                      "type": "string"
-                                    },
-                                    "type": "array"
-                                  },
-                                  "target": {
-                                    "~elyTyp": 7,
-                                    "nullable": true,
-                                    "type": [
-                                      "string",
-                                      "null"
-                                    ]
-                                  },
-                                  "to": {
-                                    "type": "string"
-                                  }
-                                },
-                                "required": [
-                                  "from",
-                                  "to",
-                                  "kind",
-                                  "target",
-                                  "requestedFeatures",
-                                  "defaultFeatures"
-                                ],
-                                "type": "object"
-                              },
-                              "type": "array"
-                            },
-                            "featureActivationCount": {
-                              "type": "number"
-                            },
-                            "instances": {
-                              "items": {
-                                "properties": {
-                                  "features": {
-                                    "items": {
-                                      "type": "string"
-                                    },
-                                    "type": "array"
-                                  },
-                                  "id": {
-                                    "type": "string"
-                                  },
-                                  "name": {
-                                    "type": "string"
-                                  },
-                                  "role": {
-                                    "enum": [
-                                      "host",
-                                      "target"
-                                    ],
-                                    "type": "string"
-                                  },
-                                  "source": {
-                                    "type": "string"
-                                  },
-                                  "version": {
-                                    "type": "string"
-                                  }
-                                },
-                                "required": [
-                                  "id",
-                                  "source",
-                                  "name",
-                                  "version",
-                                  "role",
-                                  "features"
-                                ],
-                                "type": "object"
-                              },
-                              "type": "array"
-                            },
-                            "missing": {
-                              "items": {
-                                "type": "string"
-                              },
-                              "type": "array"
-                            },
-                            "releaseCount": {
-                              "type": "number"
-                            },
-                            "selected": {
-                              "items": {
-                                "properties": {
-                                  "id": {
-                                    "type": "string"
-                                  },
-                                  "name": {
-                                    "type": "string"
-                                  },
-                                  "source": {
-                                    "type": "string"
-                                  },
-                                  "version": {
-                                    "type": "string"
-                                  }
-                                },
-                                "required": [
-                                  "id",
-                                  "source",
-                                  "name",
-                                  "version"
-                                ],
-                                "type": "object"
-                              },
-                              "type": "array"
-                            },
-                            "status": {
-                              "enum": [
-                                "solved",
-                                "unsupported-semantics",
-                                "incomplete-source-data",
-                                "budget-exhausted"
-                              ],
+                            "createdAt": {
                               "type": "string"
                             },
-                            "unsupportedClauses": {
-                              "items": {
-                                "type": "string"
-                              },
-                              "type": "array"
-                            }
-                          },
-                          "required": [
-                            "status",
-                            "selected",
-                            "instances",
-                            "edges",
-                            "missing",
-                            "unsupportedClauses",
-                            "releaseCount",
-                            "edgeCount",
-                            "featureActivationCount"
-                          ],
-                          "type": "object"
-                        },
-                        "profile": {
-                          "const": "cargo-index-exact-resolution-v1",
-                          "type": "string"
-                        },
-                        "request": {
-                          "additionalProperties": false,
-                          "properties": {
-                            "defaultFeatures": {
-                              "type": "boolean"
-                            },
-                            "features": {
-                              "items": {
-                                "maxLength": 64,
-                                "minLength": 1,
-                                "type": "string"
-                              },
-                              "maxItems": 32,
-                              "type": "array"
-                            },
-                            "host": {
-                              "enum": [
-                                "x86_64-unknown-linux-gnu",
-                                "x86_64-pc-windows-msvc"
-                              ],
-                              "type": "string"
-                            },
-                            "indexFiles": {
-                              "items": {
-                                "additionalProperties": false,
-                                "properties": {
-                                  "bytesBase64": {
-                                    "maxLength": 87384,
+                            "outcome": {
+                              "properties": {
+                                "edgeCount": {
+                                  "type": "number"
+                                },
+                                "edges": {
+                                  "items": {
+                                    "properties": {
+                                      "defaultFeatures": {
+                                        "type": "boolean"
+                                      },
+                                      "from": {
+                                        "type": "string"
+                                      },
+                                      "kind": {
+                                        "enum": [
+                                          "normal",
+                                          "build"
+                                        ],
+                                        "type": "string"
+                                      },
+                                      "requestedFeatures": {
+                                        "items": {
+                                          "type": "string"
+                                        },
+                                        "type": "array"
+                                      },
+                                      "target": {
+                                        "~elyTyp": 7,
+                                        "nullable": true,
+                                        "type": [
+                                          "string",
+                                          "null"
+                                        ]
+                                      },
+                                      "to": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "from",
+                                      "to",
+                                      "kind",
+                                      "target",
+                                      "requestedFeatures",
+                                      "defaultFeatures"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  "type": "array"
+                                },
+                                "featureActivationCount": {
+                                  "type": "number"
+                                },
+                                "instances": {
+                                  "items": {
+                                    "properties": {
+                                      "features": {
+                                        "items": {
+                                          "type": "string"
+                                        },
+                                        "type": "array"
+                                      },
+                                      "id": {
+                                        "type": "string"
+                                      },
+                                      "name": {
+                                        "type": "string"
+                                      },
+                                      "role": {
+                                        "enum": [
+                                          "host",
+                                          "target"
+                                        ],
+                                        "type": "string"
+                                      },
+                                      "source": {
+                                        "type": "string"
+                                      },
+                                      "version": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "id",
+                                      "source",
+                                      "name",
+                                      "version",
+                                      "role",
+                                      "features"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  "type": "array"
+                                },
+                                "missing": {
+                                  "items": {
                                     "type": "string"
                                   },
-                                  "name": {
+                                  "type": "array"
+                                },
+                                "releaseCount": {
+                                  "type": "number"
+                                },
+                                "selected": {
+                                  "items": {
+                                    "properties": {
+                                      "id": {
+                                        "type": "string"
+                                      },
+                                      "name": {
+                                        "type": "string"
+                                      },
+                                      "source": {
+                                        "type": "string"
+                                      },
+                                      "version": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "id",
+                                      "source",
+                                      "name",
+                                      "version"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  "type": "array"
+                                },
+                                "status": {
+                                  "enum": [
+                                    "solved",
+                                    "unsupported-semantics",
+                                    "incomplete-source-data",
+                                    "budget-exhausted"
+                                  ],
+                                  "type": "string"
+                                },
+                                "unsupportedClauses": {
+                                  "items": {
+                                    "type": "string"
+                                  },
+                                  "type": "array"
+                                }
+                              },
+                              "required": [
+                                "status",
+                                "selected",
+                                "instances",
+                                "edges",
+                                "missing",
+                                "unsupportedClauses",
+                                "releaseCount",
+                                "edgeCount",
+                                "featureActivationCount"
+                              ],
+                              "type": "object"
+                            },
+                            "profile": {
+                              "const": "cargo-index-exact-resolution-v1",
+                              "type": "string"
+                            },
+                            "request": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "defaultFeatures": {
+                                  "type": "boolean"
+                                },
+                                "features": {
+                                  "items": {
                                     "maxLength": 64,
                                     "minLength": 1,
                                     "type": "string"
                                   },
-                                  "sha256": {
-                                    "pattern": "^[0-9a-f]{64}$",
-                                    "type": "string"
-                                  }
+                                  "maxItems": 32,
+                                  "type": "array"
                                 },
-                                "required": [
-                                  "name",
-                                  "bytesBase64",
-                                  "sha256"
-                                ],
-                                "type": "object"
+                                "host": {
+                                  "enum": [
+                                    "x86_64-unknown-linux-gnu",
+                                    "x86_64-pc-windows-msvc"
+                                  ],
+                                  "type": "string"
+                                },
+                                "indexFiles": {
+                                  "items": {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "bytesBase64": {
+                                        "maxLength": 87384,
+                                        "type": "string"
+                                      },
+                                      "name": {
+                                        "maxLength": 64,
+                                        "minLength": 1,
+                                        "type": "string"
+                                      },
+                                      "sha256": {
+                                        "pattern": "^[0-9a-f]{64}$",
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "name",
+                                      "bytesBase64",
+                                      "sha256"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  "maxItems": 32,
+                                  "type": "array"
+                                },
+                                "manifestBase64": {
+                                  "maxLength": 87384,
+                                  "type": "string"
+                                },
+                                "manifestSha256": {
+                                  "pattern": "^[0-9a-f]{64}$",
+                                  "type": "string"
+                                },
+                                "profile": {
+                                  "const": "cargo-index-exact-resolver2-v1",
+                                  "type": "string"
+                                },
+                                "registryIndexUrl": {
+                                  "maxLength": 300,
+                                  "minLength": 10,
+                                  "type": "string"
+                                },
+                                "target": {
+                                  "enum": [
+                                    "x86_64-unknown-linux-gnu",
+                                    "x86_64-pc-windows-msvc"
+                                  ],
+                                  "type": "string"
+                                }
                               },
-                              "maxItems": 32,
-                              "type": "array"
-                            },
-                            "manifestBase64": {
-                              "maxLength": 87384,
-                              "type": "string"
-                            },
-                            "manifestSha256": {
-                              "pattern": "^[0-9a-f]{64}$",
-                              "type": "string"
-                            },
-                            "profile": {
-                              "const": "cargo-index-exact-resolver2-v1",
-                              "type": "string"
-                            },
-                            "registryIndexUrl": {
-                              "maxLength": 300,
-                              "minLength": 10,
-                              "type": "string"
-                            },
-                            "target": {
-                              "enum": [
-                                "x86_64-unknown-linux-gnu",
-                                "x86_64-pc-windows-msvc"
+                              "required": [
+                                "profile",
+                                "registryIndexUrl",
+                                "manifestBase64",
+                                "manifestSha256",
+                                "indexFiles",
+                                "host",
+                                "target",
+                                "features",
+                                "defaultFeatures"
                               ],
+                              "type": "object"
+                            },
+                            "requestDigest": {
+                              "type": "string"
+                            },
+                            "resolution": {
                               "type": "string"
                             }
                           },
                           "required": [
                             "profile",
-                            "registryIndexUrl",
-                            "manifestBase64",
-                            "manifestSha256",
-                            "indexFiles",
-                            "host",
-                            "target",
-                            "features",
-                            "defaultFeatures"
+                            "resolution",
+                            "requestDigest",
+                            "request",
+                            "outcome",
+                            "createdAt"
                           ],
                           "type": "object"
                         },
-                        "requestDigest": {
-                          "type": "string"
-                        },
-                        "resolution": {
-                          "type": "string"
+                        {
+                          "properties": {
+                            "createdAt": {
+                              "type": "string"
+                            },
+                            "outcome": {
+                              "anyOf": [
+                                {
+                                  "properties": {
+                                    "edgeCount": {
+                                      "type": "number"
+                                    },
+                                    "edges": {
+                                      "items": {
+                                        "properties": {
+                                          "defaultFeatures": {
+                                            "type": "boolean"
+                                          },
+                                          "from": {
+                                            "type": "string"
+                                          },
+                                          "kind": {
+                                            "enum": [
+                                              "normal",
+                                              "build"
+                                            ],
+                                            "type": "string"
+                                          },
+                                          "requestedFeatures": {
+                                            "items": {
+                                              "type": "string"
+                                            },
+                                            "type": "array"
+                                          },
+                                          "target": {
+                                            "~elyTyp": 7,
+                                            "nullable": true,
+                                            "type": [
+                                              "string",
+                                              "null"
+                                            ]
+                                          },
+                                          "to": {
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "from",
+                                          "to",
+                                          "kind",
+                                          "target",
+                                          "requestedFeatures",
+                                          "defaultFeatures"
+                                        ],
+                                        "type": "object"
+                                      },
+                                      "type": "array"
+                                    },
+                                    "featureActivationCount": {
+                                      "type": "number"
+                                    },
+                                    "instances": {
+                                      "items": {
+                                        "properties": {
+                                          "features": {
+                                            "items": {
+                                              "type": "string"
+                                            },
+                                            "type": "array"
+                                          },
+                                          "id": {
+                                            "type": "string"
+                                          },
+                                          "name": {
+                                            "type": "string"
+                                          },
+                                          "role": {
+                                            "enum": [
+                                              "host",
+                                              "target"
+                                            ],
+                                            "type": "string"
+                                          },
+                                          "source": {
+                                            "type": "string"
+                                          },
+                                          "version": {
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "id",
+                                          "source",
+                                          "name",
+                                          "version",
+                                          "role",
+                                          "features"
+                                        ],
+                                        "type": "object"
+                                      },
+                                      "type": "array"
+                                    },
+                                    "linksConflicts": {
+                                      "items": {
+                                        "properties": {
+                                          "kind": {
+                                            "const": "native-links",
+                                            "type": "string"
+                                          },
+                                          "links": {
+                                            "maxLength": 64,
+                                            "minLength": 1,
+                                            "type": "string"
+                                          },
+                                          "packages": {
+                                            "items": {
+                                              "properties": {
+                                                "id": {
+                                                  "type": "string"
+                                                },
+                                                "name": {
+                                                  "type": "string"
+                                                },
+                                                "roles": {
+                                                  "items": {
+                                                    "enum": [
+                                                      "host",
+                                                      "target"
+                                                    ],
+                                                    "type": "string"
+                                                  },
+                                                  "maxItems": 2,
+                                                  "type": "array"
+                                                },
+                                                "source": {
+                                                  "type": "string"
+                                                },
+                                                "version": {
+                                                  "type": "string"
+                                                }
+                                              },
+                                              "required": [
+                                                "id",
+                                                "source",
+                                                "name",
+                                                "version",
+                                                "roles"
+                                              ],
+                                              "type": "object"
+                                            },
+                                            "maxItems": 128,
+                                            "minItems": 2,
+                                            "type": "array"
+                                          }
+                                        },
+                                        "required": [
+                                          "kind",
+                                          "links",
+                                          "packages"
+                                        ],
+                                        "type": "object"
+                                      },
+                                      "maxItems": 0,
+                                      "type": "array"
+                                    },
+                                    "missing": {
+                                      "items": {
+                                        "type": "string"
+                                      },
+                                      "type": "array"
+                                    },
+                                    "releaseCount": {
+                                      "type": "number"
+                                    },
+                                    "selected": {
+                                      "items": {
+                                        "properties": {
+                                          "id": {
+                                            "type": "string"
+                                          },
+                                          "name": {
+                                            "type": "string"
+                                          },
+                                          "source": {
+                                            "type": "string"
+                                          },
+                                          "version": {
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "id",
+                                          "source",
+                                          "name",
+                                          "version"
+                                        ],
+                                        "type": "object"
+                                      },
+                                      "type": "array"
+                                    },
+                                    "status": {
+                                      "enum": [
+                                        "solved",
+                                        "unsupported-semantics",
+                                        "incomplete-source-data",
+                                        "budget-exhausted"
+                                      ],
+                                      "type": "string"
+                                    },
+                                    "unsupportedClauses": {
+                                      "items": {
+                                        "type": "string"
+                                      },
+                                      "type": "array"
+                                    }
+                                  },
+                                  "required": [
+                                    "status",
+                                    "selected",
+                                    "instances",
+                                    "edges",
+                                    "missing",
+                                    "unsupportedClauses",
+                                    "releaseCount",
+                                    "edgeCount",
+                                    "featureActivationCount",
+                                    "linksConflicts"
+                                  ],
+                                  "type": "object"
+                                },
+                                {
+                                  "properties": {
+                                    "edgeCount": {
+                                      "type": "number"
+                                    },
+                                    "edges": {
+                                      "items": {
+                                        "properties": {
+                                          "defaultFeatures": {
+                                            "type": "boolean"
+                                          },
+                                          "from": {
+                                            "type": "string"
+                                          },
+                                          "kind": {
+                                            "enum": [
+                                              "normal",
+                                              "build"
+                                            ],
+                                            "type": "string"
+                                          },
+                                          "requestedFeatures": {
+                                            "items": {
+                                              "type": "string"
+                                            },
+                                            "type": "array"
+                                          },
+                                          "target": {
+                                            "~elyTyp": 7,
+                                            "nullable": true,
+                                            "type": [
+                                              "string",
+                                              "null"
+                                            ]
+                                          },
+                                          "to": {
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "from",
+                                          "to",
+                                          "kind",
+                                          "target",
+                                          "requestedFeatures",
+                                          "defaultFeatures"
+                                        ],
+                                        "type": "object"
+                                      },
+                                      "maxItems": 0,
+                                      "type": "array"
+                                    },
+                                    "featureActivationCount": {
+                                      "type": "number"
+                                    },
+                                    "instances": {
+                                      "items": {
+                                        "properties": {
+                                          "features": {
+                                            "items": {
+                                              "type": "string"
+                                            },
+                                            "type": "array"
+                                          },
+                                          "id": {
+                                            "type": "string"
+                                          },
+                                          "name": {
+                                            "type": "string"
+                                          },
+                                          "role": {
+                                            "enum": [
+                                              "host",
+                                              "target"
+                                            ],
+                                            "type": "string"
+                                          },
+                                          "source": {
+                                            "type": "string"
+                                          },
+                                          "version": {
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "id",
+                                          "source",
+                                          "name",
+                                          "version",
+                                          "role",
+                                          "features"
+                                        ],
+                                        "type": "object"
+                                      },
+                                      "maxItems": 0,
+                                      "type": "array"
+                                    },
+                                    "linksConflicts": {
+                                      "items": {
+                                        "properties": {
+                                          "kind": {
+                                            "const": "native-links",
+                                            "type": "string"
+                                          },
+                                          "links": {
+                                            "maxLength": 64,
+                                            "minLength": 1,
+                                            "type": "string"
+                                          },
+                                          "packages": {
+                                            "items": {
+                                              "properties": {
+                                                "id": {
+                                                  "type": "string"
+                                                },
+                                                "name": {
+                                                  "type": "string"
+                                                },
+                                                "roles": {
+                                                  "items": {
+                                                    "enum": [
+                                                      "host",
+                                                      "target"
+                                                    ],
+                                                    "type": "string"
+                                                  },
+                                                  "maxItems": 2,
+                                                  "type": "array"
+                                                },
+                                                "source": {
+                                                  "type": "string"
+                                                },
+                                                "version": {
+                                                  "type": "string"
+                                                }
+                                              },
+                                              "required": [
+                                                "id",
+                                                "source",
+                                                "name",
+                                                "version",
+                                                "roles"
+                                              ],
+                                              "type": "object"
+                                            },
+                                            "maxItems": 128,
+                                            "minItems": 2,
+                                            "type": "array"
+                                          }
+                                        },
+                                        "required": [
+                                          "kind",
+                                          "links",
+                                          "packages"
+                                        ],
+                                        "type": "object"
+                                      },
+                                      "maxItems": 64,
+                                      "minItems": 1,
+                                      "type": "array"
+                                    },
+                                    "missing": {
+                                      "items": {
+                                        "type": "string"
+                                      },
+                                      "maxItems": 0,
+                                      "type": "array"
+                                    },
+                                    "releaseCount": {
+                                      "type": "number"
+                                    },
+                                    "selected": {
+                                      "items": {
+                                        "properties": {
+                                          "id": {
+                                            "type": "string"
+                                          },
+                                          "name": {
+                                            "type": "string"
+                                          },
+                                          "source": {
+                                            "type": "string"
+                                          },
+                                          "version": {
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "id",
+                                          "source",
+                                          "name",
+                                          "version"
+                                        ],
+                                        "type": "object"
+                                      },
+                                      "maxItems": 0,
+                                      "type": "array"
+                                    },
+                                    "status": {
+                                      "const": "unsatisfiable",
+                                      "type": "string"
+                                    },
+                                    "unsupportedClauses": {
+                                      "items": {
+                                        "type": "string"
+                                      },
+                                      "maxItems": 0,
+                                      "type": "array"
+                                    }
+                                  },
+                                  "required": [
+                                    "status",
+                                    "selected",
+                                    "instances",
+                                    "edges",
+                                    "missing",
+                                    "unsupportedClauses",
+                                    "releaseCount",
+                                    "edgeCount",
+                                    "featureActivationCount",
+                                    "linksConflicts"
+                                  ],
+                                  "type": "object"
+                                }
+                              ]
+                            },
+                            "profile": {
+                              "const": "cargo-index-exact-resolution-v2",
+                              "type": "string"
+                            },
+                            "request": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "defaultFeatures": {
+                                  "type": "boolean"
+                                },
+                                "features": {
+                                  "items": {
+                                    "maxLength": 64,
+                                    "minLength": 1,
+                                    "type": "string"
+                                  },
+                                  "maxItems": 32,
+                                  "type": "array"
+                                },
+                                "host": {
+                                  "enum": [
+                                    "x86_64-unknown-linux-gnu",
+                                    "x86_64-pc-windows-msvc"
+                                  ],
+                                  "type": "string"
+                                },
+                                "indexFiles": {
+                                  "items": {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "bytesBase64": {
+                                        "maxLength": 87384,
+                                        "type": "string"
+                                      },
+                                      "name": {
+                                        "maxLength": 64,
+                                        "minLength": 1,
+                                        "type": "string"
+                                      },
+                                      "sha256": {
+                                        "pattern": "^[0-9a-f]{64}$",
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "name",
+                                      "bytesBase64",
+                                      "sha256"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  "maxItems": 32,
+                                  "type": "array"
+                                },
+                                "manifestBase64": {
+                                  "maxLength": 87384,
+                                  "type": "string"
+                                },
+                                "manifestSha256": {
+                                  "pattern": "^[0-9a-f]{64}$",
+                                  "type": "string"
+                                },
+                                "profile": {
+                                  "const": "cargo-index-exact-resolver2-v2",
+                                  "type": "string"
+                                },
+                                "registryIndexUrl": {
+                                  "maxLength": 300,
+                                  "minLength": 10,
+                                  "type": "string"
+                                },
+                                "target": {
+                                  "enum": [
+                                    "x86_64-unknown-linux-gnu",
+                                    "x86_64-pc-windows-msvc"
+                                  ],
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "profile",
+                                "registryIndexUrl",
+                                "manifestBase64",
+                                "manifestSha256",
+                                "indexFiles",
+                                "host",
+                                "target",
+                                "features",
+                                "defaultFeatures"
+                              ],
+                              "type": "object"
+                            },
+                            "requestDigest": {
+                              "type": "string"
+                            },
+                            "resolution": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "profile",
+                            "resolution",
+                            "requestDigest",
+                            "request",
+                            "outcome",
+                            "createdAt"
+                          ],
+                          "type": "object"
                         }
-                      },
-                      "required": [
-                        "profile",
-                        "resolution",
-                        "requestDigest",
-                        "request",
-                        "outcome",
-                        "createdAt"
-                      ],
-                      "type": "object"
+                      ]
                     }
                   },
                   "required": [
@@ -32533,277 +33947,846 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "properties": {
-                    "createdAt": {
-                      "type": "string"
-                    },
-                    "outcome": {
+                  "anyOf": [
+                    {
                       "properties": {
-                        "edgeCount": {
-                          "type": "number"
-                        },
-                        "edges": {
-                          "items": {
-                            "properties": {
-                              "defaultFeatures": {
-                                "type": "boolean"
-                              },
-                              "from": {
-                                "type": "string"
-                              },
-                              "kind": {
-                                "enum": [
-                                  "normal",
-                                  "build"
-                                ],
-                                "type": "string"
-                              },
-                              "requestedFeatures": {
-                                "items": {
-                                  "type": "string"
-                                },
-                                "type": "array"
-                              },
-                              "target": {
-                                "~elyTyp": 7,
-                                "nullable": true,
-                                "type": [
-                                  "string",
-                                  "null"
-                                ]
-                              },
-                              "to": {
-                                "type": "string"
-                              }
-                            },
-                            "required": [
-                              "from",
-                              "to",
-                              "kind",
-                              "target",
-                              "requestedFeatures",
-                              "defaultFeatures"
-                            ],
-                            "type": "object"
-                          },
-                          "type": "array"
-                        },
-                        "featureActivationCount": {
-                          "type": "number"
-                        },
-                        "instances": {
-                          "items": {
-                            "properties": {
-                              "features": {
-                                "items": {
-                                  "type": "string"
-                                },
-                                "type": "array"
-                              },
-                              "id": {
-                                "type": "string"
-                              },
-                              "name": {
-                                "type": "string"
-                              },
-                              "role": {
-                                "enum": [
-                                  "host",
-                                  "target"
-                                ],
-                                "type": "string"
-                              },
-                              "source": {
-                                "type": "string"
-                              },
-                              "version": {
-                                "type": "string"
-                              }
-                            },
-                            "required": [
-                              "id",
-                              "source",
-                              "name",
-                              "version",
-                              "role",
-                              "features"
-                            ],
-                            "type": "object"
-                          },
-                          "type": "array"
-                        },
-                        "missing": {
-                          "items": {
-                            "type": "string"
-                          },
-                          "type": "array"
-                        },
-                        "releaseCount": {
-                          "type": "number"
-                        },
-                        "selected": {
-                          "items": {
-                            "properties": {
-                              "id": {
-                                "type": "string"
-                              },
-                              "name": {
-                                "type": "string"
-                              },
-                              "source": {
-                                "type": "string"
-                              },
-                              "version": {
-                                "type": "string"
-                              }
-                            },
-                            "required": [
-                              "id",
-                              "source",
-                              "name",
-                              "version"
-                            ],
-                            "type": "object"
-                          },
-                          "type": "array"
-                        },
-                        "status": {
-                          "enum": [
-                            "solved",
-                            "unsupported-semantics",
-                            "incomplete-source-data",
-                            "budget-exhausted"
-                          ],
+                        "createdAt": {
                           "type": "string"
                         },
-                        "unsupportedClauses": {
-                          "items": {
-                            "type": "string"
-                          },
-                          "type": "array"
-                        }
-                      },
-                      "required": [
-                        "status",
-                        "selected",
-                        "instances",
-                        "edges",
-                        "missing",
-                        "unsupportedClauses",
-                        "releaseCount",
-                        "edgeCount",
-                        "featureActivationCount"
-                      ],
-                      "type": "object"
-                    },
-                    "profile": {
-                      "const": "cargo-index-exact-resolution-v1",
-                      "type": "string"
-                    },
-                    "request": {
-                      "additionalProperties": false,
-                      "properties": {
-                        "defaultFeatures": {
-                          "type": "boolean"
-                        },
-                        "features": {
-                          "items": {
-                            "maxLength": 64,
-                            "minLength": 1,
-                            "type": "string"
-                          },
-                          "maxItems": 32,
-                          "type": "array"
-                        },
-                        "host": {
-                          "enum": [
-                            "x86_64-unknown-linux-gnu",
-                            "x86_64-pc-windows-msvc"
-                          ],
-                          "type": "string"
-                        },
-                        "indexFiles": {
-                          "items": {
-                            "additionalProperties": false,
-                            "properties": {
-                              "bytesBase64": {
-                                "maxLength": 87384,
+                        "outcome": {
+                          "properties": {
+                            "edgeCount": {
+                              "type": "number"
+                            },
+                            "edges": {
+                              "items": {
+                                "properties": {
+                                  "defaultFeatures": {
+                                    "type": "boolean"
+                                  },
+                                  "from": {
+                                    "type": "string"
+                                  },
+                                  "kind": {
+                                    "enum": [
+                                      "normal",
+                                      "build"
+                                    ],
+                                    "type": "string"
+                                  },
+                                  "requestedFeatures": {
+                                    "items": {
+                                      "type": "string"
+                                    },
+                                    "type": "array"
+                                  },
+                                  "target": {
+                                    "~elyTyp": 7,
+                                    "nullable": true,
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ]
+                                  },
+                                  "to": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "from",
+                                  "to",
+                                  "kind",
+                                  "target",
+                                  "requestedFeatures",
+                                  "defaultFeatures"
+                                ],
+                                "type": "object"
+                              },
+                              "type": "array"
+                            },
+                            "featureActivationCount": {
+                              "type": "number"
+                            },
+                            "instances": {
+                              "items": {
+                                "properties": {
+                                  "features": {
+                                    "items": {
+                                      "type": "string"
+                                    },
+                                    "type": "array"
+                                  },
+                                  "id": {
+                                    "type": "string"
+                                  },
+                                  "name": {
+                                    "type": "string"
+                                  },
+                                  "role": {
+                                    "enum": [
+                                      "host",
+                                      "target"
+                                    ],
+                                    "type": "string"
+                                  },
+                                  "source": {
+                                    "type": "string"
+                                  },
+                                  "version": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "id",
+                                  "source",
+                                  "name",
+                                  "version",
+                                  "role",
+                                  "features"
+                                ],
+                                "type": "object"
+                              },
+                              "type": "array"
+                            },
+                            "missing": {
+                              "items": {
                                 "type": "string"
                               },
-                              "name": {
+                              "type": "array"
+                            },
+                            "releaseCount": {
+                              "type": "number"
+                            },
+                            "selected": {
+                              "items": {
+                                "properties": {
+                                  "id": {
+                                    "type": "string"
+                                  },
+                                  "name": {
+                                    "type": "string"
+                                  },
+                                  "source": {
+                                    "type": "string"
+                                  },
+                                  "version": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "id",
+                                  "source",
+                                  "name",
+                                  "version"
+                                ],
+                                "type": "object"
+                              },
+                              "type": "array"
+                            },
+                            "status": {
+                              "enum": [
+                                "solved",
+                                "unsupported-semantics",
+                                "incomplete-source-data",
+                                "budget-exhausted"
+                              ],
+                              "type": "string"
+                            },
+                            "unsupportedClauses": {
+                              "items": {
+                                "type": "string"
+                              },
+                              "type": "array"
+                            }
+                          },
+                          "required": [
+                            "status",
+                            "selected",
+                            "instances",
+                            "edges",
+                            "missing",
+                            "unsupportedClauses",
+                            "releaseCount",
+                            "edgeCount",
+                            "featureActivationCount"
+                          ],
+                          "type": "object"
+                        },
+                        "profile": {
+                          "const": "cargo-index-exact-resolution-v1",
+                          "type": "string"
+                        },
+                        "request": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "defaultFeatures": {
+                              "type": "boolean"
+                            },
+                            "features": {
+                              "items": {
                                 "maxLength": 64,
                                 "minLength": 1,
                                 "type": "string"
                               },
-                              "sha256": {
-                                "pattern": "^[0-9a-f]{64}$",
-                                "type": "string"
-                              }
+                              "maxItems": 32,
+                              "type": "array"
                             },
-                            "required": [
-                              "name",
-                              "bytesBase64",
-                              "sha256"
-                            ],
-                            "type": "object"
+                            "host": {
+                              "enum": [
+                                "x86_64-unknown-linux-gnu",
+                                "x86_64-pc-windows-msvc"
+                              ],
+                              "type": "string"
+                            },
+                            "indexFiles": {
+                              "items": {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "bytesBase64": {
+                                    "maxLength": 87384,
+                                    "type": "string"
+                                  },
+                                  "name": {
+                                    "maxLength": 64,
+                                    "minLength": 1,
+                                    "type": "string"
+                                  },
+                                  "sha256": {
+                                    "pattern": "^[0-9a-f]{64}$",
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "name",
+                                  "bytesBase64",
+                                  "sha256"
+                                ],
+                                "type": "object"
+                              },
+                              "maxItems": 32,
+                              "type": "array"
+                            },
+                            "manifestBase64": {
+                              "maxLength": 87384,
+                              "type": "string"
+                            },
+                            "manifestSha256": {
+                              "pattern": "^[0-9a-f]{64}$",
+                              "type": "string"
+                            },
+                            "profile": {
+                              "const": "cargo-index-exact-resolver2-v1",
+                              "type": "string"
+                            },
+                            "registryIndexUrl": {
+                              "maxLength": 300,
+                              "minLength": 10,
+                              "type": "string"
+                            },
+                            "target": {
+                              "enum": [
+                                "x86_64-unknown-linux-gnu",
+                                "x86_64-pc-windows-msvc"
+                              ],
+                              "type": "string"
+                            }
                           },
-                          "maxItems": 32,
-                          "type": "array"
-                        },
-                        "manifestBase64": {
-                          "maxLength": 87384,
-                          "type": "string"
-                        },
-                        "manifestSha256": {
-                          "pattern": "^[0-9a-f]{64}$",
-                          "type": "string"
-                        },
-                        "profile": {
-                          "const": "cargo-index-exact-resolver2-v1",
-                          "type": "string"
-                        },
-                        "registryIndexUrl": {
-                          "maxLength": 300,
-                          "minLength": 10,
-                          "type": "string"
-                        },
-                        "target": {
-                          "enum": [
-                            "x86_64-unknown-linux-gnu",
-                            "x86_64-pc-windows-msvc"
+                          "required": [
+                            "profile",
+                            "registryIndexUrl",
+                            "manifestBase64",
+                            "manifestSha256",
+                            "indexFiles",
+                            "host",
+                            "target",
+                            "features",
+                            "defaultFeatures"
                           ],
+                          "type": "object"
+                        },
+                        "requestDigest": {
+                          "type": "string"
+                        },
+                        "resolution": {
                           "type": "string"
                         }
                       },
                       "required": [
                         "profile",
-                        "registryIndexUrl",
-                        "manifestBase64",
-                        "manifestSha256",
-                        "indexFiles",
-                        "host",
-                        "target",
-                        "features",
-                        "defaultFeatures"
+                        "resolution",
+                        "requestDigest",
+                        "request",
+                        "outcome",
+                        "createdAt"
                       ],
                       "type": "object"
                     },
-                    "requestDigest": {
-                      "type": "string"
-                    },
-                    "resolution": {
-                      "type": "string"
+                    {
+                      "properties": {
+                        "createdAt": {
+                          "type": "string"
+                        },
+                        "outcome": {
+                          "anyOf": [
+                            {
+                              "properties": {
+                                "edgeCount": {
+                                  "type": "number"
+                                },
+                                "edges": {
+                                  "items": {
+                                    "properties": {
+                                      "defaultFeatures": {
+                                        "type": "boolean"
+                                      },
+                                      "from": {
+                                        "type": "string"
+                                      },
+                                      "kind": {
+                                        "enum": [
+                                          "normal",
+                                          "build"
+                                        ],
+                                        "type": "string"
+                                      },
+                                      "requestedFeatures": {
+                                        "items": {
+                                          "type": "string"
+                                        },
+                                        "type": "array"
+                                      },
+                                      "target": {
+                                        "~elyTyp": 7,
+                                        "nullable": true,
+                                        "type": [
+                                          "string",
+                                          "null"
+                                        ]
+                                      },
+                                      "to": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "from",
+                                      "to",
+                                      "kind",
+                                      "target",
+                                      "requestedFeatures",
+                                      "defaultFeatures"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  "type": "array"
+                                },
+                                "featureActivationCount": {
+                                  "type": "number"
+                                },
+                                "instances": {
+                                  "items": {
+                                    "properties": {
+                                      "features": {
+                                        "items": {
+                                          "type": "string"
+                                        },
+                                        "type": "array"
+                                      },
+                                      "id": {
+                                        "type": "string"
+                                      },
+                                      "name": {
+                                        "type": "string"
+                                      },
+                                      "role": {
+                                        "enum": [
+                                          "host",
+                                          "target"
+                                        ],
+                                        "type": "string"
+                                      },
+                                      "source": {
+                                        "type": "string"
+                                      },
+                                      "version": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "id",
+                                      "source",
+                                      "name",
+                                      "version",
+                                      "role",
+                                      "features"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  "type": "array"
+                                },
+                                "linksConflicts": {
+                                  "items": {
+                                    "properties": {
+                                      "kind": {
+                                        "const": "native-links",
+                                        "type": "string"
+                                      },
+                                      "links": {
+                                        "maxLength": 64,
+                                        "minLength": 1,
+                                        "type": "string"
+                                      },
+                                      "packages": {
+                                        "items": {
+                                          "properties": {
+                                            "id": {
+                                              "type": "string"
+                                            },
+                                            "name": {
+                                              "type": "string"
+                                            },
+                                            "roles": {
+                                              "items": {
+                                                "enum": [
+                                                  "host",
+                                                  "target"
+                                                ],
+                                                "type": "string"
+                                              },
+                                              "maxItems": 2,
+                                              "type": "array"
+                                            },
+                                            "source": {
+                                              "type": "string"
+                                            },
+                                            "version": {
+                                              "type": "string"
+                                            }
+                                          },
+                                          "required": [
+                                            "id",
+                                            "source",
+                                            "name",
+                                            "version",
+                                            "roles"
+                                          ],
+                                          "type": "object"
+                                        },
+                                        "maxItems": 128,
+                                        "minItems": 2,
+                                        "type": "array"
+                                      }
+                                    },
+                                    "required": [
+                                      "kind",
+                                      "links",
+                                      "packages"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  "maxItems": 0,
+                                  "type": "array"
+                                },
+                                "missing": {
+                                  "items": {
+                                    "type": "string"
+                                  },
+                                  "type": "array"
+                                },
+                                "releaseCount": {
+                                  "type": "number"
+                                },
+                                "selected": {
+                                  "items": {
+                                    "properties": {
+                                      "id": {
+                                        "type": "string"
+                                      },
+                                      "name": {
+                                        "type": "string"
+                                      },
+                                      "source": {
+                                        "type": "string"
+                                      },
+                                      "version": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "id",
+                                      "source",
+                                      "name",
+                                      "version"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  "type": "array"
+                                },
+                                "status": {
+                                  "enum": [
+                                    "solved",
+                                    "unsupported-semantics",
+                                    "incomplete-source-data",
+                                    "budget-exhausted"
+                                  ],
+                                  "type": "string"
+                                },
+                                "unsupportedClauses": {
+                                  "items": {
+                                    "type": "string"
+                                  },
+                                  "type": "array"
+                                }
+                              },
+                              "required": [
+                                "status",
+                                "selected",
+                                "instances",
+                                "edges",
+                                "missing",
+                                "unsupportedClauses",
+                                "releaseCount",
+                                "edgeCount",
+                                "featureActivationCount",
+                                "linksConflicts"
+                              ],
+                              "type": "object"
+                            },
+                            {
+                              "properties": {
+                                "edgeCount": {
+                                  "type": "number"
+                                },
+                                "edges": {
+                                  "items": {
+                                    "properties": {
+                                      "defaultFeatures": {
+                                        "type": "boolean"
+                                      },
+                                      "from": {
+                                        "type": "string"
+                                      },
+                                      "kind": {
+                                        "enum": [
+                                          "normal",
+                                          "build"
+                                        ],
+                                        "type": "string"
+                                      },
+                                      "requestedFeatures": {
+                                        "items": {
+                                          "type": "string"
+                                        },
+                                        "type": "array"
+                                      },
+                                      "target": {
+                                        "~elyTyp": 7,
+                                        "nullable": true,
+                                        "type": [
+                                          "string",
+                                          "null"
+                                        ]
+                                      },
+                                      "to": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "from",
+                                      "to",
+                                      "kind",
+                                      "target",
+                                      "requestedFeatures",
+                                      "defaultFeatures"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  "maxItems": 0,
+                                  "type": "array"
+                                },
+                                "featureActivationCount": {
+                                  "type": "number"
+                                },
+                                "instances": {
+                                  "items": {
+                                    "properties": {
+                                      "features": {
+                                        "items": {
+                                          "type": "string"
+                                        },
+                                        "type": "array"
+                                      },
+                                      "id": {
+                                        "type": "string"
+                                      },
+                                      "name": {
+                                        "type": "string"
+                                      },
+                                      "role": {
+                                        "enum": [
+                                          "host",
+                                          "target"
+                                        ],
+                                        "type": "string"
+                                      },
+                                      "source": {
+                                        "type": "string"
+                                      },
+                                      "version": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "id",
+                                      "source",
+                                      "name",
+                                      "version",
+                                      "role",
+                                      "features"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  "maxItems": 0,
+                                  "type": "array"
+                                },
+                                "linksConflicts": {
+                                  "items": {
+                                    "properties": {
+                                      "kind": {
+                                        "const": "native-links",
+                                        "type": "string"
+                                      },
+                                      "links": {
+                                        "maxLength": 64,
+                                        "minLength": 1,
+                                        "type": "string"
+                                      },
+                                      "packages": {
+                                        "items": {
+                                          "properties": {
+                                            "id": {
+                                              "type": "string"
+                                            },
+                                            "name": {
+                                              "type": "string"
+                                            },
+                                            "roles": {
+                                              "items": {
+                                                "enum": [
+                                                  "host",
+                                                  "target"
+                                                ],
+                                                "type": "string"
+                                              },
+                                              "maxItems": 2,
+                                              "type": "array"
+                                            },
+                                            "source": {
+                                              "type": "string"
+                                            },
+                                            "version": {
+                                              "type": "string"
+                                            }
+                                          },
+                                          "required": [
+                                            "id",
+                                            "source",
+                                            "name",
+                                            "version",
+                                            "roles"
+                                          ],
+                                          "type": "object"
+                                        },
+                                        "maxItems": 128,
+                                        "minItems": 2,
+                                        "type": "array"
+                                      }
+                                    },
+                                    "required": [
+                                      "kind",
+                                      "links",
+                                      "packages"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  "maxItems": 64,
+                                  "minItems": 1,
+                                  "type": "array"
+                                },
+                                "missing": {
+                                  "items": {
+                                    "type": "string"
+                                  },
+                                  "maxItems": 0,
+                                  "type": "array"
+                                },
+                                "releaseCount": {
+                                  "type": "number"
+                                },
+                                "selected": {
+                                  "items": {
+                                    "properties": {
+                                      "id": {
+                                        "type": "string"
+                                      },
+                                      "name": {
+                                        "type": "string"
+                                      },
+                                      "source": {
+                                        "type": "string"
+                                      },
+                                      "version": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "id",
+                                      "source",
+                                      "name",
+                                      "version"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  "maxItems": 0,
+                                  "type": "array"
+                                },
+                                "status": {
+                                  "const": "unsatisfiable",
+                                  "type": "string"
+                                },
+                                "unsupportedClauses": {
+                                  "items": {
+                                    "type": "string"
+                                  },
+                                  "maxItems": 0,
+                                  "type": "array"
+                                }
+                              },
+                              "required": [
+                                "status",
+                                "selected",
+                                "instances",
+                                "edges",
+                                "missing",
+                                "unsupportedClauses",
+                                "releaseCount",
+                                "edgeCount",
+                                "featureActivationCount",
+                                "linksConflicts"
+                              ],
+                              "type": "object"
+                            }
+                          ]
+                        },
+                        "profile": {
+                          "const": "cargo-index-exact-resolution-v2",
+                          "type": "string"
+                        },
+                        "request": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "defaultFeatures": {
+                              "type": "boolean"
+                            },
+                            "features": {
+                              "items": {
+                                "maxLength": 64,
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "maxItems": 32,
+                              "type": "array"
+                            },
+                            "host": {
+                              "enum": [
+                                "x86_64-unknown-linux-gnu",
+                                "x86_64-pc-windows-msvc"
+                              ],
+                              "type": "string"
+                            },
+                            "indexFiles": {
+                              "items": {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "bytesBase64": {
+                                    "maxLength": 87384,
+                                    "type": "string"
+                                  },
+                                  "name": {
+                                    "maxLength": 64,
+                                    "minLength": 1,
+                                    "type": "string"
+                                  },
+                                  "sha256": {
+                                    "pattern": "^[0-9a-f]{64}$",
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "name",
+                                  "bytesBase64",
+                                  "sha256"
+                                ],
+                                "type": "object"
+                              },
+                              "maxItems": 32,
+                              "type": "array"
+                            },
+                            "manifestBase64": {
+                              "maxLength": 87384,
+                              "type": "string"
+                            },
+                            "manifestSha256": {
+                              "pattern": "^[0-9a-f]{64}$",
+                              "type": "string"
+                            },
+                            "profile": {
+                              "const": "cargo-index-exact-resolver2-v2",
+                              "type": "string"
+                            },
+                            "registryIndexUrl": {
+                              "maxLength": 300,
+                              "minLength": 10,
+                              "type": "string"
+                            },
+                            "target": {
+                              "enum": [
+                                "x86_64-unknown-linux-gnu",
+                                "x86_64-pc-windows-msvc"
+                              ],
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "profile",
+                            "registryIndexUrl",
+                            "manifestBase64",
+                            "manifestSha256",
+                            "indexFiles",
+                            "host",
+                            "target",
+                            "features",
+                            "defaultFeatures"
+                          ],
+                          "type": "object"
+                        },
+                        "requestDigest": {
+                          "type": "string"
+                        },
+                        "resolution": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "profile",
+                        "resolution",
+                        "requestDigest",
+                        "request",
+                        "outcome",
+                        "createdAt"
+                      ],
+                      "type": "object"
                     }
-                  },
-                  "required": [
-                    "profile",
-                    "resolution",
-                    "requestDigest",
-                    "request",
-                    "outcome",
-                    "createdAt"
-                  ],
-                  "type": "object"
+                  ]
                 }
               }
             },

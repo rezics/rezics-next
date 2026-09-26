@@ -4,6 +4,7 @@ import { resolve } from 'node:path';
 import { gzipSync } from 'node:zlib';
 import { solveCargoSnapshot, type CargoRequest }
   from '../../services/main/src/modules/package/cargo-resolution.ts';
+import { verifyCargoLinksOracle } from './cargo-links-oracle.ts';
 
 const base = resolve('.temp/package-cargo-oracle');
 const cargo = Bun.which('cargo');
@@ -42,10 +43,12 @@ function tarFile(path: string, bytes: Uint8Array): Uint8Array {
   const padding = Buffer.alloc((512 - bytes.length % 512) % 512);
   return Buffer.concat([header, bytes, padding]);
 }
-function crate(name: string, version: string, manifest: string): Uint8Array {
+function crate(name: string, version: string, manifest: string, links = false): Uint8Array {
   const prefix = `${name}-${version}`;
   const archive = Buffer.concat([tarFile(`${prefix}/Cargo.toml`, encoder.encode(manifest)),
     tarFile(`${prefix}/src/lib.rs`, encoder.encode('pub fn fixture() {}\n')),
+    ...(links ? [tarFile(`${prefix}/build.rs`, encoder.encode(
+      'fn main() { panic!("oracle must not run build scripts"); }\n'))] : []),
     Buffer.alloc(1024)]);
   return gzipSync(archive, { mtime: 0 } as never);
 }
@@ -93,6 +96,8 @@ if (version.exitCode !== 0 || version.stdout.trim() !== 'cargo 1.98.1 (797e8a9bc
 }
 await rm(resolve(base, 'work'), { recursive: true, force: true });
 await rm(resolve(base, 'cargo-home'), { recursive: true, force: true });
+await rm(resolve(base, 'links'), { recursive: true, force: true });
+await rm(resolve(base, 'links-result.json'), { force: true });
 await mkdir(resolve(base, 'work'), { recursive: true });
 await mkdir(resolve(base, 'cargo-home'), { recursive: true });
 const archives = new Map<string, Uint8Array>();
@@ -227,3 +232,4 @@ try {
   await writeFile(resolve(base, 'result.json'), JSON.stringify(result, null, 2));
   console.log(`Cargo oracle matched ${selected.length} selected packages and ${nativeEdges.length} root edges; result: ${resolve(base, 'result.json')}`);
 } finally { server.stop(true); }
+await verifyCargoLinksOracle(base, cargo, crate, indexPath);

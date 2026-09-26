@@ -6,7 +6,7 @@ export class CargoResolutionConflict extends Error {}
 export class CargoResolutionUnavailable extends Error {}
 
 export interface CargoRequest {
-  profile: 'cargo-index-exact-resolver2-v1';
+  profile: 'cargo-index-exact-resolver2-v1' | 'cargo-index-exact-resolver2-v2';
   registryIndexUrl: string;
   manifestBase64: string;
   manifestSha256: string;
@@ -17,23 +17,27 @@ export interface CargoRequest {
   defaultFeatures: boolean;
 }
 type Status = 'solved' | 'unsupported-semantics' | 'incomplete-source-data'
-  | 'budget-exhausted';
+  | 'budget-exhausted' | 'unsatisfiable';
 type Role = 'host' | 'target';
 interface Dependency { name: string; version: string; features: string[];
   optional: boolean; defaultFeatures: boolean; kind: 'normal' | 'build';
   target: string | null }
 interface Release { name: string; version: string; dependencies: Dependency[];
-  features: Record<string, string[]> }
+  features: Record<string, string[]>; links: string | null }
 export interface CargoInstance { id: string; source: string; name: string;
   version: string; role: Role; features: string[] }
 export interface CargoEdge { from: string; to: string; kind: 'normal' | 'build';
   target: string | null; requestedFeatures: string[]; defaultFeatures: boolean }
+export interface CargoLinksConflict { kind: 'native-links'; links: string;
+  packages: Array<{ id: string; source: string; name: string; version: string;
+    roles: Role[] }> }
 export interface CargoOutcome { status: Status; selected: Array<{ id: string;
   source: string; name: string; version: string }>;
   instances: CargoInstance[]; edges: CargoEdge[]; missing: string[];
   unsupportedClauses: string[]; releaseCount: number; edgeCount: number;
-  featureActivationCount: number }
-export interface CargoResolution { profile: 'cargo-index-exact-resolution-v1';
+  featureActivationCount: number; linksConflicts?: CargoLinksConflict[] }
+export interface CargoResolution { profile: 'cargo-index-exact-resolution-v1'
+  | 'cargo-index-exact-resolution-v2';
   resolution: string; requestDigest: string; request: CargoRequest;
   outcome: CargoOutcome; createdAt: string }
 
@@ -176,9 +180,9 @@ function parseManifest(text: string): Release {
     }
   }
   return { name: pkg.name as string, version: pkg.version as string,
-    dependencies, features: featureMap(parsed.features) };
+    dependencies, features: featureMap(parsed.features), links: null };
 }
-function parseIndex(files: CargoRequest['indexFiles']): Map<string, Release> {
+function parseIndex(files: CargoRequest['indexFiles'], admitLinks: boolean): Map<string, Release> {
   if (!Array.isArray(files) || files.length > MAX_FILES) invalid('invalid Cargo index file count');
   const releases = new Map<string, Release>();
   const seen = new Set<string>();
@@ -200,13 +204,17 @@ function parseIndex(files: CargoRequest['indexFiles']): Map<string, Release> {
       }
       if (raw.v != null && raw.v !== 1) throw new Unsupported('Cargo index schema v2');
       if (raw.yanked !== false) throw new Unsupported('yanked Cargo release');
-      if (raw.links != null) throw new Unsupported('Cargo native links');
+      if (raw.links != null) {
+        if (!admitLinks) throw new Unsupported('Cargo native links');
+        if (typeof raw.links !== 'string') invalid('Cargo native links must be a string or null');
+        if (!FEATURES.test(raw.links)) throw new Unsupported('unsupported Cargo native links name');
+      }
       const dependencies = raw.deps.map(value => dep(value,
         String(object(value).name), true));
       const key = `${file.name}@${raw.vers}`;
       if (releases.has(key)) invalid('duplicate Cargo release identity');
       releases.set(key, { name: file.name, version: raw.vers as string,
-        dependencies, features: featureMap(raw.features) });
+        dependencies, features: featureMap(raw.features), links: raw.links as string | null ?? null });
       if (releases.size > MAX_RELEASES) throw new Budget('Cargo release limit');
     }
   }
@@ -268,7 +276,13 @@ function expandFeatures(release: Release, requested: Set<string>): {
 }
 
 export function solveCargoSnapshot(input: CargoRequest): CargoOutcome {
-  if (!input || input.profile !== 'cargo-index-exact-resolver2-v1'
+  const outcome = solveSnapshot(input);
+  return input.profile === 'cargo-index-exact-resolver2-v2'
+    ? { ...outcome, linksConflicts: outcome.linksConflicts ?? [] } : outcome;
+}
+
+function solveSnapshot(input: CargoRequest): CargoOutcome {
+  if (!input || !['cargo-index-exact-resolver2-v1', 'cargo-index-exact-resolver2-v2'].includes(input.profile)
     || !/^https:\/\/[^?#@]+\/$/.test(input.registryIndexUrl)
     || !Array.isArray(input.features) || input.features.length > 32
     || input.features.some(feature => typeof feature !== 'string' || !FEATURES.test(feature))
@@ -279,9 +293,10 @@ export function solveCargoSnapshot(input: CargoRequest): CargoOutcome {
   }
   let root: Release;
   let releases: Map<string, Release>;
+  const linksProfile = input.profile === 'cargo-index-exact-resolver2-v2';
   try {
     root = parseManifest(decode(input.manifestBase64, input.manifestSha256));
-    releases = parseIndex(input.indexFiles);
+    releases = parseIndex(input.indexFiles, linksProfile);
   } catch (error) {
     if (error instanceof Unsupported) return { ...empty('unsupported-semantics'),
       unsupportedClauses: [error.message] };
@@ -293,7 +308,53 @@ export function solveCargoSnapshot(input: CargoRequest): CargoOutcome {
   const missing = new Set<string>();
   const visit = [root];
   let edgeCount = 0;
-  while (visit.length) {
+  let activationCount = 0;
+  // V1 traversal is frozen for durable replay. V2 must not lock-select inactive
+  // transitive optional dependencies: doing so could invent a links conflict.
+  if (linksProfile) {
+    const states = new Map<Release, { requested: Set<string>; processed?: string }>();
+    const enqueue = (release: Release, features: string[], defaults: boolean) => {
+      let state = states.get(release);
+      const created = !state;
+      if (!state) { state = { requested: new Set() }; states.set(release, state); }
+      const previousSize = state.requested.size;
+      for (const feature of features) state.requested.add(feature);
+      if (defaults && release.features.default) state.requested.add('default');
+      if (created || previousSize !== state.requested.size) visit.push(release);
+    };
+    visit.length = 0;
+    const hiddenOptional = new Set(Object.values(root.features).flat());
+    enqueue(root, [...input.features, ...Object.keys(root.features),
+      ...root.dependencies.filter(dependency => dependency.optional
+        && !hiddenOptional.has(`dep:${dependency.name}`)).map(dependency => dependency.name)], true);
+    try {
+      while (visit.length) {
+        const current = visit.shift()!;
+        const state = states.get(current)!;
+        const signature = [...state.requested].sort().join('\0');
+        if (state.processed === signature) continue;
+        state.processed = signature;
+        const expanded = expandFeatures(current, state.requested);
+        activationCount += expanded.active.size;
+        if (activationCount > MAX_ACTIVATIONS) throw new Budget('Cargo lock feature activation limit');
+        for (const dependency of current.dependencies) {
+          if (dependency.optional && !expanded.optional.has(dependency.name)) continue;
+          if (++edgeCount > MAX_EDGES) throw new Budget('Cargo lock edge limit');
+          const key = `${dependency.name}@${dependency.version}`;
+          const release = releases.get(key);
+          if (!release) { missing.add(key); continue; }
+          selected.set(key, release);
+          enqueue(release, [...dependency.features,
+            ...(expanded.dependencyFeatures.get(dependency.name) ?? [])], dependency.defaultFeatures);
+        }
+      }
+    } catch (error) {
+      if (error instanceof Unsupported) return { ...empty('unsupported-semantics',
+        selected.size, edgeCount, activationCount), unsupportedClauses: [error.message] };
+      if (error instanceof Budget) return empty('budget-exhausted', selected.size, edgeCount, activationCount);
+      throw error;
+    }
+  } else while (visit.length) {
     const current = visit.shift()!;
     for (const dependency of current.dependencies) {
       if (++edgeCount > MAX_EDGES) return empty('budget-exhausted', selected.size, edgeCount);
@@ -303,14 +364,14 @@ export function solveCargoSnapshot(input: CargoRequest): CargoOutcome {
       else if (!selected.has(key)) { selected.set(key, release); visit.push(release); }
     }
   }
-  if (missing.size) return { ...empty('incomplete-source-data', selected.size, edgeCount),
+  if (missing.size) return { ...empty('incomplete-source-data', selected.size, edgeCount, activationCount),
     missing: [...missing].sort() };
   const compatibility = new Map<string, string>();
   for (const release of selected.values()) {
     const key = `${release.name}:${compatibilityClass(release.version)}`;
     const prior = compatibility.get(key);
     if (prior && prior !== release.version) return {
-      ...empty('unsupported-semantics', selected.size, edgeCount),
+      ...empty('unsupported-semantics', selected.size, edgeCount, activationCount),
       unsupportedClauses: [`compatible exact version collision: ${release.name}`] };
     compatibility.set(key, release.version);
   }
@@ -340,7 +401,6 @@ export function solveCargoSnapshot(input: CargoRequest): CargoOutcome {
     return id;
   };
   ensure(root, 'target', input.features, input.defaultFeatures);
-  let activationCount = 0;
   try {
     while (queue.length) {
       const id = queue.shift()!;
@@ -376,6 +436,30 @@ export function solveCargoSnapshot(input: CargoRequest): CargoOutcome {
       selected.size, edgeCount, activationCount);
     throw error;
   }
+  if (linksProfile) {
+    const owners = new Map<string, CargoLinksConflict['packages']>();
+    const roles = new Map<string, Role[]>();
+    for (const state of states.values()) {
+      if (state.release === root) continue;
+      const id = sourceId(input.registryIndexUrl, state.release.name, state.release.version);
+      const active = roles.get(id) ?? [];
+      active.push(state.role);
+      roles.set(id, active);
+    }
+    for (const identity of lock) {
+      const release = selected.get(`${identity.name}@${identity.version}`)!;
+      if (release.links === null) continue;
+      const packages = owners.get(release.links) ?? [];
+      packages.push({ ...identity, roles: (roles.get(identity.id) ?? []).sort() });
+      owners.set(release.links, packages);
+    }
+    const linksConflicts: CargoLinksConflict[] = [...owners]
+      .filter(([, packages]) => packages.length > 1)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([links, packages]) => ({ kind: 'native-links', links, packages }));
+    if (linksConflicts.length) return { ...empty('unsatisfiable', selected.size,
+      edgeCount, activationCount), linksConflicts };
+  }
   return { status: 'solved', selected: lock,
     instances: [...states].map(([id, state]) => ({ id,
       source: state.release === root ? 'root' : input.registryIndexUrl,
@@ -395,7 +479,8 @@ export class CargoResolutionStore {
       || stable(row.outcome) !== stable(solveCargoSnapshot(row.request))) {
       throw new CargoResolutionUnavailable('stored Cargo resolution differs from its snapshot');
     }
-    return { profile: 'cargo-index-exact-resolution-v1',
+    return { profile: row.request.profile === 'cargo-index-exact-resolver2-v2'
+      ? 'cargo-index-exact-resolution-v2' : 'cargo-index-exact-resolution-v1',
       resolution: `https://rezics.com/id/${row.id}`, requestDigest: row.request_digest,
       request: row.request, outcome: row.outcome, createdAt: row.created_at.toISOString() };
   }

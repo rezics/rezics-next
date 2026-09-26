@@ -55,6 +55,41 @@ This boundary follows Cargo's [resolver 2 feature and target rules](https://doc.
 [registry index schema](https://doc.rust-lang.org/cargo/reference/registry-index.html#json-schema),
 and [metadata graph fields](https://doc.rust-lang.org/cargo/commands/cargo-metadata.html).
 
+The separately versioned `cargo-index-exact-resolver2-v2` profile admits the
+index's optional `links` value. Absent/null means no native library; admitted
+names match `[A-Za-z_][A-Za-z0-9_-]{0,63}` and remain case-sensitive. A nonstring
+value is malformed; other string syntax is unsupported. Root-manifest `links`
+and build-script execution remain outside the profile. All v1 requests retain
+their original unsupported-`links` behavior and stored v1 receipts replay
+without adding fields or changing their outcome.
+
+V2 lock selection enables all root features and optional dependencies, then
+propagates the requested/default dependency features across all targets. Inactive
+transitive optional dependencies are not selected. This versioned correction is
+necessary to avoid a false `links` proof; v1 traversal remains frozen for replay.
+`featureActivationCount` in v2 includes lock and active-graph expansion work under
+the shared 512-activation budget. V2 first completes its bounded selected graph
+and feature validation. Missing source data, unsupported clauses and exhausted
+budgets retain their distinct
+outcomes; none is relabeled unsatisfiable. Only distinct selected
+registry/name/version identities claiming the same native name prove
+`unsatisfiable`. One identity used in both host and target roles is one owner.
+Unselected index releases cannot introduce a conflict. The v2 outcome adds
+`linksConflicts`, empty except on unsatisfiable outcomes. Each conflict has
+`kind: native-links`, the exact `links` name and sorted `packages` containing
+`id`, `source`, `name`, `version` and sorted active `roles`. A lock-selected but
+inactive owner has no active roles. Conflicts sort by native name and package
+identity; unsuccessful outcomes keep the normal selected/instance/edge arrays
+empty, so the witnesses cannot be mistaken for a usable lock or build plan.
+
+The design follows Cargo's [native-library uniqueness rule](https://doc.rust-lang.org/cargo/reference/resolver.html#links)
+and [index links metadata](https://doc.rust-lang.org/cargo/reference/registry-index.html#json-schema).
+The bounded native differential fixture establishes both conflict and solvable
+cases on Cargo 1.98.1; the [package tests](../testing/packages.md) record its scope.
+It does not prove
+general backtracking, yanked fresh/locked eligibility, artifact validation or
+installation; PKG02/PKG12/PKG13 remain partial.
+
 ## npm, pnpm and Yarn
 
 Package instances are scoped by dependency/peer environment; a map from package

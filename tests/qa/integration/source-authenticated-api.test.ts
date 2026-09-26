@@ -23,7 +23,7 @@ import { SourceChildCorrespondenceStore }
   from '../../../services/main/src/modules/source/record-child-correspondence.ts';
 import { GoMvsResolutionStore }
   from '../../../services/main/src/modules/package/go-mvs.ts';
-import { CargoResolutionStore }
+import { CargoResolutionStore, type CargoResolution }
   from '../../../services/main/src/modules/package/cargo-resolution.ts';
 import { GoProxyCaptureStore }
   from '../../../services/main/src/modules/package/go-proxy-capture.ts';
@@ -35,6 +35,7 @@ import includedGoSumdb from '../fixtures/go-sumdb-x-sync.json';
 import latestGoSumdb from '../fixtures/go-sumdb-latest.json';
 import { cargoFixture } from '../fixtures/cargo-snapshot.ts';
 import { assertSourceSupportWithdrawal } from '../fixtures/source-support-withdrawal.ts';
+import { cargoLinksFixture } from '../fixtures/cargo-links-snapshot.ts';
 
 async function freePort(): Promise<number> {
   return new Promise((resolvePort, reject) => {
@@ -48,7 +49,7 @@ async function freePort(): Promise<number> {
   });
 }
 
-test('IAM10/LIVE01/LIVE02/LIVE03/LIVE05/LIVE13/PKG01/PKG05/PKG12/PKG13/PKG14/PKG20: real Account and Access fence source and package operations', async () => {
+test('IAM10/LIVE01/LIVE02/LIVE03/LIVE05/LIVE13/PKG01/PKG02/PKG05/PKG12/PKG13/PKG14/PKG20: real Account and Access fence source and package operations', async () => {
   if (!Bun.env.REZICS_QA_RUN_ID || !Bun.env.CONTENT_DATABASE_URL
     || !Bun.env.ACCESS_DATABASE_URL || !Bun.env.ACCOUNT_DATABASE_URL
     || !Bun.env.ACCOUNT_MAIN_RESOURCE || !Bun.env.FUSEKI_URL
@@ -775,6 +776,58 @@ test('IAM10/LIVE01/LIVE02/LIVE03/LIVE05/LIVE13/PKG01/PKG05/PKG12/PKG13/PKG14/PKG
       otherWork: concurrentAdoption.work, actor, titlePath, titleBody,
       failNextAcquisition: () => { failNextSourceFetch = true; },
       loseNextWithdrawalResponse: () => { loseNextWithdrawalResponse = true; } });
+    const cargoLinksBody = cargoLinksFixture();
+    const cargoLinksKey = `cargo-links-${randomUUID()}`;
+    expect((await call('POST', cargoPath, packageReadToken,
+      cargoLinksBody, cargoLinksKey)).status).toBe(401);
+    const concurrentCargoLinks = await Promise.all([0, 1].map(() =>
+      call('POST', cargoPath, packageResolveToken, cargoLinksBody, cargoLinksKey)));
+    expect(concurrentCargoLinks.map(response => response.status).sort()).toEqual([200, 201]);
+    const concurrentCargoResults = await Promise.all(concurrentCargoLinks.map(response => response.json())) as
+      Array<{ resolution: CargoResolution; replayed: boolean }>;
+    const cargoLinksSaved = concurrentCargoResults[0]!.resolution;
+    expect(concurrentCargoResults[1]!.resolution).toEqual(cargoLinksSaved);
+    expect(cargoLinksSaved).toMatchObject({ profile: 'cargo-index-exact-resolution-v2',
+      request: cargoLinksBody, outcome: { status: 'unsatisfiable', selected: [], instances: [],
+        edges: [], linksConflicts: [{ kind: 'native-links', links: 'native_shared', packages: [
+          { name: 'shared', version: '1.0.0', source: cargoLinksBody.registryIndexUrl,
+            roles: ['host', 'target'] },
+          { name: 'shared', version: '2.0.0', source: cargoLinksBody.registryIndexUrl,
+            roles: ['target'] },
+        ] }] } });
+    const cargoLinksId = cargoLinksSaved.resolution.split('/').at(-1)!;
+    const cargoLinksReadPath = `${cargoPath}/${cargoLinksId}`;
+    expect((await call('GET', cargoLinksReadPath, packageResolveToken)).status).toBe(401);
+    expect((await call('GET', cargoLinksReadPath, otherPackageReadToken)).status).toBe(404);
+    expect(await (await call('GET', cargoLinksReadPath, packageReadToken)).json()).toEqual(cargoLinksSaved);
+    expect(await (await call('POST', cargoPath, packageResolveToken,
+      cargoLinksBody, cargoLinksKey)).json()).toEqual({ resolution: cargoLinksSaved, replayed: true });
+    expect((await call('POST', cargoPath, packageResolveToken,
+      { ...cargoLinksBody, profile: 'cargo-index-exact-resolver2-v1' }, cargoLinksKey)).status).toBe(409);
+    const v1LinksKey = `cargo-v1-links-${randomUUID()}`;
+    const v1LinksBody = { ...cargoLinksBody, profile: 'cargo-index-exact-resolver2-v1' };
+    const v1Links = await (await call('POST', cargoPath, packageResolveToken,
+      v1LinksBody, v1LinksKey)).json() as { resolution: CargoResolution; replayed: boolean };
+    expect(v1Links.resolution).toMatchObject({ profile: 'cargo-index-exact-resolution-v1',
+      outcome: { status: 'unsupported-semantics', unsupportedClauses: ['Cargo native links'] } });
+    expect(v1Links.resolution.outcome).not.toHaveProperty('linksConflicts');
+    expect(await (await call('POST', cargoPath, packageResolveToken,
+      v1LinksBody, v1LinksKey)).json()).toEqual({ ...v1Links, replayed: true });
+    expect(await (await call('GET', `${cargoPath}/${v1Links.resolution.resolution.split('/').at(-1)}`,
+      packageReadToken)).json()).toEqual(v1Links.resolution);
+    const distinctLinks = await call('POST', cargoPath, packageResolveToken,
+      cargoLinksFixture('distinct-links'));
+    expect(distinctLinks.status).toBe(201);
+    expect(await distinctLinks.json()).toMatchObject({ resolution: {
+      profile: 'cargo-index-exact-resolution-v2', outcome: { status: 'solved', linksConflicts: [] } } });
+    const missingLinks = { ...cargoLinksBody, indexFiles: cargoLinksBody.indexFiles
+      .filter(file => file.name !== 'windowsonly') };
+    expect(await (await call('POST', cargoPath, packageResolveToken, missingLinks)).json())
+      .toMatchObject({ resolution: { outcome: { status: 'incomplete-source-data', linksConflicts: [] } } });
+    expect((await call('POST', cargoPath, packageResolveToken,
+      { ...cargoLinksBody, manifestSha256: '0'.repeat(64) })).status).toBe(422);
+    await expect(contentPool.query('UPDATE pkg.cargo_resolution SET outcome = $2 WHERE id = $1',
+      [cargoLinksId, JSON.stringify({ status: 'solved' })])).rejects.toThrow();
     await accessPool.query('UPDATE access.principal SET active = false WHERE id = $1', [principalId]);
     expect((await call('POST', withdrawal.path, sourceAdoptToken,
       withdrawal.body, withdrawal.key)).status).toBe(403);
@@ -807,6 +860,9 @@ test('IAM10/LIVE01/LIVE02/LIVE03/LIVE05/LIVE13/PKG01/PKG05/PKG12/PKG13/PKG14/PKG
     expect((await call('POST', cargoPath, packageResolveToken,
       cargoBody)).status).toBe(403);
     expect((await call('GET', cargoReadPath, packageReadToken)).status).toBe(403);
+    expect((await call('POST', cargoPath, packageResolveToken,
+      cargoLinksBody, cargoLinksKey)).status).toBe(403);
+    expect((await call('GET', cargoLinksReadPath, packageReadToken)).status).toBe(403);
     expect((await call('POST', capturePath, packageCaptureToken,
       captureBody)).status).toBe(403);
     expect((await call('GET', `${capturePath}/${captureId}`,

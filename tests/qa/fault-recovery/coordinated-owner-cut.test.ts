@@ -21,6 +21,8 @@ import { type IncludedGoSumdbLookup }
   from '../../../services/main/src/modules/package/go-sumdb-lookup.ts';
 import { GoSumdbTrustStore }
   from '../../../services/main/src/modules/package/go-sumdb-trust.ts';
+import { CargoResolutionStore }
+  from '../../../services/main/src/modules/package/cargo-resolution.ts';
 import { AccessAdmissionRegistry, engageAccessRecoveryFence, releaseAccessRecoveryFence }
   from '../../../services/main/src/modules/access/admission.ts';
 import { AccountAssertionVerifier } from '../../../services/main/src/modules/account/verify-assertion.ts';
@@ -41,6 +43,7 @@ import { retainRecoveryCoverageHead }
 import { readEnv, stackDirectory } from '../../../scripts/dev/config.ts';
 import includedGoSumdb from '../fixtures/go-sumdb-x-sync.json';
 import latestGoSumdb from '../fixtures/go-sumdb-latest.json';
+import { cargoLinksFixture } from '../fixtures/cargo-links-snapshot.ts';
 
 const root = resolve(import.meta.dir, '../../..');
 const recoveryKey = 'd4'.repeat(32);
@@ -232,6 +235,15 @@ test('OPS03/PKG14: signed owner cut restores Content and exact Go checksum proof
     const packageReceipt = (await packageTrust.verify(principalId,
       packageReceiptKey, packageCapture))!.verification;
     const packageVerification = packageReceipt.verification.split('/').at(-1)!;
+    const cargoResolutions = new CargoResolutionStore(contentPool);
+    const cargoRequest = cargoLinksFixture();
+    const cargoKey = `owner-cut-cargo-${randomUUID()}`;
+    const cargoV1Request = { ...cargoRequest, profile: 'cargo-index-exact-resolver2-v1' as const };
+    const cargoV1 = (await cargoResolutions.resolve(principalId, `${cargoKey}-v1`, cargoV1Request)).resolution;
+    const cargoV2 = (await cargoResolutions.resolve(principalId, cargoKey, cargoRequest)).resolution;
+    expect(cargoV1.outcome.status).toBe('unsupported-semantics');
+    expect(cargoV1.outcome).not.toHaveProperty('linksConflicts');
+    expect(cargoV2.outcome.status).toBe('unsatisfiable');
     const packageOnlyCoverage = await captureContentRecoveryCoverage(contentPool, []);
     expect(packageOnlyCoverage.graphReferencesCount).toBe('0');
     expect(packageOnlyCoverage.packageTables.go_proxy_capture.count).toBe('1');
@@ -337,6 +349,15 @@ test('OPS03/PKG14: signed owner cut restores Content and exact Go checksum proof
     expect(await restoredPackageTrust.verify(principalId,
       packageReceiptKey, packageCapture)).toEqual({
         verification: packageReceipt, replayed: true });
+    const restoredCargo = new CargoResolutionStore(restoredContent);
+    for (const [key, request, receipt] of [[`${cargoKey}-v1`, cargoV1Request, cargoV1],
+      [cargoKey, cargoRequest, cargoV2]] as const) {
+      expect(await restoredCargo.read(principalId, receipt.resolution.split('/').at(-1)!))
+        .toEqual(receipt);
+      expect(await restoredCargo.resolve(principalId, key, request))
+        .toEqual({ resolution: receipt, replayed: true });
+      expect(await restoredCargo.read(randomUUID(), receipt.resolution.split('/').at(-1)!)).toBeNull();
+    }
     const restoredEvidence = { sealedCoverage, hmacKey: recoveryKey,
       accountPool: restoredAccount, contentPool: restoredContent };
 
