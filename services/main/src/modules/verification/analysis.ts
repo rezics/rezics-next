@@ -87,17 +87,19 @@ function observationRoots(start: string, outgoing: ReadonlyMap<string, readonly 
   const links = outgoing.get(start) ?? [];
   work.links += links.length;
   let result: Roots;
-  const published = links.find(link => link.relation === 'publishes-origin' && link.targetOrigin);
-  if (published) result = { kind: 'roots', roots: new Set([`origin:${published.targetOrigin}`]) };
-  else if (!links.length) result = { kind: 'unknown' };
+  // A copied or generated observation cannot declare itself a new origin.
+  // Follow its derivation even when an attached page also claims publication.
+  const dependencies = links.filter(link => link.relation !== 'publishes-origin');
+  const considered = dependencies.length ? dependencies : links;
+  if (!considered.length) result = { kind: 'unknown' };
   else {
     const roots = new Set<string>();
     let state: 'roots' | 'unknown' | 'circular' = 'roots';
-    for (const link of links) {
+    for (const link of considered) {
       const next: Roots = link.targetObservation
         ? observationRoots(link.targetObservation, outgoing, memo, visiting, work)
-        : { kind: 'roots', roots: new Set([link.targetOrigin ? `origin:${link.targetOrigin}`
-          : `reference:${link.targetReference}`]) };
+        : link.targetOrigin ? { kind: 'roots', roots: new Set([`origin:${link.targetOrigin}`]) }
+          : { kind: 'unknown' };
       if (next.kind === 'circular') { state = 'circular'; break; }
       if (next.kind === 'unknown') state = 'unknown';
       else if (next.kind === 'roots') for (const root of next.roots) roots.add(root);
@@ -142,8 +144,9 @@ export function analyzeClaimSupport(input: AnalysisInput): AnalysisResult {
   let dependence: Dependence = input.truncated ? 'over-budget' : 'established';
   for (const item of supporting) {
     if (dependence === 'over-budget' || dependence === 'circular') break;
-    if (item.contentRevision) { origins.add(`content:${item.contentRevision}`); continue; }
-    if (item.graphReference) { origins.add(`graph:${item.graphReference}`); continue; }
+    // Exact anchors are inspectable, but their identities alone say nothing
+    // about independence from another source or from each other.
+    if (item.contentRevision || item.graphReference) { dependence = 'unknown'; continue; }
     const roots = observationRoots(item.observation!, outgoing, memo, new Set(), work);
     if (roots.kind === 'circular') dependence = 'circular';
     else if (roots.kind === 'unknown') dependence = 'unknown';

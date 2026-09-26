@@ -46,6 +46,7 @@ import type { WorkActivationEnvironment } from '../modules/work/activate.ts';
 import type { ReaderVariantPreferenceStore } from '../modules/work/native-variants.ts';
 import type { RealmVariantRecommendationStore }
   from '../modules/work/realm-variant-recommendation.ts';
+import type { VerificationStore } from '../modules/verification/store.ts';
 import type { MediaAccessBatchReader } from '../modules/media/access-batch.ts';
 import type { ErasureService } from '../modules/erasure/request.ts';
 import type { RealmReplyStore } from '../modules/realm-reply/store.ts';
@@ -108,6 +109,7 @@ export interface MainWorkDependencies {
   openLibraryFetch?: typeof fetch;
   readerPreferences?: ReaderVariantPreferenceStore;
   realmRecommendations?: RealmVariantRecommendationStore;
+  verification?: VerificationStore;
   /** Current Access authority for bounded resource-summary batches. */
   mediaAccess?: Pick<MediaAccessBatchReader, 'canReadWorks'>;
   /** Relay erasure journal and Content owner; absent means erasure is unavailable. */

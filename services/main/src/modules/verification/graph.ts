@@ -28,12 +28,17 @@ export class InvalidVerificationInput extends Error {}
 export class VerificationGraphStale extends Error {}
 
 export type Family = 'claim-create' | 'reliability-assess' | 'claim-assess';
+const CANCEL_EVENTS: Record<Family, string> = {
+  'claim-create': 'ClaimCreationCancelledEvent',
+  'reliability-assess': 'SourceReliabilityAssessmentCancelledEvent',
+  'claim-assess': 'ClaimAssessmentCancelledEvent',
+};
 export const ADMISSIONS: Record<Family, { scope: string; action: string; accountScope: string }> = {
-  'claim-create': { scope: 'verification:claim:global', action: 'verification.claim.create',
+  'claim-create': { scope: 'verification:claim:global', action: 'verification.claim-create',
     accountScope: 'claim:create' },
   'reliability-assess': { scope: 'verification:reliability:global',
-    action: 'verification.reliability.assess', accountScope: 'claim:reliability' },
-  'claim-assess': { scope: 'verification:assess:global', action: 'verification.claim.assess',
+    action: 'verification.reliability-assess', accountScope: 'claim:reliability' },
+  'claim-assess': { scope: 'verification:assess:global', action: 'verification.claim-assess',
     accountScope: 'claim:assess' },
 };
 
@@ -56,7 +61,7 @@ const dateTime = (value: string) => `${lit(value)}^^<${XSD}dateTime>`;
 const integer = (value: number) => `${lit(String(value))}^^<${XSD}integer>`;
 
 /** Read one receipt with its declared result predicates; null when absent. */
-export async function readReceipt(env: WorkActivationEnvironment, admissionId: string, family: Family,
+export async function readReceipt(env: Pick<WorkActivationEnvironment, 'fuseki'>, admissionId: string, family: Family,
   results: readonly string[]): Promise<GraphReceipt | null> {
   const receipt = receiptIri(admissionId, family);
   const response = await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?outcome ?digest ?id ?epoch ?scope
@@ -189,7 +194,7 @@ export async function sealVerificationAdmission(env: WorkActivationEnvironment, 
         GRAPH ${iri(GRAPHS.outbox)} {
           ${iri(`urn:rezics:outbox:${marker}`)} a rv:OutboxBatch ; rv:dataEpoch ${lit(env.lineage.dataEpoch)} ;
             rv:sequence ?next ; rv:eventCount 1 ; rv:event ${iri(`urn:rezics:event:${marker}`)} .
-          ${iri(`urn:rezics:event:${marker}`)} a rv:VerificationCancelledEvent ; rv:ordinal 0 ;
+          ${iri(`urn:rezics:event:${marker}`)} a rv:${CANCEL_EVENTS[family]} ; rv:ordinal 0 ;
             rv:action ${lit(admission.action)} ; rv:receipt ${iri(receipt)} ;
             rv:admissionId ${lit(admission.id)} .
         }

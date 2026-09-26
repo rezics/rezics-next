@@ -7,12 +7,26 @@ import { InvalidVerificationInput, readAssessment, readClaimRevisions, Verificat
 import { assessAdmittedClaim, createAdmittedClaim, PendingVerification, readClaimQuality,
   recordAdmittedReliability, type VerificationDependencies } from '../modules/verification/operations.ts';
 import { nativeId, VerificationConflict, VerificationDenied, VerificationInvalid, VerificationMissing,
-  VerificationStale, VerificationStore, VerificationUnavailable } from '../modules/verification/store.ts';
+  VerificationStale, VerificationUnavailable } from '../modules/verification/store.ts';
 import type { MainWorkDependencies } from './dependencies.ts';
 import { commandError, problem } from './problems.ts';
 
-/** The verification owner is wired beside the shared dependencies until they list it. */
-export interface ClaimDependencies { verification?: VerificationStore }
+export const openApiOperations = {
+  '/v1/claims': { post: { bearer: true, idempotencyKey: true } },
+  '/v1/claims/{claim}': { get: { bearer: true } },
+  '/v1/source-reliability-assessments': { post: { bearer: true, idempotencyKey: true } },
+  '/v1/claims/{claim}/assessments': { post: { bearer: true, idempotencyKey: true } },
+  '/v1/claims/{claim}/assessments/{assessment}': { get: { bearer: true } },
+  '/v1/claims/{claim}/evidence': { post: { bearer: true, idempotencyKey: true } },
+  '/v1/claims/{claim}/evidence/{revision}': { get: { bearer: true } },
+  '/v1/claims/{claim}/challenges': { post: { bearer: true, idempotencyKey: true }, get: { bearer: true } },
+  '/v1/claims/{claim}/challenges/{challenge}/withdrawal': { post: { bearer: true, idempotencyKey: true } },
+  '/v1/claims/{claim}/corrections': { get: { bearer: true } },
+  '/v1/verification/origins': { post: { bearer: true, idempotencyKey: true } },
+  '/v1/sources/observations/{observation}/lineage': { post: { bearer: true, idempotencyKey: true } },
+  '/v1/verification/lineage/{edge}/retraction': { post: { bearer: true, idempotencyKey: true } },
+  '/v1/sources/observations/{observation}/derivation': { post: { bearer: true, idempotencyKey: true } },
+} as const;
 
 const uuid = t.String({ pattern: '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' });
 const nativeRef = t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' });
@@ -60,7 +74,7 @@ const keyOf = (request: Request) => {
 };
 
 export function claimRoutes(work: MainWorkDependencies) {
-  const store = (work as MainWorkDependencies & ClaimDependencies).verification;
+  const store = work.verification;
   const deps = (): VerificationDependencies => {
     if (!store) throw new VerificationUnavailable('verification owner is not configured');
     return { env: work.environment, account: work.account, access: work.access, store };
@@ -144,14 +158,14 @@ export function claimRoutes(work: MainWorkDependencies) {
       params: t.Object({ claim: uuid, assessment: uuid }), response: read,
     }, async ({ request, params }) => {
       try {
-        await principal(request, 'claim:read');
+        const reader = await principal(request, 'claim:read');
         const assessment = await readAssessment(work.environment, nativeId(params.assessment));
         if (!assessment || assessment.claim !== nativeId(params.claim)) {
           return problem(404, 'assessment_unavailable', 'Assessment is unavailable');
         }
         // The exact manifest it cited, with current availability; never the current head.
-        const evidence = await deps().store.readEvidence(assessment.evidenceSetRevision.split('/').at(-1)!);
-        return ok({ assessment, evidence });
+        const evidence = await deps().store.readEvidenceFor(assessment.evidenceSetRevision.split('/').at(-1)!, reader);
+        return ok({ assessment, evidence, evidenceAvailability: evidence ? 'available' : 'inaccessible' });
       } catch (error) { return claimError(error); }
     })
     .post('/v1/claims/:claim/evidence', {
@@ -169,8 +183,8 @@ export function claimRoutes(work: MainWorkDependencies) {
       params: t.Object({ claim: uuid, revision: uuid }), response: read,
     }, async ({ request, params }) => {
       try {
-        await principal(request, 'claim:read');
-        const evidence = await deps().store.readEvidence(params.revision);
+        const reader = await principal(request, 'claim:read');
+        const evidence = await deps().store.readEvidenceFor(params.revision, reader);
         return evidence && evidence.claim === nativeId(params.claim) ? ok(evidence)
           : problem(404, 'evidence_unavailable', 'Evidence revision is unavailable');
       } catch (error) { return claimError(error); }

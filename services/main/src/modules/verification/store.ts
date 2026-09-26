@@ -350,6 +350,16 @@ export class VerificationStore {
     catch (error) { if (error instanceof VerificationMissing) return null; throw error; }
   }
 
+  /** HTTP disclosure: private observation selectors belong to their evidence author. */
+  async readEvidenceFor(id: string, principal: string): Promise<EvidenceRevision | null> {
+    if (!UUID.test(id)) return null;
+    return this.tx(async client => {
+      const row = (await client.query<{ principal_id: string }>(`SELECT principal_id
+        FROM verification.evidence_set_revision WHERE id = $1`, [id])).rows[0];
+      return row?.principal_id === principal ? this.readEvidenceWith(client, id) : null;
+    });
+  }
+
   async evidenceHead(claim: string): Promise<string | null> {
     const row = (await this.pool.query<{ head: string }>('SELECT head FROM verification.evidence_head WHERE claim = $1',
       [claim])).rows[0];

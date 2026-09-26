@@ -231,6 +231,10 @@ export async function assessAdmittedClaim(deps: VerificationDependencies, reques
   const receipt = await admitted(deps, request, 'claim-assess',
     { actingSubject: input.actingSubject, idempotencyKey, digest }, async admission => {
       basis = await assessmentBasis(deps, claim, intent, true);
+      if (dependencies(claim, intent, basis, basis.snapshot.challenge.revision).length
+        > verificationLimits.summaryDependencies) {
+        throw new InvalidVerificationInput('assessment dependency manifest exceeds the admitted ceiling');
+      }
       return recordAssessment(deps.env, admission, digest, { claim, claimRevision: input.claimRevision,
         evidenceSetRevision: input.evidenceSetRevision, sourceAssessments: [...input.sourceAssessments].sort(),
         method: input.method === 'automated' ? SUPPORT_METHOD : HUMAN_REVIEW_METHOD,

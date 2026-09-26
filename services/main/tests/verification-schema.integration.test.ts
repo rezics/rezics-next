@@ -8,6 +8,7 @@ import { Pool, type PoolClient } from 'pg';
 import { migrateContent } from '../../content/src/migrate.ts';
 import { verificationColumns, verificationEnumerations, verificationLimits,
   type VerificationRows } from '../src/modules/verification/schema.ts';
+import { VerificationStore } from '../src/modules/verification/store.ts';
 
 const root = resolve(import.meta.dir, '../../..');
 const migrations = join(root, 'services/content/migrations');
@@ -169,6 +170,7 @@ test('FACT01-FACT04 owner schema: Content verification migrations install empty 
       const versions = await pool.query<{ version: number }>('SELECT version FROM content.schema_migration ORDER BY version');
       expect(versions.rows.map(row => row.version)).toEqual(local.map(item => item.version));
       await assertCatalog(pool);
+      await fanoutInvariants(pool);
 
       await older.query(`CREATE SCHEMA content; CREATE TABLE content.schema_migration (version integer PRIMARY KEY,
         applied_at timestamptz NOT NULL DEFAULT now())`);
@@ -204,6 +206,36 @@ test('FACT01-FACT04 owner schema: Content verification migrations install empty 
     execFileSync('pg_ctl', ['-D', join(state, 'pgdata'), '-m', 'fast', '-w', 'stop'], { cwd: state });
   }
 }, 120_000);
+
+// FACT04: a skewed source invalidation advances in bounded, resumable pages.
+async function fanoutInvariants(pool: Pool) {
+  const source = native();
+  const context = 'urn:rezics:context:fanout';
+  const targets = Array.from({ length: 67 }, native);
+  await tx(pool, async client => {
+    for (const target of targets) {
+      const active = await generation(client, target, context, 1, null,
+        [['source-assessment', source, native()]]);
+      await client.query(`INSERT INTO verification.summary_head
+        (target, context, active_generation, generation) VALUES ($1, $2, $3, 1)`,
+      [target, context, active]);
+    }
+  });
+  const event = id();
+  await pool.query(`INSERT INTO verification.invalidation
+    (id, producer, event_key, kind, reference, changed_head, producer_epoch, producer_sequence)
+    VALUES ($1, 'graph', $2, 'source-assessment', $3, $4, 'epoch-a', 1)`,
+  [event, `urn:rezics:event:${sha(event)}`, source, native()]);
+  const owner = new VerificationStore(pool);
+  const first = await owner.processInvalidations('fanout-qa', { pageSize: 7, maxPages: 3 });
+  expect(first).toEqual({ pages: 3, rowsRead: 21, marked: 21, completed: 0 });
+  const rest = await owner.processInvalidations('fanout-qa', { pageSize: 7, maxPages: 20 });
+  expect(rest).toEqual({ pages: 7, rowsRead: 46, marked: 46, completed: 1 });
+  const demand = await pool.query<{ count: string }>(`SELECT count(*)::text FROM verification.reassessment_request
+    WHERE context = $1`, [context]);
+  expect(demand.rows[0]?.count).toBe('67');
+  expect((await owner.processInvalidations('fanout-qa')).pages).toBe(0);
+}
 
 // FACT01/FACT02: lineage and derivation are exact, complete and append-only.
 async function lineageInvariants(pool: Pool) {
