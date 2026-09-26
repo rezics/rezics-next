@@ -42,7 +42,9 @@ Parallel workers must not collide on derived or registry files:
 - Add a model profile as a new `model/definitions/<name>-v1.ts`; the compiler
   discovers it. Do not edit other profiles unless the brief claims them.
 - Use only your reserved migration numbers. Content migration versions may have
-  gaps; Access and relay files apply in file-name order.
+  gaps; Access and relay files apply in file-name order. Register a new Content
+  receipt action with `INSERT INTO content.receipt_action ... ON CONFLICT DO
+  NOTHING` (migration 022); never drop or re-list a receipt action constraint.
 - Put complete-case declarations in a new file of your own under
   `scripts/qa/coverage/` when the brief claims it; otherwise give the exact tier,
   file and test name in the handoff and the manager declares it.

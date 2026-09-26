@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
 import { execFileSync } from 'node:child_process';
-import { mkdirSync, readFileSync, rmSync } from 'node:fs';
+import { mkdirSync, readdirSync, readFileSync, rmSync } from 'node:fs';
 import { createServer } from 'node:net';
 import { join, resolve } from 'node:path';
 import { Pool } from 'pg';
@@ -40,7 +40,9 @@ test('WORK09/WORK10: Content core CAS, exact bytes, receipts, pins and outbox', 
     await migrateContent(pool);
     const versions = await pool.query<{ version: number }>(
       'SELECT version FROM content.schema_migration ORDER BY version');
-    expect(versions.rows.map(row => row.version)).toEqual([1, 2, 3, 4]);
+    const local = readdirSync(join(import.meta.dir, '../migrations')).filter(name => name.endsWith('.sql'))
+      .sort().map(name => Number(name.slice(0, 3)));
+    expect(versions.rows.map(row => row.version)).toEqual(local);
 
     // A retained v3 Content owner upgrades through the same runner; it must
     // preserve the SQL-owned triggers and install only the missing migration.
@@ -60,7 +62,7 @@ test('WORK09/WORK10: Content core CAS, exact bytes, receipts, pins and outbox', 
       await migrateContent(older);
       const upgraded = await older.query<{ version: number }>(
         'SELECT version FROM content.schema_migration ORDER BY version');
-      expect(upgraded.rows.map(row => row.version)).toEqual([1, 2, 3, 4]);
+      expect(upgraded.rows.map(row => row.version)).toEqual(local);
       const ordering = await older.query<{ name: string | null }>(
         "SELECT to_regclass('content.comment_list_order_seq')::text AS name");
       expect(ordering.rows[0]?.name).toBe('content.comment_list_order_seq');
