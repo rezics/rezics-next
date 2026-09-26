@@ -106,6 +106,9 @@ function domainRoutes(fuseki: FusekiClient, work: SearchRouteDependencies) {
     .use(notificationRoutes(work))
     .use(reportRoutes(work))
     .use(rightsRoutes(work));
+    .use(rightsRoutes(work))
+    .use(recommendationRoutes(work))
+    .use(graphLayoutRoutes(work));
 }
 
 function extraRoutes1(fuseki: FusekiClient, work: SearchRouteDependencies) {
