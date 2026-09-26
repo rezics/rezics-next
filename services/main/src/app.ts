@@ -99,12 +99,12 @@ function domainRoutes(fuseki: FusekiClient, work: SearchRouteDependencies) {
     .use(recommendationRoutes(work))
     .use(graphLayoutRoutes(work))
     .use(workRoutes(fuseki, work))
-    .use(packageNixRoutes(work))
-    .use(compositionRoutes(fuseki, work));
+    .use(packageNixRoutes(work));
 }
 
 function extraRoutes1(fuseki: FusekiClient, work: SearchRouteDependencies) {
   return new Elysia()
+    .use(compositionRoutes(fuseki, work))
     .use(packageModRoutes(work))
     .use(realmReplyRoutes(work))
     .use(ownerRoutes(work))
