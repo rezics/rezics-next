@@ -89,7 +89,7 @@ test('QA06: failure rerun selects failed names without borrowing prior passes', 
       'services/main/tests/content-revision-read.integration.test.ts',
       'services/content/tests/core.integration.test.ts']);
     expect(testArgs('model')).toEqual(['infra/jena/tests/command.integration.test.ts',
-      'model/compiler/generate.test.ts', 'model/tests/native-equivalence.test.ts',
+      'model/compiler/generate.test.ts', 'model/tests/native-equivalence.test.ts', 'model/tests/daily-rating.test.ts',
       'packages/model/tests/generated.test.ts']);
     expect(testArgs('fault/recovery')).toEqual(['tests/qa/fault-recovery',
       'services/account/tests/account-pitr.integration.test.ts',

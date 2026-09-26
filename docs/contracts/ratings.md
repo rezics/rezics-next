@@ -50,6 +50,66 @@ principal ID. Aggregation and joined search remain separate qualification.
 
 ## Slots and time
 
+### Realm daily v1
+
+`realm-daily-rating-context-v1` is a distinct immutable question profile. It fixes
+the same MainVersion grain, Account population and integer 1–10 scale as standing,
+with daily cadence, ISO calendar and a canonical named IANA `timeZone` selected
+at context creation. Changing the timezone creates another Context. The API accepts
+this profile at `POST /v1/rating-contexts`; public context reads return its timezone.
+Numeric client offsets and per-submission timezone overrides are not admitted.
+
+`POST /v1/rating-observations` also accepts
+`realm-daily-rating-observation-v1`. The body has the standing fields: Context,
+Work, MainVersion, value or null, acting subject and exact `expectedRevisionHead`.
+With a null head, Access's durable `registered_at` instant selects the current
+civil day in the Context's timezone. No client time, day, period or counting
+identity is accepted. The opaque slot hashes the private Access principal,
+Context, MainVersion, daily cadence and civil date. Another persona cannot add a
+slot; another principal or day can. Concurrent first writes have one winner and
+terminal stale-head losers. A retry retains its admission instant across midnight.
+
+With an exact head, the server derives the original day/slot from that revision
+and verifies its private principal binding. Correction, withdrawal and restoration
+retain the Observation and its evaluation/original-submission time, even on a
+later day; a null value withdraws without reviving an earlier value. A stale head
+gets the existing terminal 409 behavior. A new day requires a null head and a new
+idempotency key. Existing Account and Access configure/submit/read authorities
+apply, including active principal checks. Exact revision reads accept the daily
+profile as a query discriminator and require that same private principal.
+
+Each daily Observation and immutable revision records `day` (`YYYY-MM-DD`),
+`timeZone`, ISO calendar, and half-open `periodStart`/`periodEnd` UTC bounds.
+The owner schema uses separate daily Context/Observation/Revision types alongside
+their base Rating types, and separately generated shapes and native bindings.
+The immutable Context manifest fixes timezone; the Observation manifest fixes
+the selected period and all four timestamps. Existing standing profiles, manifest
+bytes, receipt identifiers and relay envelope fields remain compatible. Daily
+effects reuse the admitted action's receipt identity and retained manifest channel;
+recovery validates the daily profile and private slot without recalculating stored
+bounds using a later timezone database.
+
+Point lookups bind Context, target, opaque slot and exact revision through TDB2
+indexes. Admission/idempotency uses Access's existing unique principal/action/key
+index. Each command reads/writes a constant number of bounded nodes and one
+manifest; it never scans the Context's voters or all historical days. Reject
+ambiguous/missing dependencies. The real-owner fixture enforces at most 24 graph
+read calls and 64 KiB of returned graph bytes per measured branch, including
+retries and nested receipt/manifest checks, while growing the exact slot's history.
+Native engine work and deployment capacity require separate qualification.
+Daily aggregation, experience cadence and new
+cross-context policies remain outside this profile.
+
+The calendar decision follows [Temporal's start-of-day semantics](https://tc39.es/proposal-temporal/docs/zoneddatetime.html#zoneddatetimestartofday--temporalzoneddatetime)
+(reviewed 2026-09-26): use the first valid instant of the civil day and calendar
+addition for the next day, including skipped/repeated midnight. Fixed 24-hour
+arithmetic and client-provided offsets fail DST counterexamples. The pinned
+Temporal polyfill uses the pinned server runtime's IANA/ICU data. Stored exact
+bounds are authoritative for existing observations; timezone-data upgrades affect
+only newly admitted periods. Tests exercise both DST transitions, midnight gaps,
+retry/concurrency, persona changes and retained replay; small fixtures do not
+qualify deployment capacity.
+
 Standing has one effective opinion per counting identity/target/context. Daily
 uses a server-validated calendar period, timezone and DST-resolved bounds.
 Experience uses an explicit occasion. Preserve evaluation time, submission time,

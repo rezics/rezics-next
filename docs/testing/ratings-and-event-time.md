@@ -27,3 +27,31 @@ the Main aggregate API returns only the independent rater's 6, while the older
 revision. Restoring that same observation to 9 yields a two-rater mean of 7.5.
 Selected integration `20260925t183302-fd4807` passed; a selected run reports
 RATE04 as partial until a complete run executes its declared case coverage.
+
+The registered [daily API/recovery fixture](../../tests/qa/fault-recovery/rating-daily.test.ts)
+uses real Better Auth Account assertions, Access registration/claim/sealing, Main
+HTTP handlers and isolated Jena owners. Only its disposable Access database's
+registration-time default is controlled to exercise 2026 New York spring/fall
+transitions. The product has no client or test clock override. It covers exact
+UTC bounds, client-field rejection, two personas for one private principal,
+competing first submissions, distinct principals/days, pre-dispatch and sealed
+retries crossing midnight, historical correction/withdrawal/restoration, missing
+scope/grant and inactive principal, authorized revision reads, held graph-loss
+replay twice and byte-identical relay envelopes, including standing effects.
+Tampering with the retained admission time blocks replay.
+
+[Calendar units](../../services/main/tests/rating-calendar.test.ts) add skipped
+midnight/date and repeated-hour counterexamples. The [native daily matrix](../../model/tests/daily-rating.test.ts)
+checks required calendar fields, period containment, exact bindings and rollback;
+the existing 66-case matrix preserves standing profile digests/outcomes. RATE03's
+complete declaration requires the named real-owner, native-model and calendar
+cases in a full backend run; selected checks remain partial evidence. RATE02
+remains partial because experience observations are outside the daily profile.
+
+Daily commands use bound Context/slot/revision lookups. The API fixture records
+Main-to-Fuseki read calls and actual response bytes with a 24-call/64-KiB ceiling
+per measured branch, and grows one observation's revision history at 1/4/8
+additional revisions. Exact-head edits must retain the same read-call count and
+within 1 KiB of response size. A deliberate over-budget read validates the meter.
+This checks the point-query cost contract; native operator work, hot-node
+contention at scale and physical capacity remain unmeasured.

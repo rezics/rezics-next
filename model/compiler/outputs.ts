@@ -79,7 +79,12 @@ function propertyExpression(property: PropertyDefinition, prefixes: ReadonlyMap<
 }
 
 function objectExpression(properties: readonly PropertyDefinition[], prefixes: ReadonlyMap<string, string>): string {
-  const entries = properties.map(property => `${quote(property.path)}: ${propertyExpression(property, prefixes)}`);
+  const grouped = new Map<string, string[]>();
+  for (const property of properties) {
+    grouped.set(property.path, [...grouped.get(property.path) ?? [], propertyExpression(property, prefixes)]);
+  }
+  const entries = [...grouped].map(([path, constraints]) =>
+    `${quote(path)}: ${constraints.length === 1 ? constraints[0] : `Type.Intersect([${constraints.join(', ')}])`}`);
   return `Type.Object({ "@id": Type.String({ minLength: 1 }), ${entries.join(', ')} }, { additionalProperties: true })`;
 }
 
@@ -108,6 +113,7 @@ function arbitraryValue(property: PropertyDefinition, prefixes: ReadonlyMap<stri
   }
   if (property.pattern) {
     const examples: Record<string, string> = {
+      '^\\d{4}-\\d{2}-\\d{2}$': '2026-03-08',
       '^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$': 'en',
       '^[A-Za-z]{2,8}(-[A-Za-z0-9]{1,8})*$': 'en-US',
       '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$':
@@ -131,8 +137,18 @@ function arbitraryValue(property: PropertyDefinition, prefixes: ReadonlyMap<stri
 }
 
 function arbitraryProperties(properties: readonly PropertyDefinition[], prefixes: ReadonlyMap<string, string>): string[] {
-  return properties.filter(property => property.maxCount !== 0 && (property.minCount || property.hasValue))
-    .map(property => {
+  const grouped = new Map<string, PropertyDefinition[]>();
+  for (const property of properties.filter(property => property.maxCount !== 0 && (property.minCount || property.hasValue))) {
+    grouped.set(property.path, [...grouped.get(property.path) ?? [], property]);
+  }
+  return [...grouped.values()].map(constraints => {
+      const property = constraints[0]!;
+      if (constraints.length > 1) {
+        if (!constraints.every(constraint => constraint.hasValue && constraint.maxCount === undefined)) {
+          throw new Error(`No arbitrary for repeated non-fixed constraints on ${property.path}`);
+        }
+        return `${quote(property.path)}: fc.constant(${quote([...new Set(constraints.map(constraint => expand(constraint.hasValue!, prefixes)))])})`;
+      }
       if (property.minCount && property.minCount > 1 && property.in
         && property.in.length === property.minCount && property.maxCount === property.minCount) {
         return `${quote(property.path)}: fc.constant(${quote(property.in.map(term => expand(term, prefixes)))})`;

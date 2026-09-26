@@ -33,6 +33,8 @@ export interface RegisteredAdmission {
   idempotencyKey: string;
   requestDigest: string;
   authorityEpoch: string;
+  /** Durable Access clock instant; daily rating requires it, legacy fixtures may omit it. */
+  registeredAt?: string;
   expiresAt: string;
   state: 'registered' | 'claimed' | 'sealed';
   dispatchEligible: boolean;
@@ -182,6 +184,7 @@ interface AdmissionRow {
   request_digest: string;
   authority_epoch: string;
   expires_at: Date;
+  registered_at: Date;
   state: string;
   eligible: boolean;
 }
@@ -627,7 +630,7 @@ export class AccessAdmissionRegistry {
 
       const existingResult = await client.query<AdmissionRow>(
         `SELECT id, principal_id, acting_subject, authority_path, scope_id, action, idempotency_key, request_digest,
-                authority_epoch, expires_at, state, group_member_id, group_grant_id, group_generation,
+                authority_epoch, registered_at, expires_at, state, group_member_id, group_grant_id, group_generation,
                 direct_grant_id, direct_grant_generation, attribution_id, attribution_generation,
                 direct_subject_generation, direct_principal_epoch,
                 private_group_member_id, private_group_member_generation,
@@ -667,7 +670,7 @@ export class AccessAdmissionRegistry {
           action: existing.action, idempotencyKey: existing.idempotency_key,
           requestDigest: existing.request_digest,
           authorityEpoch: existing.authority_epoch,
-          expiresAt: existing.expires_at.toISOString(), state: existing.state as RegisteredAdmission['state'],
+          registeredAt: existing.registered_at.toISOString(), expiresAt: existing.expires_at.toISOString(), state: existing.state as RegisteredAdmission['state'],
           dispatchEligible, replayed: true,
         };
       }
@@ -685,7 +688,7 @@ export class AccessAdmissionRegistry {
           actingSubject: existing.acting_subject, scope: existing.scope_id,
           authorityPath: existing.authority_path, action: existing.action,
           idempotencyKey: existing.idempotency_key, requestDigest: existing.request_digest,
-          authorityEpoch: existing.authority_epoch, expiresAt: existing.expires_at.toISOString(),
+          authorityEpoch: existing.authority_epoch, registeredAt: existing.registered_at.toISOString(), expiresAt: existing.expires_at.toISOString(),
           state: existing.state as RegisteredAdmission['state'], dispatchEligible, replayed: true };
       }
 
@@ -801,7 +804,7 @@ export class AccessAdmissionRegistry {
           action: existing.action, idempotencyKey: existing.idempotency_key,
           requestDigest: existing.request_digest,
           authorityEpoch: existing.authority_epoch,
-          expiresAt: existing.expires_at.toISOString(),
+          registeredAt: existing.registered_at.toISOString(), expiresAt: existing.expires_at.toISOString(),
           state: existing.state as RegisteredAdmission['state'],
           dispatchEligible: existing.state !== 'sealed' && existing.eligible,
           replayed: true,
@@ -810,7 +813,7 @@ export class AccessAdmissionRegistry {
       if (!gate.open) throw new AdmissionDenied('scope is closed');
 
       const id = Bun.randomUUIDv7();
-      const inserted = await client.query<{ expires_at: Date }>(
+      const inserted = await client.query<{ expires_at: Date; registered_at: Date }>(
         `INSERT INTO access.admission
            (id, principal_id, acting_subject, authority_path, direct_grant_id, attribution_id,
             direct_grant_generation, attribution_generation, direct_subject_generation,
@@ -830,7 +833,7 @@ export class AccessAdmissionRegistry {
            $20, $21, $22, $23, $24, $25, $26, $27, $28,
            $29, $30, $31, $32, $33, $34, $35, $36, $37,
            clock_timestamp() + interval '30 seconds', 'registered')
-         RETURNING expires_at`,
+         RETURNING expires_at, registered_at`,
         [id, principalId, request.actingSubject, authorityPath, directGrantId, attributionId,
           directGrantGeneration, attributionGeneration, directSubjectGeneration,
           directPrincipalEpoch,
@@ -860,6 +863,7 @@ export class AccessAdmissionRegistry {
         scope: request.scope, action: request.action, idempotencyKey: request.idempotencyKey,
         requestDigest: request.requestDigest,
         authorityEpoch: gate.authority_epoch,
+        registeredAt: inserted.rows[0]!.registered_at.toISOString(),
         expiresAt: inserted.rows[0]!.expires_at.toISOString(), state: 'registered',
         dispatchEligible: true, replayed: false,
       };
@@ -901,7 +905,7 @@ export class AccessAdmissionRegistry {
                 represented_subject_generation, represented_principal_epoch,
                 role_binding_id, role_binding_generation, role_family_id, role_revision,
                 scope_id, action, idempotency_key,
-                request_digest, authority_epoch, expires_at, state, claimed_at,
+                request_digest, authority_epoch, registered_at, expires_at, state, claimed_at,
                 (expires_at > clock_timestamp()) AS eligible
          FROM access.admission WHERE id = $1 FOR UPDATE`, [admissionId]);
       const row = result.rows[0];
@@ -943,7 +947,7 @@ export class AccessAdmissionRegistry {
         authorityPath: row.authority_path,
         scope, action: row.action, idempotencyKey: row.idempotency_key,
         requestDigest: row.request_digest, authorityEpoch: row.authority_epoch,
-        expiresAt: row.expires_at.toISOString(), state: 'claimed', dispatchEligible: true,
+        registeredAt: row.registered_at.toISOString(), expiresAt: row.expires_at.toISOString(), state: 'claimed', dispatchEligible: true,
         replayed: row.state === 'claimed',
         claimedAt: claimedAt!.toISOString() };
     } catch (error) {
@@ -1090,7 +1094,7 @@ export class AccessAdmissionRegistry {
     if (!Number.isInteger(limit) || limit < 1 || limit > 100) throw new AdmissionDenied('invalid seal batch limit');
     const result = await this.pool.query<AdmissionRow>(
       `SELECT id, principal_id, acting_subject, scope_id, action, idempotency_key,
-              request_digest, authority_epoch, expires_at, state,
+              request_digest, authority_epoch, registered_at, expires_at, state,
               (expires_at > clock_timestamp()) AS eligible
        FROM access.admission WHERE principal_id = $1 AND state <> 'sealed'
        ORDER BY id LIMIT $2`, [principalId, limit]);
@@ -1098,7 +1102,7 @@ export class AccessAdmissionRegistry {
       actingSubject: row.acting_subject, scope: row.scope_id, action: row.action,
       idempotencyKey: row.idempotency_key, requestDigest: row.request_digest,
       authorityEpoch: row.authority_epoch,
-      expiresAt: row.expires_at.toISOString(), state: row.state as RegisteredAdmission['state'],
+      registeredAt: row.registered_at.toISOString(), expiresAt: row.expires_at.toISOString(), state: row.state as RegisteredAdmission['state'],
       dispatchEligible: false, replayed: true }));
   }
 
@@ -1106,14 +1110,14 @@ export class AccessAdmissionRegistry {
     if (!Number.isInteger(limit) || limit < 1 || limit > 100) throw new AdmissionDenied('invalid seal batch limit');
     const result = await this.pool.query<AdmissionRow>(
       `SELECT id, principal_id, acting_subject, scope_id, action, idempotency_key,
-              request_digest, authority_epoch, expires_at, state,
+              request_digest, authority_epoch, registered_at, expires_at, state,
               (expires_at > clock_timestamp()) AS eligible
        FROM access.admission WHERE scope_id = $1 AND state <> 'sealed'
        ORDER BY id LIMIT $2`, [scope, limit]);
     return result.rows.map(row => ({ id: row.id, principalId: row.principal_id,
       actingSubject: row.acting_subject, scope: row.scope_id, action: row.action,
       idempotencyKey: row.idempotency_key, requestDigest: row.request_digest,
-      authorityEpoch: row.authority_epoch, expiresAt: row.expires_at.toISOString(),
+      authorityEpoch: row.authority_epoch, registeredAt: row.registered_at.toISOString(), expiresAt: row.expires_at.toISOString(),
       state: row.state as RegisteredAdmission['state'], dispatchEligible: row.eligible,
       replayed: true }));
   }
@@ -1138,7 +1142,7 @@ export class AccessAdmissionRegistry {
         graph_data_epoch: string | null; graph_sequence: string | null;
       }>(
         `SELECT id, principal_id, acting_subject, scope_id, action, idempotency_key,
-                request_digest, authority_epoch, expires_at, state, graph_receipt,
+                request_digest, authority_epoch, registered_at, expires_at, state, graph_receipt,
                 graph_outcome, graph_data_epoch, graph_sequence,
                 (expires_at > clock_timestamp()) AS eligible
          FROM access.admission WHERE id = $1 FOR UPDATE`, [admissionId]);

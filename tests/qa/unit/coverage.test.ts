@@ -1,10 +1,27 @@
 import { expect, test } from 'bun:test';
+import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { acceptanceStatuses, caseInventory, type TestResult } from '../../../scripts/qa/acceptance.ts';
 import { declaredCaseCoverage, missingCaseDeclarations, renderQualification }
   from '../../../scripts/qa/coverage.ts';
 
 const cases = caseInventory(resolve(import.meta.dir, '../../..'));
+
+test('QA08: RATE03 requires its exact owner, native model and calendar test identities', () => {
+  const coverage = declaredCaseCoverage(cases, 'backend');
+  const identities = coverage.get('RATE03')!;
+  expect(identities).toHaveLength(4);
+  const results = identities.map(identity => {
+    const [tier, file, ...title] = identity.split(':');
+    const name = title.join(':');
+    const source = readFileSync(resolve(import.meta.dir, '../../..', file!), 'utf8');
+    expect(source).toContain(`test('${name}'`);
+    return { tier, file, name, failed: false, skipped: false } as TestResult;
+  });
+  expect(acceptanceStatuses(cases, results, false, coverage).RATE03.status).toBe('partial-pass');
+  expect(acceptanceStatuses(cases, results.slice(1), true, coverage).RATE03.status).toBe('partial-pass');
+  expect(acceptanceStatuses(cases, results, true, coverage).RATE03.status).toBe('passed');
+});
 
 test('SYS02: declared lost-response coverage needs the real fault result in one complete run', () => {
   const coverage = declaredCaseCoverage(cases);

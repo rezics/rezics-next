@@ -1,3 +1,4 @@
+import { canonicalRatingTimeZone, DAILY_CONTEXT_ID, DAILY_CONTEXT_PROFILE, DAILY_CADENCE, ISO_CALENDAR } from './calendar.ts';
 import { CommandRejected, type CommandValidation } from '../../infrastructure/fuseki.ts';
 import { profileValidations } from '../../infrastructure/profile.ts';
 import { assertNotInvalidProfileReceipt, validatedCommand } from '../../infrastructure/invalid-receipt.ts';
@@ -22,6 +23,8 @@ export interface CreateRatingContextInput {
   realm: string;
   question: string;
   actingSubject: string;
+  /** Present only for the daily profile. */
+  timeZone?: string;
 }
 
 export interface RatingContextReceipt {
@@ -39,10 +42,12 @@ export function ratingContextDigest(input: CreateRatingContextInput): string {
     || input.question.trim() !== input.question) {
     throw new InvalidRatingContextInput('invalid standing rating context request');
   }
-  return hash(JSON.stringify({ family: 'realm-standing-rating-context-v1',
+  const timeZone = input.timeZone === undefined ? undefined : canonicalRatingTimeZone(input.timeZone);
+  return hash(JSON.stringify({ family: timeZone ? DAILY_CONTEXT_ID : 'realm-standing-rating-context-v1',
     realm: input.realm, question: input.question, actingSubject: input.actingSubject,
-    targetGrain: 'MainVersion', scale: [1, 10], cadence: RATING_STANDING_CADENCE,
-    population: RATING_ACCOUNT_POPULATION, aggregation: RATING_LATEST_MEAN_POLICY }));
+    targetGrain: 'MainVersion', scale: [1, 10], cadence: timeZone ? DAILY_CADENCE : RATING_STANDING_CADENCE,
+    population: RATING_ACCOUNT_POPULATION, aggregation: RATING_LATEST_MEAN_POLICY,
+    ...(timeZone ? { timeZone, calendar: 'iso8601' } : {}) }));
 }
 
 export function ratingContextReceiptIri(admissionId: string): string {
@@ -93,20 +98,23 @@ function checked(receipt: RatingContextReceipt, admission: RegisteredAdmission,
 }
 
 async function validateCandidate(env: WorkActivationEnvironment, realm: string,
-  context: string, question: string): Promise<CommandValidation[]> {
+  context: string, question: string, timeZone?: string): Promise<CommandValidation[]> {
   iri(realm); iri(context);
   if (!question) throw new InvalidRatingContextInput('rating question is empty');
-  const profile = REALM_STANDING_RATING_CONTEXT_PROFILE;
-  return profileValidations(env.fuseki, 'realm-standing-rating-context-v1', [
+  const profile = timeZone ? DAILY_CONTEXT_PROFILE : REALM_STANDING_RATING_CONTEXT_PROFILE;
+  return profileValidations(env.fuseki, timeZone ? DAILY_CONTEXT_ID : 'realm-standing-rating-context-v1', [
     { shape: `${profile}/realm-shape`, focus: [realm], graphs: [GRAPHS.current] },
     { shape: `${profile}/context-shape`, focus: [context], graphs: [GRAPHS.current] },
-  ], { realm, context, question });
+  ], { realm, context, question, ...(timeZone ? { timeZone } : {}) });
 }
 
 export async function createRatingContext(env: WorkActivationEnvironment,
   admission: RegisteredAdmission, input: CreateRatingContextInput,
 ): Promise<RatingContextReceipt> {
   const digest = ratingContextDigest(input);
+  const timeZone = input.timeZone === undefined ? undefined : canonicalRatingTimeZone(input.timeZone);
+  const profile = timeZone ? DAILY_CONTEXT_PROFILE : REALM_STANDING_RATING_CONTEXT_PROFILE;
+  const cadence = timeZone ? DAILY_CADENCE : RATING_STANDING_CADENCE;
   if (admission.action !== 'rating.context.create'
     || admission.scope !== `rating:context:${input.realm}`
     || admission.actingSubject !== input.actingSubject || admission.requestDigest !== digest) {
@@ -128,12 +136,12 @@ export async function createRatingContext(env: WorkActivationEnvironment,
   const context = ID + Bun.randomUUIDv7();
   const revision = ID + Bun.randomUUIDv7();
   const operation = ID + Bun.randomUUIDv7();
-  const validations = await validateCandidate(env, input.realm, context, input.question);
+  const validations = await validateCandidate(env, input.realm, context, input.question, timeZone);
   const manifest = prepareComponent(env.objectDirectory, context,
     { context, realm: input.realm, question: input.question, state: 'active',
       targetGrain: 'MainVersion', scaleMin: 1, scaleMax: 10,
-      cadence: RATING_STANDING_CADENCE, populationPolicy: RATING_ACCOUNT_POPULATION,
-      aggregationPolicy: RATING_LATEST_MEAN_POLICY }, REALM_STANDING_RATING_CONTEXT_PROFILE);
+      cadence, ...(timeZone ? { timeZone, calendar: 'iso8601' } : {}), populationPolicy: RATING_ACCOUNT_POPULATION,
+      aggregationPolicy: RATING_LATEST_MEAN_POLICY }, profile);
   if (Date.parse(admission.expiresAt) <= Date.now()) {
     throw new PendingActivation('rating context admission expired');
   }
@@ -149,10 +157,12 @@ export async function createRatingContext(env: WorkActivationEnvironment,
       GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?next }
       GRAPH ${iri(GRAPHS.current)} {
         ${iri(input.realm)} rv:ratingContext ${iri(context)} .
-        ${iri(context)} a rv:RatingContext ; rv:contextState rv:Active ;
+        ${iri(context)} a rv:RatingContext ${timeZone ? ', rv:DailyRatingContext' : ''} ;
+          ${timeZone ? `rv:ratingTimeZone ${lit(timeZone)} ; rv:ratingCalendar ${iri(ISO_CALENDAR)} ;` : ''}
+          rv:contextState rv:Active ;
           rv:realm ${iri(input.realm)} ; rv:question ${lit(input.question)}@en ;
           rv:targetGrain rv:MainVersion ; rv:ratingScaleMin 1 ; rv:ratingScaleMax 10 ;
-          rv:ratingCadence ${iri(RATING_STANDING_CADENCE)} ;
+          rv:ratingCadence ${iri(cadence)} ;
           rv:ratingPopulationPolicy ${iri(RATING_ACCOUNT_POPULATION)} ;
           rv:ratingAggregationPolicy ${iri(RATING_LATEST_MEAN_POLICY)} ;
           rv:head ${iri(revision)} .
@@ -160,8 +170,8 @@ export async function createRatingContext(env: WorkActivationEnvironment,
       GRAPH ${iri(GRAPHS.revisions)} {
         ${iri(revision)} a rv:RevisionAnchor ; rv:component ${iri(context)} ;
           rv:operation ${iri(operation)} ; rv:manifest ${iri(`urn:rezics:sha256:${manifest}`)} ;
-          rv:modelRevision ${iri(REALM_STANDING_RATING_CONTEXT_PROFILE)} ;
-          rv:shapeRevision ${iri(REALM_STANDING_RATING_CONTEXT_PROFILE)} ;
+          rv:modelRevision ${iri(profile)} ;
+          rv:shapeRevision ${iri(profile)} ;
           rv:datasetId ${iri(DATASET)} ; rv:dataEpoch ${lit(env.lineage.dataEpoch)} ;
           rv:sequence ?next .
       }

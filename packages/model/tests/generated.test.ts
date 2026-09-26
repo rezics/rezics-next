@@ -37,7 +37,9 @@ test('P0.3: manifest authenticates every generated artifact without changing rev
     profiles: { id: string; sha256: string; file: string }[];
     artifacts: Record<string, string>;
   };
-  expect(manifest.profiles).toHaveLength(21);
+  expect(manifest.profiles).toHaveLength(24);
+  expect(manifest.profiles.map(profile => profile.id)).toContain('realm-daily-rating-context-v1');
+  expect(manifest.profiles.map(profile => profile.id)).toContain('realm-daily-rating-observation-v1');
   expect(manifest.profiles.map(profile => profile.id)).toContain('translation-link-v1');
   expect(manifest.profiles.map(profile => profile.id)).toContain('work-derivation-v1');
   for (const [path, sha256] of Object.entries(manifest.artifacts)) {
@@ -47,6 +49,16 @@ test('P0.3: manifest authenticates every generated artifact without changing rev
   }
   for (const entry of manifest.profiles) {
     expect(manifest.artifacts[entry.file]).toBe(entry.sha256);
+  }
+});
+
+test('RATE03: generated daily types require both the base class and daily specialization', () => {
+  const shape = 'https://rezics.com/definition/realm-daily-rating-context-v1/context-shape';
+  const [candidate] = fc.sample(shapeArbitraries[shape], 1);
+  expect(checkNodeLocalCandidate(shape, candidate)).toBe(true);
+  for (const type of ['RatingContext', 'DailyRatingContext']) {
+    expect(checkNodeLocalCandidate(shape, { ...candidate,
+      'rdf:type': [`https://rezics.com/vocab/${type}`] })).toBe(false);
   }
 });
 

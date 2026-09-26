@@ -86,7 +86,7 @@ final class CommandService extends ActionService {
             return;
         }
         long privateEpoch = privateSearchWriteEpoch.get();
-        respond(action, 200, Map.of("moduleVersion", "0.5.22",
+        respond(action, 200, Map.of("moduleVersion", "0.5.23",
             "instanceId", instanceId, "publicSearchWriteEpoch", Long.toString(epoch),
             "publicSearchWriteActive", (epoch & 1L) != 0L,
             "privateSearchWriteEpoch", Long.toString(privateEpoch),
@@ -592,6 +592,11 @@ final class CommandService extends ActionService {
         if (dataset.contains(graph, node, type, NodeFactory.createURI(RV + "ClassificationApplication"))
             || dataset.contains(graph, node, type, NodeFactory.createURI(RV + "ClassificationDecision")))
             return "classification-direct-decision-v1";
+        if (dataset.contains(graph, node, type, NodeFactory.createURI(RV + "DailyRatingObservation"))
+            || dataset.contains(graph, node, type, NodeFactory.createURI(RV + "DailyRatingObservationRevision")))
+            return "realm-daily-rating-observation-v1";
+        if (dataset.contains(graph, node, type, NodeFactory.createURI(RV + "DailyRatingContext")))
+            return "realm-daily-rating-context-v1";
         if (dataset.contains(graph, node, type, NodeFactory.createURI(RV + "RatingObservation"))
             || dataset.contains(graph, node, type, NodeFactory.createURI(RV + "RatingObservationRevision")))
             return "realm-standing-rating-observation-v1";
@@ -640,6 +645,12 @@ final class CommandService extends ActionService {
             canonical = new Canonical("content-match-unit-v1", "projection-shape");
         else if (types.contains(RV + "Space")) canonical = new Canonical("space-realm-v1", "space-shape");
         else if (types.contains(RV + "Realm")) canonical = new Canonical("space-realm-v1", "realm-shape");
+        else if (types.contains(RV + "DailyRatingContext"))
+            canonical = new Canonical("realm-daily-rating-context-v1", "context-shape");
+        else if (types.contains(RV + "DailyRatingObservation"))
+            canonical = new Canonical("realm-daily-rating-observation-v1", "observation-shape");
+        else if (types.contains(RV + "DailyRatingObservationRevision"))
+            canonical = new Canonical("realm-daily-rating-observation-v1", "revision-shape");
         else if (types.contains(RV + "RatingContext"))
             canonical = new Canonical("realm-standing-rating-context-v1", "context-shape");
         else if (types.contains(RV + "RatingObservation"))

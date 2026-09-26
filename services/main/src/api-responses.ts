@@ -149,6 +149,29 @@ export const ratingContextReadResult = t.Object({
   context: ref, realm: ref, question: t.String(), contextRevision: ref, ...ratingPolicy,
 });
 
+const ratingPeriod = {
+  day: t.String({ pattern: '^\\d{4}-\\d{2}-\\d{2}$' }), timeZone: t.String(),
+  calendar: t.Literal('iso8601'), periodStart: t.String(), periodEnd: t.String(),
+};
+export const dailyRatingObservationWriteResult = t.Object({
+  ...ratingObservationWriteResult.properties, ...ratingPeriod,
+  profile: t.Literal('realm-daily-rating-observation-v1'),
+});
+export const dailyRatingObservationReadResult = t.Object({
+  ...ratingObservationReadResult.properties, ...ratingPeriod,
+  profile: t.Literal('realm-daily-rating-observation-v1'),
+});
+export const dailyRatingContextWriteResult = t.Object({
+  ...ratingContextWriteResult.properties, cadence: t.Literal('daily'),
+  timeZone: t.String(), calendar: t.Literal('iso8601'),
+  profile: t.Literal('realm-daily-rating-context-v1'),
+});
+export const dailyRatingContextReadResult = t.Object({
+  ...ratingContextReadResult.properties, cadence: t.Literal('daily'),
+  timeZone: t.String(), calendar: t.Literal('iso8601'),
+  profile: t.Literal('realm-daily-rating-context-v1'),
+});
+
 export const classificationResolutionResult = t.Object({
   work: ref, mainVersion: ref, sense: ref,
   requestedContext: t.Union([t.Object({ kind: t.Literal('global') }),

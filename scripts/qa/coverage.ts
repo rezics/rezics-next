@@ -74,6 +74,23 @@ const completeCases: Record<string, readonly TestIdentity[]> = {
     file: 'tests/qa/integration/content-publication-native.test.ts',
     name: 'WORK09/WORK10/SEARCH03/SEARCH19: Content CAS, private drafts and exact public search',
   }],
+  RATE03: [{
+    tier: 'fault/recovery',
+    file: 'tests/qa/fault-recovery/rating-daily.test.ts',
+    name: 'RATE02/RATE03/OPS03: daily server periods and private slots survive real API races and graph loss',
+  }, {
+    tier: 'model',
+    file: 'model/tests/daily-rating.test.ts',
+    name: 'RATE03/MODEL17: daily shapes and native bindings reject missing or mismatched calendar fields',
+  }, {
+    tier: 'unit',
+    file: 'services/main/tests/rating-calendar.test.ts',
+    name: 'RATE03: server civil periods resolve DST, repeated hours and skipped midnight',
+  }, {
+    tier: 'unit',
+    file: 'services/main/tests/rating-calendar.test.ts',
+    name: 'RATE03: daily slots count the private principal and civil day independently of personas',
+  }],
   RATE04: [{
     tier: 'integration',
     file: 'tests/qa/integration/rating-withdrawal.test.ts',

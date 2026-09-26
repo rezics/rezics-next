@@ -1,3 +1,6 @@
+import { DAILY_CADENCE, DAILY_OBSERVATION_ID, DAILY_OBSERVATION_PROFILE,
+  dailyRatingSlotIri, periodBinding, periodTriples, type RatingPeriod } from './calendar.ts';
+import { resolveDailyPeriod, readDailyRevisionPeriod } from './daily-period.ts';
 import { CommandRejected, type CommandValidation } from '../../infrastructure/fuseki.ts';
 import { profileValidations } from '../../infrastructure/profile.ts';
 import { assertNotInvalidProfileReceipt, validatedCommand } from '../../infrastructure/invalid-receipt.ts';
@@ -54,14 +57,14 @@ export interface RatingObservationReceipt {
   availability?: 'available' | 'withdrawn';
 }
 
-export function standingRatingDigest(input: SetStandingRatingInput): string {
+export function standingRatingDigest(input: SetStandingRatingInput, daily = false): string {
   if (![input.context, input.work, input.mainVersion, input.actingSubject].every(value => nativeId.test(value))
     || (input.expectedRevisionHead !== null && !nativeId.test(input.expectedRevisionHead))
     || (input.value !== null && (!Number.isInteger(input.value) || input.value < 1 || input.value > 10))
     || (input.value === null && input.expectedRevisionHead === null)) {
     throw new InvalidRatingObservationInput('invalid standing rating request');
   }
-  return hash(JSON.stringify({ family: 'realm-standing-rating-observation-v1',
+  return hash(JSON.stringify({ family: daily ? DAILY_OBSERVATION_ID : 'realm-standing-rating-observation-v1',
     context: input.context, work: input.work, mainVersion: input.mainVersion,
     expectedRevisionHead: input.expectedRevisionHead, value: input.value,
     actingSubject: input.actingSubject }));
@@ -144,6 +147,7 @@ function matches(receipt: RatingObservationReceipt, admission: RegisteredAdmissi
 
 export function checkedStandingRatingReceipt(receipt: RatingObservationReceipt,
   admission: RegisteredAdmission, input: SetStandingRatingInput, digest: string,
+  expectedSlot?: string,
 ): RatingObservationReceipt {
   if (!matches(receipt, admission, digest)) {
     throw new IdempotencyConflict('standing rating receipt differs from admission');
@@ -155,11 +159,22 @@ export function checkedStandingRatingReceipt(receipt: RatingObservationReceipt,
   if (receipt.context !== input.context || receipt.work !== input.work
     || receipt.mainVersion !== input.mainVersion
     || receipt.predecessor !== input.expectedRevisionHead || receipt.value !== input.value
-    || receipt.slot !== standingRatingSlotIri(admission.principalId, input.context,
-      input.mainVersion)) {
+    || receipt.slot !== (expectedSlot ?? standingRatingSlotIri(admission.principalId, input.context,
+      input.mainVersion))) {
     throw new IdempotencyConflict('standing rating receipt targets another intent');
   }
   return receipt;
+}
+
+export async function checkedRatingReceipt(env: WorkActivationEnvironment,
+  receipt: RatingObservationReceipt, admission: RegisteredAdmission,
+  input: SetStandingRatingInput, digest: string, daily: boolean): Promise<RatingObservationReceipt> {
+  if (!daily || receipt.outcome !== 'succeeded') {
+    return checkedStandingRatingReceipt(receipt, admission, input, digest);
+  }
+  const period = await readDailyRevisionPeriod(env, receipt.observation!, receipt.revision!);
+  return checkedStandingRatingReceipt(receipt, admission, input, digest,
+    dailyRatingSlotIri(admission.principalId, input.context, input.mainVersion, period.day));
 }
 
 interface Dependencies {
@@ -172,7 +187,7 @@ interface Dependencies {
 }
 
 async function readDependencies(env: WorkActivationEnvironment, input: SetStandingRatingInput,
-  slot: string): Promise<Dependencies> {
+  slot: string, daily = false): Promise<Dependencies> {
   const result = await env.fuseki.query(`PREFIX rv: <${RV}> PREFIX schema: <https://schema.org/>
     SELECT ?realm ?contextRevision ?observation ?prior WHERE {
     GRAPH ${iri(GRAPHS.current)} {
@@ -181,7 +196,7 @@ async function readDependencies(env: WorkActivationEnvironment, input: SetStandi
         rv:ratingContext ${iri(input.context)} .
       ${iri(input.context)} a rv:RatingContext ; rv:contextState rv:Active ;
         rv:realm ?realm ; rv:targetGrain rv:MainVersion ; rv:ratingScaleMin 1 ;
-        rv:ratingScaleMax 10 ; rv:ratingCadence ${iri(RATING_STANDING_CADENCE)} ;
+        rv:ratingScaleMax 10 ; rv:ratingCadence ${iri(daily ? DAILY_CADENCE : RATING_STANDING_CADENCE)} ;
         rv:ratingPopulationPolicy ${iri(RATING_ACCOUNT_POPULATION)} ;
         rv:ratingAggregationPolicy ${iri(RATING_LATEST_MEAN_POLICY)} ; rv:head ?contextRevision .
       ${iri(input.work)} a schema:CreativeWork ; rv:mainVersion ${iri(input.mainVersion)} .
@@ -224,15 +239,15 @@ async function readDependencies(env: WorkActivationEnvironment, input: SetStandi
 async function validateCandidate(env: WorkActivationEnvironment, input: SetStandingRatingInput,
   deps: Dependencies, slot: string,
   observation: string, revision: string, evaluatedAt: string,
-  submittedAt: string, originalSubmissionAt: string): Promise<CommandValidation[]> {
+  submittedAt: string, originalSubmissionAt: string, period?: RatingPeriod): Promise<CommandValidation[]> {
   for (const value of [deps.realm, input.context, input.work, input.mainVersion,
     slot, observation, revision]) iri(value);
   for (const value of [evaluatedAt, submittedAt, originalSubmissionAt]) {
     if (!Number.isFinite(Date.parse(value))) throw new InvalidRatingObservationInput('invalid rating timestamp');
   }
-  const profile = STANDING_RATING_OBSERVATION_PROFILE;
+  const profile = period ? DAILY_OBSERVATION_PROFILE : STANDING_RATING_OBSERVATION_PROFILE;
   const graphs = [GRAPHS.current, GRAPHS.revisions];
-  return profileValidations(env.fuseki, 'realm-standing-rating-observation-v1', [
+  return profileValidations(env.fuseki, period ? DAILY_OBSERVATION_ID : 'realm-standing-rating-observation-v1', [
     { shape: `${profile}/realm-shape`, focus: [deps.realm], graphs },
     { shape: `${profile}/context-shape`, focus: [input.context], graphs },
     { shape: `${profile}/work-shape`, focus: [input.work], graphs },
@@ -241,6 +256,7 @@ async function validateCandidate(env: WorkActivationEnvironment, input: SetStand
     { shape: `${profile}/revision-shape`, focus: [revision], graphs },
   ], { realm: deps.realm, context: input.context, work: input.work,
     main: input.mainVersion, slot, observation, revision,
+    ...(period ? periodBinding(period) : {}),
     availability: input.value === null ? 'withdrawn' : 'available',
     ...(input.value === null ? {} : { value: String(input.value) }),
     ...(input.expectedRevisionHead ? { predecessor: input.expectedRevisionHead } : {}) });
@@ -311,9 +327,9 @@ export async function sealStandingRatingAdmission(env: WorkActivationEnvironment
 
 /** Replace one Account-principal opinion by exact head; prior revisions remain immutable. */
 export async function setStandingRating(env: WorkActivationEnvironment,
-  admission: RegisteredAdmission, input: SetStandingRatingInput,
+  admission: RegisteredAdmission, input: SetStandingRatingInput, daily = false,
 ): Promise<RatingObservationReceipt> {
-  const digest = standingRatingDigest(input);
+  const digest = standingRatingDigest(input, daily);
   if (admission.action !== 'rating.observation.set'
     || admission.scope !== `rating:observe:${input.context}`
     || admission.actingSubject !== input.actingSubject || admission.requestDigest !== digest) {
@@ -321,33 +337,43 @@ export async function setStandingRating(env: WorkActivationEnvironment,
   }
   await assertNotInvalidProfileReceipt(env.fuseki, standingRatingReceiptIri(admission.id));
   const existing = await readStandingRatingReceipt(env, admission.id);
-  if (existing) return checkedStandingRatingReceipt(existing, admission, input, digest);
+  if (existing) return checkedRatingReceipt(env, existing, admission, input, digest, daily);
   if (Date.parse(admission.expiresAt) <= Date.now()) {
     throw new PendingActivation('standing rating admission expired');
   }
-  const slot = standingRatingSlotIri(admission.principalId, input.context, input.mainVersion);
-  const deps = await readDependencies(env, input, slot);
+  let period: RatingPeriod | undefined;
+  if (daily) {
+    if (!admission.registeredAt) throw new RatingObservationUnavailable('server admission time is missing');
+    try { period = await resolveDailyPeriod(env, input.context, input.mainVersion,
+      input.expectedRevisionHead, admission.registeredAt); }
+    catch { throw new RatingObservationUnavailable('daily Context or predecessor is unavailable'); }
+  }
+  const slot = period
+    ? dailyRatingSlotIri(admission.principalId, input.context, input.mainVersion, period.day)
+    : standingRatingSlotIri(admission.principalId, input.context, input.mainVersion);
+  const profile = daily ? DAILY_OBSERVATION_PROFILE : STANDING_RATING_OBSERVATION_PROFILE;
+  const deps = await readDependencies(env, input, slot, daily);
   if ((deps.prior ?? null) !== input.expectedRevisionHead) {
     const stale = await sealTerminal(env, admission, 'stale-head', slot,
       input.expectedRevisionHead);
-    if (stale) return checkedStandingRatingReceipt(stale, admission, input, digest);
+    if (stale) return checkedRatingReceipt(env, stale, admission, input, digest, daily);
     throw new PendingActivation('stale standing rating was not sealed');
   }
   const observation = deps.observation ?? ID + Bun.randomUUIDv7();
   const revision = ID + Bun.randomUUIDv7();
   const operation = ID + Bun.randomUUIDv7();
-  const now = new Date().toISOString();
+  const now = daily ? admission.registeredAt! : new Date().toISOString();
   const evaluatedAt = deps.evaluatedAt ?? now;
   const originalSubmissionAt = deps.originalSubmissionAt ?? now;
   const validations = await validateCandidate(env, input, deps, slot, observation,
-    revision, evaluatedAt, now, originalSubmissionAt);
+    revision, evaluatedAt, now, originalSubmissionAt, period);
   const manifest = prepareComponent(env.objectDirectory, observation,
     { observation, slot, context: input.context, contextRevision: deps.contextRevision,
       realm: deps.realm, work: input.work, mainVersion: input.mainVersion,
       revision, predecessor: input.expectedRevisionHead,
       availability: input.value === null ? 'withdrawn' : 'available', value: input.value,
-      evaluatedAt, submittedAt: now, originalSubmissionAt, revisedAt: now },
-    STANDING_RATING_OBSERVATION_PROFILE);
+      evaluatedAt, submittedAt: now, originalSubmissionAt, revisedAt: now,
+      ...(period ?? {}) }, profile);
   if (Date.parse(admission.expiresAt) <= Date.now()) {
     throw new PendingActivation('standing rating admission expired');
   }
@@ -377,12 +403,15 @@ export async function setStandingRating(env: WorkActivationEnvironment,
     INSERT {
       GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?next }
       GRAPH ${iri(GRAPHS.current)} {
-        ${iri(observation)} a rv:RatingObservation ; rv:ratingContext ${iri(input.context)} ;
+        ${iri(observation)} a rv:RatingObservation ${daily ? ', rv:DailyRatingObservation' : ''} ;
+          ${period ? periodTriples(period) : ''}
+          rv:ratingContext ${iri(input.context)} ;
           rv:targetMainVersion ${iri(input.mainVersion)} ; rv:ratingSlot ${iri(slot)} ;
           rv:observationHead ${iri(revision)} .
       }
       GRAPH ${iri(GRAPHS.revisions)} {
-        ${iri(revision)} a rv:RatingObservationRevision, rv:RevisionAnchor ;
+        ${iri(revision)} a rv:RatingObservationRevision, rv:RevisionAnchor ${daily ? ', rv:DailyRatingObservationRevision' : ''} ;
+          ${period ? periodTriples(period) : ''}
           rv:component ${iri(observation)} ; rv:observation ${iri(observation)} ;
           rv:operation ${iri(operation)} ;
           rv:ratingAvailability rv:${input.value === null ? 'Withdrawn' : 'Available'} ;
@@ -393,8 +422,8 @@ export async function setStandingRating(env: WorkActivationEnvironment,
           rv:originalSubmissionAt ${lit(originalSubmissionAt)}^^xsd:dateTime ;
           rv:revisedAt ${lit(now)}^^xsd:dateTime ;
           rv:manifest ${iri(`urn:rezics:sha256:${manifest}`)} ;
-          rv:modelRevision ${iri(STANDING_RATING_OBSERVATION_PROFILE)} ;
-          rv:shapeRevision ${iri(STANDING_RATING_OBSERVATION_PROFILE)} ;
+          rv:modelRevision ${iri(profile)} ;
+          rv:shapeRevision ${iri(profile)} ;
           rv:datasetId ${iri(DATASET)} ; rv:dataEpoch ${lit(env.lineage.dataEpoch)} ;
           rv:sequence ?next .
       }
@@ -433,7 +462,7 @@ export async function setStandingRating(env: WorkActivationEnvironment,
         ${iri(input.context)} a rv:RatingContext ; rv:contextState rv:Active ;
           rv:realm ${iri(deps.realm)} ; rv:targetGrain rv:MainVersion ;
           rv:ratingScaleMin 1 ; rv:ratingScaleMax 10 ;
-          rv:ratingCadence ${iri(RATING_STANDING_CADENCE)} ;
+          rv:ratingCadence ${iri(daily ? DAILY_CADENCE : RATING_STANDING_CADENCE)} ;
           rv:ratingPopulationPolicy ${iri(RATING_ACCOUNT_POPULATION)} ;
           rv:ratingAggregationPolicy ${iri(RATING_LATEST_MEAN_POLICY)} ;
           rv:head ${iri(deps.contextRevision)} .
@@ -455,10 +484,10 @@ export async function setStandingRating(env: WorkActivationEnvironment,
     updateError = error;
   }
   const committed = await readStandingRatingReceipt(env, admission.id);
-  if (committed) return checkedStandingRatingReceipt(committed, admission, input, digest);
+  if (committed) return checkedRatingReceipt(env, committed, admission, input, digest, daily);
   const stale = await sealTerminal(env, admission, 'stale-head', slot,
     input.expectedRevisionHead);
-  if (stale) return checkedStandingRatingReceipt(stale, admission, input, digest);
+  if (stale) return checkedRatingReceipt(env, stale, admission, input, digest, daily);
   throw new PendingActivation(updateError
     ? 'standing rating update outcome unknown' : 'standing rating guard did not match');
 }

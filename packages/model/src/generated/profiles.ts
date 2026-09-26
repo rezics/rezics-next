@@ -106,6 +106,38 @@ export const profileRegistry = {
       "selection"
     ]
   },
+  "realm-daily-rating-context-v1": {
+    "sha256": "a1819809844d44a1766a4dd20713e8c639eed5b71d158c4458f861de0842e149",
+    "file": "shapes/realm-daily-rating-context-v1.ttl",
+    "shapes": [
+      "https://rezics.com/definition/realm-daily-rating-context-v1/realm-shape",
+      "https://rezics.com/definition/realm-daily-rating-context-v1/context-shape"
+    ],
+    "focusRoles": [
+      "realm",
+      "context"
+    ]
+  },
+  "realm-daily-rating-observation-v1": {
+    "sha256": "6f5ddc3f11cc7a0c31a859e7352d65ef7c9983161ae8d5ffde93eaa922a8e658",
+    "file": "shapes/realm-daily-rating-observation-v1.ttl",
+    "shapes": [
+      "https://rezics.com/definition/realm-daily-rating-observation-v1/realm-shape",
+      "https://rezics.com/definition/realm-daily-rating-observation-v1/context-shape",
+      "https://rezics.com/definition/realm-daily-rating-observation-v1/work-shape",
+      "https://rezics.com/definition/realm-daily-rating-observation-v1/main-shape",
+      "https://rezics.com/definition/realm-daily-rating-observation-v1/observation-shape",
+      "https://rezics.com/definition/realm-daily-rating-observation-v1/revision-shape"
+    ],
+    "focusRoles": [
+      "realm",
+      "context",
+      "work",
+      "main",
+      "observation",
+      "revision"
+    ]
+  },
   "realm-local-rejection-v1": {
     "sha256": "8db4a0124cf3b2ac61a28595fb05677e8dff8977c4b0a126740f583de6589e02",
     "file": "shapes/realm-local-rejection-v1.ttl",

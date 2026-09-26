@@ -3,7 +3,7 @@ import { AdmissionDenied, AdmissionExpired, type AccessAdmissionRegistry } from 
 import { assertGraphAdmissionOpen } from '../work/restore-lineage.ts';
 import { IdempotencyConflict, type WorkActivationEnvironment } from '../work/activate.ts';
 import { PendingAdmittedWork } from '../work/create-admitted.ts';
-import { checkedStandingRatingReceipt, readStandingRatingReceipt,
+import { checkedRatingReceipt, readStandingRatingReceipt,
   RatingObservationUnavailable, sealStandingRatingAdmission, setStandingRating,
   standingRatingDigest, StaleRatingObservation,
   type RatingObservationReceipt, type SetStandingRatingInput } from './observation.ts';
@@ -13,9 +13,9 @@ export async function setAdmittedStandingRating(
   account: Pick<AccountAssertionVerifier, 'verify'>,
   access: Pick<AccessAdmissionRegistry, 'register' | 'claim' | 'recordGraphOutcome'>,
   request: Request,
-  input: SetStandingRatingInput & { idempotencyKey: string },
+  input: SetStandingRatingInput & { idempotencyKey: string }, daily = false,
 ): Promise<RatingObservationReceipt & { replayed: boolean }> {
-  const digest = standingRatingDigest(input);
+  const digest = standingRatingDigest(input, daily);
   await assertGraphAdmissionOpen(env.fuseki, env.lineage);
   const principal = await account.verify(request, ['rating:submit']);
   const registered = await access.register({ principal, actingSubject: input.actingSubject,
@@ -33,7 +33,7 @@ export async function setAdmittedStandingRating(
       if (!admission.dispatchEligible || admission.state === 'registered') {
         await sealStandingRatingAdmission(env, admission);
       } else {
-        try { await setStandingRating(env, admission, input); }
+        try { await setStandingRating(env, admission, input, daily); }
         catch (error) {
           if (error instanceof IdempotencyConflict) throw error;
           if (error instanceof RatingObservationUnavailable) {
@@ -45,7 +45,7 @@ export async function setAdmittedStandingRating(
     const terminal = await readStandingRatingReceipt(env, registered.id);
     if (!terminal) throw new PendingAdmittedWork(registered.id, 'rating-observation');
     await access.recordGraphOutcome(registered.id, terminal);
-    return { ...checkedStandingRatingReceipt(terminal, registered, input, digest),
+    return { ...await checkedRatingReceipt(env, terminal, registered, input, digest, daily),
       replayed: registered.replayed };
   } catch (error) {
     if (error instanceof IdempotencyConflict || error instanceof StaleRatingObservation

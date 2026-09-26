@@ -1,3 +1,7 @@
+import { DAILY_CONTEXT_ID, DAILY_CONTEXT_PROFILE, DAILY_OBSERVATION_ID, DAILY_OBSERVATION_PROFILE,
+  DAILY_CADENCE, ISO_CALENDAR, canonicalRatingTimeZone, dailyRatingSlotIri,
+  retainedRatingPeriod, periodTriples, periodBinding } from '../rating/calendar.ts';
+import { readRatingManifest } from '../rating/manifest.ts';
 import type { Pool } from 'pg';
 import { profileValidations, type ProfileId } from '../../infrastructure/profile.ts';
 import { CONTINUITY, DATASET, GRAPHS, PROFILE, RV, hash, iri, lit,
@@ -741,13 +745,19 @@ export async function reconcileRetainedRatingContext(
     || !/^urn:rezics:sha256:[0-9a-f]{64}$/.test(receipt.ratingContextManifest)) {
     throw new RetainedEffectConflict('retained rating context references are invalid');
   }
-  const state = readComponentState(env.objectDirectory, receipt.ratingContextManifest,
-    context, REALM_STANDING_RATING_CONTEXT_PROFILE);
+  const { state, daily } = readRatingManifest(env.objectDirectory, receipt.ratingContextManifest,
+    context, 'context');
+  const profile = daily ? DAILY_CONTEXT_PROFILE : REALM_STANDING_RATING_CONTEXT_PROFILE;
+  const cadence = daily ? DAILY_CADENCE : RATING_STANDING_CADENCE;
+  const timeZone = daily && typeof state.timeZone === 'string' ? canonicalRatingTimeZone(state.timeZone) : undefined;
+  if (daily && (!timeZone || state.timeZone !== timeZone || state.calendar !== 'iso8601')) {
+    throw new RetainedEffectConflict('retained daily Context policy differs');
+  }
   const question = state.question;
   if (state.context !== context || state.realm !== realm || state.state !== 'active'
     || typeof question !== 'string' || state.targetGrain !== 'MainVersion'
     || state.scaleMin !== 1 || state.scaleMax !== 10
-    || state.cadence !== RATING_STANDING_CADENCE
+    || state.cadence !== cadence
     || state.populationPolicy !== RATING_ACCOUNT_POPULATION
     || state.aggregationPolicy !== RATING_LATEST_MEAN_POLICY) {
     throw new RetainedEffectConflict('retained rating context payload differs');
@@ -769,7 +779,8 @@ export async function reconcileRetainedRatingContext(
       || admitted.authority_epoch !== receipt.authorityEpoch
       || admitted.graph_receipt !== receipt.id || admitted.graph_outcome !== 'succeeded'
       || admitted.graph_data_epoch !== coverage.dataEpoch || admitted.graph_sequence !== sequence
-      || ratingContextDigest({ realm, question, actingSubject: admitted.acting_subject })
+      || ratingContextDigest({ realm, question, actingSubject: admitted.acting_subject,
+        ...(timeZone ? { timeZone } : {}) })
         !== receipt.requestDigest) {
       throw new RetainedEffectConflict('current Access admission does not prove retained rating context');
     }
@@ -780,10 +791,12 @@ export async function reconcileRetainedRatingContext(
         GRAPH ${iri(GRAPHS.control)} { ${iri(marker)} rv:reconciledPriorSequence ${sequence} }
         GRAPH ${iri(GRAPHS.current)} {
           ${iri(realm)} rv:ratingContext ${iri(context)} .
-          ${iri(context)} a rv:RatingContext ; rv:contextState rv:Active ;
+          ${iri(context)} a rv:RatingContext ${daily ? ', rv:DailyRatingContext' : ''} ;
+            ${timeZone ? `rv:ratingTimeZone ${lit(timeZone)} ; rv:ratingCalendar ${iri(ISO_CALENDAR)} ;` : ''}
+            rv:contextState rv:Active ;
             rv:realm ${iri(realm)} ; rv:question ${lit(question)}@en ;
             rv:targetGrain rv:MainVersion ; rv:ratingScaleMin 1 ; rv:ratingScaleMax 10 ;
-            rv:ratingCadence ${iri(RATING_STANDING_CADENCE)} ;
+            rv:ratingCadence ${iri(cadence)} ;
             rv:ratingPopulationPolicy ${iri(RATING_ACCOUNT_POPULATION)} ;
             rv:ratingAggregationPolicy ${iri(RATING_LATEST_MEAN_POLICY)} ;
             rv:head ${iri(revision)} .
@@ -791,8 +804,8 @@ export async function reconcileRetainedRatingContext(
         GRAPH ${iri(GRAPHS.revisions)} {
           ${iri(revision)} a rv:RevisionAnchor ; rv:component ${iri(context)} ;
             rv:operation ${iri(operation)} ; rv:manifest ${iri(receipt.ratingContextManifest)} ;
-            rv:modelRevision ${iri(REALM_STANDING_RATING_CONTEXT_PROFILE)} ;
-            rv:shapeRevision ${iri(REALM_STANDING_RATING_CONTEXT_PROFILE)} ;
+            rv:modelRevision ${iri(profile)} ;
+            rv:shapeRevision ${iri(profile)} ;
             rv:datasetId ${iri(DATASET)} ; rv:dataEpoch ${lit(coverage.dataEpoch)} ;
             rv:sequence ${sequence} .
         }
@@ -838,10 +851,10 @@ export async function reconcileRetainedRatingContext(
     const existing = await readRatingContextReceipt(env, receipt.admissionId);
     let updateError: unknown;
     if (!existing) {
-      try { await retainedCommand(env, update, receipt, 'realm-standing-rating-context-v1', [
-        { shape: `${REALM_STANDING_RATING_CONTEXT_PROFILE}/realm-shape`, focus: realm },
-        { shape: `${REALM_STANDING_RATING_CONTEXT_PROFILE}/context-shape`, focus: context },
-      ], { realm, context, question }); }
+      try { await retainedCommand(env, update, receipt, daily ? DAILY_CONTEXT_ID : 'realm-standing-rating-context-v1', [
+        { shape: `${profile}/realm-shape`, focus: realm },
+        { shape: `${profile}/context-shape`, focus: context },
+      ], { realm, context, question, ...(timeZone ? { timeZone } : {}) }); }
       catch (error) { updateError = error; }
     }
     const terminal = await readRatingContextReceipt(env, receipt.admissionId);
@@ -919,8 +932,10 @@ export async function reconcileRetainedStandingRating(
     || !/^urn:rezics:sha256:[0-9a-f]{64}$/.test(receipt.observationManifest)) {
     throw new RetainedEffectConflict('retained standing rating references are invalid');
   }
-  const state = readComponentState(env.objectDirectory, receipt.observationManifest,
-    observation, STANDING_RATING_OBSERVATION_PROFILE);
+  const { state, daily } = readRatingManifest(env.objectDirectory, receipt.observationManifest,
+    observation, 'observation');
+  const profile = daily ? DAILY_OBSERVATION_PROFILE : STANDING_RATING_OBSERVATION_PROFILE;
+  const period = daily ? retainedRatingPeriod(state) : undefined;
   const timestamp = (value: unknown): value is string => typeof value === 'string'
     && !Number.isNaN(Date.parse(value)) && new Date(value).toISOString() === value;
   if (state.observation !== observation || state.slot !== receipt.ratingSlot
@@ -945,9 +960,9 @@ export async function reconcileRetainedStandingRating(
       'SELECT open FROM access.recovery_fence WHERE id = true FOR SHARE');
     if (fence.rows[0]?.open !== false) throw new RetainedEffectConflict('Access recovery fence is not held');
     const access = await client.query<AccessEffectRow & { acting_subject: string;
-      principal_id: string }>(
+      principal_id: string; registered_at: Date }>(
       `SELECT action, state, scope_id, request_digest, authority_epoch,
-         acting_subject, principal_id, graph_receipt, graph_outcome, graph_data_epoch,
+         acting_subject, principal_id, registered_at, graph_receipt, graph_outcome, graph_data_epoch,
          graph_sequence FROM access.admission WHERE id = $1`, [receipt.admissionId]);
     const admitted = access.rows[0];
     const input: SetStandingRatingInput = { context, work: receipt.work,
@@ -960,9 +975,10 @@ export async function reconcileRetainedStandingRating(
       || admitted.authority_epoch !== receipt.authorityEpoch
       || admitted.graph_receipt !== receipt.id || admitted.graph_outcome !== 'succeeded'
       || admitted.graph_data_epoch !== coverage.dataEpoch || admitted.graph_sequence !== sequence
-      || standingRatingSlotIri(admitted.principal_id, context, receipt.mainVersion)
-        !== receipt.ratingSlot
-      || standingRatingDigest(input) !== receipt.requestDigest) {
+      || (period ? dailyRatingSlotIri(admitted.principal_id, context, receipt.mainVersion, period.day)
+        : standingRatingSlotIri(admitted.principal_id, context, receipt.mainVersion)) !== receipt.ratingSlot
+      || (daily && admitted.registered_at.toISOString() !== state.submittedAt)
+      || standingRatingDigest(input, daily) !== receipt.requestDigest) {
       throw new RetainedEffectConflict('current Access admission does not prove retained rating');
     }
     const marker = `urn:rezics:restore:${env.lineage.dataEpoch}`;
@@ -990,11 +1006,14 @@ export async function reconcileRetainedStandingRating(
       INSERT {
         GRAPH ${iri(GRAPHS.control)} { ${iri(marker)} rv:reconciledPriorSequence ${sequence} }
         GRAPH ${iri(GRAPHS.current)} {
-          ${iri(observation)} a rv:RatingObservation ; rv:ratingContext ${iri(context)} ;
+          ${iri(observation)} a rv:RatingObservation ${daily ? ', rv:DailyRatingObservation' : ''} ;
+            ${period ? periodTriples(period) : ''}
+            rv:ratingContext ${iri(context)} ;
             rv:targetMainVersion ${iri(receipt.mainVersion)} ;
             rv:ratingSlot ${iri(receipt.ratingSlot)} ; rv:observationHead ${iri(revision)} . }
         GRAPH ${iri(GRAPHS.revisions)} {
-          ${iri(revision)} a rv:RatingObservationRevision, rv:RevisionAnchor ;
+          ${iri(revision)} a rv:RatingObservationRevision, rv:RevisionAnchor ${daily ? ', rv:DailyRatingObservationRevision' : ''} ;
+            ${period ? periodTriples(period) : ''}
             rv:component ${iri(observation)} ; rv:observation ${iri(observation)} ;
             rv:operation ${iri(receipt.operation)} ;
             rv:ratingAvailability rv:${receipt.ratingAvailability === 'available'
@@ -1007,8 +1026,8 @@ export async function reconcileRetainedStandingRating(
             rv:originalSubmissionAt ${lit(state.originalSubmissionAt)}^^xsd:dateTime ;
             rv:revisedAt ${lit(state.revisedAt)}^^xsd:dateTime ;
             rv:manifest ${iri(receipt.observationManifest)} ;
-            rv:modelRevision ${iri(STANDING_RATING_OBSERVATION_PROFILE)} ;
-            rv:shapeRevision ${iri(STANDING_RATING_OBSERVATION_PROFILE)} ;
+            rv:modelRevision ${iri(profile)} ;
+            rv:shapeRevision ${iri(profile)} ;
             rv:datasetId ${iri(DATASET)} ; rv:dataEpoch ${lit(coverage.dataEpoch)} ;
             rv:sequence ${sequence} . }
         GRAPH ${iri(GRAPHS.receipts)} {
@@ -1057,7 +1076,7 @@ export async function reconcileRetainedStandingRating(
           ${iri(context)} a rv:RatingContext ; rv:contextState rv:Active ;
             rv:realm ${iri(receipt.realm)} ; rv:targetGrain rv:MainVersion ;
             rv:ratingScaleMin 1 ; rv:ratingScaleMax 10 ;
-            rv:ratingCadence ${iri(RATING_STANDING_CADENCE)} ;
+            rv:ratingCadence ${iri(daily ? DAILY_CADENCE : RATING_STANDING_CADENCE)} ;
             rv:ratingPopulationPolicy ${iri(RATING_ACCOUNT_POPULATION)} ;
             rv:ratingAggregationPolicy ${iri(RATING_LATEST_MEAN_POLICY)} ;
             rv:head ${iri(receipt.contextRevision)} .
@@ -1074,16 +1093,17 @@ export async function reconcileRetainedStandingRating(
     const existing = await readStandingRatingReceipt(env, receipt.admissionId);
     let updateError: unknown;
     if (!existing) {
-      try { await retainedCommand(env, update, receipt, 'realm-standing-rating-observation-v1', [
-        { shape: `${STANDING_RATING_OBSERVATION_PROFILE}/realm-shape`, focus: receipt.realm },
-        { shape: `${STANDING_RATING_OBSERVATION_PROFILE}/context-shape`, focus: context },
-        { shape: `${STANDING_RATING_OBSERVATION_PROFILE}/work-shape`, focus: receipt.work },
-        { shape: `${STANDING_RATING_OBSERVATION_PROFILE}/main-shape`, focus: receipt.mainVersion },
-        { shape: `${STANDING_RATING_OBSERVATION_PROFILE}/observation-shape`, focus: observation },
-        { shape: `${STANDING_RATING_OBSERVATION_PROFILE}/revision-shape`, focus: revision },
+      try { await retainedCommand(env, update, receipt, daily ? DAILY_OBSERVATION_ID : 'realm-standing-rating-observation-v1', [
+        { shape: `${profile}/realm-shape`, focus: receipt.realm },
+        { shape: `${profile}/context-shape`, focus: context },
+        { shape: `${profile}/work-shape`, focus: receipt.work },
+        { shape: `${profile}/main-shape`, focus: receipt.mainVersion },
+        { shape: `${profile}/observation-shape`, focus: observation },
+        { shape: `${profile}/revision-shape`, focus: revision },
       ], { realm: receipt.realm!, context, work: receipt.work,
         main: receipt.mainVersion, slot: receipt.ratingSlot, observation, revision,
         availability: receipt.ratingAvailability!,
+        ...(period ? periodBinding(period) : {}),
         ...(receipt.ratingAvailability === 'available' ? { value: String(receipt.ratingValue) } : {}),
         ...(predecessor ? { predecessor } : {}) }); } catch (error) { updateError = error; }
     }

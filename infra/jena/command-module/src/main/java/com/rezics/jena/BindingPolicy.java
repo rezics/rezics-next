@@ -23,7 +23,8 @@ final class BindingPolicy {
     private static final Set<String> BOUND = Set.of(
         "classification-context-v1", "classification-direct-decision-v1",
         "classification-proposition-v1", "realm-standing-rating-context-v1",
-        "realm-standing-rating-observation-v1", "translation-link-v1", "work-derivation-v1",
+        "realm-standing-rating-observation-v1", "realm-daily-rating-context-v1",
+        "realm-daily-rating-observation-v1", "translation-link-v1", "work-derivation-v1",
         "fixed-native-text-release-v1");
 
     static boolean applies(String profile) { return BOUND.contains(profile); }
@@ -70,8 +71,10 @@ final class BindingPolicy {
             case "classification-context-v1" -> classificationContext();
             case "classification-proposition-v1" -> classificationProposition();
             case "classification-direct-decision-v1" -> classificationDecision();
-            case "realm-standing-rating-context-v1" -> ratingContext();
-            case "realm-standing-rating-observation-v1" -> ratingObservation();
+            case "realm-standing-rating-context-v1" -> ratingContext(false);
+            case "realm-daily-rating-context-v1" -> ratingContext(true);
+            case "realm-standing-rating-observation-v1" -> ratingObservation(false);
+            case "realm-daily-rating-observation-v1" -> ratingObservation(true);
             case "translation-link-v1" -> translationLink();
             case "work-derivation-v1" -> workDerivation();
             case "fixed-native-text-release-v1" -> fixedRelease();
@@ -146,14 +149,16 @@ final class BindingPolicy {
         has("sense", RV + "path", iri(role("path")));
         has("sense", RV + "expression", iri(role("expression")));
     }
-    private void ratingContext() {
-        keys("realm context question", ""); roles("realm context");
+    private void ratingContext(boolean daily) {
+        keys("realm context question" + (daily ? " timeZone" : ""), ""); roles("realm context");
         has("realm", RV + "ratingContext", iri(role("context")));
         has("context", RV + "realm", iri(role("realm")));
         has("context", RV + "question", NodeFactory.createLiteralLang(arg("question"), "en"));
+        if (daily) ratingTimeZone();
     }
-    private void ratingObservation() {
-        keys("realm context work main slot observation revision availability", "value predecessor");
+    private void ratingObservation(boolean daily) {
+        keys("realm context work main slot observation revision availability"
+            + (daily ? " day timeZone periodStart periodEnd" : ""), "value predecessor");
         roles("realm context work main observation revision");
         if (!Set.of("available", "withdrawn").contains(arg("availability")))
             throw new IllegalArgumentException("invalid rating availability binding");
@@ -178,6 +183,50 @@ final class BindingPolicy {
             catch (NumberFormatException ex) { throw new IllegalArgumentException("invalid rating value binding"); }
             if (value < 1 || value > 10) throw new IllegalArgumentException("invalid rating value binding");
             has("revision", RV + "ratingValue", NodeFactory.createLiteralByValue(value, org.apache.jena.datatypes.xsd.XSDDatatype.XSDinteger));
+        }
+        if (daily) dailyPeriod();
+    }
+    private void ratingTimeZone() {
+        String zone = arg("timeZone");
+        if (zone == null || !(zone.equals("UTC") || zone.contains("/")))
+            throw new IllegalArgumentException("named timezone required");
+        try { java.time.ZoneId.of(zone); }
+        catch (java.time.DateTimeException ex) { throw new IllegalArgumentException("unknown timezone"); }
+        exact("context", RV + "ratingTimeZone", text(zone));
+    }
+    private java.time.Instant ratingInstant(String subject, String property) {
+        var found = data.find(iri(subject), iri(RV + property), Node.ANY);
+        if (!found.hasNext()) throw new IllegalArgumentException("rating instant absent");
+        Node value = found.next().getObject();
+        if (found.hasNext() || !value.isLiteral()) throw new IllegalArgumentException("rating instant ambiguous");
+        return java.time.Instant.parse(value.getLiteralLexicalForm());
+    }
+    private void dailyPeriod() {
+        ratingTimeZone();
+        java.time.LocalDate.parse(arg("day"));
+        var start = java.time.Instant.parse(arg("periodStart"));
+        var end = java.time.Instant.parse(arg("periodEnd"));
+        if (!start.isBefore(end) || java.time.Duration.between(start, end).toHours() > 48)
+            throw new IllegalArgumentException("invalid daily bounds");
+        for (String target : List.of("observation", "revision")) {
+            exact(target, RV + "ratingDay", text(arg("day")));
+            exact(target, RV + "ratingTimeZone", text(arg("timeZone")));
+            exact(target, RV + "periodStart", NodeFactory.createLiteralDT(arg("periodStart"), org.apache.jena.datatypes.xsd.XSDDatatype.XSDdateTime));
+            exact(target, RV + "periodEnd", NodeFactory.createLiteralDT(arg("periodEnd"), org.apache.jena.datatypes.xsd.XSDDatatype.XSDdateTime));
+        }
+        var evaluated = ratingInstant(role("revision"), "evaluatedAt");
+        var original = ratingInstant(role("revision"), "originalSubmissionAt");
+        if (evaluated.isBefore(start) || !evaluated.isBefore(end) || !evaluated.equals(original))
+            violations.add("daily evaluation outside original period");
+        if (arg("predecessor") != null) {
+            at(arg("predecessor"), RV + "observation", iri(role("observation")));
+            for (String property : List.of("ratingDay", "ratingTimeZone", "ratingCalendar", "periodStart", "periodEnd", "evaluatedAt", "originalSubmissionAt")) {
+                var value = data.find(iri(role("revision")), iri(RV + property), Node.ANY);
+                if (!value.hasNext()) throw new IllegalArgumentException("daily revision field missing");
+                at(arg("predecessor"), RV + property, value.next().getObject());
+            }
+        } else if (!evaluated.equals(ratingInstant(role("revision"), "submittedAt"))) {
+            violations.add("initial daily submission differs from evaluation");
         }
     }
     private void classificationDecision() {

@@ -11,6 +11,8 @@ import { fixedNativeTextReleaseProfile } from '../definitions/fixed-native-text-
 import { mainDefaultSelectionProfile } from '../definitions/main-default-selection-v1.ts';
 import { realmLocalRejectionProfile } from '../definitions/realm-local-rejection-v1.ts';
 import { realmLocalSelectionProfile } from '../definitions/realm-local-selection-v1.ts';
+import { realmDailyRatingContextProfile } from '../definitions/realm-daily-rating-context-v1.ts';
+import { realmDailyRatingObservationProfile } from '../definitions/realm-daily-rating-observation-v1.ts';
 import { realmStandingRatingContextProfile } from '../definitions/realm-standing-rating-context-v1.ts';
 import { realmStandingRatingObservationProfile } from '../definitions/realm-standing-rating-observation-v1.ts';
 import { spaceRealmProfile } from '../definitions/space-realm-v1.ts';
@@ -46,6 +48,8 @@ export const authoredProfiles: readonly ProfileDefinition[] = [
   mainDefaultSelectionProfile,
   realmLocalRejectionProfile,
   realmLocalSelectionProfile,
+  realmDailyRatingContextProfile,
+  realmDailyRatingObservationProfile,
   realmStandingRatingContextProfile,
   realmStandingRatingObservationProfile,
   spaceRealmProfile,

@@ -57851,95 +57851,212 @@
           "content": {
             "application/json": {
               "schema": {
-                "additionalProperties": false,
-                "properties": {
-                  "actingSubject": {
-                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
-                    "type": "string"
+                "anyOf": [
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "actingSubject": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      },
+                      "profile": {
+                        "const": "realm-standing-rating-context-v1",
+                        "type": "string"
+                      },
+                      "question": {
+                        "maxLength": 120,
+                        "minLength": 3,
+                        "type": "string"
+                      },
+                      "realm": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "profile",
+                      "realm",
+                      "question",
+                      "actingSubject"
+                    ],
+                    "type": "object"
                   },
-                  "profile": {
-                    "const": "realm-standing-rating-context-v1",
-                    "type": "string"
-                  },
-                  "question": {
-                    "maxLength": 120,
-                    "minLength": 3,
-                    "type": "string"
-                  },
-                  "realm": {
-                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
-                    "type": "string"
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "actingSubject": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      },
+                      "profile": {
+                        "const": "realm-daily-rating-context-v1",
+                        "type": "string"
+                      },
+                      "question": {
+                        "maxLength": 120,
+                        "minLength": 3,
+                        "type": "string"
+                      },
+                      "realm": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      },
+                      "timeZone": {
+                        "maxLength": 100,
+                        "minLength": 1,
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "profile",
+                      "realm",
+                      "timeZone",
+                      "question",
+                      "actingSubject"
+                    ],
+                    "type": "object"
                   }
-                },
-                "required": [
-                  "profile",
-                  "realm",
-                  "question",
-                  "actingSubject"
-                ],
-                "type": "object"
+                ]
               }
             },
             "application/x-www-form-urlencoded": {
               "schema": {
-                "additionalProperties": false,
-                "properties": {
-                  "actingSubject": {
-                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
-                    "type": "string"
+                "anyOf": [
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "actingSubject": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      },
+                      "profile": {
+                        "const": "realm-standing-rating-context-v1",
+                        "type": "string"
+                      },
+                      "question": {
+                        "maxLength": 120,
+                        "minLength": 3,
+                        "type": "string"
+                      },
+                      "realm": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "profile",
+                      "realm",
+                      "question",
+                      "actingSubject"
+                    ],
+                    "type": "object"
                   },
-                  "profile": {
-                    "const": "realm-standing-rating-context-v1",
-                    "type": "string"
-                  },
-                  "question": {
-                    "maxLength": 120,
-                    "minLength": 3,
-                    "type": "string"
-                  },
-                  "realm": {
-                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
-                    "type": "string"
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "actingSubject": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      },
+                      "profile": {
+                        "const": "realm-daily-rating-context-v1",
+                        "type": "string"
+                      },
+                      "question": {
+                        "maxLength": 120,
+                        "minLength": 3,
+                        "type": "string"
+                      },
+                      "realm": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      },
+                      "timeZone": {
+                        "maxLength": 100,
+                        "minLength": 1,
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "profile",
+                      "realm",
+                      "timeZone",
+                      "question",
+                      "actingSubject"
+                    ],
+                    "type": "object"
                   }
-                },
-                "required": [
-                  "profile",
-                  "realm",
-                  "question",
-                  "actingSubject"
-                ],
-                "type": "object"
+                ]
               }
             },
             "multipart/form-data": {
               "schema": {
-                "additionalProperties": false,
-                "properties": {
-                  "actingSubject": {
-                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
-                    "type": "string"
+                "anyOf": [
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "actingSubject": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      },
+                      "profile": {
+                        "const": "realm-standing-rating-context-v1",
+                        "type": "string"
+                      },
+                      "question": {
+                        "maxLength": 120,
+                        "minLength": 3,
+                        "type": "string"
+                      },
+                      "realm": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "profile",
+                      "realm",
+                      "question",
+                      "actingSubject"
+                    ],
+                    "type": "object"
                   },
-                  "profile": {
-                    "const": "realm-standing-rating-context-v1",
-                    "type": "string"
-                  },
-                  "question": {
-                    "maxLength": 120,
-                    "minLength": 3,
-                    "type": "string"
-                  },
-                  "realm": {
-                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
-                    "type": "string"
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "actingSubject": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      },
+                      "profile": {
+                        "const": "realm-daily-rating-context-v1",
+                        "type": "string"
+                      },
+                      "question": {
+                        "maxLength": 120,
+                        "minLength": 3,
+                        "type": "string"
+                      },
+                      "realm": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      },
+                      "timeZone": {
+                        "maxLength": 100,
+                        "minLength": 1,
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "profile",
+                      "realm",
+                      "timeZone",
+                      "question",
+                      "actingSubject"
+                    ],
+                    "type": "object"
                   }
-                },
-                "required": [
-                  "profile",
-                  "realm",
-                  "question",
-                  "actingSubject"
-                ],
-                "type": "object"
+                ]
               }
             }
           },
@@ -57950,101 +58067,211 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "properties": {
-                    "aggregation": {
-                      "const": "latest-per-rater-mean",
-                      "type": "string"
-                    },
-                    "cadence": {
-                      "const": "standing",
-                      "type": "string"
-                    },
-                    "context": {
-                      "type": "string"
-                    },
-                    "contextRevision": {
-                      "type": "string"
-                    },
-                    "population": {
-                      "const": "account-principal",
-                      "type": "string"
-                    },
-                    "profile": {
-                      "const": "realm-standing-rating-context-v1",
-                      "type": "string"
-                    },
-                    "question": {
-                      "type": "string"
-                    },
-                    "realm": {
-                      "type": "string"
-                    },
-                    "replayed": {
-                      "type": "boolean"
-                    },
-                    "scale": {
+                  "anyOf": [
+                    {
                       "properties": {
-                        "max": {
-                          "const": 10,
-                          "type": "number"
+                        "aggregation": {
+                          "const": "latest-per-rater-mean",
+                          "type": "string"
                         },
-                        "min": {
-                          "const": 1,
-                          "type": "number"
+                        "cadence": {
+                          "const": "standing",
+                          "type": "string"
                         },
-                        "step": {
-                          "const": 1,
-                          "type": "number"
+                        "context": {
+                          "type": "string"
+                        },
+                        "contextRevision": {
+                          "type": "string"
+                        },
+                        "population": {
+                          "const": "account-principal",
+                          "type": "string"
+                        },
+                        "profile": {
+                          "const": "realm-standing-rating-context-v1",
+                          "type": "string"
+                        },
+                        "question": {
+                          "type": "string"
+                        },
+                        "realm": {
+                          "type": "string"
+                        },
+                        "replayed": {
+                          "type": "boolean"
+                        },
+                        "scale": {
+                          "properties": {
+                            "max": {
+                              "const": 10,
+                              "type": "number"
+                            },
+                            "min": {
+                              "const": 1,
+                              "type": "number"
+                            },
+                            "step": {
+                              "const": 1,
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "min",
+                            "max",
+                            "step"
+                          ],
+                          "type": "object"
+                        },
+                        "sourcePosition": {
+                          "properties": {
+                            "dataEpoch": {
+                              "type": "string"
+                            },
+                            "datasetId": {
+                              "const": "product",
+                              "type": "string"
+                            },
+                            "sequence": {
+                              "pattern": "^[0-9]+$",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "datasetId",
+                            "dataEpoch",
+                            "sequence"
+                          ],
+                          "type": "object"
+                        },
+                        "targetGrain": {
+                          "const": "mainVersion",
+                          "type": "string"
                         }
                       },
                       "required": [
-                        "min",
-                        "max",
-                        "step"
+                        "context",
+                        "realm",
+                        "question",
+                        "contextRevision",
+                        "targetGrain",
+                        "scale",
+                        "cadence",
+                        "population",
+                        "aggregation",
+                        "profile",
+                        "sourcePosition",
+                        "replayed"
                       ],
                       "type": "object"
                     },
-                    "sourcePosition": {
+                    {
                       "properties": {
-                        "dataEpoch": {
+                        "aggregation": {
+                          "const": "latest-per-rater-mean",
                           "type": "string"
                         },
-                        "datasetId": {
-                          "const": "product",
+                        "cadence": {
+                          "const": "daily",
                           "type": "string"
                         },
-                        "sequence": {
-                          "pattern": "^[0-9]+$",
+                        "calendar": {
+                          "const": "iso8601",
+                          "type": "string"
+                        },
+                        "context": {
+                          "type": "string"
+                        },
+                        "contextRevision": {
+                          "type": "string"
+                        },
+                        "population": {
+                          "const": "account-principal",
+                          "type": "string"
+                        },
+                        "profile": {
+                          "const": "realm-daily-rating-context-v1",
+                          "type": "string"
+                        },
+                        "question": {
+                          "type": "string"
+                        },
+                        "realm": {
+                          "type": "string"
+                        },
+                        "replayed": {
+                          "type": "boolean"
+                        },
+                        "scale": {
+                          "properties": {
+                            "max": {
+                              "const": 10,
+                              "type": "number"
+                            },
+                            "min": {
+                              "const": 1,
+                              "type": "number"
+                            },
+                            "step": {
+                              "const": 1,
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "min",
+                            "max",
+                            "step"
+                          ],
+                          "type": "object"
+                        },
+                        "sourcePosition": {
+                          "properties": {
+                            "dataEpoch": {
+                              "type": "string"
+                            },
+                            "datasetId": {
+                              "const": "product",
+                              "type": "string"
+                            },
+                            "sequence": {
+                              "pattern": "^[0-9]+$",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "datasetId",
+                            "dataEpoch",
+                            "sequence"
+                          ],
+                          "type": "object"
+                        },
+                        "targetGrain": {
+                          "const": "mainVersion",
+                          "type": "string"
+                        },
+                        "timeZone": {
                           "type": "string"
                         }
                       },
                       "required": [
-                        "datasetId",
-                        "dataEpoch",
-                        "sequence"
+                        "context",
+                        "realm",
+                        "question",
+                        "contextRevision",
+                        "targetGrain",
+                        "scale",
+                        "cadence",
+                        "population",
+                        "aggregation",
+                        "profile",
+                        "sourcePosition",
+                        "replayed",
+                        "timeZone",
+                        "calendar"
                       ],
                       "type": "object"
-                    },
-                    "targetGrain": {
-                      "const": "mainVersion",
-                      "type": "string"
                     }
-                  },
-                  "required": [
-                    "context",
-                    "realm",
-                    "question",
-                    "contextRevision",
-                    "targetGrain",
-                    "scale",
-                    "cadence",
-                    "population",
-                    "aggregation",
-                    "profile",
-                    "sourcePosition",
-                    "replayed"
-                  ],
-                  "type": "object"
+                  ]
                 }
               }
             },
@@ -58054,101 +58281,211 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "properties": {
-                    "aggregation": {
-                      "const": "latest-per-rater-mean",
-                      "type": "string"
-                    },
-                    "cadence": {
-                      "const": "standing",
-                      "type": "string"
-                    },
-                    "context": {
-                      "type": "string"
-                    },
-                    "contextRevision": {
-                      "type": "string"
-                    },
-                    "population": {
-                      "const": "account-principal",
-                      "type": "string"
-                    },
-                    "profile": {
-                      "const": "realm-standing-rating-context-v1",
-                      "type": "string"
-                    },
-                    "question": {
-                      "type": "string"
-                    },
-                    "realm": {
-                      "type": "string"
-                    },
-                    "replayed": {
-                      "type": "boolean"
-                    },
-                    "scale": {
+                  "anyOf": [
+                    {
                       "properties": {
-                        "max": {
-                          "const": 10,
-                          "type": "number"
+                        "aggregation": {
+                          "const": "latest-per-rater-mean",
+                          "type": "string"
                         },
-                        "min": {
-                          "const": 1,
-                          "type": "number"
+                        "cadence": {
+                          "const": "standing",
+                          "type": "string"
                         },
-                        "step": {
-                          "const": 1,
-                          "type": "number"
+                        "context": {
+                          "type": "string"
+                        },
+                        "contextRevision": {
+                          "type": "string"
+                        },
+                        "population": {
+                          "const": "account-principal",
+                          "type": "string"
+                        },
+                        "profile": {
+                          "const": "realm-standing-rating-context-v1",
+                          "type": "string"
+                        },
+                        "question": {
+                          "type": "string"
+                        },
+                        "realm": {
+                          "type": "string"
+                        },
+                        "replayed": {
+                          "type": "boolean"
+                        },
+                        "scale": {
+                          "properties": {
+                            "max": {
+                              "const": 10,
+                              "type": "number"
+                            },
+                            "min": {
+                              "const": 1,
+                              "type": "number"
+                            },
+                            "step": {
+                              "const": 1,
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "min",
+                            "max",
+                            "step"
+                          ],
+                          "type": "object"
+                        },
+                        "sourcePosition": {
+                          "properties": {
+                            "dataEpoch": {
+                              "type": "string"
+                            },
+                            "datasetId": {
+                              "const": "product",
+                              "type": "string"
+                            },
+                            "sequence": {
+                              "pattern": "^[0-9]+$",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "datasetId",
+                            "dataEpoch",
+                            "sequence"
+                          ],
+                          "type": "object"
+                        },
+                        "targetGrain": {
+                          "const": "mainVersion",
+                          "type": "string"
                         }
                       },
                       "required": [
-                        "min",
-                        "max",
-                        "step"
+                        "context",
+                        "realm",
+                        "question",
+                        "contextRevision",
+                        "targetGrain",
+                        "scale",
+                        "cadence",
+                        "population",
+                        "aggregation",
+                        "profile",
+                        "sourcePosition",
+                        "replayed"
                       ],
                       "type": "object"
                     },
-                    "sourcePosition": {
+                    {
                       "properties": {
-                        "dataEpoch": {
+                        "aggregation": {
+                          "const": "latest-per-rater-mean",
                           "type": "string"
                         },
-                        "datasetId": {
-                          "const": "product",
+                        "cadence": {
+                          "const": "daily",
                           "type": "string"
                         },
-                        "sequence": {
-                          "pattern": "^[0-9]+$",
+                        "calendar": {
+                          "const": "iso8601",
+                          "type": "string"
+                        },
+                        "context": {
+                          "type": "string"
+                        },
+                        "contextRevision": {
+                          "type": "string"
+                        },
+                        "population": {
+                          "const": "account-principal",
+                          "type": "string"
+                        },
+                        "profile": {
+                          "const": "realm-daily-rating-context-v1",
+                          "type": "string"
+                        },
+                        "question": {
+                          "type": "string"
+                        },
+                        "realm": {
+                          "type": "string"
+                        },
+                        "replayed": {
+                          "type": "boolean"
+                        },
+                        "scale": {
+                          "properties": {
+                            "max": {
+                              "const": 10,
+                              "type": "number"
+                            },
+                            "min": {
+                              "const": 1,
+                              "type": "number"
+                            },
+                            "step": {
+                              "const": 1,
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "min",
+                            "max",
+                            "step"
+                          ],
+                          "type": "object"
+                        },
+                        "sourcePosition": {
+                          "properties": {
+                            "dataEpoch": {
+                              "type": "string"
+                            },
+                            "datasetId": {
+                              "const": "product",
+                              "type": "string"
+                            },
+                            "sequence": {
+                              "pattern": "^[0-9]+$",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "datasetId",
+                            "dataEpoch",
+                            "sequence"
+                          ],
+                          "type": "object"
+                        },
+                        "targetGrain": {
+                          "const": "mainVersion",
+                          "type": "string"
+                        },
+                        "timeZone": {
                           "type": "string"
                         }
                       },
                       "required": [
-                        "datasetId",
-                        "dataEpoch",
-                        "sequence"
+                        "context",
+                        "realm",
+                        "question",
+                        "contextRevision",
+                        "targetGrain",
+                        "scale",
+                        "cadence",
+                        "population",
+                        "aggregation",
+                        "profile",
+                        "sourcePosition",
+                        "replayed",
+                        "timeZone",
+                        "calendar"
                       ],
                       "type": "object"
-                    },
-                    "targetGrain": {
-                      "const": "mainVersion",
-                      "type": "string"
                     }
-                  },
-                  "required": [
-                    "context",
-                    "realm",
-                    "question",
-                    "contextRevision",
-                    "targetGrain",
-                    "scale",
-                    "cadence",
-                    "population",
-                    "aggregation",
-                    "profile",
-                    "sourcePosition",
-                    "replayed"
-                  ],
-                  "type": "object"
+                  ]
                 }
               }
             },
@@ -58446,75 +58783,159 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "properties": {
-                    "aggregation": {
-                      "const": "latest-per-rater-mean",
-                      "type": "string"
-                    },
-                    "cadence": {
-                      "const": "standing",
-                      "type": "string"
-                    },
-                    "context": {
-                      "type": "string"
-                    },
-                    "contextRevision": {
-                      "type": "string"
-                    },
-                    "population": {
-                      "const": "account-principal",
-                      "type": "string"
-                    },
-                    "profile": {
-                      "const": "realm-standing-rating-context-v1",
-                      "type": "string"
-                    },
-                    "question": {
-                      "type": "string"
-                    },
-                    "realm": {
-                      "type": "string"
-                    },
-                    "scale": {
+                  "anyOf": [
+                    {
                       "properties": {
-                        "max": {
-                          "const": 10,
-                          "type": "number"
+                        "aggregation": {
+                          "const": "latest-per-rater-mean",
+                          "type": "string"
                         },
-                        "min": {
-                          "const": 1,
-                          "type": "number"
+                        "cadence": {
+                          "const": "standing",
+                          "type": "string"
                         },
-                        "step": {
-                          "const": 1,
-                          "type": "number"
+                        "context": {
+                          "type": "string"
+                        },
+                        "contextRevision": {
+                          "type": "string"
+                        },
+                        "population": {
+                          "const": "account-principal",
+                          "type": "string"
+                        },
+                        "profile": {
+                          "const": "realm-standing-rating-context-v1",
+                          "type": "string"
+                        },
+                        "question": {
+                          "type": "string"
+                        },
+                        "realm": {
+                          "type": "string"
+                        },
+                        "scale": {
+                          "properties": {
+                            "max": {
+                              "const": 10,
+                              "type": "number"
+                            },
+                            "min": {
+                              "const": 1,
+                              "type": "number"
+                            },
+                            "step": {
+                              "const": 1,
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "min",
+                            "max",
+                            "step"
+                          ],
+                          "type": "object"
+                        },
+                        "targetGrain": {
+                          "const": "mainVersion",
+                          "type": "string"
                         }
                       },
                       "required": [
-                        "min",
-                        "max",
-                        "step"
+                        "context",
+                        "realm",
+                        "question",
+                        "contextRevision",
+                        "targetGrain",
+                        "scale",
+                        "cadence",
+                        "population",
+                        "aggregation",
+                        "profile"
                       ],
                       "type": "object"
                     },
-                    "targetGrain": {
-                      "const": "mainVersion",
-                      "type": "string"
+                    {
+                      "properties": {
+                        "aggregation": {
+                          "const": "latest-per-rater-mean",
+                          "type": "string"
+                        },
+                        "cadence": {
+                          "const": "daily",
+                          "type": "string"
+                        },
+                        "calendar": {
+                          "const": "iso8601",
+                          "type": "string"
+                        },
+                        "context": {
+                          "type": "string"
+                        },
+                        "contextRevision": {
+                          "type": "string"
+                        },
+                        "population": {
+                          "const": "account-principal",
+                          "type": "string"
+                        },
+                        "profile": {
+                          "const": "realm-daily-rating-context-v1",
+                          "type": "string"
+                        },
+                        "question": {
+                          "type": "string"
+                        },
+                        "realm": {
+                          "type": "string"
+                        },
+                        "scale": {
+                          "properties": {
+                            "max": {
+                              "const": 10,
+                              "type": "number"
+                            },
+                            "min": {
+                              "const": 1,
+                              "type": "number"
+                            },
+                            "step": {
+                              "const": 1,
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "min",
+                            "max",
+                            "step"
+                          ],
+                          "type": "object"
+                        },
+                        "targetGrain": {
+                          "const": "mainVersion",
+                          "type": "string"
+                        },
+                        "timeZone": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "context",
+                        "realm",
+                        "question",
+                        "contextRevision",
+                        "targetGrain",
+                        "scale",
+                        "cadence",
+                        "population",
+                        "aggregation",
+                        "profile",
+                        "timeZone",
+                        "calendar"
+                      ],
+                      "type": "object"
                     }
-                  },
-                  "required": [
-                    "context",
-                    "realm",
-                    "question",
-                    "contextRevision",
-                    "targetGrain",
-                    "scale",
-                    "cadence",
-                    "population",
-                    "aggregation",
-                    "profile"
-                  ],
-                  "type": "object"
+                  ]
                 }
               }
             },
@@ -58689,7 +59110,10 @@
                     "type": "string"
                   },
                   "profile": {
-                    "const": "realm-standing-rating-observation-v1",
+                    "enum": [
+                      "realm-standing-rating-observation-v1",
+                      "realm-daily-rating-observation-v1"
+                    ],
                     "type": "string"
                   },
                   "value": {
@@ -58741,7 +59165,10 @@
                     "type": "string"
                   },
                   "profile": {
-                    "const": "realm-standing-rating-observation-v1",
+                    "enum": [
+                      "realm-standing-rating-observation-v1",
+                      "realm-daily-rating-observation-v1"
+                    ],
                     "type": "string"
                   },
                   "value": {
@@ -58793,7 +59220,10 @@
                     "type": "string"
                   },
                   "profile": {
-                    "const": "realm-standing-rating-observation-v1",
+                    "enum": [
+                      "realm-standing-rating-observation-v1",
+                      "realm-daily-rating-observation-v1"
+                    ],
                     "type": "string"
                   },
                   "value": {
@@ -58829,88 +59259,198 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "properties": {
-                    "availability": {
-                      "enum": [
-                        "available",
-                        "withdrawn"
-                      ],
-                      "type": "string"
-                    },
-                    "context": {
-                      "type": "string"
-                    },
-                    "mainVersion": {
-                      "type": "string"
-                    },
-                    "observation": {
-                      "type": "string"
-                    },
-                    "observationRevision": {
-                      "type": "string"
-                    },
-                    "predecessor": {
-                      "~elyTyp": 7,
-                      "nullable": true,
-                      "type": [
-                        "string",
-                        "null"
-                      ]
-                    },
-                    "profile": {
-                      "const": "realm-standing-rating-observation-v1",
-                      "type": "string"
-                    },
-                    "replayed": {
-                      "type": "boolean"
-                    },
-                    "sourcePosition": {
+                  "anyOf": [
+                    {
                       "properties": {
-                        "dataEpoch": {
+                        "availability": {
+                          "enum": [
+                            "available",
+                            "withdrawn"
+                          ],
                           "type": "string"
                         },
-                        "datasetId": {
-                          "const": "product",
+                        "context": {
                           "type": "string"
                         },
-                        "sequence": {
-                          "pattern": "^[0-9]+$",
+                        "mainVersion": {
+                          "type": "string"
+                        },
+                        "observation": {
+                          "type": "string"
+                        },
+                        "observationRevision": {
+                          "type": "string"
+                        },
+                        "predecessor": {
+                          "~elyTyp": 7,
+                          "nullable": true,
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "profile": {
+                          "const": "realm-standing-rating-observation-v1",
+                          "type": "string"
+                        },
+                        "replayed": {
+                          "type": "boolean"
+                        },
+                        "sourcePosition": {
+                          "properties": {
+                            "dataEpoch": {
+                              "type": "string"
+                            },
+                            "datasetId": {
+                              "const": "product",
+                              "type": "string"
+                            },
+                            "sequence": {
+                              "pattern": "^[0-9]+$",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "datasetId",
+                            "dataEpoch",
+                            "sequence"
+                          ],
+                          "type": "object"
+                        },
+                        "value": {
+                          "~elyTyp": 7,
+                          "nullable": true,
+                          "type": [
+                            "integer",
+                            "null"
+                          ]
+                        },
+                        "work": {
                           "type": "string"
                         }
                       },
                       "required": [
-                        "datasetId",
-                        "dataEpoch",
-                        "sequence"
+                        "observation",
+                        "observationRevision",
+                        "predecessor",
+                        "context",
+                        "work",
+                        "mainVersion",
+                        "value",
+                        "availability",
+                        "profile",
+                        "sourcePosition",
+                        "replayed"
                       ],
                       "type": "object"
                     },
-                    "value": {
-                      "~elyTyp": 7,
-                      "nullable": true,
-                      "type": [
-                        "integer",
-                        "null"
-                      ]
-                    },
-                    "work": {
-                      "type": "string"
+                    {
+                      "properties": {
+                        "availability": {
+                          "enum": [
+                            "available",
+                            "withdrawn"
+                          ],
+                          "type": "string"
+                        },
+                        "calendar": {
+                          "const": "iso8601",
+                          "type": "string"
+                        },
+                        "context": {
+                          "type": "string"
+                        },
+                        "day": {
+                          "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+                          "type": "string"
+                        },
+                        "mainVersion": {
+                          "type": "string"
+                        },
+                        "observation": {
+                          "type": "string"
+                        },
+                        "observationRevision": {
+                          "type": "string"
+                        },
+                        "periodEnd": {
+                          "type": "string"
+                        },
+                        "periodStart": {
+                          "type": "string"
+                        },
+                        "predecessor": {
+                          "~elyTyp": 7,
+                          "nullable": true,
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "profile": {
+                          "const": "realm-daily-rating-observation-v1",
+                          "type": "string"
+                        },
+                        "replayed": {
+                          "type": "boolean"
+                        },
+                        "sourcePosition": {
+                          "properties": {
+                            "dataEpoch": {
+                              "type": "string"
+                            },
+                            "datasetId": {
+                              "const": "product",
+                              "type": "string"
+                            },
+                            "sequence": {
+                              "pattern": "^[0-9]+$",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "datasetId",
+                            "dataEpoch",
+                            "sequence"
+                          ],
+                          "type": "object"
+                        },
+                        "timeZone": {
+                          "type": "string"
+                        },
+                        "value": {
+                          "~elyTyp": 7,
+                          "nullable": true,
+                          "type": [
+                            "integer",
+                            "null"
+                          ]
+                        },
+                        "work": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "observation",
+                        "observationRevision",
+                        "predecessor",
+                        "context",
+                        "work",
+                        "mainVersion",
+                        "value",
+                        "availability",
+                        "profile",
+                        "sourcePosition",
+                        "replayed",
+                        "day",
+                        "timeZone",
+                        "calendar",
+                        "periodStart",
+                        "periodEnd"
+                      ],
+                      "type": "object"
                     }
-                  },
-                  "required": [
-                    "observation",
-                    "observationRevision",
-                    "predecessor",
-                    "context",
-                    "work",
-                    "mainVersion",
-                    "value",
-                    "availability",
-                    "profile",
-                    "sourcePosition",
-                    "replayed"
-                  ],
-                  "type": "object"
+                  ]
                 }
               }
             },
@@ -58920,88 +59460,198 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "properties": {
-                    "availability": {
-                      "enum": [
-                        "available",
-                        "withdrawn"
-                      ],
-                      "type": "string"
-                    },
-                    "context": {
-                      "type": "string"
-                    },
-                    "mainVersion": {
-                      "type": "string"
-                    },
-                    "observation": {
-                      "type": "string"
-                    },
-                    "observationRevision": {
-                      "type": "string"
-                    },
-                    "predecessor": {
-                      "~elyTyp": 7,
-                      "nullable": true,
-                      "type": [
-                        "string",
-                        "null"
-                      ]
-                    },
-                    "profile": {
-                      "const": "realm-standing-rating-observation-v1",
-                      "type": "string"
-                    },
-                    "replayed": {
-                      "type": "boolean"
-                    },
-                    "sourcePosition": {
+                  "anyOf": [
+                    {
                       "properties": {
-                        "dataEpoch": {
+                        "availability": {
+                          "enum": [
+                            "available",
+                            "withdrawn"
+                          ],
                           "type": "string"
                         },
-                        "datasetId": {
-                          "const": "product",
+                        "context": {
                           "type": "string"
                         },
-                        "sequence": {
-                          "pattern": "^[0-9]+$",
+                        "mainVersion": {
+                          "type": "string"
+                        },
+                        "observation": {
+                          "type": "string"
+                        },
+                        "observationRevision": {
+                          "type": "string"
+                        },
+                        "predecessor": {
+                          "~elyTyp": 7,
+                          "nullable": true,
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "profile": {
+                          "const": "realm-standing-rating-observation-v1",
+                          "type": "string"
+                        },
+                        "replayed": {
+                          "type": "boolean"
+                        },
+                        "sourcePosition": {
+                          "properties": {
+                            "dataEpoch": {
+                              "type": "string"
+                            },
+                            "datasetId": {
+                              "const": "product",
+                              "type": "string"
+                            },
+                            "sequence": {
+                              "pattern": "^[0-9]+$",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "datasetId",
+                            "dataEpoch",
+                            "sequence"
+                          ],
+                          "type": "object"
+                        },
+                        "value": {
+                          "~elyTyp": 7,
+                          "nullable": true,
+                          "type": [
+                            "integer",
+                            "null"
+                          ]
+                        },
+                        "work": {
                           "type": "string"
                         }
                       },
                       "required": [
-                        "datasetId",
-                        "dataEpoch",
-                        "sequence"
+                        "observation",
+                        "observationRevision",
+                        "predecessor",
+                        "context",
+                        "work",
+                        "mainVersion",
+                        "value",
+                        "availability",
+                        "profile",
+                        "sourcePosition",
+                        "replayed"
                       ],
                       "type": "object"
                     },
-                    "value": {
-                      "~elyTyp": 7,
-                      "nullable": true,
-                      "type": [
-                        "integer",
-                        "null"
-                      ]
-                    },
-                    "work": {
-                      "type": "string"
+                    {
+                      "properties": {
+                        "availability": {
+                          "enum": [
+                            "available",
+                            "withdrawn"
+                          ],
+                          "type": "string"
+                        },
+                        "calendar": {
+                          "const": "iso8601",
+                          "type": "string"
+                        },
+                        "context": {
+                          "type": "string"
+                        },
+                        "day": {
+                          "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+                          "type": "string"
+                        },
+                        "mainVersion": {
+                          "type": "string"
+                        },
+                        "observation": {
+                          "type": "string"
+                        },
+                        "observationRevision": {
+                          "type": "string"
+                        },
+                        "periodEnd": {
+                          "type": "string"
+                        },
+                        "periodStart": {
+                          "type": "string"
+                        },
+                        "predecessor": {
+                          "~elyTyp": 7,
+                          "nullable": true,
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "profile": {
+                          "const": "realm-daily-rating-observation-v1",
+                          "type": "string"
+                        },
+                        "replayed": {
+                          "type": "boolean"
+                        },
+                        "sourcePosition": {
+                          "properties": {
+                            "dataEpoch": {
+                              "type": "string"
+                            },
+                            "datasetId": {
+                              "const": "product",
+                              "type": "string"
+                            },
+                            "sequence": {
+                              "pattern": "^[0-9]+$",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "datasetId",
+                            "dataEpoch",
+                            "sequence"
+                          ],
+                          "type": "object"
+                        },
+                        "timeZone": {
+                          "type": "string"
+                        },
+                        "value": {
+                          "~elyTyp": 7,
+                          "nullable": true,
+                          "type": [
+                            "integer",
+                            "null"
+                          ]
+                        },
+                        "work": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "observation",
+                        "observationRevision",
+                        "predecessor",
+                        "context",
+                        "work",
+                        "mainVersion",
+                        "value",
+                        "availability",
+                        "profile",
+                        "sourcePosition",
+                        "replayed",
+                        "day",
+                        "timeZone",
+                        "calendar",
+                        "periodStart",
+                        "periodEnd"
+                      ],
+                      "type": "object"
                     }
-                  },
-                  "required": [
-                    "observation",
-                    "observationRevision",
-                    "predecessor",
-                    "context",
-                    "work",
-                    "mainVersion",
-                    "value",
-                    "availability",
-                    "profile",
-                    "sourcePosition",
-                    "replayed"
-                  ],
-                  "type": "object"
+                  ]
                 }
               }
             },
@@ -59273,6 +59923,15 @@
           },
           {
             "in": "query",
+            "name": "profile",
+            "required": false,
+            "schema": {
+              "const": "realm-daily-rating-observation-v1",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
             "name": "context",
             "required": true,
             "schema": {
@@ -59304,78 +59963,178 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "properties": {
-                    "availability": {
-                      "enum": [
-                        "available",
-                        "withdrawn"
+                  "anyOf": [
+                    {
+                      "properties": {
+                        "availability": {
+                          "enum": [
+                            "available",
+                            "withdrawn"
+                          ],
+                          "type": "string"
+                        },
+                        "context": {
+                          "type": "string"
+                        },
+                        "evaluatedAt": {
+                          "type": "string"
+                        },
+                        "mainVersion": {
+                          "type": "string"
+                        },
+                        "observation": {
+                          "type": "string"
+                        },
+                        "observationRevision": {
+                          "type": "string"
+                        },
+                        "originalSubmissionAt": {
+                          "type": "string"
+                        },
+                        "predecessor": {
+                          "~elyTyp": 7,
+                          "nullable": true,
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "profile": {
+                          "const": "realm-standing-rating-observation-v1",
+                          "type": "string"
+                        },
+                        "revisedAt": {
+                          "type": "string"
+                        },
+                        "submittedAt": {
+                          "type": "string"
+                        },
+                        "value": {
+                          "~elyTyp": 7,
+                          "nullable": true,
+                          "type": [
+                            "integer",
+                            "null"
+                          ]
+                        },
+                        "work": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "observation",
+                        "observationRevision",
+                        "context",
+                        "work",
+                        "mainVersion",
+                        "predecessor",
+                        "availability",
+                        "value",
+                        "evaluatedAt",
+                        "submittedAt",
+                        "originalSubmissionAt",
+                        "revisedAt",
+                        "profile"
                       ],
-                      "type": "string"
+                      "type": "object"
                     },
-                    "context": {
-                      "type": "string"
-                    },
-                    "evaluatedAt": {
-                      "type": "string"
-                    },
-                    "mainVersion": {
-                      "type": "string"
-                    },
-                    "observation": {
-                      "type": "string"
-                    },
-                    "observationRevision": {
-                      "type": "string"
-                    },
-                    "originalSubmissionAt": {
-                      "type": "string"
-                    },
-                    "predecessor": {
-                      "~elyTyp": 7,
-                      "nullable": true,
-                      "type": [
-                        "string",
-                        "null"
-                      ]
-                    },
-                    "profile": {
-                      "const": "realm-standing-rating-observation-v1",
-                      "type": "string"
-                    },
-                    "revisedAt": {
-                      "type": "string"
-                    },
-                    "submittedAt": {
-                      "type": "string"
-                    },
-                    "value": {
-                      "~elyTyp": 7,
-                      "nullable": true,
-                      "type": [
-                        "integer",
-                        "null"
-                      ]
-                    },
-                    "work": {
-                      "type": "string"
+                    {
+                      "properties": {
+                        "availability": {
+                          "enum": [
+                            "available",
+                            "withdrawn"
+                          ],
+                          "type": "string"
+                        },
+                        "calendar": {
+                          "const": "iso8601",
+                          "type": "string"
+                        },
+                        "context": {
+                          "type": "string"
+                        },
+                        "day": {
+                          "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+                          "type": "string"
+                        },
+                        "evaluatedAt": {
+                          "type": "string"
+                        },
+                        "mainVersion": {
+                          "type": "string"
+                        },
+                        "observation": {
+                          "type": "string"
+                        },
+                        "observationRevision": {
+                          "type": "string"
+                        },
+                        "originalSubmissionAt": {
+                          "type": "string"
+                        },
+                        "periodEnd": {
+                          "type": "string"
+                        },
+                        "periodStart": {
+                          "type": "string"
+                        },
+                        "predecessor": {
+                          "~elyTyp": 7,
+                          "nullable": true,
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "profile": {
+                          "const": "realm-daily-rating-observation-v1",
+                          "type": "string"
+                        },
+                        "revisedAt": {
+                          "type": "string"
+                        },
+                        "submittedAt": {
+                          "type": "string"
+                        },
+                        "timeZone": {
+                          "type": "string"
+                        },
+                        "value": {
+                          "~elyTyp": 7,
+                          "nullable": true,
+                          "type": [
+                            "integer",
+                            "null"
+                          ]
+                        },
+                        "work": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "observation",
+                        "observationRevision",
+                        "context",
+                        "work",
+                        "mainVersion",
+                        "predecessor",
+                        "availability",
+                        "value",
+                        "evaluatedAt",
+                        "submittedAt",
+                        "originalSubmissionAt",
+                        "revisedAt",
+                        "profile",
+                        "day",
+                        "timeZone",
+                        "calendar",
+                        "periodStart",
+                        "periodEnd"
+                      ],
+                      "type": "object"
                     }
-                  },
-                  "required": [
-                    "observation",
-                    "observationRevision",
-                    "context",
-                    "work",
-                    "mainVersion",
-                    "predecessor",
-                    "availability",
-                    "value",
-                    "evaluatedAt",
-                    "submittedAt",
-                    "originalSubmissionAt",
-                    "revisedAt",
-                    "profile"
-                  ],
-                  "type": "object"
+                  ]
                 }
               }
             },

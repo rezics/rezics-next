@@ -1,3 +1,6 @@
+import { DAILY_CONTEXT_PROFILE, DAILY_CADENCE, DAILY_OBSERVATION_PROFILE, DAILY_OBSERVATION_ID,
+  dailyRatingSlotIri, canonicalRatingTimeZone, InvalidRatingCalendar } from './modules/rating/calendar.ts';
+import { readDailyRevisionPeriod } from './modules/rating/daily-period.ts';
 import { Elysia, ParseError, ValidationError, t } from 'elysia';
 import { ContentConflict, ContentLimitExceeded, ContentUnavailable,
   type ContentCore } from '../../content/src/core.ts';
@@ -172,6 +175,8 @@ import { actingContextCheck, actingContextDiscovery, actingContextPreference,
   contributionDraftReadResult,
   contributionEditWriteResult, contributionPublicationWriteResult, contributionWriteResult,
   mainSelectionReadResult, publicationRejectionWriteResult, publicationSelectionWriteResult,
+  dailyRatingContextWriteResult, dailyRatingContextReadResult,
+  dailyRatingObservationWriteResult, dailyRatingObservationReadResult,
   ratingAggregateResult, ratingContextReadResult, ratingContextWriteResult,
   ratingObservationReadResult, ratingObservationWriteResult, readProblems,
   realmSelectionReadResult, spaceReadResult, spaceWriteResult, writeProblems } from './api-responses.ts';
@@ -1321,6 +1326,7 @@ function commandError(error: unknown): Response {
     || error instanceof InvalidClassificationPropositionInput
     || error instanceof InvalidClassificationDecisionInput
     || error instanceof InvalidClassificationResolution
+    || error instanceof InvalidRatingCalendar
     || error instanceof InvalidRatingContextInput
     || error instanceof InvalidRatingObservationInput
     || error instanceof InvalidRatingAggregateQuery) {
@@ -3029,7 +3035,8 @@ export function createMainApp(fuseki: FusekiClient, work?: MainWorkDependencies)
       } catch (error) { return commandError(error); }
     })
     .post('/v1/rating-observations', {
-      body: t.Object({ profile: t.Literal('realm-standing-rating-observation-v1'),
+      body: t.Object({ profile: t.Union([t.Literal('realm-standing-rating-observation-v1'),
+        t.Literal('realm-daily-rating-observation-v1')]),
         context: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
         work: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
         mainVersion: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
@@ -3038,7 +3045,8 @@ export function createMainApp(fuseki: FusekiClient, work?: MainWorkDependencies)
         value: t.Union([t.Integer({ minimum: 1, maximum: 10 }), t.Null()]),
         actingSubject: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
       }, { additionalProperties: false }),
-      response: { 200: ratingObservationWriteResult, 201: ratingObservationWriteResult,
+      response: { 200: t.Union([ratingObservationWriteResult, dailyRatingObservationWriteResult]),
+        201: t.Union([ratingObservationWriteResult, dailyRatingObservationWriteResult]),
         202: pendingOperation, ...writeProblems },
     }, async ({ request, body }) => {
       const idempotencyKey = request.headers.get('idempotency-key');
@@ -3046,15 +3054,17 @@ export function createMainApp(fuseki: FusekiClient, work?: MainWorkDependencies)
         return problem(400, 'invalid_idempotency_key', 'A valid Idempotency-Key header is required');
       }
       try {
+        const daily = body.profile === DAILY_OBSERVATION_ID;
         const receipt = await setAdmittedStandingRating(work.environment,
           work.account, work.access, request, { context: body.context, work: body.work,
             mainVersion: body.mainVersion, expectedRevisionHead: body.expectedRevisionHead,
-            value: body.value, actingSubject: body.actingSubject, idempotencyKey });
+            value: body.value, actingSubject: body.actingSubject, idempotencyKey }, daily);
+        const period = daily ? await readDailyRevisionPeriod(work.environment, receipt.observation!, receipt.revision!) : undefined;
         return Response.json({ observation: receipt.observation,
           observationRevision: receipt.revision, predecessor: receipt.predecessor,
           context: receipt.context, work: receipt.work, mainVersion: receipt.mainVersion,
           value: receipt.value, availability: receipt.availability,
-          profile: 'realm-standing-rating-observation-v1',
+          profile: body.profile, ...(period ?? {}),
           sourcePosition: { datasetId: 'product', dataEpoch: receipt.dataEpoch,
             sequence: receipt.sequence }, replayed: receipt.replayed }, {
           status: receipt.replayed ? 200 : 201, headers: { 'cache-control': 'no-store' },
@@ -3064,10 +3074,10 @@ export function createMainApp(fuseki: FusekiClient, work?: MainWorkDependencies)
     .get('/v1/rating-observations/:observation/revisions/:revision', {
       params: t.Object({ observation: t.String({ pattern: '^[0-9a-f-]{36}$' }),
         revision: t.String({ pattern: '^[0-9a-f-]{36}$' }) }),
-      query: t.Object({ context: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
+      query: t.Object({ profile: t.Optional(t.Literal('realm-daily-rating-observation-v1')), context: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
         mainVersion: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
         actingSubject: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }) }),
-      response: { 200: ratingObservationReadResult, ...authorizedReadProblems },
+      response: { 200: t.Union([ratingObservationReadResult, dailyRatingObservationReadResult]), ...authorizedReadProblems },
     }, async ({ params, query, request }) => {
       try {
         await assertGraphAdmissionOpen(fuseki, work.environment.lineage);
@@ -3079,7 +3089,11 @@ export function createMainApp(fuseki: FusekiClient, work?: MainWorkDependencies)
         if (!principalId) return problem(403, 'authority_denied', 'Authority is not admitted');
         const observation = `https://rezics.com/id/${params.observation}`;
         const revision = `https://rezics.com/id/${params.revision}`;
-        const slot = standingRatingSlotIri(principalId, query.context, query.mainVersion);
+        const daily = query.profile === DAILY_OBSERVATION_ID;
+        const profile = daily ? DAILY_OBSERVATION_PROFILE : STANDING_RATING_OBSERVATION_PROFILE;
+        const period = daily ? await readDailyRevisionPeriod(work.environment, observation, revision) : undefined;
+        const slot = period ? dailyRatingSlotIri(principalId, query.context, query.mainVersion, period.day)
+          : standingRatingSlotIri(principalId, query.context, query.mainVersion);
         const result = await fuseki.query(`PREFIX rv: <https://rezics.com/vocab/>
           SELECT ?manifest ?work ?realm ?availability ?value ?predecessor
             ?evaluatedAt ?submittedAt ?originalSubmissionAt ?revisedAt WHERE {
@@ -3090,7 +3104,7 @@ export function createMainApp(fuseki: FusekiClient, work?: MainWorkDependencies)
               ${iri(query.context)} a rv:RatingContext ; rv:contextState rv:Active ;
                 rv:realm ?realm ; rv:targetGrain rv:MainVersion ;
                 rv:ratingScaleMin 1 ; rv:ratingScaleMax 10 ;
-                rv:ratingCadence ${iri(RATING_STANDING_CADENCE)} ;
+                rv:ratingCadence ${iri(daily ? DAILY_CADENCE : RATING_STANDING_CADENCE)} ;
                 rv:ratingPopulationPolicy ${iri(RATING_ACCOUNT_POPULATION)} ;
                 rv:ratingAggregationPolicy ${iri(RATING_LATEST_MEAN_POLICY)} .
               ${iri(observation)} a rv:RatingObservation ; rv:ratingSlot ${iri(slot)} ;
@@ -3103,7 +3117,7 @@ export function createMainApp(fuseki: FusekiClient, work?: MainWorkDependencies)
             GRAPH <urn:rezics:graph:revisions> { ${iri(revision)}
               a rv:RatingObservationRevision, rv:RevisionAnchor ;
               rv:component ${iri(observation)} ; rv:observation ${iri(observation)} ;
-              rv:modelRevision ${iri(STANDING_RATING_OBSERVATION_PROFILE)} ;
+              rv:modelRevision ${iri(profile)} ;
               rv:manifest ?manifest ; rv:ratingAvailability ?availability ;
               rv:evaluatedAt ?evaluatedAt ; rv:submittedAt ?submittedAt ;
               rv:originalSubmissionAt ?originalSubmissionAt ; rv:revisedAt ?revisedAt .
@@ -3118,7 +3132,7 @@ export function createMainApp(fuseki: FusekiClient, work?: MainWorkDependencies)
           return problem(404, 'rating_revision_unavailable', 'Rating revision is unavailable');
         }
         const state = readComponentState(work.environment.objectDirectory,
-          rows[0].manifest.value, observation, STANDING_RATING_OBSERVATION_PROFILE);
+          rows[0].manifest.value, observation, profile);
         if (state.observation !== observation || state.revision !== revision
           || state.slot !== slot || state.context !== query.context
           || state.realm !== rows[0].realm.value
@@ -3144,17 +3158,25 @@ export function createMainApp(fuseki: FusekiClient, work?: MainWorkDependencies)
           predecessor: state.predecessor, availability: state.availability,
           value: state.value, evaluatedAt: state.evaluatedAt,
           submittedAt: state.submittedAt, originalSubmissionAt: state.originalSubmissionAt,
-          revisedAt: state.revisedAt, profile: 'realm-standing-rating-observation-v1' },
+          revisedAt: state.revisedAt, ...(period ?? {}),
+          profile: daily ? DAILY_OBSERVATION_ID : 'realm-standing-rating-observation-v1' },
         { headers: { 'cache-control': 'no-store' } });
       } catch (error) { return commandError(error); }
     })
     .post('/v1/rating-contexts', {
-      body: t.Object({ profile: t.Literal('realm-standing-rating-context-v1'),
+      body: t.Union([t.Object({ profile: t.Literal('realm-standing-rating-context-v1'),
         realm: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
         question: t.String({ minLength: 3, maxLength: 120 }),
         actingSubject: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
       }, { additionalProperties: false }),
-      response: { 200: ratingContextWriteResult, 201: ratingContextWriteResult,
+        t.Object({ profile: t.Literal('realm-daily-rating-context-v1'),
+        realm: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
+        timeZone: t.String({ minLength: 1, maxLength: 100 }),
+        question: t.String({ minLength: 3, maxLength: 120 }),
+        actingSubject: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
+      }, { additionalProperties: false })]),
+      response: { 200: t.Union([ratingContextWriteResult, dailyRatingContextWriteResult]),
+        201: t.Union([ratingContextWriteResult, dailyRatingContextWriteResult]),
         202: pendingOperation, ...writeProblems, 404: problemResult(404) },
     }, async ({ request, body }) => {
       const idempotencyKey = request.headers.get('idempotency-key');
@@ -3164,13 +3186,16 @@ export function createMainApp(fuseki: FusekiClient, work?: MainWorkDependencies)
       try {
         const receipt = await createAdmittedRatingContext(work.environment,
           work.account, work.access, request, { realm: body.realm,
-            question: body.question, actingSubject: body.actingSubject, idempotencyKey });
+            question: body.question, actingSubject: body.actingSubject, idempotencyKey,
+            ...(body.profile === 'realm-daily-rating-context-v1' ? { timeZone: body.timeZone } : {}) });
         return Response.json({ context: receipt.context, realm: receipt.realm,
           question: body.question, contextRevision: receipt.revision,
           targetGrain: 'mainVersion', scale: { min: 1, max: 10, step: 1 },
-          cadence: 'standing', population: 'account-principal',
+          cadence: body.profile === 'realm-daily-rating-context-v1' ? 'daily' : 'standing',
+          ...(body.profile === 'realm-daily-rating-context-v1'
+            ? { timeZone: canonicalRatingTimeZone(body.timeZone), calendar: 'iso8601' } : {}), population: 'account-principal',
           aggregation: 'latest-per-rater-mean',
-          profile: 'realm-standing-rating-context-v1',
+          profile: body.profile,
           sourcePosition: { datasetId: 'product', dataEpoch: receipt.dataEpoch,
             sequence: receipt.sequence }, replayed: receipt.replayed }, {
           status: receipt.replayed ? 200 : 201, headers: { 'cache-control': 'no-store' },
@@ -3179,13 +3204,13 @@ export function createMainApp(fuseki: FusekiClient, work?: MainWorkDependencies)
     })
     .get('/v1/rating-contexts/:id', {
       params: t.Object({ id: t.String({ pattern: '^[0-9a-f-]{36}$' }) }),
-      response: { 200: ratingContextReadResult, ...readProblems },
+      response: { 200: t.Union([ratingContextReadResult, dailyRatingContextReadResult]), ...readProblems },
     }, async ({ params }) => {
       try {
         await assertGraphAdmissionOpen(fuseki, work.environment.lineage);
         const context = `https://rezics.com/id/${params.id}`;
         const result = await fuseki.query(`PREFIX rv: <https://rezics.com/vocab/>
-          SELECT ?realm ?question ?revision ?manifest WHERE {
+          SELECT ?realm ?question ?revision ?manifest ?profile ?cadence ?timeZone WHERE {
             GRAPH <urn:rezics:graph:current> {
               ?space a rv:Space ; rv:realmCapability ?realm ; rv:disclosure rv:Public .
               ?realm a rv:Realm ; rv:space ?space ; rv:realmState rv:Active ;
@@ -3193,15 +3218,17 @@ export function createMainApp(fuseki: FusekiClient, work?: MainWorkDependencies)
               ${iri(context)} a rv:RatingContext ; rv:contextState rv:Active ;
                 rv:realm ?realm ; rv:question ?question ; rv:targetGrain rv:MainVersion ;
                 rv:ratingScaleMin 1 ; rv:ratingScaleMax 10 ;
-                rv:ratingCadence ${iri(RATING_STANDING_CADENCE)} ;
+                rv:ratingCadence ?cadence ;
                 rv:ratingPopulationPolicy ${iri(RATING_ACCOUNT_POPULATION)} ;
                 rv:ratingAggregationPolicy ${iri(RATING_LATEST_MEAN_POLICY)} ;
                 rv:head ?revision .
+              OPTIONAL { ${iri(context)} rv:ratingTimeZone ?timeZone }
             }
             GRAPH <urn:rezics:graph:revisions> { ?revision a rv:RevisionAnchor ;
               rv:component ${iri(context)} ;
-              rv:modelRevision ${iri(REALM_STANDING_RATING_CONTEXT_PROFILE)} ;
+              rv:modelRevision ?profile ;
               rv:manifest ?manifest . }
+            VALUES ?profile { ${iri(REALM_STANDING_RATING_CONTEXT_PROFILE)} ${iri(DAILY_CONTEXT_PROFILE)} }
             FILTER(LANG(?question) = "en")
           }`);
         const rows = result.results?.bindings ?? [];
@@ -3211,20 +3238,25 @@ export function createMainApp(fuseki: FusekiClient, work?: MainWorkDependencies)
           return problem(404, 'rating_context_unavailable', 'Rating context is unavailable');
         }
         const state = readComponentState(work.environment.objectDirectory,
-          row.manifest.value, context, REALM_STANDING_RATING_CONTEXT_PROFILE);
+          row.manifest.value, context, row.profile!.value);
+        const daily = row.profile!.value === DAILY_CONTEXT_PROFILE;
         if (state.context !== context || state.realm !== row.realm.value
           || state.question !== row.question.value || state.targetGrain !== 'MainVersion'
           || state.scaleMin !== 1 || state.scaleMax !== 10
-          || state.cadence !== RATING_STANDING_CADENCE
+          || state.cadence !== (daily ? DAILY_CADENCE : RATING_STANDING_CADENCE)
+          || state.cadence !== row.cadence?.value
+          || (daily && (typeof state.timeZone !== 'string' || state.timeZone !== row.timeZone?.value
+            || state.calendar !== 'iso8601'))
           || state.populationPolicy !== RATING_ACCOUNT_POPULATION
           || state.aggregationPolicy !== RATING_LATEST_MEAN_POLICY) {
           return problem(503, 'revision_unavailable', 'Committed revision bytes are unavailable');
         }
         return Response.json({ context, realm: row.realm.value, question: row.question.value,
           contextRevision: row.revision.value, targetGrain: 'mainVersion',
-          scale: { min: 1, max: 10, step: 1 }, cadence: 'standing',
+          scale: { min: 1, max: 10, step: 1 }, cadence: daily ? 'daily' : 'standing',
+          ...(daily ? { timeZone: state.timeZone, calendar: 'iso8601' } : {}),
           population: 'account-principal', aggregation: 'latest-per-rater-mean',
-          profile: 'realm-standing-rating-context-v1' },
+          profile: daily ? 'realm-daily-rating-context-v1' : 'realm-standing-rating-context-v1' },
         { headers: { 'cache-control': 'no-store' } });
       } catch (error) { return commandError(error); }
     })
