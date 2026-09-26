@@ -8,6 +8,7 @@ import { activateMetadataWork, metadataWorkRequestDigest,
   type WorkActivationEnvironment } from '../src/modules/work/activate.ts';
 import { sealMetadataWorkAdmission } from '../src/modules/work/seal.ts';
 import type { RegisteredAdmission } from '../src/modules/access/admission.ts';
+import { COMMAND_MODULE_VERSION } from '../src/infrastructure/profile.ts';
 
 const root = resolve(import.meta.dir, '../../..');
 const literal = (value: string) => ({ type: 'literal', value });
@@ -23,7 +24,7 @@ class InMemoryCommandFuseki extends FusekiClient {
   commands = 0;
 
   constructor() { super('http://localhost:1/rezics'); }
-  override async commandHealth() { return { moduleVersion: '0.5.29',
+  override async commandHealth() { return { moduleVersion: COMMAND_MODULE_VERSION,
     instanceId: '11111111-1111-4111-8111-111111111111',
     publicSearchWriteEpoch: '0', publicSearchWriteActive: false,
     profiles: { 'work-metadata-v1': profileRegistry['work-metadata-v1'].sha256 } }; }

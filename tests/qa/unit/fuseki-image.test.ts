@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { dockerfileCopySources, fusekiBuildInputs, fusekiImageTag, stampFusekiImage }
   from '../../../scripts/dev/fuseki-image.ts';
 import { fusekiImageFromCompose } from '../../../scripts/load/image.ts';
+import { COMMAND_MODULE_VERSION } from '../../../services/main/src/infrastructure/profile.ts';
 
 const root = join(import.meta.dir, '../../..');
 
@@ -48,7 +49,7 @@ test('a hand-written Compose tag is replaced by the derived tag', () => {
   try {
     const path = join(directory, 'infra/dev/compose.yaml');
     const compose = readFileSync(path, 'utf8');
-    writeFileSync(path, compose.replace(/^ {4}image: rezics\/fuseki:\S+$/m, '    image: rezics/fuseki:6.2.0-cmd0.5.29-scalar1'));
+    writeFileSync(path, compose.replace(/^ {4}image: rezics\/fuseki:\S+$/m, `    image: rezics/fuseki:6.2.0-cmd${COMMAND_MODULE_VERSION}-scalar1`));
     stampFusekiImage(directory, false);
     expect(fusekiImageFromCompose(readFileSync(path, 'utf8')).image).toBe(fusekiImageTag(directory));
   } finally { rmSync(directory, { recursive: true, force: true }); }

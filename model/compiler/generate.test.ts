@@ -2,8 +2,11 @@ import { afterEach, expect, test } from 'bun:test';
 import { createHash } from 'node:crypto';
 import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { authoredProfiles, buildArtifacts, generate } from './generate.ts';
-import { renderProfile } from './ir.ts';
+import { registryProbeDirectory, registryProbeFiles, registryProbeProfile }
+  from '../tests/fixtures/registry-probe.ts';
+import { authoredProfiles, buildArtifacts, commandModuleVersion, generate } from './generate.ts';
+import { renderProfile, type ProfileDefinition } from './ir.ts';
+import { buildCommandRegistry, shapeRole, type RegistryOptions } from './registry.ts';
 
 const repo = resolve(import.meta.dir, '../..');
 const temporary: string[] = [];
@@ -216,4 +219,146 @@ test('P0.3: invalid or changed authored constraints cannot silently reuse the pr
     ] }, ...profile.shapes.slice(1)],
   });
   expect(changed).not.toBe(renderProfile(profile));
+});
+
+// The command module's hand-written chains before G-071, in match order: the registry
+// must route every type to the same shape and demand the same bound profile.
+const historicalCanonical: [type: string, ...routes: string[]][] = [
+  ['EditorialControlRevision', 'work-title-control-v1/control'],
+  ['AuthorCredit', 'work-author-credit-v1/credit'],
+  ['AuthorCreditRevision', 'work-author-credit-v1/revision'],
+  ['https://schema.org/CreativeWork', 'work-metadata-v1/work'],
+  ['MainVersion', 'work-metadata-v1/main-version'],
+  ['ContentVariant', 'content-publication-v1/variant'],
+  ['ContentPublicationDecision', 'content-publication-v1/decision'],
+  ['ContentSearchEligibilityDecision', 'content-search-eligibility-v1/decision'],
+  ['ContentProjection', 'content-match-unit-v1/projection'],
+  ['Space', 'space-realm-v1/space'],
+  ['Realm', 'space-realm-v1/realm'],
+  ['ExperienceRatingContext', 'realm-experience-rating-context-v1/context'],
+  ['ExperienceRatingObservation', 'realm-experience-rating-observation-v1/observation'],
+  ['ExperienceRatingObservationRevision', 'realm-experience-rating-observation-v1/revision'],
+  ['RatingPolicyRevision', 'rating-aggregate-default-policy-v1/revision'],
+  ['DailyRatingContext', 'realm-daily-rating-context-v1/context'],
+  ['DailyRatingObservation', 'realm-daily-rating-observation-v1/observation'],
+  ['DailyRatingObservationRevision', 'realm-daily-rating-observation-v1/revision'],
+  ['RatingContext', 'realm-standing-rating-context-v1/context'],
+  ['RatingObservation', 'realm-standing-rating-observation-v1/observation'],
+  ['RatingObservationRevision', 'realm-standing-rating-observation-v1/revision'],
+  ['RouteBinding', 'work-address-disposition-v1/merged-route routeState=Redirected routeDisposition=Merged',
+    'work-address-disposition-v1/retired-route routeState=Retired',
+    'work-address-lifecycle-v1/redirect routeState=Redirected', 'work-address-claim-v1/binding'],
+  ['TranslationLink', 'translation-link-v1/link'],
+  ['WorkDerivation', 'work-derivation-v1/derivation'],
+  ['FixedRelease', 'fixed-native-text-release-v1/release'],
+  ['TextContribution', 'text-contribution-v1/contribution'],
+  ['PublicationDecision', 'text-publication-v1/decision'],
+  ['ClassificationApplication', 'classification-direct-decision-v1/application'],
+  ['ClassificationDecision', 'classification-direct-decision-v1/decision'],
+  ['ClassificationSense', 'classification-proposition-v1/sense'],
+  ['ClassificationContext', 'classification-context-v1/global contextRole=GlobalClassification',
+    'classification-context-v1/context'],
+  ['PublicationSelection', 'main-default-selection-v1/selection selectionBasis=MainMaintainer',
+    'realm-local-selection-v1/selection'],
+  ['RealmPublicationRejection', 'realm-local-rejection-v1/rejection'],
+  ['http://www.w3.org/2004/02/skos/core#ConceptScheme', 'classification-proposition-v1/scheme'],
+  ['http://www.w3.org/2004/02/skos/core#Concept', 'classification-proposition-v1/concept'],
+  ['ConceptPath', 'classification-proposition-v1/path'],
+  ['ClassificationExpression', 'classification-proposition-v1/expression'],
+];
+const historicalDemands: [profile: string, ...types: string[]][] = [
+  ['work-author-credit-v1', 'AuthorCredit', 'AuthorCreditRevision'],
+  ['rating-aggregate-default-policy-v1', 'RatingPolicyRevision'],
+  ['classification-direct-decision-v1', 'ClassificationApplication', 'ClassificationDecision'],
+  ['realm-experience-rating-observation-v1', 'ExperienceRatingObservation', 'ExperienceRatingObservationRevision'],
+  ['realm-experience-rating-context-v1', 'ExperienceRatingContext'],
+  ['realm-daily-rating-observation-v1', 'DailyRatingObservation', 'DailyRatingObservationRevision'],
+  ['realm-daily-rating-context-v1', 'DailyRatingContext'],
+  ['realm-standing-rating-observation-v1', 'RatingObservation', 'RatingObservationRevision'],
+  ['realm-standing-rating-context-v1', 'RatingContext'],
+  ['translation-link-v1', 'TranslationLink'],
+  ['work-derivation-v1', 'WorkDerivation'],
+  ['fixed-native-text-release-v1', 'FixedRelease'],
+  ['classification-context-v1', 'ClassificationContext'],
+  ['classification-proposition-v1', 'ClassificationSense', 'ConceptPath', 'ClassificationExpression',
+    'http://www.w3.org/2004/02/skos/core#Concept', 'http://www.w3.org/2004/02/skos/core#ConceptScheme'],
+];
+const vocabulary = (name: string) => name.includes(':') ? name : `https://rezics.com/vocab/${name}`;
+const local = (iri: string) => iri.replace('https://rezics.com/vocab/', '');
+type Manifest = {
+  commandModule: string;
+  profiles: { id: string; binding?: { required: string[]; optional: string[]; roles: string[] } }[];
+  canonical: { type: string; routes: { profile: string; shape: string; when: { path: string; value: string }[] }[] }[];
+  bindingDemands: { type: string; profile: string }[];
+};
+const manifestOf = (artifacts: Map<string, string>) =>
+  JSON.parse(artifacts.get('generated/model/manifest.json')!) as Manifest;
+
+test('G-071: the generated registry keeps the historical canonical routes and binding demands', () => {
+  const manifest = manifestOf(buildArtifacts(repo));
+  expect(manifest.canonical.map(entry => [entry.type, ...entry.routes.map(route =>
+    [`${route.profile}/${shapeRole(route.profile, route.shape)}`,
+      ...route.when.map(condition => `${local(condition.path)}=${local(condition.value)}`)].join(' '))]))
+    .toEqual(historicalCanonical.map(([type, ...routes]) => [vocabulary(type), ...routes]));
+  expect(manifest.bindingDemands).toEqual(historicalDemands.flatMap(([profile, ...types]) =>
+    types.map(type => ({ type: vocabulary(type), profile }))));
+  const bound = manifest.profiles.filter(profile => profile.binding).map(profile => profile.id);
+  expect(bound.sort()).toEqual(historicalDemands.map(([profile]) => profile).sort());
+  const credit = manifest.profiles.find(profile => profile.id === 'work-author-credit-v1')!.binding!;
+  expect(credit).toEqual({ required: ['credit', 'revision', 'work', 'work-head', 'key', 'ordinal', 'actor',
+    'receipt', 'scope', 'epoch', 'intent'], optional: ['source-role'], roles: ['credit', 'revision'] });
+  expect(manifest.profiles.find(profile => profile.id === 'classification-context-v1')!.binding!.roles)
+    .toEqual(['global', 'realm', 'context']);
+});
+
+test('G-071: the manifest pins the command-module version defined once in pom.xml', () => {
+  const pom = readFileSync(join(repo, 'infra/jena/command-module/pom.xml'), 'utf8');
+  const manifest = manifestOf(buildArtifacts(repo));
+  expect(manifest.commandModule).toBe(commandModuleVersion(repo));
+  expect(pom).toContain(`<artifactId>fuseki-command</artifactId><version>${manifest.commandModule}</version>`);
+  expect(readFileSync(join(repo, 'infra/jena/Dockerfile'), 'utf8')).toContain('target/fuseki-command.jar ');
+});
+
+test('G-071: a profile declared in its definition joins the registry after the established types', () => {
+  const registry = buildCommandRegistry([...authoredProfiles, registryProbeProfile]);
+  expect(registry.canonical.slice(-2).map(entry => entry.type)).toEqual([
+    'https://rezics.com/vocab/RegistryProbe', 'https://rezics.com/vocab/RegistryProbeRecord']);
+  expect(registry.canonical.at(-2)!.routes.map(route => shapeRole(route.profile, route.shape)))
+    .toEqual(['sealed-item', 'item']);
+  expect(registry.bindingDemands.at(-1)).toEqual({ type: 'https://rezics.com/vocab/RegistryProbeRecord',
+    profile: 'registry-probe-v1' });
+  expect(registry.bindings.get('registry-probe-v1')).toEqual({ required: ['item', 'record', 'label'],
+    optional: ['note'], roles: ['item', 'record'] });
+  // The Java registry test loads exactly this generator output.
+  for (const [file, content] of registryProbeFiles()) {
+    expect(readFileSync(join(registryProbeDirectory, file), 'utf8')).toBe(content);
+  }
+});
+
+test('G-071: ambiguous, duplicate or stale registry declarations fail generation', () => {
+  const probe = registryProbeProfile;
+  const alone = { established: {}, canonicalOrder: [], demandOrder: [] };
+  const [item, sealed, record] = probe.shapes;
+  const build = (profile: ProfileDefinition, options: RegistryOptions = alone) => () =>
+    buildCommandRegistry([profile], options);
+  expect(build({ ...probe, shapes: [item, { ...sealed, canonical: { types: ['rv:RegistryProbe'] } }, record] }))
+    .toThrow('Ambiguous canonical routing');
+  expect(build({ ...probe, shapes: [item, { ...sealed, canonical: { types: ['rv:RegistryProbe'],
+    when: [{ path: 'rv:probeState', value: 'rv:Sealed' }] } }, { ...record, canonical: { types: ['rv:RegistryProbe'],
+    when: [{ path: 'rv:item', value: 'rv:Other' }] } }] })).toThrow('Ambiguous canonical routing');
+  expect(build({ ...probe, binding: { ...probe.binding, roles: ['item', 'missing'] } }))
+    .toThrow('binding names unknown role missing');
+  expect(build({ ...probe, binding: { ...probe.binding, optional: ['item'] } }))
+    .toThrow('invalid binding keys or roles');
+  expect(build(probe, { ...alone, established: { [probe.id]: { canonical: { item: { types: ['<urn:x:T>'] } } } } }))
+    .toThrow('declares canonical routing twice');
+  expect(build(probe, { ...alone, established: { [probe.id]: { binding: probe.binding } } }))
+    .toThrow('declares its binding twice');
+  expect(build(probe, { ...alone, canonicalOrder: ['<https://rezics.com/vocab/Retired>'] }))
+    .toThrow('Canonical precedence names undeclared type');
+  expect(() => buildCommandRegistry([probe, { ...probe, id: 'registry-twin-v1', shapes: probe.shapes.map(shape =>
+    ({ ...shape, iri: shape.iri.replace('registry-probe-v1', 'registry-twin-v1'), canonical: undefined })) }], alone))
+    .toThrow('demands bindings of both');
+  expect(() => buildCommandRegistry(authoredProfiles, { established: { 'retired-profile-v1': {} } }))
+    .toThrow('unknown profile retired-profile-v1');
 });

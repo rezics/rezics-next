@@ -16,6 +16,7 @@ import type { ContentProjectionCursor } from '../../../services/content/src/proj
 import { assertPublicTextReady, assertQuerySnapshotMoved, SearchIndexUnavailable, SearchRequestTimedOut,
   SearchSnapshotMoved, withStableSearchSnapshot, type SearchAttemptDiagnostic }
   from '../../../services/main/src/modules/work/search-readiness.ts';
+import { COMMAND_MODULE_VERSION } from '../../../services/main/src/infrastructure/profile.ts';
 
 const generation = 'urn:rezics:text-index-generation:11111111-1111-4111-8111-111111111111';
 const work = 'https://rezics.com/id/11111111-1111-4111-8111-111111111111';
@@ -45,7 +46,7 @@ function fake() {
   let queryCalls = 0;
   const fuseki = { commandHealth: async () => {
     healthCalls++;
-    return { moduleVersion: '0.5.29', profiles: {}, instanceId,
+    return { moduleVersion: COMMAND_MODULE_VERSION, profiles: {}, instanceId,
       publicSearchWriteEpoch: String(publicSearchWriteEpoch), publicSearchWriteActive,
       publicSearchDeltaAvailable: deltaAvailable };
   },
@@ -150,7 +151,7 @@ test('SEARCH15/SEARCH18: readiness singleflight is position and JVM-bound', asyn
 test('SEARCH15/SEARCH18: empty readiness control retries only across a native write epoch', async () => {
   let writeEpoch = '0';
   let moveDuringControl = true;
-  const fuseki = { commandHealth: async () => ({ moduleVersion: '0.5.29', profiles: {},
+  const fuseki = { commandHealth: async () => ({ moduleVersion: COMMAND_MODULE_VERSION, profiles: {},
     instanceId: '11111111-1111-4111-8111-111111111111',
     publicSearchWriteEpoch: writeEpoch, publicSearchWriteActive: false }),
   query: async (): Promise<SparqlResult> => {

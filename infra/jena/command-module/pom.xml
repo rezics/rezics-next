@@ -1,10 +1,19 @@
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
   <modelVersion>4.0.0</modelVersion>
-  <groupId>com.rezics</groupId><artifactId>fuseki-command</artifactId><version>0.5.29</version>
+  <!-- The only definition of the command-module version: the jar reports it through
+       module.properties, and yarn gen copies it into the TypeScript constant and image tag. -->
+  <groupId>com.rezics</groupId><artifactId>fuseki-command</artifactId><version>0.5.30</version>
   <properties><maven.compiler.release>21</maven.compiler.release><project.build.sourceEncoding>UTF-8</project.build.sourceEncoding></properties>
   <dependencies>
     <dependency><groupId>org.apache.jena</groupId><artifactId>jena-fuseki-main</artifactId><version>6.2.0</version><scope>provided</scope></dependency>
     <dependency><groupId>org.apache.jena</groupId><artifactId>jena-text</artifactId><version>6.2.0</version><scope>provided</scope></dependency>
     <dependency><groupId>junit</groupId><artifactId>junit</artifactId><version>4.13.2</version><scope>test</scope></dependency>
   </dependencies>
+  <build>
+    <finalName>fuseki-command</finalName>
+    <resources>
+      <resource><directory>src/main/resources</directory><filtering>true</filtering><includes><include>com/rezics/jena/module.properties</include></includes></resource>
+      <resource><directory>src/main/resources</directory><filtering>false</filtering><excludes><exclude>com/rezics/jena/module.properties</exclude></excludes></resource>
+    </resources>
+  </build>
 </project>

@@ -4,6 +4,7 @@ import { closeSync, mkdirSync, openSync, readFileSync, unlinkSync } from 'node:f
 import { join, resolve } from 'node:path';
 import { expectedFusekiModuleVersion } from '../../../scripts/qa/core.ts';
 import { FusekiClient } from '../../../services/main/src/infrastructure/fuseki.ts';
+import { COMMAND_MODULE_VERSION } from '../../../services/main/src/infrastructure/profile.ts';
 
 const root = resolve(import.meta.dir, '../../..');
 
@@ -18,6 +19,7 @@ test('OPS01: host Main work readiness accepts the pinned live command module', a
     readFileSync(join(root, 'infra/dev/compose.yaml'), 'utf8'));
   const actual = await new FusekiClient(fusekiUrl).commandHealth();
   expect(actual.moduleVersion).toBe(expected);
+  expect(expected).toBe(COMMAND_MODULE_VERSION);
   expect(actual.publicSearchDeltaAvailable).toBe(false); // QA exposes a general update operation.
 
   const logs = join(artifacts, 'logs');

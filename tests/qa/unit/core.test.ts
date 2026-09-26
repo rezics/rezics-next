@@ -3,6 +3,7 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { acquireFullLock, expectedFusekiModuleVersion, parseArgs, testLogEnvironment, writeSummary,
   implementedTiers, tierArtifactName, xmlForCommand } from '../../../scripts/qa/core.ts';
+import { COMMAND_MODULE_VERSION } from '../../../services/main/src/infrastructure/profile.ts';
 
 const scratch = join(import.meta.dir, '../../../.temp');
 mkdirSync(scratch, { recursive: true });
@@ -76,8 +77,9 @@ test('QA12: QA bootstrap rejects a Fuseki module that differs from the Compose p
     .toBe('0.5.12');
   expect(() => expectedFusekiModuleVersion('services:\n  fuseki:\n    image: rezics/fuseki:6.2.0-base1\n'))
     .toThrow('must pin one command-module');
-  expect(expectedFusekiModuleVersion('services:\n  fuseki:\n    image: rezics/fuseki:6.2.0-cmd0.5.29-4dc9015683cb\n'))
-    .toBe('0.5.29');
+  expect(expectedFusekiModuleVersion(
+    `services:\n  fuseki:\n    image: rezics/fuseki:6.2.0-cmd${COMMAND_MODULE_VERSION}-4dc9015683cb\n`))
+    .toBe(COMMAND_MODULE_VERSION);
 });
 
 test('QA tier Bun runs drop agent output variables so logs list every test', () => {

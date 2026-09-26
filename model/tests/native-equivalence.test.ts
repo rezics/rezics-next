@@ -4,6 +4,7 @@ import { join, resolve } from 'node:path';
 import manifest from '../../generated/model/manifest.json';
 import { nativeFixtures } from './fixtures/native/index.ts';
 import type { NativeProfileFixture } from './native-fixture-types.ts';
+import { COMMAND_MODULE_VERSION } from '../../services/main/src/infrastructure/profile.ts';
 
 const root = resolve(import.meta.dir, '../..');
 const current = 'urn:rezics:graph:current';
@@ -237,7 +238,7 @@ nativeTest('MODEL17/MODEL27: generated profiles match recorded candidates throug
   writeFileSync(reportPath, `${JSON.stringify(result, null, 2)}\n`);
   console.log(`P0.3 native matrix ${result.moduleVersion}: ${result.cases - result.mismatches.length}/${result.cases} outcomes matched, ${result.pathDifferences.length} violation paths absent from bounded reports; ${reportPath}`);
   if (process.env.MODEL_NATIVE_EQUIVALENCE_STRICT === '1') {
-    expect(result.moduleVersion).toBe('0.5.29');
+    expect(result.moduleVersion).toBe(COMMAND_MODULE_VERSION);
     expect(result.cases).toBe(69);
     expect(result.mismatches).toEqual([]);
     expect(result.pathDifferences).toEqual([]);

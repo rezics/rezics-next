@@ -90,7 +90,7 @@ final class CommandService extends ActionService {
             return;
         }
         long privateEpoch = privateSearchWriteEpoch.get();
-        respond(action, 200, Map.of("moduleVersion", "0.5.29",
+        respond(action, 200, Map.of("moduleVersion", CommandModule.VERSION,
             "instanceId", instanceId, "publicSearchWriteEpoch", Long.toString(epoch),
             "publicSearchWriteActive", (epoch & 1L) != 0L,
             "privateSearchWriteEpoch", Long.toString(privateEpoch),
@@ -251,7 +251,8 @@ final class CommandService extends ActionService {
             Map<String, List<Validation>> grouped = new LinkedHashMap<>();
             for (Validation entry : validations) grouped.computeIfAbsent(entry.profileId(), ignored -> new ArrayList<>()).add(entry);
             for (var group : grouped.entrySet()) {
-                String report = BindingPolicy.check(dataset, group.getKey(), group.getValue());
+                String report = BindingPolicy.check(dataset, group.getKey(),
+                    profiles.get(group.getKey()).binding(), group.getValue());
                 if (report != null) return invalid(report);
             }
             for (Validation validation : validations) {
@@ -325,7 +326,7 @@ final class CommandService extends ActionService {
                 }
             }
             if (!covered) return invalid("current graph focus omitted: " + subject);
-            Map<String, Object> canonical = validateCanonical(dataset, subject, false);
+            Map<String, Object> canonical = CanonicalPolicy.validate(profiles, dataset, subject, false);
             if (canonical != null) return canonical;
             if (hasType(dataset, CommandPolicy.CURRENT, subject, "ContentVariant")) {
                 if (!hasContentFocus(validations, subject, "variant-shape", CommandPolicy.CURRENT))
@@ -333,12 +334,12 @@ final class CommandService extends ActionService {
                 String link = contentPublicationLinks(dataset, receipt, subject, false, freshPublication);
                 if (link != null) return invalid(link);
             }
-            String boundProfile = requiredBindingProfile(dataset, revisionGraph, subject, false);
+            String boundProfile = CanonicalPolicy.requiredBindingProfile(profiles, dataset, subject, false);
             if (boundProfile != null && !boundFocus(validations, boundProfile, subject))
                 return invalid("bound profile focus omitted: " + subject);
         }
         for (String subject : plan.revisions()) {
-            Map<String, Object> canonical = validateCanonical(dataset, subject, true);
+            Map<String, Object> canonical = CanonicalPolicy.validate(profiles, dataset, subject, true);
             if (canonical != null) return canonical;
             if (hasType(dataset, CommandPolicy.REVISIONS, subject, "ContentPublicationDecision")) {
                 if (!hasContentFocus(validations, subject, "decision-shape", CommandPolicy.REVISIONS))
@@ -361,7 +362,7 @@ final class CommandService extends ActionService {
                     validations);
                 if (projection != null) return projection;
             }
-            String boundProfile = requiredBindingProfile(dataset, revisionGraph, subject, true);
+            String boundProfile = CanonicalPolicy.requiredBindingProfile(profiles, dataset, subject, true);
             if (boundProfile != null && !boundFocus(validations, boundProfile, subject))
                 return invalid("bound profile focus omitted: " + subject);
             Node node = NodeFactory.createURI(subject);
@@ -597,170 +598,10 @@ final class CommandService extends ActionService {
             return invalid("Content projection receipt variant mismatch: " + subject);
         return null;
     }
-    private static String requiredBindingProfile(DatasetGraph dataset, Node revisionGraph,
-                                                 String subject, boolean revision) {
-        Node graph = revision ? revisionGraph : NodeFactory.createURI(CommandPolicy.CURRENT);
-        Node node = NodeFactory.createURI(subject);
-        Node type = org.apache.jena.vocabulary.RDF.type.asNode();
-        if (dataset.contains(graph, node, type, NodeFactory.createURI(RV + "AuthorCredit"))
-            || dataset.contains(graph, node, type, NodeFactory.createURI(RV + "AuthorCreditRevision")))
-            return "work-author-credit-v1";
-        if (dataset.contains(graph, node, type, NodeFactory.createURI(RV + "RatingPolicyRevision")))
-            return "rating-aggregate-default-policy-v1";
-        if (dataset.contains(graph, node, type, NodeFactory.createURI(RV + "ClassificationApplication"))
-            || dataset.contains(graph, node, type, NodeFactory.createURI(RV + "ClassificationDecision")))
-            return "classification-direct-decision-v1";
-        if (dataset.contains(graph, node, type, NodeFactory.createURI(RV + "ExperienceRatingObservation"))
-            || dataset.contains(graph, node, type, NodeFactory.createURI(RV + "ExperienceRatingObservationRevision")))
-            return "realm-experience-rating-observation-v1";
-        if (dataset.contains(graph, node, type, NodeFactory.createURI(RV + "ExperienceRatingContext")))
-            return "realm-experience-rating-context-v1";
-        if (dataset.contains(graph, node, type, NodeFactory.createURI(RV + "DailyRatingObservation"))
-            || dataset.contains(graph, node, type, NodeFactory.createURI(RV + "DailyRatingObservationRevision")))
-            return "realm-daily-rating-observation-v1";
-        if (dataset.contains(graph, node, type, NodeFactory.createURI(RV + "DailyRatingContext")))
-            return "realm-daily-rating-context-v1";
-        if (dataset.contains(graph, node, type, NodeFactory.createURI(RV + "RatingObservation"))
-            || dataset.contains(graph, node, type, NodeFactory.createURI(RV + "RatingObservationRevision")))
-            return "realm-standing-rating-observation-v1";
-        if (dataset.contains(graph, node, type, NodeFactory.createURI(RV + "RatingContext")))
-            return "realm-standing-rating-context-v1";
-        if (dataset.contains(graph, node, type, NodeFactory.createURI(RV + "TranslationLink")))
-            return "translation-link-v1";
-        if (dataset.contains(graph, node, type, NodeFactory.createURI(RV + "WorkDerivation")))
-            return "work-derivation-v1";
-        if (dataset.contains(graph, node, type, NodeFactory.createURI(RV + "FixedRelease")))
-            return "fixed-native-text-release-v1";
-        if (dataset.contains(graph, node, type, NodeFactory.createURI(RV + "ClassificationContext")))
-            return "classification-context-v1";
-        if (dataset.contains(graph, node, type, NodeFactory.createURI(RV + "ClassificationSense"))
-            || dataset.contains(graph, node, type, NodeFactory.createURI(RV + "ConceptPath"))
-            || dataset.contains(graph, node, type, NodeFactory.createURI(RV + "ClassificationExpression"))
-            || dataset.contains(graph, node, type, NodeFactory.createURI("http://www.w3.org/2004/02/skos/core#Concept"))
-            || dataset.contains(graph, node, type, NodeFactory.createURI("http://www.w3.org/2004/02/skos/core#ConceptScheme")))
-            return "classification-proposition-v1";
-        return null;
-    }
-    private static Map<String, Object> invalid(String report) {
+    static Map<String, Object> invalid(String report) {
         return Map.of("status", "invalid", "report", report);
     }
-    private record Canonical(String profile, String shape) {}
-    private Map<String, Object> validateCanonical(DatasetGraph dataset, String subject, boolean revision) {
-        Node graph = NodeFactory.createURI(revision ? CommandPolicy.REVISIONS : CommandPolicy.CURRENT);
-        Node node = NodeFactory.createURI(subject);
-        Set<String> types = new HashSet<>();
-        dataset.find(graph, node, org.apache.jena.vocabulary.RDF.type.asNode(), Node.ANY)
-            .forEachRemaining(quad -> { if (quad.getObject().isURI()) types.add(quad.getObject().getURI()); });
-        if (!revision && types.isEmpty()) return invalid("current graph subject has no type: " + subject);
-        Canonical canonical = null;
-        String basis = "https://rezics.com/definition/";
-        if (types.contains(RV + "EditorialControlRevision"))
-            canonical = new Canonical("work-title-control-v1", "control-shape");
-        else if (types.contains(RV + "AuthorCredit"))
-            canonical = new Canonical("work-author-credit-v1", "credit-shape");
-        else if (types.contains(RV + "AuthorCreditRevision"))
-            canonical = new Canonical("work-author-credit-v1", "revision-shape");
-        else if (types.contains("https://schema.org/CreativeWork"))
-            canonical = new Canonical("work-metadata-v1", "work-shape");
-        else if (types.contains(RV + "MainVersion"))
-            canonical = new Canonical("work-metadata-v1", "main-version-shape");
-        else if (types.contains(RV + "ContentVariant"))
-            canonical = new Canonical("content-publication-v1", "variant-shape");
-        else if (types.contains(RV + "ContentPublicationDecision"))
-            canonical = new Canonical("content-publication-v1", "decision-shape");
-        else if (types.contains(RV + "ContentSearchEligibilityDecision"))
-            canonical = new Canonical("content-search-eligibility-v1", "decision-shape");
-        else if (types.contains(RV + "ContentProjection"))
-            canonical = new Canonical("content-match-unit-v1", "projection-shape");
-        else if (types.contains(RV + "Space")) canonical = new Canonical("space-realm-v1", "space-shape");
-        else if (types.contains(RV + "Realm")) canonical = new Canonical("space-realm-v1", "realm-shape");
-        else if (types.contains(RV + "ExperienceRatingContext"))
-            canonical = new Canonical("realm-experience-rating-context-v1", "context-shape");
-        else if (types.contains(RV + "ExperienceRatingObservation"))
-            canonical = new Canonical("realm-experience-rating-observation-v1", "observation-shape");
-        else if (types.contains(RV + "ExperienceRatingObservationRevision"))
-            canonical = new Canonical("realm-experience-rating-observation-v1", "revision-shape");
-        else if (types.contains(RV + "RatingPolicyRevision"))
-            canonical = new Canonical("rating-aggregate-default-policy-v1", "revision-shape");
-        else if (types.contains(RV + "DailyRatingContext"))
-            canonical = new Canonical("realm-daily-rating-context-v1", "context-shape");
-        else if (types.contains(RV + "DailyRatingObservation"))
-            canonical = new Canonical("realm-daily-rating-observation-v1", "observation-shape");
-        else if (types.contains(RV + "DailyRatingObservationRevision"))
-            canonical = new Canonical("realm-daily-rating-observation-v1", "revision-shape");
-        else if (types.contains(RV + "RatingContext"))
-            canonical = new Canonical("realm-standing-rating-context-v1", "context-shape");
-        else if (types.contains(RV + "RatingObservation"))
-            canonical = new Canonical("realm-standing-rating-observation-v1", "observation-shape");
-        else if (types.contains(RV + "RatingObservationRevision"))
-            canonical = new Canonical("realm-standing-rating-observation-v1", "revision-shape");
-        else if (types.contains(RV + "RouteBinding")) {
-            String state = singleObject(dataset, graph, node, RV + "routeState");
-            String disposition = singleObject(dataset, graph, node, RV + "routeDisposition");
-            canonical = (RV + "Retired").equals(state)
-                ? new Canonical("work-address-disposition-v1", "retired-route-shape")
-                : (RV + "Redirected").equals(state) && (RV + "Merged").equals(disposition)
-                ? new Canonical("work-address-disposition-v1", "merged-route-shape")
-                : (RV + "Redirected").equals(state)
-                ? new Canonical("work-address-lifecycle-v1", "redirect-shape")
-                : new Canonical("work-address-claim-v1", "binding-shape");
-        }
-        else if (types.contains(RV + "TranslationLink"))
-            canonical = new Canonical("translation-link-v1", "link-shape");
-        else if (types.contains(RV + "WorkDerivation"))
-            canonical = new Canonical("work-derivation-v1", "derivation-shape");
-        else if (types.contains(RV + "FixedRelease"))
-            canonical = new Canonical("fixed-native-text-release-v1", "release-shape");
-        else if (types.contains(RV + "TextContribution"))
-            canonical = new Canonical("text-contribution-v1", "contribution-shape");
-        else if (types.contains(RV + "PublicationDecision"))
-            canonical = new Canonical("text-publication-v1", "decision-shape");
-        else if (types.contains(RV + "ClassificationApplication"))
-            canonical = new Canonical("classification-direct-decision-v1", "application-shape");
-        else if (types.contains(RV + "ClassificationDecision"))
-            canonical = new Canonical("classification-direct-decision-v1", "decision-shape");
-        else if (types.contains(RV + "ClassificationSense"))
-            canonical = new Canonical("classification-proposition-v1", "sense-shape");
-        else if (types.contains(RV + "ClassificationContext")) {
-            String role = singleObject(dataset, graph, node, RV + "contextRole");
-            canonical = new Canonical("classification-context-v1",
-                (RV + "GlobalClassification").equals(role) ? "global-shape" : "context-shape");
-        } else if (types.contains(RV + "PublicationSelection")) {
-            String selectionBasis = singleObject(dataset, graph, node, RV + "selectionBasis");
-            canonical = (RV + "MainMaintainer").equals(selectionBasis)
-                ? new Canonical("main-default-selection-v1", "selection-shape")
-                : new Canonical("realm-local-selection-v1", "selection-shape");
-        } else if (types.contains(RV + "RealmPublicationRejection"))
-            canonical = new Canonical("realm-local-rejection-v1", "rejection-shape");
-        else if (types.contains("http://www.w3.org/2004/02/skos/core#ConceptScheme"))
-            canonical = new Canonical("classification-proposition-v1", "scheme-shape");
-        else if (types.contains("http://www.w3.org/2004/02/skos/core#Concept"))
-            canonical = new Canonical("classification-proposition-v1", "concept-shape");
-        else if (types.contains(RV + "ConceptPath"))
-            canonical = new Canonical("classification-proposition-v1", "path-shape");
-        else if (types.contains(RV + "ClassificationExpression"))
-            canonical = new Canonical("classification-proposition-v1", "expression-shape");
-        else if (types.contains(RV + "RealmPublicationSlot")) {
-            for (String predicate : List.of("realm", "mainVersion", "work", "selectionHead")) {
-                if (singleObject(dataset, graph, node, RV + predicate) == null)
-                    return invalid("incomplete Realm publication slot: " + subject);
-            }
-            return null;
-        }
-        if (canonical == null) return revision ? null : invalid("unrecognized current graph type: " + subject);
-        ProfileRegistry.Profile profile = profiles.get(canonical.profile());
-        if (profile == null) return invalid("canonical profile unavailable: " + canonical.profile());
-        return validateOne(dataset, new Validation(canonical.profile(), profile, basis + canonical.profile() + "/" + canonical.shape(),
-            List.of(subject), List.of(CommandPolicy.CURRENT, CommandPolicy.REVISIONS), Map.of()));
-    }
-    private static String singleObject(DatasetGraph dataset, Node graph, Node subject, String predicate) {
-        var values = dataset.find(graph, subject, NodeFactory.createURI(predicate), Node.ANY);
-        if (!values.hasNext()) return null;
-        Node first = values.next().getObject();
-        if (values.hasNext()) return null;
-        return first.isURI() ? first.getURI() : first.isLiteral() ? first.getLiteralLexicalForm() : null;
-    }
-    private Map<String, Object> validateOne(DatasetGraph dataset, Validation validation) {
+    static Map<String, Object> validateOne(DatasetGraph dataset, Validation validation) {
         Model shapes = ModelFactory.createDefaultModel().add(validation.profile().shapes());
         for (String focus : validation.focus()) {
             shapes.createResource(validation.shape())

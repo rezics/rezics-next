@@ -12,25 +12,16 @@ import org.apache.jena.graph.NodeFactory;
 import org.apache.jena.sparql.core.DatasetGraph;
 
 /** Fixed, node-local poststate bindings for the profiles whose historical
- * candidate validators supplied request-specific hasValue constraints. No path,
- * shape, graph or query text comes from the request. */
+ * candidate validators supplied request-specific hasValue constraints. The
+ * generated registry names the bound profiles and their keys and roles; the
+ * profile-specific value checks below stay code. No path, shape, graph or query
+ * text comes from the request. */
 final class BindingPolicy {
     private static final String RV = "https://rezics.com/vocab/";
     private static final String SKOS = "http://www.w3.org/2004/02/skos/core#";
     private static final String GLOBAL = "urn:rezics:classification-context:global";
     private static final String ISOLATE = "https://rezics.com/definition/classification-isolate-v1";
     private static final String INHERIT = "https://rezics.com/definition/classification-inherit-global-v1";
-    private static final Set<String> BOUND = Set.of(
-        "classification-context-v1", "classification-direct-decision-v1",
-        "classification-proposition-v1", "realm-standing-rating-context-v1",
-        "realm-standing-rating-observation-v1", "realm-daily-rating-context-v1",
-        "realm-daily-rating-observation-v1", "realm-experience-rating-context-v1",
-        "realm-experience-rating-observation-v1", "translation-link-v1", "work-derivation-v1",
-        "fixed-native-text-release-v1", "work-author-credit-v1",
-        "rating-aggregate-default-policy-v1");
-
-    static boolean applies(String profile) { return BOUND.contains(profile); }
-
     private final Graph data;
     private final Map<String, String> focus;
     private final Map<String, String> args;
@@ -40,8 +31,9 @@ final class BindingPolicy {
         this.data = data; this.focus = focus; this.args = args;
     }
 
-    static String check(DatasetGraph dataset, String profile, List<CommandService.Validation> entries) {
-        if (!applies(profile)) {
+    static String check(DatasetGraph dataset, String profile, ProfileRegistry.Binding binding,
+                        List<CommandService.Validation> entries) {
+        if (binding == null) {
             if (entries.stream().anyMatch(entry -> !entry.binding().isEmpty()))
                 throw new IllegalArgumentException("bindings are not admitted for this profile");
             return null;
@@ -62,6 +54,8 @@ final class BindingPolicy {
         }
         Graph data = SelectedGraphUnion.readOnly(dataset, graphs);
         BindingPolicy policy = new BindingPolicy(data, focus, args);
+        policy.keys(binding.required(), binding.optional());
+        policy.roles(binding.roles());
         policy.validate(profile);
         if (policy.violations.isEmpty()) return null;
         String report = String.join("\n", policy.violations);
@@ -84,15 +78,16 @@ final class BindingPolicy {
             case "work-derivation-v1" -> workDerivation();
             case "fixed-native-text-release-v1" -> fixedRelease();
             case "work-author-credit-v1" -> authorCredit();
-            default -> throw new IllegalArgumentException("unknown binding profile");
+            // A registry-only binding has only the generic key and role checks.
+            default -> { }
         }
     }
 
-    private void keys(String required, String optional) {
-        Set<String> allowed = new HashSet<>();
-        for (String key : (required + " " + optional).trim().split(" +")) if (!key.isEmpty()) allowed.add(key);
+    private void keys(List<String> required, List<String> optional) {
+        Set<String> allowed = new HashSet<>(required);
+        allowed.addAll(optional);
         if (!allowed.containsAll(args.keySet())) throw new IllegalArgumentException("unknown binding key");
-        for (String key : required.split(" +")) if (!args.containsKey(key) || args.get(key).isEmpty())
+        for (String key : required) if (!args.containsKey(key) || args.get(key).isEmpty())
             throw new IllegalArgumentException("missing binding key: " + key);
         for (String value : args.values()) if (value.length() > 4096)
             throw new IllegalArgumentException("binding value too large");
@@ -104,10 +99,9 @@ final class BindingPolicy {
         if (value == null || !value.equals(arg(key))) throw new IllegalArgumentException("binding focus differs: " + key);
         return value;
     }
-    private void roles(String names) {
-        Set<String> required = Set.of(names.split(" +"));
-        if (!focus.keySet().equals(required)) throw new IllegalArgumentException("binding focus roles differ");
-        for (String name : required) if (args.containsKey(name)) role(name);
+    private void roles(List<String> names) {
+        if (!focus.keySet().equals(Set.copyOf(names))) throw new IllegalArgumentException("binding focus roles differ");
+        for (String name : names) if (args.containsKey(name)) role(name);
     }
     private static Node iri(String value) {
         if (value == null || !(value.startsWith("https://") || value.startsWith("http://") || value.startsWith("urn:"))
@@ -141,13 +135,11 @@ final class BindingPolicy {
     }
 
     private void classificationContext() {
-        keys("realm context", ""); roles("global realm context");
         if (!GLOBAL.equals(focus.get("global"))) throw new IllegalArgumentException("global focus differs");
         has("realm", RV + "classificationContext", iri(role("context")));
         has("context", RV + "realm", iri(role("realm")));
     }
     private void classificationProposition() {
-        keys("scheme concept path expression sense", ""); roles("scheme concept path expression sense");
         has("concept", SKOS + "inScheme", iri(role("scheme")));
         has("path", RV + "terminalConcept", iri(role("concept")));
         has("expression", RV + "path", iri(role("path")));
@@ -156,15 +148,12 @@ final class BindingPolicy {
         has("sense", RV + "expression", iri(role("expression")));
     }
     private void ratingContext(boolean daily) {
-        keys("realm context question" + (daily ? " timeZone" : ""), ""); roles("realm context");
         has("realm", RV + "ratingContext", iri(role("context")));
         has("context", RV + "realm", iri(role("realm")));
         has("context", RV + "question", NodeFactory.createLiteralLang(arg("question"), "en"));
         if (daily) ratingTimeZone();
     }
     private void ratingDefaultPolicy() {
-        keys("context revision contextRevision predecessor aggregationPolicy", "");
-        roles("context revision");
         String selected = switch (arg("aggregationPolicy")) {
             case "latest-per-rater-mean" -> "rating-latest-per-rater-mean-v1";
             case "mean-per-rater" -> "rating-mean-per-rater-v1";
@@ -180,9 +169,6 @@ final class BindingPolicy {
             iri("https://rezics.com/definition/" + selected));
     }
     private void ratingObservation(boolean daily, boolean experience) {
-        keys("realm context work main slot observation revision availability"
-            + (daily ? " day timeZone periodStart periodEnd" : experience ? " occasion" : ""), "value predecessor");
-        roles("realm context work main observation revision");
         if (!Set.of("available", "withdrawn").contains(arg("availability")))
             throw new IllegalArgumentException("invalid rating availability binding");
         if (arg("availability").equals("available") != (arg("value") != null))
@@ -276,9 +262,6 @@ final class BindingPolicy {
         }
     }
     private void classificationDecision() {
-        keys("work main sense sense-revision context context-kind application decision slot proposer decider outcome",
-            "realm context-revision predecessor");
-        roles("work main sense context application decision");
         String kind = arg("context-kind");
         if (!Set.of("global", "realm").contains(kind) || !Set.of("accepted", "rejected").contains(arg("outcome")))
             throw new IllegalArgumentException("invalid classification decision binding");
@@ -323,9 +306,6 @@ final class BindingPolicy {
     }
 
     private void translationLink() {
-        keys("link target-work target-main target-revision source-work source-main status language "
-                + "translator publisher evidence actor receipt scope epoch", "source-revision");
-        roles("link");
         String status = arg("status");
         String sourceRevision = arg("source-revision");
         if (!Set.of("official", "third-party").contains(status)
@@ -376,8 +356,6 @@ final class BindingPolicy {
     }
 
     private void authorCredit() {
-        keys("credit revision work work-head key ordinal actor receipt scope epoch intent", "source-role");
-        roles("credit revision");
         if (!("work:edit:" + arg("work")).equals(arg("scope"))
             || !arg("key").matches("/authors/OL[1-9][0-9]{0,11}A")
             || !arg("ordinal").matches("[0-9]{1,3}"))
@@ -417,9 +395,6 @@ final class BindingPolicy {
     }
 
     private void workDerivation() {
-        keys("derivation target-work target-main target-revision source-work source-main "
-                + "source-revision kind evidence actor receipt scope epoch", "");
-        roles("derivation");
         String kind = arg("kind");
         if (!Set.of("adaptation", "new-recording", "software-fork").contains(kind))
             throw new IllegalArgumentException("invalid derivation kind");
@@ -456,9 +431,6 @@ final class BindingPolicy {
     }
 
     private void fixedRelease() {
-        keys("release work main revision selection contribution decision draft language digest "
-                + "manifest actor receipt scope epoch", "");
-        roles("release");
         if (!arg("digest").matches("[0-9a-f]{64}"))
             throw new IllegalArgumentException("invalid fixed release body digest");
         exact("release", RV + "work", iri(arg("work")));

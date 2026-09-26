@@ -25,11 +25,41 @@ export interface PropertyDefinition {
   lineBreaks?: readonly { after: number; indent: number }[];
 }
 
+/** Holds when the subject has exactly one `path` value whose IRI or lexical form is `value`. */
+export interface Discriminator {
+  path: Term;
+  value: Term;
+}
+
+/**
+ * Canonical routing: the command module validates every touched current or revision
+ * subject whose selected canonical type is listed here against this shape, whatever
+ * the request declares. Among shapes sharing a type, the one whose `when` conditions
+ * hold and are most specific wins; the compiler rejects ambiguous sets.
+ */
+export interface CanonicalFocus {
+  types: readonly Term[];
+  when?: readonly Discriminator[];
+}
+
+/** Generic command binding rules; profile-specific value checks remain module code. */
+export interface BindingRequirement {
+  /** Keys that must be present and nonempty, in the order the module reports them. */
+  required: readonly string[];
+  optional?: readonly string[];
+  /** Shape roles that each need one focus; a key with the same name must equal it. */
+  roles: readonly string[];
+  /** rdf:types whose touched subjects must be the focus of a bound validation of this profile. */
+  demandedBy: readonly Term[];
+}
+
 export interface ShapeDefinition {
   iri: string;
   properties: readonly PropertyDefinition[];
   /** SHACL disjunction of local property groups. */
   or?: readonly (readonly PropertyDefinition[])[];
+  /** Command-registry metadata; it does not change the rendered shape. */
+  canonical?: CanonicalFocus;
 }
 
 export interface ProfileDefinition {
@@ -38,6 +68,8 @@ export interface ProfileDefinition {
   prefixes: readonly (readonly [name: string, iri: string])[];
   layout: 'expanded' | 'compact';
   shapes: readonly ShapeDefinition[];
+  /** Command-registry metadata; it does not change the rendered shapes. */
+  binding?: BindingRequirement;
 }
 
 function propertyClauses(property: PropertyDefinition): string[] {

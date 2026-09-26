@@ -14,6 +14,7 @@ import { PrivateSearchUnavailable, queryPrivateContributionPhrase }
   from '../../../services/main/src/modules/contribution/search-private.ts';
 import { activateMetadataWork, ID, metadataWorkRequestDigest, RV,
   type WorkActivationEnvironment } from '../../../services/main/src/modules/work/activate.ts';
+import { COMMAND_MODULE_VERSION } from '../../../services/main/src/infrastructure/profile.ts';
 
 const root = resolve(import.meta.dir, '../../..');
 
@@ -59,7 +60,7 @@ test('SEARCH11/SEARCH12 foundation: native private posting follows one current C
 
   try {
     const health = await env.fuseki.commandHealth();
-    expect(health.moduleVersion).toBe('0.5.29');
+    expect(health.moduleVersion).toBe(COMMAND_MODULE_VERSION);
     expect(health.privateSearchWriteActive).toBe(false);
     // The shared QA assembler exposes raw update for fault fixtures. The
     // adapter must reject that writer topology even though native postings

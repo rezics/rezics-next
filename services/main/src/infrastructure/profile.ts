@@ -1,8 +1,10 @@
+import manifest from '../../../../generated/model/manifest.json';
 import { profileRegistry } from '../../../../packages/model/src/generated/profiles.ts';
 import type { CommandValidation, FusekiClient } from './fuseki.ts';
 
 export type ProfileId = keyof typeof profileRegistry;
-export const COMMAND_MODULE_VERSION = '0.5.29';
+/** Generated into the manifest from infra/jena/command-module/pom.xml; import it, never a literal. */
+export const COMMAND_MODULE_VERSION: string = manifest.commandModule;
 
 export async function assertCommandProfiles(fuseki: FusekiClient): Promise<void> {
   const health = await fuseki.commandHealth();

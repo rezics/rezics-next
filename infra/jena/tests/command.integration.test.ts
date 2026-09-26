@@ -6,6 +6,7 @@ import { activateMetadataWork, initializeFreshGraph, metadataWorkRequestDigest }
 import { editMetadataWork, metadataWorkEditDigest, StaleWorkHead }
   from '../../../services/main/src/modules/work/edit.ts';
 import { join } from 'node:path';
+import { COMMAND_MODULE_VERSION } from '../../../services/main/src/infrastructure/profile.ts';
 
 const base = process.env.FUSEKI_URL?.replace(/\/$/, '') ?? 'http://127.0.0.1:39030/rezics';
 const rv = 'https://rezics.com/vocab/';
@@ -131,7 +132,7 @@ beforeAll(async () => {
   for (let attempt=0; attempt<60 && !health; attempt++) {
     try { health = await (await fetch(`${base}/command`)).json(); } catch { await Bun.sleep(250); }
   }
-  expect(health?.moduleVersion).toBe('0.5.29');
+  expect(health?.moduleVersion).toBe(COMMAND_MODULE_VERSION);
   expect(health?.instanceId).toMatch(/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i);
   expect(health?.publicSearchWriteEpoch).toMatch(/^(0|[1-9][0-9]*)$/);
   expect(health?.publicSearchWriteActive).toBe(false);

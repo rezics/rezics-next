@@ -14,6 +14,7 @@ import { activateRebuiltPublicContentSearch, clearQuarantinedContentUnits,
 import { assertSavedStackRawUpdate, assertSavedStackStorage, composeProcessEnvironment,
   parseOptions, projectName,
   readEnv, stackDirectory } from '../dev/config.ts';
+import { COMMAND_MODULE_VERSION } from '../../services/main/src/infrastructure/profile.ts';
 
 const root = resolve(import.meta.dir, '../..');
 const UUID = /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i;
@@ -71,8 +72,8 @@ const id = saved?.id ?? jobArg ?? randomUUID();
 const docker = loadDockerEnvironment();
 await assertWritersStopped(apps.MAIN_ORIGIN!);
 const fuseki = new FusekiClient(apps.FUSEKI_URL!, apps.FUSEKI_MAINTENANCE_TOKEN!, apps.FUSEKI_COMMAND_TOKEN!);
-if ((await fuseki.commandHealth()).moduleVersion !== '0.5.29') {
-  throw new Error('Fuseki command module 0.5.29 is required; run yarn toolchain:install and restart the stack');
+if ((await fuseki.commandHealth()).moduleVersion !== COMMAND_MODULE_VERSION) {
+  throw new Error(`Fuseki command module ${COMMAND_MODULE_VERSION} is required; run yarn toolchain:install and restart the stack`);
 }
 if (!saved) writeFileSync(jobFile, JSON.stringify({ id }) + '\n', { mode: 0o600, flag: 'wx' });
 const pool = new Pool({ connectionString: apps.CONTENT_DATABASE_URL, max: 4 });
