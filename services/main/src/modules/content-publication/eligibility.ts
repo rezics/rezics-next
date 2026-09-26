@@ -351,13 +351,15 @@ export async function selectPublicContentSearch(env: WorkActivationEnvironment,
   admission: RegisteredAdmission, input: ContentSearchEligibilityInput): Promise<ContentSearchEligibilityResult> {
   const digest = contentSearchEligibilityDigest(input);
   admissionMatches(admission, input, digest);
-  await assertPublishedRights(env, content, access, input);
+  // A recorded terminal outcome replays without a write, even after a later
+  // publication superseded the source it approved.
   const prior = await readReceipt(env, admission.id);
   if (prior) {
     const checked = checkedReceipt(prior, env, admission, input, digest);
     if (checked.outcome === 'stale') throw new ContentEligibilityStale('eligibility head is stale');
     return checked;
   }
+  await assertPublishedRights(env, content, access, input);
   if (!admission.dispatchEligible || admission.state !== 'claimed'
     || !Number.isFinite(Date.parse(admission.expiresAt))
     || Date.parse(admission.expiresAt) <= Date.now()) {
