@@ -105,27 +105,24 @@ function domainRoutes(fuseki: FusekiClient, work: SearchRouteDependencies) {
     .use(reportRoutes(work))
     .use(rightsRoutes(work))
     .use(recommendationRoutes(work));
-    .use(recommendationRoutes(work))
-    .use(graphLayoutRoutes(work))
-    .use(themeRoutes(work))
-    .use(workRoutes(fuseki, work));
 }
 
 function extraRoutes1(fuseki: FusekiClient, work: SearchRouteDependencies) {
   return new Elysia()
     .use(graphLayoutRoutes(work))
+    .use(themeRoutes(work))
     .use(workRoutes(fuseki, work))
     .use(packageNixRoutes(work))
     .use(compositionRoutes(fuseki, work))
     .use(connectedAppRoutes(work))
     .use(ownerRoutes(work))
     .use(packageModRoutes(work))
-    .use(realmReplyRoutes(work))
-    .use(pollRoutes(work));
+    .use(realmReplyRoutes(work));
 }
 
 function extraRoutes2(fuseki: FusekiClient, work: SearchRouteDependencies) {
   return new Elysia()
+    .use(pollRoutes(work))
     .use(semanticRoutes(fuseki, work))
     .use(relationRoutes(fuseki, work))
     .use(hubRoutes(work))
