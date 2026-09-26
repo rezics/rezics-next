@@ -6,7 +6,7 @@ export const workDerivationUnresolvedProfile = {
   id: 'work-derivation-unresolved-v1',
   comments: [
     'One explicitly declared derivation of a target Work revision whose source version is not yet known.',
-    'The source names a Work and its Main Version without an exact revision; it is never an exact declaration.',
+    'The source names a Work, optionally its Main Version, without an exact revision; it is never an exact declaration.',
     'A later exact declaration resolves it through rv:corrects; this relation stays unchanged and readable.',
   ],
   prefixes: [
@@ -26,7 +26,7 @@ export const workDerivationUnresolvedProfile = {
       { path: 'rv:targetMainVersion', minCount: 1, maxCount: 1, class: 'rv:MainVersion' },
       { path: 'rv:targetMainRevision', minCount: 1, maxCount: 1, class: 'rv:RevisionAnchor' },
       { path: 'rv:sourceWork', minCount: 1, maxCount: 1, class: 'schema:CreativeWork' },
-      { path: 'rv:sourceMainVersion', minCount: 1, maxCount: 1, class: 'rv:MainVersion' },
+      { path: 'rv:sourceMainVersion', maxCount: 1, class: 'rv:MainVersion' },
       { path: 'rv:sourceMainRevision', maxCount: 0 },
       { path: 'rv:sourceVersionStatus', hasValue: 'rv:Unresolved', minCount: 1, maxCount: 1 },
       { path: 'rv:derivationKind', minCount: 1, maxCount: 1,
@@ -48,7 +48,8 @@ export const workDerivationUnresolvedProfile = {
   // the native command's fixed-key guards hold the value checks.
   binding: {
     required: ['derivation', 'target-work', 'target-main', 'target-revision', 'source-work',
-      'source-main', 'kind', 'evidence', 'actor', 'receipt', 'scope', 'epoch'],
+      'kind', 'evidence', 'actor', 'receipt', 'scope', 'epoch'],
+    optional: ['source-main'],
     roles: ['derivation'], demandedBy: ['rv:UnresolvedWorkDerivation'],
   },
 } as const satisfies ProfileDefinition;

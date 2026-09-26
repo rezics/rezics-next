@@ -233,7 +233,7 @@ export interface MainCloudEvent {
       observationManifest?: string; ratingAvailability?: 'available' | 'withdrawn';
       ratingValue?: number;
       translationLink?: string; targetWork?: string; targetMainVersion?: string;
-      targetMainRevision?: string; sourceWork?: string; sourceMainVersion?: string;
+      targetMainRevision?: string; sourceWork?: string; sourceMainVersion?: string | null;
       sourceMainRevision?: string | null; sourceVersionStatus?: 'exact' | 'unresolved';
       translationStatus?: 'official' | 'third-party'; contentLanguage?: string;
       translator?: string; publisher?: string; evidence?: string; linkedBy?: string;
@@ -558,15 +558,14 @@ async function workDerivedEnvelope(fuseki: FusekiClient, batch: MainOutboxBatch,
     || eventValue('sequence') !== batch.sequence) {
     throw new OutboxIncomplete('work derivation event differs from its receipt');
   }
-  // An exact declaration names its retained source revision; an unresolved one,
-  // under its own profile, names only the source Main Version.
+  // An unresolved declaration can name the source Work alone or its Main Version.
   const result = await fuseki.query(`PREFIX rv: <${RV}> SELECT
     ?targetWork ?targetMain ?targetRevision ?sourceWork ?sourceMain ?sourceRevision
     ?sourceStatus ?class ?kind ?evidence ?linkedBy ?corrects ?epoch ?sequence WHERE {
     GRAPH ${iri(GRAPHS.revisions)} {
       ${iri(derivation)} a ?class ; rv:targetWork ?targetWork ;
         rv:targetMainVersion ?targetMain ; rv:targetMainRevision ?targetRevision ;
-        rv:sourceWork ?sourceWork ; rv:sourceMainVersion ?sourceMain ;
+        rv:sourceWork ?sourceWork ;
         rv:derivationKind ?kind ; rv:evidence ?evidence ; rv:linkedBy ?linkedBy ;
         rv:modelRevision ?model ; rv:shapeRevision ?model ;
         rv:dataEpoch ?epoch ; rv:sequence ?sequence .
@@ -575,6 +574,7 @@ async function workDerivedEnvelope(fuseki: FusekiClient, batch: MainOutboxBatch,
         || ?class = rv:UnresolvedWorkDerivation
           && ?model = <https://rezics.com/definition/work-derivation-unresolved-v1>)
       OPTIONAL { ${iri(derivation)} rv:sourceMainRevision ?sourceRevision }
+      OPTIONAL { ${iri(derivation)} rv:sourceMainVersion ?sourceMain }
       OPTIONAL { ${iri(derivation)} rv:sourceVersionStatus ?sourceStatus }
       OPTIONAL { ${iri(derivation)} rv:corrects ?corrects }
     }
@@ -590,9 +590,9 @@ async function workDerivedEnvelope(fuseki: FusekiClient, batch: MainOutboxBatch,
   const unresolved = value('class') === `${RV}UnresolvedWorkDerivation`;
   const sourceRevision = value('sourceRevision') ?? null;
   if (!kind || !targetWork || !value('targetMain') || !value('targetRevision')
-    || !value('sourceWork') || !value('sourceMain')
+    || !value('sourceWork')
     || (unresolved ? sourceRevision !== null || value('sourceStatus') !== `${RV}Unresolved`
-      : sourceRevision === null || value('sourceStatus') !== undefined)
+      : !value('sourceMain') || sourceRevision === null || value('sourceStatus') !== undefined)
     || !value('evidence') || !value('linkedBy')
     || scope !== `derivation:link:${targetWork}`
     || value('epoch') !== batch.dataEpoch || value('sequence') !== batch.sequence) {
@@ -608,7 +608,7 @@ async function workDerivedEnvelope(fuseki: FusekiClient, batch: MainOutboxBatch,
         authorityEpoch: authorityEpoch!, scope, workDerivation: derivation,
         targetWork, targetMainVersion: value('targetMain')!,
         targetMainRevision: value('targetRevision')!, sourceWork: value('sourceWork')!,
-        sourceMainVersion: value('sourceMain')!, sourceMainRevision: sourceRevision,
+        sourceMainVersion: value('sourceMain') ?? null, sourceMainRevision: sourceRevision,
         sourceVersionStatus: unresolved ? 'unresolved' : 'exact',
         derivationKind: kind, evidence: value('evidence')!, linkedBy: value('linkedBy')!,
         corrects: value('corrects') ?? null } } };

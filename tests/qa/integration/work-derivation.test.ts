@@ -13,9 +13,8 @@ import { publishTextContribution, textPublicationDigest }
   from '../../../services/main/src/modules/contribution/publish.ts';
 import { activateMetadataWork, GRAPHS, ID, RV, iri, metadataWorkRequestDigest,
   type WorkActivationEnvironment } from '../../../services/main/src/modules/work/activate.ts';
-import { createAdmittedWorkDerivation, MAX_REVISION_DERIVATIONS, readWorkDerivations,
-  type WorkDerivationInput } from '../../../services/main/src/modules/work/derivations.ts';
-import { commandError } from '../../../services/main/src/routes/problems.ts';
+import { MAX_REVISION_DERIVATIONS, type WorkDerivationInput }
+  from '../../../services/main/src/modules/work/derivations.ts';
 import { initializeRelayCheckpoint, readNextMainOutboxBatch, relayMainOutboxOnce }
   from '../../../services/main/src/modules/outbox/relay.ts';
 
@@ -438,26 +437,19 @@ test('WORK04: an unresolved source version stays distinct and resolves later wit
     const access = new AccessAdmissionRegistry(accessPool);
     const account = { verify: async () => principal };
     const app = createMainApp(env.fuseki, { environment: env, account, access });
-    type Relation = { derivation: string; sourceWork: string; sourceMainVersion: string;
+    type Relation = { derivation: string; sourceWork: string; sourceMainVersion: string | null;
       sourceMainRevision: string | null; sourceVersionStatus: string; kind: string;
       evidence: string; corrects: string | null; supersededBy: string | null; status: string };
     type Declared = { status: number; body: Relation & { code?: string; receipt: string;
       replayed: boolean; sourcePosition: { sequence: string } } };
-    // The owner command with the POST route's receipt read and error mapping. The
-    // route body does not accept a null source revision yet; see the G-080 handoff.
+    // Exercise the public POST contract, including nullable source identities.
     const declare = async (input: WorkDerivationInput, key: string = randomUUID()): Promise<Declared> => {
-      try {
-        const receipt = await createAdmittedWorkDerivation(env, account, access, new Request(
-          'http://main.local/v1/work-derivations', { method: 'POST',
-            headers: { authorization: 'Bearer qa' } }), { ...input, idempotencyKey: key });
-        const relation = (await readWorkDerivations(env, input.targetMainVersion,
-          input.expectedTargetHead)).find(item => item.derivation === receipt.derivation)!;
-        return { status: receipt.replayed ? 200 : 201, body: { ...relation, receipt: receipt.receipt,
-          replayed: receipt.replayed, sourcePosition: { sequence: receipt.sequence } } };
-      } catch (error) {
-        const response = commandError(error);
-        return { status: response.status, body: await response.json() as Declared['body'] };
-      }
+      const response = await app.handle(new Request('http://main.local/v1/work-derivations', {
+        method: 'POST', headers: { authorization: 'Bearer qa',
+          'content-type': 'application/json', 'idempotency-key': key },
+        body: JSON.stringify({ profile: 'work-derivation-v1', ...input }),
+      }));
+      return { status: response.status, body: await response.json() as Declared['body'] };
     };
     const inventory = async (main: string, revision: string) => {
       const response = await app.handle(new Request(`http://main.local/v1/main-versions/${
@@ -569,6 +561,39 @@ test('WORK04: an unresolved source version stays distinct and resolves later wit
     expect(afterRace.filter(item => item.sourceWork === series.work && item.status === 'effective'))
       .toEqual([expect.objectContaining({ sourceVersionStatus: 'exact' })]);
 
+    // A source Work may be known before either its Main Version or revision is known.
+    const workOnly = { ...unresolved, sourceWork: spinoff.work, sourceMainVersion: null,
+      evidence: 'https://studio.example/film/spinoff-work' };
+    expect((await declare({ ...workOnly, sourceWork: ID + randomUUID() })).status).toBe(404);
+    expect((await declare({ ...workOnly, sourceMainRevision: spinoff.mainRevision })).status).toBe(400);
+    const workOnlyKey = `work-only-${randomUUID()}`;
+    const workOnlyCreated = await declare(workOnly, workOnlyKey);
+    expect(workOnlyCreated.status).toBe(201);
+    expect(workOnlyCreated.body).toMatchObject({ sourceWork: spinoff.work,
+      sourceMainVersion: null, sourceMainRevision: null, sourceVersionStatus: 'unresolved' });
+    expect((await declare(workOnly, workOnlyKey)).body).toMatchObject({
+      derivation: workOnlyCreated.body.derivation, replayed: true });
+    expect((await declare({ ...workOnly, sourceMainVersion: spinoff.mainVersion })).status).toBe(409);
+    const resolvedWorkOnly = await declare({ ...workOnly, sourceMainVersion: spinoff.mainVersion,
+      sourceMainRevision: spinoff.mainRevision, corrects: workOnlyCreated.body.derivation,
+      evidence: 'https://studio.example/film/spinoff-edition' });
+    expect(resolvedWorkOnly.status).toBe(201);
+    expect((await inventory(film.mainVersion, film.mainRevision)).derivations).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ derivation: workOnlyCreated.body.derivation,
+          sourceMainVersion: null, sourceMainRevision: null, status: 'superseded',
+          supersededBy: resolvedWorkOnly.body.derivation }),
+        expect.objectContaining({ derivation: resolvedWorkOnly.body.derivation,
+          sourceMainVersion: spinoff.mainVersion, sourceMainRevision: spinoff.mainRevision,
+          corrects: workOnlyCreated.body.derivation, status: 'effective' }),
+      ]));
+    expect((await env.fuseki.query(`PREFIX rv: <${RV}> ASK { GRAPH ${iri(GRAPHS.revisions)} {
+      ${iri(workOnlyCreated.body.derivation)} a rv:UnresolvedWorkDerivation ;
+        rv:sourceWork ${iri(spinoff.work)} ; rv:sourceVersionStatus rv:Unresolved .
+      FILTER NOT EXISTS { ${iri(workOnlyCreated.body.derivation)} rv:sourceMainVersion ?main }
+      FILTER NOT EXISTS { ${iri(workOnlyCreated.body.derivation)} rv:sourceMainRevision ?revision }
+    } }`)).boolean).toBe(true);
+
     // The typed relay envelope keeps the source-version certainty and the resolution link.
     const consumer = `work04-unresolved:${randomUUID()}`;
     await initializeRelayCheckpoint(relayPool, consumer, env.lineage.dataEpoch);
@@ -592,6 +617,14 @@ test('WORK04: an unresolved source version stays distinct and resolves later wit
       data: { receipt: { workDerivation: resolved.body.derivation,
         sourceMainRevision: novel.mainRevision, sourceVersionStatus: 'exact',
         corrects: declaration.derivation } } });
+    expect(await relay(workOnlyCreated.body.sourcePosition.sequence)).toMatchObject({
+      data: { receipt: { workDerivation: workOnlyCreated.body.derivation,
+        sourceWork: spinoff.work, sourceMainVersion: null, sourceMainRevision: null,
+        sourceVersionStatus: 'unresolved' } } });
+    expect(await relay(resolvedWorkOnly.body.sourcePosition.sequence)).toMatchObject({
+      data: { receipt: { workDerivation: resolvedWorkOnly.body.derivation,
+        sourceMainVersion: spinoff.mainVersion, sourceMainRevision: spinoff.mainRevision,
+        corrects: workOnlyCreated.body.derivation } } });
 
     // Cost: an unresolved declaration makes no more calls than an exact one, and
     // unrelated unresolved declarations add no Fuseki read calls or result growth.
@@ -619,6 +652,12 @@ test('WORK04: an unresolved source version stays distinct and resolves later wit
     expect((small.result as Declared).status).toBe(201);
     expect(small.calls).toBeGreaterThan(0);
     expect(small.calls).toBeLessThanOrEqual(exactProbe.calls);
+    const workOnlyProbe = await workFor('Work-only probe');
+    const workOnlyCost = await observed(() => onto(workOnlyProbe, { ...unresolved,
+      sourceWork: spinoff.work, sourceMainVersion: null }));
+    expect((workOnlyCost.result as Declared).status).toBe(201);
+    expect(workOnlyCost.calls).toBeLessThanOrEqual(exactProbe.calls);
+    expect(workOnlyCost.bytes).toBeLessThanOrEqual(small.bytes + 1024);
     for (const unrelated of await Promise.all(Array.from({ length: 8 },
       (_, n) => workFor(`Unrelated ${n}`)))) {
       expect((await onto(unrelated, unresolved)).status).toBe(201);

@@ -30,8 +30,9 @@ export interface WorkDerivationInput {
   targetMainVersion: string;
   expectedTargetHead: string;
   sourceWork: string;
-  sourceMainVersion: string;
-  /** Null declares the source Main Version without a known exact revision. */
+  /** Null names only the source Work; its Main Version is not yet known. */
+  sourceMainVersion: string | null;
+  /** Null leaves the exact source revision unresolved. */
   sourceMainRevision: string | null;
   kind: keyof typeof kinds;
   evidence: string;
@@ -61,8 +62,10 @@ export interface WorkDerivationReceipt {
 
 export function validateWorkDerivation(input: WorkDerivationInput): void {
   if (![input.targetWork, input.targetMainVersion, input.expectedTargetHead,
-    input.sourceWork, input.sourceMainVersion, input.actingSubject].every(value => nativeId.test(value))
+    input.sourceWork, input.actingSubject].every(value => nativeId.test(value))
+    || (input.sourceMainVersion !== null && !nativeId.test(input.sourceMainVersion))
     || (input.sourceMainRevision !== null && !nativeId.test(input.sourceMainRevision))
+    || (input.sourceMainVersion === null && input.sourceMainRevision !== null)
     || (input.corrects !== undefined && !nativeId.test(input.corrects))
     || input.targetWork === input.sourceWork || !Object.hasOwn(kinds, input.kind)
     || !evidenceUrl.test(input.evidence)) {
@@ -198,17 +201,22 @@ function unchangedPattern(input: WorkDerivationInput & { corrects: string }): st
   const corrects = iri(input.corrects);
   return `${corrects} rv:derivationKind rv:${kinds[input.kind]} ;
         rv:evidence ${lit(input.evidence)} .
+      ${input.sourceMainVersion === null
+    ? `FILTER NOT EXISTS { ${corrects} rv:sourceMainVersion ?anyMain }`
+    : `${corrects} rv:sourceMainVersion ${iri(input.sourceMainVersion)} .`}
       ${input.sourceMainRevision === null
     ? `FILTER NOT EXISTS { ${corrects} rv:sourceMainRevision ?anyRevision }`
     : `${corrects} rv:sourceMainRevision ${iri(input.sourceMainRevision)} .`}`;
 }
 
-/** The source Work, Main Version and, when exact, the retained revision anchor. */
+/** The source Work, optional Main Version and, when exact, its retained revision anchor. */
 export function sourcePattern(input: WorkDerivationInput): { current: string; revisions: string } {
-  return { current: `${iri(input.sourceWork)} rv:mainVersion ${iri(input.sourceMainVersion)} .
+  return { current: input.sourceMainVersion === null
+    ? `${iri(input.sourceWork)} a <https://schema.org/CreativeWork> .`
+    : `${iri(input.sourceWork)} rv:mainVersion ${iri(input.sourceMainVersion)} .
         ${iri(input.sourceMainVersion)} a rv:MainVersion ; rv:work ${iri(input.sourceWork)} .`,
   revisions: input.sourceMainRevision === null ? '' : `${iri(input.sourceMainRevision)} a rv:RevisionAnchor ;
-          rv:component ${iri(input.sourceMainVersion)} .` };
+          rv:component ${iri(input.sourceMainVersion!)} .` };
 }
 
 /** The immutable relation triples, typed and profiled by source-version certainty. */
@@ -220,7 +228,8 @@ export function derivationTriples(derivation: string, input: WorkDerivationInput
           rv:targetMainVersion ${iri(input.targetMainVersion)} ;
           rv:targetMainRevision ${iri(input.expectedTargetHead)} ;
           rv:sourceWork ${iri(input.sourceWork)} ;
-          rv:sourceMainVersion ${iri(input.sourceMainVersion)} ;
+          ${input.sourceMainVersion === null ? ''
+    : `rv:sourceMainVersion ${iri(input.sourceMainVersion)} ;`}
           ${input.sourceMainRevision === null ? 'rv:sourceVersionStatus rv:Unresolved'
     : `rv:sourceMainRevision ${iri(input.sourceMainRevision)}`} ;
           rv:derivationKind rv:${kinds[input.kind]} ; rv:evidence ${lit(input.evidence)} ;
@@ -244,25 +253,43 @@ export async function derivationValidations(env: WorkActivationEnvironment, deri
       : [GRAPHS.current, GRAPHS.revisions, GRAPHS.receipts, GRAPHS.control],
   }], { derivation, 'target-work': input.targetWork,
     'target-main': input.targetMainVersion, 'target-revision': input.expectedTargetHead,
-    'source-work': input.sourceWork, 'source-main': input.sourceMainVersion,
+    'source-work': input.sourceWork,
+    ...(input.sourceMainVersion === null ? {} : { 'source-main': input.sourceMainVersion }),
     ...(unresolved ? {} : { 'source-revision': input.sourceMainRevision! }), kind: input.kind,
     evidence: input.evidence, actor: input.actingSubject, receipt: receipt.id,
     scope: receipt.scope, epoch: receipt.authorityEpoch });
 }
 
 /** Fixed-key guards; the count reads only one target revision's bounded declarations. */
+function sourcePair(subject: string, input: WorkDerivationInput): string {
+  const work = iri(input.sourceWork);
+  return `${subject} rv:sourceWork ?pairWork .
+    OPTIONAL { ${subject} rv:sourceMainVersion ?pairMain }
+    FILTER(${input.sourceMainVersion === null
+    ? `?pairWork = ${work}`
+    : `?pairMain = ${iri(input.sourceMainVersion)} || (?pairWork = ${work} && !BOUND(?pairMain))`})`;
+}
+
+function correctedSource(input: WorkDerivationInput): string {
+  const corrected = iri(input.corrects!);
+  return `${corrected} rv:sourceWork ${iri(input.sourceWork)} .
+    OPTIONAL { ${corrected} rv:sourceMainVersion ?correctedMain }
+    FILTER(${input.sourceMainVersion === null
+    ? '!BOUND(?correctedMain)'
+    : `!BOUND(?correctedMain) || ?correctedMain = ${iri(input.sourceMainVersion)}`})`;
+}
+
 export function continuityGuard(input: WorkDerivationInput): string {
   const revision = iri(input.expectedTargetHead);
   const pair = input.corrects === undefined ? `
     FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.revisions)} {
-      ?prior rv:targetMainRevision ${revision} ;
-        rv:sourceMainVersion ${iri(input.sourceMainVersion)} .
+      ?prior rv:targetMainRevision ${revision} .
+      ${sourcePair('?prior', input)}
       ${declared('?prior', 'prior')} } }` : `
     GRAPH ${iri(GRAPHS.revisions)} {
       ${iri(input.corrects)} rv:targetMainRevision ${revision} ;
-        rv:targetMainVersion ${iri(input.targetMainVersion)} ;
-        rv:sourceWork ${iri(input.sourceWork)} ;
-        rv:sourceMainVersion ${iri(input.sourceMainVersion)} .
+        rv:targetMainVersion ${iri(input.targetMainVersion)} .
+      ${correctedSource(input)}
       ${declared(iri(input.corrects), 'corrected')}
     }
     FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.revisions)} {
@@ -294,15 +321,14 @@ async function relationState(env: WorkActivationEnvironment,
     BIND(EXISTS { GRAPH ${iri(GRAPHS.current)} { ${source.current} }${source.revisions
     ? ` GRAPH ${iri(GRAPHS.revisions)} { ${source.revisions} }` : ''} } AS ?source)
     BIND(EXISTS { GRAPH ${iri(GRAPHS.revisions)} {
-      ?derivation rv:targetMainRevision ${revision} ;
-        rv:sourceMainVersion ${iri(input.sourceMainVersion)} .
+      ?derivation rv:targetMainRevision ${revision} .
+      ${sourcePair('?derivation', input)}
       ${declared('?derivation', 'paired')}
     } } AS ?paired)
     BIND(${corrects === null ? 'false' : `EXISTS { GRAPH ${iri(GRAPHS.revisions)} {
       ${corrects} rv:targetMainRevision ${revision} ;
-        rv:targetMainVersion ${iri(input.targetMainVersion)} ;
-        rv:sourceWork ${iri(input.sourceWork)} ;
-        rv:sourceMainVersion ${iri(input.sourceMainVersion)} .
+        rv:targetMainVersion ${iri(input.targetMainVersion)} .
+      ${correctedSource(input)}
       ${declared(corrects, 'correctable')}
     } }`} AS ?correctable)
     BIND(${corrects === null ? 'false' : `EXISTS { GRAPH ${iri(GRAPHS.revisions)} {
@@ -485,12 +511,13 @@ export async function readWorkDerivations(env: WorkActivationEnvironment,
     GRAPH ${iri(GRAPHS.revisions)} {
       ?derivation rv:targetMainRevision ${iri(mainRevision)} ; a ?class ; rv:targetWork ?targetWork ;
         rv:targetMainVersion ${iri(mainVersion)} ;
-        rv:sourceWork ?sourceWork ; rv:sourceMainVersion ?sourceMain ; rv:derivationKind ?kind ;
+        rv:sourceWork ?sourceWork ; rv:derivationKind ?kind ;
         rv:evidence ?evidence ; rv:linkedBy ?linkedBy ; rv:sequence ?sequence ;
         rv:modelRevision ?model ; rv:shapeRevision ?model .
       FILTER(?class = rv:WorkDerivation && ?model = ${iri(PROFILE)}
         || ?class = rv:UnresolvedWorkDerivation && ?model = ${iri(UNRESOLVED_PROFILE)})
       OPTIONAL { ?derivation rv:sourceMainRevision ?sourceRevision }
+      OPTIONAL { ?derivation rv:sourceMainVersion ?sourceMain }
       OPTIONAL { ?derivation rv:sourceVersionStatus ?sourceStatus }
       OPTIONAL { ?derivation rv:corrects ?corrects }
       OPTIONAL { ?supersededBy rv:corrects ?derivation }
@@ -505,16 +532,16 @@ export async function readWorkDerivations(env: WorkActivationEnvironment,
       .find(([, value]) => row.kind?.value === `${RV}${value}`)?.[0] as WorkDerivation['kind'] | undefined;
     const unresolved = row.class?.value === `${RV}UnresolvedWorkDerivation`;
     // An exact declaration names its retained revision; an unresolved one names none.
-    if (!kind || !row.derivation || !row.targetWork || !row.sourceWork || !row.sourceMain
+    if (!kind || !row.derivation || !row.targetWork || !row.sourceWork
       || !row.evidence || !row.linkedBy || !row.sequence
       || (unresolved ? row.sourceRevision || row.sourceStatus?.value !== `${RV}Unresolved`
-        : !row.sourceRevision || row.sourceStatus)) {
+        : !row.sourceMain || !row.sourceRevision || row.sourceStatus)) {
       throw new WorkDerivationConflict('incomplete derivation');
     }
     const supersededBy = row.supersededBy?.value ?? null;
     return { derivation: row.derivation.value, targetWork: row.targetWork.value,
       targetMainVersion: mainVersion, targetMainRevision: mainRevision,
-      sourceWork: row.sourceWork.value, sourceMainVersion: row.sourceMain.value,
+      sourceWork: row.sourceWork.value, sourceMainVersion: row.sourceMain?.value ?? null,
       sourceMainRevision: row.sourceRevision?.value ?? null, kind, evidence: row.evidence.value,
       linkedBy: row.linkedBy.value,
       sourceVersionStatus: unresolved ? 'unresolved' as const : 'exact' as const, corrects: row.corrects?.value ?? null, supersededBy,
@@ -524,10 +551,14 @@ export async function readWorkDerivations(env: WorkActivationEnvironment,
   const ids = new Set(relations.map(item => item.derivation));
   const effective = relations.filter(item => item.status === 'effective');
   if (ids.size !== relations.length
-    || new Set(effective.map(item => item.sourceMainVersion)).size !== effective.length
+    || effective.some((item, index) => effective.slice(index + 1).some(other =>
+      item.sourceWork === other.sourceWork && (item.sourceMainVersion === null
+        || other.sourceMainVersion === null || item.sourceMainVersion === other.sourceMainVersion)))
     || relations.some(item => item.corrects !== null && (!ids.has(item.corrects)
-      || relations.find(prior => prior.derivation === item.corrects)?.sourceMainVersion
-        !== item.sourceMainVersion))) {
+      || !relations.some(prior => prior.derivation === item.corrects
+        && prior.sourceWork === item.sourceWork
+        && (prior.sourceMainVersion === null
+          || prior.sourceMainVersion === item.sourceMainVersion))))) {
     throw new WorkDerivationConflict('ambiguous target derivations');
   }
   return relations;

@@ -145,6 +145,22 @@ test('WORK04/OPS03: graph loss replays only the original admitted multi-source, 
       ...fromThird, sourceMainRevision: thirdSource.mainRevision, corrects: unresolved.derivation,
       evidence: 'https://creator.example/resolved', idempotencyKey: `resolve-${randomUUID()}` });
     expect(resolution.sequence).toBe('9');
+    // A source Work without a chosen Main Version resolves through an immutable correction.
+    const fourthSource = await createAdmittedMetadataWork(live, account, access, request,
+      { title: 'Retained Work-only derivation source', actingSubject: actor,
+        idempotencyKey: `fourth-source-${randomUUID()}` });
+    expect(fourthSource.sequence).toBe('10');
+    const workOnly = await createAdmittedWorkDerivation(live, account, access, request, {
+      ...firstDeclaration, sourceWork: fourthSource.work, sourceMainVersion: null,
+      sourceMainRevision: null, evidence: 'https://creator.example/work-only',
+      idempotencyKey: `work-only-${randomUUID()}` });
+    expect(workOnly.sequence).toBe('11');
+    const workOnlyResolution = await createAdmittedWorkDerivation(live, account, access, request, {
+      ...firstDeclaration, sourceWork: fourthSource.work,
+      sourceMainVersion: fourthSource.mainVersion, sourceMainRevision: fourthSource.mainRevision,
+      corrects: workOnly.derivation, evidence: 'https://creator.example/work-only-resolved',
+      idempotencyKey: `work-only-resolve-${randomUUID()}` });
+    expect(workOnlyResolution.sequence).toBe('12');
     const final = await readWorkDerivations(live, target.mainVersion, target.mainRevision);
     expect(final.map(item => [item.derivation, item.status, item.corrects,
       item.sourceVersionStatus])).toEqual([
@@ -152,14 +168,16 @@ test('WORK04/OPS03: graph loss replays only the original admitted multi-source, 
       [secondLinked.derivation, 'effective', null, 'exact'],
       [correction.derivation, 'effective', linked.derivation, 'exact'],
       [unresolved.derivation, 'superseded', null, 'unresolved'],
-      [resolution.derivation, 'effective', unresolved.derivation, 'exact']]);
-    for (let position = 1; position <= 9; position++) {
+      [resolution.derivation, 'effective', unresolved.derivation, 'exact'],
+      [workOnly.derivation, 'superseded', null, 'unresolved'],
+      [workOnlyResolution.derivation, 'effective', workOnly.derivation, 'exact']]);
+    for (let position = 1; position <= 12; position++) {
       expect((await relayMainOutboxOnce(liveFuseki, relayPool, consumer))?.sequence)
         .toBe(String(position));
     }
     const coverage = await relayCoverage(relayPool, consumer);
-    expect(coverage).toMatchObject({ dataEpoch: lineage.dataEpoch, sequence: '9',
-      batchCount: '9', eventCount: '9' });
+    expect(coverage).toMatchObject({ dataEpoch: lineage.dataEpoch, sequence: '12',
+      batchCount: '12', eventCount: '12' });
     const originalEvent = (await relayPool.query<{ event_id: string; envelope: unknown }>(
       'SELECT event_id, envelope FROM relay.delivered_event WHERE data_epoch = $1 AND sequence = 3',
       [lineage.dataEpoch])).rows[0];
@@ -284,7 +302,28 @@ test('WORK04/OPS03: graph loss replays only the original admitted multi-source, 
         coverage, position)).toEqual({ receipt: restoredEffect.receipt,
         derivation: restoredEffect.derivation, replayed: false });
     }
-    for (const position of ['9', '8', '6', '3']) {
+    expect((await reconcileRetainedWorkCreate(restored, accessPool, relayPool,
+      coverage, '10')).work).toBe(fourthSource.work);
+    const workOnlyEvent = (await relayPool.query<{ event_id: string; envelope: unknown }>(
+      'SELECT event_id, envelope FROM relay.delivered_event WHERE data_epoch = $1 AND sequence = 11',
+      [lineage.dataEpoch])).rows[0];
+    if (!workOnlyEvent) throw new Error('retained Work-only event is absent');
+    await relayPool.query(`UPDATE relay.delivered_event SET envelope =
+      jsonb_set(envelope, '{data,receipt,sourceMainVersion}', to_jsonb($1::text))
+      WHERE event_id = $2`, [fourthSource.mainVersion, workOnlyEvent.event_id]);
+    await expect(reconcileRetainedWorkDerivation(restored, accessPool, relayPool,
+      coverage, '11')).rejects.toBeInstanceOf(RetainedEffectConflict);
+    await relayPool.query('UPDATE relay.delivered_event SET envelope = $1 WHERE event_id = $2',
+      [workOnlyEvent.envelope, workOnlyEvent.event_id]);
+    await expect(reconcileRetainedWorkDerivation(restored, accessPool, relayPool,
+      coverage, '12')).rejects.toBeInstanceOf(RetainedEffectConflict);
+    for (const [position, restoredEffect] of [['11', workOnly],
+      ['12', workOnlyResolution]] as const) {
+      expect(await reconcileRetainedWorkDerivation(restored, accessPool, relayPool,
+        coverage, position)).toEqual({ receipt: restoredEffect.receipt,
+        derivation: restoredEffect.derivation, replayed: false });
+    }
+    for (const position of ['12', '11', '9', '8', '6', '3']) {
       expect((await reconcileRetainedWorkDerivation(restored, accessPool, relayPool,
         coverage, position)).replayed).toBe(true);
     }
@@ -303,6 +342,15 @@ test('WORK04/OPS03: graph loss replays only the original admitted multi-source, 
         ${iri(resolution.derivation)} a rv:WorkDerivation ;
           rv:sourceMainRevision ${iri(thirdSource.mainRevision)} ;
           rv:corrects ${iri(unresolved.derivation)} ; rv:sequence 9 .
+        ${iri(workOnly.derivation)} a rv:UnresolvedWorkDerivation ;
+          rv:sourceWork ${iri(fourthSource.work)} ; rv:sourceVersionStatus rv:Unresolved ;
+          rv:sequence 11 .
+        FILTER NOT EXISTS { ${iri(workOnly.derivation)} rv:sourceMainVersion ?main }
+        FILTER NOT EXISTS { ${iri(workOnly.derivation)} rv:sourceMainRevision ?revision }
+        ${iri(workOnlyResolution.derivation)} a rv:WorkDerivation ;
+          rv:sourceMainVersion ${iri(fourthSource.mainVersion)} ;
+          rv:sourceMainRevision ${iri(fourthSource.mainRevision)} ;
+          rv:corrects ${iri(workOnly.derivation)} ; rv:sequence 12 .
       }
     }`)).boolean).toBe(true);
   } finally {

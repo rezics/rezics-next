@@ -43,7 +43,9 @@ export function parseRetainedWorkDerivation(eventId: string, envelope: MainCloud
     // Envelopes retained before unresolved sources carry only an exact revision.
     || (receipt.sourceVersionStatus === 'unresolved' ? receipt.sourceMainRevision !== null
       : ![undefined, 'exact'].includes(receipt.sourceVersionStatus)
-        || typeof receipt.sourceMainRevision !== 'string')
+        || typeof receipt.sourceMainRevision !== 'string'
+        || typeof receipt.sourceMainVersion !== 'string')
+    || (receipt.sourceMainVersion !== null && typeof receipt.sourceMainVersion !== 'string')
     || (receipt.corrects !== undefined && receipt.corrects !== null
       && !nativeId.test(receipt.corrects))) {
     throw new RetainedEffectConflict('retained Work derivation event is incomplete');
@@ -53,7 +55,7 @@ export function parseRetainedWorkDerivation(eventId: string, envelope: MainCloud
     targetMainVersion: receipt.targetMainVersion ?? '',
     expectedTargetHead: receipt.targetMainRevision ?? '',
     sourceWork: receipt.sourceWork ?? '',
-    sourceMainVersion: receipt.sourceMainVersion ?? '',
+    sourceMainVersion: receipt.sourceMainVersion ?? null,
     sourceMainRevision: receipt.sourceMainRevision ?? null,
     kind: receipt.derivationKind,
     evidence: receipt.evidence ?? '',
@@ -75,7 +77,10 @@ async function retainedCorrection(env: WorkActivationEnvironment, input: WorkDer
   derivation: string, replayed: boolean): Promise<string | undefined> {
   const pattern = replayed ? `${iri(derivation)} rv:corrects ?prior .` : `
     ?prior rv:targetMainRevision ${iri(input.expectedTargetHead)} ;
-      rv:sourceMainVersion ${iri(input.sourceMainVersion)} .
+      rv:sourceWork ${iri(input.sourceWork)} .
+    OPTIONAL { ?prior rv:sourceMainVersion ?priorMain }
+    FILTER(${input.sourceMainVersion === null ? '!BOUND(?priorMain)'
+    : `!BOUND(?priorMain) || ?priorMain = ${iri(input.sourceMainVersion)}`})
     ${declared('?prior', 'prior')}
     FILTER NOT EXISTS { ?later rv:corrects ?prior }
     FILTER(?prior != ${iri(derivation)})`;

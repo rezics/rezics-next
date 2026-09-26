@@ -36,7 +36,9 @@ const translationLinkWrite = t.Object({ profile: t.Literal('translation-link-v1'
 
 const workDerivationRef = t.Object({ derivation: t.String(), targetWork: t.String(),
   targetMainVersion: t.String(), targetMainRevision: t.String(),
-  sourceWork: t.String(), sourceMainVersion: t.String(), sourceMainRevision: t.String(),
+  sourceWork: t.String(), sourceMainVersion: t.Nullable(t.String()),
+  sourceMainRevision: t.Nullable(t.String()),
+  sourceVersionStatus: t.Union([t.Literal('exact'), t.Literal('unresolved')]),
   kind: t.Union([t.Literal('adaptation'), t.Literal('new-recording'),
     t.Literal('software-fork')]), evidence: t.String(), linkedBy: t.String(),
   corrects: t.Nullable(t.String()), supersededBy: t.Nullable(t.String()),
@@ -153,7 +155,8 @@ export function workRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
     .post('/v1/work-derivations', {
       body: t.Object({ profile: t.Literal('work-derivation-v1'),
         targetWork: t.String(), targetMainVersion: t.String(), expectedTargetHead: t.String(),
-        sourceWork: t.String(), sourceMainVersion: t.String(), sourceMainRevision: t.String(),
+        sourceWork: t.String(), sourceMainVersion: t.Nullable(t.String()),
+        sourceMainRevision: t.Nullable(t.String()),
         kind: t.Union([t.Literal('adaptation'), t.Literal('new-recording'),
           t.Literal('software-fork')]), evidence: t.String(), actingSubject: t.String(),
         corrects: t.Optional(t.String()),
