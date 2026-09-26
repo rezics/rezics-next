@@ -18,7 +18,7 @@ import { FusekiClient } from '../../../services/main/src/infrastructure/fuseki.t
 import { AccessAdmissionRegistry, AdmissionUnavailable, engageAccessRecoveryFence,
   releaseAccessRecoveryFence } from '../../../services/main/src/modules/access/admission.ts';
 import { AccountAssertionVerifier } from '../../../services/main/src/modules/account/verify-assertion.ts';
-import { settleAccountErasures } from '../../../services/main/src/modules/erasure/account.ts';
+import { accountCredentialsPresent, settleAccountErasures } from '../../../services/main/src/modules/erasure/account.ts';
 import { ensureRetentionDomain, readErasure } from '../../../services/main/src/modules/erasure/journal.ts';
 import { ErasureRestoreHold, reconcileRestoredErasures, releaseErasureRestoreHold,
   retainErasureCoverage, verifyErasure } from '../../../services/main/src/modules/erasure/reconcile.ts';
@@ -310,6 +310,8 @@ test('OPS11/OPS12/IAM11: restored backups keep erased payloads and credentials o
       expect(report).toMatchObject({ stage: 'verified', suppression: 'suppressed', destruction: 'retained' });
       const copies = new Map(report.dispositions.map(entry => [entry.domain, entry]));
       expect(copies.get(`${owner}:postgresql:live`)).toMatchObject({ suppression: 'suppressed', destruction: 'retained' });
+      expect(copies.get(`${owner}:postgresql-wal:live`)).toMatchObject({ store: 'postgresql_wal',
+        suppression: 'suppressed', destruction: 'retained' });
       expect(copies.get(`${owner}:backup:before:${runId}`)).toMatchObject({ suppression: 'not_applicable',
         destruction: 'retained', retainedUntil: first.expiresAt.toISOString() });
       expect(copies.get(`${owner}:backup:after-account:${runId}`)).toMatchObject({ suppression: 'not_applicable',
@@ -327,19 +329,20 @@ test('OPS11/OPS12/IAM11: restored backups keep erased payloads and credentials o
     expect(await exact(older.content, payload)).toMatchObject({ status: 'available',
       serializedJson: JSON.stringify({ body: payloadBody }) });
     expect(await credentials(older.account, erased.id)).toEqual({ users: '1', passwords: '1', sessions: '1' });
+    expect(await accountCredentialsPresent(older.account, [erased.id])).toEqual(new Set([erased.id]));
     // OPS12: protected reads and new effects stay offline on the fenced restore.
     const olderMain = offline(older);
     expect((await readJournal(olderMain)).status).toBe(503);
     await expect(new AccessAdmissionRegistry(older.access).canReadWork({ issuer, subject: operator.id }, actor, work))
       .rejects.toBeInstanceOf(AdmissionUnavailable);
-    await expect(releaseErasureRestoreHold(relay, older.access, randomUUID(), first.restoredFence))
+    await expect(releaseErasureRestoreHold(relay, older, randomUUID(), first.restoredFence))
       .rejects.toBeInstanceOf(ErasureRestoreHold);
     const olderPass = await reconcileRestoredErasures(relay, older,
       { operationId: `restore-before-${runId}`, consumer: first.consumer, replay: true });
     expect(olderPass).toMatchObject({ state: 'held' });
     expect(olderPass.counts.conflict).toBe(2);
     expect(olderPass.counts.replayed).toBe(1);
-    await expect(releaseErasureRestoreHold(relay, older.access, olderPass.reconciliationId, first.restoredFence))
+    await expect(releaseErasureRestoreHold(relay, older, olderPass.reconciliationId, first.restoredFence))
       .rejects.toBeInstanceOf(ErasureRestoreHold);
     expect((await readJournal(olderMain)).status).toBe(503);
     expect(await credentials(older.account, erased.id)).toMatchObject({ users: '1' });
@@ -347,12 +350,15 @@ test('OPS11/OPS12/IAM11: restored backups keep erased payloads and credentials o
     // Backup 2: credentials stay erased, but it lacks the later Content erasure.
     const current = second.restored;
     expect(await credentials(current.account, erased.id)).toEqual({ users: '0', passwords: '0', sessions: '0' });
+    expect(await accountCredentialsPresent(current.account, [erased.id])).toEqual(new Set());
     expect(await exact(current.content, payload)).toMatchObject({ status: 'available' });
+    const backupPayload = (await current.content.query<{ serialized_bytes: Buffer; body: object }>(
+      'SELECT serialized_bytes, body FROM content.revision WHERE id = $1', [payload])).rows[0]!;
     const currentMain = offline(current);
     const unreplayed = await reconcileRestoredErasures(relay, current,
       { operationId: `restore-hold-${runId}`, consumer: second.consumer, replay: false });
     expect(unreplayed).toMatchObject({ state: 'held', counts: { conflict: 1 } });
-    await expect(releaseErasureRestoreHold(relay, current.access, unreplayed.reconciliationId, second.restoredFence))
+    await expect(releaseErasureRestoreHold(relay, current, unreplayed.reconciliationId, second.restoredFence))
       .rejects.toBeInstanceOf(ErasureRestoreHold);
     expect((await readJournal(currentMain)).status).toBe(503);
     const replayed = await reconcileRestoredErasures(relay, current,
@@ -362,13 +368,33 @@ test('OPS11/OPS12/IAM11: restored backups keep erased payloads and credentials o
 
     // A later journal entry makes that reconciliation stale before release.
     const laterErasure = await erase([later]);
-    await expect(releaseErasureRestoreHold(relay, current.access, replayed.reconciliationId, second.restoredFence))
+    await expect(releaseErasureRestoreHold(relay, current, replayed.reconciliationId, second.restoredFence))
       .rejects.toBeInstanceOf(ErasureRestoreHold);
     expect((await readJournal(currentMain)).status).toBe(503);
     const final = await reconcileRestoredErasures(relay, current,
       { operationId: `restore-final-${runId}`, consumer: second.consumer, replay: true });
     expect(final).toMatchObject({ state: 'reconciled', erasureEpoch: laterErasure.erasureEpoch });
-    await releaseErasureRestoreHold(relay, current.access, final.reconciliationId, second.restoredFence);
+    // Simulate an unsafe copy replacement after reconciliation. Release checks
+    // the owner again under the retained journal lock, then refuses resurrection.
+    const unsafe = await current.content.connect();
+    try {
+      await unsafe.query('BEGIN');
+      await unsafe.query('SET LOCAL session_replication_role = replica');
+      await unsafe.query(`UPDATE content.revision SET availability = 'available',
+        serialized_bytes = $2, body = $3 WHERE id = $1`,
+      [payload, backupPayload.serialized_bytes, backupPayload.body]);
+      await unsafe.query('COMMIT');
+    } catch (error) {
+      await unsafe.query('ROLLBACK').catch(() => undefined);
+      throw error;
+    } finally { unsafe.release(); }
+    expect(await exact(current.content, payload)).toMatchObject({ status: 'available' });
+    await expect(releaseErasureRestoreHold(relay, current, final.reconciliationId,
+      second.restoredFence)).rejects.toBeInstanceOf(ErasureRestoreHold);
+    expect((await readJournal(currentMain)).status).toBe(503);
+    await current.content.query(`UPDATE content.revision SET availability = 'erased',
+      serialized_bytes = NULL, body = NULL WHERE id = $1`, [payload]);
+    await releaseErasureRestoreHold(relay, current, final.reconciliationId, second.restoredFence);
 
     // Reopened restore: no resurrection, credentials absent, unrelated content intact.
     const reopened = await readJournal(currentMain);

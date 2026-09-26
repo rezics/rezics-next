@@ -4,6 +4,7 @@ import { releaseAccessRecoveryFence } from '../access/admission.ts';
 import { AccountDeletionJournalConflict, assertAccountDeletionJournalCoverage } from
   '../outbox/account-deletion-journal.ts';
 import type { OwnerReconciliationItemRow, OwnerReconciliationCutRow } from '../owner/schema.ts';
+import { accountCredentialsPresent } from './account.ts';
 import { applyContentErasure, ContentErasureGraphRequired, contentErasureResource,
   ContentErasureStale, probeContentErasure } from './content.ts';
 import { ErasureUnavailable, readErasure, relayTransaction, sha256 } from './journal.ts';
@@ -115,9 +116,9 @@ export async function verifyErasure(relay: Pool, owners: { content?: Pool; accou
     const header = (await relay.query<{ account_subject: string; deleted_principal_id: string | null }>(
       'SELECT account_subject, deleted_principal_id FROM relay.erasure WHERE id = $1', [erasureId])).rows[0]!;
     if (!owners.account || !owners.access) throw new ErasureUnavailable('Account and Access owners are required');
-    const live = await owners.account.query('SELECT 1 FROM "user" WHERE id = $1 LIMIT 1', [header.account_subject]);
+    const live = await accountCredentialsPresent(owners.account, [header.account_subject]);
     items.push({ owner: 'account', kind: 'erasure', ref: `account-subject:${sha256(header.account_subject)}`,
-      disposition: live.rowCount ? 'conflict' : 'erased' });
+      disposition: live.size ? 'conflict' : 'erased' });
     if (header.deleted_principal_id) {
       const fenced = await owners.access.query<{ active: boolean }>(
         'SELECT active FROM access.principal WHERE id = $1', [header.deleted_principal_id]);
@@ -249,9 +250,8 @@ export async function reconcileRestoredErasures(relay: Pool, restored: RestoredO
       `SELECT erasure_epoch::text AS epoch, account_subject, suppression_status FROM relay.erasure
        WHERE kind = 'account' AND erasure_epoch > $1::bigint ORDER BY erasure_epoch LIMIT 1000`,
       [after])).rows;
-    const present = new Set((await restored.account.query<{ id: string }>(
-      'SELECT id FROM "user" WHERE id = ANY($1::text[])', [entries.map(entry => entry.account_subject)]))
-      .rows.map(row => row.id));
+    const present = await accountCredentialsPresent(restored.account,
+      entries.map(entry => entry.account_subject));
     for (const entry of entries) {
       account.push({ owner: 'account', kind: 'erasure', ref: `account-subject:${sha256(entry.account_subject)}`,
         disposition: entry.suppression_status !== 'suppressed' || present.has(entry.account_subject)
@@ -291,12 +291,62 @@ export async function reconcileRestoredErasures(relay: Pool, restored: RestoredO
   return (await summary(relay, input.operationId))!;
 }
 
+/** Recheck the live restored copies immediately before releasing their Access fence. */
+async function assertRestoredErasuresCurrent(relay: PoolClient, restored: RestoredOwners): Promise<void> {
+  const unresolved = await relay.query(`SELECT 1 FROM relay.erasure
+    WHERE suppression_status <> 'suppressed' LIMIT 1`);
+  if (unresolved.rowCount) throw new ErasureRestoreHold('an erasure is not suppressed');
+  const unsupported = await relay.query(`SELECT 1 FROM relay.erasure e
+    WHERE e.kind <> 'account' AND (NOT EXISTS (SELECT 1 FROM relay.erasure_target t
+      WHERE t.erasure_id = e.id) OR EXISTS (SELECT 1 FROM relay.erasure_target t
+      WHERE t.erasure_id = e.id AND (t.owner <> 'content' OR t.target_kind <> 'content_revision')))
+    LIMIT 1`);
+  if (unsupported.rowCount) throw new ErasureRestoreHold('an erasure owner is not reconciled');
+  let after = '0';
+  while (true) {
+    const entries = (await relay.query<{ id: string; epoch: string; refs: string[] }>(
+      `SELECT e.id, e.erasure_epoch::text AS epoch, array_agg(t.target_ref ORDER BY t.ordinal) AS refs
+       FROM relay.erasure e JOIN relay.erasure_target t ON t.erasure_id = e.id
+       WHERE e.kind <> 'account' AND e.erasure_epoch > $1::bigint
+       GROUP BY e.id ORDER BY e.erasure_epoch LIMIT ${JOURNAL_PAGE}`, [after])).rows;
+    for (const entry of entries) {
+      const probes = await probeContentErasure(restored.content, entry.id, entry.refs);
+      if (entry.refs.some(ref => !['erased', 'absent'].includes(probes.get(ref) ?? 'foreign'))) {
+        throw new ErasureRestoreHold('restored Content still exposes an erased revision');
+      }
+    }
+    if (entries.length < JOURNAL_PAGE) break;
+    after = entries[entries.length - 1]!.epoch;
+  }
+  after = '0';
+  while (true) {
+    const entries = (await relay.query<{ epoch: string; account_subject: string;
+      deleted_principal_id: string | null }>(`SELECT erasure_epoch::text AS epoch,
+        account_subject, deleted_principal_id FROM relay.erasure
+       WHERE kind = 'account' AND erasure_epoch > $1::bigint
+       ORDER BY erasure_epoch LIMIT 1000`, [after])).rows;
+    const present = await accountCredentialsPresent(restored.account,
+      entries.map(entry => entry.account_subject));
+    if (present.size) {
+      throw new ErasureRestoreHold('restored Account still has erased credentials');
+    }
+    const principals = entries.map(entry => entry.deleted_principal_id).filter((id): id is string => !!id);
+    if (principals.length) {
+      const active = await restored.access.query(`SELECT 1 FROM access.principal
+        WHERE id = ANY($1::uuid[]) AND active = true LIMIT 1`, [principals]);
+      if (active.rowCount) throw new ErasureRestoreHold('restored Access principal is active');
+    }
+    if (entries.length < 1000) break;
+    after = entries[entries.length - 1]!.epoch;
+  }
+}
+
 /**
  * Reopen the restored Access owner only for a reconciled restore that is still
  * current: no newer journal entry, no newer retained capture and matching Access
  * deletion intents. The journal allocator lock blocks new erasures meanwhile.
  */
-export async function releaseErasureRestoreHold(relay: Pool, restoredAccess: Pool,
+export async function releaseErasureRestoreHold(relay: Pool, restored: RestoredOwners,
   reconciliationId: string, fenceGeneration: string): Promise<void> {
   await relayTransaction(relay, async client => {
     await client.query("SELECT pg_advisory_xact_lock(hashtextextended('rezics-relay-erasure-epoch', 0))");
@@ -314,11 +364,12 @@ export async function releaseErasureRestoreHold(relay: Pool, restoredAccess: Poo
     if (head?.generation !== row.coverage_generation || journal !== row.erasure_epoch) {
       throw new ErasureRestoreHold('a newer retained frontier needs reconciliation');
     }
-    try { await assertAccountDeletionJournalCoverage(restoredAccess, relay); }
+    try { await assertAccountDeletionJournalCoverage(restored.access, relay); }
     catch (error) {
       if (error instanceof AccountDeletionJournalConflict) throw new ErasureRestoreHold(error.message);
       throw error;
     }
-    await releaseAccessRecoveryFence(restoredAccess, fenceGeneration);
+    await assertRestoredErasuresCurrent(client, restored);
+    await releaseAccessRecoveryFence(restored.access, fenceGeneration);
   });
 }

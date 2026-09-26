@@ -1,7 +1,7 @@
 # Erasure owner template
 
 The first write/read operation is a Content revision erasure. Copy
-`request.ts`, `journal.ts`, `content.ts`, and
+`request.ts`, `journal.ts`, `content.ts`, `receipt-family.ts`, and
 `services/main/src/routes/erasures.ts` for another
 PostgreSQL-owned target family; extend the single `relay.erasure` journal and
 `relay.erasure_target` instead of creating another frontier. Its caller verifies
@@ -17,7 +17,6 @@ and isolated restore. `reconcile.ts` compares owner copies with the retained
 journal and keeps unsupported owner targets held. Graph-owned targets need the
 Jena erasure command registration before they can leave that hold.
 
-Activation also needs the shared Access admission registry to recognize
-`erasure.request` as receipt family `erasure-request`, and Main startup to supply
-`ErasureService` with the relay and Content pools. Those composition changes
-are outside this module.
+The receipt family is discovered from `receipt-family.ts`. Main startup supplies
+`ErasureService` from its relay and Content pools, and the route module exports
+the bearer and idempotency metadata used by OpenAPI generation.

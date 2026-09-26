@@ -4,7 +4,7 @@ import { ContentErasureGraphRequired, ContentErasureInvalid, ContentErasureStale
   MAX_CONTENT_ERASURE_TARGETS } from '../modules/erasure/content.ts';
 import { ErasureConflict, ErasureInvalid, ErasureNotFound, ErasureStale, ErasureUnavailable,
   type ErasureReport } from '../modules/erasure/journal.ts';
-import { ErasureDenied, ErasureNotApplied, type ErasureService, readRequestedErasure,
+import { ErasureDenied, ErasureNotApplied, readRequestedErasure,
   requestContentErasure } from '../modules/erasure/request.ts';
 import { DESTRUCTION_STATUSES, DISPOSITION_DESTRUCTION, DISPOSITION_SUPPRESSION,
   ERASURE_KINDS, ERASURE_STAGES, RETENTION_CUSTODY, RETENTION_OWNERS, RETENTION_STORES,
@@ -13,12 +13,10 @@ import type { MainWorkDependencies } from './dependencies.ts';
 import { commandError, problem } from './problems.ts';
 import { groupAgent, groupUuid } from './shared.ts';
 
-declare module './dependencies.ts' {
-  interface MainWorkDependencies {
-    /** Relay erasure journal and Content owner; absent means erasure is unavailable. */
-    erasures?: ErasureService;
-  }
-}
+export const openApiOperations = {
+  '/v1/erasures': { post: { bearer: true, idempotencyKey: true } },
+  '/v1/erasures/{erasureId}': { get: { bearer: true } },
+} as const;
 
 const literals = (values: readonly string[]) => t.Union(values.map(value => t.Literal(value)));
 const instant = t.String({ format: 'date-time' });

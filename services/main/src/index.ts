@@ -6,6 +6,7 @@ import { ContentProjectionWorker } from './content-projection-worker.ts';
 import { FusekiClient } from './infrastructure/fuseki.ts';
 import { S3ImmutableObjects } from './infrastructure/immutable-objects.ts';
 import { AccessAdmissionRegistry } from './modules/access/admission.ts';
+import { ErasureService } from './modules/erasure/request.ts';
 import { PrivateSearchSettlement } from './modules/contribution/private-search-settlement.ts';
 import { AccessActingContexts } from './modules/access/contexts.ts';
 import { AccessGroups } from './modules/access/groups.ts';
@@ -76,6 +77,8 @@ if (Boolean(relayUrl) !== Boolean(relayConsumer)) {
 }
 const relayPool = relayUrl ? new Pool({ connectionString: relayUrl, max: 2,
   options: '-c default_transaction_read_only=on' }) : undefined;
+const erasureRelayUrl = relayUrl ?? Bun.env.ACCOUNT_RELAY_DATABASE_URL;
+const erasureRelayPool = erasureRelayUrl ? new Pool({ connectionString: erasureRelayUrl, max: 2 }) : undefined;
 const contentPool = new Pool({ connectionString: required('CONTENT_DATABASE_URL') });
 await migrateContent(contentPool);
 const content = new ContentCore(contentPool);
@@ -122,6 +125,7 @@ const app = createMainApp(fuseki, {
   },
   account,
   access,
+  erasures: erasureRelayPool ? new ErasureService(erasureRelayPool, contentPool) : undefined,
   privateSearch: { access, settlement: new PrivateSearchSettlement(pool) },
   media,
   mediaAccess: new MediaAccessBatchReader(pool),
@@ -180,6 +184,7 @@ async function stop(): Promise<void> {
   await app.stop();
   try { await worker.stop(); }
   finally { await Promise.all([pool.end(), contentPool.end(), relayPool?.end()]); }
+  await erasureRelayPool?.end();
 }
 process.once('SIGINT', () => { void stop(); });
 process.once('SIGTERM', () => { void stop(); });

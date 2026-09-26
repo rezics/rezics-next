@@ -12,7 +12,7 @@ import { AccessAdmissionRegistry, engageAccessRecoveryFence, releaseAccessRecove
 import { ensureRetentionDomain, ERASURE_JOURNAL_EPOCH, retireRetentionDomain } from
   '../../../services/main/src/modules/erasure/journal.ts';
 import { verifyErasure } from '../../../services/main/src/modules/erasure/reconcile.ts';
-import { CONTENT_LIVE_DOMAIN, CONTENT_LIVE_RETENTION, completePendingContentErasures,
+import { CONTENT_LIVE_DOMAIN, CONTENT_LIVE_RETENTION, CONTENT_WAL_DOMAIN, completePendingContentErasures,
   erasureReceiptIri, ErasureService } from '../../../services/main/src/modules/erasure/request.ts';
 import { cloneQaAccountAccessDatabases } from '../support/databases.ts';
 import { ratingAccount } from '../support/rating-account.ts';
@@ -40,7 +40,7 @@ function counted(pool: Pool, costs: Costs): Pool {
 interface Report {
   erasureId: string; erasureEpoch: string; stage: string; suppression: string; destruction: string;
   replayed: boolean; targets: { owner: string; kind: string; ref: string }[];
-  dispositions: { domain: string; custody: string; suppression: string; destruction: string;
+  dispositions: { domain: string; store: string; custody: string; suppression: string; destruction: string;
     retainedUntil: string | null; reason: string | null; evidenceDigest: string | null }[];
 }
 
@@ -138,6 +138,8 @@ test('OPS11: Content erasure journals exact targets with receipts, denial, stale
       [[principalA, principalB]])).rows[0]!.n);
     expect((await call('POST', '/v1/erasures', null, request([erased]))).status).toBe(401);
     expect([401, 403]).toContain((await call('POST', '/v1/erasures', account.noScope, request([erased]))).status);
+    // A narrower consent exchange can retire the earlier token for the same user.
+    account.tokenA = await account.tokenFor(account.a);
     expect((await call('POST', '/v1/erasures', account.tokenB,
       { ...request([erased]), actingSubject: actorB })).status).toBe(403);
     expect((await call('POST', '/v1/erasures', account.tokenA, request([erased]), null)).status).toBe(400);
@@ -159,6 +161,8 @@ test('OPS11: Content erasure journals exact targets with receipts, denial, stale
       targets: [{ owner: 'content', kind: 'content_revision', ref: erased }] });
     const dispositions = new Map(report.dispositions.map(entry => [entry.domain, entry]));
     expect(dispositions.get(CONTENT_LIVE_DOMAIN)).toMatchObject({ custody: 'live',
+      suppression: 'suppressed', destruction: 'retained', reason: CONTENT_LIVE_RETENTION });
+    expect(dispositions.get(CONTENT_WAL_DOMAIN)).toMatchObject({ store: 'postgresql_wal',
       suppression: 'suppressed', destruction: 'retained', reason: CONTENT_LIVE_RETENTION });
     expect(dispositions.get(backupLabel)).toMatchObject({ custody: 'backup',
       suppression: 'not_applicable', destruction: 'retained', retainedUntil: expiry.toISOString() });

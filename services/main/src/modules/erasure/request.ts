@@ -17,6 +17,7 @@ export const ERASURE_ACTION = 'erasure.request';
 export const CONTENT_ERASURE_PROFILE = 'content-revision-erasure-v1';
 /** Live Content rows lose their bytes, but PostgreSQL keeps prior versions until rewrite. */
 export const CONTENT_LIVE_DOMAIN = 'content:postgresql:live';
+export const CONTENT_WAL_DOMAIN = 'content:postgresql-wal:live';
 export const CONTENT_LIVE_RETENTION =
   'PostgreSQL keeps prior row versions and WAL until a qualified rewrite and WAL recycling';
 
@@ -84,6 +85,8 @@ async function completeContentErasure(service: ErasureService, access: ErasureAc
   await access.recordGraphOutcome(admission.id, proof(admission, 'succeeded', journaled.erasureEpoch));
   await ensureRetentionDomain(service.relay, { label: CONTENT_LIVE_DOMAIN, owner: 'content',
     store: 'postgresql', custody: 'live' });
+  await ensureRetentionDomain(service.relay, { label: CONTENT_WAL_DOMAIN, owner: 'content',
+    store: 'postgresql_wal', custody: 'live' });
   await recordErasureInventory(service.relay, erasureId,
     { owners: ['content'], liveRetentionReason: CONTENT_LIVE_RETENTION });
 }
