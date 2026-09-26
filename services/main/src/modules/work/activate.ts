@@ -20,10 +20,11 @@ export const WORK_SEMANTIC_TYPES = [
   'https://schema.org/Book', 'https://schema.org/DigitalDocument', 'https://schema.org/Recipe',
 ] as const;
 export const DATASET = 'urn:rezics:dataset:product';
-export const TEXT_INDEX_PROFILE = 'https://rezics.com/definition/search-index-cjk-bigram-v1';
+export const TEXT_INDEX_PROFILE = 'https://rezics.com/definition/search-index-cjk-bigram-v2';
 export const TEXT_INDEX_PROBE_GRAPH = 'urn:rezics:search:probe';
 export const TEXT_INDEX_PROBE = 'urn:rezics:search:probe:cjk-bigram-v1';
 export const TEXT_INDEX_PROBE_BODY = '中文检索验证';
+export const TEXT_INDEX_PROBE_TITLE = '标题检索验证';
 export const PUBLIC_SEARCH_ANCHOR = 'urn:rezics:search:public:anchor';
 export const GRAPHS = {
   control: 'urn:rezics:graph:control',
@@ -342,7 +343,8 @@ export async function initializeFreshGraph(fuseki: FusekiClient, lineage: GraphL
   } GRAPH <urn:rezics:search:public> {
     ${iri(PUBLIC_SEARCH_ANCHOR)} a rv:SearchGraphAnchor .
   } GRAPH ${iri(TEXT_INDEX_PROBE_GRAPH)} {
-    ${iri(TEXT_INDEX_PROBE)} rv:searchBody ${lit(TEXT_INDEX_PROBE_BODY)}@zh .
+    ${iri(TEXT_INDEX_PROBE)} rv:searchBody ${lit(TEXT_INDEX_PROBE_BODY)}@zh ;
+      rv:publicTitle ${lit(TEXT_INDEX_PROBE_TITLE)}@en .
   } GRAPH ${iri(GRAPHS.receipts)} {
     ${iri(receipt)} a rv:OperationReceipt ; rv:requestDigest ${lit(digest)} ;
       rv:datasetId ${iri(DATASET)} ; rv:dataEpoch ${lit(lineage.dataEpoch)} ; rv:sequence 0 .
@@ -358,7 +360,8 @@ export async function initializeFreshGraph(fuseki: FusekiClient, lineage: GraphL
   } GRAPH <urn:rezics:search:public> {
     ${iri(PUBLIC_SEARCH_ANCHOR)} a rv:SearchGraphAnchor .
   } GRAPH ${iri(TEXT_INDEX_PROBE_GRAPH)} {
-    ${iri(TEXT_INDEX_PROBE)} rv:searchBody ${lit(TEXT_INDEX_PROBE_BODY)}@zh .
+    ${iri(TEXT_INDEX_PROBE)} rv:searchBody ${lit(TEXT_INDEX_PROBE_BODY)}@zh ;
+      rv:publicTitle ${lit(TEXT_INDEX_PROBE_TITLE)}@en .
   } }`);
   if (result.boolean !== true) throw new Error('dataset control already initialized or invalid');
 }

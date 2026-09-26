@@ -664,7 +664,10 @@ would be empty. The title is copied from the Work's current `rdfs:label` only
 onto a selected public body unit and refreshed by title edits and replay. The
 query never counts the assembler's general `rdfs:label` postings. Activation of
 this profile requires the assembler to map `rv:publicTitle` as its own `publicTitle`
-field and a new qualified reader generation; until then the title field is not
+field and a new qualified reader generation under `search-index-cjk-bigram-v2`.
+Its dedicated title sentinel must be returned by that exact field before this
+profile can report a complete result; an old or unmapped index is unavailable.
+Until the assembler map and rebuild are installed, the title field is not
 searchable on the deployed index. The corresponding page profile uses the same
 complete-relation restart contract.
 

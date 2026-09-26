@@ -1,5 +1,5 @@
 import { DATASET, GRAPHS, RV, iri, lit, PUBLIC_SEARCH_ANCHOR,
-  TEXT_INDEX_PROFILE, TEXT_INDEX_PROBE, TEXT_INDEX_PROBE_BODY,
+  TEXT_INDEX_PROFILE, TEXT_INDEX_PROBE, TEXT_INDEX_PROBE_BODY, TEXT_INDEX_PROBE_TITLE,
   TEXT_INDEX_PROBE_GRAPH, type GraphLineage } from './activate.ts';
 import { setTimeout as delay } from 'node:timers/promises';
 import { PUBLIC_SEARCH_GRAPH } from './select-main.ts';
@@ -288,6 +288,35 @@ export async function assertPublicTextReady(fuseki: FusekiClient,
     return { ...position, population: membership.population };
   }
   catch (error) { if (entries.get(key) === proof) entries.delete(key); throw error; }
+}
+
+/** A title query needs proof of its dedicated field map. An unmapped predicate
+ * must never turn a real title match into a complete empty result. */
+export async function assertPublicTitleReady(fuseki: FusekiClient,
+  lineage: GraphLineage): Promise<PublicTextPosition> {
+  const position = await assertPublicTextReady(fuseki, lineage);
+  let result: SparqlResult;
+  try {
+    result = await fuseki.query(`PREFIX rv: <${RV}>
+      PREFIX text: <http://jena.apache.org/text#>
+      SELECT ?literal ?graph WHERE { GRAPH ${iri(TEXT_INDEX_PROBE_GRAPH)} {
+        ${iri(TEXT_INDEX_PROBE)} rv:publicTitle ${lit(TEXT_INDEX_PROBE_TITLE)}@en .
+        (${iri(TEXT_INDEX_PROBE)} ?score ?literal ?graph)
+          text:query (rv:publicTitle ${lit('"标题检索"')} 2) .
+        FILTER(?literal = ${lit(TEXT_INDEX_PROBE_TITLE)}@en
+          && ?graph = ${iri(TEXT_INDEX_PROBE_GRAPH)})
+      } }`, MAX_PROOF_RESPONSE_BYTES);
+  } catch (error) {
+    if (error instanceof FusekiReadBudgetExceeded || error instanceof FusekiQueryResponseTooLarge) throw error;
+    throw new SearchIndexUnavailable('public title field is not installed', { cause: error });
+  }
+  const rows = result.results?.bindings ?? [];
+  if (rows.length !== 1 || rows[0]?.literal?.value !== TEXT_INDEX_PROBE_TITLE
+    || rows[0]?.graph?.value !== TEXT_INDEX_PROBE_GRAPH) {
+    throw new SearchIndexUnavailable('public title field has no indexed probe');
+  }
+  await assertSameTextInstance(fuseki, position);
+  return position;
 }
 
 async function qualifyMembership(fuseki: FusekiClient,

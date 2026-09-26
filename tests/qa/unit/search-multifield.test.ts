@@ -7,13 +7,15 @@ import { queryPublicMainTitleBody }
   from '../../../services/main/src/modules/work/search-multifield.ts';
 import { PublicQueryBudgetExceeded }
   from '../../../services/main/src/modules/work/search-budget.ts';
+import { SearchIndexUnavailable }
+  from '../../../services/main/src/modules/work/search-readiness.ts';
 import { COMMAND_MODULE_VERSION } from '../../../services/main/src/infrastructure/profile.ts';
 
 const generation = 'urn:rezics:text-index-generation:11111111-1111-4111-8111-111111111111';
 const id = (n: number) => `https://rezics.com/id/${String(n).padStart(8, '0')}-1111-4111-8111-111111111111`;
 const value = (text: string) => ({ type: 'literal', value: text });
 
-function fixture(titleCount = 1) {
+function fixture(titleCount = 1, titleReady = true) {
   const calls: string[] = [];
   const fuseki = { commandHealth: async () => ({ moduleVersion: COMMAND_MODULE_VERSION,
     profiles: {}, instanceId: '11111111-1111-4111-8111-111111111111',
@@ -28,6 +30,10 @@ function fixture(titleCount = 1) {
       epoch: value('epoch'), sequence: value('7'), generation: value(generation),
       population: value('1'), indexed: value('1'), uniqueIndexed: value('1'), valid: value('1'),
     }] } };
+    if (sparql.includes('SELECT ?literal ?graph') && sparql.includes('rv:publicTitle')) {
+      return { results: { bindings: titleReady ? [{ literal: value('标题检索验证'),
+        graph: value('urn:rezics:search:probe') }] : [] } };
+    }
     if (sparql.includes('?titleCount') && sparql.includes('text:query')) {
       return { results: { bindings: [{ epoch: value('epoch'), sequence: value('7'),
         indexGeneration: value(generation), titleCount: value(String(titleCount)),
@@ -61,4 +67,11 @@ test('SEARCH14/SEARCH10: the dedicated title field has its own typed raw-hit bou
   await expect(queryPublicMainTitleBody(env,
     { titleTerm: '星海', bodyTerm: '中文', language: 'zh' }))
     .rejects.toBeInstanceOf(PublicQueryBudgetExceeded);
+});
+
+test('SEARCH14: an unmapped title field cannot report a false complete empty relation', async () => {
+  const { env } = fixture(0, false);
+  await expect(queryPublicMainTitleBody(env,
+    { titleTerm: '星海', bodyTerm: '中文', language: 'zh' }))
+    .rejects.toBeInstanceOf(SearchIndexUnavailable);
 });

@@ -2,7 +2,7 @@ import { DATASET, GRAPHS, RV, iri, lit, PUBLIC_SEARCH_ANCHOR,
   type WorkActivationEnvironment } from './activate.ts';
 import { assertGraphAdmissionOpen } from './restore-lineage.ts';
 import { PUBLIC_SEARCH_GRAPH } from './select-main.ts';
-import { assertPublicTextReady, assertQuerySnapshotMoved, assertSameTextInstance,
+import { assertPublicTitleReady, assertQuerySnapshotMoved, assertSameTextInstance,
   MAX_SEARCH_RESPONSE_BYTES, PHRASE_HIT_PROBE } from './search-readiness.ts';
 import { InvalidPublicQuery } from './search-public.ts';
 import { PublicQueryBudgetExceeded, PublicQueryUnavailable } from './search-budget.ts';
@@ -36,7 +36,7 @@ export async function queryPublicMainTitleBody(env: WorkActivationEnvironment,
     throw new InvalidPublicQuery('invalid public title/body selector');
   }
   await assertGraphAdmissionOpen(env.fuseki, env.lineage);
-  const index = await assertPublicTextReady(env.fuseki, env.lineage);
+  const index = await assertPublicTitleReady(env.fuseki, env.lineage);
   const result = await env.fuseki.query(`PREFIX rv: <${RV}>
     PREFIX text: <http://jena.apache.org/text#>
     SELECT ?epoch ?sequence ?indexGeneration ?titleCount ?bodyCount
