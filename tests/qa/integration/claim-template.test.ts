@@ -322,7 +322,7 @@ test('FACT01/FACT02/FACT03/FACT04/FACT06: claim verification preserves origin, h
       ...assessIntent, sourceAssessments: [corrected.assessment!], method: 'human-review',
       judgment: 'material-conflict', expectedSummary: updated.activation!.generation,
       resolvesChallenges: [short(challenge.challenge!.challenge)] });
-    const judged = await judgedResponse.json() as { assessment?: { support: string };
+    const judged = await judgedResponse.json() as { assessment?: { assessment: string; support: string };
       activation?: { status: string; generation: string; dispute: string } };
     if (judgedResponse.status !== 201) console.error('judged assessment', judgedResponse.status, judged);
     expect(judgedResponse.status).toBe(201);
@@ -401,8 +401,11 @@ test('FACT01/FACT02/FACT03/FACT04/FACT06: claim verification preserves origin, h
     const missing = await missingResponse.json() as { evidence?: { revision: string } };
     if (missingResponse.status !== 201) console.error('missing support', missingResponse.status, missing);
     expect(missingResponse.status).toBe(201);
-    const afterMissing = await (await call('GET', qualityPath)).json() as { quality: { freshness: string } };
+    const afterMissing = await (await call('GET', qualityPath)).json() as { quality: {
+      freshness: string; review: string; assessment: string } };
     expect(afterMissing.quality.freshness).not.toBe('current');
+    expect(afterMissing.quality.review).toBe('reviewed');
+    expect(afterMissing.quality.assessment).toBe(judged.assessment?.assessment);
     const missingAssessmentResponse = await call('POST',
       `/v1/claims/${short(created.claim!.claim)}/assessments`, {
         ...assessIntent, evidenceSetRevision: missing.evidence!.revision,

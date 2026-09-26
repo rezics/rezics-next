@@ -828,7 +828,17 @@ export class VerificationStore {
       reference, changed_head, producer_epoch, producer_sequence) VALUES ($1, 'graph', $2, $3, $4, $5, $6, $7)
       ON CONFLICT (producer, event_key) DO NOTHING`,
     [crypto.randomUUID(), event, kind, reference, head, position.dataEpoch, position.sequence]);
-    return result.rowCount === 1;
+    if (result.rowCount === 1) return true;
+    const existing = (await this.pool.query<{ kind: string; reference: string; changed_head: string;
+      producer_epoch: string; producer_sequence: string }>(`SELECT kind, reference, changed_head,
+      producer_epoch, producer_sequence FROM verification.invalidation
+      WHERE producer = 'graph' AND event_key = $1`, [event])).rows[0];
+    if (!existing || existing.kind !== kind || existing.reference !== reference
+      || existing.changed_head !== head || existing.producer_epoch !== position.dataEpoch
+      || existing.producer_sequence !== position.sequence) {
+      throw new VerificationConflict('graph invalidation identity was reused with another event');
+    }
+    return false;
   }
 
   /**
@@ -839,7 +849,10 @@ export class VerificationStore {
   async processInvalidations(owner: string, options: { pageSize?: number; maxPages?: number } = {}) {
     const pageSize = options.pageSize ?? 50;
     const maxPages = options.maxPages ?? 20;
-    if (!Number.isInteger(pageSize) || pageSize < 1 || pageSize > 200) throw new VerificationInvalid('invalid page size');
+    if (!Number.isInteger(pageSize) || pageSize < 1 || pageSize > 200
+      || !Number.isInteger(maxPages) || maxPages < 1 || maxPages > 20) {
+      throw new VerificationInvalid('invalidation page budget is invalid');
+    }
     const counters = { pages: 0, rowsRead: 0, marked: 0, completed: 0 };
     while (counters.pages < maxPages) {
       const page = await this.tx(async client => {
@@ -855,6 +868,10 @@ export class VerificationStore {
         [work.kind, work.reference, work.cursor_target, work.cursor_context, pageSize])).rows;
         let marked = 0;
         for (const row of rows) {
+          const effect = await client.query(`INSERT INTO verification.invalidation_effect
+            (invalidation_id, target, context) VALUES ($1, $2, $3)
+            ON CONFLICT DO NOTHING`, [work.id, row.target, row.context]);
+          if (!effect.rowCount) continue;
           const upsert = await client.query(`INSERT INTO verification.reassessment_request
             (target, context, first_invalidation, latest_invalidation) VALUES ($1, $2, $3, $3)
             ON CONFLICT (target, context) DO UPDATE SET latest_invalidation = EXCLUDED.latest_invalidation,

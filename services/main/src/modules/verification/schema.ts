@@ -132,6 +132,9 @@ interface InvalidationRow {
   cursor_context: string | null; marked: string; pages: number; lease_owner: string | null;
   lease_until: Date | null; created_at: Date; completed_at: Date | null;
 }
+interface InvalidationEffectRow {
+  invalidation_id: string; target: string; context: string; created_at: Date;
+}
 interface ReassessmentRequestRow {
   target: string; context: string; first_invalidation: string; latest_invalidation: string;
   marks: string; lease_owner: string | null; lease_until: Date | null; created_at: Date; updated_at: Date;
@@ -156,7 +159,8 @@ export interface VerificationRows {
   challenge: ChallengeRow; challenge_resolution: ChallengeResolutionRow; challenge_pending: ChallengePendingRow;
   challenge_head: ChallengeHeadRow; summary_generation: SummaryGenerationRow;
   summary_dependency: SummaryDependencyRow; summary_head: SummaryHeadRow; active_dependency: ActiveDependencyRow;
-  invalidation: InvalidationRow; reassessment_request: ReassessmentRequestRow;
+  invalidation: InvalidationRow; invalidation_effect: InvalidationEffectRow;
+  reassessment_request: ReassessmentRequestRow;
   lineage_head: LineageHeadRow; correction_notice: CorrectionNoticeRow;
 }
 
@@ -209,6 +213,8 @@ export const verificationColumns = {
   invalidation: ['id', 'producer', 'event_key', 'kind', 'reference', 'changed_head', 'producer_epoch',
     'producer_sequence', 'state', 'cursor_target', 'cursor_context', 'marked', 'pages', 'lease_owner',
     'lease_until', 'created_at', 'completed_at'] satisfies (keyof InvalidationRow)[],
+  invalidation_effect: ['invalidation_id', 'target', 'context', 'created_at'] satisfies
+    (keyof InvalidationEffectRow)[],
   reassessment_request: ['target', 'context', 'first_invalidation', 'latest_invalidation', 'marks',
     'lease_owner', 'lease_until', 'created_at', 'updated_at'] satisfies (keyof ReassessmentRequestRow)[],
   lineage_head: ['observation_id', 'revision', 'updated_at'] satisfies (keyof LineageHeadRow)[],

@@ -25,9 +25,12 @@ without broadening the Content reader's admitted bases.
   manifest and local receipt. A summary read checks each of its admitted heads
   and one active generation; it never scans all claims.
 - Invalidation fan-out uses the indexed `(kind, reference, target, context)`
-  reverse edge and keyset pages of at most 200. Each page commits its demand and
-  cursor together. The schema test checks the index plan; the claim API test
-  checks analysis work and paged invalidation. Capacity still requires the
+  reverse edge and keyset pages of at most 200, with at most 20 pages per call.
+  Each page commits its effect ledger, demand and cursor together. Replaying a
+  producer identity checks the exact payload; the ledger prevents a target from
+  receiving the same invalidation twice even if other events advance its demand.
+  The FACT04 integration test checks 205 dependents across bounded pages, resume,
+  duplicate identity and one effect per target. Capacity still requires the
   planned load tier.
 - Correction delivery pages at most 128 recipients per notice and calls one
   bounded G-051 enqueue per page. The cursor moves after Access commits;
