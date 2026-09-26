@@ -800,6 +800,18 @@ export const profileRegistry = {
       "decision"
     ]
   },
+  "theme-activation-v1": {
+    "sha256": "a6783b594ea6ff88743128c994707b49dc59da2d234ac3969c0a1bd5f294d8b6",
+    "file": "shapes/theme-activation-v1.ttl",
+    "shapes": [
+      "https://rezics.com/definition/theme-activation-v1/theme-shape",
+      "https://rezics.com/definition/theme-activation-v1/activation-shape"
+    ],
+    "focusRoles": [
+      "theme",
+      "activation"
+    ]
+  },
   "translation-link-v1": {
     "sha256": "4342e9d51554c176bda308d999f7620eb6b8b0096a1dab54e85a3265085a3f0e",
     "file": "shapes/translation-link-v1.ttl",

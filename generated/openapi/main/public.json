@@ -231658,6 +231658,1125 @@
         }
       }
     },
+    "/v1/themes/{theme}": {
+      "get": {
+        "operationId": "getV1ThemesByTheme",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "theme",
+            "required": true,
+            "schema": {
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "active": {
+                      "type": "boolean"
+                    },
+                    "approvalExpiresAt": {
+                      "type": "string"
+                    },
+                    "approvalGeneration": {
+                      "type": "string"
+                    },
+                    "approvalId": {
+                      "type": "string"
+                    },
+                    "approvedAt": {
+                      "type": "string"
+                    },
+                    "approvedBy": {
+                      "type": "string"
+                    },
+                    "capabilities": {
+                      "properties": {
+                        "cpuMs": {
+                          "type": "number"
+                        },
+                        "data": {
+                          "const": "public-only",
+                          "type": "string"
+                        },
+                        "memoryMiB": {
+                          "type": "number"
+                        },
+                        "networkOrigins": {
+                          "items": {
+                            "type": "string"
+                          },
+                          "type": "array"
+                        },
+                        "secrets": {
+                          "const": false,
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "data",
+                        "secrets",
+                        "networkOrigins",
+                        "cpuMs",
+                        "memoryMiB"
+                      ],
+                      "type": "object"
+                    },
+                    "capabilityDigest": {
+                      "type": "string"
+                    },
+                    "dependencyDigest": {
+                      "type": "string"
+                    },
+                    "graphDataEpoch": {
+                      "type": "string"
+                    },
+                    "graphReceipt": {
+                      "type": "string"
+                    },
+                    "graphSequence": {
+                      "type": "string"
+                    },
+                    "origin": {
+                      "type": "string"
+                    },
+                    "owner": {
+                      "type": "string"
+                    },
+                    "predecessor": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "profile": {
+                      "const": "theme-view-v1",
+                      "type": "string"
+                    },
+                    "revision": {
+                      "type": "string"
+                    },
+                    "runtime": {
+                      "const": "worker-isolated-v1",
+                      "type": "string"
+                    },
+                    "state": {
+                      "enum": [
+                        "active",
+                        "expired"
+                      ],
+                      "type": "string"
+                    },
+                    "theme": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "theme",
+                    "revision",
+                    "predecessor",
+                    "approvalGeneration",
+                    "owner",
+                    "dependencyDigest",
+                    "capabilityDigest",
+                    "capabilities",
+                    "origin",
+                    "runtime",
+                    "approvalId",
+                    "approvedBy",
+                    "approvedAt",
+                    "approvalExpiresAt",
+                    "graphReceipt",
+                    "graphDataEpoch",
+                    "graphSequence",
+                    "profile",
+                    "state",
+                    "active"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 200"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 400,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 400"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 401,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 401"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 403,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 403"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 409,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 409"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 500,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 500"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 503,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 503"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/v1/themes/{theme}/activations": {
+      "post": {
+        "operationId": "postV1ThemesByThemeActivations",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "theme",
+            "required": true,
+            "schema": {
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 128,
+              "minLength": 1,
+              "pattern": "^[A-Za-z0-9:_./-]{1,128}$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "actingSubject": {
+                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                    "type": "string"
+                  },
+                  "approvalExpiresAt": {
+                    "format": "date-time",
+                    "type": "string"
+                  },
+                  "capabilities": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "cpuMs": {
+                        "maximum": 5000,
+                        "minimum": 100,
+                        "type": "integer"
+                      },
+                      "data": {
+                        "const": "public-only",
+                        "type": "string"
+                      },
+                      "memoryMiB": {
+                        "maximum": 256,
+                        "minimum": 16,
+                        "type": "integer"
+                      },
+                      "networkOrigins": {
+                        "items": {
+                          "maxLength": 512,
+                          "pattern": "^https://[^\\s/?#]{1,500}$",
+                          "type": "string"
+                        },
+                        "maxItems": 16,
+                        "type": "array"
+                      },
+                      "secrets": {
+                        "const": false,
+                        "type": "boolean"
+                      }
+                    },
+                    "required": [
+                      "data",
+                      "secrets",
+                      "networkOrigins",
+                      "cpuMs",
+                      "memoryMiB"
+                    ],
+                    "type": "object"
+                  },
+                  "dependencyDigest": {
+                    "pattern": "^[0-9a-f]{64}$",
+                    "type": "string"
+                  },
+                  "expectedRevision": {
+                    "~elyTyp": 7,
+                    "nullable": true,
+                    "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "idempotencyKey": {
+                    "pattern": "^[A-Za-z0-9:_./-]{1,128}$",
+                    "type": "string"
+                  },
+                  "origin": {
+                    "maxLength": 512,
+                    "pattern": "^https://[^\\s/?#]{1,500}$",
+                    "type": "string"
+                  },
+                  "owner": {
+                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                    "type": "string"
+                  },
+                  "profile": {
+                    "const": "theme-activation-request-v1",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "profile",
+                  "owner",
+                  "expectedRevision",
+                  "dependencyDigest",
+                  "origin",
+                  "capabilities",
+                  "approvalExpiresAt",
+                  "actingSubject",
+                  "idempotencyKey"
+                ],
+                "type": "object"
+              }
+            },
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "actingSubject": {
+                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                    "type": "string"
+                  },
+                  "approvalExpiresAt": {
+                    "format": "date-time",
+                    "type": "string"
+                  },
+                  "capabilities": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "cpuMs": {
+                        "maximum": 5000,
+                        "minimum": 100,
+                        "type": "integer"
+                      },
+                      "data": {
+                        "const": "public-only",
+                        "type": "string"
+                      },
+                      "memoryMiB": {
+                        "maximum": 256,
+                        "minimum": 16,
+                        "type": "integer"
+                      },
+                      "networkOrigins": {
+                        "items": {
+                          "maxLength": 512,
+                          "pattern": "^https://[^\\s/?#]{1,500}$",
+                          "type": "string"
+                        },
+                        "maxItems": 16,
+                        "type": "array"
+                      },
+                      "secrets": {
+                        "const": false,
+                        "type": "boolean"
+                      }
+                    },
+                    "required": [
+                      "data",
+                      "secrets",
+                      "networkOrigins",
+                      "cpuMs",
+                      "memoryMiB"
+                    ],
+                    "type": "object"
+                  },
+                  "dependencyDigest": {
+                    "pattern": "^[0-9a-f]{64}$",
+                    "type": "string"
+                  },
+                  "expectedRevision": {
+                    "~elyTyp": 7,
+                    "nullable": true,
+                    "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "idempotencyKey": {
+                    "pattern": "^[A-Za-z0-9:_./-]{1,128}$",
+                    "type": "string"
+                  },
+                  "origin": {
+                    "maxLength": 512,
+                    "pattern": "^https://[^\\s/?#]{1,500}$",
+                    "type": "string"
+                  },
+                  "owner": {
+                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                    "type": "string"
+                  },
+                  "profile": {
+                    "const": "theme-activation-request-v1",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "profile",
+                  "owner",
+                  "expectedRevision",
+                  "dependencyDigest",
+                  "origin",
+                  "capabilities",
+                  "approvalExpiresAt",
+                  "actingSubject",
+                  "idempotencyKey"
+                ],
+                "type": "object"
+              }
+            },
+            "multipart/form-data": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "actingSubject": {
+                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                    "type": "string"
+                  },
+                  "approvalExpiresAt": {
+                    "format": "date-time",
+                    "type": "string"
+                  },
+                  "capabilities": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "cpuMs": {
+                        "maximum": 5000,
+                        "minimum": 100,
+                        "type": "integer"
+                      },
+                      "data": {
+                        "const": "public-only",
+                        "type": "string"
+                      },
+                      "memoryMiB": {
+                        "maximum": 256,
+                        "minimum": 16,
+                        "type": "integer"
+                      },
+                      "networkOrigins": {
+                        "items": {
+                          "maxLength": 512,
+                          "pattern": "^https://[^\\s/?#]{1,500}$",
+                          "type": "string"
+                        },
+                        "maxItems": 16,
+                        "type": "array"
+                      },
+                      "secrets": {
+                        "const": false,
+                        "type": "boolean"
+                      }
+                    },
+                    "required": [
+                      "data",
+                      "secrets",
+                      "networkOrigins",
+                      "cpuMs",
+                      "memoryMiB"
+                    ],
+                    "type": "object"
+                  },
+                  "dependencyDigest": {
+                    "pattern": "^[0-9a-f]{64}$",
+                    "type": "string"
+                  },
+                  "expectedRevision": {
+                    "~elyTyp": 7,
+                    "nullable": true,
+                    "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "idempotencyKey": {
+                    "pattern": "^[A-Za-z0-9:_./-]{1,128}$",
+                    "type": "string"
+                  },
+                  "origin": {
+                    "maxLength": 512,
+                    "pattern": "^https://[^\\s/?#]{1,500}$",
+                    "type": "string"
+                  },
+                  "owner": {
+                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                    "type": "string"
+                  },
+                  "profile": {
+                    "const": "theme-activation-request-v1",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "profile",
+                  "owner",
+                  "expectedRevision",
+                  "dependencyDigest",
+                  "origin",
+                  "capabilities",
+                  "approvalExpiresAt",
+                  "actingSubject",
+                  "idempotencyKey"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "active": {
+                      "type": "boolean"
+                    },
+                    "approvalExpiresAt": {
+                      "type": "string"
+                    },
+                    "approvalGeneration": {
+                      "type": "string"
+                    },
+                    "approvalId": {
+                      "type": "string"
+                    },
+                    "approvedAt": {
+                      "type": "string"
+                    },
+                    "approvedBy": {
+                      "type": "string"
+                    },
+                    "capabilities": {
+                      "properties": {
+                        "cpuMs": {
+                          "type": "number"
+                        },
+                        "data": {
+                          "const": "public-only",
+                          "type": "string"
+                        },
+                        "memoryMiB": {
+                          "type": "number"
+                        },
+                        "networkOrigins": {
+                          "items": {
+                            "type": "string"
+                          },
+                          "type": "array"
+                        },
+                        "secrets": {
+                          "const": false,
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "data",
+                        "secrets",
+                        "networkOrigins",
+                        "cpuMs",
+                        "memoryMiB"
+                      ],
+                      "type": "object"
+                    },
+                    "capabilityDigest": {
+                      "type": "string"
+                    },
+                    "dependencyDigest": {
+                      "type": "string"
+                    },
+                    "graphDataEpoch": {
+                      "type": "string"
+                    },
+                    "graphReceipt": {
+                      "type": "string"
+                    },
+                    "graphSequence": {
+                      "type": "string"
+                    },
+                    "origin": {
+                      "type": "string"
+                    },
+                    "owner": {
+                      "type": "string"
+                    },
+                    "predecessor": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "profile": {
+                      "const": "theme-activation-result-v1",
+                      "type": "string"
+                    },
+                    "replayed": {
+                      "type": "boolean"
+                    },
+                    "revision": {
+                      "type": "string"
+                    },
+                    "runtime": {
+                      "const": "worker-isolated-v1",
+                      "type": "string"
+                    },
+                    "theme": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "theme",
+                    "revision",
+                    "predecessor",
+                    "approvalGeneration",
+                    "owner",
+                    "dependencyDigest",
+                    "capabilityDigest",
+                    "capabilities",
+                    "origin",
+                    "runtime",
+                    "approvalId",
+                    "approvedBy",
+                    "approvedAt",
+                    "approvalExpiresAt",
+                    "graphReceipt",
+                    "graphDataEpoch",
+                    "graphSequence",
+                    "profile",
+                    "replayed",
+                    "active"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 200"
+          },
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "active": {
+                      "type": "boolean"
+                    },
+                    "approvalExpiresAt": {
+                      "type": "string"
+                    },
+                    "approvalGeneration": {
+                      "type": "string"
+                    },
+                    "approvalId": {
+                      "type": "string"
+                    },
+                    "approvedAt": {
+                      "type": "string"
+                    },
+                    "approvedBy": {
+                      "type": "string"
+                    },
+                    "capabilities": {
+                      "properties": {
+                        "cpuMs": {
+                          "type": "number"
+                        },
+                        "data": {
+                          "const": "public-only",
+                          "type": "string"
+                        },
+                        "memoryMiB": {
+                          "type": "number"
+                        },
+                        "networkOrigins": {
+                          "items": {
+                            "type": "string"
+                          },
+                          "type": "array"
+                        },
+                        "secrets": {
+                          "const": false,
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "data",
+                        "secrets",
+                        "networkOrigins",
+                        "cpuMs",
+                        "memoryMiB"
+                      ],
+                      "type": "object"
+                    },
+                    "capabilityDigest": {
+                      "type": "string"
+                    },
+                    "dependencyDigest": {
+                      "type": "string"
+                    },
+                    "graphDataEpoch": {
+                      "type": "string"
+                    },
+                    "graphReceipt": {
+                      "type": "string"
+                    },
+                    "graphSequence": {
+                      "type": "string"
+                    },
+                    "origin": {
+                      "type": "string"
+                    },
+                    "owner": {
+                      "type": "string"
+                    },
+                    "predecessor": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "profile": {
+                      "const": "theme-activation-result-v1",
+                      "type": "string"
+                    },
+                    "replayed": {
+                      "type": "boolean"
+                    },
+                    "revision": {
+                      "type": "string"
+                    },
+                    "runtime": {
+                      "const": "worker-isolated-v1",
+                      "type": "string"
+                    },
+                    "theme": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "theme",
+                    "revision",
+                    "predecessor",
+                    "approvalGeneration",
+                    "owner",
+                    "dependencyDigest",
+                    "capabilityDigest",
+                    "capabilities",
+                    "origin",
+                    "runtime",
+                    "approvalId",
+                    "approvedBy",
+                    "approvedAt",
+                    "approvalExpiresAt",
+                    "graphReceipt",
+                    "graphDataEpoch",
+                    "graphSequence",
+                    "profile",
+                    "replayed",
+                    "active"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 201"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 400,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 400"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 401,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 401"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 403,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 403"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 409,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 409"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 500,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 500"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 503,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 503"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
     "/v1/translation-links": {
       "post": {
         "operationId": "postV1Translation-links",

@@ -1,0 +1,34 @@
+# An executable custom-theme activation binds one dependency digest and a bounded capability set to an exact approval.
+# Activation revisions are append-only; expiry or rollback never makes an older approval current again.
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix rv: <https://rezics.com/vocab/> .
+
+<https://rezics.com/definition/theme-activation-v1/theme-shape>
+    a sh:NodeShape ;
+    sh:property [ sh:path rdf:type ; sh:hasValue rv:CustomTheme ] ;
+    sh:property [ sh:path rv:themeHead ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] .
+
+<https://rezics.com/definition/theme-activation-v1/activation-shape>
+    a sh:NodeShape ;
+    sh:property [ sh:path rdf:type ; sh:minCount 2 ; sh:maxCount 2 ; sh:in ( rv:ThemeActivation rv:RevisionAnchor ) ] ;
+    sh:property [ sh:path rv:component ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ; sh:pattern "^https://rezics\\.com/id/[0-9a-f-]{36}$" ] ;
+    sh:property [ sh:path rv:predecessor ; sh:maxCount 1 ; sh:nodeKind sh:IRI ; sh:pattern "^https://rezics\\.com/id/[0-9a-f-]{36}$" ] ;
+    sh:property [ sh:path rv:themeOwner ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ; sh:pattern "^https://rezics\\.com/id/[0-9a-f-]{36}$" ] ;
+    sh:property [ sh:path rv:dependencyDigest ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:string ; sh:pattern "^[0-9a-f]{64}$" ] ;
+    sh:property [ sh:path rv:capabilityDigest ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:string ; sh:pattern "^[0-9a-f]{64}$" ] ;
+    sh:property [ sh:path rv:capabilities ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:string ; sh:maxLength 4096 ] ;
+    sh:property [ sh:path rv:origin ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:string ; sh:pattern "^https://[^\\s/?#]{1,500}$" ; sh:maxLength 512 ] ;
+    sh:property [ sh:path rv:runtime ; sh:maxCount 1 ; sh:hasValue "worker-isolated-v1" ] ;
+    sh:property [ sh:path rv:approvalId ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ; sh:pattern "^https://rezics\\.com/id/[0-9a-f-]{36}$" ] ;
+    sh:property [ sh:path rv:approvedBy ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ; sh:pattern "^https://rezics\\.com/id/[0-9a-f-]{36}$" ] ;
+    sh:property [ sh:path rv:approvedAt ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:dateTime ] ;
+    sh:property [ sh:path rv:approvalExpiresAt ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:dateTime ] ;
+    sh:property [ sh:path rv:approvalGeneration ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:integer ; sh:minInclusive 1 ] ;
+    sh:property [ sh:path rv:operation ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
+    sh:property [ sh:path rv:modelRevision ; sh:maxCount 1 ; sh:hasValue <https://rezics.com/definition/theme-activation-v1> ] ;
+    sh:property [ sh:path rv:shapeRevision ; sh:maxCount 1 ; sh:hasValue <https://rezics.com/definition/theme-activation-v1> ] ;
+    sh:property [ sh:path rv:datasetId ; sh:maxCount 1 ; sh:hasValue <urn:rezics:dataset:product> ] ;
+    sh:property [ sh:path rv:dataEpoch ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:string ; sh:pattern "^[0-9a-f-]{36}$" ] ;
+    sh:property [ sh:path rv:sequence ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:integer ; sh:minInclusive 1 ] .

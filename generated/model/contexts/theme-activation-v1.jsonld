@@ -1,0 +1,99 @@
+{
+  "@context": {
+    "sh": {
+      "@id": "http://www.w3.org/ns/shacl#",
+      "@prefix": true
+    },
+    "rdf": {
+      "@id": "http://www.w3.org/1999/02/22-rdf-syntax-ns#",
+      "@prefix": true
+    },
+    "xsd": {
+      "@id": "http://www.w3.org/2001/XMLSchema#",
+      "@prefix": true
+    },
+    "rv": {
+      "@id": "https://rezics.com/vocab/",
+      "@prefix": true
+    },
+    "rdf:type": {
+      "@id": "http://www.w3.org/1999/02/22-rdf-syntax-ns#type",
+      "@type": "@id"
+    },
+    "rv:approvalExpiresAt": {
+      "@id": "https://rezics.com/vocab/approvalExpiresAt",
+      "@type": "xsd:dateTime"
+    },
+    "rv:approvalGeneration": {
+      "@id": "https://rezics.com/vocab/approvalGeneration",
+      "@type": "xsd:integer"
+    },
+    "rv:approvalId": {
+      "@id": "https://rezics.com/vocab/approvalId",
+      "@type": "@id"
+    },
+    "rv:approvedAt": {
+      "@id": "https://rezics.com/vocab/approvedAt",
+      "@type": "xsd:dateTime"
+    },
+    "rv:approvedBy": {
+      "@id": "https://rezics.com/vocab/approvedBy",
+      "@type": "@id"
+    },
+    "rv:capabilities": {
+      "@id": "https://rezics.com/vocab/capabilities"
+    },
+    "rv:capabilityDigest": {
+      "@id": "https://rezics.com/vocab/capabilityDigest"
+    },
+    "rv:component": {
+      "@id": "https://rezics.com/vocab/component",
+      "@type": "@id"
+    },
+    "rv:dataEpoch": {
+      "@id": "https://rezics.com/vocab/dataEpoch"
+    },
+    "rv:datasetId": {
+      "@id": "https://rezics.com/vocab/datasetId",
+      "@type": "@id"
+    },
+    "rv:dependencyDigest": {
+      "@id": "https://rezics.com/vocab/dependencyDigest"
+    },
+    "rv:modelRevision": {
+      "@id": "https://rezics.com/vocab/modelRevision",
+      "@type": "@id"
+    },
+    "rv:operation": {
+      "@id": "https://rezics.com/vocab/operation",
+      "@type": "@id"
+    },
+    "rv:origin": {
+      "@id": "https://rezics.com/vocab/origin"
+    },
+    "rv:predecessor": {
+      "@id": "https://rezics.com/vocab/predecessor",
+      "@type": "@id"
+    },
+    "rv:runtime": {
+      "@id": "https://rezics.com/vocab/runtime",
+      "@type": "@id"
+    },
+    "rv:sequence": {
+      "@id": "https://rezics.com/vocab/sequence",
+      "@type": "xsd:integer"
+    },
+    "rv:shapeRevision": {
+      "@id": "https://rezics.com/vocab/shapeRevision",
+      "@type": "@id"
+    },
+    "rv:themeHead": {
+      "@id": "https://rezics.com/vocab/themeHead",
+      "@type": "@id"
+    },
+    "rv:themeOwner": {
+      "@id": "https://rezics.com/vocab/themeOwner",
+      "@type": "@id"
+    }
+  }
+}
