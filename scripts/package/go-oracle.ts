@@ -79,6 +79,42 @@ const supersededReplacementFixture: GoMvsSnapshotRequest = {
   roots: [...directedFixture.roots,
     { path: 'example.com/c', version: 'v1.5.0' }],
 };
+const pseudoLower = 'v1.2.4-0.20260925010101-abcdef123456';
+const pseudoHigher = 'v1.2.4-0.20260925020202-fedcba654321';
+const pseudoMajor = 'v2.0.0-20260925000000-abcdef123456';
+const pseudoFixture: GoMvsSnapshotRequest = {
+  profile: 'go-mvs-stable-unpruned-v1', mainModule: 'example.com/main',
+  goDirective: '1.16', coverage: { complete: true, unsupportedClauses: [] },
+  roots: [{ path: 'example.com/a', version: 'v1.0.0' },
+    { path: 'example.com/b', version: 'v1.0.0' },
+    { path: 'example.com/compat/v2', version: pseudoMajor }],
+  releases: [
+    { path: 'example.com/a', version: 'v1.0.0', requirements: [
+      { path: 'example.com/c', version: pseudoLower }] },
+    { path: 'example.com/b', version: 'v1.0.0', requirements: [
+      { path: 'example.com/c', version: pseudoHigher }] },
+    { path: 'example.com/c', version: pseudoLower, requirements: [
+      { path: 'example.com/d', version: 'v1.0.0' }] },
+    { path: 'example.com/c', version: pseudoHigher, requirements: [
+      { path: 'example.com/e', version: 'v1.0.0' }] },
+    { path: 'example.com/compat/v2', version: pseudoMajor, requirements: [] },
+    { path: 'example.com/d', version: 'v1.0.0', requirements: [] },
+    { path: 'example.com/e', version: 'v1.0.0', requirements: [] },
+  ],
+};
+const preTagPseudo = 'v1.2.3-rc.0.20260925010101-abcdef123456';
+const preTagFixture: GoMvsSnapshotRequest = {
+  ...pseudoFixture,
+  roots: pseudoFixture.roots.slice(0, 2),
+  releases: [
+    { path: 'example.com/a', version: 'v1.0.0', requirements: [
+      { path: 'example.com/c', version: preTagPseudo }] },
+    { path: 'example.com/b', version: 'v1.0.0', requirements: [
+      { path: 'example.com/c', version: 'v1.2.3' }] },
+    { path: 'example.com/c', version: preTagPseudo, requirements: [] },
+    { path: 'example.com/c', version: 'v1.2.3', requirements: [] },
+  ],
+};
 const retractedFixture: GoMvsSnapshotRequest = {
   ...fixture, profile: 'go-mvs-stable-unpruned-main-directives-v2',
   releases: fixture.releases.map(item => item.path === 'example.com/d'
@@ -144,7 +180,11 @@ async function runScenario(name: string, request: GoMvsSnapshotRequest) {
       goMod(release.declaredModule ?? release.path, release.requirements,
         undefined, release.retractions));
     await writeFile(resolve(directory, `${release.version}.info`),
-      `${JSON.stringify({ Version: release.version, Time: '2020-01-01T00:00:00Z' })}\n`);
+      `${JSON.stringify({ Version: release.version, Time: (() => {
+        const stamp = /(?:^|[.-])(20[0-9]{12})-[A-Za-z0-9]+$/.exec(release.version)?.[1];
+        return stamp ? `${stamp.slice(0, 4)}-${stamp.slice(4, 6)}-${stamp.slice(6, 8)}T${stamp.slice(8, 10)}:${stamp.slice(10, 12)}:${stamp.slice(12, 14)}Z`
+          : '2020-01-01T00:00:00Z';
+      })() })}\n`);
     versions.set(release.path, [...(versions.get(release.path) ?? []), release.version]);
   }
   for (const [path, available] of versions) {
@@ -215,6 +255,8 @@ async function main(): Promise<void> {
       await runScenario('wildcard-replacement', wildcardFixture),
       await runScenario('wildcard-override', wildcardOverrideFixture),
       await runScenario('superseded-replacement', supersededReplacementFixture),
+      await runScenario('pseudo-timestamps', pseudoFixture),
+      await runScenario('pseudo-pretag', preTagFixture),
       await runScenario('retracted', retractedFixture)] };
   await writeFile(resolve(base, 'result.json'), `${JSON.stringify(report, null, 2)}\n`);
   process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);

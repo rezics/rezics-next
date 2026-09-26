@@ -151,6 +151,23 @@ test('PKG05/PKG13/IAM10: bounded Go MVS snapshot resolution is private and immut
         rationale: 'bad release' }] });
     expect(await (await read('owner-read', retractedBody.resolution.resolution.split('/').at(-1)!))
       .json()).toEqual(retractedBody.resolution);
+    const pseudoVersion = 'v1.2.4-0.20260925020202-fedcba654321';
+    const pseudo = await write('owner-write', `go-${randomUUID()}`, {
+      ...requestBody, roots: [{ path: 'example.com/a', version: 'v1.0.0' }],
+      releases: [
+        { path: 'example.com/a', version: 'v1.0.0', requirements: [
+          { path: 'example.com/c', version: pseudoVersion }] },
+        { path: 'example.com/c', version: pseudoVersion, requirements: [] },
+      ],
+    });
+    expect(pseudo.status).toBe(201);
+    const pseudoBody = await pseudo.json() as { resolution: { resolution: string;
+      outcome: { status: string; buildList: unknown[] } } };
+    expect(pseudoBody.resolution.outcome).toMatchObject({ status: 'solved',
+      buildList: [{ path: 'example.com/a', version: 'v1.0.0' },
+        { path: 'example.com/c', version: pseudoVersion }] });
+    expect(await (await read('owner-read', pseudoBody.resolution.resolution.split('/').at(-1)!))
+      .json()).toEqual(pseudoBody.resolution);
     await expect(contentPool.query('UPDATE pkg.go_resolution SET request_digest = $2 WHERE id = $1',
       [id, '0'.repeat(64)])).rejects.toThrow();
     await accessPool.query('UPDATE access.principal SET active = false WHERE id = $1', [ownerId]);

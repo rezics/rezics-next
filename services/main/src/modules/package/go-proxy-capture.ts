@@ -83,6 +83,9 @@ function checkedRequest(input: GoProxyCaptureRequest): void {
     }
     throw error;
   }
+  if (!STABLE.test(input.version)) {
+    throw new GoProxyCaptureInvalid('Go proxy capture requires a listed stable tag');
+  }
 }
 
 function decode(bytes: Buffer): string {

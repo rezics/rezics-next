@@ -285,7 +285,7 @@ const recordedSourceChildCorrespondenceResult = t.Object({
 const recordedSourceChildCorrespondenceWriteResult = t.Object({
   correspondence: recordedSourceChildCorrespondenceResult, replayed: t.Boolean() });
 const goModuleRequirement = t.Object({ path: t.String({ minLength: 3, maxLength: 200 }),
-  version: t.String({ minLength: 6, maxLength: 32 }) }, { additionalProperties: false });
+  version: t.String({ minLength: 6, maxLength: 96 }) }, { additionalProperties: false });
 const goMvsCommon = {
   mainModule: t.String({ minLength: 3, maxLength: 200 }), goDirective: t.Literal('1.16'),
   coverage: t.Object({ complete: t.Boolean(),
@@ -366,7 +366,9 @@ const goMvsResolutionWrite = t.Object({ resolution: goMvsResolution,
   replayed: t.Boolean() });
 const goProxyCaptureRequest = t.Object({ profile: t.Literal('go-module-proxy-capture-v1'),
   path: goModuleRequirement.properties.path,
-  version: goModuleRequirement.properties.version }, { additionalProperties: false });
+  version: t.String({ minLength: 6, maxLength: 32,
+    pattern: '^v(0|[1-9][0-9]{0,8})\\.(0|[1-9][0-9]{0,8})\\.(0|[1-9][0-9]{0,8})$' }) },
+  { additionalProperties: false });
 const goProxyCaptureResult = t.Object({
   profile: t.Literal('go-module-proxy-capture-v1'), capture: t.String(),
   provider: t.Literal('proxy.golang.org'), path: t.String(), version: t.String(),

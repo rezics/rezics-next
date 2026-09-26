@@ -65,8 +65,55 @@ test('PKG05/PKG13: budget and unsupported version/path are explicit', () => {
     roots: [requirement('example.com/mod', 'v2.0.0')] })))
     .toThrow(GoResolutionInvalid);
   expect(() => solveGoMvsSnapshot(input({
-    roots: [requirement('example.com/mod', 'v1.2.0-pre')] })))
+    roots: [requirement('example.com/mod', 'v1.2.0-2026092501010-abcdef123456')] })))
     .toThrow(GoResolutionInvalid);
+});
+
+test('PKG05: Go pseudo-version timestamps order MVS and preserve major paths', () => {
+  const lower = 'v1.2.4-0.20260925010101-abcdef123456';
+  const higher = 'v1.2.4-0.20260925020202-fedcba654321';
+  const major = 'v2.0.0-20260925000000-abcdef123456';
+  const outcome = solveGoMvsSnapshot(input({
+    roots: [requirement('example.com/a', 'v1.0.0'),
+      requirement('example.com/b', 'v1.0.0'),
+      requirement('example.com/compat/v2', major)],
+    releases: [
+      release('example.com/a', 'v1.0.0', [requirement('example.com/c', lower)]),
+      release('example.com/b', 'v1.0.0', [requirement('example.com/c', higher)]),
+      release('example.com/c', lower, [requirement('example.com/d', 'v1.0.0')]),
+      release('example.com/c', higher, [requirement('example.com/e', 'v1.0.0')]),
+      release('example.com/compat/v2', major),
+      release('example.com/d', 'v1.0.0'), release('example.com/e', 'v1.0.0'),
+    ],
+  }));
+  expect(outcome).toMatchObject({ status: 'solved', buildList: [
+    requirement('example.com/a', 'v1.0.0'),
+    requirement('example.com/b', 'v1.0.0'),
+    requirement('example.com/c', higher),
+    requirement('example.com/compat/v2', major),
+    requirement('example.com/d', 'v1.0.0'),
+    requirement('example.com/e', 'v1.0.0'),
+  ] });
+  expect(() => solveGoMvsSnapshot(input({
+    roots: [requirement('example.com/compat', major)] })))
+    .toThrow(GoResolutionInvalid);
+});
+
+test('PKG05: pre-tag pseudo-version sorts before its stable release', () => {
+  const prerelease = 'v1.2.3-rc.0.20260925010101-abcdef123456';
+  expect(solveGoMvsSnapshot(input({
+    roots: [requirement('example.com/a', 'v1.0.0'),
+      requirement('example.com/b', 'v1.0.0')],
+    releases: [
+      release('example.com/a', 'v1.0.0', [requirement('example.com/c', prerelease)]),
+      release('example.com/b', 'v1.0.0', [requirement('example.com/c', 'v1.2.3')]),
+      release('example.com/c', prerelease), release('example.com/c', 'v1.2.3'),
+    ],
+  }))).toMatchObject({ status: 'solved', buildList: [
+    requirement('example.com/a', 'v1.0.0'),
+    requirement('example.com/b', 'v1.0.0'),
+    requirement('example.com/c', 'v1.2.3'),
+  ] });
 });
 
 test('PKG05: main exclusions suppress the required version and replacements load source manifests', () => {

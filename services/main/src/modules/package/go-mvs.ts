@@ -76,7 +76,10 @@ interface Row {
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const KEY = /^[A-Za-z0-9:_./-]{1,128}$/;
 const PATH = /^[a-z0-9][a-z0-9.-]*(?:\/[a-z0-9][a-z0-9._-]*)+$/;
-const VERSION = /^v(0|[1-9][0-9]{0,8})\.(0|[1-9][0-9]{0,8})\.(0|[1-9][0-9]{0,8})$/;
+const VERSION = /^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(?:-([0-9A-Za-z.-]+))?$/;
+// The admitted pseudo-version forms follow x/mod/module.IsPseudoVersion, without build metadata.
+const PSEUDO_VERSION = /^v[0-9]+\.(?:0\.0-|[0-9]+\.[0-9]+-(?:[^+]*\.)?0\.)[0-9]{14}-[A-Za-z0-9]+$/;
+const MAX_VERSION_LENGTH = 96;
 const MAX_LOADED = 128;
 const MAX_REQUIREMENTS = 512;
 
@@ -92,19 +95,47 @@ function digest(value: unknown): string {
   return createHash('sha256').update(stable(value)).digest('hex');
 }
 
-function versionParts(version: string): [number, number, number] {
+function versionParts(version: string): { core: [string, string, string]; prerelease: string[] } {
+  if (typeof version !== 'string' || version.length > MAX_VERSION_LENGTH) {
+    throw new GoResolutionInvalid('Go module version exceeds profile');
+  }
   const match = VERSION.exec(version);
-  if (!match) throw new GoResolutionInvalid('stable Go module tag is required');
-  return [Number(match[1]), Number(match[2]), Number(match[3])];
+  if (!match || (match[4] !== undefined && !PSEUDO_VERSION.test(version))) {
+    throw new GoResolutionInvalid('canonical stable tag or Go pseudo-version is required');
+  }
+  const prerelease = match[4]?.split('.') ?? [];
+  if (prerelease.some(part => !/^[0-9A-Za-z-]+$/.test(part)
+    || (/^[0-9]+$/.test(part) && part.length > 1 && part.startsWith('0')))) {
+    throw new GoResolutionInvalid('invalid Go pseudo-version prerelease');
+  }
+  return { core: [match[1]!, match[2]!, match[3]!], prerelease };
+}
+
+function compareNumeric(left: string, right: string): number {
+  return Math.sign(left.length - right.length) || (left < right ? -1 : left > right ? 1 : 0);
 }
 
 function compareVersion(left: string, right: string): number {
   const a = versionParts(left);
   const b = versionParts(right);
   for (let index = 0; index < 3; index++) {
-    if (a[index]! !== b[index]!) return a[index]! - b[index]!;
+    const compared = compareNumeric(a.core[index]!, b.core[index]!);
+    if (compared) return compared;
   }
-  return 0;
+  if (!a.prerelease.length || !b.prerelease.length) {
+    return a.prerelease.length ? -1 : b.prerelease.length ? 1 : 0;
+  }
+  for (let index = 0; index < Math.min(a.prerelease.length, b.prerelease.length); index++) {
+    const leftPart = a.prerelease[index]!;
+    const rightPart = b.prerelease[index]!;
+    const leftNumeric = /^[0-9]+$/.test(leftPart);
+    const rightNumeric = /^[0-9]+$/.test(rightPart);
+    if (leftNumeric !== rightNumeric) return leftNumeric ? -1 : 1;
+    const compared = leftNumeric ? compareNumeric(leftPart, rightPart)
+      : leftPart < rightPart ? -1 : leftPart > rightPart ? 1 : 0;
+    if (compared) return compared;
+  }
+  return Math.sign(a.prerelease.length - b.prerelease.length);
 }
 
 export function validateGoModuleRequirement(requirement: GoModuleRequirement): void {
@@ -113,10 +144,10 @@ export function validateGoModuleRequirement(requirement: GoModuleRequirement): v
     || requirement.path.length > 200 || !PATH.test(requirement.path)) {
     throw new GoResolutionInvalid('Go module path is outside the stable snapshot profile');
   }
-  const [major] = versionParts(requirement.version);
+  const major = versionParts(requirement.version).core[0];
   const suffix = /\/v([0-9]+)$/.exec(requirement.path);
-  if ((major! >= 2 && suffix?.[1] !== String(major))
-    || (major! < 2 && suffix !== null)) {
+  if ((compareNumeric(major!, '2') >= 0 && suffix?.[1] !== major)
+    || (compareNumeric(major!, '2') < 0 && suffix !== null)) {
     throw new GoResolutionInvalid('Go module path and major version differ');
   }
 }

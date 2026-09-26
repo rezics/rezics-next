@@ -27,12 +27,25 @@ require example.com/c v0.0.0-20200101000000-abcdefabcdef
 replace example.com/b => ../b
 `, 'example.com/a');
   expect(parsed).toMatchObject({ status: 'unsupported-syntax',
-    requirements: [], unsupportedClauses: [
-      'require example.com/c v0.0.0-20200101000000-abcdefabcdef',
-      'replace example.com/b => ../b'] });
+    requirements: [], unsupportedClauses: ['replace example.com/b => ../b'] });
   expect(parseGoModRequirements('module example.com/wrong\n', 'example.com/a'))
     .toMatchObject({ status: 'unsupported-syntax', requirements: [] });
   expect(parseGoModRequirements('module golang.org/x/sync\n', 'golang.org/x/sync'))
     .toMatchObject({ status: 'parsed', requirements: [],
       compatibleWithUnprunedGo116: false });
+});
+
+test('PKG05: bounded Go pseudo-version requirements retain exact manifest identity', () => {
+  expect(parseGoModRequirements(`module example.com/a
+go 1.16
+require example.com/c/v2 v2.0.0-20260925010101-abcdef123456
+`, 'example.com/a')).toMatchObject({ status: 'parsed',
+    requirements: [{ path: 'example.com/c/v2',
+      version: 'v2.0.0-20260925010101-abcdef123456' }] });
+  expect(parseGoModRequirements(`module example.com/a
+go 1.16
+require example.com/c v1.2.4-0.20260925010101-abcdef123456
+`, 'example.com/a')).toMatchObject({ status: 'parsed',
+    requirements: [{ path: 'example.com/c',
+      version: 'v1.2.4-0.20260925010101-abcdef123456' }] });
 });

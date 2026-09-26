@@ -86,6 +86,14 @@ original version appears in `selectedSources`. The 32-directive,
 128-loaded-version and 512-requirement bounds are unchanged. Local directory
 replacements and `go 1.17+` graph pruning remain unsupported and
 must be declared in `coverage.unsupportedClauses`.
+The bounded Go 1.16 snapshot now admits canonical stable tags and pseudo-version
+forms without build metadata, up to 96 bytes per version. Numeric version fields
+and prerelease identifiers use Go semantic-version precedence, including the
+timestamp ordering within a pseudo-version and the precedence of a stable tag
+over its prerelease. A `/vN` module path must match the pseudo-version's major.
+The pinned native Go oracle matches two pseudo-version graphs. The current
+fixed-origin proxy capture operation still requires a version listed as a stable
+tag; pseudo-version source capture and provenance remain separate work.
 The v2 release manifest may include bounded `retractions` from its `go.mod`.
 The highest supplied release per original module path provides the retraction
 advisory. A selected retracted version stays in the build list and appears in
@@ -110,7 +118,7 @@ The fetch path is O(response bytes plus listed
 versions), with three fixed proxy requests and one indexed PostgreSQL insert/read.
 The capture read includes `manifest.parsed`, a conservative line-oriented parser
 for simple `module`, `go` and `require` directives. It handles bounded grouped
-requirements and comments; unfamiliar directives, pseudo-versions, quoted
+requirements, canonical pseudo-version requirements and comments; unfamiliar directives, quoted
 syntax, duplicate paths and mismatched module identity return
 `unsupported-syntax` with no requirements. `compatibleWithUnprunedGo116` is true
 only for a clean parse with explicit `go 1.16`. The view is derived from the

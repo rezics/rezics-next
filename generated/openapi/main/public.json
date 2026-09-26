@@ -21714,7 +21714,7 @@
                                     "type": "string"
                                   },
                                   "version": {
-                                    "maxLength": 32,
+                                    "maxLength": 96,
                                     "minLength": 6,
                                     "type": "string"
                                   }
@@ -21729,7 +21729,7 @@
                               "type": "array"
                             },
                             "version": {
-                              "maxLength": 32,
+                              "maxLength": 96,
                               "minLength": 6,
                               "type": "string"
                             }
@@ -21754,7 +21754,7 @@
                               "type": "string"
                             },
                             "version": {
-                              "maxLength": 32,
+                              "maxLength": 96,
                               "minLength": 6,
                               "type": "string"
                             }
@@ -21821,7 +21821,7 @@
                                   "type": "string"
                                 },
                                 "version": {
-                                  "maxLength": 32,
+                                  "maxLength": 96,
                                   "minLength": 6,
                                   "type": "string"
                                 }
@@ -21848,7 +21848,7 @@
                                       "type": "string"
                                     },
                                     "version": {
-                                      "maxLength": 32,
+                                      "maxLength": 96,
                                       "minLength": 6,
                                       "type": "string"
                                     }
@@ -21867,7 +21867,7 @@
                                       "type": "string"
                                     },
                                     "version": {
-                                      "maxLength": 32,
+                                      "maxLength": 96,
                                       "minLength": 6,
                                       "type": "string"
                                     }
@@ -21928,7 +21928,7 @@
                                     "type": "string"
                                   },
                                   "version": {
-                                    "maxLength": 32,
+                                    "maxLength": 96,
                                     "minLength": 6,
                                     "type": "string"
                                   }
@@ -21947,7 +21947,7 @@
                                 "additionalProperties": false,
                                 "properties": {
                                   "lower": {
-                                    "maxLength": 32,
+                                    "maxLength": 96,
                                     "minLength": 6,
                                     "type": "string"
                                   },
@@ -21957,7 +21957,7 @@
                                     "type": "string"
                                   },
                                   "upper": {
-                                    "maxLength": 32,
+                                    "maxLength": 96,
                                     "minLength": 6,
                                     "type": "string"
                                   }
@@ -21973,7 +21973,7 @@
                               "type": "array"
                             },
                             "version": {
-                              "maxLength": 32,
+                              "maxLength": 96,
                               "minLength": 6,
                               "type": "string"
                             }
@@ -21998,7 +21998,7 @@
                               "type": "string"
                             },
                             "version": {
-                              "maxLength": 32,
+                              "maxLength": 96,
                               "minLength": 6,
                               "type": "string"
                             }
@@ -22087,7 +22087,7 @@
                                     "type": "string"
                                   },
                                   "version": {
-                                    "maxLength": 32,
+                                    "maxLength": 96,
                                     "minLength": 6,
                                     "type": "string"
                                   }
@@ -22102,7 +22102,7 @@
                               "type": "array"
                             },
                             "version": {
-                              "maxLength": 32,
+                              "maxLength": 96,
                               "minLength": 6,
                               "type": "string"
                             }
@@ -22127,7 +22127,7 @@
                               "type": "string"
                             },
                             "version": {
-                              "maxLength": 32,
+                              "maxLength": 96,
                               "minLength": 6,
                               "type": "string"
                             }
@@ -22194,7 +22194,7 @@
                                   "type": "string"
                                 },
                                 "version": {
-                                  "maxLength": 32,
+                                  "maxLength": 96,
                                   "minLength": 6,
                                   "type": "string"
                                 }
@@ -22221,7 +22221,7 @@
                                       "type": "string"
                                     },
                                     "version": {
-                                      "maxLength": 32,
+                                      "maxLength": 96,
                                       "minLength": 6,
                                       "type": "string"
                                     }
@@ -22240,7 +22240,7 @@
                                       "type": "string"
                                     },
                                     "version": {
-                                      "maxLength": 32,
+                                      "maxLength": 96,
                                       "minLength": 6,
                                       "type": "string"
                                     }
@@ -22301,7 +22301,7 @@
                                     "type": "string"
                                   },
                                   "version": {
-                                    "maxLength": 32,
+                                    "maxLength": 96,
                                     "minLength": 6,
                                     "type": "string"
                                   }
@@ -22320,7 +22320,7 @@
                                 "additionalProperties": false,
                                 "properties": {
                                   "lower": {
-                                    "maxLength": 32,
+                                    "maxLength": 96,
                                     "minLength": 6,
                                     "type": "string"
                                   },
@@ -22330,7 +22330,7 @@
                                     "type": "string"
                                   },
                                   "upper": {
-                                    "maxLength": 32,
+                                    "maxLength": 96,
                                     "minLength": 6,
                                     "type": "string"
                                   }
@@ -22346,7 +22346,7 @@
                               "type": "array"
                             },
                             "version": {
-                              "maxLength": 32,
+                              "maxLength": 96,
                               "minLength": 6,
                               "type": "string"
                             }
@@ -22371,7 +22371,7 @@
                               "type": "string"
                             },
                             "version": {
-                              "maxLength": 32,
+                              "maxLength": 96,
                               "minLength": 6,
                               "type": "string"
                             }
@@ -22460,7 +22460,7 @@
                                     "type": "string"
                                   },
                                   "version": {
-                                    "maxLength": 32,
+                                    "maxLength": 96,
                                     "minLength": 6,
                                     "type": "string"
                                   }
@@ -22475,7 +22475,7 @@
                               "type": "array"
                             },
                             "version": {
-                              "maxLength": 32,
+                              "maxLength": 96,
                               "minLength": 6,
                               "type": "string"
                             }
@@ -22500,7 +22500,7 @@
                               "type": "string"
                             },
                             "version": {
-                              "maxLength": 32,
+                              "maxLength": 96,
                               "minLength": 6,
                               "type": "string"
                             }
@@ -22567,7 +22567,7 @@
                                   "type": "string"
                                 },
                                 "version": {
-                                  "maxLength": 32,
+                                  "maxLength": 96,
                                   "minLength": 6,
                                   "type": "string"
                                 }
@@ -22594,7 +22594,7 @@
                                       "type": "string"
                                     },
                                     "version": {
-                                      "maxLength": 32,
+                                      "maxLength": 96,
                                       "minLength": 6,
                                       "type": "string"
                                     }
@@ -22613,7 +22613,7 @@
                                       "type": "string"
                                     },
                                     "version": {
-                                      "maxLength": 32,
+                                      "maxLength": 96,
                                       "minLength": 6,
                                       "type": "string"
                                     }
@@ -22674,7 +22674,7 @@
                                     "type": "string"
                                   },
                                   "version": {
-                                    "maxLength": 32,
+                                    "maxLength": 96,
                                     "minLength": 6,
                                     "type": "string"
                                   }
@@ -22693,7 +22693,7 @@
                                 "additionalProperties": false,
                                 "properties": {
                                   "lower": {
-                                    "maxLength": 32,
+                                    "maxLength": 96,
                                     "minLength": 6,
                                     "type": "string"
                                   },
@@ -22703,7 +22703,7 @@
                                     "type": "string"
                                   },
                                   "upper": {
-                                    "maxLength": 32,
+                                    "maxLength": 96,
                                     "minLength": 6,
                                     "type": "string"
                                   }
@@ -22719,7 +22719,7 @@
                               "type": "array"
                             },
                             "version": {
-                              "maxLength": 32,
+                              "maxLength": 96,
                               "minLength": 6,
                               "type": "string"
                             }
@@ -22744,7 +22744,7 @@
                               "type": "string"
                             },
                             "version": {
-                              "maxLength": 32,
+                              "maxLength": 96,
                               "minLength": 6,
                               "type": "string"
                             }
@@ -22802,7 +22802,7 @@
                                     "type": "string"
                                   },
                                   "version": {
-                                    "maxLength": 32,
+                                    "maxLength": 96,
                                     "minLength": 6,
                                     "type": "string"
                                   }
@@ -22828,7 +22828,7 @@
                                     "type": "string"
                                   },
                                   "version": {
-                                    "maxLength": 32,
+                                    "maxLength": 96,
                                     "minLength": 6,
                                     "type": "string"
                                   }
@@ -22856,7 +22856,7 @@
                                         "type": "string"
                                       },
                                       "version": {
-                                        "maxLength": 32,
+                                        "maxLength": 96,
                                         "minLength": 6,
                                         "type": "string"
                                       }
@@ -22879,7 +22879,7 @@
                                         "type": "string"
                                       },
                                       "version": {
-                                        "maxLength": 32,
+                                        "maxLength": 96,
                                         "minLength": 6,
                                         "type": "string"
                                       }
@@ -22912,7 +22912,7 @@
                                         "type": "string"
                                       },
                                       "version": {
-                                        "maxLength": 32,
+                                        "maxLength": 96,
                                         "minLength": 6,
                                         "type": "string"
                                       }
@@ -22932,7 +22932,7 @@
                                         "type": "string"
                                       },
                                       "version": {
-                                        "maxLength": 32,
+                                        "maxLength": 96,
                                         "minLength": 6,
                                         "type": "string"
                                       }
@@ -23045,7 +23045,7 @@
                                               "type": "string"
                                             },
                                             "version": {
-                                              "maxLength": 32,
+                                              "maxLength": 96,
                                               "minLength": 6,
                                               "type": "string"
                                             }
@@ -23060,7 +23060,7 @@
                                         "type": "array"
                                       },
                                       "version": {
-                                        "maxLength": 32,
+                                        "maxLength": 96,
                                         "minLength": 6,
                                         "type": "string"
                                       }
@@ -23085,7 +23085,7 @@
                                         "type": "string"
                                       },
                                       "version": {
-                                        "maxLength": 32,
+                                        "maxLength": 96,
                                         "minLength": 6,
                                         "type": "string"
                                       }
@@ -23152,7 +23152,7 @@
                                             "type": "string"
                                           },
                                           "version": {
-                                            "maxLength": 32,
+                                            "maxLength": 96,
                                             "minLength": 6,
                                             "type": "string"
                                           }
@@ -23179,7 +23179,7 @@
                                                 "type": "string"
                                               },
                                               "version": {
-                                                "maxLength": 32,
+                                                "maxLength": 96,
                                                 "minLength": 6,
                                                 "type": "string"
                                               }
@@ -23198,7 +23198,7 @@
                                                 "type": "string"
                                               },
                                               "version": {
-                                                "maxLength": 32,
+                                                "maxLength": 96,
                                                 "minLength": 6,
                                                 "type": "string"
                                               }
@@ -23259,7 +23259,7 @@
                                               "type": "string"
                                             },
                                             "version": {
-                                              "maxLength": 32,
+                                              "maxLength": 96,
                                               "minLength": 6,
                                               "type": "string"
                                             }
@@ -23278,7 +23278,7 @@
                                           "additionalProperties": false,
                                           "properties": {
                                             "lower": {
-                                              "maxLength": 32,
+                                              "maxLength": 96,
                                               "minLength": 6,
                                               "type": "string"
                                             },
@@ -23288,7 +23288,7 @@
                                               "type": "string"
                                             },
                                             "upper": {
-                                              "maxLength": 32,
+                                              "maxLength": 96,
                                               "minLength": 6,
                                               "type": "string"
                                             }
@@ -23304,7 +23304,7 @@
                                         "type": "array"
                                       },
                                       "version": {
-                                        "maxLength": 32,
+                                        "maxLength": 96,
                                         "minLength": 6,
                                         "type": "string"
                                       }
@@ -23329,7 +23329,7 @@
                                         "type": "string"
                                       },
                                       "version": {
-                                        "maxLength": 32,
+                                        "maxLength": 96,
                                         "minLength": 6,
                                         "type": "string"
                                       }
@@ -23381,7 +23381,7 @@
                                         "type": "string"
                                       },
                                       "version": {
-                                        "maxLength": 32,
+                                        "maxLength": 96,
                                         "minLength": 6,
                                         "type": "string"
                                       }
@@ -23471,7 +23471,7 @@
                                               "type": "string"
                                             },
                                             "version": {
-                                              "maxLength": 32,
+                                              "maxLength": 96,
                                               "minLength": 6,
                                               "type": "string"
                                             }
@@ -23486,7 +23486,7 @@
                                         "type": "array"
                                       },
                                       "version": {
-                                        "maxLength": 32,
+                                        "maxLength": 96,
                                         "minLength": 6,
                                         "type": "string"
                                       }
@@ -23511,7 +23511,7 @@
                                         "type": "string"
                                       },
                                       "version": {
-                                        "maxLength": 32,
+                                        "maxLength": 96,
                                         "minLength": 6,
                                         "type": "string"
                                       }
@@ -23592,7 +23592,7 @@
                                     "type": "string"
                                   },
                                   "version": {
-                                    "maxLength": 32,
+                                    "maxLength": 96,
                                     "minLength": 6,
                                     "type": "string"
                                   }
@@ -23618,7 +23618,7 @@
                                     "type": "string"
                                   },
                                   "version": {
-                                    "maxLength": 32,
+                                    "maxLength": 96,
                                     "minLength": 6,
                                     "type": "string"
                                   }
@@ -23646,7 +23646,7 @@
                                         "type": "string"
                                       },
                                       "version": {
-                                        "maxLength": 32,
+                                        "maxLength": 96,
                                         "minLength": 6,
                                         "type": "string"
                                       }
@@ -23669,7 +23669,7 @@
                                         "type": "string"
                                       },
                                       "version": {
-                                        "maxLength": 32,
+                                        "maxLength": 96,
                                         "minLength": 6,
                                         "type": "string"
                                       }
@@ -23702,7 +23702,7 @@
                                         "type": "string"
                                       },
                                       "version": {
-                                        "maxLength": 32,
+                                        "maxLength": 96,
                                         "minLength": 6,
                                         "type": "string"
                                       }
@@ -23722,7 +23722,7 @@
                                         "type": "string"
                                       },
                                       "version": {
-                                        "maxLength": 32,
+                                        "maxLength": 96,
                                         "minLength": 6,
                                         "type": "string"
                                       }
@@ -23835,7 +23835,7 @@
                                               "type": "string"
                                             },
                                             "version": {
-                                              "maxLength": 32,
+                                              "maxLength": 96,
                                               "minLength": 6,
                                               "type": "string"
                                             }
@@ -23850,7 +23850,7 @@
                                         "type": "array"
                                       },
                                       "version": {
-                                        "maxLength": 32,
+                                        "maxLength": 96,
                                         "minLength": 6,
                                         "type": "string"
                                       }
@@ -23875,7 +23875,7 @@
                                         "type": "string"
                                       },
                                       "version": {
-                                        "maxLength": 32,
+                                        "maxLength": 96,
                                         "minLength": 6,
                                         "type": "string"
                                       }
@@ -23942,7 +23942,7 @@
                                             "type": "string"
                                           },
                                           "version": {
-                                            "maxLength": 32,
+                                            "maxLength": 96,
                                             "minLength": 6,
                                             "type": "string"
                                           }
@@ -23969,7 +23969,7 @@
                                                 "type": "string"
                                               },
                                               "version": {
-                                                "maxLength": 32,
+                                                "maxLength": 96,
                                                 "minLength": 6,
                                                 "type": "string"
                                               }
@@ -23988,7 +23988,7 @@
                                                 "type": "string"
                                               },
                                               "version": {
-                                                "maxLength": 32,
+                                                "maxLength": 96,
                                                 "minLength": 6,
                                                 "type": "string"
                                               }
@@ -24049,7 +24049,7 @@
                                               "type": "string"
                                             },
                                             "version": {
-                                              "maxLength": 32,
+                                              "maxLength": 96,
                                               "minLength": 6,
                                               "type": "string"
                                             }
@@ -24068,7 +24068,7 @@
                                           "additionalProperties": false,
                                           "properties": {
                                             "lower": {
-                                              "maxLength": 32,
+                                              "maxLength": 96,
                                               "minLength": 6,
                                               "type": "string"
                                             },
@@ -24078,7 +24078,7 @@
                                               "type": "string"
                                             },
                                             "upper": {
-                                              "maxLength": 32,
+                                              "maxLength": 96,
                                               "minLength": 6,
                                               "type": "string"
                                             }
@@ -24094,7 +24094,7 @@
                                         "type": "array"
                                       },
                                       "version": {
-                                        "maxLength": 32,
+                                        "maxLength": 96,
                                         "minLength": 6,
                                         "type": "string"
                                       }
@@ -24119,7 +24119,7 @@
                                         "type": "string"
                                       },
                                       "version": {
-                                        "maxLength": 32,
+                                        "maxLength": 96,
                                         "minLength": 6,
                                         "type": "string"
                                       }
@@ -24171,7 +24171,7 @@
                                         "type": "string"
                                       },
                                       "version": {
-                                        "maxLength": 32,
+                                        "maxLength": 96,
                                         "minLength": 6,
                                         "type": "string"
                                       }
@@ -24261,7 +24261,7 @@
                                               "type": "string"
                                             },
                                             "version": {
-                                              "maxLength": 32,
+                                              "maxLength": 96,
                                               "minLength": 6,
                                               "type": "string"
                                             }
@@ -24276,7 +24276,7 @@
                                         "type": "array"
                                       },
                                       "version": {
-                                        "maxLength": 32,
+                                        "maxLength": 96,
                                         "minLength": 6,
                                         "type": "string"
                                       }
@@ -24301,7 +24301,7 @@
                                         "type": "string"
                                       },
                                       "version": {
-                                        "maxLength": 32,
+                                        "maxLength": 96,
                                         "minLength": 6,
                                         "type": "string"
                                       }
@@ -24617,7 +24617,7 @@
                                 "type": "string"
                               },
                               "version": {
-                                "maxLength": 32,
+                                "maxLength": 96,
                                 "minLength": 6,
                                 "type": "string"
                               }
@@ -24643,7 +24643,7 @@
                                 "type": "string"
                               },
                               "version": {
-                                "maxLength": 32,
+                                "maxLength": 96,
                                 "minLength": 6,
                                 "type": "string"
                               }
@@ -24671,7 +24671,7 @@
                                     "type": "string"
                                   },
                                   "version": {
-                                    "maxLength": 32,
+                                    "maxLength": 96,
                                     "minLength": 6,
                                     "type": "string"
                                   }
@@ -24694,7 +24694,7 @@
                                     "type": "string"
                                   },
                                   "version": {
-                                    "maxLength": 32,
+                                    "maxLength": 96,
                                     "minLength": 6,
                                     "type": "string"
                                   }
@@ -24727,7 +24727,7 @@
                                     "type": "string"
                                   },
                                   "version": {
-                                    "maxLength": 32,
+                                    "maxLength": 96,
                                     "minLength": 6,
                                     "type": "string"
                                   }
@@ -24747,7 +24747,7 @@
                                     "type": "string"
                                   },
                                   "version": {
-                                    "maxLength": 32,
+                                    "maxLength": 96,
                                     "minLength": 6,
                                     "type": "string"
                                   }
@@ -24860,7 +24860,7 @@
                                           "type": "string"
                                         },
                                         "version": {
-                                          "maxLength": 32,
+                                          "maxLength": 96,
                                           "minLength": 6,
                                           "type": "string"
                                         }
@@ -24875,7 +24875,7 @@
                                     "type": "array"
                                   },
                                   "version": {
-                                    "maxLength": 32,
+                                    "maxLength": 96,
                                     "minLength": 6,
                                     "type": "string"
                                   }
@@ -24900,7 +24900,7 @@
                                     "type": "string"
                                   },
                                   "version": {
-                                    "maxLength": 32,
+                                    "maxLength": 96,
                                     "minLength": 6,
                                     "type": "string"
                                   }
@@ -24967,7 +24967,7 @@
                                         "type": "string"
                                       },
                                       "version": {
-                                        "maxLength": 32,
+                                        "maxLength": 96,
                                         "minLength": 6,
                                         "type": "string"
                                       }
@@ -24994,7 +24994,7 @@
                                             "type": "string"
                                           },
                                           "version": {
-                                            "maxLength": 32,
+                                            "maxLength": 96,
                                             "minLength": 6,
                                             "type": "string"
                                           }
@@ -25013,7 +25013,7 @@
                                             "type": "string"
                                           },
                                           "version": {
-                                            "maxLength": 32,
+                                            "maxLength": 96,
                                             "minLength": 6,
                                             "type": "string"
                                           }
@@ -25074,7 +25074,7 @@
                                           "type": "string"
                                         },
                                         "version": {
-                                          "maxLength": 32,
+                                          "maxLength": 96,
                                           "minLength": 6,
                                           "type": "string"
                                         }
@@ -25093,7 +25093,7 @@
                                       "additionalProperties": false,
                                       "properties": {
                                         "lower": {
-                                          "maxLength": 32,
+                                          "maxLength": 96,
                                           "minLength": 6,
                                           "type": "string"
                                         },
@@ -25103,7 +25103,7 @@
                                           "type": "string"
                                         },
                                         "upper": {
-                                          "maxLength": 32,
+                                          "maxLength": 96,
                                           "minLength": 6,
                                           "type": "string"
                                         }
@@ -25119,7 +25119,7 @@
                                     "type": "array"
                                   },
                                   "version": {
-                                    "maxLength": 32,
+                                    "maxLength": 96,
                                     "minLength": 6,
                                     "type": "string"
                                   }
@@ -25144,7 +25144,7 @@
                                     "type": "string"
                                   },
                                   "version": {
-                                    "maxLength": 32,
+                                    "maxLength": 96,
                                     "minLength": 6,
                                     "type": "string"
                                   }
@@ -25196,7 +25196,7 @@
                                     "type": "string"
                                   },
                                   "version": {
-                                    "maxLength": 32,
+                                    "maxLength": 96,
                                     "minLength": 6,
                                     "type": "string"
                                   }
@@ -25286,7 +25286,7 @@
                                           "type": "string"
                                         },
                                         "version": {
-                                          "maxLength": 32,
+                                          "maxLength": 96,
                                           "minLength": 6,
                                           "type": "string"
                                         }
@@ -25301,7 +25301,7 @@
                                     "type": "array"
                                   },
                                   "version": {
-                                    "maxLength": 32,
+                                    "maxLength": 96,
                                     "minLength": 6,
                                     "type": "string"
                                   }
@@ -25326,7 +25326,7 @@
                                     "type": "string"
                                   },
                                   "version": {
-                                    "maxLength": 32,
+                                    "maxLength": 96,
                                     "minLength": 6,
                                     "type": "string"
                                   }
@@ -25620,7 +25620,7 @@
                               "type": "string"
                             },
                             "version": {
-                              "maxLength": 32,
+                              "maxLength": 96,
                               "minLength": 6,
                               "type": "string"
                             }
@@ -25706,7 +25706,7 @@
                               "type": "string"
                             },
                             "version": {
-                              "maxLength": 32,
+                              "maxLength": 96,
                               "minLength": 6,
                               "type": "string"
                             }
@@ -25792,7 +25792,7 @@
                               "type": "string"
                             },
                             "version": {
-                              "maxLength": 32,
+                              "maxLength": 96,
                               "minLength": 6,
                               "type": "string"
                             }
@@ -25874,7 +25874,7 @@
                                     "type": "string"
                                   },
                                   "version": {
-                                    "maxLength": 32,
+                                    "maxLength": 96,
                                     "minLength": 6,
                                     "type": "string"
                                   }
@@ -25900,7 +25900,7 @@
                                     "type": "string"
                                   },
                                   "version": {
-                                    "maxLength": 32,
+                                    "maxLength": 96,
                                     "minLength": 6,
                                     "type": "string"
                                   }
@@ -25928,7 +25928,7 @@
                                         "type": "string"
                                       },
                                       "version": {
-                                        "maxLength": 32,
+                                        "maxLength": 96,
                                         "minLength": 6,
                                         "type": "string"
                                       }
@@ -25951,7 +25951,7 @@
                                         "type": "string"
                                       },
                                       "version": {
-                                        "maxLength": 32,
+                                        "maxLength": 96,
                                         "minLength": 6,
                                         "type": "string"
                                       }
@@ -25984,7 +25984,7 @@
                                         "type": "string"
                                       },
                                       "version": {
-                                        "maxLength": 32,
+                                        "maxLength": 96,
                                         "minLength": 6,
                                         "type": "string"
                                       }
@@ -26004,7 +26004,7 @@
                                         "type": "string"
                                       },
                                       "version": {
-                                        "maxLength": 32,
+                                        "maxLength": 96,
                                         "minLength": 6,
                                         "type": "string"
                                       }
@@ -26117,7 +26117,7 @@
                                               "type": "string"
                                             },
                                             "version": {
-                                              "maxLength": 32,
+                                              "maxLength": 96,
                                               "minLength": 6,
                                               "type": "string"
                                             }
@@ -26132,7 +26132,7 @@
                                         "type": "array"
                                       },
                                       "version": {
-                                        "maxLength": 32,
+                                        "maxLength": 96,
                                         "minLength": 6,
                                         "type": "string"
                                       }
@@ -26157,7 +26157,7 @@
                                         "type": "string"
                                       },
                                       "version": {
-                                        "maxLength": 32,
+                                        "maxLength": 96,
                                         "minLength": 6,
                                         "type": "string"
                                       }
@@ -26224,7 +26224,7 @@
                                             "type": "string"
                                           },
                                           "version": {
-                                            "maxLength": 32,
+                                            "maxLength": 96,
                                             "minLength": 6,
                                             "type": "string"
                                           }
@@ -26251,7 +26251,7 @@
                                                 "type": "string"
                                               },
                                               "version": {
-                                                "maxLength": 32,
+                                                "maxLength": 96,
                                                 "minLength": 6,
                                                 "type": "string"
                                               }
@@ -26270,7 +26270,7 @@
                                                 "type": "string"
                                               },
                                               "version": {
-                                                "maxLength": 32,
+                                                "maxLength": 96,
                                                 "minLength": 6,
                                                 "type": "string"
                                               }
@@ -26331,7 +26331,7 @@
                                               "type": "string"
                                             },
                                             "version": {
-                                              "maxLength": 32,
+                                              "maxLength": 96,
                                               "minLength": 6,
                                               "type": "string"
                                             }
@@ -26350,7 +26350,7 @@
                                           "additionalProperties": false,
                                           "properties": {
                                             "lower": {
-                                              "maxLength": 32,
+                                              "maxLength": 96,
                                               "minLength": 6,
                                               "type": "string"
                                             },
@@ -26360,7 +26360,7 @@
                                               "type": "string"
                                             },
                                             "upper": {
-                                              "maxLength": 32,
+                                              "maxLength": 96,
                                               "minLength": 6,
                                               "type": "string"
                                             }
@@ -26376,7 +26376,7 @@
                                         "type": "array"
                                       },
                                       "version": {
-                                        "maxLength": 32,
+                                        "maxLength": 96,
                                         "minLength": 6,
                                         "type": "string"
                                       }
@@ -26401,7 +26401,7 @@
                                         "type": "string"
                                       },
                                       "version": {
-                                        "maxLength": 32,
+                                        "maxLength": 96,
                                         "minLength": 6,
                                         "type": "string"
                                       }
@@ -26453,7 +26453,7 @@
                                         "type": "string"
                                       },
                                       "version": {
-                                        "maxLength": 32,
+                                        "maxLength": 96,
                                         "minLength": 6,
                                         "type": "string"
                                       }
@@ -26543,7 +26543,7 @@
                                               "type": "string"
                                             },
                                             "version": {
-                                              "maxLength": 32,
+                                              "maxLength": 96,
                                               "minLength": 6,
                                               "type": "string"
                                             }
@@ -26558,7 +26558,7 @@
                                         "type": "array"
                                       },
                                       "version": {
-                                        "maxLength": 32,
+                                        "maxLength": 96,
                                         "minLength": 6,
                                         "type": "string"
                                       }
@@ -26583,7 +26583,7 @@
                                         "type": "string"
                                       },
                                       "version": {
-                                        "maxLength": 32,
+                                        "maxLength": 96,
                                         "minLength": 6,
                                         "type": "string"
                                       }
@@ -26664,7 +26664,7 @@
                                     "type": "string"
                                   },
                                   "version": {
-                                    "maxLength": 32,
+                                    "maxLength": 96,
                                     "minLength": 6,
                                     "type": "string"
                                   }
@@ -26690,7 +26690,7 @@
                                     "type": "string"
                                   },
                                   "version": {
-                                    "maxLength": 32,
+                                    "maxLength": 96,
                                     "minLength": 6,
                                     "type": "string"
                                   }
@@ -26718,7 +26718,7 @@
                                         "type": "string"
                                       },
                                       "version": {
-                                        "maxLength": 32,
+                                        "maxLength": 96,
                                         "minLength": 6,
                                         "type": "string"
                                       }
@@ -26741,7 +26741,7 @@
                                         "type": "string"
                                       },
                                       "version": {
-                                        "maxLength": 32,
+                                        "maxLength": 96,
                                         "minLength": 6,
                                         "type": "string"
                                       }
@@ -26774,7 +26774,7 @@
                                         "type": "string"
                                       },
                                       "version": {
-                                        "maxLength": 32,
+                                        "maxLength": 96,
                                         "minLength": 6,
                                         "type": "string"
                                       }
@@ -26794,7 +26794,7 @@
                                         "type": "string"
                                       },
                                       "version": {
-                                        "maxLength": 32,
+                                        "maxLength": 96,
                                         "minLength": 6,
                                         "type": "string"
                                       }
@@ -26907,7 +26907,7 @@
                                               "type": "string"
                                             },
                                             "version": {
-                                              "maxLength": 32,
+                                              "maxLength": 96,
                                               "minLength": 6,
                                               "type": "string"
                                             }
@@ -26922,7 +26922,7 @@
                                         "type": "array"
                                       },
                                       "version": {
-                                        "maxLength": 32,
+                                        "maxLength": 96,
                                         "minLength": 6,
                                         "type": "string"
                                       }
@@ -26947,7 +26947,7 @@
                                         "type": "string"
                                       },
                                       "version": {
-                                        "maxLength": 32,
+                                        "maxLength": 96,
                                         "minLength": 6,
                                         "type": "string"
                                       }
@@ -27014,7 +27014,7 @@
                                             "type": "string"
                                           },
                                           "version": {
-                                            "maxLength": 32,
+                                            "maxLength": 96,
                                             "minLength": 6,
                                             "type": "string"
                                           }
@@ -27041,7 +27041,7 @@
                                                 "type": "string"
                                               },
                                               "version": {
-                                                "maxLength": 32,
+                                                "maxLength": 96,
                                                 "minLength": 6,
                                                 "type": "string"
                                               }
@@ -27060,7 +27060,7 @@
                                                 "type": "string"
                                               },
                                               "version": {
-                                                "maxLength": 32,
+                                                "maxLength": 96,
                                                 "minLength": 6,
                                                 "type": "string"
                                               }
@@ -27121,7 +27121,7 @@
                                               "type": "string"
                                             },
                                             "version": {
-                                              "maxLength": 32,
+                                              "maxLength": 96,
                                               "minLength": 6,
                                               "type": "string"
                                             }
@@ -27140,7 +27140,7 @@
                                           "additionalProperties": false,
                                           "properties": {
                                             "lower": {
-                                              "maxLength": 32,
+                                              "maxLength": 96,
                                               "minLength": 6,
                                               "type": "string"
                                             },
@@ -27150,7 +27150,7 @@
                                               "type": "string"
                                             },
                                             "upper": {
-                                              "maxLength": 32,
+                                              "maxLength": 96,
                                               "minLength": 6,
                                               "type": "string"
                                             }
@@ -27166,7 +27166,7 @@
                                         "type": "array"
                                       },
                                       "version": {
-                                        "maxLength": 32,
+                                        "maxLength": 96,
                                         "minLength": 6,
                                         "type": "string"
                                       }
@@ -27191,7 +27191,7 @@
                                         "type": "string"
                                       },
                                       "version": {
-                                        "maxLength": 32,
+                                        "maxLength": 96,
                                         "minLength": 6,
                                         "type": "string"
                                       }
@@ -27243,7 +27243,7 @@
                                         "type": "string"
                                       },
                                       "version": {
-                                        "maxLength": 32,
+                                        "maxLength": 96,
                                         "minLength": 6,
                                         "type": "string"
                                       }
@@ -27333,7 +27333,7 @@
                                               "type": "string"
                                             },
                                             "version": {
-                                              "maxLength": 32,
+                                              "maxLength": 96,
                                               "minLength": 6,
                                               "type": "string"
                                             }
@@ -27348,7 +27348,7 @@
                                         "type": "array"
                                       },
                                       "version": {
-                                        "maxLength": 32,
+                                        "maxLength": 96,
                                         "minLength": 6,
                                         "type": "string"
                                       }
@@ -27373,7 +27373,7 @@
                                         "type": "string"
                                       },
                                       "version": {
-                                        "maxLength": 32,
+                                        "maxLength": 96,
                                         "minLength": 6,
                                         "type": "string"
                                       }
@@ -27719,6 +27719,7 @@
                   "version": {
                     "maxLength": 32,
                     "minLength": 6,
+                    "pattern": "^v(0|[1-9][0-9]{0,8})\\.(0|[1-9][0-9]{0,8})\\.(0|[1-9][0-9]{0,8})$",
                     "type": "string"
                   }
                 },
@@ -27746,6 +27747,7 @@
                   "version": {
                     "maxLength": 32,
                     "minLength": 6,
+                    "pattern": "^v(0|[1-9][0-9]{0,8})\\.(0|[1-9][0-9]{0,8})\\.(0|[1-9][0-9]{0,8})$",
                     "type": "string"
                   }
                 },
@@ -27773,6 +27775,7 @@
                   "version": {
                     "maxLength": 32,
                     "minLength": 6,
+                    "pattern": "^v(0|[1-9][0-9]{0,8})\\.(0|[1-9][0-9]{0,8})\\.(0|[1-9][0-9]{0,8})$",
                     "type": "string"
                   }
                 },
@@ -27870,7 +27873,7 @@
                                         "type": "string"
                                       },
                                       "version": {
-                                        "maxLength": 32,
+                                        "maxLength": 96,
                                         "minLength": 6,
                                         "type": "string"
                                       }
@@ -28087,7 +28090,7 @@
                                         "type": "string"
                                       },
                                       "version": {
-                                        "maxLength": 32,
+                                        "maxLength": 96,
                                         "minLength": 6,
                                         "type": "string"
                                       }
@@ -28882,7 +28885,7 @@
                                     "type": "string"
                                   },
                                   "version": {
-                                    "maxLength": 32,
+                                    "maxLength": 96,
                                     "minLength": 6,
                                     "type": "string"
                                   }

@@ -45,7 +45,7 @@ replayed it exactly, rejected a changed request on that key and denied another
 principal or inactive owner. This is partial PKG05/PKG13/IAM10 evidence. The
 Account verifier in the API fixture was isolated; the snapshot was supplied
 by the caller rather than captured from a live provider.
-Pseudo-versions, replace/exclude/retract, Go 1.17+ pruning, checksum provenance,
+At that batch pseudo-versions, replace/exclude/retract, Go 1.17+ pruning, checksum provenance,
 general conflict outcomes and locks/installations remain open.
 
 Selected real Account/Access/Main/PostgreSQL integration
@@ -86,6 +86,17 @@ whose source is the ultimately selected higher version. Unit and private API
 checks cover duplicate wildcard refusal, missing source, exact precedence and
 immutable read. This remains partial PKG05/PKG12 evidence for bounded Go 1.16
 snapshots; local directory replacement is still unsupported.
+
+The B73 pseudo-version cases compare two timestamped `v1` revisions, a `v2`
+path and a prerelease-derived pseudo-version against its stable tag. Native Go
+1.27.1 and the bounded resolver select the same build lists in both local
+proxy scenarios. The captured-manifest parser retains those exact requirements;
+the stable-tag-only capture operation rejects a pseudo-version before any
+provider fetch. Selected PostgreSQL/Main resolution `20260926t033758-22bd61`
+and stable-tag capture `20260926t033835-c14c92` integrations passed with
+private exact read and the existing capture contract. Source capture for
+pseudo-versions and build metadata remain open, so PKG05/PKG12/PKG13 stay
+partial.
 
 The v2 profile also reports retracted selected versions as advisories from the
 highest supplied release manifest, without changing the build list. A fourth

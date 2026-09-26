@@ -34,6 +34,11 @@ test('PKG05/PKG20: fixed Go proxy capture checks path, bounds and response ident
   expect(goModH1(bytes.mod)).toMatch(/^h1:[A-Za-z0-9+/]{43}=$/);
   await expect(fetchGoProxyCapture({ ...request, path: 'example.com/../private' }, fetcher))
     .rejects.toThrow(GoProxyCaptureInvalid);
+  const beforePseudo = urls.length;
+  await expect(fetchGoProxyCapture({ ...request,
+    version: 'v0.0.0-20260925010101-abcdef123456' }, fetcher))
+    .rejects.toThrow(GoProxyCaptureInvalid);
+  expect(urls.length).toBe(beforePseudo);
   await expect(fetchGoProxyCapture(request, (async () => new Response('',
     { status: 302, headers: { location: 'https://other.test/' } })) as typeof fetch))
     .rejects.toThrow(GoProxyCaptureUnavailable);
