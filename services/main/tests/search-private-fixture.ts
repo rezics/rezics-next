@@ -80,4 +80,3 @@ export function fixture() {
     lineage: { dataEpoch: epoch, routingEpoch: '1' } };
   return { env, fuseki, cleanup: () => rmSync(directory, { force: true, recursive: true }) };
 }
-
