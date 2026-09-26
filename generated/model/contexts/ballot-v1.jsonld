@@ -54,6 +54,10 @@
       "@id": "https://rezics.com/vocab/holderCharter",
       "@type": "@id"
     },
+    "rv:internalPoll": {
+      "@id": "https://rezics.com/vocab/internalPoll",
+      "@type": "@id"
+    },
     "rv:internalResolution": {
       "@id": "https://rezics.com/vocab/internalResolution",
       "@type": "@id"

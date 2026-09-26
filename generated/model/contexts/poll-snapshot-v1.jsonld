@@ -23,6 +23,10 @@
     "rv:allocationManifestDigest": {
       "@id": "https://rezics.com/vocab/allocationManifestDigest"
     },
+    "rv:closedAt": {
+      "@id": "https://rezics.com/vocab/closedAt",
+      "@type": "xsd:dateTime"
+    },
     "rv:closesAt": {
       "@id": "https://rezics.com/vocab/closesAt",
       "@type": "xsd:dateTime"

@@ -27,6 +27,7 @@
     sh:property [ sh:path rv:proxyRoute ; sh:maxCount 1 ; sh:class rv:ProxyRouteRevision ] ;
     sh:property [ sh:path rv:mandateApproval ; sh:class rv:MandateApproval ] ;
     sh:property [ sh:path rv:internalResolution ; sh:maxCount 1 ; sh:class rv:PollResolution ] ;
+    sh:property [ sh:path rv:internalPoll ; sh:maxCount 1 ; sh:class rv:Poll ] ;
     sh:property [ sh:path rv:ballotDigest ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:string ; sh:pattern "^[0-9a-f]{64}$" ] ;
     sh:property [ sh:path rv:countedUnits ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:integer ; sh:minInclusive 0 ; sh:maxInclusive 1000000 ] ;
     sh:property [ sh:path rv:operation ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ; sh:pattern "^urn:rezics:operation:[0-9a-f]{64}$" ] ;

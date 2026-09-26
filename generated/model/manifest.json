@@ -18,12 +18,12 @@
     },
     {
       "id": "ballot-v1",
-      "sha256": "a134e1f3d8b5eb226959e927c6ba76cc331bfc6cd9fbc6583d6d35571a45fa20",
+      "sha256": "8ef327fb788d4ab18785ca37f3f6ced829f54458a3bc0087681608d0849ffc05",
       "file": "shapes/ballot-v1.ttl"
     },
     {
       "id": "charter-revision-v1",
-      "sha256": "e32aaaccc578bfaa70a05d65136a13de0bc080dec34e830c766221b0e3152d3c",
+      "sha256": "7d3903702c3767fd57874688413fa8bd1501c5c0ae3abba04e87dd7c80b78169",
       "file": "shapes/charter-revision-v1.ttl"
     },
     {
@@ -246,7 +246,7 @@
     },
     {
       "id": "poll-snapshot-v1",
-      "sha256": "4dd37b61d150bc6655414923b5ae09f618e5780ad982e24864b242cdb1fabf02",
+      "sha256": "3ec7e743c3f0d69b20bb231c7deb1988aba0b23fffbb3a91a8d3855e5b365751",
       "file": "shapes/poll-snapshot-v1.ttl"
     },
     {
@@ -1101,6 +1101,166 @@
       ]
     },
     {
+      "type": "http://www.w3.org/1999/02/22-rdf-syntax-ns#Statement",
+      "routes": [
+        {
+          "profile": "statement-v1",
+          "shape": "https://rezics.com/definition/statement-v1/statement-shape",
+          "when": []
+        }
+      ]
+    },
+    {
+      "type": "https://rezics.com/vocab/AllocationActivation",
+      "routes": [
+        {
+          "profile": "poll-allocation-v1",
+          "shape": "https://rezics.com/definition/poll-allocation-v1/activation-shape",
+          "when": []
+        }
+      ]
+    },
+    {
+      "type": "https://rezics.com/vocab/AllocationLeaf",
+      "routes": [
+        {
+          "profile": "poll-allocation-v1",
+          "shape": "https://rezics.com/definition/poll-allocation-v1/leaf-shape",
+          "when": []
+        }
+      ]
+    },
+    {
+      "type": "https://rezics.com/vocab/AllocationPlan",
+      "routes": [
+        {
+          "profile": "poll-allocation-v1",
+          "shape": "https://rezics.com/definition/poll-allocation-v1/plan-shape",
+          "when": []
+        }
+      ]
+    },
+    {
+      "type": "https://rezics.com/vocab/Ballot",
+      "routes": [
+        {
+          "profile": "ballot-v1",
+          "shape": "https://rezics.com/definition/ballot-v1/ballot-shape",
+          "when": []
+        }
+      ]
+    },
+    {
+      "type": "https://rezics.com/vocab/BallotInvalidation",
+      "routes": [
+        {
+          "profile": "poll-resolution-v1",
+          "shape": "https://rezics.com/definition/poll-resolution-v1/invalidation-shape",
+          "when": []
+        }
+      ]
+    },
+    {
+      "type": "https://rezics.com/vocab/BallotRevision",
+      "routes": [
+        {
+          "profile": "ballot-v1",
+          "shape": "https://rezics.com/definition/ballot-v1/revision-shape",
+          "when": []
+        }
+      ]
+    },
+    {
+      "type": "https://rezics.com/vocab/BallotShare",
+      "routes": [
+        {
+          "profile": "ballot-v1",
+          "shape": "https://rezics.com/definition/ballot-v1/share-shape",
+          "when": []
+        }
+      ]
+    },
+    {
+      "type": "https://rezics.com/vocab/ContextEntry",
+      "routes": [
+        {
+          "profile": "context-v1",
+          "shape": "https://rezics.com/definition/context-v1/entry-shape",
+          "when": []
+        }
+      ]
+    },
+    {
+      "type": "https://rezics.com/vocab/ContextPreferenceRevision",
+      "routes": [
+        {
+          "profile": "context-v1",
+          "shape": "https://rezics.com/definition/context-v1/preference-revision-shape",
+          "when": []
+        }
+      ]
+    },
+    {
+      "type": "https://rezics.com/vocab/ContextSelection",
+      "routes": [
+        {
+          "profile": "context-selection-v1",
+          "shape": "https://rezics.com/definition/context-selection-v1/selection-shape",
+          "when": []
+        }
+      ]
+    },
+    {
+      "type": "https://rezics.com/vocab/ContextSelectionRevision",
+      "routes": [
+        {
+          "profile": "context-selection-v1",
+          "shape": "https://rezics.com/definition/context-selection-v1/revision-shape",
+          "when": []
+        }
+      ]
+    },
+    {
+      "type": "https://rezics.com/vocab/ContextSemanticRevision",
+      "routes": [
+        {
+          "profile": "context-v1",
+          "shape": "https://rezics.com/definition/context-v1/semantic-revision-shape",
+          "when": []
+        }
+      ]
+    },
+    {
+      "type": "https://rezics.com/vocab/DecisionSlot",
+      "routes": [
+        {
+          "profile": "statement-decision-v1",
+          "shape": "https://rezics.com/definition/statement-decision-v1/slot-shape",
+          "when": []
+        }
+      ]
+    },
+    {
+      "type": "https://rezics.com/vocab/ElectorateCharterRevision",
+      "routes": [
+        {
+          "profile": "charter-revision-v1",
+          "shape": "https://rezics.com/definition/charter-revision-v1/electorate-revision-shape",
+          "when": []
+        }
+      ]
+    },
+    {
+      "type": "https://rezics.com/vocab/ElectorateSnapshot",
+      "routes": [
+        {
+          "profile": "poll-snapshot-v1",
+          "shape": "https://rezics.com/definition/poll-snapshot-v1/snapshot-shape",
+          "when": []
+        }
+      ]
+    },
+    {
       "type": "https://rezics.com/vocab/GlobalRatingContext",
       "routes": [
         {
@@ -1131,6 +1291,136 @@
       ]
     },
     {
+      "type": "https://rezics.com/vocab/HolderCharterRevision",
+      "routes": [
+        {
+          "profile": "charter-revision-v1",
+          "shape": "https://rezics.com/definition/charter-revision-v1/holder-revision-shape",
+          "when": []
+        }
+      ]
+    },
+    {
+      "type": "https://rezics.com/vocab/MandateApproval",
+      "routes": [
+        {
+          "profile": "ballot-mandate-approval-v1",
+          "shape": "https://rezics.com/definition/ballot-mandate-approval-v1/approval-shape",
+          "when": []
+        }
+      ]
+    },
+    {
+      "type": "https://rezics.com/vocab/OptionTally",
+      "routes": [
+        {
+          "profile": "poll-resolution-v1",
+          "shape": "https://rezics.com/definition/poll-resolution-v1/tally-shape",
+          "when": []
+        }
+      ]
+    },
+    {
+      "type": "https://rezics.com/vocab/Poll",
+      "routes": [
+        {
+          "profile": "poll-snapshot-v1",
+          "shape": "https://rezics.com/definition/poll-snapshot-v1/poll-shape",
+          "when": []
+        }
+      ]
+    },
+    {
+      "type": "https://rezics.com/vocab/PollOpening",
+      "routes": [
+        {
+          "profile": "poll-snapshot-v1",
+          "shape": "https://rezics.com/definition/poll-snapshot-v1/opening-shape",
+          "when": []
+        }
+      ]
+    },
+    {
+      "type": "https://rezics.com/vocab/PollOption",
+      "routes": [
+        {
+          "profile": "poll-snapshot-v1",
+          "shape": "https://rezics.com/definition/poll-snapshot-v1/option-shape",
+          "when": []
+        }
+      ]
+    },
+    {
+      "type": "https://rezics.com/vocab/PollQuestionRevision",
+      "routes": [
+        {
+          "profile": "poll-snapshot-v1",
+          "shape": "https://rezics.com/definition/poll-snapshot-v1/question-shape",
+          "when": []
+        }
+      ]
+    },
+    {
+      "type": "https://rezics.com/vocab/PollResolution",
+      "routes": [
+        {
+          "profile": "poll-resolution-v1",
+          "shape": "https://rezics.com/definition/poll-resolution-v1/resolution-shape",
+          "when": []
+        }
+      ]
+    },
+    {
+      "type": "https://rezics.com/vocab/Proposal",
+      "routes": [
+        {
+          "profile": "proposal-v1",
+          "shape": "https://rezics.com/definition/proposal-v1/proposal-shape",
+          "when": []
+        }
+      ]
+    },
+    {
+      "type": "https://rezics.com/vocab/ProposalExecution",
+      "routes": [
+        {
+          "profile": "proposal-v1",
+          "shape": "https://rezics.com/definition/proposal-v1/execution-shape",
+          "when": []
+        }
+      ]
+    },
+    {
+      "type": "https://rezics.com/vocab/ProposalRevision",
+      "routes": [
+        {
+          "profile": "proposal-v1",
+          "shape": "https://rezics.com/definition/proposal-v1/revision-shape",
+          "when": []
+        }
+      ]
+    },
+    {
+      "type": "https://rezics.com/vocab/ProxyRoute",
+      "routes": [
+        {
+          "profile": "ballot-proxy-v1",
+          "shape": "https://rezics.com/definition/ballot-proxy-v1/route-shape",
+          "when": []
+        }
+      ]
+    },
+    {
+      "type": "https://rezics.com/vocab/ProxyRouteRevision",
+      "routes": [
+        {
+          "profile": "ballot-proxy-v1",
+          "shape": "https://rezics.com/definition/ballot-proxy-v1/revision-shape",
+          "when": []
+        }
+      ]
+    },
+    {
       "type": "https://rezics.com/vocab/RealmReplyPlacement",
       "routes": [
         {
@@ -1141,11 +1431,71 @@
       ]
     },
     {
+      "type": "https://rezics.com/vocab/SemanticContext",
+      "routes": [
+        {
+          "profile": "context-v1",
+          "shape": "https://rezics.com/definition/context-v1/global-shape",
+          "when": [
+            {
+              "path": "https://rezics.com/vocab/contextRole",
+              "value": "https://rezics.com/vocab/GlobalInterpretation"
+            }
+          ]
+        },
+        {
+          "profile": "context-v1",
+          "shape": "https://rezics.com/definition/context-v1/context-shape",
+          "when": []
+        }
+      ]
+    },
+    {
+      "type": "https://rezics.com/vocab/SourceEntitlement",
+      "routes": [
+        {
+          "profile": "poll-snapshot-v1",
+          "shape": "https://rezics.com/definition/poll-snapshot-v1/entitlement-shape",
+          "when": []
+        }
+      ]
+    },
+    {
+      "type": "https://rezics.com/vocab/StatementDecision",
+      "routes": [
+        {
+          "profile": "statement-decision-v1",
+          "shape": "https://rezics.com/definition/statement-decision-v1/decision-shape",
+          "when": []
+        }
+      ]
+    },
+    {
+      "type": "https://rezics.com/vocab/StatementRevision",
+      "routes": [
+        {
+          "profile": "statement-v1",
+          "shape": "https://rezics.com/definition/statement-v1/revision-shape",
+          "when": []
+        }
+      ]
+    },
+    {
       "type": "https://rezics.com/vocab/UnresolvedWorkDerivation",
       "routes": [
         {
           "profile": "work-derivation-unresolved-v1",
           "shape": "https://rezics.com/definition/work-derivation-unresolved-v1/derivation-shape",
+          "when": []
+        }
+      ]
+    },
+    {
+      "type": "https://rezics.com/vocab/VotingCharter",
+      "routes": [
+        {
+          "profile": "charter-revision-v1",
+          "shape": "https://rezics.com/definition/charter-revision-v1/charter-shape",
           "when": []
         }
       ]
@@ -1269,8 +1619,8 @@
     "contexts/assessment-v1.jsonld": "9ca3b1e4a3ba05a60821f6bb98b90400b49628ab19c3555cd84da6fbac8db66c",
     "contexts/ballot-mandate-approval-v1.jsonld": "3891b117248ab7df885eee0c0fb757b99c851c8f1237cef8f2218f96804aa289",
     "contexts/ballot-proxy-v1.jsonld": "2efecc0ce28ae8be50d8fae3de69b544d34517d184c163c8c494a47f5065f048",
-    "contexts/ballot-v1.jsonld": "04b407cbac5d47372075e49ec9d0aa60f1360b57df875a94f390c7d0811d51da",
-    "contexts/charter-revision-v1.jsonld": "bd7a3477249a9e322adc0c9dff6c8141a74d3bfbdbc483dc981b399b3121d686",
+    "contexts/ballot-v1.jsonld": "c76d44642bccbbaab3b7f416ebb820cedb76165ab786c015fa88f725323461b1",
+    "contexts/charter-revision-v1.jsonld": "38ec02c84a32fbf97ffe5348e23aa95bd1c4a32181420e771f0d13a1651d94e5",
     "contexts/claim-v1.jsonld": "3b549a954e24ec1c64681f0acd9e145e6cf18146667ce9b01b086eef5b669f8f",
     "contexts/classification-context-v1.jsonld": "fd24ce1c9e096eb7498e5253552160cb17f795ca3553a27a92da299526759f53",
     "contexts/classification-direct-decision-v1.jsonld": "0047318fab769e767f13971aebbf24013212cdc1002104ab3642b403efd5943a",
@@ -1292,7 +1642,7 @@
     "contexts/main-default-selection-v1.jsonld": "f08bbc6a41d97eef45c81812c1938ede21b1a8a4a5a34abbbfa07c9d04ec3cd3",
     "contexts/poll-allocation-v1.jsonld": "d9e2c115b4ede5d0d2e6e63bc246f59c90f17ce112d9047bc8c669f12aab9a57",
     "contexts/poll-resolution-v1.jsonld": "b3ceb6ec3f789b15b77014d610facbb77100f46ed31bc7fb211b3963f08273a7",
-    "contexts/poll-snapshot-v1.jsonld": "46ec0b4a1610b7348c410d5ca08852ccbefe51c37ad93be5094e04b8ee4ace12",
+    "contexts/poll-snapshot-v1.jsonld": "4e9cbdcdcf22422d5e7b1bd49548a2b8f96991b26585f6a44b4edfba326d2424",
     "contexts/proposal-v1.jsonld": "9b15fd249376b05db294eafb5296b6209d8f51451801b07c111f5acc4e57bc23",
     "contexts/protection-revision-v1.jsonld": "a34ff68ba13da88dbdfb1e08ba33757dda7cfebefc0390972bf72861173b27b2",
     "contexts/rating-aggregate-default-policy-v1.jsonld": "a2e6e731c50a827471cefd97aaeca10ba0b6e8a87a1ddf912258c5e7fe759d38",
@@ -1334,8 +1684,8 @@
     "shapes/assessment-v1.ttl": "8ae62975dfc08b39267e2e53463ff47c11f2366c7bfe14f1b8c2902933eadbca",
     "shapes/ballot-mandate-approval-v1.ttl": "0fecd52c8455390decae35d5641030372402236bdad2c5c96cb32c57fdea6647",
     "shapes/ballot-proxy-v1.ttl": "f0d2242d2d8026b9f6283c38c1e5db4efb28e2fec203428a49e225c9a40246c7",
-    "shapes/ballot-v1.ttl": "a134e1f3d8b5eb226959e927c6ba76cc331bfc6cd9fbc6583d6d35571a45fa20",
-    "shapes/charter-revision-v1.ttl": "e32aaaccc578bfaa70a05d65136a13de0bc080dec34e830c766221b0e3152d3c",
+    "shapes/ballot-v1.ttl": "8ef327fb788d4ab18785ca37f3f6ced829f54458a3bc0087681608d0849ffc05",
+    "shapes/charter-revision-v1.ttl": "7d3903702c3767fd57874688413fa8bd1501c5c0ae3abba04e87dd7c80b78169",
     "shapes/claim-v1.ttl": "e028a8f74d433a28cd3860fec7bbaa468afe259b50e82d72fa276fe34c27e36f",
     "shapes/classification-context-v1.ttl": "41aa65a8f1f780d5902b858a8e9238d7e932afc88add4b23d731c51cfcd0bd20",
     "shapes/classification-direct-decision-v1.ttl": "c33d12713979c86a3d29aa2fc6ebd4952f37bdece02a5aa6ba485fc48bda468b",
@@ -1357,7 +1707,7 @@
     "shapes/main-default-selection-v1.ttl": "92f91c7e990901a457bd688dd47f576178ffa1daa90f35a4d2d1c53f751de52a",
     "shapes/poll-allocation-v1.ttl": "c277302719c0570563b7889276e106b9a1cee676551b2932299ad7cf03910ae4",
     "shapes/poll-resolution-v1.ttl": "47413e42bb40731c023a3129dd1c878b335e73ea20bc6e45204cb166bf2a4654",
-    "shapes/poll-snapshot-v1.ttl": "4dd37b61d150bc6655414923b5ae09f618e5780ad982e24864b242cdb1fabf02",
+    "shapes/poll-snapshot-v1.ttl": "3ec7e743c3f0d69b20bb231c7deb1988aba0b23fffbb3a91a8d3855e5b365751",
     "shapes/proposal-v1.ttl": "5fa5082efb1b4215773347902cf82a11dc925ed9bdb4396cc2461006fe8291ce",
     "shapes/protection-revision-v1.ttl": "92a6e82e55849a2c3ab4bae1076cb8d17f18a4516870d3d46bbd7f050bcdb396",
     "shapes/rating-aggregate-default-policy-v1.ttl": "0d9a0acbe78f4043628960ed5942b64bc7a90d915e5e1fe0cb40938bda5f6fe4",
@@ -1397,8 +1747,8 @@
     "shapes/work-title-control-v1.ttl": "100dddad43cac4fd47c3090e987ef9dc9aa272d189fc4240cc08302340c5d42d",
     "shapes/zone-capability-v1.ttl": "aa63a9c6f5dcaffc4859aaf4ad164c53b2d4b30b209eb5e942ac3c11b4cb83de",
     "packages/model/src/generated/arbitraries.ts": "604e96ea2884f8f5a1aeb60dda24dffffd7064f0f9b4a0029bcafd7d135b3f56",
-    "packages/model/src/generated/profiles.ts": "247ec816c7f3c884f287248d7a067282511dcfc59d1cd81712b0d38ab6aba533",
-    "packages/model/src/generated/schemas.ts": "330ba63ed74d500829ee3b04e865753bd8b1495eb3c2f3a80c748c59efec3bf5",
-    "packages/model/src/generated/vocabulary.ts": "bf680965ceddc8bdbe863757d82ec46627e4ca46fcc1561be919afeee2851693"
+    "packages/model/src/generated/profiles.ts": "1e8e3c572763f6af233e7b5dee47f56cbe4670204a5b73519c6e9d25826c509b",
+    "packages/model/src/generated/schemas.ts": "65e636847dfee85a97f214c9cc27e39f16db8704a3768509ef8900d19526fc4f",
+    "packages/model/src/generated/vocabulary.ts": "ae2a39354d1575029fa8a999e56325417017710c584313616ee1550e20707d0d"
   }
 }

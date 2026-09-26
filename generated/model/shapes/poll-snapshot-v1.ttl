@@ -17,6 +17,7 @@
     sh:property [ sh:path rv:electorateSnapshot ; sh:maxCount 1 ; sh:class rv:ElectorateSnapshot ] ;
     sh:property [ sh:path rv:pollOpening ; sh:maxCount 1 ; sh:class rv:PollOpening ] ;
     sh:property [ sh:path rv:pollResolution ; sh:maxCount 1 ; sh:class rv:PollResolution ] ;
+    sh:property [ sh:path rv:closedAt ; sh:maxCount 1 ; sh:datatype xsd:dateTime ] ;
     sh:or (
         [ sh:property [ sh:path rv:pollState ; sh:hasValue rv:PollDraft ] ;
           sh:property [ sh:path rv:pollOpening ; sh:maxCount 0 ] ;

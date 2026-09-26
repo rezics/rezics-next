@@ -37,7 +37,7 @@ export const profileRegistry = {
     ]
   },
   "ballot-v1": {
-    "sha256": "a134e1f3d8b5eb226959e927c6ba76cc331bfc6cd9fbc6583d6d35571a45fa20",
+    "sha256": "8ef327fb788d4ab18785ca37f3f6ced829f54458a3bc0087681608d0849ffc05",
     "file": "shapes/ballot-v1.ttl",
     "shapes": [
       "https://rezics.com/definition/ballot-v1/ballot-shape",
@@ -51,7 +51,7 @@ export const profileRegistry = {
     ]
   },
   "charter-revision-v1": {
-    "sha256": "e32aaaccc578bfaa70a05d65136a13de0bc080dec34e830c766221b0e3152d3c",
+    "sha256": "7d3903702c3767fd57874688413fa8bd1501c5c0ae3abba04e87dd7c80b78169",
     "file": "shapes/charter-revision-v1.ttl",
     "shapes": [
       "https://rezics.com/definition/charter-revision-v1/charter-shape",
@@ -351,7 +351,7 @@ export const profileRegistry = {
     ]
   },
   "poll-snapshot-v1": {
-    "sha256": "4dd37b61d150bc6655414923b5ae09f618e5780ad982e24864b242cdb1fabf02",
+    "sha256": "3ec7e743c3f0d69b20bb231c7deb1988aba0b23fffbb3a91a8d3855e5b365751",
     "file": "shapes/poll-snapshot-v1.ttl",
     "shapes": [
       "https://rezics.com/definition/poll-snapshot-v1/poll-shape",

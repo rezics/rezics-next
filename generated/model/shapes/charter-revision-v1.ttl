@@ -12,7 +12,9 @@
     sh:property [ sh:path rdf:type ; sh:hasValue rv:VotingCharter ] ;
     sh:property [ sh:path rv:governingBody ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
     sh:property [ sh:path rv:charterKind ; sh:minCount 1 ; sh:maxCount 1 ; sh:in ( rv:ElectorateCharter rv:HolderCharter ) ] ;
-    sh:property [ sh:path rv:charterHead ; sh:minCount 1 ; sh:maxCount 1 ; sh:class rv:VotingCharterRevision ] .
+    sh:property [ sh:path rv:charterHead ; sh:minCount 1 ; sh:maxCount 1 ; sh:class rv:VotingCharterRevision ] ;
+    sh:property [ sh:path rv:poll ; sh:maxCount 1 ; sh:class rv:Poll ] ;
+    sh:property [ sh:path rv:sourceEntitlement ; sh:maxCount 1 ; sh:class rv:SourceEntitlement ] .
 
 <https://rezics.com/definition/charter-revision-v1/electorate-revision-shape>
     a sh:NodeShape ;

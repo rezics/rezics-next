@@ -90,6 +90,10 @@
       "@id": "https://rezics.com/vocab/personCountingBasis",
       "@type": "@id"
     },
+    "rv:poll": {
+      "@id": "https://rezics.com/vocab/poll",
+      "@type": "@id"
+    },
     "rv:predecessor": {
       "@id": "https://rezics.com/vocab/predecessor",
       "@type": "@id"
@@ -112,6 +116,10 @@
     },
     "rv:ruleRevision": {
       "@id": "https://rezics.com/vocab/ruleRevision",
+      "@type": "@id"
+    },
+    "rv:sourceEntitlement": {
+      "@id": "https://rezics.com/vocab/sourceEntitlement",
       "@type": "@id"
     },
     "rv:uncastPolicy": {
