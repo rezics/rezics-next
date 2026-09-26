@@ -11,7 +11,9 @@ export interface CargoLiveCapture { profile: 'cargo-sparse-index-capture-v1'; re
     sha256: string | null }>;
   procMacros: Array<{ name: string; version: string; crateSha256: string }> }
 
-const directory = resolve(import.meta.dir, 'cargo-live-index');
+const root = resolve(import.meta.dir, '../../..');
+const directory = resolve(root, 'tests/qa/fixtures/cargo-live-index/');
+const indexDirectory = resolve(root, 'tests/qa/fixtures/cargo-live-index/index/');
 
 export function cargoLiveCapture(): CargoLiveCapture {
   return JSON.parse(readFileSync(resolve(directory, 'capture.json'), 'utf8')) as CargoLiveCapture;
@@ -21,7 +23,7 @@ export function cargoLiveIndex(): Map<string, Uint8Array> {
   const files = new Map<string, Uint8Array>();
   for (const file of cargoLiveCapture().files) {
     if (!file.present) continue;
-    const path = resolve(directory, 'index', `${file.name}.gz`);
+    const path = resolve(indexDirectory, `${file.name}.gz`);
     if (!existsSync(path)) throw new Error(`captured index file ${file.name} is missing`);
     const bytes = Bun.gunzipSync(readFileSync(path));
     if (createHash('sha256').update(bytes).digest('hex') !== file.sha256 || bytes.length !== file.bytes) {
