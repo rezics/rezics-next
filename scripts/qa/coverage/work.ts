@@ -19,6 +19,10 @@ export const workCases: CaseDeclarations = {
     file: 'tests/qa/integration/translated-work-links.test.ts',
     name: 'WORK02: independent translated Works retain exact and unresolved source provenance',
   }, {
+    tier: 'integration',
+    file: 'tests/qa/integration/translated-work-links.test.ts',
+    name: 'WORK02: newer fixed releases inherit no translation coverage or official authorization, and metadata localization keeps content language',
+  }, {
     tier: 'fault/recovery',
     file: 'tests/qa/fault-recovery/translated-work-recovery.test.ts',
     name: 'WORK02/OPS03: isolated graph loss restores exact translated Work links from retained events',

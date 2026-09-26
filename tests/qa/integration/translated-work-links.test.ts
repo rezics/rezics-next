@@ -21,13 +21,13 @@ import { listEligibleNativeVariants, readEligibleNativeVariant }
 
 const root = resolve(import.meta.dir, '../../..');
 
-test('WORK02: independent translated Works retain exact and unresolved source provenance', async () => {
+function translationFixture(label: string) {
   if (!Bun.env.REZICS_QA_RUN_ID || !Bun.env.FUSEKI_URL
     || !Bun.env.MAIN_DATA_EPOCH || !Bun.env.MAIN_ROUTING_EPOCH
     || !Bun.env.ACCESS_DATABASE_URL || !Bun.env.ACCOUNT_RELAY_DATABASE_URL) {
     throw new Error('Run through the isolated QA integration tier');
   }
-  const directory = join(root, '.temp', `translated-work-${randomUUID()}`);
+  const directory = join(root, '.temp', `${label}-${randomUUID()}`);
   mkdirSync(directory, { recursive: true, mode: 0o700 });
   const env: WorkActivationEnvironment = { fuseki: new FusekiClient(Bun.env.FUSEKI_URL),
     lineage: { dataEpoch: Bun.env.MAIN_DATA_EPOCH, routingEpoch: Bun.env.MAIN_ROUTING_EPOCH },
@@ -35,9 +35,7 @@ test('WORK02: independent translated Works retain exact and unresolved source pr
   const accessPool = new Pool({ connectionString: Bun.env.ACCESS_DATABASE_URL });
   const relayPool = new Pool({ connectionString: Bun.env.ACCOUNT_RELAY_DATABASE_URL });
   const actor = ID + randomUUID();
-  const translatorOfficial = ID + randomUUID();
-  const translatorThirdParty = ID + randomUUID();
-  const principal = { issuer: 'https://qa-translation.test', subject: randomUUID() };
+  const principal = { issuer: `https://qa-${label}.test`, subject: randomUUID() };
   const principalId = randomUUID();
   const admission = (scope: string, action: string, requestDigest: string): RegisteredAdmission => {
     const id = randomUUID();
@@ -58,14 +56,22 @@ test('WORK02: independent translated Works retain exact and unresolved source pr
       VALUES ($1, $2, $2, $3, $4, now() + interval '1 hour')`,
     [randomUUID(), actor, scope, action]);
   };
+  const registerActor = async () => {
+    await accessPool.query('INSERT INTO access.principal (id, account_issuer, account_subject) VALUES ($1, $2, $3)',
+      [principalId, principal.issuer, principal.subject]);
+    await accessPool.query('INSERT INTO access.authority_subject (id, kind) VALUES ($1, $2)',
+      [actor, 'agent']);
+  };
   const send = (app: ReturnType<typeof createMainApp>, body: object, key = randomUUID()) =>
     app.handle(new Request('http://main.local/v1/translation-links', {
       method: 'POST', headers: { authorization: 'Bearer qa',
         'content-type': 'application/json', 'idempotency-key': key },
       body: JSON.stringify({ profile: 'translation-link-v1', ...body }),
     }));
-  const publish = async (work: string, body: string) => {
-    const draftInput = { work, language: 'zh', body, actingSubject: actor };
+  const createWork = async (title: string) => activateMetadataWork(env, { title,
+    admission: admission('work:create:root', 'work.create', metadataWorkRequestDigest(title)) });
+  const publish = async (work: string, body: string, language = 'zh') => {
+    const draftInput = { work, language, body, actingSubject: actor };
     const draft = await activateTextContribution(env, admission(`contribution:create:${work}`,
       'contribution.create', textContributionDigest(draftInput)), draftInput);
     if (draft.outcome !== 'succeeded' || !draft.contribution || !draft.draftRevision) {
@@ -83,13 +89,23 @@ test('WORK02: independent translated Works retain exact and unresolved source pr
     }
     return { contribution: draft.contribution, decision: publication.publicationDecision };
   };
+  const close = async () => {
+    await accessPool.end();
+    await relayPool.end();
+    rmSync(directory, { recursive: true, force: true });
+  };
+  return { env, accessPool, relayPool, actor, principal, admission, grant, registerActor,
+    send, createWork, publish, close };
+}
+
+test('WORK02: independent translated Works retain exact and unresolved source provenance', async () => {
+  const { env, accessPool, relayPool, actor, principal, grant, registerActor, send,
+    createWork, publish, close } = translationFixture('translated-work');
+  const translatorOfficial = ID + randomUUID();
+  const translatorThirdParty = ID + randomUUID();
   try {
     const [a, b, c, d] = await Promise.all(['Source A', 'Official B', 'Third party C',
-      'Unlinked D'].map(async label => {
-      const title = `${label} ${randomUUID()}`;
-      return activateMetadataWork(env, { title, admission: admission('work:create:root',
-        'work.create', metadataWorkRequestDigest(title)) });
-    }));
+      'Unlinked D'].map(label => createWork(`${label} ${randomUUID()}`)));
     expect(new Set([a.work, b.work, c.work, d.work]).size).toBe(4);
     expect(new Set([a.mainVersion, b.mainVersion, c.mainVersion, d.mainVersion]).size).toBe(4);
     const bPublication = await publish(b.work, '官方中文正文');
@@ -97,10 +113,7 @@ test('WORK02: independent translated Works retain exact and unresolved source pr
     const bContribution = bPublication.contribution;
     const cContribution = cPublication.contribution;
     expect(bContribution).not.toBe(cContribution);
-    await accessPool.query('INSERT INTO access.principal (id, account_issuer, account_subject) VALUES ($1, $2, $3)',
-      [principalId, principal.issuer, principal.subject]);
-    await accessPool.query('INSERT INTO access.authority_subject (id, kind) VALUES ($1, $2)',
-      [actor, 'agent']);
+    await registerActor();
     for (const target of [b, c, d]) await grant(`translation:link:${target.work}`, 'translation.link');
     const authorization = `translation:authorize:${a.work}:${a.mainRevision}`;
     await accessPool.query('INSERT INTO access.scope_gate (id) VALUES ($1)', [authorization]);
@@ -354,8 +367,134 @@ test('WORK02: independent translated Works retain exact and unresolved source pr
       data: { receipt: { mainRevision: selected.mainRevision, selection: selected.selection } },
     });
   } finally {
-    await accessPool.end();
-    await relayPool.end();
-    rmSync(directory, { recursive: true, force: true });
+    await close();
+  }
+}, 180_000);
+
+test('WORK02: newer fixed releases inherit no translation coverage or official authorization, and metadata localization keeps content language', async () => {
+  const { env, accessPool, actor, principal, grant, registerActor, send, createWork, publish,
+    close } = translationFixture('translated-release');
+  try {
+    const [a, b] = await Promise.all([createWork(`English source A ${randomUUID()}`),
+      createWork(`Official Chinese B ${randomUUID()}`)]);
+    const english = await publish(a.work, 'English source body', 'en');
+    const first = await publish(b.work, '第一版官方中文正文');
+    const second = await publish(b.work, '第二版中文正文');
+    await registerActor();
+    const authorization = `translation:authorize:${a.work}:${a.mainRevision}`;
+    for (const [scope, action] of [[`publication:select:${b.mainVersion}`, 'publication.select'],
+      [`release:seal:${b.mainVersion}`, 'release.seal'], [`translation:link:${b.work}`, 'translation.link'],
+      [authorization, 'translation.authorize'], [`work:read:${b.work}`, 'work.read'],
+      [`work:edit:${a.work}`, 'work.edit'], [`work:edit:${b.work}`, 'work.edit']] as const) {
+      await grant(scope, action);
+    }
+    const app = createMainApp(env.fuseki, { environment: env,
+      account: { verify: async () => principal }, access: new AccessAdmissionRegistry(accessPool) });
+    const post = (path: string, body: object) => app.handle(new Request(`http://main.local${path}`, {
+      method: 'POST', headers: { authorization: 'Bearer qa', 'content-type': 'application/json',
+        'idempotency-key': randomUUID() }, body: JSON.stringify(body) }));
+    const links = async (main: string, revision: string) => (await app.handle(new Request(
+      `http://main.local/v1/main-versions/${main.slice(ID.length)}/revisions/${revision.slice(ID.length)}/translation-links`)))
+      .json() as Promise<{ complete: boolean; links: Array<Record<string, unknown>> }>;
+    const select = async (published: { contribution: string; decision: string },
+      expectedSelectionHead: string | null) => {
+      const response = await post('/v1/publication-selections', { profile: 'main-default-selection-v1',
+        context: { kind: 'main-version-default', id: b.mainVersion }, work: b.work,
+        contribution: published.contribution, publicationDecision: published.decision,
+        expectedSelectionHead, selectionBasis: 'main-maintainer', actingSubject: actor });
+      expect(response.status).toBe(201);
+      return response.json() as Promise<{ mainRevision: string; selection: string }>;
+    };
+    type Release = { release: string; mainRevision: string; language: string; body: string };
+    const seal = async (selected: { mainRevision: string; selection: string }) => {
+      const response = await post('/v1/fixed-releases', { profile: 'fixed-native-text-release-v1',
+        work: b.work, mainVersion: b.mainVersion, expectedMainRevision: selected.mainRevision,
+        expectedSelection: selected.selection, actingSubject: actor });
+      expect(response.status).toBe(201);
+      return response.json() as Promise<Release & Record<string, unknown>>;
+    };
+    const readRelease = async (release: string) => {
+      const response = await app.handle(new Request(`http://main.local/v1/fixed-releases/${
+        release.slice(ID.length)}?actingSubject=${encodeURIComponent(actor)}`,
+      { headers: { authorization: 'Bearer qa' } }));
+      expect(response.status).toBe(200);
+      return response.json() as Promise<Release & Record<string, unknown>>;
+    };
+    const authorityFields = ['translationLink', 'translationStatus', 'status', 'sourceVersionStatus',
+      'authorizingParty', 'authorizationScope', 'authorizationEpoch', 'translator'];
+
+    const firstSelection = await select(first, null);
+    const official = { targetWork: b.work, targetMainVersion: b.mainVersion,
+      targetMainRevision: firstSelection.mainRevision, sourceWork: a.work,
+      sourceMainVersion: a.mainVersion, sourceMainRevision: a.mainRevision,
+      status: 'official', contentLanguage: 'zh', translator: ID + randomUUID(), publisher: actor,
+      evidence: 'https://publisher.example/authorization/release-one', actingSubject: actor };
+    const linked = await send(app, official);
+    expect(linked.status).toBe(201);
+    const officialLink = await linked.json() as { link: string };
+    const firstRelease = await seal(firstSelection);
+    expect(firstRelease).toMatchObject({ mainRevision: firstSelection.mainRevision,
+      language: 'zh', body: '第一版官方中文正文' });
+    for (const field of authorityFields) expect(firstRelease).not.toHaveProperty(field);
+    // Coverage is resolved only through the release's exact Main Version revision.
+    expect(await links(b.mainVersion, firstRelease.mainRevision)).toMatchObject({ complete: true,
+      links: [{ link: officialLink.link, status: 'official', authorizingParty: actor,
+        authorizationScope: authorization, contentLanguage: 'zh' }] });
+
+    const secondSelection = await select(second, firstSelection.selection);
+    expect(secondSelection.mainRevision).not.toBe(firstSelection.mainRevision);
+    const secondRelease = await seal(secondSelection);
+    expect(secondRelease.release).not.toBe(firstRelease.release);
+    expect(secondRelease).toMatchObject({ mainRevision: secondSelection.mainRevision,
+      language: 'zh', body: '第二版中文正文' });
+    for (const field of authorityFields) expect(secondRelease).not.toHaveProperty(field);
+    expect(await links(b.mainVersion, secondRelease.mainRevision))
+      .toEqual(expect.objectContaining({ complete: true, links: [] }));
+    // The first release's official authority does not transfer: a newer claim needs a current admission.
+    await accessPool.query(`UPDATE access.permission_grant SET active = false
+      WHERE recipient_subject = $1 AND scope_id = $2 AND action = 'translation.authorize'`,
+    [actor, authorization]);
+    const inherited = await send(app, { ...official, targetMainRevision: secondSelection.mainRevision,
+      evidence: 'https://publisher.example/authorization/release-two' });
+    expect(inherited.status).toBe(403);
+    expect((await links(b.mainVersion, secondRelease.mainRevision)).links).toEqual([]);
+    const thirdParty = await send(app, { ...official, targetMainRevision: secondSelection.mainRevision,
+      sourceMainRevision: null, status: 'third-party',
+      evidence: 'https://publisher.example/edition/release-two' });
+    expect(thirdParty.status).toBe(201);
+    expect(await links(b.mainVersion, secondRelease.mainRevision)).toMatchObject({ complete: true,
+      links: [{ status: 'third-party', sourceVersionStatus: 'unresolved', sourceMainRevision: null,
+        authorizingParty: null, authorizationScope: null, authorizationEpoch: null }] });
+    expect(await links(b.mainVersion, firstRelease.mainRevision)).toMatchObject({
+      links: [{ link: officialLink.link, status: 'official', authorizationScope: authorization }] });
+
+    // Localized display metadata is a Work revision; it changes no Main Version or content language.
+    for (const [target, title] of [[a, '英文原著 A 的中文显示标题'],
+      [b, 'Official Chinese B, English display title']] as const) {
+      const edited = await post('/v1/content-edits', { profile: 'metadata-only-v1', work: target.work,
+        expectedHead: target.workRevision, title, actingSubject: actor });
+      expect(edited.status).toBe(200);
+      expect(await edited.json()).toMatchObject({ work: target.work, predecessor: target.workRevision });
+    }
+    const heads = await env.fuseki.query(`PREFIX rv: <${RV}> ASK {
+      GRAPH ${iri(GRAPHS.current)} {
+        ${iri(a.mainVersion)} rv:head ${iri(a.mainRevision)} .
+        ${iri(b.mainVersion)} rv:head ${iri(secondSelection.mainRevision)} .
+      }
+    }`);
+    expect(heads.boolean).toBe(true);
+    expect((await listEligibleNativeVariants(env, a.mainVersion, 'zh')).variants).toEqual([]);
+    expect((await listEligibleNativeVariants(env, a.mainVersion, 'en')).variants)
+      .toMatchObject([{ contribution: english.contribution }]);
+    expect((await links(a.mainVersion, a.mainRevision)).links).toEqual([]);
+    for (const [release, body] of [[firstRelease, '第一版官方中文正文'],
+      [secondRelease, '第二版中文正文']] as const) {
+      expect(await readRelease(release.release)).toMatchObject({ release: release.release,
+        mainRevision: release.mainRevision, language: 'zh', body });
+    }
+    expect((await links(b.mainVersion, firstRelease.mainRevision)).links)
+      .toMatchObject([{ contentLanguage: 'zh', status: 'official' }]);
+  } finally {
+    await close();
   }
 }, 180_000);
