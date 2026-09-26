@@ -1,0 +1,384 @@
+{"id":84844,"label":"SUPPORTS","domain":"screen","claim":"Vedam is a drama film.","evidence":[["Vedam_-LRB-film-RRB-",0]]}
+{"id":60978,"label":"SUPPORTS","domain":"screen","claim":"DodgeBall: A True Underdog Story was written and directed by Rawson Marshall.","evidence":[["DodgeBall-COLON-_A_True_Underdog_Story",0]]}
+{"id":40450,"label":"SUPPORTS","domain":"screen","claim":"Warcraft premiered in Paris before the Rio Olympics.","evidence":[["Warcraft_-LRB-film-RRB-",7]]}
+{"id":51355,"label":"SUPPORTS","domain":"screen","claim":"Balibo (film) is about an investigation of crimes.","evidence":[["Balibo_-LRB-film-RRB-",0],["Balibo_-LRB-film-RRB-",4]]}
+{"id":222030,"label":"SUPPORTS","domain":"screen","claim":"Brubaker's director was Stuart Rosenberg.","evidence":[["Brubaker",0]]}
+{"id":16437,"label":"SUPPORTS","domain":"screen","claim":"Match Point was a film by Woody Allen.","evidence":[["Match_Point",0]]}
+{"id":167181,"label":"SUPPORTS","domain":"screen","claim":"Westworld's first season premiered in the month of October.","evidence":[["Westworld_-LRB-TV_series-RRB-",4]]}
+{"id":173921,"label":"SUPPORTS","domain":"screen","claim":"An Education is a film.","evidence":[["An_Education",0],["An_Education",7]]}
+{"id":203369,"label":"SUPPORTS","domain":"screen","claim":"Goosebumps (film) was directed by Rob Letterman.","evidence":[["Goosebumps_-LRB-film-RRB-",1]]}
+{"id":222024,"label":"SUPPORTS","domain":"screen","claim":"Brubaker is an American film.","evidence":[["Brubaker",0]]}
+{"id":225803,"label":"SUPPORTS","domain":"screen","claim":"Chinatown was directed by Roman Polanski.","evidence":[["Chinatown_-LRB-1974_film-RRB-",0]]}
+{"id":68623,"label":"SUPPORTS","domain":"screen","claim":"Robert Zemeckis has made movies.","evidence":[["Robert_Zemeckis",7],["Beowulf_-LRB-2007_film-RRB-",0],["The_Polar_Express_-LRB-film-RRB-",0],["Back_to_the_Future_-LRB-franchise-RRB-",0],["Forrest_Gump",0],["A_Christmas_Carol_-LRB-2009_film-RRB-",0],["Back_to_the_Future_Part_II",0],["Robert_Zemeckis",2],["Academy_Award_for_Best_Director",0],["Robert_Zemeckis",1],["Romancing_the_Stone",0],["Who_Framed_Roger_Rabbit",0]]}
+{"id":39833,"label":"SUPPORTS","domain":"screen","claim":"The SpongeBob SquarePants Movie stars an actor.","evidence":[["The_SpongeBob_SquarePants_Movie",1]]}
+{"id":44383,"label":"SUPPORTS","domain":"screen","claim":"Rachel Green is one of the six main characters in the sitcom Friends aired in the 1990s.","evidence":[["Rachel_Green",0],["Friends",0]]}
+{"id":5832,"label":"SUPPORTS","domain":"screen","claim":"The 100 is a TV series following a group of teens.","evidence":[["The_100_-LRB-TV_series-RRB-",0],["The_100_-LRB-TV_series-RRB-",4]]}
+{"id":77616,"label":"SUPPORTS","domain":"screen","claim":"Night of the Living Dead is a 1968 American independent horror film.","evidence":[["Night_of_the_Living_Dead",0]]}
+{"id":70882,"label":"REFUTES","domain":"screen","claim":"Jackie (2016 film) was directed by Peter Jackson.","evidence":[["Jackie_-LRB-2016_film-RRB-",0]]}
+{"id":25115,"label":"REFUTES","domain":"screen","claim":"Barbarella was directed by George Lucas.","evidence":[["Barbarella_-LRB-film-RRB-",0]]}
+{"id":180582,"label":"REFUTES","domain":"screen","claim":"Swordfish (film) is a book that is about an animal who is targeted for a bank robbery conspiracy.","evidence":[["Swordfish_-LRB-film-RRB-",1]]}
+{"id":165702,"label":"REFUTES","domain":"screen","claim":"Simon Cowell was asked to step down as a judge for the show the season before American Idol (season 8).","evidence":[["American_Idol_-LRB-season_8-RRB-",1]]}
+{"id":101340,"label":"REFUTES","domain":"screen","claim":"The Good Wife is not on network television.","evidence":[["The_Good_Wife",0],["CBS",0],["The_Good_Wife",6],["The_Good_Wife",13]]}
+{"id":187216,"label":"REFUTES","domain":"screen","claim":"The Hurt Locker is 2010 American film.","evidence":[["The_Hurt_Locker",0]]}
+{"id":137040,"label":"REFUTES","domain":"screen","claim":"The Raven (2012 film) was released in Ireland in April 2012.","evidence":[["The_Raven_-LRB-2012_film-RRB-",10]]}
+{"id":95991,"label":"REFUTES","domain":"screen","claim":"A View to a Kill is only directed by Chris Columbus.","evidence":[["A_View_to_a_Kill",6]]}
+{"id":180572,"label":"REFUTES","domain":"screen","claim":"Swordfish (film) is incapable of being a film that is about an ex-convict.","evidence":[["Swordfish_-LRB-film-RRB-",1]]}
+{"id":120077,"label":"REFUTES","domain":"screen","claim":"The SpongeBob SquarePants Movie was directed by Donald Trump.","evidence":[["The_SpongeBob_SquarePants_Movie",1]]}
+{"id":135968,"label":"REFUTES","domain":"screen","claim":"Cheese in the Trap (TV series) is a book.","evidence":[["Cheese_in_the_Trap_-LRB-TV_series-RRB-",0]]}
+{"id":34412,"label":"REFUTES","domain":"screen","claim":"Jayasudha is an actor that stars in Daag.","evidence":[["Daag_-LRB-1973_film-RRB-",10]]}
+{"id":163985,"label":"REFUTES","domain":"screen","claim":"Veeram is a 2017 film.","evidence":[["Veeram_-LRB-2014_film-RRB-",0],["Veeram_-LRB-2014_film-RRB-",3]]}
+{"id":137011,"label":"REFUTES","domain":"screen","claim":"Sheryl Lee has yet to appear in a film.","evidence":[["Sheryl_Lee",0],["Sheryl_Lee",1],["Sheryl_Lee",5],["Sheryl_Lee",6],["Backbeat_-LRB-film-RRB-",0],["Sheryl_Lee",7],["Café_Society_-LRB-film-RRB-",0]]}
+{"id":55470,"label":"REFUTES","domain":"screen","claim":"Henry Cavill is not a famous actor.","evidence":[["Henry_Cavill",8]]}
+{"id":183506,"label":"REFUTES","domain":"screen","claim":"Estelle Getty appeared only in television.","evidence":[["Estelle_Getty",0]]}
+{"id":211793,"label":"NOT ENOUGH INFO","domain":"screen","claim":"Brick (film) is a Canadian film.","evidence":[]}
+{"id":19921,"label":"NOT ENOUGH INFO","domain":"screen","claim":"Trouble with the Curve was directed by Robert Lorenz in 2002.","evidence":[]}
+{"id":64886,"label":"NOT ENOUGH INFO","domain":"screen","claim":"Fantastic Four (2005 film) was the highest grossing film in July.","evidence":[]}
+{"id":72144,"label":"NOT ENOUGH INFO","domain":"screen","claim":"Designated Survivor (TV series) was expensive to make.","evidence":[]}
+{"id":125262,"label":"NOT ENOUGH INFO","domain":"screen","claim":"Veeru Devgan is a film franchise.","evidence":[]}
+{"id":97776,"label":"NOT ENOUGH INFO","domain":"screen","claim":"Game of Thrones (season 7) involves English actor Tom Hopper.","evidence":[]}
+{"id":99353,"label":"NOT ENOUGH INFO","domain":"screen","claim":"The NAACP Image Award for Outstanding Supporting Actor in a Drama Series was first given in Hollywood.","evidence":[]}
+{"id":10356,"label":"NOT ENOUGH INFO","domain":"screen","claim":"Brian Michael Bendis has worked in television.","evidence":[]}
+{"id":66079,"label":"NOT ENOUGH INFO","domain":"screen","claim":"One Flew Over the Cuckoo's Nest won Best Actor at the Academy Awards in 1978.","evidence":[]}
+{"id":182699,"label":"NOT ENOUGH INFO","domain":"screen","claim":"Nina Jacobson is a famous film executive.","evidence":[]}
+{"id":44611,"label":"NOT ENOUGH INFO","domain":"screen","claim":"Cheese in the Trap (TV series) is from a book.","evidence":[]}
+{"id":162038,"label":"NOT ENOUGH INFO","domain":"screen","claim":"Benjamin Walker (actor) is a stand up comedian known for slapstick.","evidence":[]}
+{"id":180576,"label":"NOT ENOUGH INFO","domain":"screen","claim":"Swordfish (film) is the highest grossing film.","evidence":[]}
+{"id":172323,"label":"NOT ENOUGH INFO","domain":"screen","claim":"Scream 2 is a romantic film.","evidence":[]}
+{"id":110544,"label":"NOT ENOUGH INFO","domain":"screen","claim":"Justine Bateman is a screenwriter.","evidence":[]}
+{"id":51901,"label":"NOT ENOUGH INFO","domain":"screen","claim":"Southern Hospitality debuted at Cannes Film Festival.","evidence":[]}
+{"id":3597,"label":"SUPPORTS","domain":"music","claim":"Ice-T began his career as a rapper in the 1980s.","evidence":[["Ice-T",1]]}
+{"id":19190,"label":"SUPPORTS","domain":"music","claim":"Pharrell Williams and Shay Haley were in a band together.","evidence":[["Pharrell_Williams",4]]}
+{"id":182908,"label":"SUPPORTS","domain":"music","claim":"The soundtrack of Far from the Madding Crowd was by Richard Rodney Bennett.","evidence":[["Far_from_the_Madding_Crowd_-LRB-1967_film-RRB-",3]]}
+{"id":4529,"label":"SUPPORTS","domain":"music","claim":"John Dolmayan is a musician.","evidence":[["John_Dolmayan",0],["John_Dolmayan",1],["John_Dolmayan",2],["John_Dolmayan",4]]}
+{"id":194346,"label":"SUPPORTS","domain":"music","claim":"Happiness in Slavery is a song.","evidence":[["Happiness_in_Slavery",0]]}
+{"id":227081,"label":"SUPPORTS","domain":"music","claim":"The 2013 album Prism features Roar (song).","evidence":[["Roar_-LRB-song-RRB-",0]]}
+{"id":22092,"label":"SUPPORTS","domain":"music","claim":"Meteora is an album by Linkin Park.","evidence":[["Meteora_-LRB-album-RRB-",0]]}
+{"id":155860,"label":"SUPPORTS","domain":"music","claim":"Richard Fortus is a guitarist of Guns N' Roses.","evidence":[["Richard_Fortus",1],["Guns_N'_Roses",24]]}
+{"id":54417,"label":"SUPPORTS","domain":"music","claim":"Paris (Paris Hilton album) incorporates elements of pop rock.","evidence":[["Paris_-LRB-Paris_Hilton_album-RRB-",9]]}
+{"id":148632,"label":"SUPPORTS","domain":"music","claim":"The Bee Gees did not write their own songs.","evidence":[["Bee_Gees",6]]}
+{"id":208896,"label":"SUPPORTS","domain":"music","claim":"The Monster is a song by an American rapper.","evidence":[["The_Monster_-LRB-song-RRB-",0],["The_Monster_-LRB-song-RRB-",1],["Eminem",0],["Jon_Bellion",0],["The_Monster_-LRB-song-RRB-",2],["The_Monster_-LRB-song-RRB-",9]]}
+{"id":227083,"label":"SUPPORTS","domain":"music","claim":"Roar (song) is on the Katy Perry album Prism.","evidence":[["Roar_-LRB-song-RRB-",0]]}
+{"id":24675,"label":"SUPPORTS","domain":"music","claim":"Overexposed is an album.","evidence":[["Overexposed_-LRB-album-RRB-",0],["Overexposed_-LRB-album-RRB-",1],["Overexposed_-LRB-album-RRB-",2],["Overexposed_-LRB-album-RRB-",3],["Overexposed_-LRB-album-RRB-",4],["Overexposed_-LRB-album-RRB-",9],["Overexposed_-LRB-album-RRB-",11],["One_More_Night_-LRB-Maroon_5_song-RRB-",1],["Overexposed_-LRB-album-RRB-",13],["Daylight_-LRB-Maroon_5_song-RRB-",1],["Overexposed_-LRB-album-RRB-",16],["Overexposed_-LRB-album-RRB-",17],["Overexposed_-LRB-album-RRB-",18],["Overexposed_-LRB-album-RRB-",19],["Overexposed_-LRB-album-RRB-",21],["Overexposed_-LRB-album-RRB-",20]]}
+{"id":180730,"label":"SUPPORTS","domain":"music","claim":"In 1982 the single Victoria (Dance Exponents Song) was released.","evidence":[["Victoria_-LRB-Dance_Exponents_song-RRB-",1]]}
+{"id":63465,"label":"SUPPORTS","domain":"music","claim":"Pearl Jam is a band.","evidence":[["Pearl_Jam",0],["Pearl_Jam",1],["Pearl_Jam",2],["Pearl_Jam",3],["Pearl_Jam",4],["Pearl_Jam",7],["Ten_-LRB-Pearl_Jam_album-RRB-",0]]}
+{"id":32076,"label":"SUPPORTS","domain":"music","claim":"Mick Thomson is a guitarist.","evidence":[["Mick_Thomson",1]]}
+{"id":52197,"label":"REFUTES","domain":"music","claim":"Eric Church is a pop singer.","evidence":[["Eric_Church",0]]}
+{"id":84775,"label":"REFUTES","domain":"music","claim":"Little Dorrit is a song by Charles Dickens.","evidence":[["Little_Dorrit",0]]}
+{"id":117998,"label":"REFUTES","domain":"music","claim":"SZA is not a Neo Soul singer.","evidence":[["SZA_-LRB-singer-RRB-",6]]}
+{"id":96840,"label":"REFUTES","domain":"music","claim":"Temple of the Dog is not a band.","evidence":[["Temple_of_the_Dog",0]]}
+{"id":180717,"label":"REFUTES","domain":"music","claim":"Victoria (Dance Exponents song) was released in New Zealand in 1980.","evidence":[["Victoria_-LRB-Dance_Exponents_song-RRB-",0]]}
+{"id":42072,"label":"REFUTES","domain":"music","claim":"You Belong with Me is an album.","evidence":[["You_Belong_with_Me",0],["You_Belong_with_Me",1],["You_Belong_with_Me",4]]}
+{"id":175742,"label":"REFUTES","domain":"music","claim":"The Cry of the Owl is based on a song.","evidence":[["The_Cry_of_the_Owl_-LRB-2009_film-RRB-",0]]}
+{"id":17718,"label":"REFUTES","domain":"music","claim":"Hourglass is the sixteenth studio album of James Taylor.","evidence":[["Hourglass_-LRB-James_Taylor_album-RRB-",0]]}
+{"id":136325,"label":"REFUTES","domain":"music","claim":"Queen (band) is from the capital of Massachusetts.","evidence":[["Queen_-LRB-band-RRB-",0],["London",0]]}
+{"id":125912,"label":"REFUTES","domain":"music","claim":"Moscovium is a band from Dallas.","evidence":[["Moscovium",0],["Moscovium",1],["Moscovium",2],["Moscovium",6],["Moscovium",7],["Moscovium",8],["Period_7_element",0],["Moscovium",9],["Moscovium",10]]}
+{"id":195374,"label":"REFUTES","domain":"music","claim":"Graffiti is a Bobby Brown album.","evidence":[["Graffiti_-LRB-Chris_Brown_album-RRB-",0]]}
+{"id":221244,"label":"REFUTES","domain":"music","claim":"The Block (album) was a film about the band the New Kids on the Block.","evidence":[["The_Block_-LRB-album-RRB-",0],["The_Block_-LRB-album-RRB-",13]]}
+{"id":28384,"label":"REFUTES","domain":"music","claim":"Creedence Clearwater Revival did not have John Fogerty as lead vocalist and guitarist.","evidence":[["Creedence_Clearwater_Revival",1]]}
+{"id":34577,"label":"REFUTES","domain":"music","claim":"Rick Ross had nothing to do with the Maybach Music Group.","evidence":[["Rick_Ross",3]]}
+{"id":47839,"label":"REFUTES","domain":"music","claim":"Mandy Moore did not have a career in music.","evidence":[["Mandy_Moore",1],["Mandy_Moore",2],["Mandy_Moore",3],["Mandy_Moore",4],["Mandy_Moore",7],["Mandy_Moore",8]]}
+{"id":53568,"label":"REFUTES","domain":"music","claim":"A Milli is a song by someone born in 1992.","evidence":[["A_Milli",0],["Lil_Wayne",0]]}
+{"id":200392,"label":"NOT ENOUGH INFO","domain":"music","claim":"Tom DeLonge formed a band in his sophomore year of high school.","evidence":[]}
+{"id":49240,"label":"NOT ENOUGH INFO","domain":"music","claim":"Ragtime features an instrumental song by Jack Nicholson.","evidence":[]}
+{"id":98,"label":"NOT ENOUGH INFO","domain":"music","claim":"Craig David is a performer that does pop music.","evidence":[]}
+{"id":195142,"label":"NOT ENOUGH INFO","domain":"music","claim":"Backing vocalists sing with the lead vocalist in a band.","evidence":[]}
+{"id":204422,"label":"NOT ENOUGH INFO","domain":"music","claim":"Brad Wilk was a guitarist for Greta.","evidence":[]}
+{"id":58514,"label":"NOT ENOUGH INFO","domain":"music","claim":"In the End was written by a band.","evidence":[]}
+{"id":109359,"label":"NOT ENOUGH INFO","domain":"music","claim":"In the End was the only song released through Warner Bros.","evidence":[]}
+{"id":146059,"label":"NOT ENOUGH INFO","domain":"music","claim":"Hourglass is the fourteenth studio album of 2017.","evidence":[]}
+{"id":109821,"label":"NOT ENOUGH INFO","domain":"music","claim":"Riz Ahmed is an award nominated singer.","evidence":[]}
+{"id":200389,"label":"NOT ENOUGH INFO","domain":"music","claim":"Tom DeLonge formed a band in college.","evidence":[]}
+{"id":140449,"label":"NOT ENOUGH INFO","domain":"music","claim":"Hourglass was James Taylor's first album in 6 days.","evidence":[]}
+{"id":162651,"label":"NOT ENOUGH INFO","domain":"music","claim":"Probot had a guitarist and a bassist.","evidence":[]}
+{"id":220209,"label":"NOT ENOUGH INFO","domain":"music","claim":"Raabta (song) is a song from a Hollywood film called Agent Vinod.","evidence":[]}
+{"id":189777,"label":"NOT ENOUGH INFO","domain":"music","claim":"Matthias Corvinus patronized art and music.","evidence":[]}
+{"id":208425,"label":"NOT ENOUGH INFO","domain":"music","claim":"Excuse My French is a jazz album by French Montana.","evidence":[]}
+{"id":79900,"label":"NOT ENOUGH INFO","domain":"music","claim":"Ice-T made a hip-hop album in 1999.","evidence":[]}
+{"id":79460,"label":"SUPPORTS","domain":"sport","claim":"Olympic medals displayed the Colosseum from 1928 to 2004.","evidence":[["Olympic_medal",6]]}
+{"id":53794,"label":"SUPPORTS","domain":"sport","claim":"The 2003 NCAA Division I Men's Basketball Tournament was played.","evidence":[["2003_NCAA_Division_I_Men's_Basketball_Tournament",0],["2003_NCAA_Division_I_Men's_Basketball_Tournament",1],["2003_NCAA_Division_I_Men's_Basketball_Tournament",2],["2003_NCAA_Division_I_Men's_Basketball_Tournament",5],["2003_NCAA_Division_I_Men's_Basketball_Tournament",6],["2003_NCAA_Division_I_Men's_Basketball_Tournament",9]]}
+{"id":169936,"label":"SUPPORTS","domain":"sport","claim":"Japan national football team had second round advancements in 2010.","evidence":[["Japan_national_football_team",4]]}
+{"id":144102,"label":"SUPPORTS","domain":"sport","claim":"Manchester United's first name was the Newton Heath LYR Football Club.","evidence":[["Manchester_United_F.C.",1]]}
+{"id":61817,"label":"SUPPORTS","domain":"sport","claim":"Ronaldinho has scored 33 goals for the Brazil national football team.","evidence":[["Ronaldinho",10],["Brazil_national_football_team",0]]}
+{"id":140589,"label":"SUPPORTS","domain":"sport","claim":"The CONCACAF Champions League is put together for football unions in Central America.","evidence":[["CONCACAF_Champions_League",0]]}
+{"id":169931,"label":"SUPPORTS","domain":"sport","claim":"AFC Asian Cup  was won four times by the Japan national football team.","evidence":[["Japan_national_football_team",4]]}
+{"id":110585,"label":"SUPPORTS","domain":"sport","claim":"Golf is played on a course.","evidence":[["Golf",4],["Golf",5]]}
+{"id":156861,"label":"SUPPORTS","domain":"sport","claim":"During the 49ers 63rd season in the National Football League Colin Kaepernick became a starter.","evidence":[["Colin_Kaepernick",5],["2012_San_Francisco_49ers_season",0]]}
+{"id":32958,"label":"SUPPORTS","domain":"sport","claim":"The New York Knicks compete in the Eastern Conference of the National Basketball Association.","evidence":[["New_York_Knicks",1]]}
+{"id":73532,"label":"SUPPORTS","domain":"sport","claim":"Juventus F.C. is the second oldest association football (soccer) club in Italy.","evidence":[["Juventus_F.C.",1],["Juventus_Stadium",0],["List_of_football_clubs_in_Italy",0]]}
+{"id":227120,"label":"SUPPORTS","domain":"sport","claim":"New Orleans Pelicans compete in the NBA in the Western Conference .","evidence":[["New_Orleans_Pelicans",1]]}
+{"id":51188,"label":"SUPPORTS","domain":"sport","claim":"Minor League Baseball prepares players for the major leagues.","evidence":[["Minor_League_Baseball",0]]}
+{"id":104017,"label":"SUPPORTS","domain":"sport","claim":"Minor League Baseball provides player development opportunities.","evidence":[["Minor_League_Baseball",0]]}
+{"id":23925,"label":"SUPPORTS","domain":"sport","claim":"Laura Robson is an athlete.","evidence":[["Laura_Robson",0],["Laura_Robson",3],["The_Championships,_Wimbledon",0],["Laura_Robson",8],["Grand_Slam_-LRB-tennis-RRB-",0],["Laura_Robson",9],["Laura_Robson",11],["WTA_Awards",0]]}
+{"id":129575,"label":"SUPPORTS","domain":"sport","claim":"Villa Park hosted a football match in 2012.","evidence":[["Villa_Park",14],["2012_FA_Community_Shield",0]]}
+{"id":28307,"label":"REFUTES","domain":"sport","claim":"Lou Gehrig got more votes than anyone else on the Major League Baseball All-Century Team in 1987.","evidence":[["Lou_Gehrig",15]]}
+{"id":57245,"label":"REFUTES","domain":"sport","claim":"Manchester United's current name is the Newton Heath LYR Football Club.","evidence":[["Manchester_United_F.C.",1]]}
+{"id":227133,"label":"REFUTES","domain":"sport","claim":"New Orleans Pelicans compete the southwest Division of the NBA's Western Conference and have been since 2002.","evidence":[["New_Orleans_Pelicans",1],["Western_Conference_-LRB-NBA-RRB-",20],["Western_Conference_-LRB-NBA-RRB-",21]]}
+{"id":123785,"label":"REFUTES","domain":"sport","claim":"Olympic medals have always displayed the Colosseum.","evidence":[["Olympic_medal",6],["Olympic_medal",5]]}
+{"id":89730,"label":"REFUTES","domain":"sport","claim":"Leslie Alexander is incapable of owning an NBA team.","evidence":[["Leslie_Alexander_-LRB-businessman-RRB-",1]]}
+{"id":45085,"label":"REFUTES","domain":"sport","claim":"Chris Bosh was incapable of winning his first NBA Finals title in 2012.","evidence":[["Chris_Bosh",8]]}
+{"id":136840,"label":"REFUTES","domain":"sport","claim":"Laura Robson lost the Wimbledon Junior Girls' Championship.","evidence":[["Laura_Robson",3]]}
+{"id":23861,"label":"REFUTES","domain":"sport","claim":"Minor League Baseball provides opportunities for river development.","evidence":[["Minor_League_Baseball",0]]}
+{"id":111980,"label":"REFUTES","domain":"sport","claim":"Mary of Teck was a professional athlete.","evidence":[["Mary_of_Teck",0]]}
+{"id":169935,"label":"REFUTES","domain":"sport","claim":"Japan national football team is incapable of having any second round advancements in 2010.","evidence":[["Japan_national_football_team",4]]}
+{"id":67833,"label":"REFUTES","domain":"sport","claim":"Shane McMahon did not win the Hardcore Championship once.","evidence":[["Shane_McMahon",10]]}
+{"id":23797,"label":"REFUTES","domain":"sport","claim":"Henry Cavill is a famous athlete.","evidence":[["Henry_Cavill",0]]}
+{"id":92439,"label":"REFUTES","domain":"sport","claim":"Terry Crews was only a quarterback.","evidence":[["Terry_Crews",9]]}
+{"id":72279,"label":"REFUTES","domain":"sport","claim":"Henri Kontinen is currently ranked last in the world for doubles in tennis.","evidence":[["Henri_Kontinen",5]]}
+{"id":227132,"label":"REFUTES","domain":"sport","claim":"The New Orleans Pelicans play in the Eastern Conference of the NBA.","evidence":[["New_Orleans_Pelicans",1],["Western_Conference_-LRB-NBA-RRB-",20],["Western_Conference_-LRB-NBA-RRB-",21]]}
+{"id":119867,"label":"REFUTES","domain":"sport","claim":"Ronaldinho has scored zero goals for the Brazil national football team.","evidence":[["Ronaldinho",10]]}
+{"id":51535,"label":"NOT ENOUGH INFO","domain":"sport","claim":"The CONCACAF Champions League is organized for football clubs in North America and it has many people.","evidence":[]}
+{"id":63769,"label":"NOT ENOUGH INFO","domain":"sport","claim":"Chris Bosh is a tennis player.","evidence":[]}
+{"id":101226,"label":"NOT ENOUGH INFO","domain":"sport","claim":"Pearl Jam plays basketball.","evidence":[]}
+{"id":8484,"label":"NOT ENOUGH INFO","domain":"sport","claim":"The 2003 NCAA Division I Men's Basketball Tournament was a knockout.","evidence":[]}
+{"id":54715,"label":"NOT ENOUGH INFO","domain":"sport","claim":"Alberto Contador initially won the Grand Prix.","evidence":[]}
+{"id":25760,"label":"NOT ENOUGH INFO","domain":"sport","claim":"Pierce County, Washington is the home of a football team.","evidence":[]}
+{"id":68680,"label":"NOT ENOUGH INFO","domain":"sport","claim":"A.J. Styles is an athlete in a combat sport.","evidence":[]}
+{"id":155982,"label":"NOT ENOUGH INFO","domain":"sport","claim":"Google Search can find athletes.","evidence":[]}
+{"id":181208,"label":"NOT ENOUGH INFO","domain":"sport","claim":"Southpaw is a sports football team.","evidence":[]}
+{"id":40293,"label":"NOT ENOUGH INFO","domain":"sport","claim":"Olympic medals no longer display the Colosseum as of the 2004 Athens Olympics.","evidence":[]}
+{"id":141652,"label":"NOT ENOUGH INFO","domain":"sport","claim":"Laura Robson won a championship.","evidence":[]}
+{"id":73345,"label":"NOT ENOUGH INFO","domain":"sport","claim":"NXT Tag Team Championship was produced by World Wrestling Entertainment, Inc.","evidence":[]}
+{"id":51189,"label":"NOT ENOUGH INFO","domain":"sport","claim":"Minor League Baseball prepares players for leagues.","evidence":[]}
+{"id":195239,"label":"NOT ENOUGH INFO","domain":"sport","claim":"Kevin Bacon was in a golf tournament with Barry Levinson.","evidence":[]}
+{"id":54869,"label":"NOT ENOUGH INFO","domain":"sport","claim":"Henri Kontinen's father is a retired tennis player.","evidence":[]}
+{"id":156623,"label":"NOT ENOUGH INFO","domain":"sport","claim":"Olympic medals no longer feature different metals for different ranks as of 2004.","evidence":[]}
+{"id":190755,"label":"SUPPORTS","domain":"literature","claim":"Marjorie Gross was a writer.","evidence":[["Marjorie_Gross",0]]}
+{"id":171082,"label":"SUPPORTS","domain":"literature","claim":"Lalla Ward is a writer.","evidence":[["Lalla_Ward",0]]}
+{"id":11658,"label":"SUPPORTS","domain":"literature","claim":"Emperor Norton is the basis of characters in many authors' books.","evidence":[["Emperor_Norton",19]]}
+{"id":84260,"label":"SUPPORTS","domain":"literature","claim":"The Big Country's basis was a serialized magazine novel.","evidence":[["The_Big_Country",2]]}
+{"id":122615,"label":"SUPPORTS","domain":"literature","claim":"The Punisher stars Jon Bernthal as the comic book character of the same title.","evidence":[["The_Punisher_-LRB-TV_series-RRB-",5]]}
+{"id":225281,"label":"SUPPORTS","domain":"literature","claim":"Brian De Palma is a writer.","evidence":[["Brian_De_Palma",0]]}
+{"id":59001,"label":"SUPPORTS","domain":"literature","claim":"The Book of Mormon won a Tony Award for Best Musical.","evidence":[["The_Book_of_Mormon_-LRB-musical-RRB-",19]]}
+{"id":146399,"label":"SUPPORTS","domain":"literature","claim":"Black Canary is a character in works published by an American comic book publisher.","evidence":[["Black_Canary",0],["DC_Comics",0],["Black_Canary",1],["Black_Canary",2]]}
+{"id":209880,"label":"SUPPORTS","domain":"literature","claim":"In a Lonely Place was based on a book of the same name.","evidence":[["In_a_Lonely_Place",1]]}
+{"id":31447,"label":"SUPPORTS","domain":"literature","claim":"The Winds of Winter is a novel in the epic fantasy genre.","evidence":[["The_Winds_of_Winter",0]]}
+{"id":200289,"label":"SUPPORTS","domain":"literature","claim":"The screenplay for Natural Born Killers was heavily revised by writer Richard Rutowski.","evidence":[["Natural_Born_Killers",5]]}
+{"id":78534,"label":"SUPPORTS","domain":"literature","claim":"Benjamin Franklin was an author.","evidence":[["Benjamin_Franklin",1],["Benjamin_Franklin",7]]}
+{"id":175468,"label":"SUPPORTS","domain":"literature","claim":"Christian Gottlob Neefe was an opera writer.","evidence":[["Christian_Gottlob_Neefe",0],["Composer",0]]}
+{"id":143123,"label":"SUPPORTS","domain":"literature","claim":"Daenerys Targaryen was introduced in a novel.","evidence":[["Daenerys_Targaryen",5],["A_Game_of_Thrones",0]]}
+{"id":157277,"label":"SUPPORTS","domain":"literature","claim":"Winter's Tale is a book.","evidence":[["Winter's_Tale_-LRB-novel-RRB-",0]]}
+{"id":3583,"label":"SUPPORTS","domain":"literature","claim":"Robert Palmer (writer) has written for the New York Times.","evidence":[["Robert_Palmer_-LRB-writer-RRB-",1]]}
+{"id":93320,"label":"REFUTES","domain":"literature","claim":"DodgeBall: A True Underdog Story is a 2004 novel.","evidence":[["DodgeBall-COLON-_A_True_Underdog_Story",0],["DodgeBall-COLON-_A_True_Underdog_Story",1],["DodgeBall-COLON-_A_True_Underdog_Story",4],["Rotten_Tomatoes",0]]}
+{"id":59214,"label":"REFUTES","domain":"literature","claim":"The Hunger Games is only a novel.","evidence":[["The_Hunger_Games_-LRB-novel-RRB-",17]]}
+{"id":15489,"label":"REFUTES","domain":"literature","claim":"See You on the Other Side is a book.","evidence":[["See_You_on_the_Other_Side_-LRB-Korn_album-RRB-",0],["See_You_on_the_Other_Side_-LRB-Korn_album-RRB-",2],["See_You_on_the_Other_Side_-LRB-Korn_album-RRB-",3],["See_You_on_the_Other_Side_-LRB-Korn_album-RRB-",4],["See_You_on_the_Other_Side_-LRB-Korn_album-RRB-",6]]}
+{"id":217669,"label":"REFUTES","domain":"literature","claim":"The Pelican Brief is based solely on a poem.","evidence":[["The_Pelican_Brief_-LRB-film-RRB-",0]]}
+{"id":68386,"label":"REFUTES","domain":"literature","claim":"Philomena is only a book.","evidence":[["Philomena_-LRB-film-RRB-",0],["Philomena_-LRB-film-RRB-",1],["Philomena_Lee",1]]}
+{"id":93473,"label":"REFUTES","domain":"literature","claim":"Charles Howard Hinton wrote predominately epistolary pastoral novels.","evidence":[["Charles_Howard_Hinton",0]]}
+{"id":94861,"label":"REFUTES","domain":"literature","claim":"The Winds of Winter is the eighth book in a series.","evidence":[["The_Winds_of_Winter",0]]}
+{"id":172762,"label":"REFUTES","domain":"literature","claim":"The Beach is an adventure drama novel.","evidence":[["The_Beach_-LRB-film-RRB-",0],["The_Beach_-LRB-film-RRB-",1],["The_Beach_-LRB-film-RRB-",2]]}
+{"id":132786,"label":"REFUTES","domain":"literature","claim":"Shawn Carlson is a social science writer.","evidence":[["Shawn_Carlson",0]]}
+{"id":144809,"label":"REFUTES","domain":"literature","claim":"AMGTV is a family-oriented comic book.","evidence":[["AMGTV",0],["AMGTV",1],["AMGTV",4],["AMGTV",5]]}
+{"id":100145,"label":"REFUTES","domain":"literature","claim":"The Silver Surfer appears only in Icelandic comic books.","evidence":[["Silver_Surfer",0],["Silver_Surfer",1]]}
+{"id":23330,"label":"REFUTES","domain":"literature","claim":"The Wonder Years was only a book.","evidence":[["The_Wonder_Years",0],["The_Wonder_Years",2],["The_Wonder_Years",5],["The_Wonder_Years",6],["The_Wonder_Years",7],["The_Wonder_Years",9],["The_Wonder_Years",10],["The_Wonder_Years",11],["The_Wonder_Years",12],["The_Wonder_Years",13],["The_Wonder_Years",1],["The_Wonder_Years",8],["Fred_Savage",1]]}
+{"id":141641,"label":"REFUTES","domain":"literature","claim":"Victor Frankenstein is based on contemporary adaptations of Mark Twain's novel.","evidence":[["Victor_Frankenstein_-LRB-film-RRB-",0]]}
+{"id":82594,"label":"REFUTES","domain":"literature","claim":"Carol Danvers appears only in comic books published by DC.","evidence":[["Carol_Danvers",0],["Carol_Danvers",1],["Carol_Danvers",2],["Avengers_-LRB-comics-RRB-",0],["Carol_Danvers",3],["Carol_Danvers",6],["Carol_Danvers",7]]}
+{"id":16115,"label":"REFUTES","domain":"literature","claim":"Ayananka Bose works on books.","evidence":[["Ayananka_Bose",0]]}
+{"id":171647,"label":"REFUTES","domain":"literature","claim":"Dave Gibbons is an Indian comic book artist.","evidence":[["Dave_Gibbons",0]]}
+{"id":160417,"label":"NOT ENOUGH INFO","domain":"literature","claim":"Kesha is a dancer, playwright, and slam poet.","evidence":[]}
+{"id":204986,"label":"NOT ENOUGH INFO","domain":"literature","claim":"Tyler Perry is a professional writer.","evidence":[]}
+{"id":220465,"label":"NOT ENOUGH INFO","domain":"literature","claim":"The Church of Jesus Christ of Latter-day Saints has a book called the Doctrine and Covenants, more commonly known as the \"Word of Wisdom.\"","evidence":[]}
+{"id":102756,"label":"NOT ENOUGH INFO","domain":"literature","claim":"Bad Romance is a novel.","evidence":[]}
+{"id":177861,"label":"NOT ENOUGH INFO","domain":"literature","claim":"Milk is based solely on a novel by Stephen King.","evidence":[]}
+{"id":100300,"label":"NOT ENOUGH INFO","domain":"literature","claim":"The Walking Dead (comic book) inspired a piece of media.","evidence":[]}
+{"id":93519,"label":"NOT ENOUGH INFO","domain":"literature","claim":"Penguin Books demonstrated that large audiences existed for serious books such as Shantaram.","evidence":[]}
+{"id":101608,"label":"NOT ENOUGH INFO","domain":"literature","claim":"Robert Palmer (writer) has produced poems.","evidence":[]}
+{"id":26107,"label":"NOT ENOUGH INFO","domain":"literature","claim":"Winter's Tale is a collaborative work by 300 authors.","evidence":[]}
+{"id":141973,"label":"NOT ENOUGH INFO","domain":"literature","claim":"Penguin Books has had significant impact on public debate in cheese.","evidence":[]}
+{"id":1424,"label":"NOT ENOUGH INFO","domain":"literature","claim":"Roberto Orci wrote a book.","evidence":[]}
+{"id":150909,"label":"NOT ENOUGH INFO","domain":"literature","claim":"South Island is sometimes referred to as the novelist's homeland.","evidence":[]}
+{"id":187582,"label":"NOT ENOUGH INFO","domain":"literature","claim":"Dan Brown is an American author with five kids.","evidence":[]}
+{"id":184068,"label":"NOT ENOUGH INFO","domain":"literature","claim":"Kenneth Lonergan is the writer of Pacific Rim.","evidence":[]}
+{"id":135174,"label":"NOT ENOUGH INFO","domain":"literature","claim":"Joseph Goebbels' Propaganda Ministry controlled the news media, arts, and information in books.","evidence":[]}
+{"id":217681,"label":"NOT ENOUGH INFO","domain":"literature","claim":"The Pelican Brief is based on a novel by an Italian plumber.","evidence":[]}
+{"id":38299,"label":"SUPPORTS","domain":"place","claim":"Helmand Province has a domestic airport.","evidence":[["Helmand_Province",7],["Helmand_Province",0]]}
+{"id":33838,"label":"SUPPORTS","domain":"place","claim":"The Hindu Kush is a mountain range.","evidence":[["Hindu_Kush",0]]}
+{"id":28912,"label":"SUPPORTS","domain":"place","claim":"Sarawak's city with the most people is Kuching.","evidence":[["Kuching",0]]}
+{"id":145446,"label":"SUPPORTS","domain":"place","claim":"Topman has clothing outlets in six Irish cities and towns.","evidence":[["Topman",1]]}
+{"id":50486,"label":"SUPPORTS","domain":"place","claim":"The Atlanta metropolitan area covers 39 counties.","evidence":[["Atlanta_metropolitan_area",3]]}
+{"id":22725,"label":"SUPPORTS","domain":"place","claim":"In Kentucky, the electric chair has been retired except for those whose capital crimes were committed prior to March 31, 1998, and who choose electrocution.","evidence":[["Electric_chair",15]]}
+{"id":126496,"label":"SUPPORTS","domain":"place","claim":"The Bahamas is a country.","evidence":[["The_Bahamas",3],["The_Bahamas",22]]}
+{"id":48541,"label":"SUPPORTS","domain":"place","claim":"UNESCO's City of Literature program aims to advocate for the social, economic and cultural development of cities in both the developed and the developing world.","evidence":[["City_of_Literature",2]]}
+{"id":45805,"label":"SUPPORTS","domain":"place","claim":"Bonobos have an estimated population of less than 50,000.","evidence":[["Bonobo",13]]}
+{"id":72401,"label":"SUPPORTS","domain":"place","claim":"The Columbia River contains locks for shipping channels.","evidence":[["Columbia_River",21]]}
+{"id":87517,"label":"SUPPORTS","domain":"place","claim":"The Cyclades are located to the southeast of Greece's mainland.","evidence":[["Cyclades",0]]}
+{"id":426,"label":"SUPPORTS","domain":"place","claim":"Absinthe is banned in some countries.","evidence":[["Absinthe",16]]}
+{"id":68084,"label":"SUPPORTS","domain":"place","claim":"Wales' population changed.","evidence":[["Wales",16]]}
+{"id":24074,"label":"SUPPORTS","domain":"place","claim":"Musala is a mountain.","evidence":[["Musala",0],["Mountain",0],["Musala",1],["Musala",2]]}
+{"id":108376,"label":"SUPPORTS","domain":"place","claim":"Prescott, Arizona is an American city.","evidence":[["Prescott,_Arizona",0]]}
+{"id":98304,"label":"SUPPORTS","domain":"place","claim":"The Indian Army comprises part of the country's active defense personnel.","evidence":[["Indian_Army",16]]}
+{"id":118940,"label":"REFUTES","domain":"place","claim":"Aarhus is the second-largest city in flag.","evidence":[["Aarhus",0]]}
+{"id":8830,"label":"REFUTES","domain":"place","claim":"Helmand Province is far away from Lashkargah.","evidence":[["Helmand_Province",3]]}
+{"id":143063,"label":"REFUTES","domain":"place","claim":"Brown University's main campus is located in the least populous city in Connecticut.","evidence":[["Brown_University",0]]}
+{"id":75904,"label":"REFUTES","domain":"place","claim":"The Indian Army does not comprise more than 80% of the country's active defense personnel.","evidence":[["Indian_Army",16]]}
+{"id":199741,"label":"REFUTES","domain":"place","claim":"Tijuana is the center of the Mexico City metropolitan area.","evidence":[["Tijuana",0]]}
+{"id":113754,"label":"REFUTES","domain":"place","claim":"The Columbia River is totally uncontrolled by man-made devices.","evidence":[["Columbia_River",22]]}
+{"id":103503,"label":"REFUTES","domain":"place","claim":"Eurotas (river) is a minor river of Laconia.","evidence":[["Eurotas_-LRB-river-RRB-",0]]}
+{"id":146606,"label":"REFUTES","domain":"place","claim":"Yemen is the most wealthy country in the Arabian peninsula.","evidence":[["Yemen",21],["Middle_East",19]]}
+{"id":102175,"label":"REFUTES","domain":"place","claim":"The ancient Roman town of Pompeii was located near present-day Worms, which is nowhere near Naples.","evidence":[["Naples",34],["Pompeii",0]]}
+{"id":105651,"label":"REFUTES","domain":"place","claim":"Salt River Valley is in northern Arizona.","evidence":[["Salt_River_Valley",0]]}
+{"id":109036,"label":"REFUTES","domain":"place","claim":"Atlanta metropolitan area is located in south Georgia.","evidence":[["Atlanta_metropolitan_area",3]]}
+{"id":219693,"label":"REFUTES","domain":"place","claim":"Corsica is a mountain.","evidence":[["Corsica",0]]}
+{"id":198037,"label":"REFUTES","domain":"place","claim":"The New York City Landmarks Preservation Commission consists of zero commissioners.","evidence":[["New_York_City_Landmarks_Preservation_Commission",6]]}
+{"id":24994,"label":"REFUTES","domain":"place","claim":"Skopje was the capital of the Russian Empire.","evidence":[["Skopje",0]]}
+{"id":206173,"label":"REFUTES","domain":"place","claim":"Palo Alto, California is located in the southeast corner San Francisco Bay Area.","evidence":[["Palo_Alto,_California",0]]}
+{"id":173049,"label":"REFUTES","domain":"place","claim":"Barcelona has a population of less than one million.","evidence":[["Barcelona",0]]}
+{"id":5428,"label":"NOT ENOUGH INFO","domain":"place","claim":"Vatican City was established in 1929.","evidence":[]}
+{"id":77296,"label":"NOT ENOUGH INFO","domain":"place","claim":"Vatican City is a colony.","evidence":[]}
+{"id":97002,"label":"NOT ENOUGH INFO","domain":"place","claim":"Lucy Hale is a citizen of a country.","evidence":[]}
+{"id":66362,"label":"NOT ENOUGH INFO","domain":"place","claim":"The Columbia River has gold sediments.","evidence":[]}
+{"id":22514,"label":"NOT ENOUGH INFO","domain":"place","claim":"Bonobos have a population of 40,000.","evidence":[]}
+{"id":66418,"label":"NOT ENOUGH INFO","domain":"place","claim":"UNESCO's City of Literature program aims to promote the social, economic and cultural development of nations in both the developed and the developing world.","evidence":[]}
+{"id":6856,"label":"NOT ENOUGH INFO","domain":"place","claim":"The Columbia River contains class five rapids.","evidence":[]}
+{"id":26138,"label":"NOT ENOUGH INFO","domain":"place","claim":"Tremont Street Subway served a light rail station on the MBTA Green Line system, and is located on the southeast corner of Boston Common at the intersection of Boylston Street and Tremont Street.","evidence":[]}
+{"id":89309,"label":"NOT ENOUGH INFO","domain":"place","claim":"The Mormon population has grown significantly since 1980.","evidence":[]}
+{"id":2204,"label":"NOT ENOUGH INFO","domain":"place","claim":"Antigua has a native population known as the Antiguan.","evidence":[]}
+{"id":57892,"label":"NOT ENOUGH INFO","domain":"place","claim":"Pierce County, Washington is modeled after the highest mountain in Washington.","evidence":[]}
+{"id":160681,"label":"NOT ENOUGH INFO","domain":"place","claim":"Charlotte, North Carolina was the third-largest city in population size from 1995 to 2017.","evidence":[]}
+{"id":86846,"label":"NOT ENOUGH INFO","domain":"place","claim":"Kuching is a city in southern Malaysia.","evidence":[]}
+{"id":146963,"label":"NOT ENOUGH INFO","domain":"place","claim":"The fourth highest civilian honour of the country was received by Kojol.","evidence":[]}
+{"id":124845,"label":"NOT ENOUGH INFO","domain":"place","claim":"The Columbia River has fish and crayfish.","evidence":[]}
+{"id":199743,"label":"NOT ENOUGH INFO","domain":"place","claim":"Tijuana is the most populous city of the Tijuana metropolitan area.","evidence":[]}
+{"id":142462,"label":"SUPPORTS","domain":"public-affairs","claim":"During the Battle of France, English forces occupied Paris.","evidence":[["Battle_of_France",13]]}
+{"id":21187,"label":"SUPPORTS","domain":"public-affairs","claim":"The Battle of France happened during World War II.","evidence":[["Battle_of_France",0],["Battle_of_France",1],["Western_Front_-LRB-World_War_II-RRB-",0],["Battle_of_France",2],["Italian_invasion_of_France",0],["Battle_of_France",7],["Battle_of_Dunkirk",0],["Battle_of_Dunkirk",1],["Battle_of_France",10],["Fall_Rot",0],["Fall_Rot",1],["Battle_of_France",17],["World_War_II",0],["Armistice_of_22_June_1940",5]]}
+{"id":179036,"label":"SUPPORTS","domain":"public-affairs","claim":"Congressional Space Medal of Honor is awarded by the President on behalf of the Senate.","evidence":[["Congressional_Space_Medal_of_Honor",1]]}
+{"id":182689,"label":"SUPPORTS","domain":"public-affairs","claim":"Nina Jacobson was president of a Walt Disney Company subsidiary.","evidence":[["Nina_Jacobson",0]]}
+{"id":205126,"label":"SUPPORTS","domain":"public-affairs","claim":"Gaius Julius Caesar participated in a senate.","evidence":[["Gaius_Julius_Caesar_-LRB-proconsul-RRB-",0],["Roman_Senate",0]]}
+{"id":18079,"label":"SUPPORTS","domain":"public-affairs","claim":"Scandinavia includes the three kingdoms of Denmark, Norway, and Sweden as of 1902.","evidence":[["Scandinavia",3],["Sweden",27]]}
+{"id":113686,"label":"SUPPORTS","domain":"public-affairs","claim":"Georgians arose from an ancient kingdom on the coast of the Black Sea and they are significant.","evidence":[["Georgians",4],["Colchis",0],["Georgians",0]]}
+{"id":41003,"label":"SUPPORTS","domain":"public-affairs","claim":"Sora (Kingdom Hearts) is a fictional character.","evidence":[["Sora_-LRB-Kingdom_Hearts-RRB-",0]]}
+{"id":132620,"label":"SUPPORTS","domain":"public-affairs","claim":"A brief civil war was put down by Otto I, Holy Roman Emperor.","evidence":[["Otto_I,_Holy_Roman_Emperor",11]]}
+{"id":38898,"label":"SUPPORTS","domain":"public-affairs","claim":"Nero's death sparked a brief period of civil wars.","evidence":[["Nero",22]]}
+{"id":121093,"label":"SUPPORTS","domain":"public-affairs","claim":"French Indochina was a grouping of French colonial territories.","evidence":[["French_Indochina",0]]}
+{"id":164497,"label":"SUPPORTS","domain":"public-affairs","claim":"The Nobel Prize in Chemistry was awarded to a person from the Kingdom of the Netherlands.","evidence":[["Nobel_Prize_in_Chemistry",6]]}
+{"id":3106,"label":"SUPPORTS","domain":"public-affairs","claim":"The Armenian Genocide was the Ottoman government's systematic extermination of 1.5 million Armenians.","evidence":[["Armenian_Genocide",0]]}
+{"id":98916,"label":"SUPPORTS","domain":"public-affairs","claim":"The American Revolution was lead by Benjamin Franklin.","evidence":[["Benjamin_Franklin",23]]}
+{"id":61874,"label":"SUPPORTS","domain":"public-affairs","claim":"L.A. Reid has been the president of Arista Records.","evidence":[["L.A._Reid",1]]}
+{"id":178237,"label":"SUPPORTS","domain":"public-affairs","claim":"Currently Nawaz Sharif serves as a prime minister.","evidence":[["Nawaz_Sharif",0]]}
+{"id":98970,"label":"REFUTES","domain":"public-affairs","claim":"Nero's death sparked a brief period of civil wars in Russia.","evidence":[["Nero",22],["Year_of_the_Four_Emperors",3]]}
+{"id":93621,"label":"REFUTES","domain":"public-affairs","claim":"The Armenian Genocide was the Ottoman government's systematic extermination of 1.5 million Jews.","evidence":[["Armenian_Genocide",0]]}
+{"id":205283,"label":"REFUTES","domain":"public-affairs","claim":"In the 1994 genocide in Rwanda, there was zero casualties.","evidence":[["Rwanda",26]]}
+{"id":96657,"label":"REFUTES","domain":"public-affairs","claim":"Ann Richards was the Governor of Texas for one year.","evidence":[["Ann_Richards",0]]}
+{"id":112506,"label":"REFUTES","domain":"public-affairs","claim":"Harold Macmillan was a German politician.","evidence":[["Harold_Macmillan",0]]}
+{"id":56742,"label":"REFUTES","domain":"public-affairs","claim":"Luis Fonsi is a prime minister.","evidence":[["Luis_Fonsi",0]]}
+{"id":172469,"label":"REFUTES","domain":"public-affairs","claim":"Matteo Renzi was a senator from February 2014 to December 2016.","evidence":[["Matteo_Renzi",0]]}
+{"id":71352,"label":"REFUTES","domain":"public-affairs","claim":"Qin dynasty was incapable of working with currency.","evidence":[["Qin_dynasty",21]]}
+{"id":177171,"label":"REFUTES","domain":"public-affairs","claim":"Invasion literature was influential in France in shaping politics.","evidence":[["Invasion_literature",3]]}
+{"id":169003,"label":"REFUTES","domain":"public-affairs","claim":"Manmohan Singh was only a prime minister before Jawaharlal Nehru.","evidence":[["Manmohan_Singh",1]]}
+{"id":116278,"label":"REFUTES","domain":"public-affairs","claim":"Tennessee was a member of the Union during the Civil War.","evidence":[["Tennessee",11]]}
+{"id":6743,"label":"REFUTES","domain":"public-affairs","claim":"Jens Stoltenberg was the first Prime Minister of Norway from 2005 to 2013.","evidence":[["Jens_Stoltenberg",4],["Norway",14]]}
+{"id":45014,"label":"REFUTES","domain":"public-affairs","claim":"Cambridgeshire's local government is only one unitary authority.","evidence":[["Cambridgeshire",7]]}
+{"id":80458,"label":"REFUTES","domain":"public-affairs","claim":"Fidel Castro lost all elections for President of Cuba.","evidence":[["Fidel_Castro",0]]}
+{"id":194183,"label":"REFUTES","domain":"public-affairs","claim":"Jeb Bush is former President George H. W. Bush's eldest son.","evidence":[["Jeb_Bush",3]]}
+{"id":26948,"label":"REFUTES","domain":"public-affairs","claim":"Battle of the Bastards did not have a viewership of over a million in its initial broadcast.","evidence":[["Battle_of_the_Bastards",15]]}
+{"id":202984,"label":"NOT ENOUGH INFO","domain":"public-affairs","claim":"No President of Lockheed Martin has been born after 1950.","evidence":[]}
+{"id":147487,"label":"NOT ENOUGH INFO","domain":"public-affairs","claim":"The Armenian Genocide occurred during the Reconstruction.","evidence":[]}
+{"id":127601,"label":"NOT ENOUGH INFO","domain":"public-affairs","claim":"Mamata Banerjee has been Chief Minister of Western Union since 2011,","evidence":[]}
+{"id":202981,"label":"NOT ENOUGH INFO","domain":"public-affairs","claim":"The current President of Lockheed Martin was born in Brazil.","evidence":[]}
+{"id":87098,"label":"NOT ENOUGH INFO","domain":"public-affairs","claim":"Harold Macmillan only served as the President of the United Kingdom.","evidence":[]}
+{"id":174899,"label":"NOT ENOUGH INFO","domain":"public-affairs","claim":"The Alfred P. Murrah Federal Building was only an Australian federal government complex.","evidence":[]}
+{"id":41789,"label":"NOT ENOUGH INFO","domain":"public-affairs","claim":"Sora (Kingdom Hearts) works with multiple characters in the world of Kingdom Hearts.","evidence":[]}
+{"id":147963,"label":"NOT ENOUGH INFO","domain":"public-affairs","claim":"The Armenian Genocide is also known as the event.","evidence":[]}
+{"id":46390,"label":"NOT ENOUGH INFO","domain":"public-affairs","claim":"Keegan-Michael Key played President Barack Obama's famous anger translator.","evidence":[]}
+{"id":138265,"label":"NOT ENOUGH INFO","domain":"public-affairs","claim":"The Gettysburg Address was delivered to a President of the United States.","evidence":[]}
+{"id":156591,"label":"NOT ENOUGH INFO","domain":"public-affairs","claim":"B. R. Ambedkar was a Pakistani politician.","evidence":[]}
+{"id":194438,"label":"NOT ENOUGH INFO","domain":"public-affairs","claim":"The Indiana Pacers became a member of the United States Congress in 1976.","evidence":[]}
+{"id":84354,"label":"NOT ENOUGH INFO","domain":"public-affairs","claim":"The American Civil War ended on May 8, 1865.","evidence":[]}
+{"id":26918,"label":"NOT ENOUGH INFO","domain":"public-affairs","claim":"Jewell is a mayor.","evidence":[]}
+{"id":194168,"label":"NOT ENOUGH INFO","domain":"public-affairs","claim":"Jeb Bush is former President George H. W. Bush's assistant.","evidence":[]}
+{"id":169010,"label":"NOT ENOUGH INFO","domain":"public-affairs","claim":"After the first Prime Minister of India, Manmohan Singh was a prime minister.","evidence":[]}
+{"id":34205,"label":"SUPPORTS","domain":"science","claim":"A person who was known for his work in mass spectrometry discovered Uranium-235.","evidence":[["Uranium-235",6],["Arthur_Jeffrey_Dempster",0]]}
+{"id":119047,"label":"SUPPORTS","domain":"science","claim":"Microbiologist research promotes information found in pathology and molecular biology","evidence":[["Microbiologist",14]]}
+{"id":101125,"label":"SUPPORTS","domain":"science","claim":"A near-Earth object is not a planet and it is in the universe.","evidence":[["Near-Earth_object",0],["Earth",0],["Small_Solar_System_body",0]]}
+{"id":86133,"label":"SUPPORTS","domain":"science","claim":"Rabies is a disease.","evidence":[["Rabies",0],["Rabies",4],["Rabies",12],["Rabies",16],["Rabies",22],["Rabies",34]]}
+{"id":125780,"label":"SUPPORTS","domain":"science","claim":"Youtube is listed as the second most popular website on the planet.","evidence":[["YouTube",15]]}
+{"id":219278,"label":"SUPPORTS","domain":"science","claim":"Capsicum chinense is a species of chili pepper.","evidence":[["Capsicum_chinense",0]]}
+{"id":219164,"label":"SUPPORTS","domain":"science","claim":"Species distribution can be understood through factors such as glaciation.","evidence":[["Species_distribution",14]]}
+{"id":94151,"label":"SUPPORTS","domain":"science","claim":"Uranium-235 was discovered by at least one person.","evidence":[["Uranium-235",6],["Arthur_Jeffrey_Dempster",0]]}
+{"id":15980,"label":"SUPPORTS","domain":"science","claim":"Parkinson's disease causes symptoms.","evidence":[["Parkinson's_disease",1],["Parkinson's_disease",6],["Parkinson's_disease",7],["Parkinson's_disease",13],["Parkinson's_disease",16],["Parkinson's_disease",22],["Parkinson's_disease",23],["Parkinson's_disease",24],["Parkinson's_disease",2]]}
+{"id":142863,"label":"SUPPORTS","domain":"science","claim":"Coeliac disease is treated by maintaining a healthy diet.","evidence":[["Coeliac_disease",26]]}
+{"id":67319,"label":"SUPPORTS","domain":"science","claim":"Uranium is an elemental chemical.","evidence":[["Uranium",0]]}
+{"id":145012,"label":"SUPPORTS","domain":"science","claim":"Coeliac disease may result in increased risk of cancer.","evidence":[["Coeliac_disease",27]]}
+{"id":15982,"label":"SUPPORTS","domain":"science","claim":"Uranium-235 was discovered by a person who died in March.","evidence":[["Uranium-235",6],["Arthur_Jeffrey_Dempster",0]]}
+{"id":138161,"label":"SUPPORTS","domain":"science","claim":"Uranium-235 was founded in 1935.","evidence":[["Uranium-235",6]]}
+{"id":198216,"label":"SUPPORTS","domain":"science","claim":"Saturn is the second-largest planet in the Solar System.","evidence":[["Saturn",0]]}
+{"id":21085,"label":"SUPPORTS","domain":"science","claim":"Amyotrophic lateral sclerosis is a disease that usually starts around the age of 60.","evidence":[["Amyotrophic_lateral_sclerosis",15]]}
+{"id":123121,"label":"REFUTES","domain":"science","claim":"Physics' main goal is to understand the behavior of eels.","evidence":[["Physics",1]]}
+{"id":53751,"label":"REFUTES","domain":"science","claim":"Parkinson's disease prevents tremors.","evidence":[["Parkinson's_disease",2]]}
+{"id":103872,"label":"REFUTES","domain":"science","claim":"Uranium-235 was discovered by a person who lived forever.","evidence":[["Uranium-235",6],["Arthur_Jeffrey_Dempster",0]]}
+{"id":103709,"label":"REFUTES","domain":"science","claim":"Uranium was unable to meet the qualifications to be considered a chemical element.","evidence":[["Uranium",0]]}
+{"id":171625,"label":"REFUTES","domain":"science","claim":"Dave Gibbons was born at a Planet Fitness.","evidence":[["Dave_Gibbons",0]]}
+{"id":198225,"label":"REFUTES","domain":"science","claim":"Saturn is the ninth planet from the Sun.","evidence":[["Saturn",0]]}
+{"id":61136,"label":"REFUTES","domain":"science","claim":"Physics is not one of the oldest academic disciplines.","evidence":[["Physics",4]]}
+{"id":115257,"label":"REFUTES","domain":"science","claim":"Homo sapiens live on the fourth planet from the Sun.","evidence":[["Homo_sapiens",0]]}
+{"id":116349,"label":"REFUTES","domain":"science","claim":"Uranium-235 was discovered by a person who was known for his work in mass spectrometry in 2014.","evidence":[["Uranium-235",6],["Arthur_Jeffrey_Dempster",0]]}
+{"id":198231,"label":"REFUTES","domain":"science","claim":"Saturn is the third-largest planet in the Solar System.","evidence":[["Saturn",0]]}
+{"id":219190,"label":"REFUTES","domain":"science","claim":"Species distribution can be understood through many factors except continental drift.","evidence":[["Species_distribution",14]]}
+{"id":68468,"label":"REFUTES","domain":"science","claim":"Uranium has an address of 92.","evidence":[["Uranium",0]]}
+{"id":76901,"label":"REFUTES","domain":"science","claim":"Physics is not a scientific discipline.","evidence":[["Physics",1],["Physics",4],["Astronomy",18],["Astronomy",7],["Astronomy",0]]}
+{"id":219299,"label":"REFUTES","domain":"science","claim":"Capsicum chinense is only a species of tomato.","evidence":[["Capsicum_chinense",0]]}
+{"id":87879,"label":"REFUTES","domain":"science","claim":"Uranium-235 was lost by Arthur Jeffrey Dempster.","evidence":[["Uranium-235",6]]}
+{"id":83577,"label":"REFUTES","domain":"science","claim":"Physics includes biology.","evidence":[["Physics",5],["Biology",0]]}
+{"id":81067,"label":"NOT ENOUGH INFO","domain":"science","claim":"Benzodiazepine is a medication for heart disease.","evidence":[]}
+{"id":219279,"label":"NOT ENOUGH INFO","domain":"science","claim":"Capsicum chinense is a German species of chili pepper.","evidence":[]}
+{"id":27529,"label":"NOT ENOUGH INFO","domain":"science","claim":"The Bengal tiger is a member of the largest cat species coming from the eponymous region in India.","evidence":[]}
+{"id":11665,"label":"NOT ENOUGH INFO","domain":"science","claim":"A near-Earth object is not a dwarf planet.","evidence":[]}
+{"id":219169,"label":"NOT ENOUGH INFO","domain":"science","claim":"Species distribution can be understood through factors such as available resources.","evidence":[]}
+{"id":76275,"label":"NOT ENOUGH INFO","domain":"science","claim":"Parkinson's disease has afflicted beagles.","evidence":[]}
+{"id":12475,"label":"NOT ENOUGH INFO","domain":"science","claim":"Physics is a discipline of science.","evidence":[]}
+{"id":219167,"label":"NOT ENOUGH INFO","domain":"science","claim":"Species distribution can be understood through at least one environmental factor.","evidence":[]}
+{"id":221142,"label":"NOT ENOUGH INFO","domain":"science","claim":"Ted Cruz is a lobbyist and physician.","evidence":[]}
+{"id":95742,"label":"NOT ENOUGH INFO","domain":"science","claim":"Uranium-235 was discovered by a person who was known for his work in mass media.","evidence":[]}
+{"id":32307,"label":"NOT ENOUGH INFO","domain":"science","claim":"Physics' main goal is to understand the behavior of the universe through the study of matter and its movement.","evidence":[]}
+{"id":139796,"label":"NOT ENOUGH INFO","domain":"science","claim":"Uranium-235 was parodied by Arthur Jeffrey Dempster.","evidence":[]}
+{"id":60917,"label":"NOT ENOUGH INFO","domain":"science","claim":"Uranium-235 was discovered by at least one person who died in a month.","evidence":[]}
+{"id":140573,"label":"NOT ENOUGH INFO","domain":"science","claim":"Physics is the second oldest academic discipline.","evidence":[]}
+{"id":198211,"label":"NOT ENOUGH INFO","domain":"science","claim":"Saturn is the sixth planet from the Earth.","evidence":[]}
+{"id":60399,"label":"NOT ENOUGH INFO","domain":"science","claim":"Coeliac disease may result in increased risk of eggs.","evidence":[]}
+{"id":175879,"label":"SUPPORTS","domain":"other","claim":"From 1997 until the 1999-2000 season, Chris Mullin played with the Indiana Pacers.","evidence":[["Chris_Mullin_-LRB-basketball-RRB-",11]]}
+{"id":163829,"label":"SUPPORTS","domain":"other","claim":"William Blackstone went to Pembroke College in Oxford.","evidence":[["William_Blackstone",2],["Matriculation",0]]}
+{"id":84041,"label":"SUPPORTS","domain":"other","claim":"Ashley Graham was on Vogue's cover in 2017.","evidence":[["Ashley_Graham_-LRB-model-RRB-",6]]}
+{"id":56261,"label":"SUPPORTS","domain":"other","claim":"Taarak Mehta Ka Ooltah Chashmah is from India.","evidence":[["Taarak_Mehta_Ka_Ooltah_Chashmah",0],["Taarak_Mehta_Ka_Ooltah_Chashmah",2],["SAB_TV",0],["Taarak_Mehta_Ka_Ooltah_Chashmah",3],["Sony_Pal",0]]}
+{"id":216352,"label":"SUPPORTS","domain":"other","claim":"The Chagatai language is moribund.","evidence":[["Chagatai_language",0]]}
+{"id":116103,"label":"SUPPORTS","domain":"other","claim":"Mount Rushmore was made.","evidence":[["Mount_Rushmore",0]]}
+{"id":45565,"label":"SUPPORTS","domain":"other","claim":"Seohyun is a performer.","evidence":[["Seohyun",0],["Seohyun",2],["Seohyun",3]]}
+{"id":207534,"label":"SUPPORTS","domain":"other","claim":"A solo career was had by Mel B.","evidence":[["Mel_B",5],["Mel_B",9]]}
+{"id":96937,"label":"SUPPORTS","domain":"other","claim":"Veeru Devgan is from Asia.","evidence":[["Veeru_Devgan",1],["Amritsar",0],["India",0]]}
+{"id":32940,"label":"SUPPORTS","domain":"other","claim":"David Spade appeared in Joe Dirt 2: Beautiful Loser.","evidence":[["David_Spade",2]]}
+{"id":117869,"label":"SUPPORTS","domain":"other","claim":"In The 100, teens are the first to return to Earth.","evidence":[["The_100_-LRB-TV_series-RRB-",4]]}
+{"id":159324,"label":"SUPPORTS","domain":"other","claim":"Weill Cornell Medicine is a unit.","evidence":[["Weill_Cornell_Medicine",0]]}
+{"id":97449,"label":"SUPPORTS","domain":"other","claim":"Sandra Bullock was in George Lopez.","evidence":[["Sandra_Bullock",17]]}
+{"id":182283,"label":"SUPPORTS","domain":"other","claim":"Saturn Corporation is registered as a trademark.","evidence":[["Saturn_Corporation",0]]}
+{"id":126466,"label":"SUPPORTS","domain":"other","claim":"Trollhunters is animated.","evidence":[["Trollhunters",0],["Trollhunters",5]]}
+{"id":163818,"label":"SUPPORTS","domain":"other","claim":"William Blackstone was born in London.","evidence":[["William_Blackstone",2],["William_Blackstone",0]]}
+{"id":172716,"label":"REFUTES","domain":"other","claim":"Northwestern University is the only public university of the Big Ten Conference.","evidence":[["Northwestern_University",19],["Northwestern_University",0]]}
+{"id":108031,"label":"REFUTES","domain":"other","claim":"Luis Fonsi is American.","evidence":[["Luis_Fonsi",0]]}
+{"id":9849,"label":"REFUTES","domain":"other","claim":"Michigan is not a U.S. state.","evidence":[["Michigan",0],["Michigan",2],["Michigan",8],["U.S._state",0]]}
+{"id":67212,"label":"REFUTES","domain":"other","claim":"John Dolmayan is Armenian-American and Indian.","evidence":[["John_Dolmayan",0]]}
+{"id":60702,"label":"REFUTES","domain":"other","claim":"A parent of Jed Whedon was born in the month of August.","evidence":[["Jed_Whedon",0]]}
+{"id":35754,"label":"REFUTES","domain":"other","claim":"Joseph Merrick was a man in the 19th century with perfect features.","evidence":[["Joseph_Merrick",0]]}
+{"id":203695,"label":"REFUTES","domain":"other","claim":"Poseidon had a budget of $160 million and did not make a profit.","evidence":[["Poseidon_-LRB-film-RRB-",6]]}
+{"id":57141,"label":"REFUTES","domain":"other","claim":"Keith Godchaux was a member of the Grateful Dead in 1999.","evidence":[["Grateful_Dead",15]]}
+{"id":165117,"label":"REFUTES","domain":"other","claim":"Mickey Rourke was unable to appear in The Expendables.","evidence":[["Mickey_Rourke",13]]}
+{"id":24541,"label":"REFUTES","domain":"other","claim":"Harris Jayaraj is exclusively a teacher.","evidence":[["Harris_Jayaraj",0]]}
+{"id":128760,"label":"REFUTES","domain":"other","claim":"Stan Beeman is in a show on CBS.","evidence":[["Stan_Beeman",0]]}
+{"id":78663,"label":"REFUTES","domain":"other","claim":"Diana, Princess of Wales's funeral did not start on September 6th, 1997.","evidence":[["Diana,_Princess_of_Wales",18],["Funeral_of_Diana,_Princess_of_Wales",0]]}
+{"id":199759,"label":"REFUTES","domain":"other","claim":"Tijuana is in Southwestern Mexico.","evidence":[["Tijuana",0],["Baja_California_Peninsula",0]]}
+{"id":47660,"label":"REFUTES","domain":"other","claim":"Sleipnir has eight arms.","evidence":[["Sleipnir",0]]}
+{"id":110351,"label":"REFUTES","domain":"other","claim":"The 100 does not follow character Clarke Griffin.","evidence":[["The_100_-LRB-TV_series-RRB-",4]]}
+{"id":106928,"label":"REFUTES","domain":"other","claim":"Mamata Banerjee has only ever been called Mamata Banerjee.","evidence":[["Mamata_Banerjee",0],["Mamata_Banerjee",3]]}
+{"id":5627,"label":"NOT ENOUGH INFO","domain":"other","claim":"Charles Howard Hinton was a theoretical mathematician.","evidence":[]}
+{"id":74270,"label":"NOT ENOUGH INFO","domain":"other","claim":"The Maltese language is a co-official language of Malta.","evidence":[]}
+{"id":216371,"label":"NOT ENOUGH INFO","domain":"other","claim":"The Chagatai language was a creole language.","evidence":[]}
+{"id":146335,"label":"NOT ENOUGH INFO","domain":"other","claim":"English people are descended from several peoples in Asia.","evidence":[]}
+{"id":139370,"label":"NOT ENOUGH INFO","domain":"other","claim":"Stanley Williams was a police officer in California.","evidence":[]}
+{"id":43443,"label":"NOT ENOUGH INFO","domain":"other","claim":"In the End was released through a company.","evidence":[]}
+{"id":160960,"label":"NOT ENOUGH INFO","domain":"other","claim":"Dissociative identity disorder, or DID, may cause weight gain.","evidence":[]}
+{"id":134468,"label":"NOT ENOUGH INFO","domain":"other","claim":"Daenerys Targaryen was introduced in a flashback.","evidence":[]}
+{"id":185305,"label":"NOT ENOUGH INFO","domain":"other","claim":"Bradley Fuller was arrested with Andrew Form.","evidence":[]}
+{"id":45545,"label":"NOT ENOUGH INFO","domain":"other","claim":"Tennessee was a slave-holding state.","evidence":[]}
+{"id":174621,"label":"NOT ENOUGH INFO","domain":"other","claim":"The X-Files had award-winning seasons.","evidence":[]}
+{"id":13218,"label":"NOT ENOUGH INFO","domain":"other","claim":"Tremont Street Subway is an expensive project.","evidence":[]}
+{"id":202028,"label":"NOT ENOUGH INFO","domain":"other","claim":"Tamerlan Tsarnaev carjacked a minivan.","evidence":[]}
+{"id":76335,"label":"NOT ENOUGH INFO","domain":"other","claim":"Microbiologist research promotes information that can help parents.","evidence":[]}
+{"id":116653,"label":"NOT ENOUGH INFO","domain":"other","claim":"Kellyanne Conway publicly endorsed the pope.","evidence":[]}
+{"id":92750,"label":"NOT ENOUGH INFO","domain":"other","claim":"One Dance reached number one in Belgium.","evidence":[]}

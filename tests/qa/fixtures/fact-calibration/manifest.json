@@ -1,0 +1,177 @@
+{
+  "name": "fact-calibration-v1",
+  "seed": "g-116-fact-calibration-v1",
+  "perStratum": 16,
+  "method": "stratified-sha256-rank+jaccard-0.5",
+  "retrieved": "2026-09-27",
+  "source": {
+    "name": "FEVER",
+    "version": "shared-task labelled development set",
+    "page": "https://fever.ai/dataset/fever.html",
+    "url": "https://fever.ai/download/fever/shared_task_dev.jsonl",
+    "licencePage": "https://fever.ai/download/fever/license.html",
+    "licence": "CC BY-SA 3.0",
+    "licenceUrl": "https://creativecommons.org/licenses/by-sa/3.0/",
+    "bytes": 4349935,
+    "lines": 19998,
+    "sha256": "e89865bfe1b4dd054e03dd57d7241a6fde24862905f31117cf0cd719f7c78df7"
+  },
+  "citation": {
+    "authors": "James Thorne, Andreas Vlachos, Christos Christodoulopoulos, and Arpit Mittal",
+    "title": "FEVER: a Large-scale Dataset for Fact Extraction and VERification",
+    "venue": "NAACL-HLT 2018",
+    "url": "https://aclanthology.org/N18-1074/",
+    "doi": "10.18653/v1/N18-1074"
+  },
+  "subset": {
+    "file": "claims.jsonl",
+    "sha256": "90705d7358b377469f3efa1fda31849cb10b29072cbd86def1d7d225552b6293",
+    "count": 384,
+    "strata": [
+      {
+        "label": "SUPPORTS",
+        "domain": "screen",
+        "selected": 16,
+        "pool": 1089
+      },
+      {
+        "label": "REFUTES",
+        "domain": "screen",
+        "selected": 16,
+        "pool": 969
+      },
+      {
+        "label": "NOT ENOUGH INFO",
+        "domain": "screen",
+        "selected": 16,
+        "pool": 955
+      },
+      {
+        "label": "SUPPORTS",
+        "domain": "music",
+        "selected": 16,
+        "pool": 379
+      },
+      {
+        "label": "REFUTES",
+        "domain": "music",
+        "selected": 16,
+        "pool": 335
+      },
+      {
+        "label": "NOT ENOUGH INFO",
+        "domain": "music",
+        "selected": 16,
+        "pool": 303
+      },
+      {
+        "label": "SUPPORTS",
+        "domain": "sport",
+        "selected": 16,
+        "pool": 136
+      },
+      {
+        "label": "REFUTES",
+        "domain": "sport",
+        "selected": 16,
+        "pool": 112
+      },
+      {
+        "label": "NOT ENOUGH INFO",
+        "domain": "sport",
+        "selected": 16,
+        "pool": 99
+      },
+      {
+        "label": "SUPPORTS",
+        "domain": "literature",
+        "selected": 16,
+        "pool": 187
+      },
+      {
+        "label": "REFUTES",
+        "domain": "literature",
+        "selected": 16,
+        "pool": 192
+      },
+      {
+        "label": "NOT ENOUGH INFO",
+        "domain": "literature",
+        "selected": 16,
+        "pool": 181
+      },
+      {
+        "label": "SUPPORTS",
+        "domain": "place",
+        "selected": 16,
+        "pool": 231
+      },
+      {
+        "label": "REFUTES",
+        "domain": "place",
+        "selected": 16,
+        "pool": 232
+      },
+      {
+        "label": "NOT ENOUGH INFO",
+        "domain": "place",
+        "selected": 16,
+        "pool": 195
+      },
+      {
+        "label": "SUPPORTS",
+        "domain": "public-affairs",
+        "selected": 16,
+        "pool": 168
+      },
+      {
+        "label": "REFUTES",
+        "domain": "public-affairs",
+        "selected": 16,
+        "pool": 187
+      },
+      {
+        "label": "NOT ENOUGH INFO",
+        "domain": "public-affairs",
+        "selected": 16,
+        "pool": 163
+      },
+      {
+        "label": "SUPPORTS",
+        "domain": "science",
+        "selected": 16,
+        "pool": 55
+      },
+      {
+        "label": "REFUTES",
+        "domain": "science",
+        "selected": 16,
+        "pool": 51
+      },
+      {
+        "label": "NOT ENOUGH INFO",
+        "domain": "science",
+        "selected": 16,
+        "pool": 56
+      },
+      {
+        "label": "SUPPORTS",
+        "domain": "other",
+        "selected": 16,
+        "pool": 4421
+      },
+      {
+        "label": "REFUTES",
+        "domain": "other",
+        "selected": 16,
+        "pool": 4588
+      },
+      {
+        "label": "NOT ENOUGH INFO",
+        "domain": "other",
+        "selected": 16,
+        "pool": 4714
+      }
+    ]
+  }
+}
