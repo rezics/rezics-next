@@ -255,6 +255,18 @@ including during the run. Treat those changes as authoritative input:
   `yarn docs:check` passes, commit them as a separate "Adopt maintainer
   documentation update" commit before dispatching briefs that depend on them.
 
+## Environment ownership
+
+Maintainer direction, 2026-09-26: the manager owns the environment completely and
+repairs, proactively, anything that blocks the Goal: Docker and host failures,
+toolchain gaps (for example a pinned Nix), local infrastructure the cases need
+(second Main instances, a simulated second host, image capabilities such as TDB2
+compaction), fixtures and providers that can be served locally, using the vault
+credentials when needed. It dispatches Codex workers for repairs and uses Grok
+for research and repair. A missing environment capability is a task to create,
+not a blocker to record; only prerequisites that no local action can supply,
+such as a third-party account or API key, are reported to the maintainer.
+
 ## Checkpoints and recovery
 
 - Handle every `wait` completion immediately. Once per elapsed hour and at each
