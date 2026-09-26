@@ -58,6 +58,11 @@ and REZICS agree on conflict versus solved outcomes, exact solvable lock/source
 identities, active edges and feature unions. Each native `links` crate includes
 a build script that would fail if run; metadata resolution does not execute it.
 The extra oracle result is `.temp/package-cargo-oracle/links-result.json`.
+After merge with Source, the manager also passed the combined real API selection
+`20260926t055142-cf5e59` and a coordinated physical owner-cut restore
+`20260926t055206-dc75de` on signed Content recovery coverage v3. The restore
+replayed exact stored v1/v2 Cargo receipts; this supersedes the worker's
+pre-integration coverage limitation below, without qualifying package installation.
 
 Unit cases preserve v1's exact unsupported receipt shape, deterministic sorted
 v2 witnesses and role identities, unselected-release isolation and separate
