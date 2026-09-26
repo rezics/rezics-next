@@ -39,6 +39,7 @@ import type { WorkActivationEnvironment } from '../modules/work/activate.ts';
 import type { ReaderVariantPreferenceStore } from '../modules/work/native-variants.ts';
 import type { RealmVariantRecommendationStore }
   from '../modules/work/realm-variant-recommendation.ts';
+import type { MediaAccessBatchReader } from '../modules/media/access-batch.ts';
 
 export interface MainWorkDependencies {
   environment: WorkActivationEnvironment;
@@ -88,4 +89,6 @@ export interface MainWorkDependencies {
   openLibraryFetch?: typeof fetch;
   readerPreferences?: ReaderVariantPreferenceStore;
   realmRecommendations?: RealmVariantRecommendationStore;
+  /** Current Access authority for bounded resource-summary batches. */
+  mediaAccess?: Pick<MediaAccessBatchReader, 'canReadWorks'>;
 }

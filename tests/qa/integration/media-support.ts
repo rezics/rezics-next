@@ -7,8 +7,9 @@ import { migrateContent } from '../../../services/content/src/migrate.ts';
 import { createMainApp } from '../../../services/main/src/app.ts';
 import { FusekiClient, type SparqlResult } from '../../../services/main/src/infrastructure/fuseki.ts';
 import { S3ImmutableObjects } from '../../../services/main/src/infrastructure/immutable-objects.ts';
-import { AccessAdmissionRegistry, type RegisteredAdmission }
+import { AccessAdmissionRegistry, type RegisteredAdmission, type VerifiedPrincipal }
   from '../../../services/main/src/modules/access/admission.ts';
+import { MediaAccessBatchReader } from '../../../services/main/src/modules/media/access-batch.ts';
 import { activateTextContribution, textContributionDigest }
   from '../../../services/main/src/modules/contribution/draft.ts';
 import { publishTextContribution, textPublicationDigest }
@@ -43,6 +44,14 @@ class CountingFuseki extends FusekiClient {
   }
 }
 
+class CountingMediaAccess extends MediaAccessBatchReader {
+  batches = 0;
+  override async canReadWorks(principal: VerifiedPrincipal, actingSubject: string, works: readonly string[]) {
+    this.batches++;
+    return super.canReadWorks(principal, actingSubject, works);
+  }
+}
+
 export type MediaStack = Awaited<ReturnType<typeof startMediaStack>>;
 
 /** Real Access, Content PostgreSQL, Jena and RustFS behind one Main app; Account is a
@@ -71,7 +80,9 @@ export async function startMediaStack(label: string) {
   const access = new AccessAdmissionRegistry(accessPool);
   const issuer = `https://qa-${label}.test`;
   const tokens = new Map<string, { issuer: string; subject: string }>();
+  const mediaAccess = new CountingMediaAccess(accessPool);
   const main = createMainApp(fuseki, { environment: env, access, content, contentAuthoring: content, media,
+    mediaAccess,
     account: { verify: async request => {
       const token = request.headers.get('authorization')?.replace(/^Bearer /, '') ?? '';
       const principal = tokens.get(token);
@@ -181,6 +192,6 @@ export async function startMediaStack(label: string) {
     await Promise.all([accessPool.end(), contentPool.end()]);
     rmSync(directory, { recursive: true, force: true });
   };
-  return { env, fuseki, main, call, member, access, accessPool, contentPool, content, store, objects,
+  return { env, fuseki, main, call, member, access, mediaAccess, accessPool, contentPool, content, store, objects,
     media, admission, privateWork, publicWork, contribution, stop };
 }

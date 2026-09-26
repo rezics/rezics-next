@@ -52,9 +52,11 @@ selection history stay out of TDB2, where
 ## Read contract for summaries
 
 `summary.ts` resolves at most 64 references with one graph query (type, labels,
-public disclosure and the graph generation) and one media query. Each non-public
-Work or Main Version reference costs one Access `canReadWork` check. That
-per-item authority check is the remaining gap: it needs an Access batch read.
+public disclosure and the graph generation), one Access query for the distinct
+non-public Works and one media query. `access-batch.ts` evaluates the current
+gate, principal, represented subject and grant under the Access recovery fence.
+It takes the same share locks as `AccessAdmissionRegistry.canReadWork`; each
+target needs only an indexed scope/grant probe, and no result is cached.
 The media query probes the requested context, then
 `urn:rezics:media:context:default`. That is at most two primary-key slot probes
 per target, followed by joins to:
@@ -89,7 +91,7 @@ check at request time. A replaced selection therefore stops resolving at once.
 | Asset state CAS | `POST /v1/media/assets/{asset}/state` | `media.asset.state` | 1 PG transaction; erasure updates the asset's representations |
 | Avatar selection CAS | `PUT /v1/resources/{resource}/avatar` | `media.selection.change` | 1 summary read, 1 Access admission, 1 PG transaction |
 | Image-only body | `POST /v1/media/publications` | `media.use.create`, then `draft.save` | ≤ 16 items; 1 basis query, 2 PG transactions, 1 Access seal |
-| Summaries | `GET /v1/resources/{id}`, `POST /v1/resources/summaries`, `GET /v1/public-previews/{id}` | none | 2 graph queries (lineage and batch), 1 media query, ≤ k Access checks |
+| Summaries | `GET /v1/resources/{id}`, `POST /v1/resources/summaries`, `GET /v1/public-previews/{id}` | none | 2 graph queries (lineage and batch), 1 media query, ≤ 1 Access batch query for ≤ 64 Works |
 | Sitemap | `GET /v1/sitemap` | none | 1 graph query per page of 500. The keyset still orders all public Works, a scan over P |
 
 Extension, for a new PG-owned media command:
@@ -116,13 +118,26 @@ Extension, for a new PG-owned media command:
   - Dispatch `sealMediaAdmission` in `work/strong-revoke.ts`.
   - The owner side, including the fence receipt and replay, is implemented and
     tested.
-- **Content relay.** `relayContentProjectionOnce` must acknowledge events with
-  recipe `media-v1`. It must also skip text projection for `media-set-v1`
-  publications. Otherwise the search projection cursor stops at the first media
-  event.
-- **Main entrypoint.** `services/main/src/index.ts` must pass
-  `media: { store: new MediaStore(contentPool, content), content, objects }`.
-  Here `objects` builds an `S3ImmutableObjects` for each namespace prefix.
+- **Content relay.** `relayContentProjectionOnce` now acknowledges `media-v1`
+  events in order without invoking text projection. Its `content-body-v1`
+  publication path still needs a `media-set-v1` skip before image-only
+  publications can be production-enabled.
+- **Main entrypoint.** `services/main/src/index.ts` supplies `MediaStore`, the
+  Access batch reader and a namespaced `S3ImmutableObjects` factory. Main now
+  requires the configured RustFS bucket at startup for media operations.
+
+## Ingress and scan boundary
+
+The current upload path accepts authenticated direct bytes only, with an 8 MiB
+cap, declared SHA-256, allowlisted raster MIME type and matching container header
+and dimensions. It stages and reads back exact bytes through RustFS before
+activation. It never fetches a caller URL, parses metadata, renders on the
+server or runs a transform. Delivery uses the exact allowlisted image type and
+`X-Content-Type-Options: nosniff`; it never serves SVG or caller-supplied HTML.
+No malware scanner is in this path. Header inspection does not certify full
+decoder validity, so a malformed raster can still be stored and fail to render.
+Adding server-side decoding, transformation or arbitrary source acquisition
+requires a pinned local scanner/decoder and a separate qualification gate.
 
 ## Recovery obligations
 
@@ -136,7 +151,7 @@ Extension, for a new PG-owned media command:
 - **Erasure.** After the state becomes erased, a sweep marks representations
   `erased` and deletes the asset namespace plus quarantine keys. Asset revisions
   follow the Content erasure procedure.
-- **Content projection.** The relay must acknowledge `media.*` events and must
-  not project a `media-set-v1` publication as text.
+- **Content projection.** The relay acknowledges `media.*` events. It must also
+  skip text projection for a `media-set-v1` publication.
 - **Orphans.** Expired reservations are reclaimed through
   `upload_reserved_expiry_idx`.

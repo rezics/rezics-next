@@ -15,6 +15,8 @@ export type ResourceType = 'work' | 'main-version' | 'space' | 'concept';
 export interface SummaryReader {
   /** Readable non-public Work, checked against current Access only after the graph read. */
   canReadWork?: (work: string) => Promise<boolean>;
+  /** One Access owner request for all distinct non-public Works in the batch. */
+  canReadWorks?: (works: readonly string[]) => Promise<ReadonlySet<string>>;
 }
 
 export interface SummaryInput {
@@ -38,7 +40,7 @@ export interface SummaryBatch {
   summaries: ResourceSummary[];
   generation: { graph: string; media: string | null };
   /** Owner round trips spent by this batch, reported for the cost contract. */
-  cost: { graphQueries: number; mediaQueries: number; accessChecks: number };
+  cost: { graphQueries: number; mediaQueries: number; accessChecks: number; accessQueries: number };
 }
 
 interface GraphRow { type: ResourceType; work: string | null; public: boolean; labels: Map<string, string> }
@@ -117,7 +119,7 @@ async function graphRows(env: WorkActivationEnvironment, resources: readonly str
 }
 
 /** Resource summaries for at most 64 references. Cost: one graph query, one media
- * query and at most one Access check per non-public Work reference. */
+ * query and one batched Access query for all distinct non-public Works. */
 export async function readResourceSummaries(env: WorkActivationEnvironment, media: MediaStore | undefined,
   reader: SummaryReader, input: SummaryInput): Promise<SummaryBatch> {
   if (!input.resources.length || input.resources.length > MAX_SUMMARY_BATCH
@@ -128,17 +130,32 @@ export async function readResourceSummaries(env: WorkActivationEnvironment, medi
   }
   const unique = [...new Set(input.resources)];
   const graph = await graphRows(env, unique);
-  const cost = { graphQueries: 1, mediaQueries: 0, accessChecks: 0 };
+  const cost = { graphQueries: 1, mediaQueries: 0, accessChecks: 0, accessQueries: 0 };
   const readable = new Map<string, GraphRow>();
-  await Promise.all(unique.map(async reference => {
+  const restricted = new Map<string, string>();
+  for (const reference of unique) {
     const row = graph.rows.get(reference);
-    if (!row || !selectName(row.labels, null)) return;
-    if (row.public) { readable.set(reference, row); return; }
-    if ((row.type === 'work' || row.type === 'main-version') && row.work && reader.canReadWork) {
-      cost.accessChecks++;
-      if (await reader.canReadWork(row.work)) readable.set(reference, row);
+    if (!row || !selectName(row.labels, null)) continue;
+    if (row.public) { readable.set(reference, row); continue; }
+    if ((row.type === 'work' || row.type === 'main-version') && row.work) {
+      restricted.set(reference, row.work);
     }
-  }));
+  }
+  const works = [...new Set(restricted.values())];
+  cost.accessChecks = works.length;
+  let admitted = new Set<string>();
+  if (works.length && reader.canReadWorks) {
+    admitted = new Set(await reader.canReadWorks(works));
+    cost.accessQueries = 1;
+  } else if (works.length && reader.canReadWork) {
+    cost.accessQueries = works.length;
+    const decisions = await Promise.all(works.map(async work =>
+      await reader.canReadWork!(work) ? work : null));
+    admitted = new Set(decisions.filter((work): work is string => work !== null));
+  }
+  for (const [reference, work] of restricted) {
+    if (admitted.has(work)) readable.set(reference, graph.rows.get(reference)!);
+  }
   let avatars = new Map<string, AvatarRow>();
   let mediaGeneration: string | null = null;
   if (media && readable.size) {

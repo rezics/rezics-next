@@ -163,7 +163,7 @@ test('VIEW08: Main Version language selection, fallback, RTL direction and metad
 }, 180_000);
 
 test('VIEW08: batched summaries hydrate names and avatars with fixed owner round trips, contexts and partial results', async () => {
-  const { member, publicWork, privateWork, call, fuseki, env, admission, contentPool } = await stack();
+  const { member, publicWork, privateWork, call, fuseki, env, admission, contentPool, mediaAccess } = await stack();
   const owner = await member('batch');
   const reader = await member('batch-reader');
   const works: Array<Awaited<ReturnType<MediaStack['publicWork']>>> = [];
@@ -199,14 +199,16 @@ test('VIEW08: batched summaries hydrate names and avatars with fixed owner round
     restricted.work, unreadable.work, spaceIri, conceptIri, `${ID}${randomUUID()}`];
   const batch = async (resources: string[], extra: Record<string, unknown> = {}, as = reader) => {
     const graphBefore = fuseki.queries;
+    const accessBefore = mediaAccess.batches;
     const response = await as.send('POST', '/v1/resources/summaries', { profile: 'resource-summary-batch-v1',
       resources, actingSubject: as.actor, ...extra });
     expect(response.status).toBe(200);
     const body = await response.json() as { summaries: Summary[];
-      cost: { graphQueries: number; mediaQueries: number; accessChecks: number };
+      cost: { graphQueries: number; mediaQueries: number; accessChecks: number; accessQueries: number };
       generation: { graph: string; media: string } };
     // One lineage check plus one batch query, whatever the batch size.
     expect(fuseki.queries - graphBefore).toBe(2);
+    expect(mediaAccess.batches - accessBefore).toBe(body.cost.accessQueries);
     return body;
   };
   const mixed = await batch(references);
@@ -214,7 +216,7 @@ test('VIEW08: batched summaries hydrate names and avatars with fixed owner round
     ['available', 'work'], ['available', 'work'], ['available', 'work'], ['available', 'main-version'],
     ['available', 'work'], ['unavailable', null], ['available', 'space'], ['available', 'concept'],
     ['unavailable', null]]);
-  expect(mixed.cost).toEqual({ graphQueries: 1, mediaQueries: 1, accessChecks: 2 });
+  expect(mixed.cost).toEqual({ graphQueries: 1, mediaQueries: 1, accessChecks: 2, accessQueries: 1 });
   expect(mixed.summaries[5]).toEqual({ reference: unreadable.work, status: 'unavailable' });
   for (const summary of mixed.summaries.filter(item => item.status === 'available')) {
     expect(summary.name!.value.length).toBeGreaterThan(0);
@@ -239,13 +241,14 @@ test('VIEW08: batched summaries hydrate names and avatars with fixed owner round
   const filler = Array.from({ length: 64 }, (_, index) => references[index % 3]!);
   for (const size of [1, 16, 64]) {
     const sized = await batch(filler.slice(0, size), {}, owner);
-    expect(sized.cost).toEqual({ graphQueries: 1, mediaQueries: 1, accessChecks: 0 });
+    expect(sized.cost).toEqual({ graphQueries: 1, mediaQueries: 1, accessChecks: 0, accessQueries: 0 });
   }
   await contentPool.query(`INSERT INTO media.selection_slot (target, context, role, policy)
     SELECT 'https://rezics.com/id/' || gen_random_uuid(), 'urn:rezics:media:context:default', 'avatar',
       'avatar-selection-v1' FROM generate_series(1, 50000)`);
   await contentPool.query('ANALYZE media.selection_slot');
-  expect((await batch(filler, {}, owner)).cost).toEqual({ graphQueries: 1, mediaQueries: 1, accessChecks: 0 });
+  expect((await batch(filler, {}, owner)).cost).toEqual({ graphQueries: 1, mediaQueries: 1,
+    accessChecks: 0, accessQueries: 0 });
   const plan = await contentPool.query<{ 'QUERY PLAN': unknown }>(`EXPLAIN (FORMAT JSON)
     SELECT s.head FROM unnest($1::text[]) AS t(target) JOIN media.selection_slot s
       ON s.target = t.target AND s.context = 'urn:rezics:media:context:default' AND s.role = 'avatar'`,

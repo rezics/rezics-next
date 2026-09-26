@@ -22,6 +22,8 @@ import { AccessRepresentedMembershipAuthority } from './modules/access/represent
 import { AccessEligibleOrgMemberSet } from './modules/access/eligible-org-member-set.ts';
 import { AccessRoles } from './modules/access/roles.ts';
 import { AccessPolicyOwner } from './modules/access/policy-owner.ts';
+import { MediaAccessBatchReader } from './modules/media/access-batch.ts';
+import { MediaStore } from './modules/media/store.ts';
 import { ReaderVariantPreferenceStore } from './modules/work/native-variants.ts';
 import { RealmVariantRecommendationStore } from './modules/work/realm-variant-recommendation.ts';
 import { SourceIntakeStore } from './modules/source/intake.ts';
@@ -95,6 +97,13 @@ const workObjects = Bun.env.MAIN_S3_ENDPOINT ? new S3ImmutableObjects({
   secretAccessKey: required('MAIN_S3_SECRET_KEY'), prefix: 'semantic/work/',
 }) : undefined;
 if (workObjects) await workObjects.initialize();
+const mediaObjects = (prefix: string) => new S3ImmutableObjects({
+  endpoint: required('MAIN_S3_ENDPOINT'), bucket: required('MAIN_S3_BUCKET'),
+  region: required('MAIN_S3_REGION'), accessKeyId: required('MAIN_S3_ACCESS_KEY'),
+  secretAccessKey: required('MAIN_S3_SECRET_KEY'), prefix,
+});
+await mediaObjects('media/').initialize();
+const media = { store: new MediaStore(contentPool, content), content, objects: mediaObjects };
 const account = new AccountAssertionVerifier({
   issuer: required('ACCOUNT_ISSUER'), audience: required('ACCOUNT_MAIN_RESOURCE'),
   jwksUrl: required('ACCOUNT_JWKS_URL'), introspectUrl: required('ACCOUNT_INTROSPECT_URL'),
@@ -112,6 +121,8 @@ const app = createMainApp(fuseki, {
   account,
   access,
   privateSearch: { access, settlement: new PrivateSearchSettlement(pool) },
+  media,
+  mediaAccess: new MediaAccessBatchReader(pool),
   actingContexts: new AccessActingContexts(pool),
   groups: new AccessGroups(pool),
   grants: new AccessGrants(pool),

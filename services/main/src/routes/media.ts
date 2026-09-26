@@ -46,6 +46,13 @@ function idempotencyKey(request: Request): string | null {
 
 const unavailable = () => problem(404, 'media_unavailable', 'Media is unavailable');
 
+export const openApiOperations = {
+  '/v1/media/uploads': { post: { bearer: true, idempotencyKey: true } },
+  '/v1/media/uploads/{upload}/bytes': { put: { bearer: true } },
+  '/v1/media/assets/{asset}/state': { post: { bearer: true, idempotencyKey: true } },
+  '/v1/media/publications': { post: { bearer: true, idempotencyKey: true } },
+} as const;
+
 /** Serve one exact representation after the caller-independent disclosure checks. */
 async function deliver(media: MediaDependencies, basis: { objectNamespace: string; sha256: string;
   mediaType: string }, publicTarget: boolean): Promise<Response> {
@@ -61,7 +68,10 @@ export function mediaRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
     if (!request.headers.get('authorization')) return {};
     if (!actingSubject) throw new MediaInvalid('actingSubject is required for an authenticated read');
     const principal = await work.account.verify(request, ['work:read']);
-    return { canReadWork: (resource: string) => work.access.canReadWork(principal, actingSubject, resource) };
+    return { canReadWorks: work.mediaAccess
+      ? (resources: readonly string[]) => work.mediaAccess!.canReadWorks(principal, actingSubject, resources)
+      : undefined,
+    canReadWork: (resource: string) => work.access.canReadWork(principal, actingSubject, resource) };
   };
   return new Elysia()
     .post('/v1/media/uploads', {

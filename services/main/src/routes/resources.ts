@@ -21,13 +21,19 @@ const SITEMAP_PAGE = 500;
 
 const unavailable = () => problem(404, 'resource_unavailable', 'Resource is unavailable');
 
+export const openApiOperations = {
+  '/v1/resources/{resource}/avatar': { put: { bearer: true, idempotencyKey: true } },
+} as const;
+
 /** Resource summaries, previews, sitemap and avatar selection, plus the media owner routes. */
 export function resourceRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
   const readerFor = async (request: Request, actingSubject: string | undefined): Promise<SummaryReader> => {
     if (!request.headers.get('authorization')) return {};
     if (!actingSubject) throw new MediaInvalid('actingSubject is required for an authenticated read');
     const principal = await work.account.verify(request, ['work:read']);
-    return { canReadWork: resource => work.access.canReadWork(principal, actingSubject, resource) };
+    return { canReadWorks: work.mediaAccess
+      ? resources => work.mediaAccess!.canReadWorks(principal, actingSubject, resources) : undefined,
+    canReadWork: resource => work.access.canReadWork(principal, actingSubject, resource) };
   };
   const summarize = async (request: Request, input: { resources: string[]; actingSubject?: string;
     context?: string; language?: string }) => {
