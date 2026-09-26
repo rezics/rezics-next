@@ -51,6 +51,7 @@ import { npmFixture } from '../fixtures/npm-lock-snapshot.ts';
 import { npmPlatformFixture, npmTargets } from '../fixtures/npm-platform-snapshot.ts';
 import { npmIdentityFixture } from '../fixtures/npm-identity-snapshot.ts';
 import { npmCompositionFixture, npmCompositionTargets } from '../fixtures/npm-composition-snapshot.ts';
+import { npmPolicyFixture } from '../fixtures/npm-policy-snapshot.ts';
 import { NpmResolutionStore, NpmResolutionUnavailable }
   from '../../../services/main/src/modules/package/npm-resolution.ts';
 import { goManifest, goPrunedFixtureResponse, goPrunedMain, goPrunedSources,
@@ -339,13 +340,20 @@ test('OPS03/PKG14: signed owner cut restores Content and exact Go checksum proof
       expect(receipt).toMatchObject({ profile: 'npm-lock-topology-receipt-v4', outcome: { status: 'validated', target } });
       npmCompositionReceipts.push({ request, key, receipt, id: receipt.resolution.split('/').at(-1)! });
     }
+    const npmPolicyRequest = npmPolicyFixture();
+    const npmPolicyKey = `${npmKey}-policy-v5`;
+    const npmPolicyReceipt = (await npmStore.resolve(principalId, npmPolicyKey, npmPolicyRequest)).resolution;
+    expect(npmPolicyReceipt).toMatchObject({ profile: 'npm-lock-topology-receipt-v5',
+      outcome: { status: 'validated', overrideSelections: [expect.objectContaining({ name: 'leaf' })] } });
+    const npmPolicyReceipts = [{ request: npmPolicyRequest, key: npmPolicyKey,
+      receipt: npmPolicyReceipt, id: npmPolicyReceipt.resolution.split('/').at(-1)! }];
     const packageOnlyCoverage = await captureContentRecoveryCoverage(contentPool, []);
     expect(packageOnlyCoverage.graphReferencesCount).toBe('0');
     expect(packageOnlyCoverage.packageTables.go_proxy_capture.count).toBe('7');
     expect(packageOnlyCoverage.packageTables.go_resolution.count).toBe('6');
     expect(packageOnlyCoverage.packageTables.go_sumdb_verification.count).toBe('1');
     expect(packageOnlyCoverage.packageTables.cargo_resolution.count).toBe('3');
-    expect(packageOnlyCoverage.packageTables.npm_resolution.count).toBe('9');
+    expect(packageOnlyCoverage.packageTables.npm_resolution.count).toBe('10');
     await grant(`content:publish:${variantId}`, 'content.publish');
     const published = await publishAdmittedContent(env, content, account, access,
       new Request(request.url, { headers: { authorization: bearer } }), {
@@ -382,7 +390,7 @@ test('OPS03/PKG14: signed owner cut restores Content and exact Go checksum proof
     expect(coverage.content.packageTables.go_resolution.count).toBe('6');
     expect(coverage.content.packageTables.go_sumdb_verification.count).toBe('1');
     expect(coverage.content.packageTables.cargo_resolution.count).toBe('3');
-    expect(coverage.content.packageTables.npm_resolution.count).toBe('9');
+    expect(coverage.content.packageTables.npm_resolution.count).toBe('10');
     const sealedCoverage = JSON.stringify(sealRecoveryPayload(
       coverage, recoveryKey, 'graph-recovery-coverage'));
     await retainRecoveryCoverageHead(relayPool, sealedCoverage, recoveryKey);
@@ -474,7 +482,8 @@ test('OPS03/PKG14: signed owner cut restores Content and exact Go checksum proof
     expect(await restoredNpm.resolve(principalId, npmKey, npmRequest))
       .toEqual({ resolution: npmReceipt, replayed: true });
     expect(await restoredNpm.read(randomUUID(), npmId)).toBeNull();
-    for (const { request, key, receipt, id } of [...npmPlatformReceipts, ...npmIdentityReceipts, ...npmCompositionReceipts]) {
+    for (const { request, key, receipt, id } of [...npmPlatformReceipts, ...npmIdentityReceipts,
+      ...npmCompositionReceipts, ...npmPolicyReceipts]) {
       expect(await restoredNpm.read(principalId, id)).toEqual(receipt);
       expect(await restoredNpm.resolve(principalId, key, request)).toEqual({ resolution: receipt, replayed: true });
       expect(await restoredNpm.read(randomUUID(), id)).toBeNull();
@@ -566,6 +575,24 @@ test('OPS03/PKG14: signed owner cut restores Content and exact Go checksum proof
           await expect(releaseRestoredGraphHold(fuseki, restoredAccess, restoredRelay,
             nextLineage, restoredEvidence)).rejects.toThrow('Content owner or graph references differ from recovery coverage');
           await restoredContent.query('UPDATE pkg.npm_resolution SET outcome = $2 WHERE id = $1', [id, JSON.stringify(receipt.outcome)]);
+        }
+      }
+      for (const { id, receipt } of npmPolicyReceipts) {
+        if (!('overrideSelections' in receipt.outcome)) throw new Error('policy recovery receipt lacks override witness');
+        const originalOutcome = (await restoredContent.query<{ outcome: unknown }>(
+          'SELECT outcome FROM pkg.npm_resolution WHERE id = $1', [id])).rows[0]?.outcome;
+        if (!originalOutcome) throw new Error('restored policy receipt is absent');
+        for (const corrupted of [
+          { ...receipt.outcome, overrideSelections: receipt.outcome.overrideSelections.map(item =>
+            ({ ...item, effectiveSpecifier: '9.0.0' })) },
+          { ...receipt.outcome, engineChecks: receipt.outcome.engineChecks.map(item =>
+            ({ ...item, compatible: !item.compatible })) },
+        ]) {
+          await restoredContent.query('UPDATE pkg.npm_resolution SET outcome = $2 WHERE id = $1', [id, JSON.stringify(corrupted)]);
+          await expect(restoredNpm.read(principalId, id)).rejects.toBeInstanceOf(NpmResolutionUnavailable);
+          await expect(releaseRestoredGraphHold(fuseki, restoredAccess, restoredRelay,
+            nextLineage, restoredEvidence)).rejects.toThrow('Content owner or graph references differ from recovery coverage');
+          await restoredContent.query('UPDATE pkg.npm_resolution SET outcome = $2 WHERE id = $1', [id, JSON.stringify(originalOutcome)]);
         }
       }
     } finally {

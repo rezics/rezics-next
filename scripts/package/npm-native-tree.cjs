@@ -11,7 +11,8 @@ for (const name of ['node:http', 'node:https', 'node:net']) {
 }
 globalThis.fetch = () => { throw new Error('native oracle forbids network'); };
 async function main() {
-  const identity = process.argv[4] === 'identity' || process.argv[4] === 'composition';
+  const policy = process.argv[4] === 'policy';
+  const identity = process.argv[4] === 'identity' || process.argv[4] === 'composition' || policy;
   const tree = await new Arborist({ path: process.argv[3], offline: true,
     ignoreScripts: true, strictPeerDeps: true, legacyPeerDeps: false }).loadVirtual();
   const nodes = [...tree.inventory.values()].map(node => ({
@@ -21,14 +22,16 @@ async function main() {
       linkTarget: node.isLink ? node.target.location : null, isWorkspace: !!node.isWorkspace,
       parent: node.resolveParent?.location ?? null } : {}),
     edges: [...node.edgesOut.values()].map(edge => ({ name: edge.name, specifier: edge.spec,
+      ...(policy ? { rawSpecifier: edge.rawSpec, override: edge.overrides?.value ?? null } : {}),
       kind: edge.type, to: edge.to?.location ?? null, error: edge.error || null })),
   }));
   let projection;
-  if (process.argv[4] && !identity || process.argv[4] === 'composition') {
-    const target = JSON.parse(process.argv[4] === 'composition' ? process.argv[5] : process.argv[4]);
+  if (process.argv[4] && !identity || process.argv[4] === 'composition' || policy) {
+    const target = JSON.parse(process.argv[4] === 'composition' || policy ? process.argv[5] : process.argv[4]);
     const path = require('node:path');
     const lib = path.dirname(requireNpm.resolve('@npmcli/arborist'));
     const { checkPlatform } = requireNpm('npm-install-checks');
+    const { checkEngine } = requireNpm('npm-install-checks');
     const optionalSet = require(path.join(lib, 'optional-set.js'));
     const resetDepFlags = require(path.join(lib, 'reset-dep-flags.js'));
     const calcDepFlags = require(path.join(lib, 'calc-dep-flags.js'));
@@ -52,7 +55,16 @@ async function main() {
         }
       }
     }
+    const engineTarget = policy ? JSON.parse(process.argv[6]) : null;
+    const engineChecks = engineTarget ? ordered.map(node => {
+      let compatible = true;
+      try { checkEngine(node.package, engineTarget.npmVersion, engineTarget.nodeVersion); }
+      catch (error) { if (error.code !== 'EBADENGINE') throw error; compatible = false; }
+      return { path: node.location, node: node.package.engines?.node ?? null,
+        npm: node.package.engines?.npm ?? null, compatible };
+    }) : undefined;
     projection = { target, metadata, platformErrors,
+      ...(engineTarget ? { engineTarget, engineChecks } : {}),
       omissions: omissions.sort((a, b) => a.path.localeCompare(b.path)),
       activePaths: ordered.filter(node => !node.inert).map(node => node.location) };
   }
@@ -61,7 +73,7 @@ async function main() {
     ...(projection ? { projection } : {}) }));
 }
 main().catch(error => {
-  if (['identity', 'composition'].includes(process.argv[4])) process.stdout.write(JSON.stringify({
+  if (['identity', 'composition', 'policy'].includes(process.argv[4])) process.stdout.write(JSON.stringify({
     error: { code: error.code || error.name, message: error.message } }));
   console.error(error); process.exitCode = 1;
 });

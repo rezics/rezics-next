@@ -7,6 +7,14 @@ const { object, keys, decode, parseJson, name, version, location, provenance,
 export interface NpmWorkspaceInput { path: string; manifest: NpmBytes }
 export interface NpmCompositionRequest { profile: 'npm-lock-v3-topology-v4'; npmVersion: string;
   policy: string; manifest: NpmBytes; lock: NpmBytes; workspaces: NpmWorkspaceInput[]; target: { os: string; cpu: string } }
+export interface NpmPolicyRequest extends Omit<NpmCompositionRequest, 'profile'> {
+  profile: 'npm-lock-v3-topology-v5'; engineTarget: { nodeVersion: string; npmVersion: string } }
+export interface NpmPolicyOutcome extends NpmCompositionOutcome {
+  engineTarget: NpmPolicyRequest['engineTarget'];
+  overrideSelections: Array<{ fromPath: string; toPath: string | null; name: string;
+    declaredSpecifier: string; effectiveSpecifier: string }>;
+  engineChecks: Array<{ path: string; node: string | null; npm: string | null; compatible: boolean }>;
+}
 export interface NpmCompositionInstance extends Omit<NpmInstance, 'peerHosts'> {
   peerHosts: Array<NpmPeerHost & { optional: boolean }>; optional: boolean;
   os: string[] | null; cpu: string[] | null;
@@ -17,7 +25,8 @@ export interface NpmCompositionEdge { from: string; to: string; kind: 'dependenc
   name: string; specifier: string; requestedName: string; optional: boolean }
 export interface NpmCompositionIssue extends Omit<NpmIssue, 'kind'> {
   kind: NpmIssue['kind'] | 'missing-workspace-manifest' | 'missing-workspace-target'
-    | 'missing-link-source' | 'link-target-mismatch' | 'optional-flag-mismatch' | 'platform-incompatible';
+    | 'missing-link-source' | 'link-target-mismatch' | 'optional-flag-mismatch' | 'platform-incompatible'
+    | 'engine-incompatible';
 }
 export interface NpmCompositionOutcome extends Omit<NpmOutcome, 'instances' | 'edges' | 'issues' | 'cost'> {
   instances: NpmCompositionInstance[]; edges: NpmCompositionEdge[]; issues: NpmCompositionIssue[];
@@ -29,6 +38,7 @@ export interface NpmCompositionOutcome extends Omit<NpmOutcome, 'instances' | 'e
 }
 interface Requirement extends Omit<NpmCompositionEdge, 'from' | 'to'> {
   exactVersion: string | null; workspacePath: string | null; alias: boolean;
+  effectiveSpecifier?: string;
 }
 export interface NpmCompositionNode extends NpmCompositionInstance { parent: string | null; requirements: Requirement[];
   declaredOptional: boolean | undefined }
@@ -58,24 +68,66 @@ function workspaceDeclarations(raw: unknown): string[] {
   }
   return paths;
 }
-function fields(raw: Record<string, unknown>, kind: 'root' | 'registry' | 'workspace'): void {
+function fields(raw: Record<string, unknown>, kind: 'root' | 'registry' | 'workspace', policy = false): void {
   keys(raw, ['name', 'version', 'dependencies', 'optionalDependencies', 'peerDependencies', 'peerDependenciesMeta', 'os', 'cpu', 'license',
+    ...(policy ? ['engines'] : []),
     ...(kind === 'root' ? [] : ['optional']),
     ...(kind === 'registry' ? ['resolved', 'integrity', 'peer'] : ['private']),
-    ...(kind === 'root' ? ['workspaces'] : [])]);
+    ...(kind === 'root' ? ['workspaces', ...(policy ? ['overrides'] : [])] : [])]);
   if (raw.license !== undefined && typeof raw.license !== 'string') invalid('malformed license metadata');
   for (const field of ['private', 'peer', 'optional']) if (raw[field] !== undefined && typeof raw[field] !== 'boolean') {
     invalid(`malformed ${field} metadata`);
   }
 }
-function agree(manifest: Record<string, unknown>, lock: Record<string, unknown>, root: boolean): void {
+function agree(manifest: Record<string, unknown>, lock: Record<string, unknown>, root: boolean, policy = false): void {
   if (manifest.name !== lock.name || manifest.version !== lock.version
     || ['dependencies', 'optionalDependencies', 'peerDependencies', 'peerDependenciesMeta'].some(field =>
       npmStable(dependencyMap(manifest[field])) !== npmStable(dependencyMap(lock[field])))
     || ['os', 'cpu'].some(field => npmStable(manifest[field] ?? null) !== npmStable(lock[field] ?? null))
-    || root && npmStable(manifest.workspaces ?? []) !== npmStable(lock.workspaces ?? [])) {
+    || root && npmStable(manifest.workspaces ?? []) !== npmStable(lock.workspaces ?? [])
+    || policy && !root && npmStable(manifest.engines ?? null) !== npmStable(lock.engines ?? null)) {
     invalid('npm manifest and lock package disagree');
   }
+}
+
+function engineVersion(raw: unknown): [number, number, number] {
+  if (typeof raw !== 'string') return invalid('malformed npm engine version');
+  if (!/^\d{1,8}\.\d{1,8}\.\d{1,8}$/.test(raw)) throw new Unsupported('only exact stable npm engine target versions are admitted');
+  return raw.split('.').map(Number) as [number, number, number];
+}
+function engineRange(raw: unknown): { raw: string; minimum: boolean; value: [number, number, number] } {
+  if (typeof raw !== 'string') return invalid('malformed npm engine requirement');
+  const minimum = raw.startsWith('>=');
+  const value = engineVersion(minimum ? raw.slice(2) : raw);
+  return { raw, minimum, value };
+}
+function engineMetadata(raw: unknown): { node: string | null; npm: string | null;
+  ranges: Array<{ key: 'node' | 'npm'; minimum: boolean; value: [number, number, number] }> } {
+  if (raw === undefined) return { node: null, npm: null, ranges: [] };
+  const data = object(raw); keys(data, ['node', 'npm']);
+  const ranges: Array<{ key: 'node' | 'npm'; minimum: boolean; value: [number, number, number] }> = [];
+  for (const key of ['node', 'npm'] as const) if (data[key] !== undefined) ranges.push({ key, ...engineRange(data[key]) });
+  return { node: data.node as string ?? null, npm: data.npm as string ?? null, ranges };
+}
+function engineMatches(target: [number, number, number], range: { minimum: boolean; value: [number, number, number] }): boolean {
+  const comparison = target[0] - range.value[0] || target[1] - range.value[1] || target[2] - range.value[2];
+  return range.minimum ? comparison >= 0 : comparison === 0;
+}
+function rootOverrides(raw: unknown): Map<string, string> {
+  if (raw === undefined) return new Map();
+  const map = object(raw);
+  const entries = Object.entries(map).sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0);
+  if (entries.length > 32) throw new Budget('npm root override rule limit');
+  const result = new Map<string, string>();
+  for (const [key, value] of entries) {
+    name(key);
+    if (typeof value !== 'string') {
+      if (value !== null && typeof value === 'object') throw new Unsupported('nested npm overrides are outside this profile');
+      return invalid('malformed npm root override value');
+    }
+    result.set(key, version(value));
+  }
+  return result;
 }
 function requirement(kind: 'dependency' | 'peer', depName: string, raw: unknown, optional: boolean): Requirement {
   name(depName);
@@ -93,9 +145,17 @@ function requirement(kind: 'dependency' | 'peer', depName: string, raw: unknown,
 
 /** V4 owns composition. Historical v1/v2/v3 validators and receipt bytes stay frozen. */
 export function validateNpmCompositionSnapshot(request: NpmCompositionRequest): NpmCompositionOutcome {
+  return validateComposition(request);
+}
+export function validateNpmPolicySnapshot(request: NpmPolicyRequest): NpmPolicyOutcome {
+  return validateComposition(request) as NpmPolicyOutcome;
+}
+function validateComposition(request: NpmCompositionRequest | NpmPolicyRequest): NpmCompositionOutcome {
+  const policy = request.profile === 'npm-lock-v3-topology-v5';
   const envelope = object(request);
-  if (Object.keys(envelope).sort().join(',') !== 'lock,manifest,npmVersion,policy,profile,target,workspaces'
-    || request.profile !== 'npm-lock-v3-topology-v4'
+  if (Object.keys(envelope).sort().join(',') !== (policy
+    ? 'engineTarget,lock,manifest,npmVersion,policy,profile,target,workspaces'
+    : 'lock,manifest,npmVersion,policy,profile,target,workspaces')
     || typeof request.npmVersion !== 'string' || !request.npmVersion || request.npmVersion.length > 32
     || typeof request.policy !== 'string' || !request.policy || request.policy.length > 64
     || !Array.isArray(request.workspaces) || request.workspaces.length > 16) invalid('malformed npm composition request');
@@ -103,6 +163,13 @@ export function validateNpmCompositionSnapshot(request: NpmCompositionRequest): 
   if (Object.keys(target).sort().join(',') !== 'cpu,os'
     || [target.os, target.cpu].some(value => typeof value !== 'string' || !value || value.length > 32)) {
     invalid('malformed npm target');
+  }
+  if (policy) {
+    const engine = object(request.engineTarget);
+    if (Object.keys(engine).sort().join(',') !== 'nodeVersion,npmVersion'
+      || Object.values(engine).some(value => typeof value !== 'string' || !value || value.length > 32)) {
+      invalid('malformed npm engine target');
+    }
   }
   const manifestText = decode(request.manifest);
   const lockText = decode(request.lock);
@@ -120,6 +187,8 @@ export function validateNpmCompositionSnapshot(request: NpmCompositionRequest): 
     lockfileVersion: null, instances: [], edges: [], issues: [], unsupportedClauses: [], budgetReason: null,
     cost: { inputBytes: texts.reduce((sum, text) => sum + Buffer.byteLength(text), 0),
       nodeCount: 0, edgeCount: 0, ancestorLookups: 0, workspaceCount: workspaceTexts.size, graphVisits: 0 } };
+  if (policy) Object.assign(outcome, { engineTarget: { ...request.engineTarget },
+    overrideSelections: [], engineChecks: [] });
   const visit = () => { if (++outcome.cost.graphVisits > 65_536) throw new Budget('npm graph visit limit'); };
   const countEdge = () => { if (++outcome.cost.edgeCount > 256) throw new Budget('npm dependency edge limit'); };
   try {
@@ -127,13 +196,17 @@ export function validateNpmCompositionSnapshot(request: NpmCompositionRequest): 
     if (outcome.cost.inputBytes > 262_144) throw new Budget('npm aggregate byte limit');
     const manifest = parseJson(manifestText);
     const lock = parseJson(lockText);
-    if (request.npmVersion !== '11.19.1' || request.policy !== 'literal-sources-composed-v4') {
+    if (request.npmVersion !== '11.19.1' || request.policy !== (policy
+      ? 'literal-sources-policy-v5' : 'literal-sources-composed-v4')) {
       throw new Unsupported('unsupported npm version or topology policy');
     }
     if (!['linux', 'win32'].includes(request.target.os) || !['x64', 'arm64'].includes(request.target.cpu)) {
       throw new Unsupported('unsupported npm target environment');
     }
-    fields(manifest, 'root'); name(manifest.name); version(manifest.version);
+    fields(manifest, 'root', policy); name(manifest.name); version(manifest.version);
+    const overrides = policy ? rootOverrides(manifest.overrides) : new Map<string, string>();
+    const engineTarget = policy ? { node: engineVersion(request.engineTarget.nodeVersion),
+      npm: engineVersion(request.engineTarget.npmVersion) } : null;
     const declared = workspaceDeclarations(manifest.workspaces);
     const declaredSet = new Set(declared);
     const workspaces = new Map<string, Record<string, unknown>>();
@@ -142,7 +215,7 @@ export function validateNpmCompositionSnapshot(request: NpmCompositionRequest): 
       workspacePath(path);
       if (!declaredSet.has(path)) invalid('undeclared npm workspace input');
       const data = parseJson(text);
-      fields(data, 'workspace'); name(data.name); version(data.version);
+      fields(data, 'workspace', policy); name(data.name); version(data.version);
       if (workspaceNames.has(data.name as string)) invalid('duplicate npm workspace package name');
       workspaceNames.add(data.name as string);
       workspaces.set(path, data);
@@ -160,7 +233,7 @@ export function validateNpmCompositionSnapshot(request: NpmCompositionRequest): 
     if (paths.length > 129) throw new Budget('npm locked package limit');
     if (!Object.hasOwn(packages, '')) invalid('npm lock is missing its root');
     if (lock.name !== manifest.name || lock.version !== manifest.version) invalid('npm manifest and lock root disagree');
-    agree(manifest, object(packages['']), true);
+    agree(manifest, object(packages['']), true, policy);
     for (const path of declared) if (!Object.hasOwn(packages, path)) outcome.issues.push({
       kind: 'missing-workspace-target', path, name: workspaces.get(path)?.name as string ?? '',
       specifier: null, foundPath: null });
@@ -197,11 +270,18 @@ export function validateNpmCompositionSnapshot(request: NpmCompositionRequest): 
         continue;
       }
       const kind = path === '' ? 'root' : declaredSet.has(path) ? 'workspace' : 'registry';
-      fields(raw, kind);
+      fields(raw, kind, policy);
       const installed = kind === 'registry' ? slot(path) : null;
       const packageName = name(raw.name ?? installed?.name);
       const pkgVersion = version(raw.version);
-      if (kind === 'workspace' && workspaces.has(path)) agree(workspaces.get(path)!, raw, false);
+      if (kind === 'workspace' && workspaces.has(path)) agree(workspaces.get(path)!, raw, false, policy);
+      if (policy) {
+        const engine = engineMetadata(kind === 'root' ? manifest.engines : raw.engines);
+        const compatible = engine.ranges.every(range => engineMatches(engineTarget![range.key], range));
+        (outcome as NpmPolicyOutcome).engineChecks.push({ path, node: engine.node, npm: engine.npm, compatible });
+        if (!compatible) outcome.issues.push({ kind: 'engine-incompatible', path,
+          name: packageName, specifier: null, foundPath: path });
+      }
       const resolved = kind === 'registry' ? provenance(raw.resolved, 'resolved') : null;
       const integrity = kind === 'registry' ? provenance(raw.integrity, 'integrity') : null;
       if (kind === 'registry' && (!resolved || !integrity)) outcome.issues.push({ kind: 'missing-provenance',
@@ -224,7 +304,19 @@ export function validateNpmCompositionSnapshot(request: NpmCompositionRequest): 
           names.add(depName);
           const optional = field === 'optionalDependencies'
             || edgeKind === 'peer' && Object.hasOwn(meta, depName) && object(meta[depName]).optional === true;
-          requirements.push(requirement(edgeKind, depName, deps[depName], optional));
+          const req = requirement(edgeKind, depName, deps[depName], optional);
+          const replacement = policy ? overrides.get(depName) : undefined;
+          if (replacement !== undefined) {
+            if (edgeKind !== 'dependency' || req.alias) {
+              throw new Unsupported('peer and alias override selection is outside this profile');
+            }
+            if (kind === 'root' && req.specifier !== replacement) {
+              throw new Unsupported('native EOVERRIDE: direct root dependency conflicts with override');
+            }
+            req.exactVersion = replacement;
+            req.effectiveSpecifier = replacement;
+          }
+          requirements.push(req);
         }
       }
       if (kind === 'root') for (const [path, data] of [...workspaces].sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0)) {
@@ -274,6 +366,11 @@ export function validateNpmCompositionSnapshot(request: NpmCompositionRequest): 
             path: node.path, foundPath: null, reason: 'absent-optional', causePath: null });
           else outcome.issues.push({ ...issue, kind: req.kind === 'peer' ? 'missing-peer' : 'missing-dependency' });
           continue;
+        }
+        if (policy && req.effectiveSpecifier !== undefined) {
+          if (to.kind !== 'registry') throw new Unsupported('workspace override selection is outside this profile');
+          (outcome as NpmPolicyOutcome).overrideSelections.push({ fromPath: node.path, toPath: to.path,
+            name: req.name, declaredSpecifier: req.specifier, effectiveSpecifier: req.effectiveSpecifier });
         }
         // Native version/alias edges do not authenticate names. Refuse unproven identities,
         // including inside a branch that would disappear on this target.

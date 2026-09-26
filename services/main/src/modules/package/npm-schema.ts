@@ -138,6 +138,31 @@ export const npmCompositionOutcomeSchema = t.Union([
 ]);
 export const npmResolutionV4Schema = t.Object({ ...npmResolutionV1Schema.properties,
   profile: t.Literal('npm-lock-topology-receipt-v4'), request: npmRequestV4Schema, outcome: npmCompositionOutcomeSchema });
-export const npmRequestSchema = t.Union([npmRequestV1Schema, npmRequestV2Schema, npmRequestV3Schema, npmRequestV4Schema]);
-export const npmResolutionSchema = t.Union([npmResolutionV1Schema, npmResolutionV2Schema, npmResolutionV3Schema, npmResolutionV4Schema]);
+const engineTarget = t.Object({ nodeVersion: t.String({ minLength: 1, maxLength: 32 }),
+  npmVersion: t.String({ minLength: 1, maxLength: 32 }) }, { additionalProperties: false });
+export const npmRequestV5Schema = t.Object({ ...npmRequestV4Schema.properties,
+  profile: t.Literal('npm-lock-v3-topology-v5'), engineTarget }, { additionalProperties: false });
+const policyFields = { ...compositionFields, engineTarget,
+  overrideSelections: t.Array(t.Object({ fromPath: t.String(), toPath: nullable, name: t.String(),
+    declaredSpecifier: t.String(), effectiveSpecifier: t.String() }), { maxItems: 256 }),
+  engineChecks: t.Array(t.Object({ path: t.String(), node: nullable, npm: nullable,
+    compatible: t.Boolean() }), { maxItems: 129 }) };
+const policyIssue = t.Object({ ...compositionIssue.properties,
+  kind: t.Union([...compositionIssue.properties.kind.anyOf, t.Literal('engine-incompatible')]) });
+export const npmPolicyOutcomeSchema = t.Union([
+  t.Object({ ...npmCompositionOutcomeSchema.anyOf[0]!.properties, ...policyFields,
+    issues: t.Array(policyIssue, { maxItems: 0 }) }),
+  t.Object({ ...npmCompositionOutcomeSchema.anyOf[1]!.properties, ...policyFields,
+    issues: t.Array(policyIssue, { minItems: 1, maxItems: 1062 }) }),
+  t.Object({ ...npmCompositionOutcomeSchema.anyOf[2]!.properties, ...policyFields,
+    issues: t.Array(policyIssue, { maxItems: 0 }) }),
+  t.Object({ ...npmCompositionOutcomeSchema.anyOf[3]!.properties, ...policyFields,
+    issues: t.Array(policyIssue, { maxItems: 0 }) }),
+]);
+export const npmResolutionV5Schema = t.Object({ ...npmResolutionV1Schema.properties,
+  profile: t.Literal('npm-lock-topology-receipt-v5'), request: npmRequestV5Schema, outcome: npmPolicyOutcomeSchema });
+export const npmRequestSchema = t.Union([npmRequestV1Schema, npmRequestV2Schema, npmRequestV3Schema,
+  npmRequestV4Schema, npmRequestV5Schema]);
+export const npmResolutionSchema = t.Union([npmResolutionV1Schema, npmResolutionV2Schema, npmResolutionV3Schema,
+  npmResolutionV4Schema, npmResolutionV5Schema]);
 export const npmResolutionWriteSchema = t.Object({ resolution: npmResolutionSchema, replayed: t.Boolean() });

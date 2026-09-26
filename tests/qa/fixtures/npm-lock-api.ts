@@ -8,6 +8,7 @@ import { npmBytes, npmDocuments, npmFixture, npmRequest } from './npm-lock-snaps
 import { assertNpmPlatformApi } from './npm-platform-api.ts';
 import { assertNpmIdentityApi } from './npm-identity-api.ts';
 import { assertNpmCompositionApi } from './npm-composition-api.ts';
+import { assertNpmPolicyApi } from './npm-policy-api.ts';
 
 export async function assertNpmLockApi(context: {
   call: (method: string, path: string, token: string, body?: unknown, key?: string) => Promise<Response>;
@@ -15,7 +16,8 @@ export async function assertNpmLockApi(context: {
 }): Promise<{ body: ReturnType<typeof npmFixture>; key: string; path: string; readPath: string;
   platform: Awaited<ReturnType<typeof assertNpmPlatformApi>>;
   identity: Awaited<ReturnType<typeof assertNpmIdentityApi>>;
-  composition: Awaited<ReturnType<typeof assertNpmCompositionApi>> }> {
+  composition: Awaited<ReturnType<typeof assertNpmCompositionApi>>;
+  policy: Awaited<ReturnType<typeof assertNpmPolicyApi>> }> {
   const { call, pool, principalId, resolveToken, readToken, otherReadToken } = context;
   const path = '/v1/package-resolutions/npm';
   const body = npmFixture();
@@ -76,11 +78,15 @@ export async function assertNpmLockApi(context: {
   const platform = await assertNpmPlatformApi(context);
   const identity = await assertNpmIdentityApi(context);
   const composition = await assertNpmCompositionApi(context);
+  const policy = await assertNpmPolicyApi(context);
   expect((await call('POST', path, resolveToken, platform.body, key)).status).toBe(409);
   expect((await call('POST', path, resolveToken, identity.body, key)).status).toBe(409);
   expect((await call('POST', path, resolveToken, identity.body, platform.key)).status).toBe(409);
   for (const previousKey of [key, platform.key, identity.key]) {
     expect((await call('POST', path, resolveToken, composition.body, previousKey)).status).toBe(409);
+  }
+  for (const previousKey of [key, platform.key, identity.key, composition.key]) {
+    expect((await call('POST', path, resolveToken, policy.body, previousKey)).status).toBe(409);
   }
   // Real owner calls and native plans at growing unrelated history sizes.
   // Background is bulk copied once per scale, never command seeded or revalidated.
@@ -109,7 +115,9 @@ export async function assertNpmLockApi(context: {
     expect(await observed.resolve(principalId, identity.key, identity.body)).toEqual({ resolution: identity.receipt, replayed: true });
     expect(await observed.read(principalId, composition.id)).toEqual(composition.receipt);
     expect(await observed.resolve(principalId, composition.key, composition.body)).toEqual({ resolution: composition.receipt, replayed: true });
-    expect(statements.map(statement => statement.rows)).toEqual([1, 0, 1, 1, 0, 1, 1, 0, 1, 1, 0, 1]);
+    expect(await observed.read(principalId, policy.id)).toEqual(policy.receipt);
+    expect(await observed.resolve(principalId, policy.key, policy.body)).toEqual({ resolution: policy.receipt, replayed: true });
+    expect(statements.map(statement => statement.rows)).toEqual([1, 0, 1, 1, 0, 1, 1, 0, 1, 1, 0, 1, 1, 0, 1]);
     const plans: Array<{ type: string; rows: number; filtered: number; blocks: number }> = [];
     for (const statement of statements.filter(statement => statement.sql.startsWith('SELECT'))) {
       const result = await pool.query(`EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON, TIMING OFF) ${statement.sql}`, statement.values);
@@ -124,13 +132,15 @@ export async function assertNpmLockApi(context: {
         blocks: plan['Shared Hit Blocks'] + plan['Shared Read Blocks'] });
     }
     evidence.push({ unrelatedReceipts: count, operationRows: statements.map(statement => statement.rows),
-      planOrder: ['v1-id', 'v1-key', 'v2-id', 'v2-key', 'v3-id', 'v3-key', 'v4-id', 'v4-key'], plans,
-      costs: [receipt.outcome.cost, platform.receipt.outcome.cost, identity.receipt.outcome.cost, composition.receipt.outcome.cost] });
+      planOrder: ['v1-id', 'v1-key', 'v2-id', 'v2-key', 'v3-id', 'v3-key', 'v4-id', 'v4-key', 'v5-id', 'v5-key'], plans,
+      costs: [receipt.outcome.cost, platform.receipt.outcome.cost, identity.receipt.outcome.cost,
+        composition.receipt.outcome.cost, policy.receipt.outcome.cost] });
     expect(receipt.outcome.cost).toEqual((await observed.read(principalId, id))!.outcome.cost);
     expect(platform.receipt.outcome.cost).toEqual((await observed.read(principalId, platform.id))!.outcome.cost);
     expect(identity.receipt.outcome.cost).toEqual((await observed.read(principalId, identity.id))!.outcome.cost);
     expect(composition.receipt.outcome.cost).toEqual((await observed.read(principalId, composition.id))!.outcome.cost);
+    expect(policy.receipt.outcome.cost).toEqual((await observed.read(principalId, policy.id))!.outcome.cost);
   }
   await writeFile(join(Bun.env.REZICS_QA_ARTIFACT_DIR ?? '.temp', 'npm-receipt-reads.json'), JSON.stringify(evidence, null, 2));
-  return { body, key, path, readPath, platform, identity, composition };
+  return { body, key, path, readPath, platform, identity, composition, policy };
 }

@@ -249,6 +249,35 @@ request and read-response schemas compare equal to the base. These are selected
 worker checks, not final backend qualification; the harness removed its isolated
 stacks after each run.
 
+G-033 adds `npm-lock-v3-topology-v5` and a separate immutable v5 receipt for
+bounded flat root overrides and explicit Node/npm engine targets. The native
+oracle adds five npm 11.19.1/Arborist 9.9.1 cases, bringing the fixed comparison
+set to 187. It checks a transitive override's declared and effective edge
+selectors, per-node native engine results, npm's direct-dependency `EOVERRIDE`,
+the deliberately unsupported nested override, and missing SRI provenance.
+`policy-result.json` retains exact inputs, native outputs and REZICS outcomes.
+An incompatible optional node is still checked before platform omission; this
+is REZICS strict admission, while npm's default engine check is advisory.
+The selected unit/contract and real Source/npm API tests cover success, negative
+outcomes, same-key convergence, private exact reads, conflicting replay and
+indexed reads at 64/512/4,096 unrelated receipts. The physical owner-cut test
+restores a v5 receipt and independently corrupts its override and engine-check
+witnesses to require exact-read and graph-hold denial. Signed Content coverage
+includes all ten npm receipts. These are affected checks, not full backend
+qualification, and PKG04/PKG12/PKG13 remain partial.
+
+The affected G-033 command set is:
+
+```sh
+yarn test tests/qa/unit/npm-policy-topology.test.ts tests/qa/unit/npm-lock-contract.test.ts tests/qa/unit/npm-v1-compatibility.test.ts tests/qa/unit/npm-v2-compatibility.test.ts tests/qa/unit/npm-v3-compatibility.test.ts tests/qa/unit/npm-composition-topology.test.ts
+yarn package:npm-oracle
+yarn gen
+yarn test tests/qa/integration/source-authenticated-api.test.ts
+yarn test tests/qa/fault-recovery/coordinated-owner-cut.test.ts
+yarn check:backend
+yarn docs:check
+```
+
 PKG04/PKG12/PKG13 remain partial. V4 qualifies bounded virtual identity and target
 projection only. Broad workspaces, overrides, engine policy, pnpm/Yarn, registry
 solving, artifact validation, installation and deployment capacity remain open.

@@ -420,6 +420,39 @@ The offline oracle checks virtual trees plus explicit platform and optional-regi
 observations on four OS/CPU pairs. These bounded observations do not establish
 ideal-tree selection or installation, and PKG04/PKG12/PKG13 remain partial.
 
+G-033 adds the separately versioned `npm-lock-v3-topology-v5` request with
+`policy: "literal-sources-policy-v5"`. It requires the v4 target and explicit
+`engineTarget.nodeVersion`/`npmVersion`, both exact stable versions, plus the
+same exact manifest, lockfile and workspace bytes. The root manifest may contain
+at most 32 flat package-name override rules with exact version values. A rule
+changes the effective selector for a transitive registry dependency while the
+receipt retains its declared selector and selected path. A direct root
+dependency whose selector conflicts with its override returns
+`unsupported-semantics` with the pinned npm `EOVERRIDE` difference recorded;
+nested override objects, peer/alias/workspace override selection and ranges are
+also outside this admitted grammar. V1–v4 request and receipt identities remain
+unchanged. The v5 immutable `npm-lock-topology-receipt-v5` stores the engine
+target, override selections and a per-node engine-check witness beside the v4
+projection; read and replay revalidate these exact bytes under the same private
+owner and signed Content recovery coverage.
+
+Each root, workspace and registry node may declare `engines.node` and
+`engines.npm` as an exact stable version or `>=` that version. The explicit
+target is checked for every locked node, including an optional node that is
+omitted from the requested platform projection. An incompatible node produces
+`invalid-topology` and an empty graph. This is a strict REZICS admission rule:
+npm's default engine warning does not by itself reject installation unless
+`engine-strict` is enabled. The native comparison invokes npm 11.19.1's pinned
+engine checker with the declared target; the virtual-tree observation is not
+an install or ideal-tree solve. Missing source or SRI remains
+`incomplete-source-data`, and malformed, unsupported and budget outcomes retain
+empty graphs. The v5 profile advances bounded PKG04/PKG12/PKG13 evidence;
+general npm override grammar, engine ranges, solver behavior, pnpm/Yarn and
+artifact installation remain outside it. See npm's
+[override and engine declarations](https://docs.npmjs.com/cli/v11/configuring-npm/package-json/),
+[engine-strict setting](https://docs.npmjs.com/cli/v11/using-npm/config/), and
+the pinned [native engine checker](https://github.com/npm/cli/blob/v11.19.1/node_modules/npm-install-checks/lib/index.js).
+
 ## Go
 
 Use MVS over module requirements with module-path/major-version identity, pseudo-

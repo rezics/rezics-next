@@ -12,6 +12,8 @@ import { compareNpmIdentity } from './npm-identity-compare.ts';
 import { npmCompositionCases, npmCompositionFixture, npmCompositionTargets } from '../../tests/qa/fixtures/npm-composition-snapshot.ts';
 import { validateNpmCompositionSnapshot, type NpmCompositionOutcome } from '../../services/main/src/modules/package/npm-composition.ts';
 import { compareNpmComposition } from './npm-composition-compare.ts';
+import { npmPolicyCases, npmPolicyFixture } from '../../tests/qa/fixtures/npm-policy-snapshot.ts';
+import { validateNpmPolicySnapshot } from '../../services/main/src/modules/package/npm-composition.ts';
 
 const base = resolve(import.meta.dir, '../../.temp/package-npm-oracle');
 await mkdir(base, { recursive: true });
@@ -231,3 +233,74 @@ await writeFile(resolve(base, 'composition-result.json'), JSON.stringify(composi
 await writeFile(resolve(base, 'summary.json'), JSON.stringify({ compatibility, platformCompatibility, identityCompatibility,
   platformSummary, identitySummary, compositionSummary }, null, 2));
 console.log(`npm offline native composition matched ${Object.keys(compositionResults).length} cases; result: ${resolve(base, 'composition-result.json')}`);
+const policyResults: Record<string, unknown> = {};
+for (const kind of npmPolicyCases) {
+  const request = npmPolicyFixture(kind);
+  const directory = resolve(base, `policy-${kind}`);
+  await rm(directory, { force: true, recursive: true });
+  await mkdir(directory, { recursive: true });
+  const inputs = [{ path: 'package.json', bytes: request.manifest },
+    { path: 'package-lock.json', bytes: request.lock }];
+  for (const input of inputs) await writeFile(resolve(directory, input.path),
+    Buffer.from(input.bytes.bytesBase64, 'base64'));
+  const listing = await run([cli, 'ls', '--all', '--json', '--long', '--package-lock-only',
+    '--offline', '--ignore-scripts', '--strict-peer-deps', '--legacy-peer-deps=false'], directory);
+  const virtual = await run([resolve(import.meta.dir, 'npm-native-tree.cjs'), npmPackage, directory,
+    'policy', JSON.stringify(request.target), JSON.stringify(request.engineTarget)], directory);
+  const native = JSON.parse(virtual.stdout) as { npmVersion?: string; arboristVersion?: string;
+    error?: { code: string; message: string }; projection?: { engineChecks: Array<{
+      path: string; node: string | null; npm: string | null; compatible: boolean }> };
+    nodes?: Array<{ path: string; name: string; version: string; resolved: string | null;
+      integrity: string | null; edges: Array<{ name: string; specifier: string;
+        rawSpecifier: string; override: string | null; to: string | null; error: string | null }> }> };
+  const rezics = validateNpmPolicySnapshot(request);
+  policyResults[kind] = { request, listing, virtual, native, rezics };
+  await writeFile(resolve(base, 'policy-result.json'), JSON.stringify(policyResults, null, 2));
+  const expected = kind === 'override' ? 'validated'
+    : kind === 'engine-incompatible' ? 'invalid-topology'
+      : kind === 'missing-provenance' ? 'incomplete-source-data' : 'unsupported-semantics';
+  if (rezics.status !== expected) throw new Error(`${kind}: policy result ${rezics.status} differs from ${expected}`);
+  if (kind === 'override' || kind === 'engine-incompatible') {
+    if (!native.nodes || !native.projection || native.error) throw new Error(`${kind}: native virtual tree unavailable`);
+    if (native.npmVersion !== '11.19.1' || native.arboristVersion !== '9.9.1') {
+      throw new Error(`${kind}: native npm/Arborist pin differs`);
+    }
+    if (npmStable(native.projection.engineChecks) !== npmStable(rezics.engineChecks)) {
+      throw new Error(`${kind}: native engine check differs`);
+    }
+    const leaf = native.nodes.find(node => node.path === 'node_modules/leaf');
+    const edge = native.nodes.find(node => node.path === 'node_modules/renamed')?.edges.find(item => item.name === 'leaf');
+    if (leaf?.version !== '2.0.0' || edge?.rawSpecifier !== '1.0.0'
+      || edge.specifier !== '2.0.0' || edge.override !== '2.0.0') {
+      throw new Error(`${kind}: native override target or edge differs`);
+    }
+    if (kind === 'override' && (rezics.overrideSelections.length !== 1
+      || rezics.overrideSelections[0]?.effectiveSpecifier !== edge.specifier)) {
+      throw new Error(`${kind}: REZICS override witness differs`);
+    }
+    if (kind === 'engine-incompatible' && !native.projection.engineChecks.some(item => !item.compatible)) {
+      throw new Error('native engine incompatibility was not observed');
+    }
+  }
+  if (kind === 'nested-override' && (listing.exitCode !== 0 || virtual.exitCode !== 0
+    || !native.nodes?.find(node => node.path === 'node_modules/renamed')?.edges.some(edge =>
+      edge.name === 'leaf' && edge.specifier === '2.0.0'))) {
+    throw new Error('nested native override contrast was not observed');
+  }
+  if (kind === 'direct-conflict' && (listing.exitCode === 0 || virtual.exitCode === 0
+    || native.error?.code !== 'EOVERRIDE')) {
+    throw new Error('native direct-override EOVERRIDE was not observed');
+  }
+  if (kind === 'missing-provenance' && (listing.exitCode !== 0 || virtual.exitCode !== 0
+    || native.nodes?.find(node => node.path === 'node_modules/leaf')?.integrity !== null
+    || !rezics.issues.some(issue => issue.kind === 'missing-provenance'))) {
+    throw new Error('missing provenance policy difference was not observed');
+  }
+  for (const input of inputs) if (await readFile(resolve(directory, input.path), 'base64') !== input.bytes.bytesBase64) {
+    throw new Error(`${kind}: native oracle changed exact input bytes`);
+  }
+  if (await access(resolve(directory, 'node_modules')).then(() => true, () => false)) {
+    throw new Error(`${kind}: native oracle unexpectedly installed packages`);
+  }
+}
+console.log(`npm offline native policy compared ${npmPolicyCases.length} cases; result: ${resolve(base, 'policy-result.json')}`);
