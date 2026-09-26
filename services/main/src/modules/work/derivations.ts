@@ -238,7 +238,10 @@ export async function derivationValidations(env: WorkActivationEnvironment, deri
   const profile = unresolved ? UNRESOLVED_PROFILE : PROFILE;
   return profileValidations(env.fuseki, unresolved ? 'work-derivation-unresolved-v1'
     : 'work-derivation-v1', [{ shape: `${profile}/derivation-shape`, focus: [derivation],
-    graphs: [GRAPHS.current, GRAPHS.revisions, GRAPHS.receipts, GRAPHS.control],
+    // The exact profile has a native receipt/control binding. The unresolved
+    // profile uses the registry binding and validates against its two owner graphs.
+    graphs: unresolved ? [GRAPHS.current, GRAPHS.revisions]
+      : [GRAPHS.current, GRAPHS.revisions, GRAPHS.receipts, GRAPHS.control],
   }], { derivation, 'target-work': input.targetWork,
     'target-main': input.targetMainVersion, 'target-revision': input.expectedTargetHead,
     'source-work': input.sourceWork, 'source-main': input.sourceMainVersion,
