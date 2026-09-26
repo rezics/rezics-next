@@ -56,6 +56,9 @@ export interface SummaryBatch {
 
 interface GraphRow { type: ResourceType; work: string | null; head: string | null;
   public: boolean; labels: Map<string, string> }
+const typePriority: readonly ResourceType[] = [
+  'work', 'main-version', 'space', 'realm', 'concept', 'context', 'character', 'role', 'relation-definition',
+];
 
 export function direction(language: string): 'ltr' | 'rtl' {
   return RTL.has(language.split('-')[0]!.toLowerCase()) ? 'rtl' : 'ltr';
@@ -130,7 +133,10 @@ async function graphRows(env: WorkActivationEnvironment, resources: readonly str
   for (const binding of bindings) {
     const reference = binding.r?.value;
     if (!reference || !binding.type) continue;
-    const row = rows.get(reference) ?? { type: binding.type.value as ResourceType,
+    const type = binding.type.value as ResourceType;
+    const previous = rows.get(reference);
+    if (previous && typePriority.indexOf(previous.type) < typePriority.indexOf(type)) continue;
+    const row = previous?.type === type ? previous : { type,
       work: binding.work?.value ?? null, head: binding.head?.value ?? null,
       public: binding.public?.value === 'true', labels: new Map() };
     const label = binding.label;
@@ -224,14 +230,23 @@ export async function readResourceSummaries(env: WorkActivationEnvironment, medi
     } else {
       if (semantic.state.component !== 'resource'
         || !semantic.state.types.includes(`${RV}${row.type === 'character' ? 'Character' : 'Role'}`)) continue;
+      const names = new Map<string, string>();
+      const ambiguous = new Set<string>();
       for (const property of semantic.state.properties) {
         if (property.predicate !== 'https://schema.org/name') continue;
+        let language: string;
+        let value: string;
         if (property.value.kind === 'language-string' && property.value.lexical.trim()) {
-          row.labels.set(property.value.language.toLowerCase(), property.value.lexical);
+          language = property.value.language.toLowerCase();
+          value = property.value.lexical;
         } else if (property.value.kind === 'string' && property.value.lexical.trim()) {
-          row.labels.set('en', property.value.lexical);
-        }
+          language = 'en';
+          value = property.value.lexical;
+        } else continue;
+        if (names.has(language) && names.get(language) !== value) ambiguous.add(language);
+        names.set(language, value);
       }
+      for (const [language, value] of names) if (!ambiguous.has(language)) row.labels.set(language, value);
     }
     if (!row.labels.size) {
       const kind = row.type === 'character' ? 'Character' : row.type === 'role' ? 'Role' : 'Relation definition';

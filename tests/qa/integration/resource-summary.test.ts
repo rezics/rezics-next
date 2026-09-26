@@ -360,6 +360,17 @@ test('VIEW08: Character, Context, Realm, Role and RelationDefinition summaries o
     .toEqual(await costOf([character]));
   expect(await costOf([character])).toEqual({ graphQueries: 5, mediaQueries: 1,
     accessChecks: 1, accessQueries: 1 });
+  const dual = await createSemantic({ component: 'resource', types: [
+    'https://rezics.com/vocab/Role', 'https://rezics.com/vocab/Character'],
+  properties: [{ predicate: 'https://schema.org/name', value: {
+    kind: 'language-string', lexical: 'First', language: 'ja' } },
+  { predicate: 'https://schema.org/name', value: {
+    kind: 'language-string', lexical: 'Second', language: 'ja' } }] });
+  await owner.grant(`semantic:read:${dual}`, 'semantic.read');
+  const dualRead = await owner.read(`/v1/resources/${local(dual)}?language=ja`);
+  expect(dualRead.status).toBe(200);
+  expect(await dualRead.json()).toMatchObject({ type: 'character',
+    name: { value: `Character ${dual.slice(-8)}`, basis: 'fallback' } });
   const other = await summaries(outsider);
   expect(other.map(item => item.status)).toEqual(denied.map(item => item.status));
   expect((await call('GET', `/v1/public-previews/${local(hidden)}`)).status).toBe(404);
