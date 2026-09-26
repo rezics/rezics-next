@@ -12,6 +12,7 @@ import { SourceNativeWorkAdoptionStore, type NativeWorkSourceAdoption } from '..
 import { SourceNativeWorkAttachmentStore } from '../../../services/main/src/modules/source/native-work-attachment.ts';
 import { SourceChildCorrespondenceStore } from '../../../services/main/src/modules/source/record-child-correspondence.ts';
 import { SourceAuthorCreditStore, type AdoptSourceAuthorCreditInput } from '../../../services/main/src/modules/source/author-credit.ts';
+import { ProviderIdentityStore } from '../../../services/main/src/modules/source/provider-identity.ts';
 import { sourceChildOccurrence } from '../../../services/main/src/modules/source/child-correspondence.ts';
 import { ratingAccount } from '../support/rating-account.ts';
 import { migrateContent } from '../../../services/content/src/migrate.ts';
@@ -23,7 +24,7 @@ export const author = (key: string, role: string | null = '/type/author_role') =
 
 export async function authorCreditFixture(apps: Record<string, string>, objectDirectory: string) {
   const account = await ratingAccount(apps,
-    'openid work:create work:edit work:read source:acquire source:convert source:propose source:adopt source:correspond source:read');
+    'openid work:create work:edit work:read source:intake source:acquire source:convert source:propose source:adopt source:correspond source:read');
   const accessPool = new Pool({ connectionString: apps.ACCESS_DATABASE_URL });
   const pool = new Pool({ connectionString: apps.CONTENT_DATABASE_URL });
   await migrateContent(pool);
@@ -82,6 +83,7 @@ export async function authorCreditFixture(apps: Record<string, string>, objectDi
   const app = createMainApp(fuseki, { environment: env, account: account.verifier, access,
     sourceIntake: intake, sourceConversions: conversions, sourceGraph: graph, sourceProposals: proposals,
     sourceCorrespondences: correspondences, sourceAdoptions: adoptions, sourceAuthorCredits: credits,
+    sourceProviderIdentity: new ProviderIdentityStore(pool),
     sourceAttachments: new SourceNativeWorkAttachmentStore(pool, proposals, adoptions, env, access),
     openLibraryFetch: (async () => new Response(JSON.stringify(source), { headers: { 'content-type': 'application/json' } })) as typeof fetch });
   const call = (method: string, path: string, body?: object, key = randomUUID(), token = account.tokenA) => app.handle(
