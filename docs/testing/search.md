@@ -86,6 +86,10 @@ qualifies the installed body-only response surface when its isolated integration
 tier passes. Title search, snippets and facets require separate cases if those
 surfaces are added.
 
+Merged selected integration `20260926t122802-263b0c` and the QA coverage unit
+passed for this installed body-only lane. SEARCH03 is a complete-case candidate
+pending one clean recorded backend QA; the selection remains a partial run.
+
 The shared-stack `public-search-scale` fixture builds the rated Realm relation
 through native Work, Contribution, selection, classification and standing-rating
 commands. It directly observes two valid text/rating join paths for one selected

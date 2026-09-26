@@ -161,6 +161,21 @@ test('QA08: IAM25 needs the exact selected-set API and restored authority episod
   expect(acceptanceStatuses(cases, results, true, coverage).IAM25.status).toBe('passed');
 });
 
+test('QA08: SEARCH03 needs the real public Content phrase and retained private draft', () => {
+  const coverage = declaredCaseCoverage(cases, 'backend');
+  const identities = coverage.get('SEARCH03')!;
+  expect(identities).toHaveLength(1);
+  const [tier, file, ...title] = identities[0]!.split(':');
+  const name = title.join(':');
+  const source = readFileSync(resolve(import.meta.dir, '../../..', file!), 'utf8');
+  expect(source).toContain(`test('${name}'`);
+  const result = { tier, file, name, failed: false, skipped: false } as TestResult;
+  expect(acceptanceStatuses(cases, [result], false, coverage).SEARCH03.status).toBe('partial-pass');
+  expect(acceptanceStatuses(cases, [result], true, coverage).SEARCH03.status).toBe('passed');
+  expect(acceptanceStatuses(cases, [{ ...result, failed: true }], true, coverage).SEARCH03.status)
+    .toBe('failed');
+});
+
 test('SYS02: declared lost-response coverage needs the real fault result in one complete run', () => {
   const coverage = declaredCaseCoverage(cases);
   expect(missingCaseDeclarations(cases, coverage)).toContain('SYS03');

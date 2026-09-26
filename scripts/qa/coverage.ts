@@ -228,6 +228,11 @@ const completeCases: Record<string, readonly TestIdentity[]> = {
     file: 'tests/qa/unit/search-budgets.test.ts',
     name: 'SEARCH02/SEARCH10: a 513th raw hit cannot become a false complete empty result',
   }],
+  SEARCH03: [{
+    tier: 'integration',
+    file: 'tests/qa/integration/content-publication-native.test.ts',
+    name: 'WORK09/WORK10/SEARCH03/SEARCH19: Content CAS, private drafts and exact public search',
+  }],
   SEARCH04: [{
     tier: 'integration',
     file: 'tests/qa/integration/public-search-scale.test.ts',
