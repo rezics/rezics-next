@@ -21,6 +21,7 @@ export async function profileValidations(fuseki: FusekiClient, profile: ProfileI
   entries: readonly { shape: string; focus: readonly string[]; graphs: readonly string[] }[],
   binding?: Readonly<Record<string, string>>,
 ): Promise<CommandValidation[]> {
+  if (entries.length === 0) throw new Error('required validation entries are empty');
   const pinned = profileRegistry[profile];
   const health = await fuseki.commandHealth();
   if (health.profiles[profile] !== pinned.sha256) {
