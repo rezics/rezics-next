@@ -77299,6 +77299,7 @@
     },
     "/v1/me/notifications/hint": {
       "get": {
+        "description": "Returns a cursor snapshot; a WebSocket upgrade on this path receives live cursor hints.",
         "operationId": "getV1MeNotificationsHint",
         "responses": {
           "200": {
