@@ -105498,6 +105498,16 @@
                           "minLength": 1,
                           "type": "string"
                         },
+                        "nestedOf": {
+                          "maxLength": 64,
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "nestedPath": {
+                          "maxLength": 164,
+                          "minLength": 1,
+                          "type": "string"
+                        },
                         "sha256": {
                           "~elyTyp": 7,
                           "nullable": true,
@@ -105561,6 +105571,21 @@
                   "runtime": {
                     "additionalProperties": false,
                     "properties": {
+                      "features": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "javaVersion": {
+                            "maxLength": 32,
+                            "type": "string"
+                          },
+                          "openGLVersion": {
+                            "maxLength": 32,
+                            "type": "string"
+                          }
+                        },
+                        "required": [],
+                        "type": "object"
+                      },
                       "gameVersion": {
                         "maxLength": 32,
                         "type": "string"
@@ -105621,6 +105646,16 @@
                           "minLength": 1,
                           "type": "string"
                         },
+                        "nestedOf": {
+                          "maxLength": 64,
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "nestedPath": {
+                          "maxLength": 164,
+                          "minLength": 1,
+                          "type": "string"
+                        },
                         "sha256": {
                           "~elyTyp": 7,
                           "nullable": true,
@@ -105684,6 +105719,21 @@
                   "runtime": {
                     "additionalProperties": false,
                     "properties": {
+                      "features": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "javaVersion": {
+                            "maxLength": 32,
+                            "type": "string"
+                          },
+                          "openGLVersion": {
+                            "maxLength": 32,
+                            "type": "string"
+                          }
+                        },
+                        "required": [],
+                        "type": "object"
+                      },
                       "gameVersion": {
                         "maxLength": 32,
                         "type": "string"
@@ -105744,6 +105794,16 @@
                           "minLength": 1,
                           "type": "string"
                         },
+                        "nestedOf": {
+                          "maxLength": 64,
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "nestedPath": {
+                          "maxLength": 164,
+                          "minLength": 1,
+                          "type": "string"
+                        },
                         "sha256": {
                           "~elyTyp": 7,
                           "nullable": true,
@@ -105807,6 +105867,21 @@
                   "runtime": {
                     "additionalProperties": false,
                     "properties": {
+                      "features": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "javaVersion": {
+                            "maxLength": 32,
+                            "type": "string"
+                          },
+                          "openGLVersion": {
+                            "maxLength": 32,
+                            "type": "string"
+                          }
+                        },
+                        "required": [],
+                        "type": "object"
+                      },
                       "gameVersion": {
                         "maxLength": 32,
                         "type": "string"
@@ -106072,6 +106147,16 @@
                                     "minLength": 1,
                                     "type": "string"
                                   },
+                                  "nestedOf": {
+                                    "maxLength": 64,
+                                    "minLength": 1,
+                                    "type": "string"
+                                  },
+                                  "nestedPath": {
+                                    "maxLength": 164,
+                                    "minLength": 1,
+                                    "type": "string"
+                                  },
                                   "sha256": {
                                     "~elyTyp": 7,
                                     "nullable": true,
@@ -106135,6 +106220,21 @@
                             "runtime": {
                               "additionalProperties": false,
                               "properties": {
+                                "features": {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "javaVersion": {
+                                      "maxLength": 32,
+                                      "type": "string"
+                                    },
+                                    "openGLVersion": {
+                                      "maxLength": 32,
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [],
+                                  "type": "object"
+                                },
                                 "gameVersion": {
                                   "maxLength": 32,
                                   "type": "string"
@@ -106423,6 +106523,16 @@
                                     "minLength": 1,
                                     "type": "string"
                                   },
+                                  "nestedOf": {
+                                    "maxLength": 64,
+                                    "minLength": 1,
+                                    "type": "string"
+                                  },
+                                  "nestedPath": {
+                                    "maxLength": 164,
+                                    "minLength": 1,
+                                    "type": "string"
+                                  },
                                   "sha256": {
                                     "~elyTyp": 7,
                                     "nullable": true,
@@ -106486,6 +106596,21 @@
                             "runtime": {
                               "additionalProperties": false,
                               "properties": {
+                                "features": {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "javaVersion": {
+                                      "maxLength": 32,
+                                      "type": "string"
+                                    },
+                                    "openGLVersion": {
+                                      "maxLength": 32,
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [],
+                                  "type": "object"
+                                },
                                 "gameVersion": {
                                   "maxLength": 32,
                                   "type": "string"
@@ -107009,6 +107134,16 @@
                                 "minLength": 1,
                                 "type": "string"
                               },
+                              "nestedOf": {
+                                "maxLength": 64,
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "nestedPath": {
+                                "maxLength": 164,
+                                "minLength": 1,
+                                "type": "string"
+                              },
                               "sha256": {
                                 "~elyTyp": 7,
                                 "nullable": true,
@@ -107072,6 +107207,21 @@
                         "runtime": {
                           "additionalProperties": false,
                           "properties": {
+                            "features": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "javaVersion": {
+                                  "maxLength": 32,
+                                  "type": "string"
+                                },
+                                "openGLVersion": {
+                                  "maxLength": 32,
+                                  "type": "string"
+                                }
+                              },
+                              "required": [],
+                              "type": "object"
+                            },
                             "gameVersion": {
                               "maxLength": 32,
                               "type": "string"
