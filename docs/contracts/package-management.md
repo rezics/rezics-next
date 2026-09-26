@@ -46,6 +46,30 @@ Results distinguish solved, unsatisfiable, incomplete-source-data,
 unsupported-semantics, cancelled and budget-exhausted. A timeout is not an unsat
 proof; an inaccessible dependency is not an empty dependency set.
 
+`POST /v1/package-resolutions/cargo` accepts the first bounded
+`cargo-index-exact-resolver2-v1` request described in [Cargo profiles](package-profiles.md#cargo).
+It binds exact base64 root manifest and registry index file bytes, SHA-256 values,
+the original registry URL, resolver 2, host/target triples and requested features
+to an immutable private row under `Idempotency-Key`. `package:resolve` creates or
+replays; `GET /v1/package-resolutions/cargo/{resolution}` requires `package:read`
+and re-verifies the stored request digest and outcome. Both operations require an
+active Access principal; another principal receives 404 for a private read.
+The solved response keeps a lock selection by source/name/version and a separate
+active host/target instance graph with features and typed edges. The API returns
+explicit incomplete, unsupported and budget outcomes with empty graph fields.
+Malformed bytes or duplicate source identities return 422; a changed request on
+an existing key returns 409. It makes no artifact availability, checksum
+verification, installation or build claim.
+
+The Cargo operation reads no provider data at execution time. Its upper bound is
+O(B + V + E + F·E) work for B supplied bytes, V at most 128 releases, E at most
+256 dependency edges and F at most 512 feature activations; feature expansion
+may inspect each release's bounded dependency list. It performs one bounded
+insert and one indexed PostgreSQL read on create/replay, or one indexed read for
+exact private retrieval, followed by a bounded re-solve. Request and response
+bytes grow with the supplied snapshot and graph. Native Cargo comparison is a
+separate oracle command, never a Main runtime side effect.
+
 The first callable profile, `POST /v1/package-resolutions`, accepts
 `go-mvs-stable-unpruned-v1`: a bounded caller-supplied snapshot of parsed Go
 module requirements with a `go 1.16` graph declaration. It supports stable

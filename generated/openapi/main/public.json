@@ -30273,6 +30273,1596 @@
         ]
       }
     },
+    "/v1/package-resolutions/cargo": {
+      "post": {
+        "operationId": "postV1Package-resolutionsCargo",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 128,
+              "minLength": 1,
+              "pattern": "^[A-Za-z0-9:_./-]{1,128}$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "defaultFeatures": {
+                    "type": "boolean"
+                  },
+                  "features": {
+                    "items": {
+                      "maxLength": 64,
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "maxItems": 32,
+                    "type": "array"
+                  },
+                  "host": {
+                    "enum": [
+                      "x86_64-unknown-linux-gnu",
+                      "x86_64-pc-windows-msvc"
+                    ],
+                    "type": "string"
+                  },
+                  "indexFiles": {
+                    "items": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "bytesBase64": {
+                          "maxLength": 87384,
+                          "type": "string"
+                        },
+                        "name": {
+                          "maxLength": 64,
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "sha256": {
+                          "pattern": "^[0-9a-f]{64}$",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "name",
+                        "bytesBase64",
+                        "sha256"
+                      ],
+                      "type": "object"
+                    },
+                    "maxItems": 32,
+                    "type": "array"
+                  },
+                  "manifestBase64": {
+                    "maxLength": 87384,
+                    "type": "string"
+                  },
+                  "manifestSha256": {
+                    "pattern": "^[0-9a-f]{64}$",
+                    "type": "string"
+                  },
+                  "profile": {
+                    "const": "cargo-index-exact-resolver2-v1",
+                    "type": "string"
+                  },
+                  "registryIndexUrl": {
+                    "maxLength": 300,
+                    "minLength": 10,
+                    "type": "string"
+                  },
+                  "target": {
+                    "enum": [
+                      "x86_64-unknown-linux-gnu",
+                      "x86_64-pc-windows-msvc"
+                    ],
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "profile",
+                  "registryIndexUrl",
+                  "manifestBase64",
+                  "manifestSha256",
+                  "indexFiles",
+                  "host",
+                  "target",
+                  "features",
+                  "defaultFeatures"
+                ],
+                "type": "object"
+              }
+            },
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "defaultFeatures": {
+                    "type": "boolean"
+                  },
+                  "features": {
+                    "items": {
+                      "maxLength": 64,
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "maxItems": 32,
+                    "type": "array"
+                  },
+                  "host": {
+                    "enum": [
+                      "x86_64-unknown-linux-gnu",
+                      "x86_64-pc-windows-msvc"
+                    ],
+                    "type": "string"
+                  },
+                  "indexFiles": {
+                    "items": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "bytesBase64": {
+                          "maxLength": 87384,
+                          "type": "string"
+                        },
+                        "name": {
+                          "maxLength": 64,
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "sha256": {
+                          "pattern": "^[0-9a-f]{64}$",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "name",
+                        "bytesBase64",
+                        "sha256"
+                      ],
+                      "type": "object"
+                    },
+                    "maxItems": 32,
+                    "type": "array"
+                  },
+                  "manifestBase64": {
+                    "maxLength": 87384,
+                    "type": "string"
+                  },
+                  "manifestSha256": {
+                    "pattern": "^[0-9a-f]{64}$",
+                    "type": "string"
+                  },
+                  "profile": {
+                    "const": "cargo-index-exact-resolver2-v1",
+                    "type": "string"
+                  },
+                  "registryIndexUrl": {
+                    "maxLength": 300,
+                    "minLength": 10,
+                    "type": "string"
+                  },
+                  "target": {
+                    "enum": [
+                      "x86_64-unknown-linux-gnu",
+                      "x86_64-pc-windows-msvc"
+                    ],
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "profile",
+                  "registryIndexUrl",
+                  "manifestBase64",
+                  "manifestSha256",
+                  "indexFiles",
+                  "host",
+                  "target",
+                  "features",
+                  "defaultFeatures"
+                ],
+                "type": "object"
+              }
+            },
+            "multipart/form-data": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "defaultFeatures": {
+                    "type": "boolean"
+                  },
+                  "features": {
+                    "items": {
+                      "maxLength": 64,
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "maxItems": 32,
+                    "type": "array"
+                  },
+                  "host": {
+                    "enum": [
+                      "x86_64-unknown-linux-gnu",
+                      "x86_64-pc-windows-msvc"
+                    ],
+                    "type": "string"
+                  },
+                  "indexFiles": {
+                    "items": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "bytesBase64": {
+                          "maxLength": 87384,
+                          "type": "string"
+                        },
+                        "name": {
+                          "maxLength": 64,
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "sha256": {
+                          "pattern": "^[0-9a-f]{64}$",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "name",
+                        "bytesBase64",
+                        "sha256"
+                      ],
+                      "type": "object"
+                    },
+                    "maxItems": 32,
+                    "type": "array"
+                  },
+                  "manifestBase64": {
+                    "maxLength": 87384,
+                    "type": "string"
+                  },
+                  "manifestSha256": {
+                    "pattern": "^[0-9a-f]{64}$",
+                    "type": "string"
+                  },
+                  "profile": {
+                    "const": "cargo-index-exact-resolver2-v1",
+                    "type": "string"
+                  },
+                  "registryIndexUrl": {
+                    "maxLength": 300,
+                    "minLength": 10,
+                    "type": "string"
+                  },
+                  "target": {
+                    "enum": [
+                      "x86_64-unknown-linux-gnu",
+                      "x86_64-pc-windows-msvc"
+                    ],
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "profile",
+                  "registryIndexUrl",
+                  "manifestBase64",
+                  "manifestSha256",
+                  "indexFiles",
+                  "host",
+                  "target",
+                  "features",
+                  "defaultFeatures"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "replayed": {
+                      "type": "boolean"
+                    },
+                    "resolution": {
+                      "properties": {
+                        "createdAt": {
+                          "type": "string"
+                        },
+                        "outcome": {
+                          "properties": {
+                            "edgeCount": {
+                              "type": "number"
+                            },
+                            "edges": {
+                              "items": {
+                                "properties": {
+                                  "defaultFeatures": {
+                                    "type": "boolean"
+                                  },
+                                  "from": {
+                                    "type": "string"
+                                  },
+                                  "kind": {
+                                    "enum": [
+                                      "normal",
+                                      "build"
+                                    ],
+                                    "type": "string"
+                                  },
+                                  "requestedFeatures": {
+                                    "items": {
+                                      "type": "string"
+                                    },
+                                    "type": "array"
+                                  },
+                                  "target": {
+                                    "~elyTyp": 7,
+                                    "nullable": true,
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ]
+                                  },
+                                  "to": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "from",
+                                  "to",
+                                  "kind",
+                                  "target",
+                                  "requestedFeatures",
+                                  "defaultFeatures"
+                                ],
+                                "type": "object"
+                              },
+                              "type": "array"
+                            },
+                            "featureActivationCount": {
+                              "type": "number"
+                            },
+                            "instances": {
+                              "items": {
+                                "properties": {
+                                  "features": {
+                                    "items": {
+                                      "type": "string"
+                                    },
+                                    "type": "array"
+                                  },
+                                  "id": {
+                                    "type": "string"
+                                  },
+                                  "name": {
+                                    "type": "string"
+                                  },
+                                  "role": {
+                                    "enum": [
+                                      "host",
+                                      "target"
+                                    ],
+                                    "type": "string"
+                                  },
+                                  "source": {
+                                    "type": "string"
+                                  },
+                                  "version": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "id",
+                                  "source",
+                                  "name",
+                                  "version",
+                                  "role",
+                                  "features"
+                                ],
+                                "type": "object"
+                              },
+                              "type": "array"
+                            },
+                            "missing": {
+                              "items": {
+                                "type": "string"
+                              },
+                              "type": "array"
+                            },
+                            "releaseCount": {
+                              "type": "number"
+                            },
+                            "selected": {
+                              "items": {
+                                "properties": {
+                                  "id": {
+                                    "type": "string"
+                                  },
+                                  "name": {
+                                    "type": "string"
+                                  },
+                                  "source": {
+                                    "type": "string"
+                                  },
+                                  "version": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "id",
+                                  "source",
+                                  "name",
+                                  "version"
+                                ],
+                                "type": "object"
+                              },
+                              "type": "array"
+                            },
+                            "status": {
+                              "enum": [
+                                "solved",
+                                "unsupported-semantics",
+                                "incomplete-source-data",
+                                "budget-exhausted"
+                              ],
+                              "type": "string"
+                            },
+                            "unsupportedClauses": {
+                              "items": {
+                                "type": "string"
+                              },
+                              "type": "array"
+                            }
+                          },
+                          "required": [
+                            "status",
+                            "selected",
+                            "instances",
+                            "edges",
+                            "missing",
+                            "unsupportedClauses",
+                            "releaseCount",
+                            "edgeCount",
+                            "featureActivationCount"
+                          ],
+                          "type": "object"
+                        },
+                        "profile": {
+                          "const": "cargo-index-exact-resolution-v1",
+                          "type": "string"
+                        },
+                        "request": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "defaultFeatures": {
+                              "type": "boolean"
+                            },
+                            "features": {
+                              "items": {
+                                "maxLength": 64,
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "maxItems": 32,
+                              "type": "array"
+                            },
+                            "host": {
+                              "enum": [
+                                "x86_64-unknown-linux-gnu",
+                                "x86_64-pc-windows-msvc"
+                              ],
+                              "type": "string"
+                            },
+                            "indexFiles": {
+                              "items": {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "bytesBase64": {
+                                    "maxLength": 87384,
+                                    "type": "string"
+                                  },
+                                  "name": {
+                                    "maxLength": 64,
+                                    "minLength": 1,
+                                    "type": "string"
+                                  },
+                                  "sha256": {
+                                    "pattern": "^[0-9a-f]{64}$",
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "name",
+                                  "bytesBase64",
+                                  "sha256"
+                                ],
+                                "type": "object"
+                              },
+                              "maxItems": 32,
+                              "type": "array"
+                            },
+                            "manifestBase64": {
+                              "maxLength": 87384,
+                              "type": "string"
+                            },
+                            "manifestSha256": {
+                              "pattern": "^[0-9a-f]{64}$",
+                              "type": "string"
+                            },
+                            "profile": {
+                              "const": "cargo-index-exact-resolver2-v1",
+                              "type": "string"
+                            },
+                            "registryIndexUrl": {
+                              "maxLength": 300,
+                              "minLength": 10,
+                              "type": "string"
+                            },
+                            "target": {
+                              "enum": [
+                                "x86_64-unknown-linux-gnu",
+                                "x86_64-pc-windows-msvc"
+                              ],
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "profile",
+                            "registryIndexUrl",
+                            "manifestBase64",
+                            "manifestSha256",
+                            "indexFiles",
+                            "host",
+                            "target",
+                            "features",
+                            "defaultFeatures"
+                          ],
+                          "type": "object"
+                        },
+                        "requestDigest": {
+                          "type": "string"
+                        },
+                        "resolution": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "profile",
+                        "resolution",
+                        "requestDigest",
+                        "request",
+                        "outcome",
+                        "createdAt"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "resolution",
+                    "replayed"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 200"
+          },
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "replayed": {
+                      "type": "boolean"
+                    },
+                    "resolution": {
+                      "properties": {
+                        "createdAt": {
+                          "type": "string"
+                        },
+                        "outcome": {
+                          "properties": {
+                            "edgeCount": {
+                              "type": "number"
+                            },
+                            "edges": {
+                              "items": {
+                                "properties": {
+                                  "defaultFeatures": {
+                                    "type": "boolean"
+                                  },
+                                  "from": {
+                                    "type": "string"
+                                  },
+                                  "kind": {
+                                    "enum": [
+                                      "normal",
+                                      "build"
+                                    ],
+                                    "type": "string"
+                                  },
+                                  "requestedFeatures": {
+                                    "items": {
+                                      "type": "string"
+                                    },
+                                    "type": "array"
+                                  },
+                                  "target": {
+                                    "~elyTyp": 7,
+                                    "nullable": true,
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ]
+                                  },
+                                  "to": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "from",
+                                  "to",
+                                  "kind",
+                                  "target",
+                                  "requestedFeatures",
+                                  "defaultFeatures"
+                                ],
+                                "type": "object"
+                              },
+                              "type": "array"
+                            },
+                            "featureActivationCount": {
+                              "type": "number"
+                            },
+                            "instances": {
+                              "items": {
+                                "properties": {
+                                  "features": {
+                                    "items": {
+                                      "type": "string"
+                                    },
+                                    "type": "array"
+                                  },
+                                  "id": {
+                                    "type": "string"
+                                  },
+                                  "name": {
+                                    "type": "string"
+                                  },
+                                  "role": {
+                                    "enum": [
+                                      "host",
+                                      "target"
+                                    ],
+                                    "type": "string"
+                                  },
+                                  "source": {
+                                    "type": "string"
+                                  },
+                                  "version": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "id",
+                                  "source",
+                                  "name",
+                                  "version",
+                                  "role",
+                                  "features"
+                                ],
+                                "type": "object"
+                              },
+                              "type": "array"
+                            },
+                            "missing": {
+                              "items": {
+                                "type": "string"
+                              },
+                              "type": "array"
+                            },
+                            "releaseCount": {
+                              "type": "number"
+                            },
+                            "selected": {
+                              "items": {
+                                "properties": {
+                                  "id": {
+                                    "type": "string"
+                                  },
+                                  "name": {
+                                    "type": "string"
+                                  },
+                                  "source": {
+                                    "type": "string"
+                                  },
+                                  "version": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "id",
+                                  "source",
+                                  "name",
+                                  "version"
+                                ],
+                                "type": "object"
+                              },
+                              "type": "array"
+                            },
+                            "status": {
+                              "enum": [
+                                "solved",
+                                "unsupported-semantics",
+                                "incomplete-source-data",
+                                "budget-exhausted"
+                              ],
+                              "type": "string"
+                            },
+                            "unsupportedClauses": {
+                              "items": {
+                                "type": "string"
+                              },
+                              "type": "array"
+                            }
+                          },
+                          "required": [
+                            "status",
+                            "selected",
+                            "instances",
+                            "edges",
+                            "missing",
+                            "unsupportedClauses",
+                            "releaseCount",
+                            "edgeCount",
+                            "featureActivationCount"
+                          ],
+                          "type": "object"
+                        },
+                        "profile": {
+                          "const": "cargo-index-exact-resolution-v1",
+                          "type": "string"
+                        },
+                        "request": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "defaultFeatures": {
+                              "type": "boolean"
+                            },
+                            "features": {
+                              "items": {
+                                "maxLength": 64,
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "maxItems": 32,
+                              "type": "array"
+                            },
+                            "host": {
+                              "enum": [
+                                "x86_64-unknown-linux-gnu",
+                                "x86_64-pc-windows-msvc"
+                              ],
+                              "type": "string"
+                            },
+                            "indexFiles": {
+                              "items": {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "bytesBase64": {
+                                    "maxLength": 87384,
+                                    "type": "string"
+                                  },
+                                  "name": {
+                                    "maxLength": 64,
+                                    "minLength": 1,
+                                    "type": "string"
+                                  },
+                                  "sha256": {
+                                    "pattern": "^[0-9a-f]{64}$",
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "name",
+                                  "bytesBase64",
+                                  "sha256"
+                                ],
+                                "type": "object"
+                              },
+                              "maxItems": 32,
+                              "type": "array"
+                            },
+                            "manifestBase64": {
+                              "maxLength": 87384,
+                              "type": "string"
+                            },
+                            "manifestSha256": {
+                              "pattern": "^[0-9a-f]{64}$",
+                              "type": "string"
+                            },
+                            "profile": {
+                              "const": "cargo-index-exact-resolver2-v1",
+                              "type": "string"
+                            },
+                            "registryIndexUrl": {
+                              "maxLength": 300,
+                              "minLength": 10,
+                              "type": "string"
+                            },
+                            "target": {
+                              "enum": [
+                                "x86_64-unknown-linux-gnu",
+                                "x86_64-pc-windows-msvc"
+                              ],
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "profile",
+                            "registryIndexUrl",
+                            "manifestBase64",
+                            "manifestSha256",
+                            "indexFiles",
+                            "host",
+                            "target",
+                            "features",
+                            "defaultFeatures"
+                          ],
+                          "type": "object"
+                        },
+                        "requestDigest": {
+                          "type": "string"
+                        },
+                        "resolution": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "profile",
+                        "resolution",
+                        "requestDigest",
+                        "request",
+                        "outcome",
+                        "createdAt"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "resolution",
+                    "replayed"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 201"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 400,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 400"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 401,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 401"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 403,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 403"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 409,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 409"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 422,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 422"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 500,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 500"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 503,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 503"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/v1/package-resolutions/cargo/{resolution}": {
+      "get": {
+        "operationId": "getV1Package-resolutionsCargoByResolution",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "resolution",
+            "required": true,
+            "schema": {
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "createdAt": {
+                      "type": "string"
+                    },
+                    "outcome": {
+                      "properties": {
+                        "edgeCount": {
+                          "type": "number"
+                        },
+                        "edges": {
+                          "items": {
+                            "properties": {
+                              "defaultFeatures": {
+                                "type": "boolean"
+                              },
+                              "from": {
+                                "type": "string"
+                              },
+                              "kind": {
+                                "enum": [
+                                  "normal",
+                                  "build"
+                                ],
+                                "type": "string"
+                              },
+                              "requestedFeatures": {
+                                "items": {
+                                  "type": "string"
+                                },
+                                "type": "array"
+                              },
+                              "target": {
+                                "~elyTyp": 7,
+                                "nullable": true,
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              },
+                              "to": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "from",
+                              "to",
+                              "kind",
+                              "target",
+                              "requestedFeatures",
+                              "defaultFeatures"
+                            ],
+                            "type": "object"
+                          },
+                          "type": "array"
+                        },
+                        "featureActivationCount": {
+                          "type": "number"
+                        },
+                        "instances": {
+                          "items": {
+                            "properties": {
+                              "features": {
+                                "items": {
+                                  "type": "string"
+                                },
+                                "type": "array"
+                              },
+                              "id": {
+                                "type": "string"
+                              },
+                              "name": {
+                                "type": "string"
+                              },
+                              "role": {
+                                "enum": [
+                                  "host",
+                                  "target"
+                                ],
+                                "type": "string"
+                              },
+                              "source": {
+                                "type": "string"
+                              },
+                              "version": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "source",
+                              "name",
+                              "version",
+                              "role",
+                              "features"
+                            ],
+                            "type": "object"
+                          },
+                          "type": "array"
+                        },
+                        "missing": {
+                          "items": {
+                            "type": "string"
+                          },
+                          "type": "array"
+                        },
+                        "releaseCount": {
+                          "type": "number"
+                        },
+                        "selected": {
+                          "items": {
+                            "properties": {
+                              "id": {
+                                "type": "string"
+                              },
+                              "name": {
+                                "type": "string"
+                              },
+                              "source": {
+                                "type": "string"
+                              },
+                              "version": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "source",
+                              "name",
+                              "version"
+                            ],
+                            "type": "object"
+                          },
+                          "type": "array"
+                        },
+                        "status": {
+                          "enum": [
+                            "solved",
+                            "unsupported-semantics",
+                            "incomplete-source-data",
+                            "budget-exhausted"
+                          ],
+                          "type": "string"
+                        },
+                        "unsupportedClauses": {
+                          "items": {
+                            "type": "string"
+                          },
+                          "type": "array"
+                        }
+                      },
+                      "required": [
+                        "status",
+                        "selected",
+                        "instances",
+                        "edges",
+                        "missing",
+                        "unsupportedClauses",
+                        "releaseCount",
+                        "edgeCount",
+                        "featureActivationCount"
+                      ],
+                      "type": "object"
+                    },
+                    "profile": {
+                      "const": "cargo-index-exact-resolution-v1",
+                      "type": "string"
+                    },
+                    "request": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "defaultFeatures": {
+                          "type": "boolean"
+                        },
+                        "features": {
+                          "items": {
+                            "maxLength": 64,
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "maxItems": 32,
+                          "type": "array"
+                        },
+                        "host": {
+                          "enum": [
+                            "x86_64-unknown-linux-gnu",
+                            "x86_64-pc-windows-msvc"
+                          ],
+                          "type": "string"
+                        },
+                        "indexFiles": {
+                          "items": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "bytesBase64": {
+                                "maxLength": 87384,
+                                "type": "string"
+                              },
+                              "name": {
+                                "maxLength": 64,
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "sha256": {
+                                "pattern": "^[0-9a-f]{64}$",
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "name",
+                              "bytesBase64",
+                              "sha256"
+                            ],
+                            "type": "object"
+                          },
+                          "maxItems": 32,
+                          "type": "array"
+                        },
+                        "manifestBase64": {
+                          "maxLength": 87384,
+                          "type": "string"
+                        },
+                        "manifestSha256": {
+                          "pattern": "^[0-9a-f]{64}$",
+                          "type": "string"
+                        },
+                        "profile": {
+                          "const": "cargo-index-exact-resolver2-v1",
+                          "type": "string"
+                        },
+                        "registryIndexUrl": {
+                          "maxLength": 300,
+                          "minLength": 10,
+                          "type": "string"
+                        },
+                        "target": {
+                          "enum": [
+                            "x86_64-unknown-linux-gnu",
+                            "x86_64-pc-windows-msvc"
+                          ],
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "profile",
+                        "registryIndexUrl",
+                        "manifestBase64",
+                        "manifestSha256",
+                        "indexFiles",
+                        "host",
+                        "target",
+                        "features",
+                        "defaultFeatures"
+                      ],
+                      "type": "object"
+                    },
+                    "requestDigest": {
+                      "type": "string"
+                    },
+                    "resolution": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "profile",
+                    "resolution",
+                    "requestDigest",
+                    "request",
+                    "outcome",
+                    "createdAt"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 200"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 400,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 400"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 401,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 401"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 403,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 403"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 404,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 404"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 500,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 500"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 503,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 503"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
     "/v1/package-resolutions/from-captures": {
       "post": {
         "operationId": "postV1Package-resolutionsFrom-captures",

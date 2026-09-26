@@ -32,6 +32,22 @@ Controlled installation/plan tests need not compile every upstream project.
 Do not claim runtime/build success from a resolver-only pass. Preserve rejected
 states, dependency explanations, installation inventory and exact run profiles.
 
+The G-008 Cargo slice adds `cargo-index-exact-resolver2-v1` with exact root
+manifest and registry-index bytes. The pinned Cargo 1.98.1 local-registry oracle
+compares lock selection and active root dependency kinds on a fixed resolver 2
+graph, including a transitive feature union, distinct build/normal features,
+optional default activation and Linux versus Windows target selection. Unit
+cases cover incompatible version instances, malformed/duplicate identities,
+missing source, explicit `links`/yank refusal and a traversal budget. Real
+Account OAuth, Access and PostgreSQL API checks cover scope denial, private read,
+immutable exact replay, changed-key conflict and inactive-principal fencing.
+The selected API integration run `20260926t052109-b15e57` passed; its 11
+reported IDs are partial evidence only. The oracle result is retained locally
+at `.temp/package-cargo-oracle/result.json`.
+PKG01/PKG02/PKG12/PKG13 remain partial: general semver selection, native
+conflict and yanked-lock eligibility, broader target predicates, provider
+capture, artifact checks and installation are still separate work.
+
 G-005's local-replacement slice passed `yarn package:go-oracle` on pinned
 Go 1.27.1 with `go 1.16` files and a generated local module directory. Its
 version-specific local rule overrode a path-wide rule, and native/REZICS build

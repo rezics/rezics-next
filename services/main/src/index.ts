@@ -21,6 +21,7 @@ import { OpenLibraryConversionStore } from './modules/source/open-library-conver
 import { SourceChildCorrespondenceStore }
   from './modules/source/record-child-correspondence.ts';
 import { GoMvsResolutionStore } from './modules/package/go-mvs.ts';
+import { CargoResolutionStore } from './modules/package/cargo-resolution.ts';
 import { GoProxyCaptureStore } from './modules/package/go-proxy-capture.ts';
 import { GoSumdbTrustStore } from './modules/package/go-sumdb-trust.ts';
 import { OpenLibrarySourceGraph } from './modules/source/graph-projection.ts';
@@ -91,6 +92,7 @@ const app = createMainApp(fuseki, {
   sourceConversions,
   sourceCorrespondences: new SourceChildCorrespondenceStore(contentPool, sourceConversions),
   packageResolutions: new GoMvsResolutionStore(contentPool, packageCaptures),
+  packageCargoResolutions: new CargoResolutionStore(contentPool),
   packageCaptures,
   packageVerifications: new GoSumdbTrustStore(contentPool, packageCaptures),
   sourceGraph,

@@ -22,6 +22,8 @@ import { SourceChildCorrespondenceStore }
   from '../../../services/main/src/modules/source/record-child-correspondence.ts';
 import { GoMvsResolutionStore }
   from '../../../services/main/src/modules/package/go-mvs.ts';
+import { CargoResolutionStore }
+  from '../../../services/main/src/modules/package/cargo-resolution.ts';
 import { GoProxyCaptureStore }
   from '../../../services/main/src/modules/package/go-proxy-capture.ts';
 import { GoSumdbTrustStore }
@@ -30,6 +32,7 @@ import { type IncludedGoSumdbLookup }
   from '../../../services/main/src/modules/package/go-sumdb-lookup.ts';
 import includedGoSumdb from '../fixtures/go-sumdb-x-sync.json';
 import latestGoSumdb from '../fixtures/go-sumdb-latest.json';
+import { cargoFixture } from '../fixtures/cargo-snapshot.ts';
 
 async function freePort(): Promise<number> {
   return new Promise((resolvePort, reject) => {
@@ -43,7 +46,7 @@ async function freePort(): Promise<number> {
   });
 }
 
-test('IAM10/LIVE01/LIVE02/LIVE03/LIVE13/PKG05/PKG13/PKG14/PKG20: real Account and Access fence source and package operations', async () => {
+test('IAM10/LIVE01/LIVE02/LIVE03/LIVE13/PKG01/PKG05/PKG12/PKG13/PKG14/PKG20: real Account and Access fence source and package operations', async () => {
   if (!Bun.env.REZICS_QA_RUN_ID || !Bun.env.CONTENT_DATABASE_URL
     || !Bun.env.ACCESS_DATABASE_URL || !Bun.env.ACCOUNT_DATABASE_URL
     || !Bun.env.ACCOUNT_MAIN_RESOURCE || !Bun.env.FUSEKI_URL
@@ -186,6 +189,7 @@ test('IAM10/LIVE01/LIVE02/LIVE03/LIVE13/PKG05/PKG13/PKG14/PKG20: real Account an
       sourceCorrespondences: new SourceChildCorrespondenceStore(contentPool,
         sourceConversions),
       packageResolutions: new GoMvsResolutionStore(contentPool, packageCaptures),
+      packageCargoResolutions: new CargoResolutionStore(contentPool),
       packageCaptures,
       packageVerifications,
       sourceProposals,
@@ -706,6 +710,37 @@ test('IAM10/LIVE01/LIVE02/LIVE03/LIVE13/PKG05/PKG13/PKG14/PKG20: real Account an
     expect(derived.status).toBe(201);
     expect(await derived.json()).toMatchObject({ resolution: { outcome: {
       status: 'unsupported-semantics', buildList: [] } } });
+    const cargoPath = '/v1/package-resolutions/cargo';
+    const cargoBody = cargoFixture();
+    const cargoKey = `cargo-${randomUUID()}`;
+    expect((await call('POST', cargoPath, packageReadToken, cargoBody, cargoKey)).status)
+      .toBe(401);
+    const cargoCreated = await call('POST', cargoPath, packageResolveToken,
+      cargoBody, cargoKey);
+    expect(cargoCreated.status).toBe(201);
+    const cargoSaved = await cargoCreated.json() as { resolution: {
+      resolution: string; request: typeof cargoBody;
+      outcome: { status: string; selected: unknown[] } }; replayed: boolean };
+    expect(cargoSaved).toMatchObject({ replayed: false,
+      resolution: { outcome: { status: 'solved' } } });
+    expect(cargoSaved.resolution.request).toEqual(cargoBody);
+    expect(cargoSaved.resolution.outcome.selected.every(item =>
+      (item as { source: string }).source === cargoBody.registryIndexUrl)).toBe(true);
+    const cargoId = cargoSaved.resolution.resolution.split('/').at(-1)!;
+    const cargoReadPath = `${cargoPath}/${cargoId}`;
+    expect((await call('GET', cargoReadPath, packageResolveToken)).status).toBe(401);
+    expect((await call('GET', cargoReadPath, otherPackageReadToken)).status).toBe(404);
+    expect(await (await call('GET', cargoReadPath, packageReadToken)).json())
+      .toEqual(cargoSaved.resolution);
+    expect(await (await call('POST', cargoPath, packageResolveToken,
+      cargoBody, cargoKey)).json()).toEqual({ ...cargoSaved, replayed: true });
+    expect((await call('POST', cargoPath, packageResolveToken,
+      { ...cargoBody, defaultFeatures: false }, cargoKey)).status).toBe(409);
+    expect((await call('POST', cargoPath, packageResolveToken,
+      { ...cargoBody, registryIndexUrl: 'https://changed.example.invalid/index/' },
+      cargoKey)).status).toBe(409);
+    await expect(contentPool.query('UPDATE pkg.cargo_resolution SET request_digest = $2 WHERE id = $1',
+      [cargoId, '0'.repeat(64)])).rejects.toThrow();
     await accessPool.query('UPDATE access.principal SET active = false WHERE id = $1', [principalId]);
     const beforeDenied = await contentPool.query('SELECT id FROM source.observation WHERE principal_id = $1',
       [principalId]);
@@ -733,6 +768,9 @@ test('IAM10/LIVE01/LIVE02/LIVE03/LIVE13/PKG05/PKG13/PKG14/PKG20: real Account an
       goBody)).status).toBe(403);
     expect((await call('GET', `/v1/package-resolutions/${goId}`,
       packageReadToken)).status).toBe(403);
+    expect((await call('POST', cargoPath, packageResolveToken,
+      cargoBody)).status).toBe(403);
+    expect((await call('GET', cargoReadPath, packageReadToken)).status).toBe(403);
     expect((await call('POST', capturePath, packageCaptureToken,
       captureBody)).status).toBe(403);
     expect((await call('GET', `${capturePath}/${captureId}`,

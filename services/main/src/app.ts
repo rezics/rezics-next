@@ -33,6 +33,8 @@ import { SourceChildCorrespondenceStore, SourceChildCorrespondenceInvalid,
   from './modules/source/record-child-correspondence.ts';
 import { GoMvsResolutionStore, GoResolutionInvalid, GoResolutionConflict,
   GoResolutionUnavailable } from './modules/package/go-mvs.ts';
+import { CargoResolutionStore, CargoResolutionInvalid, CargoResolutionConflict,
+  CargoResolutionUnavailable } from './modules/package/cargo-resolution.ts';
 import { GoProxyCaptureStore, GoProxyCaptureInvalid, GoProxyCaptureConflict,
   GoProxyCaptureMissing, GoProxyCaptureUnavailable }
   from './modules/package/go-proxy-capture.ts';
@@ -191,6 +193,7 @@ export interface MainWorkDependencies {
   sourceConversions?: OpenLibraryConversionStore;
   sourceCorrespondences?: SourceChildCorrespondenceStore;
   packageResolutions?: GoMvsResolutionStore;
+  packageCargoResolutions?: CargoResolutionStore;
   packageCaptures?: GoProxyCaptureStore;
   packageVerifications?: GoSumdbTrustStore;
   sourceGraph?: OpenLibrarySourceGraph;
@@ -426,6 +429,40 @@ const goMvsResolution = t.Object({
   outcome: goMvsOutcome, createdAt: t.String() });
 const goMvsResolutionWrite = t.Object({ resolution: goMvsResolution,
   replayed: t.Boolean() });
+const cargoIndexFile = t.Object({ name: t.String({ minLength: 1, maxLength: 64 }),
+  bytesBase64: t.String({ maxLength: 87_384 }),
+  sha256: t.String({ pattern: '^[0-9a-f]{64}$' }) }, { additionalProperties: false });
+const cargoTriple = t.Union([t.Literal('x86_64-unknown-linux-gnu'),
+  t.Literal('x86_64-pc-windows-msvc')]);
+const cargoRequest = t.Object({ profile: t.Literal('cargo-index-exact-resolver2-v1'),
+  registryIndexUrl: t.String({ minLength: 10, maxLength: 300 }),
+  manifestBase64: t.String({ maxLength: 87_384 }),
+  manifestSha256: t.String({ pattern: '^[0-9a-f]{64}$' }),
+  indexFiles: t.Array(cargoIndexFile, { maxItems: 32 }),
+  host: cargoTriple, target: cargoTriple,
+  features: t.Array(t.String({ minLength: 1, maxLength: 64 }), { maxItems: 32 }),
+  defaultFeatures: t.Boolean(),
+}, { additionalProperties: false });
+const cargoSelected = t.Object({ id: t.String(), source: t.String(),
+  name: t.String(), version: t.String() });
+const cargoInstance = t.Object({ ...cargoSelected.properties,
+  role: t.Union([t.Literal('host'), t.Literal('target')]),
+  features: t.Array(t.String()) });
+const cargoEdge = t.Object({ from: t.String(), to: t.String(),
+  kind: t.Union([t.Literal('normal'), t.Literal('build')]),
+  target: t.Nullable(t.String()), requestedFeatures: t.Array(t.String()),
+  defaultFeatures: t.Boolean() });
+const cargoOutcome = t.Object({ status: t.Union([t.Literal('solved'),
+  t.Literal('unsupported-semantics'), t.Literal('incomplete-source-data'),
+  t.Literal('budget-exhausted')]),
+  selected: t.Array(cargoSelected), instances: t.Array(cargoInstance),
+  edges: t.Array(cargoEdge), missing: t.Array(t.String()),
+  unsupportedClauses: t.Array(t.String()), releaseCount: t.Number(),
+  edgeCount: t.Number(), featureActivationCount: t.Number() });
+const cargoResolution = t.Object({ profile: t.Literal('cargo-index-exact-resolution-v1'),
+  resolution: t.String(), requestDigest: t.String(), request: cargoRequest,
+  outcome: cargoOutcome, createdAt: t.String() });
+const cargoResolutionWrite = t.Object({ resolution: cargoResolution, replayed: t.Boolean() });
 const goProxyCaptureV1Request = t.Object({ profile: t.Literal('go-module-proxy-capture-v1'),
   path: goModuleRequirement.properties.path,
   version: t.String({ minLength: 6, maxLength: 32,
@@ -955,6 +992,15 @@ function commandError(error: unknown): Response {
   }
   if (error instanceof GoResolutionUnavailable) {
     return problem(503, 'go_resolution_unavailable', 'Go resolution evidence is unavailable');
+  }
+  if (error instanceof CargoResolutionInvalid) {
+    return problem(422, 'cargo_resolution_invalid', error.message);
+  }
+  if (error instanceof CargoResolutionConflict) {
+    return problem(409, 'cargo_resolution_conflict', 'Cargo resolution key binds another snapshot');
+  }
+  if (error instanceof CargoResolutionUnavailable) {
+    return problem(503, 'cargo_resolution_unavailable', 'Cargo resolution evidence is unavailable');
   }
   if (error instanceof GoProxyCaptureInvalid) {
     return problem(422, 'go_capture_invalid', 'Go proxy capture request is invalid');
@@ -1596,6 +1642,40 @@ export function createMainApp(fuseki: FusekiClient, work?: MainWorkDependencies)
         const result = await work.packageResolutions.read(principalId, params.resolution);
         if (!result) return problem(404, 'go_resolution_unavailable',
           'Package resolution is unavailable');
+        return Response.json(result, { headers: { 'cache-control': 'no-store' } });
+      } catch (error) { return commandError(error); }
+    })
+    .post('/v1/package-resolutions/cargo', {
+      body: cargoRequest,
+      response: { 200: cargoResolutionWrite, 201: cargoResolutionWrite,
+        ...writeProblems, 422: problemResult(422) },
+    }, async ({ request, body }) => {
+      try {
+        if (!work.packageCargoResolutions) return problem(503,
+          'cargo_resolution_unavailable', 'Cargo resolution owner is unavailable');
+        const key = request.headers.get('idempotency-key');
+        if (!key) return problem(400, 'invalid_idempotency_key', 'Idempotency-Key is required');
+        const principal = await work.account.verify(request, ['package:resolve']);
+        const principalId = await work.access.activePrincipalId(principal);
+        if (!principalId) return problem(403, 'authority_denied', 'Package principal is inactive');
+        const result = await work.packageCargoResolutions.resolve(principalId, key, body);
+        return Response.json(result, { status: result.replayed ? 200 : 201,
+          headers: { 'cache-control': 'no-store' } });
+      } catch (error) { return commandError(error); }
+    })
+    .get('/v1/package-resolutions/cargo/:resolution', {
+      params: t.Object({ resolution: groupUuid }),
+      response: { 200: cargoResolution, ...authorizedReadProblems },
+    }, async ({ request, params }) => {
+      try {
+        if (!work.packageCargoResolutions) return problem(503,
+          'cargo_resolution_unavailable', 'Cargo resolution owner is unavailable');
+        const principal = await work.account.verify(request, ['package:read']);
+        const principalId = await work.access.activePrincipalId(principal);
+        if (!principalId) return problem(403, 'authority_denied', 'Package principal is inactive');
+        const result = await work.packageCargoResolutions.read(principalId, params.resolution);
+        if (!result) return problem(404, 'cargo_resolution_unavailable',
+          'Cargo resolution is unavailable');
         return Response.json(result, { headers: { 'cache-control': 'no-store' } });
       } catch (error) { return commandError(error); }
     })

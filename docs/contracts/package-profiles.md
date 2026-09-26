@@ -18,6 +18,43 @@ Preserve yanked eligibility for fresh resolution versus an admitted existing loc
 Compare with Cargo's resolved graph/features for the same captured manifests,
 toolchain/resolver and target, not merely package counts.
 
+The first `cargo-index-exact-resolver2-v1` profile is a deliberately bounded
+fresh resolution. The caller supplies canonical base64 of one root `Cargo.toml`,
+its SHA-256, one exact registry index URL as source identity, and canonical
+base64 plus SHA-256 for each complete newline-delimited index file. The request
+names a target and host triple, root features and default-feature selection.
+Main stores those bytes and the outcome in a private immutable resolution.
+The root manifest must declare `resolver = "2"`, one package, and dependencies
+from the named `snapshot` registry. The admitted version requirements are exact
+`=major.minor.patch` only. A selected index record must use schema v1,
+non-yanked releases, no `links`, no `features2`, and exact same-registry
+dependencies. Incompatible exact versions retain distinct instance identities;
+compatible exact version collisions return unsupported until a native conflict
+profile is proved. The supported feature grammar is direct features, `default`,
+`dep:name` and `name/feature`; weak features, renames, workspaces, path/git
+sources, patches, overrides, dev selection and existing locks are outside v1.
+Target predicates are only absent or `cfg(target_os = "linux")` and
+`cfg(target_os = "windows")` for the admitted Linux/Windows triples. This
+profile has no rust-version fallback, artifact download or build claim.
+
+The result has a lock selection keyed by registry URL/name/version and an
+active instance graph keyed by that identity plus host/target role. Edges keep
+their dependency kind, target predicate and requested features; each instance
+keeps its activated features. Optional and nonmatching target dependencies may
+be lock-selected yet inactive. Missing required index files/versions produce
+`incomplete-source-data`; unfamiliar syntax or unsupported semantic clauses
+produce `unsupported-semantics`; a traversal limit produces
+`budget-exhausted`, with no partial graph presented as solved. Malformed
+base64/digests and duplicate or changed source identities are rejected. The
+bounded profile allows at most 32 index files, 128 releases, 256 dependency
+edges and 512 feature activations; each raw file is at most 65,536 bytes.
+The full Cargo solver, `links` conflicts and yanked lock eligibility remain
+outside this profile until separately proved against native Cargo.
+
+This boundary follows Cargo's [resolver 2 feature and target rules](https://doc.rust-lang.org/cargo/reference/resolver.html#feature-resolver-version-2),
+[registry index schema](https://doc.rust-lang.org/cargo/reference/registry-index.html#json-schema),
+and [metadata graph fields](https://doc.rust-lang.org/cargo/commands/cargo-metadata.html).
+
 ## npm, pnpm and Yarn
 
 Package instances are scoped by dependency/peer environment; a map from package
