@@ -107,6 +107,37 @@ export const npmIdentityOutcomeSchema = t.Union([
 ]);
 export const npmResolutionV3Schema = t.Object({ ...npmResolutionV1Schema.properties,
   profile: t.Literal('npm-lock-topology-receipt-v3'), request: npmRequestV3Schema, outcome: npmIdentityOutcomeSchema });
-export const npmRequestSchema = t.Union([npmRequestV1Schema, npmRequestV2Schema, npmRequestV3Schema]);
-export const npmResolutionSchema = t.Union([npmResolutionV1Schema, npmResolutionV2Schema, npmResolutionV3Schema]);
+export const npmRequestV4Schema = t.Object({ ...npmRequestV3Schema.properties,
+  profile: t.Literal('npm-lock-v3-topology-v4'), target }, { additionalProperties: false });
+const compositionInstance = t.Object({ ...identityInstance.properties,
+  peerHosts: platformInstance.properties.peerHosts, optional: t.Boolean(), os: selector, cpu: selector });
+const compositionEdge = t.Object({ ...identityEdge.properties, optional: t.Boolean() });
+const compositionIssue = t.Object({ ...identityIssue.properties,
+  kind: t.Union([...identityIssue.properties.kind.anyOf, t.Literal('optional-flag-mismatch'), t.Literal('platform-incompatible')]) });
+const compositionOmittedEdge = t.Object({ ...compositionEdge.properties, to: nullable,
+  path: t.String(), foundPath: nullable, reason: t.Union([t.Literal('absent-optional'), t.Literal('platform')]), causePath: nullable });
+const compositionFields = { ...identityFields, target };
+const emptyComposition = { instances: t.Array(compositionInstance, { maxItems: 0 }),
+  edges: t.Array(compositionEdge, { maxItems: 0 }), activeInstances: t.Array(t.String(), { maxItems: 0 }),
+  activeEdges: t.Array(compositionEdge, { maxItems: 0 }), omittedInstances: t.Array(omittedInstance, { maxItems: 0 }),
+  omittedEdges: t.Array(compositionOmittedEdge, { maxItems: 0 }) };
+export const npmCompositionOutcomeSchema = t.Union([
+  t.Object({ ...compositionFields, status: t.Literal('validated'), lockfileVersion: t.Literal(3),
+    instances: t.Array(compositionInstance, { maxItems: 129 }), edges: t.Array(compositionEdge, { maxItems: 256 }),
+    activeInstances: t.Array(t.String(), { maxItems: 129 }), activeEdges: t.Array(compositionEdge, { maxItems: 256 }),
+    omittedInstances: t.Array(omittedInstance, { maxItems: 128 }), omittedEdges: t.Array(compositionOmittedEdge, { maxItems: 256 }),
+    issues: t.Array(compositionIssue, { maxItems: 0 }), unsupportedClauses: t.Array(t.String(), { maxItems: 0 }), budgetReason: t.Null() }),
+  t.Object({ ...compositionFields, ...emptyComposition,
+    status: t.Union([t.Literal('incomplete-source-data'), t.Literal('invalid-topology')]),
+    issues: t.Array(compositionIssue, { minItems: 1, maxItems: 1062 }),
+    unsupportedClauses: t.Array(t.String(), { maxItems: 0 }), budgetReason: t.Null() }),
+  t.Object({ ...compositionFields, ...emptyComposition, status: t.Literal('unsupported-semantics'),
+    issues: t.Array(compositionIssue, { maxItems: 0 }), unsupportedClauses: t.Array(t.String(), { minItems: 1, maxItems: 1 }), budgetReason: t.Null() }),
+  t.Object({ ...compositionFields, ...emptyComposition, status: t.Literal('budget-exhausted'),
+    issues: t.Array(compositionIssue, { maxItems: 0 }), unsupportedClauses: t.Array(t.String(), { maxItems: 0 }), budgetReason: t.String() }),
+]);
+export const npmResolutionV4Schema = t.Object({ ...npmResolutionV1Schema.properties,
+  profile: t.Literal('npm-lock-topology-receipt-v4'), request: npmRequestV4Schema, outcome: npmCompositionOutcomeSchema });
+export const npmRequestSchema = t.Union([npmRequestV1Schema, npmRequestV2Schema, npmRequestV3Schema, npmRequestV4Schema]);
+export const npmResolutionSchema = t.Union([npmResolutionV1Schema, npmResolutionV2Schema, npmResolutionV3Schema, npmResolutionV4Schema]);
 export const npmResolutionWriteSchema = t.Object({ resolution: npmResolutionSchema, replayed: t.Boolean() });

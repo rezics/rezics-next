@@ -190,6 +190,71 @@ yarn check:backend
 yarn docs:check
 ```
 
+G-026 adds the separate `npm-lock-v3-topology-v4` composed identity/target
+profile. The offline oracle retains 29 scenarios on all four Linux/Windows and
+x64/arm64 pairs (116 comparisons) in
+`.temp/package-npm-oracle/composition-result.json`. Cases combine optional aliases,
+required/optional shared aliases, a workspace whose differently named directory
+owns an omitted child, required and local workspace peers, internal workspace
+links, platform restrictions on both links and targets, absent and shadowing
+optional peers, cycles and shared optional children. Missing required edges,
+workspace manifests/targets/link sources, literal sources/SRI, wrong alias or
+plain package identity, malformed evidence, optional flag disagreement and
+override/engine clauses cannot become successful projection.
+
+Each observation records exact caller bytes, native virtual nodes/edges, npm
+11.19.1 and Arborist 9.9.1 identity, recomputed optional flags, platform errors,
+optional-region omissions and the REZICS result. Validated cases compare every
+slot/name/source/SRI, workspace target, selector, optional flag, peer host,
+active edge and omitted instance/edge cause path. Deliberate admission differences
+are asserted separately. V1's eight and v2's 33 outcome hashes remain frozen;
+the v3 compatibility test freezes all 25 G-023 outputs including errors, costs
+and identities before admitting v4. The oracle verifies that all fixture bytes
+are unchanged and that no package directories were installed.
+
+Unit tests exercise composed failure precedence, exact-byte/workspace/target
+identity, malformed inputs, selector semantics, shared regions, cycles, and
+byte/node/edge/workspace/path/ancestor/visit bounds at multiple small scales.
+The selected real Account/Access/Main/Content test adds concurrent v4 same-key
+convergence, changed target and workspace-byte conflict, private/scoped/inactive
+denial, immutable rows, and exact reads/replay across v1/v2/v3/v4 at 64, 512 and
+4,096 unrelated rows. `npm-receipt-reads.json` retains all eight owner query plans.
+The physical owner-cut fixture adds all four v4 targets to signed Content
+coverage v4, restores exact reads/replay, and corrupts alias identity, workspace
+target and omission causes independently in the restored copy to require both
+exact-read and hold-release denial.
+
+The affected G-026 command set is:
+
+```sh
+yarn test tests/qa/unit/npm-composition-topology.test.ts tests/qa/unit/npm-v3-compatibility.test.ts tests/qa/unit/npm-v2-compatibility.test.ts tests/qa/unit/npm-v1-compatibility.test.ts tests/qa/unit/npm-identity-topology.test.ts tests/qa/unit/npm-platform-topology.test.ts tests/qa/unit/npm-lock-topology.test.ts tests/qa/unit/npm-lock-contract.test.ts
+yarn package:npm-oracle
+yarn gen
+yarn test tests/qa/integration/source-authenticated-api.test.ts
+yarn test tests/qa/fault-recovery/coordinated-owner-cut.test.ts
+yarn check:backend
+yarn docs:check
+```
+
+The worker passed 34 unit/contract tests and all 182 native comparisons, generated
+the Main contract, and passed backend static and documentation checks. Final
+selected API run `20260926t094945-c1f2aa` and physical owner-cut run
+`20260926t094830-cbbf03` both passed on stable runtime source fingerprint
+`2277e067155c`, in 13.2 and 44.1 seconds respectively. The v4 exact reads used
+six-block sequential scans at 64 unrelated receipts and three-block index scans
+at 512 and 4,096, returning one row; the latter scans filtered zero rows. Its
+six-node/five-edge fixture retained eight ancestor lookups and 60 graph visits
+at every scale. The generated API changes only the two npm paths; v1/v2/v3
+request and read-response schemas compare equal to the base. These are selected
+worker checks, not final backend qualification; the harness removed its isolated
+stacks after each run.
+
+PKG04/PKG12/PKG13 remain partial. V4 qualifies bounded virtual identity and target
+projection only. Broad workspaces, overrides, engine policy, pnpm/Yarn, registry
+solving, artifact validation, installation and deployment capacity remain open.
+The manager repeats affected checks on integrated source; this selected worker
+scope does not qualify the whole backend.
+
 The G-008 Cargo slice adds `cargo-index-exact-resolver2-v1` with exact root
 manifest and registry-index bytes. The pinned Cargo 1.98.1 local-registry oracle
 compares lock selection and active root dependency kinds on a fixed resolver 2

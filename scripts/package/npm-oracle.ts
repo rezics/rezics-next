@@ -9,6 +9,9 @@ import { npmIdentityCases, npmIdentityFixture } from '../../tests/qa/fixtures/np
 import { validateNpmIdentitySnapshot, type NpmIdentityOutcome } from '../../services/main/src/modules/package/npm-identity.ts';
 import { NpmResolutionInvalid } from '../../services/main/src/modules/package/npm-lock.ts';
 import { compareNpmIdentity } from './npm-identity-compare.ts';
+import { npmCompositionCases, npmCompositionFixture, npmCompositionTargets } from '../../tests/qa/fixtures/npm-composition-snapshot.ts';
+import { validateNpmCompositionSnapshot, type NpmCompositionOutcome } from '../../services/main/src/modules/package/npm-composition.ts';
+import { compareNpmComposition } from './npm-composition-compare.ts';
 
 const base = resolve(import.meta.dir, '../../.temp/package-npm-oracle');
 await mkdir(base, { recursive: true });
@@ -146,6 +149,7 @@ await writeFile(resolve(base, 'platform-result.json'), JSON.stringify(platformRe
 console.log(`npm offline native platform comparison matched ${Object.keys(platformResults).length} cases; result: ${resolve(base, 'platform-result.json')}`);
 const identityResults: Record<string, unknown> = {};
 const identitySummary: Record<string, unknown> = {};
+const identityCompatibility: Record<string, string> = {};
 for (const kind of npmIdentityCases) {
   const request = npmIdentityFixture(kind);
   const directory = resolve(base, `identity-${kind}`);
@@ -168,6 +172,7 @@ for (const kind of npmIdentityCases) {
     rezics = { status: 'rejected', message: error.message };
   }
   const policyDifference = compareNpmIdentity(kind, directory, native, rezics);
+  identityCompatibility[kind] = npmSha(npmStable(rezics));
   for (const input of inputs) if (await readFile(resolve(directory, input.path), 'base64') !== input.bytes.bytesBase64) {
     throw new Error('native identity oracle changed exact input bytes');
   }
@@ -181,5 +186,48 @@ for (const kind of npmIdentityCases) {
     ...(rezics.status === 'rejected' ? { message: rezics.message } : { issues: rezics.issues, cost: rezics.cost }) };
 }
 await writeFile(resolve(base, 'identity-result.json'), JSON.stringify(identityResults, null, 2));
-await writeFile(resolve(base, 'summary.json'), JSON.stringify({ compatibility, platformCompatibility, platformSummary, identitySummary }, null, 2));
+await writeFile(resolve(base, 'summary.json'), JSON.stringify({ compatibility, platformCompatibility, identityCompatibility, platformSummary, identitySummary }, null, 2));
 console.log(`npm offline native identity comparison matched ${npmIdentityCases.length} cases; result: ${resolve(base, 'identity-result.json')}`);
+const compositionResults: Record<string, unknown> = {};
+const compositionSummary: Record<string, unknown> = {};
+for (const kind of npmCompositionCases) for (const target of npmCompositionTargets) {
+  const request = npmCompositionFixture(kind, target);
+  const key = `${kind}-${target.os}-${target.cpu}`;
+  const directory = resolve(base, `composition-${key}`);
+  await rm(directory, { force: true, recursive: true });
+  await mkdir(directory, { recursive: true });
+  const inputs = [{ path: 'package.json', bytes: request.manifest }, { path: 'package-lock.json', bytes: request.lock },
+    ...request.workspaces.map(item => ({ path: `${item.path}/package.json`, bytes: item.manifest }))];
+  for (const input of inputs) {
+    await mkdir(dirname(resolve(directory, input.path)), { recursive: true });
+    await writeFile(resolve(directory, input.path), Buffer.from(input.bytes.bytesBase64, 'base64'));
+  }
+  const virtual = await run([resolve(import.meta.dir, 'npm-native-tree.cjs'), npmPackage, directory,
+    'composition', JSON.stringify(target)], directory);
+  const native = JSON.parse(virtual.stdout);
+  let rezics: NpmCompositionOutcome | { status: 'rejected'; message: string };
+  try { rezics = validateNpmCompositionSnapshot(request); }
+  catch (error) {
+    if (!(error instanceof NpmResolutionInvalid)) throw error;
+    rezics = { status: 'rejected', message: error.message };
+  }
+  // Persist the observation before asserting, including any native/profile disagreement.
+  compositionResults[key] = { request, directory, virtual, native, rezics };
+  await writeFile(resolve(base, 'composition-result.json'), JSON.stringify(compositionResults, null, 2));
+  const policyDifference = compareNpmComposition(kind, directory, native, rezics);
+  for (const input of inputs) if (await readFile(resolve(directory, input.path), 'base64') !== input.bytes.bytesBase64) {
+    throw new Error('native composition oracle changed exact input bytes');
+  }
+  for (const path of ['', ...request.workspaces.map(item => item.path)]) {
+    if (await access(resolve(directory, path, 'node_modules')).then(() => true, () => false)) {
+      throw new Error('native composition oracle unexpectedly installed packages');
+    }
+  }
+  compositionResults[key] = { request, directory, virtual, native, rezics, policyDifference };
+  compositionSummary[key] = { status: rezics.status, policyDifference,
+    ...(rezics.status === 'rejected' ? { message: rezics.message } : { issues: rezics.issues, cost: rezics.cost }) };
+}
+await writeFile(resolve(base, 'composition-result.json'), JSON.stringify(compositionResults, null, 2));
+await writeFile(resolve(base, 'summary.json'), JSON.stringify({ compatibility, platformCompatibility, identityCompatibility,
+  platformSummary, identitySummary, compositionSummary }, null, 2));
+console.log(`npm offline native composition matched ${Object.keys(compositionResults).length} cases; result: ${resolve(base, 'composition-result.json')}`);

@@ -68,3 +68,7 @@ void client.v1['package-resolutions'].npm.post({ profile: 'npm-lock-v3-topology-
   npmVersion: '11.19.1', policy: 'literal-sources-alias-workspace-v3', workspaces: [],
   manifest: { bytesBase64: 'e30=', sha256: '0'.repeat(64) },
   lock: { bytesBase64: 'e30=', sha256: '0'.repeat(64) } });
+void client.v1['package-resolutions'].npm.post({ profile: 'npm-lock-v3-topology-v4',
+  npmVersion: '11.19.1', policy: 'literal-sources-composed-v4', workspaces: [], target: { os: 'linux', cpu: 'arm64' },
+  manifest: { bytesBase64: 'e30=', sha256: '0'.repeat(64) },
+  lock: { bytesBase64: 'e30=', sha256: '0'.repeat(64) } });

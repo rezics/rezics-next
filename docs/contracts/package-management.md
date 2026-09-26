@@ -131,6 +131,19 @@ dependency cannot be silently omitted; present incompatible optional peers still
 fail topology validation. Changed target or profile under an existing key is 409.
 V1 requests and exact receipts retain their original shape and interpretation.
 
+The same private operations accept the
+[v3 identity profile](package-profiles.md#alias-and-workspace-identity-profile)
+and [v4 composed profile](package-profiles.md#composed-identity-and-target-profile).
+V3 retains exact alias slots, workspace manifest bytes and distinct link/target
+identities. V4 adds the explicit target and optional projection in one receipt;
+every required edge and identity is validated before any branch can be omitted.
+An unproven alias/package name returns unsupported semantics, even if the target
+would remove that package. Workspace byte or target changes under the same key
+conflict. All historical request/outcome/ID/replay formats stay frozen. V4 omitted
+edges retain their requested package name and exact platform cause path, or null
+for an absent optional target. Clients may use active IDs/edges for the declared
+projection while retaining the full locked evidence.
+
 The npm operation reads no filesystem paths, registry or artifact. The
 [profile cost contract](package-profiles.md#npm-pnpm-and-yarn) bounds every supplied
 byte/node/edge and ancestor lookup. One indexed exact read follows one insert on

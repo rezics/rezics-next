@@ -360,6 +360,66 @@ and [dependency validator](https://github.com/npm/cli/blob/v11.19.1/workspaces/a
 These are virtual-tree claims only; workspace file contents beyond the supplied
 manifests, physical symlinks, archive integrity and installation are unqualified.
 
+### Composed identity and target profile
+
+G-026 adds `npm-lock-v3-topology-v4`, with
+`policy: "literal-sources-composed-v4"`, npm 11.19.1, required explicit `target`
+(`linux`/`win32`, `x64`/`arm64`), exact root/lock bytes and the v3 bounded workspace
+manifest inputs. Its `npm-lock-topology-receipt-v4` composes the v3 identity
+grammar with the v2 optional/platform grammar. Historical v1/v2/v3 validators,
+IDs, outcome bytes, reads and replay remain frozen. The immutable npm owner and
+signed Content recovery coverage v4 need no schema change.
+
+The complete supplied virtual graph is validated before projection: every
+declared slot, alias name/version, workspace manifest/link/target, peer host,
+source/SRI and required edge is checked even when its branch would be omitted.
+Absent optional edges remain distinct from platform removals. A wrong or missing
+required peer cannot be excused by optional ancestry. A mismatching alias name,
+alias addressing a link, or plain selector pointing at a differently named
+package returns unsupported identity evidence. Native version edges authenticate
+none of those package names; this is a deliberate stricter admission rule, not a
+claim of native invalidity. Missing bytes/provenance are incomplete; malformed
+bytes, SRI, paths and manifest/lock disagreement reject before storage.
+
+All v3 identity fields and v2 optional flags/selectors are retained together.
+`instances` and `edges` describe the full locked graph; `activeInstances` and
+`activeEdges` describe its declared target projection. Root workspace edges are
+required. Reachability and required flags traverse `linkTarget`, so a workspace
+and its required peer stay required while an optional child may disappear.
+Links inherit their target's platform selectors; links and targets retain
+distinct IDs and paths. Optional-region expansion/pruning walks dependency edges
+only, matching the pinned native helper; a link-to-target association is not
+invented as a dependency edge. Workspace targets remain filesystem tops and may
+resolve a peer from their own installed children. Each graph operation counts
+visits and terminates under the profile budget.
+
+Omitted instances retain their exact incompatible `causePath`. V4 omitted edges
+also include `requestedName` and `causePath`: null for `absent-optional`, otherwise
+the omitted source endpoint's cause, or the target endpoint's cause when the
+source survives. The edge retains its original source/target IDs, paths,
+specifier and optional flag. No omitted edge is rebound to a different ancestor.
+Full peer-host witnesses remain on locked instances even when a host is omitted;
+the projection reports the corresponding omitted peer edge. Any failure returns
+empty full and active graphs and empty omission arrays, with a distinct status
+and issue, unsupported clause or budget reason.
+
+V4 keeps the v3 byte, workspace, path, node, edge and ancestor limits, the v2
+16-token selector limit, and a 65,536-visit ceiling. It counts link traversal in
+reachability and all adjacency, projection and output walks. Conservative work
+is O(B + V log V + E log E + E·D + V²·(V + E)); the visit ceiling bounds adversarial
+region pruning. Exact read and replay use indexed owner rows, independent of
+unrelated history. Override/engine policy, overlapping dependency classes,
+workspace globs/external/nested links, registry solving, artifact validation,
+installation and other package managers remain outside the admitted grammar.
+
+The composition follows npm 11.19.1's
+[flag propagation](https://github.com/npm/cli/blob/v11.19.1/workspaces/arborist/lib/calc-dep-flags.js),
+[optional region](https://github.com/npm/cli/blob/v11.19.1/workspaces/arborist/lib/optional-set.js)
+and [version/alias validator](https://github.com/npm/cli/blob/v11.19.1/workspaces/arborist/lib/dep-valid.js).
+The offline oracle checks virtual trees plus explicit platform and optional-region
+observations on four OS/CPU pairs. These bounded observations do not establish
+ideal-tree selection or installation, and PKG04/PKG12/PKG13 remain partial.
+
 ## Go
 
 Use MVS over module requirements with module-path/major-version identity, pseudo-

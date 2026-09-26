@@ -3,12 +3,13 @@ import { NpmResolutionInvalid, npmSha, npmStable, validateNpmSnapshot,
   type NpmOutcome, type NpmRequest } from './npm-lock.ts';
 import { validateNpmPlatformSnapshot, type NpmPlatformOutcome, type NpmPlatformRequest } from './npm-platform.ts';
 import { validateNpmIdentitySnapshot, type NpmIdentityOutcome, type NpmIdentityRequest } from './npm-identity.ts';
+import { validateNpmCompositionSnapshot, type NpmCompositionOutcome, type NpmCompositionRequest } from './npm-composition.ts';
 export { NpmResolutionInvalid } from './npm-lock.ts';
 export class NpmResolutionConflict extends Error {}
 export class NpmResolutionUnavailable extends Error {}
-export type NpmSnapshotRequest = NpmRequest | NpmPlatformRequest | NpmIdentityRequest;
-type NpmSnapshotOutcome = NpmOutcome | NpmPlatformOutcome | NpmIdentityOutcome;
-export interface NpmResolution { profile: 'npm-lock-topology-receipt-v1' | 'npm-lock-topology-receipt-v2' | 'npm-lock-topology-receipt-v3';
+export type NpmSnapshotRequest = NpmRequest | NpmPlatformRequest | NpmIdentityRequest | NpmCompositionRequest;
+type NpmSnapshotOutcome = NpmOutcome | NpmPlatformOutcome | NpmIdentityOutcome | NpmCompositionOutcome;
+export interface NpmResolution { profile: 'npm-lock-topology-receipt-v1' | 'npm-lock-topology-receipt-v2' | 'npm-lock-topology-receipt-v3' | 'npm-lock-topology-receipt-v4';
   resolution: string; requestDigest: string; request: NpmSnapshotRequest;
   outcome: NpmSnapshotOutcome; createdAt: string }
 interface Row { id: string; principal_id: string; idempotency_key: string;
@@ -16,7 +17,8 @@ interface Row { id: string; principal_id: string; idempotency_key: string;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const KEY = /^[A-Za-z0-9:_./-]{1,128}$/;
 function validate(request: NpmSnapshotRequest) {
-  return request?.profile === 'npm-lock-v3-topology-v3' ? validateNpmIdentitySnapshot(request)
+  return request?.profile === 'npm-lock-v3-topology-v4' ? validateNpmCompositionSnapshot(request)
+    : request?.profile === 'npm-lock-v3-topology-v3' ? validateNpmIdentitySnapshot(request)
     : request?.profile === 'npm-lock-v3-topology-v2'
     ? validateNpmPlatformSnapshot(request) : validateNpmSnapshot(request);
 }
@@ -28,7 +30,8 @@ export class NpmResolutionStore {
         || npmStable(row.outcome) !== npmStable(validate(row.request))) {
         throw new Error('stored npm receipt differs from its snapshot');
       }
-      return { profile: row.request.profile === 'npm-lock-v3-topology-v3' ? 'npm-lock-topology-receipt-v3'
+      return { profile: row.request.profile === 'npm-lock-v3-topology-v4' ? 'npm-lock-topology-receipt-v4'
+        : row.request.profile === 'npm-lock-v3-topology-v3' ? 'npm-lock-topology-receipt-v3'
         : row.request.profile === 'npm-lock-v3-topology-v2'
         ? 'npm-lock-topology-receipt-v2' : 'npm-lock-topology-receipt-v1', resolution: `https://rezics.com/id/${row.id}`,
         requestDigest: row.request_digest, request: row.request, outcome: row.outcome,
