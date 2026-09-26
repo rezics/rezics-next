@@ -69,8 +69,9 @@ expansion or private proof is exposed.
 These transitions create no representation, grant, membership, publication,
 source ownership or managed-organization authority. They do not move an
 organization or alter participation in another Realm. No authority consumer may
-use the structural tuple as a grant; future dependent permissions require a
-separately qualified exact-episode contract. IAM06, IAM23 and IAM24 remain partial.
+use the structural tuple as a grant. The organization publication profile below
+uses the exact episode as a separate precondition alongside its own permission.
+IAM06, IAM23 and IAM24 remain partial pending complete-case verification.
 
 The two-party invitation/acceptance design was selected over a unilateral Realm
 join or reuse of the Agent roster because those alternatives cannot express the
@@ -218,6 +219,111 @@ remain unqualified.
 This is partial IAM24/IAM23/IAM06. Founding grants, general administrative
 actions, control/recovery, voting, publication moderation, paid benefits, moves,
 complete Realm quota/review and wider delegation remain retained work.
+
+### Exact organization publication moderation
+
+`POST /v1/organization-publication-rejections` accepts
+`realm-organization-publication-rejection-v1` with an Account `realm:reject`
+bearer and principal/action-scoped `Idempotency-Key`. It targets one native text
+Contribution's selected, public publication in a Realm/Main Version slot. Inputs
+name the Realm, admitted organization, participation ID/generation and consumed
+proposal, policy revision, Work/Main Version and expected Work head, selection,
+Contribution, publication decision, selected draft, acting manager and exact
+representation ID/generation. The decision is the fixed `not-approved` local
+suppression. The manager is the Realm's independently registered authority;
+it needs the separate `publication.reject.organization` direct permission on
+`publication:reject:<realm>`. Generic `publication.reject` authority, organization
+self-representation, managed-roster grants, membership and public descriptions
+cannot satisfy this permission. Installation still provisions manager mandates
+and permission grants; this operation does not create or widen them.
+
+Access owns `organization_publication_moderation`, an immutable row tied to a
+dispatchable admission, exact joined-history generation, consumed proposal and
+publisher admission. Its canonical target, selected manager proof, organization
+admission generations and publisher receipt have a stable digest. One transaction
+locks the recovery fence, G-012 scope gate, exact Realm action gate, principal,
+policy, selected manager representation/grant, admitted organization and episode.
+It verifies the current joined, unbanned episode, the proposal's admitted subject
+generations and policy, then inserts the proof, claimed admission, admission
+receipt and registration/claim outbox together. The admission lasts at most 30
+seconds and cannot outlive its selected mandate or permission. Real-clock expiry
+is checked again after lock waits and before commit. A deferred database
+constraint rejects a moderation admission that commits without its bound proof.
+Generic registration and claim explicitly refuse this action. A preflight
+participation read followed by generic registration was rejected because leave
+can commit between those steps.
+
+The Contribution's author is the exact organization IRI in the native graph,
+publication revision and immutable draft/publication payloads. The sealed Access
+`contribution.publish` admission must have that acting subject, Contribution
+scope and exact graph receipt/digest/position. The operation does not interpret
+author text or catalog links as authority. Before any dispatch it checks the
+immutable selected evidence and content-addressed objects. Jena compares the
+current Work head, Realm slot head and Contribution publication head, plus the
+selected publication/draft/author identities, inside the effect transaction.
+Its clock guard refuses dispatch after the admission's deadline. A changed head
+seals a stale cancellation; missing owner or graph evidence never implies success.
+
+An already dispatched admission may finish within its original deadline after a
+later leave, suspension or ordinary revocation. That finite in-flight decision
+is attributed to the earlier admitted episode. A new admission cannot use an
+ended, banned or replaced episode. Retrying an unresolved admission requires
+the saved episode and manager path to remain current; a fresh grant cannot
+replace the saved permission. An additional valid grant does not invalidate the
+original grant, which is rechecked by its saved identity and generation.
+Exact currently authorized retries can recover an already committed receipt
+after later leave or rejoin. Changed intent conflicts,
+and a revoked named representation or deactivated Account session denies a new
+API call. Strong Access closure still requires draining/sealing its outstanding
+admissions before claiming completion. There is no instantaneous distributed
+revocation of a graph request already sent.
+
+The Jena transaction replaces only the target slot head, writes one immutable
+rejection and receipt/outbox, and deletes that exact predecessor's local public
+MatchUnit. Local selection reads report suppression and local search omits it;
+the Main selection, other Realm selections, Work, Contribution author, draft,
+publication and earlier revisions survive. The rejection uses the established
+`realm-local-rejection-v1` RDF shape and receipt family. Its immutable object
+additionally retains the complete organization target and opaque Access proof
+digest. Existing generic rejection digests, objects and receipts retain their
+meaning; they cannot be reinterpreted as organization-profile evidence. This
+profile covers native text publication, not general Content publication, source
+editing, organization management or quota/review policy.
+
+Access and Jena do not commit atomically with each other. Loss after graph commit
+but before Access acknowledgement returns pending; retry reads the same graph
+receipt and seals the original admission. Held graph recovery replays the retained
+relay event and immutable object only against the exact sealed Access admission,
+moderation proof and publisher admission. Missing Access tail, changed proof or
+changed retained event blocks replay. Recovery keeps the original decision's
+identity and attribution; it never reconstructs authority from the current
+participation tuple. The Access recovery coverage includes every proof row, and
+the WAL fixture retains it through independent restore. An incompatible owner
+cut requires restoring the missing evidence or remaining fenced, not minting a
+replacement admission. These tests do not qualify arbitrary mixed-owner backup
+cuts or instantaneous cross-owner atomicity.
+
+The lock order follows [PostgreSQL 18 row locking](https://www.postgresql.org/docs/18/explicit-locking.html#LOCKING-ROWS)
+and the post-wait behavior described in its
+[Read Committed contract](https://www.postgresql.org/docs/18/transaction-iso.html#XACT-READ-COMMITTED)
+(reviewed 2026-09-26). These support the mechanism; owner races and recovery tests
+establish the particular composition. Holding PostgreSQL locks across graph I/O
+was rejected: it neither creates a distributed commit nor handles lost graph
+responses. The chosen durable admission plus guarded receipt has an explicit,
+finite in-flight boundary instead.
+
+Authority evaluation uses fixed exact/indexed probes and selects one grant for
+fresh admission; a retry also probes its saved grant by identity. These probes
+are independent of roster size and publication history. For retained history
+`h`, each probe is expected `O(log h)`; selected rows and metadata bytes are
+constant. Fresh admission writes one admission, proof, receipt and two outbox
+rows. Graph work is bounded by one slot, one publication, three immutable
+payloads and one local MatchUnit; payload reads are `O(b)` in the selected text
+bytes, bounded by the existing native text input limit. Recovery reads one event
+and the same exact proof; no roster or revision-history expansion is needed.
+Two-second lock and five-second statement bounds remain in force. Small growth,
+logical row/write and graph-response budgets do not qualify cold-cache I/O,
+physical WAL amplification, scope-gate throughput or deployment capacity.
 
 ## Resource and action budgets
 

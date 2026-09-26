@@ -200,7 +200,7 @@ export interface MainCloudEvent {
   datacontenttype: 'application/json';
   data: { batchId: string; sourcePosition: { datasetId: 'product'; dataEpoch: string;
     sequence: string }; routingEpoch: string; ordinal: number; receipt: {
-      id: string; action: 'work.create' | 'work.edit' | 'work.derive' | 'release.seal' | 'address.claim' | 'address.rename' | 'address.dispose' | 'contribution.create' | 'contribution.edit' | 'contribution.publish' | 'publication.select' | 'space.create' | 'publication.adopt' | 'publication.reject' | 'classification.context.configure' | 'classification.proposition.define' | 'classification.decision.set' | 'rating.context.create' | 'rating.observation.set' | 'translation.link' | 'translation.authorize';
+      id: string; action: 'work.create' | 'work.edit' | 'work.derive' | 'release.seal' | 'address.claim' | 'address.rename' | 'address.dispose' | 'contribution.create' | 'contribution.edit' | 'contribution.publish' | 'publication.select' | 'space.create' | 'publication.adopt' | 'publication.reject' | 'publication.reject.organization' | 'classification.context.configure' | 'classification.proposition.define' | 'classification.decision.set' | 'rating.context.create' | 'rating.observation.set' | 'translation.link' | 'translation.authorize';
       outcome: 'succeeded' | 'cancelled';
       admissionId: string; requestDigest: string; authorityEpoch: string; scope: string;
       operation?: string; work?: string; mainVersion?: string; workRevision?: string;
@@ -969,7 +969,7 @@ export async function readMainOutboxEnvelope(fuseki: FusekiClient, batch: MainOu
     || !/^[0-9a-f-]{36}$/.test(admissionId)
     || value('epoch') !== batch.dataEpoch
     || value('sequence') !== batch.sequence
-    || !['work.create', 'work.edit', 'contribution.create', 'contribution.edit', 'contribution.publish', 'publication.select', 'space.create', 'publication.adopt', 'publication.reject', 'classification.context.configure', 'classification.proposition.define', 'classification.decision.set', 'rating.context.create', 'rating.observation.set'].includes(action ?? '')
+    || !['work.create', 'work.edit', 'contribution.create', 'contribution.edit', 'contribution.publish', 'publication.select', 'space.create', 'publication.adopt', 'publication.reject', 'publication.reject.organization', 'classification.context.configure', 'classification.proposition.define', 'classification.decision.set', 'rating.context.create', 'rating.observation.set'].includes(action ?? '')
     || ![`${RV}Succeeded`, `${RV}Cancelled`].includes(outcome ?? '')) {
     throw new OutboxIncomplete('event does not match its committed source position or receipt');
   }
@@ -1147,18 +1147,18 @@ export async function readMainOutboxEnvelope(fuseki: FusekiClient, batch: MainOu
         || reason || operation || work || main || realm || slot
         || contribution || publicationDecision || selectedDraft || selection || matchUnit))
     || (type === 'com.rezics.realm.publication-suppressed.v1'
-      && (action !== 'publication.reject' || outcome !== `${RV}Succeeded`
+      && (!['publication.reject', 'publication.reject.organization'].includes(action!) || outcome !== `${RV}Succeeded`
         || !operation || !work || !main || !realm || !slot || !rejection
         || reasonCode !== `${RV}NotApproved` || reason || selection || matchUnit
         || contribution || publicationDecision || selectedDraft || language
         || value('eventOperation') !== operation || value('eventWork') !== work
         || value('eventRealm') !== realm))
     || (type === 'com.rezics.realm.suppression-rejected.v1'
-      && (action !== 'publication.reject' || outcome !== `${RV}Cancelled`
+      && (!['publication.reject', 'publication.reject.organization'].includes(action!) || outcome !== `${RV}Cancelled`
         || reason !== `${RV}StaleHead` || operation || work || main || realm || slot
         || rejection || reasonCode || selection || matchUnit))
     || (type === 'com.rezics.realm.suppression-cancelled.v1'
-      && (action !== 'publication.reject' || outcome !== `${RV}Cancelled`
+      && (!['publication.reject', 'publication.reject.organization'].includes(action!) || outcome !== `${RV}Cancelled`
         || reason || operation || work || main || realm || slot
         || rejection || reasonCode || selection || matchUnit))
     || (type === 'com.rezics.classification.context-created.v1'

@@ -12,6 +12,10 @@ import { CommandRejected, FusekiClient, FusekiQueryResponseTooLarge, FusekiReadB
 import { assertCommandProfiles } from './infrastructure/profile.ts';
 import { AdmissionConflict, AdmissionDenied, AdmissionUnavailable } from './modules/access/admission.ts';
 import type { AccessAdmissionRegistry } from './modules/access/admission.ts';
+import type { AccessOrganizationModeration } from './modules/access/organization-moderation.ts';
+import { rejectAdmittedOrganizationPublication } from './modules/work/reject-organization-admitted.ts';
+import { organizationRejectionBody, organizationRejectionResult }
+  from './modules/work/organization-rejection-schemas.ts';
 import { AccessGroups, GroupConflict, GroupDenied, GroupStale, GroupUnavailable,
   GROUP_SCOPE } from './modules/access/groups.ts';
 import { groupChangeIntentDigest } from './modules/access/group-intent.ts';
@@ -213,6 +217,7 @@ export interface MainWorkDependencies {
   memberships?: AccessMemberships;
   membershipConsents?: AccessMembershipConsents;
   orgRealmParticipation?: AccessOrgRealmParticipation;
+  organizationModeration?: AccessOrganizationModeration;
   managedOrganizations?: AccessManagedOrganizations;
   privateMemberships?: AccessPrivateMemberships;
   privateRecipients?: AccessPrivateRecipients;
@@ -3945,6 +3950,32 @@ export function createMainApp(fuseki: FusekiClient, work?: MainWorkDependencies)
             sequence: receipt.sequence }, replayed: receipt.replayed }, {
           status: receipt.replayed ? 200 : 201, headers: { 'cache-control': 'no-store' },
         });
+      } catch (error) { return commandError(error); }
+    })
+    .post('/v1/organization-publication-rejections', {
+      body: organizationRejectionBody,
+      response: { 200: organizationRejectionResult, 201: organizationRejectionResult,
+        202: pendingOperation, ...writeProblems },
+    }, async ({ request, body }) => {
+      const key = request.headers.get('idempotency-key');
+      if (!key || !/^[A-Za-z0-9:_./-]{1,128}$/.test(key)) {
+        return problem(400, 'invalid_idempotency_key', 'A valid Idempotency-Key header is required');
+      }
+      try {
+        if (!work.organizationModeration) throw new AdmissionUnavailable('moderation owner unavailable');
+        const receipt = await rejectAdmittedOrganizationPublication(work.environment, work.account,
+          work.organizationModeration, work.access, request, body, key);
+        return Response.json({ profile: body.profile, work: receipt.work, mainVersion: receipt.mainVersion,
+          realm: receipt.realm, slot: receipt.slot, rejection: receipt.rejection,
+          reasonCode: receipt.reasonCode, predecessor: receipt.expectedHead,
+          organizationSubject: body.organizationSubject, participationId: body.participationId,
+          participationGeneration: body.participationGeneration, proposalId: body.proposalId,
+          contribution: body.contribution, publicationDecision: body.publicationDecision,
+          selectedDraft: body.selectedDraft, expectedWorkHead: body.expectedWorkHead,
+          authorityProofDigest: receipt.authorityProofDigest,
+          sourcePosition: { datasetId: 'product', dataEpoch: receipt.dataEpoch, sequence: receipt.sequence },
+          replayed: receipt.replayed }, { status: receipt.replayed ? 200 : 201,
+          headers: { 'cache-control': 'no-store' } });
       } catch (error) { return commandError(error); }
     })
     .post('/v1/publication-rejections', {

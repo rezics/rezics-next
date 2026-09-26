@@ -597,6 +597,9 @@ export class AccessAdmissionRegistry {
   }
 
   async register(request: AdmissionRequest): Promise<RegisteredAdmission> {
+    if (request.action === 'publication.reject.organization') {
+      throw new AdmissionDenied('organization moderation requires its atomic episode admission');
+    }
     const authorityPath = request.authorityPath ?? 'represented-agent';
     if (!/^[A-Za-z0-9:_./-]{1,128}$/.test(request.idempotencyKey)
       || !/^[a-z][a-z0-9.:-]{1,127}$/.test(request.action)
@@ -912,6 +915,9 @@ export class AccessAdmissionRegistry {
       if (!row || row.scope_id !== scope || !row.eligible || !['registered', 'claimed'].includes(row.state)) {
         throw new AdmissionExpired('admission is not dispatchable');
       }
+      if (row.action === 'publication.reject.organization') {
+        throw new AdmissionDenied('organization moderation cannot use generic claim');
+      }
       if (row.authority_epoch !== gateResult.rows[0]?.authority_epoch) {
         throw new AdmissionDenied('admission scope epoch is stale');
       }
@@ -1166,7 +1172,8 @@ export class AccessAdmissionRegistry {
                 : row?.action === 'publication.select' ? 'select-main-default'
                   : row?.action === 'space.create' ? 'create-space-realm'
                     : row?.action === 'publication.adopt' ? 'select-realm-local'
-                      : row?.action === 'publication.reject' ? 'reject-realm-local'
+                      : row?.action === 'publication.reject' || row?.action === 'publication.reject.organization'
+                        ? 'reject-realm-local'
                         : row?.action === 'classification.context.configure'
                           ? 'classification-context-create'
                           : row?.action === 'classification.proposition.define'

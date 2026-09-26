@@ -44,6 +44,22 @@ boundaries, source snapshots and positive/denied/partial outcomes.
 | IAM36 | Parent/child groups have different grants | Child membership receives the admitted parent grant; parent membership does not receive the child's extra grant. |
 | IAM37 | A Realm editor may edit an organization's catalog description | Apply the content owner's editing policy; the edit permission does not establish organizational control. |
 
+The `organization-publication-moderation` fixture targets IAM23 through real
+Account OAuth, Main, Access and Jena. It exercises the separate Realm action,
+exact selected publisher and episode, stale/revoked representation, lock-wait
+expiry, changed Work/selection/publication heads, suspension, leave/rejoin and
+local-only selection/search effects. The paired
+`organization-publication-recovery` fixture uses isolated owner copies and a
+held graph replay to reject missing Access tail or altered retained evidence,
+recover an acknowledgement lost after graph commit, and preserve another Realm
+and Main search. Its authentication is isolated; the API fixture owns OAuth.
+The Access WAL fixture checks immutable moderation proof durability with
+synthetic graph coordinates; it does not itself prove the graph publication.
+The generic rejection receipt regression retains old digest semantics. These
+are affected checks, not a final backend qualification or a claim that every
+mixed-owner recovery cut works. IAM23 remains partial until the complete row is
+verified on merged source; broader WORK/SEARCH assertions are unchanged.
+
 The `access-org-realm-api` fixture covers partial IAM06/IAM23/IAM24 through real
 Account OAuth/introspection, Main handlers and Access PostgreSQL. It checks two
 distinct organization/Realm principals and authority subjects, exact selected

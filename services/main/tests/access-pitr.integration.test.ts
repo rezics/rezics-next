@@ -9,6 +9,11 @@ import { Pool } from 'pg';
 import { AccessAdmissionRegistry, AdmissionDenied } from '../src/modules/access/admission.ts';
 import { AccessOrgRealmParticipation } from '../src/modules/access/org-realm-participation.ts';
 import { OrgRealmDenied } from '../src/modules/access/org-realm-authority.ts';
+import { AccessOrganizationModeration } from '../src/modules/access/organization-moderation.ts';
+import { ORGANIZATION_MODERATION_ACTION } from '../src/modules/access/organization-publication.ts';
+import { textPublicationReceiptIri } from '../src/modules/contribution/publish.ts';
+import { organizationRejectionInput } from '../src/modules/work/reject-organization-admitted.ts';
+import { realmRejectionDigest } from '../src/modules/work/reject-realm.ts';
 import { seedOrgRealm } from '../../../tests/qa/support/org-realm.ts';
 import { seedManagedOrganization } from '../../../tests/qa/support/managed-organization.ts';
 import { AccessManagedOrganizations, type ManagedOrgChange } from '../src/modules/access/managed-organizations.ts';
@@ -126,6 +131,39 @@ test('OPS03/IAM07/IAM06/IAM23/IAM24: archived Access WAL restores exact authorit
     const orgJoin = { ...orgBasis, action: 'join' as const, proposalId: proposal.proposalId,
       termsRevision: 'terms-1' };
     const joined = await orgRealm.change(orgFixture.orgPrincipal, orgJoin, 'pitr-org-join');
+    // Storage-only WAL fixture: graph evidence itself is qualified by the paired
+    // real graph-loss test, not by these synthetic receipt coordinates.
+    const native = () => `https://rezics.com/id/${Bun.randomUUIDv7()}`;
+    const contribution = native(), managerRepresentation = Bun.randomUUIDv7();
+    const publicationScope = `contribution:publish:${contribution}`;
+    const moderationScope = `publication:reject:${orgFixture.realm}`;
+    await primary.query('INSERT INTO access.scope_gate (id) VALUES ($1),($2)', [publicationScope, moderationScope]);
+    for (const [subject, identity, scope, action, representation] of [
+      [orgFixture.org, orgFixture.orgPrincipalId, publicationScope, 'contribution.publish', Bun.randomUUIDv7()],
+      [orgFixture.realmManager, orgFixture.realmPrincipalId, moderationScope, ORGANIZATION_MODERATION_ACTION, managerRepresentation],
+    ]) {
+      await primary.query(`INSERT INTO access.representation (id,principal_id,subject_id,action,valid_until)
+        VALUES ($1,$2,$3,$4,now() + interval '1 hour')`, [representation, identity, subject, action]);
+      await primary.query(`INSERT INTO access.permission_grant
+        (id,issuer_subject,recipient_subject,scope_id,action,valid_until)
+        VALUES ($1,$2,$2,$3,$4,now() + interval '1 hour')`, [Bun.randomUUIDv7(), subject, scope, action]);
+    }
+    const publisher = await registry.register({ principal: orgFixture.orgPrincipal,
+      actingSubject: orgFixture.org, scope: publicationScope, action: 'contribution.publish',
+      idempotencyKey: 'pitr-publisher', requestDigest: 'a'.repeat(64) });
+    await registry.claim(publisher.id, publisher.requestDigest);
+    const publisherProof = { admissionId: publisher.id, receipt: textPublicationReceiptIri(publisher.id),
+      outcome: 'succeeded' as const, requestDigest: publisher.requestDigest, authorityEpoch: publisher.authorityEpoch,
+      scope: publicationScope, dataEpoch: 'pitr-graph-fixture', sequence: '1' };
+    await registry.recordGraphOutcome(publisher.id, publisherProof);
+    const moderationTarget = { realm: orgFixture.realm, organizationSubject: orgFixture.org,
+      participationId: joined.participationId!, participationGeneration: joined.generation,
+      proposalId: proposal.proposalId, policyRevision: '1', work: native(), mainVersion: native(),
+      expectedWorkHead: native(), selection: native(), contribution, publicationDecision: native(), selectedDraft: native(),
+      actingSubject: orgFixture.realmManager, representationId: managerRepresentation, representationGeneration: '0' };
+    const moderation = await new AccessOrganizationModeration(primary).admit(orgFixture.realmPrincipal,
+      moderationTarget, publisherProof, 'pitr-moderation', realmRejectionDigest(organizationRejectionInput(moderationTarget)));
+    const moderationRow = (await primary.query('SELECT * FROM access.organization_publication_moderation WHERE admission_id = $1', [moderation.id])).rows[0];
     const orgSuspend = { ...orgBasis, expectedGeneration: '1', action: 'suspend' as const,
       reasonReference: 'pitr-suspension' };
     const suspended = await orgRealm.change(orgFixture.realmPrincipal, orgSuspend, 'pitr-org-suspend');
@@ -320,6 +358,10 @@ test('OPS03/IAM07/IAM06/IAM23/IAM24: archived Access WAL restores exact authorit
     expect(gate.rows[0]).toEqual({ authority_epoch: '6', open: false, dispatch_open: false });
     expect((await restored.query<{ active: boolean }>(
       'SELECT active FROM access.principal WHERE id = $1', [principalId])).rows[0]?.active).toBe(false);
+    expect((await restored.query('SELECT * FROM access.organization_publication_moderation WHERE admission_id = $1',
+      [moderation.id])).rows[0]).toEqual(moderationRow);
+    expect((await restored.query('SELECT state FROM access.admission WHERE id = $1', [moderation.id])).rows[0].state).toBe('claimed');
+    await expect(restored.query('DELETE FROM access.organization_publication_moderation WHERE admission_id = $1', [moderation.id])).rejects.toThrow();
     expect((await restored.query<{ generation: string }>(`
       SELECT generation FROM access.membership_consent_use WHERE consent_id = $1`,
     [consentId])).rows[0]?.generation).toBe('1');

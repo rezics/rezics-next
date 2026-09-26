@@ -81,7 +81,7 @@ export async function strongRevokeWorkScope(
               ? await sealRealmSpaceAdmission(env, admission)
             : admission.action === 'publication.adopt'
               ? await sealRealmSelectionAdmission(env, admission)
-            : admission.action === 'publication.reject'
+            : admission.action === 'publication.reject' || admission.action === 'publication.reject.organization'
               ? await sealRealmRejectionAdmission(env, admission)
             : admission.action === 'classification.context.configure'
               ? await sealClassificationContextAdmission(env, admission)
@@ -158,7 +158,7 @@ export async function strongRevokeWorkPrincipal(
               ? await sealRealmSpaceAdmission(env, admission)
             : admission.action === 'publication.adopt'
               ? await sealRealmSelectionAdmission(env, admission)
-            : admission.action === 'publication.reject'
+            : admission.action === 'publication.reject' || admission.action === 'publication.reject.organization'
               ? await sealRealmRejectionAdmission(env, admission)
             : admission.action === 'classification.context.configure'
               ? await sealClassificationContextAdmission(env, admission)

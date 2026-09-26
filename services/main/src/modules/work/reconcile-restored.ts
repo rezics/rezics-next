@@ -3,6 +3,10 @@ import { DAILY_CONTEXT_ID, DAILY_CONTEXT_PROFILE, DAILY_OBSERVATION_ID, DAILY_OB
   retainedRatingPeriod, periodTriples, periodBinding } from '../rating/calendar.ts';
 import { readRatingManifest } from '../rating/manifest.ts';
 import type { Pool } from 'pg';
+import { assertRetainedOrganizationModeration } from '../access/organization-moderation.ts';
+import { ORGANIZATION_MODERATION_ACTION, type OrganizationPublicationTarget }
+  from '../access/organization-publication.ts';
+import { organizationPublicationGuard } from './organization-publication-evidence.ts';
 import { profileValidations, type ProfileId } from '../../infrastructure/profile.ts';
 import { CONTINUITY, DATASET, GRAPHS, PROFILE, RV, hash, iri, lit,
   type WorkActivationEnvironment } from './activate.ts';
@@ -2914,7 +2918,7 @@ export async function reconcileRetainedRealmRejection(
     || data.ordinal !== 0 || data.sourcePosition.datasetId !== 'product'
     || data.sourcePosition.dataEpoch !== coverage.dataEpoch
     || data.sourcePosition.sequence !== sequence
-    || receipt.action !== 'publication.reject' || receipt.outcome !== 'succeeded'
+    || !['publication.reject', ORGANIZATION_MODERATION_ACTION].includes(receipt.action) || receipt.outcome !== 'succeeded'
     || !receipt.operation || !receipt.work || !receipt.mainVersion || !receipt.realm
     || !receipt.slot || !receipt.rejection || !receipt.rejectionManifest
     || receipt.reasonCode !== 'not-approved'
@@ -2950,6 +2954,13 @@ export async function reconcileRetainedRealmRejection(
     || state.predecessor !== predecessor || typeof state.reviewer !== 'string') {
     throw new RetainedEffectConflict('retained Realm suppression payload differs');
   }
+  const organization = state.organizationPublication as OrganizationPublicationTarget | undefined;
+  if ((receipt.action === ORGANIZATION_MODERATION_ACTION) !== !!organization
+    || (organization && (typeof state.authorityProofDigest !== 'string'
+      || organization.realm !== realm || organization.work !== work || organization.mainVersion !== main
+      || organization.selection !== predecessor || organization.actingSubject !== state.reviewer))) {
+    throw new RetainedEffectConflict('retained organization suppression identity differs');
+  }
   const eligible = await env.fuseki.query(`PREFIX rv: <${RV}> ASK {
     GRAPH ${iri(GRAPHS.current)} {
       ?space a rv:Space ; rv:realmCapability ${iri(realm)} ; rv:disclosure rv:Public .
@@ -2973,7 +2984,7 @@ export async function reconcileRetainedRealmRejection(
          graph_receipt, graph_outcome, graph_data_epoch, graph_sequence
        FROM access.admission WHERE id = $1`, [receipt.admissionId]);
     const admitted = access.rows[0];
-    if (!admitted || admitted.action !== 'publication.reject' || admitted.state !== 'sealed'
+    if (!admitted || admitted.action !== receipt.action || admitted.state !== 'sealed'
       || admitted.acting_subject !== state.reviewer
       || admitted.scope_id !== receipt.scope || admitted.request_digest !== receipt.requestDigest
       || admitted.authority_epoch !== receipt.authorityEpoch
@@ -2982,9 +2993,11 @@ export async function reconcileRetainedRealmRejection(
       || realmRejectionDigest({ context: { kind: 'realm-local', id: realm },
         work, mainVersion: main, expectedSelectionHead: predecessor,
         decisionBasis: 'realm-manager-review', reasonCode: 'not-approved',
-        actingSubject: admitted.acting_subject }) !== receipt.requestDigest) {
+        actingSubject: admitted.acting_subject, ...(organization ? { organizationPublication: organization } : {}) }) !== receipt.requestDigest) {
       throw new RetainedEffectConflict('current Access admission does not prove Realm suppression');
     }
+    if (organization) await assertRetainedOrganizationModeration(client, receipt.admissionId,
+      organization, state.authorityProofDigest as string);
     const marker = `urn:rezics:restore:${env.lineage.dataEpoch}`;
     const predecessorTriple = predecessor ? `rv:predecessor ${iri(predecessor)} ;` : '';
     const receiptPredecessor = predecessor ? `rv:expectedHead ${iri(predecessor)} ;` : '';
@@ -3028,7 +3041,7 @@ export async function reconcileRetainedRealmRejection(
           ${iri(data.batchId)} a rv:OutboxBatch ; rv:dataEpoch ${lit(coverage.dataEpoch)} ;
             rv:sequence ${sequence} ; rv:eventCount 1 ; rv:event ${iri(eventId)} .
           ${iri(eventId)} a rv:RealmPublicationSuppressedEvent ; rv:ordinal 0 ;
-            rv:action "publication.reject" ; rv:receipt ${iri(receipt.id)} ;
+            rv:action ${lit(receipt.action)} ; rv:receipt ${iri(receipt.id)} ;
             rv:operation ${iri(operation)} ; rv:work ${iri(work)} ; rv:realm ${iri(realm)} .
         }
       }
@@ -3067,6 +3080,7 @@ export async function reconcileRetainedRealmRejection(
           BIND(true AS ?priorRejected)
         }
         FILTER(COALESCE(?prior, ${iri('urn:rezics:none')}) = ${iri(predecessor ?? 'urn:rezics:none')})
+        ${organization ? organizationPublicationGuard(organization) : ''}
         FILTER(!BOUND(?prior) || (BOUND(?oldUnit) != BOUND(?priorRejected)))
         FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt.id)} ?p ?o } }
         FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.revisions)} { ${iri(rejection)} ?p ?o } }
@@ -3174,7 +3188,7 @@ export async function reconcileRetainedAdmissionCancellation(
                 ? spaceCreationReceiptIri(receipt.admissionId)
                 : receipt?.action === 'publication.adopt'
                   ? realmSelectionReceiptIri(receipt.admissionId)
-                  : receipt?.action === 'publication.reject'
+                  : receipt?.action === 'publication.reject' || receipt?.action === ORGANIZATION_MODERATION_ACTION
                     ? realmRejectionReceiptIri(receipt.admissionId)
                     : receipt?.action === 'classification.context.configure'
                       ? classificationContextReceiptIri(receipt.admissionId)
@@ -3213,9 +3227,9 @@ export async function reconcileRetainedAdmissionCancellation(
     || (realmRejected && (receipt.action !== 'publication.adopt'
       || receipt.reason !== 'stale-head'))
     || (realmCancelled && (receipt.action !== 'publication.adopt' || receipt.reason))
-    || (suppressionRejected && (receipt.action !== 'publication.reject'
+    || (suppressionRejected && (!['publication.reject', ORGANIZATION_MODERATION_ACTION].includes(receipt.action)
       || receipt.reason !== 'stale-head'))
-    || (suppressionCancelled && (receipt.action !== 'publication.reject' || receipt.reason))
+    || (suppressionCancelled && (!['publication.reject', ORGANIZATION_MODERATION_ACTION].includes(receipt.action) || receipt.reason))
     || (contextCancelled && (receipt.action !== 'classification.context.configure'
       || receipt.reason))
     || (propositionCancelled && (receipt.action !== 'classification.proposition.define'
@@ -3344,7 +3358,7 @@ export async function reconcileRetainedAdmissionCancellation(
                   ? readSpaceCreationReceipt(env, receipt.admissionId)
                   : receipt.action === 'publication.adopt'
                     ? readRealmSelectionReceipt(env, receipt.admissionId)
-                    : receipt.action === 'publication.reject'
+                    : receipt.action === 'publication.reject' || receipt.action === ORGANIZATION_MODERATION_ACTION
                       ? readRealmRejectionReceipt(env, receipt.admissionId)
                       : receipt.action === 'classification.context.configure'
                         ? readClassificationContextReceipt(env, receipt.admissionId)

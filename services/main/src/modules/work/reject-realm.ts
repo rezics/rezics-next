@@ -2,6 +2,9 @@ import { CommandRejected, type CommandValidation } from '../../infrastructure/fu
 import { profileValidations } from '../../infrastructure/profile.ts';
 import { assertNotInvalidProfileReceipt, validatedCommand } from '../../infrastructure/invalid-receipt.ts';
 import type { RegisteredAdmission } from '../access/admission.ts';
+import { canonicalOrganizationPublication, ORGANIZATION_MODERATION_ACTION,
+  type OrganizationPublicationTarget } from '../access/organization-publication.ts';
+import { organizationPublicationGuard } from './organization-publication-evidence.ts';
 import { REVIEW_POLICY, SELECTION_POLICY } from '../space/create.ts';
 import { PUBLIC_SEARCH_GRAPH } from './select-main.ts';
 import { realmSelectionSlotIri } from './select-realm.ts';
@@ -24,6 +27,7 @@ export interface RejectRealmLocalInput {
   decisionBasis: 'realm-manager-review';
   reasonCode: 'not-approved';
   actingSubject: string;
+  organizationPublication?: OrganizationPublicationTarget;
 }
 
 export interface RealmRejectionReceipt {
@@ -55,12 +59,18 @@ export function realmRejectionDigest(input: RejectRealmLocalInput): string {
     || input.reasonCode !== 'not-approved') {
     throw new InvalidRealmRejectionInput('invalid Realm rejection');
   }
+  const organization = input.organizationPublication && canonicalOrganizationPublication(input.organizationPublication);
+  if (organization && (organization.realm !== input.context.id || organization.work !== input.work
+    || organization.mainVersion !== input.mainVersion || organization.selection !== input.expectedSelectionHead
+    || organization.actingSubject !== input.actingSubject)) {
+    throw new InvalidRealmRejectionInput('organization rejection target differs');
+  }
   return hash(JSON.stringify({ family: 'reject-realm-local-v1', context: input.context,
     work: input.work, mainVersion: input.mainVersion,
     expectedSelectionHead: input.expectedSelectionHead,
     decisionBasis: input.decisionBasis, reasonCode: input.reasonCode,
     actor: input.actingSubject, selectionPolicy: SELECTION_POLICY,
-    reviewPolicy: REVIEW_POLICY }));
+    reviewPolicy: REVIEW_POLICY, ...(organization ? { organizationPublication: organization } : {}) }));
 }
 
 export function realmRejectionReceiptIri(admissionId: string): string {
@@ -152,7 +162,8 @@ async function sealTerminal(env: WorkActivationEnvironment, admission: Registere
       ${iri(input.work)} rv:mainVersion ${iri(input.mainVersion)} .
       OPTIONAL { ${iri(slot)} rv:selectionHead ?prior }
     }
-    FILTER(COALESCE(?prior, ${iri(NONE)}) != ${iri(input.expectedSelectionHead ?? NONE)})` : '';
+    FILTER(COALESCE(?prior, ${iri(NONE)}) != ${iri(input.expectedSelectionHead ?? NONE)}
+      ${input.organizationPublication ? `|| NOT EXISTS { ${organizationPublicationGuard(input.organizationPublication)} }` : ''})` : '';
   try { await env.fuseki.commandWithReceipt({ receipt, digest: admission.requestDigest,
     validations: [], deadlineMs: 10_000, update: `PREFIX rv: <${RV}>
     DELETE { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?n } }
@@ -170,7 +181,7 @@ async function sealTerminal(env: WorkActivationEnvironment, admission: Registere
         ${iri(batch)} a rv:OutboxBatch ; rv:dataEpoch ${lit(env.lineage.dataEpoch)} ;
           rv:sequence ?next ; rv:eventCount 1 ; rv:event ${iri(event)} .
         ${iri(event)} a rv:${reason ? 'RealmPublicationSuppressionRejectedEvent' : 'RealmPublicationSuppressionCancelledEvent'} ;
-          rv:ordinal 0 ; rv:action "publication.reject" ; rv:receipt ${iri(receipt)} .
+          rv:ordinal 0 ; rv:action ${lit(admission.action)} ; rv:receipt ${iri(receipt)} .
       }
     }
     WHERE {
@@ -186,7 +197,9 @@ async function sealTerminal(env: WorkActivationEnvironment, admission: Registere
 
 export async function sealRealmRejectionAdmission(env: WorkActivationEnvironment,
   admission: RegisteredAdmission): Promise<RealmRejectionReceipt> {
-  if (admission.action !== 'publication.reject') throw new Error('unsupported Realm rejection admission');
+  if (!['publication.reject', ORGANIZATION_MODERATION_ACTION].includes(admission.action)) {
+    throw new Error('unsupported Realm rejection admission');
+  }
   const existing = await readRealmRejectionReceipt(env, admission.id);
   if (existing) {
     if (!matches(existing, admission, admission.requestDigest)) {
@@ -212,13 +225,17 @@ async function validateCandidate(env: WorkActivationEnvironment, rejection: stri
 
 /** Reject publication for one Realm/Main Version slot, suppressing Main fallback. */
 export async function rejectRealmLocal(env: WorkActivationEnvironment,
-  admission: RegisteredAdmission, input: RejectRealmLocalInput): Promise<RealmRejectionReceipt> {
+  admission: RegisteredAdmission & { moderationProofDigest?: string }, input: RejectRealmLocalInput): Promise<RealmRejectionReceipt> {
   const digest = realmRejectionDigest(input);
-  if (admission.action !== 'publication.reject'
+  if (admission.action !== (input.organizationPublication ? ORGANIZATION_MODERATION_ACTION : 'publication.reject')
     || admission.scope !== `publication:reject:${input.context.id}`
     || admission.actingSubject !== input.actingSubject
     || admission.requestDigest !== digest) {
     throw new IdempotencyConflict('Realm rejection admission differs from intent');
+  }
+  if (input.organizationPublication && (!/^[0-9a-f]{64}$/.test(admission.moderationProofDigest ?? '')
+    || admission.state !== 'claimed' || !admission.dispatchEligible)) {
+    throw new IdempotencyConflict('organization rejection has no dispatchable authority proof');
   }
   await assertNotInvalidProfileReceipt(env.fuseki, realmRejectionReceiptIri(admission.id));
   const existing = await readRealmRejectionReceipt(env, admission.id);
@@ -253,7 +270,10 @@ export async function rejectRealmLocal(env: WorkActivationEnvironment,
       decisionBasis: input.decisionBasis, reasonCode: input.reasonCode,
       reviewer: input.actingSubject, predecessor: input.expectedSelectionHead,
       selectionPolicy: SELECTION_POLICY, reviewPolicy: REVIEW_POLICY,
-      outcome: 'rejected' }, REALM_REJECTION_PROFILE);
+      outcome: 'rejected', ...(input.organizationPublication ? {
+        organizationPublication: canonicalOrganizationPublication(input.organizationPublication),
+        authorityProofDigest: admission.moderationProofDigest,
+      } : {}) }, REALM_REJECTION_PROFILE);
   if (Date.parse(admission.expiresAt) <= Date.now()) throw new PendingActivation('Realm rejection expired');
   const receipt = realmRejectionReceiptIri(admission.id);
   const batch = `urn:rezics:outbox:${hash(receipt)}`;
@@ -308,7 +328,7 @@ export async function rejectRealmLocal(env: WorkActivationEnvironment,
         ${iri(batch)} a rv:OutboxBatch ; rv:dataEpoch ${lit(env.lineage.dataEpoch)} ;
           rv:sequence ?next ; rv:eventCount 1 ; rv:event ${iri(event)} .
         ${iri(event)} a rv:RealmPublicationSuppressedEvent ; rv:ordinal 0 ;
-          rv:action "publication.reject" ; rv:receipt ${iri(receipt)} ;
+          rv:action ${lit(admission.action)} ; rv:receipt ${iri(receipt)} ;
           rv:operation ${iri(operation)} ; rv:work ${iri(input.work)} ;
           rv:realm ${iri(input.context.id)} .
       }
@@ -340,6 +360,8 @@ export async function rejectRealmLocal(env: WorkActivationEnvironment,
         BIND(true AS ?priorRejected)
       }
       FILTER(COALESCE(?prior, ${iri(NONE)}) = ${iri(input.expectedSelectionHead ?? NONE)})
+      ${input.organizationPublication ? organizationPublicationGuard(input.organizationPublication) : ''}
+      ${input.organizationPublication ? `FILTER(NOW() < ${lit(admission.expiresAt)}^^<http://www.w3.org/2001/XMLSchema#dateTime>)` : ''}
       FILTER(!BOUND(?prior) || (BOUND(?oldUnit) != BOUND(?priorRejected)))
       FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:restoreHold true } }
       FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} ?p ?o } }
