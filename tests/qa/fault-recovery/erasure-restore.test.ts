@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
-import { appendFileSync, cpSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { appendFileSync, cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:net';
 import { join, resolve } from 'node:path';
 import { getMigrations } from 'better-auth/db/migration';
@@ -10,7 +10,7 @@ import { accountAuthOptions, createAccountAuth } from '../../../services/account
 import { createAccountApp } from '../../../services/account/src/app.ts';
 import { installConsentRefreshFence } from '../../../services/account/src/consent-fence.ts';
 import { captureDeletionRecoverySet } from '../../../services/account/src/deletion-recovery-set.ts';
-import { sealRecoveryPayload } from '../../../services/account/src/recovery-envelope.ts';
+import { openRecoveryPayload, sealRecoveryPayload } from '../../../services/account/src/recovery-envelope.ts';
 import { ContentCore } from '../../../services/content/src/core.ts';
 import { migrateContent } from '../../../services/content/src/migrate.ts';
 import { createMainApp } from '../../../services/main/src/app.ts';
@@ -19,7 +19,7 @@ import { AccessAdmissionRegistry, AdmissionUnavailable, engageAccessRecoveryFenc
   releaseAccessRecoveryFence } from '../../../services/main/src/modules/access/admission.ts';
 import { AccountAssertionVerifier } from '../../../services/main/src/modules/account/verify-assertion.ts';
 import { accountCredentialsPresent, settleAccountErasures } from '../../../services/main/src/modules/erasure/account.ts';
-import { ensureRetentionDomain, readErasure } from '../../../services/main/src/modules/erasure/journal.ts';
+import { ensureRetentionDomain, readErasure, retireRetentionDomain } from '../../../services/main/src/modules/erasure/journal.ts';
 import { ErasureRestoreHold, reconcileRestoredErasures, releaseErasureRestoreHold,
   retainErasureCoverage, verifyErasure } from '../../../services/main/src/modules/erasure/reconcile.ts';
 import { ErasureService } from '../../../services/main/src/modules/erasure/request.ts';
@@ -260,7 +260,7 @@ test('OPS11/OPS12/IAM11: restored backups keep erased payloads and credentials o
         if (recovering) await Bun.sleep(100);
       }
       expect(recovering).toBe(false);
-      return owners;
+      return { ...owners, port: replayPort };
     };
     const credentials = async (pool: Pool, subject: string) => (await pool.query<{ users: string;
       passwords: string; sessions: string }>(`SELECT (SELECT count(*) FROM "user" WHERE id = $1)::text AS users,
@@ -436,6 +436,95 @@ test('OPS11/OPS12/IAM11: restored backups keep erased payloads and credentials o
     expect(await credentials(current.account, erased.id)).toEqual({ users: '0', passwords: '0', sessions: '0' });
     expect(await credentials(current.account, operator.id)).toMatchObject({ users: '1' });
     expect((await readJournal(olderMain)).status).toBe(503);
+
+    // IAM11: build a fresh logical archive only from the reconciled cut. This
+    // local, separate cluster represents off-host custody; no pre-erasure
+    // physical fileset or WAL is copied into it. The retained relay journal is
+    // one of the four owner archives and must survive beside the owner rows.
+    const offHost = join(state, 'off-host-custody');
+    const offHostData = join(offHost, 'postgresql');
+    mkdirSync(offHost, { recursive: true, mode: 0o700 });
+    const offHostExpiry = new Date(Date.now() + 14 * 24 * 60 * 60_000);
+    for (const owner of ['account', 'access', 'content', 'relay'] as const) {
+      await ensureRetentionDomain(relay, { label: `${owner}:off-host:${runId}`,
+        owner, store: 'postgresql', custody: 'archive', expiresAt: offHostExpiry });
+    }
+    const archives = new Map<string, string>();
+    const archive = (name: 'account' | 'access' | 'content' | 'relay', port: number) => {
+      const file = join(offHost, `${name}.dump`);
+      execFileSync('pg_dump', ['-Fc', '-f', file, '-h', '127.0.0.1', '-p', String(port),
+        '-U', 'postgres', name], { cwd: state, timeout: 60_000,
+        env: { ...process.env, PGPASSWORD: compose.POSTGRES_PASSWORD! } });
+      archives.set(name, file);
+      return createHash('sha256').update(readFileSync(file)).digest('hex');
+    };
+    const archiveDigests = [archive('account', current.port),
+      archive('access', current.port), archive('content', current.port),
+      archive('relay', Number(compose.POSTGRES_PORT))];
+    const sealedCustody = JSON.stringify(sealRecoveryPayload({
+      format: 'rezics-sanitized-custody-v1',
+      erasedSubjects: [erased.id], erasureEpoch: laterErasure.erasureEpoch,
+      archives: Object.fromEntries([...archives.keys()].map((name, index) =>
+        [name, archiveDigests[index]])),
+    }, recoveryKey, 'sanitized-custody'));
+    const custodyFile = join(offHost, 'manifest.json');
+    writeFileSync(custodyFile, sealedCustody, { mode: 0o600, flag: 'wx' });
+    const custody = openRecoveryPayload<{ erasureEpoch: string;
+      archives: Record<string, string> }>(readFileSync(custodyFile, 'utf8'),
+    recoveryKey, 'sanitized-custody');
+    expect(custody.erasureEpoch).toBe(laterErasure.erasureEpoch);
+    for (const [name, file] of archives) {
+      expect(createHash('sha256').update(readFileSync(file)).digest('hex'))
+        .toBe(custody.archives[name]);
+    }
+    execFileSync('initdb', ['-D', offHostData, '-U', 'postgres', '--auth=trust', '--no-instructions'],
+      { cwd: state, timeout: 30_000, stdio: 'ignore' });
+    replayData.push(offHostData);
+    const offHostPort = await freePort();
+    execFileSync('pg_ctl', ['-D', offHostData, '-l', join(offHost, 'postgresql.log'),
+      '-o', `-h 127.0.0.1 -p ${offHostPort} -k ${socketDirectory}`, '-t', '60', '-w', 'start'],
+    { cwd: state, timeout: 65_000 });
+    const offHostAdmin = new Pool({ host: '127.0.0.1', port: offHostPort,
+      database: 'postgres', user: 'postgres' });
+    pools.push(offHostAdmin);
+    for (const name of ['account', 'access', 'content', 'relay'] as const) {
+      await offHostAdmin.query(`CREATE DATABASE ${name}`);
+      execFileSync('pg_restore', ['--no-owner', '--no-acl', '-h', '127.0.0.1',
+        '-p', String(offHostPort), '-U', 'postgres', '-d', name, archives.get(name)!],
+      { cwd: state, timeout: 60_000, stdio: 'pipe' });
+    }
+    const copy = (database: string) => new Pool({ host: '127.0.0.1', port: offHostPort,
+      database, user: 'postgres' });
+    const offAccount = copy('account');
+    const offAccess = copy('access');
+    const offContent = copy('content');
+    const offRelay = copy('relay');
+    pools.push(offAccount, offAccess, offContent, offRelay);
+    expect(await credentials(offAccount, erased.id)).toEqual({ users: '0', passwords: '0', sessions: '0' });
+    expect(await credentials(offAccount, operator.id)).toMatchObject({ users: '1' });
+    expect(await exact(offContent, payload)).toMatchObject({ status: 'erased' });
+    expect(await exact(offContent, later)).toMatchObject({ status: 'erased' });
+    expect(await exact(offContent, unrelated)).toMatchObject({ status: 'available',
+      serializedJson: JSON.stringify({ body: 'unrelated public text' }) });
+    expect((await offAccess.query<{ open: boolean }>(
+      'SELECT open FROM access.scope_gate WHERE id = $1', [laterAuthorityScope])).rows[0]?.open).toBe(false);
+    expect(await readErasure(offRelay, contentErasure.erasureId)).toMatchObject({
+      erasureEpoch: contentErasure.erasureEpoch, suppression: 'suppressed' });
+    expect(await readErasure(offRelay, accountErasureId)).toMatchObject({ suppression: 'suppressed' });
+
+    // Retire the three historical physical backup directories only after the
+    // sanitized archive has been restored and probed. The evidence digest
+    // identifies this local archive set, not production media destruction.
+    const custodyDigest = createHash('sha256').update(JSON.stringify(archiveDigests)).digest('hex');
+    for (const copyInfo of [first, second, third]) {
+      rmSync(copyInfo.backup, { recursive: true });
+      expect(existsSync(copyInfo.backup)).toBe(false);
+      for (const owner of ['account', 'content'] as const) {
+        await retireRetentionDomain(relay, `${owner}:backup:${copyInfo === first ? 'before'
+          : copyInfo === second ? 'after-account' : 'after-authority'}:${runId}`,
+        'expired', custodyDigest);
+      }
+    }
   } finally {
     await app?.stop();
     await Promise.allSettled(pools.map(pool => pool.end()));
