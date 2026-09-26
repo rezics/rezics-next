@@ -106,6 +106,11 @@ the Main aggregate API returns only the independent rater's 6, while the older
 revision. Restoring that same observation to 9 yields a two-rater mean of 7.5.
 Selected integration `20260925t183302-fd4807` passed; a selected run reports
 RATE04 as partial until a complete run executes its declared case coverage.
+The merged-source selected integration `20260926t111944-b5e316` passed on
+`6f0404f`, including the immutable older revisions, withdrawal head and
+restoration. Its registered full-backend coverage declaration makes RATE04 a
+complete-case candidate pending `yarn qa --backend --record`; this selected run
+alone is not that qualification.
 
 The registered [daily API/recovery fixture](../../tests/qa/fault-recovery/rating-daily.test.ts)
 uses real Better Auth Account assertions, Access registration/claim/sealing, Main
