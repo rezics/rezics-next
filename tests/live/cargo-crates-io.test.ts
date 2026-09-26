@@ -19,7 +19,7 @@ const MAX_INDEX_BYTES = 4 * 1024 * 1024;
 const MAX_CRATE_BYTES = 8 * 1024 * 1024;
 const sha = (bytes: Uint8Array) => createHash('sha256').update(bytes).digest('hex');
 
-async function bounded(url: string, limit: number): Promise<Uint8Array | null> {
+async function bounded(url: string, limit: number): Promise<Uint8Array<ArrayBuffer> | null> {
   const response = await fetch(url, { redirect: 'error',
     headers: { 'user-agent': 'rezics-package-capture' } });
   if (response.status === 404 || response.status === 410 || response.status === 451) return null;
@@ -29,7 +29,7 @@ async function bounded(url: string, limit: number): Promise<Uint8Array | null> {
   return bytes;
 }
 
-function crateManifest(archive: Uint8Array, prefix: string): string {
+function crateManifest(archive: Uint8Array<ArrayBuffer>, prefix: string): string {
   const tar = Bun.gunzipSync(archive);
   for (let at = 0; at + 512 <= tar.length;) {
     const header = tar.subarray(at, at + 512);
@@ -47,7 +47,7 @@ function crateManifest(archive: Uint8Array, prefix: string): string {
 }
 
 test('PKG01/PKG02/PKG13/PKG19: live crates.io sparse index capture is lazily loaded and replayable', async () => {
-  const files = new Map<string, Uint8Array | null>();
+  const files = new Map<string, Uint8Array<ArrayBuffer> | null>();
   const loadIndex = async (name: string) => {
     if (!files.has(name)) files.set(name, await bounded(`${INDEX_ORIGIN}${cargoIndexPath(name)}`,
       MAX_INDEX_BYTES));

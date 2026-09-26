@@ -101,7 +101,7 @@ async function compareRegistry(directory: string, cargo: string, crate: Crate,
     });
     served.set(cargoIndexPath(name), `${lines.join('\n')}\n`);
   }
-  const server = Bun.serve({ hostname: '127.0.0.1', port: 0, fetch(req) {
+  const server: Bun.Server<undefined> = Bun.serve({ hostname: '127.0.0.1', port: 0, fetch(req): Response {
     const path = new URL(req.url).pathname;
     if (path === '/index/config.json') return Response.json({ dl: `http://127.0.0.1:${server.port}/crates` });
     if (path.startsWith('/index/')) {
@@ -112,7 +112,7 @@ async function compareRegistry(directory: string, cargo: string, crate: Crate,
     }
     const match = /^\/crates\/([^/]+)\/([^/]+)\/download$/.exec(path);
     const archive = match ? archives.get(`${match[1]}/${match[2]}`) : undefined;
-    return archive ? new Response(archive) : new Response('not found', { status: 404 });
+    return archive ? new Response(new Uint8Array(archive)) : new Response('not found', { status: 404 });
   } });
   const run = async (cwd: string, args: string[]) => {
     const child = Bun.spawn([cargo, ...args], { cwd, stdout: 'pipe', stderr: 'pipe',
