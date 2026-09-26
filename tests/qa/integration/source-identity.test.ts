@@ -119,6 +119,39 @@ test('LIVE06: acquired redirect assertion keeps source records separate', async 
   } finally { await h.close(); }
 }, 60_000);
 
+test('LIVE06: exact Open Library redirect shape is admitted while a wrong destination fails', async () => {
+  const h = await identityHarness({ realAccount: true, acquisition: true });
+  try {
+    const fromId = 'OL991904W', toId = 'OL991905W';
+    h.provider.works.set(fromId, { key: `/works/${fromId}`, type: { key: '/type/redirect' },
+      location: `/works/${toId}`, revision: 3 });
+    h.provider.work(toId, 1);
+    const request = { profile: 'open-library-works-run-v1', workIds: [fromId, toId],
+      editions: false, ratings: false, frontier: false };
+    const captured = await h.post('/v1/sources/acquisitions', 'owner', request, randomUUID());
+    expect(captured.status).toBe(201);
+    const run = await captured.json() as { run: { state: string; surfaces: Array<{
+      surface: string; captures: Array<{ record: string; observation: string; externalId: string }> }> } };
+    expect(run.run.state).toBe('completed');
+    const works = run.run.surfaces.find(surface => surface.surface === 'works')!.captures;
+    const from = works.find(item => item.externalId === fromId)!;
+    const to = works.find(item => item.externalId === toId)!;
+    const change = await h.post('/v1/sources/identity-changes', 'owner', {
+      profile: 'source-record-identity-change-v1', kind: 'merge',
+      fromRecord: from.record, toRecord: to.record,
+      observation: from.observation, evidencePointer: '/location' });
+    expect(change.status).toBe(201);
+    h.provider.works.set(fromId, { key: `/works/${fromId}`, type: { key: '/type/redirect' },
+      location: '/books/OL1M', revision: 4 });
+    const wrong = await h.post('/v1/sources/acquisitions', 'owner', request, randomUUID());
+    expect(wrong.status).toBe(201);
+    const rejected = await wrong.json() as { run: { state: string; surfaces: Array<{
+      surface: string; outcome: { reason: string } }> } };
+    expect(rejected.run.state).toBe('incomplete');
+    expect(rejected.run.surfaces.find(surface => surface.surface === 'works')?.outcome.reason).toBe('identity-mismatch');
+  } finally { await h.close(); }
+}, 60_000);
+
 test('LIVE06: native Work heads and Access grants survive a redirect correction proposal', async () => {
   if (!Bun.env.REZICS_QA_RUN_ID) throw new Error('Run through the isolated integration tier');
   const directory = join(resolve(import.meta.dir, '../../..'), '.temp', `source-identity-${randomUUID()}`);

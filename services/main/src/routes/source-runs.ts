@@ -28,7 +28,8 @@ const runState = t.Union([t.Literal('running'), t.Literal('completed'), t.Litera
 
 const worksRunBody = t.Object({ profile: t.Literal(OPEN_LIBRARY_WORKS_RUN),
   workIds: t.Array(t.String({ pattern: '^OL[1-9][0-9]{0,11}W$' }), { minItems: 1, maxItems: 8, uniqueItems: true }),
-  editions: t.Boolean(), ratings: t.Boolean(), frontier: t.Boolean() }, { additionalProperties: false });
+  editions: t.Boolean(), ratings: t.Boolean(), frontier: t.Boolean(),
+  bookshelves: t.Optional(t.Boolean()) }, { additionalProperties: false });
 const goLiveRunBody = t.Object({ profile: t.Literal(GO_PROXY_LIVE_RUN),
   mainModule: t.String({ minLength: 1, maxLength: GO_PROXY_CAPTURE_BYTES }) }, { additionalProperties: false });
 const goLiveStatus = t.Union([t.Literal('solved'), t.Literal('incomplete-source-data'),

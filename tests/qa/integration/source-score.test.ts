@@ -38,6 +38,13 @@ test('LIVE08: retained provider score and user key stay source statistics withou
     expect(imported.status).toBe(201);
     const second = await imported.json() as { statistic: { providerUserKey: string; nativeEffect: string } };
     expect(second.statistic).toMatchObject({ providerUserKey: 'provider-user-7', nativeEffect: 'none' });
+    const precise = await h.observation(record, '{"average":4.192234848484849}');
+    const preciseResult = await h.post('/v1/sources/statistics', 'owner', {
+      ...aggregate, observation: iri(precise), scorePointer: '/average' }, randomUUID());
+    expect(preciseResult.status).toBe(201);
+    expect((await preciseResult.json() as { statistic: { score: string; sourceScore: string;
+      valuePrecision: string } }).statistic).toMatchObject({ score: '4.192235',
+        sourceScore: '4.192234848484849', valuePrecision: 'rounded-to-six-decimals' });
     h.provider.work('OL991901W', 1);
     h.provider.ratings.set('OL991901W', { summary: { average: 4.2, count: 11 }, counts: { 5: 5 } });
     const nativeRatings = () => h.fuseki.query(`ASK { GRAPH <${GRAPHS.current}> {

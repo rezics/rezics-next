@@ -23,6 +23,7 @@ export interface OpenLibraryWorksRunRequest {
   editions: boolean;
   ratings: boolean;
   frontier: boolean;
+  bookshelves?: boolean;
 }
 
 export interface SurfacePlan {
@@ -128,7 +129,8 @@ export function checkedWorksRun(request: OpenLibraryWorksRunRequest): OpenLibrar
   }
   for (const id of request.workIds) checkedOpenLibraryWorkId(id);
   return { profile: OPEN_LIBRARY_WORKS_RUN, workIds: [...request.workIds],
-    editions: request.editions === true, ratings: request.ratings === true, frontier: request.frontier === true };
+    editions: request.editions === true, ratings: request.ratings === true, frontier: request.frontier === true,
+    ...(request.bookshelves === true ? { bookshelves: true } : {}) };
 }
 
 export function worksRunSurfaces(request: OpenLibraryWorksRunRequest): SurfacePlan[] {
@@ -140,6 +142,8 @@ export function worksRunSurfaces(request: OpenLibraryWorksRunRequest): SurfacePl
       captureLimit: n * EDITION_PAGES_PER_WORK }] : []),
     // Provider scores are optional source statistics; their absence never blocks the run.
     ...(request.ratings ? [{ surface: 'ratings', namespace: 'work-ratings', required: false, captureLimit: n }] : []),
+    ...(request.bookshelves ? [{ surface: 'bookshelves', namespace: 'work-bookshelves',
+      required: false, captureLimit: n }] : []),
   ];
 }
 
@@ -162,7 +166,12 @@ function workRequest(workId: string): CaptureRequest {
     captureProfile: 'open-library-work-acquisition-v1',
     validate: parsed => {
       const body = objectValue(parsed);
-      return body?.key === `/works/${workId}` && typeof body.title === 'string' ? null : 'identity-mismatch';
+      if (body?.key !== `/works/${workId}`) return 'identity-mismatch';
+      if (objectValue(body.type)?.key === '/type/redirect') {
+        return typeof body.location === 'string' && /^\/works\/OL[1-9][0-9]{0,11}W$/.test(body.location)
+          && body.location !== body.key ? null : 'identity-mismatch';
+      }
+      return typeof body.title === 'string' ? null : 'identity-mismatch';
     },
     sourceRevision: parsed => {
       const revision = objectValue(parsed)?.revision;
@@ -190,6 +199,17 @@ function ratingsRequest(workId: string): CaptureRequest {
     namespace: 'work-ratings', externalId: workId, coverageScope: 'open-library-work-ratings-v1',
     captureProfile: 'open-library-run-capture-v1',
     validate: parsed => objectValue(objectValue(parsed)?.summary) ? null : 'malformed' };
+}
+
+function bookshelvesRequest(workId: string): CaptureRequest {
+  return { requestKey: `GET /works/${workId}/bookshelves.json`, path: `/works/${workId}/bookshelves.json`,
+    namespace: 'work-bookshelves', externalId: workId, coverageScope: 'open-library-work-bookshelves-v1',
+    captureProfile: 'open-library-run-capture-v1',
+    validate: parsed => {
+      const counts = objectValue(objectValue(parsed)?.counts);
+      return counts && ['want_to_read', 'currently_reading', 'already_read'].every(key =>
+        Number.isSafeInteger(counts[key]) && Number(counts[key]) >= 0) ? null : 'malformed';
+    } };
 }
 
 export function frontierRequest(): CaptureRequest {
@@ -473,7 +493,8 @@ export class SourceRunStore {
       }
     } else {
       for (const workId of request.workIds) {
-        const result = await one(surface === 'works' ? workRequest(workId) : ratingsRequest(workId), { workId });
+        const result = await one(surface === 'works' ? workRequest(workId)
+          : surface === 'ratings' ? ratingsRequest(workId) : bookshelvesRequest(workId), { workId });
         if (!result.ok) return;
       }
     }

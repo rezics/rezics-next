@@ -6,6 +6,7 @@ import { FusekiClient } from '../../../services/main/src/infrastructure/fuseki.t
 import { AccessAdmissionRegistry } from '../../../services/main/src/modules/access/admission.ts';
 import { AccountAssertionDenied } from '../../../services/main/src/modules/account/verify-assertion.ts';
 import { sourceAcquisitionServices } from '../../../services/main/src/modules/source/acquisition.ts';
+import { SourceIntakeStore } from '../../../services/main/src/modules/source/intake.ts';
 import { ProviderIdentityStore } from '../../../services/main/src/modules/source/provider-identity.ts';
 import { SourceFieldWithdrawalStore } from '../../../services/main/src/modules/source/withdrawal.ts';
 import { SourceScoreStore } from '../../../services/main/src/modules/source/score.ts';
@@ -19,7 +20,8 @@ import { FixtureOpenLibrary } from './source-run-harness.ts';
 export const iri = (id: string) => `https://rezics.com/id/${id}`;
 export const sha = (value: string | Buffer) => createHash('sha256').update(value).digest('hex');
 
-export async function identityHarness(options: { realAccount?: boolean; acquisition?: boolean } = {}) {
+export async function identityHarness(options: { realAccount?: boolean;
+  acquisition?: boolean | 'live' } = {}) {
   if (!Bun.env.REZICS_QA_RUN_ID || !Bun.env.CONTENT_DATABASE_URL || !Bun.env.ACCESS_DATABASE_URL
     || !Bun.env.FUSEKI_URL) throw new Error('Run through the isolated QA integration tier');
   const pool = new Pool({ connectionString: Bun.env.CONTENT_DATABASE_URL, max: 6 });
@@ -46,12 +48,15 @@ export async function identityHarness(options: { realAccount?: boolean; acquisit
     reader: liveAccount.noScope } : null;
   const fuseki = new FusekiClient(Bun.env.FUSEKI_URL);
   const provider = new FixtureOpenLibrary();
+  const intake = new SourceIntakeStore(pool);
   const stores = { identity: new ProviderIdentityStore(pool), withdrawal: new SourceFieldWithdrawalStore(pool),
     score: new SourceScoreStore(pool) };
   const work = { account, access, sourceProviderIdentity: stores.identity,
     sourceFieldWithdrawals: stores.withdrawal, sourceScores: stores.score,
     ...(options.acquisition ? { sourceAcquisitions: sourceAcquisitionServices(pool,
-      { fetcher: provider.fetch, reserve: async () => {} }) } : {}) } as unknown as MainWorkDependencies;
+      { fetcher: options.acquisition === 'live' ? fetch : provider.fetch,
+        reserve: options.acquisition === 'live' ? () => intake.reserveOpenLibrarySlot() : async () => {} }) }
+      : {}) } as unknown as MainWorkDependencies;
   const app = new Elysia().use(sourceRoutes(work)).use(sourceRunRoutes(work))
     .use(sourceSupportRoutes(fuseki, work));
   const headers = (token: string, key?: string) => ({ authorization: `Bearer ${tokens?.[token as keyof typeof tokens] ?? token}`,

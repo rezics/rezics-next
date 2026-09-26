@@ -19,7 +19,7 @@ interface ChangeRow {
 }
 interface EvidenceRow {
   raw_bytes: Buffer | null; byte_digest: string | null; retention: string;
-  coverage: { complete?: boolean }; to_external_id: string;
+  coverage: { complete?: boolean }; to_external_id: string; provider: string; namespace: string;
 }
 interface ProposalRow {
   id: string; principal_id: string; change_id: string; from_target: string; to_target: string;
@@ -85,7 +85,7 @@ export class ProviderIdentityStore {
   private async evidence(principalId: string, from: string, to: string, observation: string):
     Promise<EvidenceRow | null> {
     return (await this.pool.query<EvidenceRow>(`SELECT o.raw_bytes, o.byte_digest,
-      o.retention, o.coverage, t.external_id AS to_external_id
+      o.retention, o.coverage, t.external_id AS to_external_id, f.provider, f.namespace
       FROM source.observation o JOIN source.record f ON f.id = o.record_id
       JOIN source.record t ON t.id = $3 WHERE o.id = $4 AND o.principal_id = $1
         AND f.id = $2 AND t.provider = f.provider AND t.namespace = f.namespace`,
@@ -98,7 +98,10 @@ export class ProviderIdentityStore {
       || createHash('sha256').update(evidence.raw_bytes).digest('hex') !== evidence.byte_digest) {
       throw new ProviderIdentityUnavailable('complete retained identity observation is unavailable');
     }
-    if (evidenceValue(evidence.raw_bytes, path) !== evidence.to_external_id) {
+    const value = evidenceValue(evidence.raw_bytes, path);
+    if (value !== evidence.to_external_id
+      && !(evidence.provider === 'open-library' && evidence.namespace === 'work'
+        && value === `/works/${evidence.to_external_id}`)) {
       throw new ProviderIdentityConflict('retained identity value differs from destination');
     }
   }

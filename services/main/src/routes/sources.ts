@@ -33,7 +33,9 @@ const sourceStatistic = t.Object({ profile: t.Literal('source-statistic-v1'), st
   statistic: t.String(), record: t.String(), observation: t.String(),
   kind: t.Union([t.Literal('aggregate-score'), t.Literal('provider-user-score')]),
   scorePointer: t.String(), userPointer: t.Nullable(t.String()), providerUserKey: t.Nullable(t.String()),
-  score: t.String(), observationDigest: t.String(), nativeEffect: t.Literal('none'), createdAt: t.String() });
+  score: t.String(), sourceScore: t.String(),
+  valuePrecision: t.Union([t.Literal('exact'), t.Literal('rounded-to-six-decimals')]),
+  observationDigest: t.String(), nativeEffect: t.Literal('none'), createdAt: t.String() });
 
 function providerIdentityError(error: unknown): Response {
   if (error instanceof ProviderIdentityInvalid) return problem(400, 'invalid_source_identity', 'Source identity request is invalid');

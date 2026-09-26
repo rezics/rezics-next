@@ -16,7 +16,8 @@ export interface SourceStatistic {
   profile: 'source-statistic-v1'; state: 'recorded'; statistic: string;
   record: string; observation: string; kind: 'aggregate-score' | 'provider-user-score';
   scorePointer: string; userPointer: string | null; providerUserKey: string | null;
-  score: string; observationDigest: string; nativeEffect: 'none'; createdAt: string;
+  score: string; sourceScore: string; valuePrecision: 'exact' | 'rounded-to-six-decimals';
+  observationDigest: string; nativeEffect: 'none'; createdAt: string;
 }
 interface Row {
   id: string; principal_id: string; record_id: string; observation_id: string;
@@ -44,19 +45,24 @@ function pointer(root: unknown, path: string): unknown {
   return value;
 }
 
-function scoreValue(value: unknown): string {
-  if (typeof value !== 'number' || !Number.isFinite(value) || Math.abs(value) > 1_000_000_000
-    || !Number.isInteger(value * 1_000_000)) {
-    throw new SourceScoreInvalid('source score is not a bounded six-decimal number');
+function scoreValue(value: unknown): { score: string; sourceScore: string;
+  valuePrecision: SourceStatistic['valuePrecision'] } {
+  if (typeof value !== 'number' || !Number.isFinite(value) || Math.abs(value) > 1_000_000_000) {
+    throw new SourceScoreInvalid('source score is not a bounded number');
   }
-  return value.toFixed(6);
+  // PostgreSQL's statistic index is six-decimal. Exact provider bytes remain in
+  // the immutable observation; the API labels any rounded display projection.
+  const score = value.toFixed(6);
+  return { score, sourceScore: String(value),
+    valuePrecision: Number(score) === value ? 'exact' : 'rounded-to-six-decimals' };
 }
 
-function toResult(row: Row): SourceStatistic {
+function toResult(row: Row, value: ReturnType<typeof scoreValue>): SourceStatistic {
   return { profile: 'source-statistic-v1', state: 'recorded', statistic: iri(row.id),
     record: iri(row.record_id), observation: iri(row.observation_id), kind: row.kind,
     scorePointer: row.score_pointer, userPointer: row.user_pointer,
     providerUserKey: row.provider_user_key, score: row.score,
+    sourceScore: value.sourceScore, valuePrecision: value.valuePrecision,
     observationDigest: row.observation_digest, nativeEffect: 'none',
     createdAt: row.created_at.toISOString() };
 }
@@ -72,7 +78,7 @@ export class SourceScoreStore {
   }
 
   private capture(observation: Observation, input: { kind: SourceStatistic['kind'];
-    scorePointer: string; userPointer: string | null }): { score: string; user: string | null } {
+    scorePointer: string; userPointer: string | null }): ReturnType<typeof scoreValue> & { user: string | null } {
     if (observation.retention !== 'retained' || !observation.raw_bytes || !observation.byte_digest
       || !observation.coverage.complete || !/^application\/json(?:;|$)/i.test(observation.media_type)
       || hash(observation.raw_bytes) !== observation.byte_digest) {
@@ -92,7 +98,7 @@ export class SourceScoreStore {
     } else if (input.kind !== 'aggregate-score' || input.userPointer !== null) {
       throw new SourceScoreInvalid('source statistic kind and pointers differ');
     }
-    return { score, user };
+    return { ...score, user };
   }
 
   async record(principalId: string, key: string, input: { observation: string;
@@ -120,7 +126,7 @@ export class SourceScoreStore {
       if (!row || row.request_digest !== requestDigest) {
         throw new SourceScoreConflict('source statistic key or field conflicts');
       }
-      return { statistic: toResult(row), replayed: inserted.rowCount === 0 };
+      return { statistic: toResult(row, value), replayed: inserted.rowCount === 0 };
     } catch (error) {
       if (error instanceof SourceScoreConflict) throw error;
       if (['23505', '23514'].includes((error as { code?: string }).code ?? '')) {
@@ -148,6 +154,6 @@ export class SourceScoreStore {
         row.user_pointer, value.score, value.user]))) {
       throw new SourceScoreUnavailable('source statistic differs from retained capture');
     }
-    return toResult(row);
+    return toResult(row, value);
   }
 }

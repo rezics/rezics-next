@@ -491,6 +491,28 @@ record and native target. An empty reserved field slot and a withdrawn title,
 attachment or credit support do not qualify as current support. Existing
 immutable proposals remain readable after later withdrawal.
 
+The bounded Open Library Works run admits an exact JSON redirect document only
+when its key identifies the requested Work and its destination identifies another
+Work. It retains the redirect and destination as separate SourceRecords. The
+identity-change operation accepts the retained `/location` path for this provider
+and namespace; it neither follows that path into an automatic native merge nor
+changes Access grants. A malformed or cross-grain destination fails the run
+surface. The optional `bookshelves` run surface captures the provider's public
+reading-log counts separately from Work ratings; both remain source evidence.
+Open Library documents the [ratings and bookshelves APIs](https://openlibrary.org/dev/docs/api/books).
+
+`source-statistic-v1` keeps the exact response bytes, pointer and digest for an
+imported numeric score. Its indexed `score` is a six-decimal projection; the
+private receipt reports `sourceScore` and `valuePrecision` so rounding is
+explicit. Public aggregate responses do not provide a provider-user identity;
+an authored provider-user observation exercises that separate source-only path.
+Neither route creates a native ballot or Account user. Recording or reading one
+identity change or statistic uses a primary-key observation lookup, bounded
+64 KiB JSON parse and at most eight pointer steps. The selected PostgreSQL
+plans read fewer than 64 buffers for identity evidence and 32 for a statistic
+observation, with no temporary spill; a Works run makes at most one gated
+provider request per selected surface and Work ID.
+
 `POST /v1/sources/field-supports` attaches retained evidence to a reviewed native
 Work slot through the generic field support ledger. The first admitted adapters
 are `work-metadata-v1#semantic-types` and `work-metadata-v1#scalar-value`;

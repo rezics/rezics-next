@@ -6,7 +6,8 @@ import type { SurfaceOutcome } from './run-schema.ts';
 
 export const OPEN_LIBRARY_RUN_MAP = 'open-library-run-map-v1';
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
-const GRAINS: Record<string, string> = { works: 'work', editions: 'edition', ratings: 'ratings' };
+const GRAINS: Record<string, string> = { works: 'work', editions: 'edition', ratings: 'ratings',
+  bookshelves: 'work-bookshelves' };
 const MAX_FIELDS = 256;
 
 export interface RunFieldDrift {
@@ -66,7 +67,8 @@ function surfaceItems(surface: string, captures: Array<{ externalId: string; byt
         throw new SourceRunUnavailable('frozen run capture has an unexpected shape');
       }
       const record = entry as Record<string, unknown>;
-      const identity = surface === 'ratings' ? capture.externalId : String(record.key);
+      const identity = surface === 'ratings' || surface === 'bookshelves'
+        ? capture.externalId : String(record.key);
       // Offset paging can repeat an entry across pages; the later page is the same identity.
       items.set(identity, record);
     }
