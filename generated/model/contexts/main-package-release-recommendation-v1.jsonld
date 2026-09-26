@@ -1,0 +1,80 @@
+{
+  "@context": {
+    "sh": {
+      "@id": "http://www.w3.org/ns/shacl#",
+      "@prefix": true
+    },
+    "rdf": {
+      "@id": "http://www.w3.org/1999/02/22-rdf-syntax-ns#",
+      "@prefix": true
+    },
+    "xsd": {
+      "@id": "http://www.w3.org/2001/XMLSchema#",
+      "@prefix": true
+    },
+    "schema": {
+      "@id": "https://schema.org/",
+      "@prefix": true
+    },
+    "rv": {
+      "@id": "https://rezics.com/vocab/",
+      "@prefix": true
+    },
+    "rdf:type": {
+      "@id": "http://www.w3.org/1999/02/22-rdf-syntax-ns#type",
+      "@type": "@id"
+    },
+    "rv:dataEpoch": {
+      "@id": "https://rezics.com/vocab/dataEpoch"
+    },
+    "rv:datasetId": {
+      "@id": "https://rezics.com/vocab/datasetId",
+      "@type": "@id"
+    },
+    "rv:ecosystem": {
+      "@id": "https://rezics.com/vocab/ecosystem"
+    },
+    "rv:mainVersion": {
+      "@id": "https://rezics.com/vocab/mainVersion",
+      "@type": "@id"
+    },
+    "rv:modelRevision": {
+      "@id": "https://rezics.com/vocab/modelRevision",
+      "@type": "@id"
+    },
+    "rv:packageName": {
+      "@id": "https://rezics.com/vocab/packageName"
+    },
+    "rv:position": {
+      "@id": "https://rezics.com/vocab/position",
+      "@type": "xsd:integer"
+    },
+    "rv:predecessor": {
+      "@id": "https://rezics.com/vocab/predecessor",
+      "@type": "@id"
+    },
+    "rv:recommendation": {
+      "@id": "https://rezics.com/vocab/recommendation",
+      "@type": "@id"
+    },
+    "rv:selector": {
+      "@id": "https://rezics.com/vocab/selector"
+    },
+    "rv:selectorKind": {
+      "@id": "https://rezics.com/vocab/selectorKind",
+      "@type": "@id"
+    },
+    "rv:sequence": {
+      "@id": "https://rezics.com/vocab/sequence",
+      "@type": "xsd:integer"
+    },
+    "rv:shapeRevision": {
+      "@id": "https://rezics.com/vocab/shapeRevision",
+      "@type": "@id"
+    },
+    "rv:work": {
+      "@id": "https://rezics.com/vocab/work",
+      "@type": "@id"
+    }
+  }
+}

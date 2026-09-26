@@ -330,6 +330,18 @@ export const profileRegistry = {
       "selection"
     ]
   },
+  "main-package-release-recommendation-v1": {
+    "sha256": "2560da59cda40c7ac9fd0fb38b39e2d63666e6fdb06dccf250728d7d28faab60",
+    "file": "shapes/main-package-release-recommendation-v1.ttl",
+    "shapes": [
+      "https://rezics.com/definition/main-package-release-recommendation-v1/set-shape",
+      "https://rezics.com/definition/main-package-release-recommendation-v1/recommendation-shape"
+    ],
+    "focusRoles": [
+      "set",
+      "recommendation"
+    ]
+  },
   "poll-allocation-v1": {
     "sha256": "c277302719c0570563b7889276e106b9a1cee676551b2932299ad7cf03910ae4",
     "file": "shapes/poll-allocation-v1.ttl",
