@@ -76,6 +76,15 @@ costs, PostgreSQL execution plans and the inventory coverage counterexamples in
 `20260926t093847-04e4d8` preserved the experience/daily variants and 66 historical
 outcomes. Standing and Access compatibility run `20260926t094622-c8b533` passed.
 These are partial evidence; source integration and the final backend matrix remain.
+Merged source `4cfe239` passed 17 selected unit/coverage cases, native model
+`20260926t095622-9cf8cb` and three-cadence real API/graph recovery
+`20260926t095641-79d76f`. Standing withdrawal and Access compatibility passed
+on the later documentation-only source `d070f96` in
+`20260926t095929-a3bf2b`; Main API contract, generation and backend static
+checks also passed. RATE01 is therefore an affected-verified complete-case
+candidate, not a recorded backend pass. Production signed owner-cut release,
+pre-inventory Context reconstruction, native Jena operator work and deployment
+capacity retain their stated boundaries.
 
 The registered [RATE04 owner fixture](../../tests/qa/integration/rating-withdrawal.test.ts)
 creates a real Work, Realm and standing RatingContext in Fuseki, then writes two
