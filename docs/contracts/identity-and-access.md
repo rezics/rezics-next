@@ -550,6 +550,11 @@ completes after each listed stream delivers or aborts. This lease is needed
 because media bytes cross the owner boundary and an already-started response
 cannot be fenced by denying later requests alone.
 
+`releaseAccessRecoveryFence` keeps Access admission closed while any private
+search or media download lease is still delivering. Recovery must not reopen
+admission while bytes admitted before the recovery fence can still cross an
+owner boundary; release succeeds after those streams deliver or abort.
+
 ## Recovery and lifecycle
 
 Owner continuity, last-controller removal, account takeover and replacement

@@ -1,5 +1,7 @@
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
+import { engageAccessRecoveryFence, releaseAccessRecoveryFence }
+  from '../../../services/main/src/modules/access/admission.ts';
 import { png, startMediaStack, type MediaStack } from './media-support.ts';
 
 let started: Promise<MediaStack> | undefined;
@@ -60,16 +62,18 @@ test('IAM07: private media download is admitted, bounded, and drained by strong 
     expect(firstChunk.value?.byteLength).toBe(64 * 1024);
     await partial.cancel();
     expect(await (await status()).json()).toMatchObject({ state: 'draining', pending: 1 });
+
+    const recoveryGeneration = await engageAccessRecoveryFence(h.accessPool);
+    await expect(releaseAccessRecoveryFence(h.accessPool, recoveryGeneration))
+      .rejects.toThrow('Access recovery fence changed');
     expect(new Uint8Array(await second.arrayBuffer())).toEqual(bytes);
-    expect(await (await status()).json()).toMatchObject({ state: 'completed', pending: 0 });
     expect((await h.accessPool.query<{ state: string }>(`SELECT state FROM access.download_read_lease
       WHERE asset_id = $1 ORDER BY state`, [asset.asset])).rows.map(row => row.state))
       .toEqual(['aborted', 'delivered']);
 
-    const held = await h.accessPool.query('UPDATE access.recovery_fence SET open = false WHERE id = true');
-    expect(held.rowCount).toBe(1);
     expect((await h.call('GET', downloadPath, { token: owner.token })).status).toBe(503);
-    await h.accessPool.query('UPDATE access.recovery_fence SET open = true WHERE id = true');
+    await releaseAccessRecoveryFence(h.accessPool, recoveryGeneration);
+    expect(await (await status()).json()).toMatchObject({ state: 'completed', pending: 0 });
 
     const indexes = await h.accessPool.query<{ indexname: string }>(`SELECT indexname FROM pg_indexes
       WHERE schemaname = 'access' AND indexname = ANY($1::text[])`,

@@ -221,7 +221,8 @@ export async function releaseAccessRecoveryFence(pool: Pool, generation: string)
   const result = await pool.query(
     `UPDATE access.recovery_fence SET open = true, generation = generation + 1
      WHERE id = true AND open = false AND generation = $1
-       AND NOT EXISTS (SELECT 1 FROM access.search_read_lease WHERE state = 'delivering')`, [generation]);
+       AND NOT EXISTS (SELECT 1 FROM access.search_read_lease WHERE state = 'delivering')
+       AND NOT EXISTS (SELECT 1 FROM access.download_read_lease WHERE state = 'delivering')`, [generation]);
   if (result.rowCount !== 1) throw new AdmissionUnavailable('Access recovery fence changed');
 }
 
