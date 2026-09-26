@@ -9,6 +9,7 @@ import { addressRoutes } from './routes/addresses.ts';
 import { classificationRoutes } from './routes/classification.ts';
 import { commerceRoutes } from './routes/commerce.ts';
 import { contentRoutes } from './routes/content.ts';
+import { contextRoutes } from './routes/contexts.ts';
 import { contributionRoutes } from './routes/contributions.ts';
 import { healthRoutes } from './routes/health.ts';
 import { operationsRoutes } from './routes/operations.ts';
@@ -57,6 +58,7 @@ export function createMainApp(fuseki: FusekiClient, work?: SearchRouteDependenci
       .use(ratingRoutes(fuseki, work))
       .use(globalRatingRoutes(work))
       .use(classificationRoutes(fuseki, work))
+      .use(contextRoutes(fuseki, work))
       .use(spaceRoutes(fuseki, work))
       .use(publicationRoutes(fuseki, work))
       .use(contributionRoutes(fuseki, work))

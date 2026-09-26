@@ -41,6 +41,8 @@ export const contextProfile = {
   shapes: [
     {
       iri: 'https://rezics.com/definition/context-v1/global-shape',
+      canonical: { types: ['rv:SemanticContext'],
+        when: [{ path: 'rv:contextRole', value: 'rv:GlobalInterpretation' }] },
       properties: [
         ...header,
         { path: 'rv:contextRole', hasValue: 'rv:GlobalInterpretation', maxCount: 1 },
@@ -50,6 +52,7 @@ export const contextProfile = {
     },
     {
       iri: 'https://rezics.com/definition/context-v1/context-shape',
+      canonical: { types: ['rv:SemanticContext'] },
       properties: [
         ...header,
         { path: 'rv:contextRole', hasValue: 'rv:SharedInterpretation', maxCount: 1 },
@@ -59,6 +62,7 @@ export const contextProfile = {
     },
     {
       iri: 'https://rezics.com/definition/context-v1/semantic-revision-shape',
+      canonical: { types: ['rv:ContextSemanticRevision'] },
       properties: [
         { path: 'rdf:type', in: ['rv:ContextSemanticRevision', 'rv:RevisionAnchor'], minCount: 2, maxCount: 2 },
         { path: 'rv:predecessor', maxCount: 1, class: 'rv:ContextSemanticRevision' },
@@ -73,6 +77,7 @@ export const contextProfile = {
     },
     {
       iri: 'https://rezics.com/definition/context-v1/entry-shape',
+      canonical: { types: ['rv:ContextEntry'] },
       properties: [
         { path: 'rdf:type', hasValue: 'rv:ContextEntry', maxCount: 1 },
         { path: 'rv:entryTarget', minCount: 1, maxCount: 1, nodeKind: 'sh:IRI' },
@@ -92,6 +97,7 @@ export const contextProfile = {
     },
     {
       iri: 'https://rezics.com/definition/context-v1/preference-revision-shape',
+      canonical: { types: ['rv:ContextPreferenceRevision'] },
       properties: [
         { path: 'rdf:type', in: ['rv:ContextPreferenceRevision', 'rv:RevisionAnchor'], minCount: 2, maxCount: 2 },
         { path: 'rv:predecessor', maxCount: 1, class: 'rv:ContextPreferenceRevision' },

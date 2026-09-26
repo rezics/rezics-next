@@ -26,6 +26,19 @@ export const CONTEXT_LIMITS = {
   manifestBytes: 262_144,
 } as const;
 
+/**
+ * Cost contract per request, independent of how many Contexts, selections, Statements or
+ * consumers exist. Graph queries include the admission-open lineage check.
+ */
+export const CONTEXT_COST = {
+  contextRead: { graphQueries: 2 },
+  /** Speaker selection, Global head and one pinned-chain read; plus one Access proof per Private Context. */
+  interpretation: { graphQueries: 3, accessQueriesPerPrivateContext: 1 },
+  statementRead: { graphQueries: 2 },
+  /** Lineage, scope and one read of the local and Global slots. */
+  statementResolution: { graphQueries: 3 },
+} as const;
+
 /** Existing Access scope gates and grants authorize Context work; no new authority table. */
 export const CONTEXT_AUTHORITY = {
   create: { action: 'context.create', scope: 'context:create:root' },

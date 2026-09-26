@@ -23,6 +23,7 @@ export const statementProfile = {
   shapes: [
     {
       iri: 'https://rezics.com/definition/statement-v1/statement-shape',
+      canonical: { types: ['rdf:Statement'] },
       properties: [
         { path: 'rdf:type', hasValue: 'rdf:Statement' },
         { path: 'rdf:subject', minCount: 1, maxCount: 1, nodeKind: 'sh:IRI' },
@@ -43,6 +44,7 @@ export const statementProfile = {
     },
     {
       iri: 'https://rezics.com/definition/statement-v1/revision-shape',
+      canonical: { types: ['rv:StatementRevision'] },
       properties: [
         { path: 'rdf:type', in: ['rv:StatementRevision', 'rv:RevisionAnchor'], minCount: 2, maxCount: 2 },
         { path: 'rv:component', minCount: 1, maxCount: 1, class: 'rdf:Statement' },

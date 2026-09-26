@@ -23,6 +23,7 @@ export const contextSelectionProfile = {
   shapes: [
     {
       iri: 'https://rezics.com/definition/context-selection-v1/selection-shape',
+      canonical: { types: ['rv:ContextSelection'] },
       properties: [
         { path: 'rdf:type', hasValue: 'rv:ContextSelection' },
         { path: 'rv:consumer', minCount: 1, maxCount: 1, nodeKind: 'sh:IRI' },
@@ -63,6 +64,7 @@ export const contextSelectionProfile = {
     },
     {
       iri: 'https://rezics.com/definition/context-selection-v1/revision-shape',
+      canonical: { types: ['rv:ContextSelectionRevision'] },
       properties: [
         { path: 'rdf:type', in: ['rv:ContextSelectionRevision', 'rv:RevisionAnchor'], minCount: 2, maxCount: 2 },
         { path: 'rv:component', minCount: 1, maxCount: 1, class: 'rv:ContextSelection' },

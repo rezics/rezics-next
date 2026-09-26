@@ -30,14 +30,15 @@ export const STATEMENT_LIMITS = {
 } as const;
 
 /**
- * Existing Access scope gates. Deciding reuses the v1 acceptance scopes so
- * current grants keep authorizing the same Global/Realm decisions after cutover.
+ * Existing Access scope gates. Deciding reuses the v1 acceptance scope names, so
+ * a Global or Realm manager's scope gate stays the same; the action is new so a
+ * pending v1 admission can never be sealed by the Statement writer.
  */
 export const STATEMENT_AUTHORITY = {
   speak: (speaker: string) => ({ action: 'statement.record', scope: `statement:speak:${speaker}` }),
-  decide: (acceptanceContext: string) => ({ action: 'classification.decision.set',
-    scope: acceptanceContext === GLOBAL_CLASSIFICATION_CONTEXT ? 'classification:decide:global'
-      : `classification:decide:${acceptanceContext}` }),
+  decide: (acceptance: { kind: 'global' } | { kind: 'realm'; realm: string }) => ({
+    action: 'statement.decision.set',
+    scope: acceptance.kind === 'global' ? 'classification:decide:global' : `classification:decide:${acceptance.realm}` }),
 } as const;
 
 /** Outbox event types the relay must register before the first Statement command. */

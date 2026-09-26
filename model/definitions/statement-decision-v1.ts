@@ -25,6 +25,7 @@ export const statementDecisionProfile = {
   shapes: [
     {
       iri: 'https://rezics.com/definition/statement-decision-v1/slot-shape',
+      canonical: { types: ['rv:DecisionSlot'] },
       properties: [
         { path: 'rdf:type', hasValue: 'rv:DecisionSlot' },
         { path: 'rv:acceptanceContext', minCount: 1, maxCount: 1, class: 'rv:ClassificationContext' },
@@ -43,6 +44,7 @@ export const statementDecisionProfile = {
     },
     {
       iri: 'https://rezics.com/definition/statement-decision-v1/decision-shape',
+      canonical: { types: ['rv:StatementDecision'] },
       properties: [
         { path: 'rdf:type', in: ['rv:StatementDecision', 'rv:RevisionAnchor'], minCount: 2, maxCount: 2 },
         { path: 'rv:component', minCount: 1, maxCount: 1, class: 'rv:DecisionSlot' },
