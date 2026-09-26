@@ -9,8 +9,8 @@
 | Agent strategy | The current management Goal dispatches at most two justified independent tasks from fresh briefs under the [delegation policy](execution-workflow.md#delegation-and-worker-lifecycle). Cross-owner, authority, transaction and recovery work uses pinned Sol/xhigh. Bounded repetitive work may use pinned Luna/max only after owner schema and a real write/read API template pass. GPT-6 Astra is prohibited. Disjoint paths may share `main`; overlapping writes use worktrees. Shared routes, migrations, commits and QA have one coordinator. Workers finish after handoff. Compare merged passing operations and rework cost under [efficiency measurement](execution-workflow.md#efficiency-measurement) before changing concurrency. |
 | Authority | This active Goal authorizes local backend implementation, dependency setup, disposable QA stacks and coherent local commits on `main`. Remote pushes, production publication and paid provisioning remain outside this scope. |
 | Deployment premise | Principal services concentrated on one assessed host; the other primarily API and unrelated workloads. Account placement remains assessed. |
-| Status | The current management Goal started at 03:57:20 UTC on clean `f2c8aa1`. G-001 through G-034 are integrated and affected-verified on `main`; G-035 runs in an independent Sol/xhigh worktree. IAM01, IAM03, IAM06, IAM10, IAM23, IAM24, IAM25, IAM26, RATE01, RATE02, RATE03, RATE04, RATE05, SYS02, VIEW01, VIEW02, CTX02, CTX03, WORK03, WORK09, SEARCH03, SEARCH05, SEARCH06, SEARCH09 and SEARCH13 are declared complete-case candidates with passing selected owner checks, not recorded backend qualification. The last broad historical run `20260925t151147-02d115` passed 11 of 277 mixed cases; no `yarn qa --backend --record` result exists. See the [active management program](#active-management-program) and generated [qualification page](qualification.md). |
-| Next action | Integrate G-035's MODEL02 owner profile after its schema, real API and recovery gates. Qualify queued Search and WORK02 cases on that merged source without overlapping the worker's QA stack, then prepare final reconstruction and recorded backend QA. |
+| Status | The current management Goal started at 03:57:20 UTC on clean `f2c8aa1`. G-001 through G-035 are integrated on `main`; MODEL02's merged source-stable recovery rerun is pending. G-036 runs in an independent Sol/xhigh Access role-impact worktree. The prior 25 complete-case candidates remain affected-verified, not recorded backend qualifications. The last broad historical run `20260925t151147-02d115` passed 11 of 277 mixed cases; no `yarn qa --backend --record` result exists. See the [active management program](#active-management-program) and generated [qualification page](qualification.md). |
+| Next action | Finish source-stable merged MODEL02 recovery and queued Search/WORK02 selected QA after the coordinated docs task settles; integrate G-036 on handoff, then continue remaining owner/API gaps and final clean recorded backend QA. |
 | Forecast | The 276-case retained backend scope and measured partial-slice throughput forecast a miss of the 13:57:20 UTC ten-hour target. IAM06, IAM23, IAM24, RATE01, RATE02 and RATE03 are candidates, not recorded passes. Continue the full authorized scope and report only actually qualified cases; no defensible later completion timestamp exists yet. |
 
 ### Active management program
@@ -63,7 +63,8 @@ does not supply a current backend completion percentage.
 | [G-032](../goals/tasks/G-032.md) / IAM03 | Qualify one principal with two Agents and two principals with one Agent through real Account/Access/Main APIs, preserving private identity. | Manager batch integrated and affected-verified: selected real API `20260926t110324-ddd7ee`, 11 QA coverage units and backend static/docs passed. IAM03 is a backend-only complete-case candidate pending final recorded QA. |
 | [G-033](../goals/tasks/G-033.md) / PKG04 | Bounded npm root override and engine policy over the composed v4 identity/platform profile. | Manager integrated independent worktree commit `57e17e0` as `747d4f8`. Merged 15 selected npm unit/contract tests, 187 pinned native comparisons, Source/npm API `20260926t121015-72b678`, physical owner-cut `20260926t121049-7c31e2`, generation and backend static/docs checks passed. V1–v4 remain retained; PKG04/PKG12/PKG13 are partial, with broader npm/pnpm/Yarn solving and installation open. |
 | [G-034](../goals/tasks/G-034.md) / IAM25 | Distinct B-issued grant to A's eligible private-member set for one exact B roster operation; P acts as P without representation. | Worker `68650e3` integrated as `7036ea7`, OpenAPI as `4cef46b`; merged real API `20260926t123453-5a159c`, Access WAL `20260926t123752-47ac8f`, coverage unit, generation and backend static checks passed. IAM25 is a complete-case candidate pending recorded backend QA. Physical cold-cache/high-contention cost remains open. Sol/xhigh worker `/root/g034_eligible_sol` finished; artifacts were preserved and the clean worktree removed. |
-| [G-035](../goals/tasks/G-035.md) / MODEL02 | First exact Work semantic-value owner, API write/read/export and real six-state round-trip; gate future repetitive variants on a verified schema/template. | Running from `e9d4bd8` in `.temp/worktrees/g035-semantic-values` with explicitly pinned Sol/xhigh worker `/root/g035_semantic_sol`. Its audit found that Access graph-outcome dispatch and held-graph Work replay hardcode title edits; the manager authorized only exact receipt/replay branches with compatibility and recovery proof. The worker owns the shared QA stack until release; the manager owns final shared route/OpenAPI integration and coverage. MODEL02 is partial until merged evidence. |
+| [G-035](../goals/tasks/G-035.md) / MODEL02 | First exact Work semantic-value owner, API write/read/export and real six-state round-trip; gate future repetitive variants on a verified schema/template. | Worker `56bc44d` integrated as `ef6ae12`, with OpenAPI/coverage in `7aaa5bf`. Merged schema/generator/coverage units, native `20260926t132158-9d7d45` and real API/title `20260926t132216-4e12ec` passed. The merged recovery test passed but its QA run `20260926t132309-9b53ab` saw concurrent doc edits, so source stability failed and MODEL02 remains a partial candidate until rerun. The worker finished and released QA. |
+| [G-036](../goals/tasks/G-036.md) / IAM05 | Protect live populated-role authority changes with bounded impact approval and exact current ceilings. | Pinned Sol/xhigh worker `/root/g036_role_impact` starts from `7aaa5bf` in `.temp/worktrees/g036-role-impact`. Schema audit comes first; manager retains shared QA until queued merged selections finish. IAM05 and IAM30 remain partial. |
 | Authority and model backlog | IAM07–IAM37 and MODEL05–MODEL27 gaps, sequenced behind required Access and semantic owner decisions. | Planned at the [operation map](backend-operations.md); create bounded briefs when interfaces stabilize. |
 | Content, Space and community backlog | CTX, WORK, RATE, GRAPH, VIEW, BOOK, RECIPE, SUB and other M01–M10 gaps. | Planned at the operation map; retain all backend assertions. |
 | Search, sources and packages backlog | SEARCH, LIVE, PKG and HUB gaps after B75, with source/owner integration and recovery. | Planned at the operation map; selected B14–B74 evidence remains partial where named. |
@@ -604,6 +605,28 @@ waiting, MODEL02 remains partial, and the ten-hour target still forecasts a
 miss. A separate maintainer-authorized documentation task owns Resource/typed
 Statement contract rewrites; its `semantic-model.md` hunk is held for serial
 integration after G-035, while this manager keeps the plan ledger.
+
+**30-minute checkpoint, 2026-09-26 13:27 UTC.** The Goal remains active with
+one scheduling/integration owner, and Docker Desktop engine 29.7.2 is healthy.
+G-035's clean handoff `56bc44d` is integrated as `ef6ae12`; the manager added
+OpenAPI and the three-identity MODEL02 coverage declaration in `7aaa5bf`.
+Merged native `20260926t132158-9d7d45` and real API/title
+`20260926t132216-4e12ec` passed on stable source. The merged six-state graph
+restore test passed but run `20260926t132309-9b53ab` was source-unstable while
+a separate maintainer-authorized Resource/Statement documentation task edited
+main. That task owns the concurrent docs edits and will notify this manager
+after its docs check; the manager then reruns the recovery and ready
+SEARCH01/02/04 and WORK02 selections under one shared QA coordinator. G-036
+is the sole active Goal worker on an independent Sol/xhigh Access worktree; its
+schema audit found immutable role revisions and pinned bindings, so a proposed
+family-head approval would be inert. It owns a narrow immutability-gap check
+and blocker handoff, not an IAM05 completion claim. The verified complete-case
+candidate count remains 25 of 276, with 251 lacking one and zero final recorded
+backend QA results. The owner/API backlog and stable-QA queue remain under
+pressure; remaining scope, clean reconstruction and `yarn qa --backend
+--record` lie on the critical path. The 13:57:20 UTC target remains a forecast
+miss with no defensible later finish timestamp. Reconcile by 13:57 UTC or on a
+handoff, failure or blocker.
 
 **30-minute checkpoint, 2026-09-26 11:57 UTC, reconciled at 11:58.** The Goal
 remains active under one manager, and Docker Desktop engine 29.7.2 is reachable.
