@@ -233,6 +233,32 @@ completion time is defensible at this throughput. Preserve all 276 retained
 backend assertions and reconcile by 08:27 UTC or immediately on handoff or
 blocker.
 
+**30-minute checkpoint, 2026-09-26 08:27 UTC.** G-018 and G-019 joined
+G-001–G-017 on clean `main` with passing merged affected checks. G-018's real
+author-credit API, held-graph recovery and native command passed. G-019's
+versioned npm lock profile passed real API, physical owner-cut recovery, eight
+native offline scenarios and backend static checks after a small-table PostgreSQL
+plan assertion was corrected; both slices remain partial. RATE03 is still the
+sole newly declared complete-case candidate, and no retained backend ID has a
+new recorded full pass. G-020 is active on an atomic organization-publication
+moderation admission. Its G-012/G-017 and generic publication regressions plus
+Access WAL pass; the new API/graph-recovery selection and local TypeBox/model
+version test repairs remain worker-owned. G-021 is active on npm optional/platform
+topology: 33 pinned native target comparisons and 17 selected unit/contract tests
+pass, with a TypeScript narrowing repair and real API/recovery still underway.
+Both independent worktree slots are occupied; no committed handoff waits for
+integration. Docker and Podman are responsive and did not cause these test
+repairs. The critical path remains complete Realm and Source owner semantics,
+package resolution and installation, the other M01–M10 APIs, reusable full
+fixture and recovery, clean reconstruction, and one recorded backend run. Nineteen
+integrated affected-verified slices in four and a half hours have produced zero
+newly recorded complete IDs against 276 retained backend cases. The 13:57:20 UTC
+target remains forecast to miss; no later completion timestamp is defensible.
+Preserve all requirements and reconcile by 08:57 UTC or immediately on handoff
+or blocker. The next worker assignment after a release should target a complete
+case boundary where owner inputs are stable, rather than merely add another
+unsupported subprofile.
+
 ### Backend-only ten-hour proposal
 
 The maintainer's 2026-09-26 direction is authoritative: API operations define
