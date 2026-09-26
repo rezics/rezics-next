@@ -1,0 +1,45 @@
+{
+  "$schema": "https://unpkg.com/knip@6/schema.json",
+  // Frontend workspaces are outside the backend Goal.
+  "ignoreWorkspaces": ["apps/web", "packages/ui"],
+  "workspaces": {
+    ".": {
+      // Root scripts start through `bun <path>`; tests and the Eden client
+      // compile or run as their own entry points.
+      "entry": [
+        "scripts/**/*.ts",
+        "tests/**/*.test.ts",
+        "tests/qa/client/main-contract.ts",
+        "model/tests/**/*.test.ts",
+        "model/compiler/**/*.test.ts"
+      ],
+      "project": ["scripts/**/*.ts", "tests/**/*.ts", "model/**/*.ts"],
+      "ignore": ["scripts/research/**", "tests/fixtures/**"],
+      // Static tools run from node_modules/.bin in the check runner.
+      "ignoreDependencies": [
+        "@ast-grep/cli",
+        "@biomejs/biome",
+        "dependency-cruiser",
+        "oxlint",
+        "oxlint-tsgolint"
+      ]
+    },
+    // Top-level service files are process entry points and operator commands.
+    "services/main": {
+      "entry": ["src/*.ts"],
+      "project": ["src/**/*.ts", "tests/**/*.ts"],
+      // Consumed by the root OpenAPI generator and Eden type gate.
+      "ignoreDependencies": ["@elysia/eden", "@elysia/openapi", "@scalar/types"]
+    },
+    "services/account": { "entry": ["src/*.ts"], "project": ["src/**/*.ts", "tests/**/*.ts"] },
+    "services/content": { "entry": ["src/*.ts"], "project": ["src/**/*.ts", "tests/**/*.ts"] },
+    "packages/model": { "project": ["src/**/*.ts", "tests/**/*.ts"] }
+  },
+  "rules": {
+    // Root scripts and tests use hoisted workspace dependencies; host PostgreSQL
+    // binaries are system tools; spawned script paths are not imports.
+    "unlisted": "off",
+    "binaries": "off",
+    "unresolved": "off"
+  }
+}

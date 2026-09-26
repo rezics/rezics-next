@@ -1,0 +1,6 @@
+id: modules-receive-configuration
+valid:
+  - 'export function create(config: { url: string }) { return config.url; }'
+invalid:
+  - 'const url = process.env.DATABASE_URL;'
+  - 'const { TOKEN } = process.env;'

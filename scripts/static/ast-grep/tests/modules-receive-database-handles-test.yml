@@ -1,0 +1,7 @@
+id: modules-receive-database-handles
+valid:
+  - 'export async function read(pool: Pool) { return pool.query("select 1"); }'
+  - 'const client = await pool.connect();'
+invalid:
+  - 'const pool = new Pool({ connectionString });'
+  - 'const client = new Client(url);'

@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
-import { acquireFullLock, expectedFusekiModuleVersion, parseArgs, writeSummary,
+import { acquireFullLock, expectedFusekiModuleVersion, parseArgs, testLogEnvironment, writeSummary,
   implementedTiers, tierArtifactName, xmlForCommand } from '../../../scripts/qa/core.ts';
 
 const scratch = join(import.meta.dir, '../../../.temp');
@@ -76,6 +76,13 @@ test('QA12: QA bootstrap rejects a Fuseki module that differs from the Compose p
     .toBe('0.5.12');
   expect(() => expectedFusekiModuleVersion('services:\n  fuseki:\n    image: rezics/fuseki:6.2.0-base1\n'))
     .toThrow('must pin one command-module');
+  expect(expectedFusekiModuleVersion('services:\n  fuseki:\n    image: rezics/fuseki:6.2.0-cmd0.5.29-4dc9015683cb\n'))
+    .toBe('0.5.29');
+});
+
+test('QA tier Bun runs drop agent output variables so logs list every test', () => {
+  expect(testLogEnvironment({ PATH: '/bin', AGENT: '1', CLAUDECODE: '1', REPL_ID: 'x', FUSEKI_URL: 'u' }))
+    .toEqual({ PATH: '/bin', FUSEKI_URL: 'u' });
 });
 
 test('QA02: fault/recovery is a selectable implemented tier with one artifact basename', () => {

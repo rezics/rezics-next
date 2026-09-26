@@ -17,3 +17,17 @@ export function loadDockerEnvironment(env: NodeJS.ProcessEnv = process.env,
   if (!probe(fallback)) throw new Error('Podman socket is not responding');
   return fallback;
 }
+
+/**
+ * How a container reaches a service bound to the host's loopback. Docker Desktop
+ * runs containers in a VM whose host network is not this machine's, so it uses
+ * its host-gateway alias; native engines and rootless Podman share host networking.
+ */
+export function hostLoopbackAccess(env: NodeJS.ProcessEnv,
+  operatingSystem: (candidate: NodeJS.ProcessEnv) => string = candidate =>
+    spawnSync('docker', ['info', '--format', '{{.OperatingSystem}}'],
+      { env: candidate, encoding: 'utf8', timeout: 10_000 }).stdout.trim()): { args: string[]; host: string } {
+  return operatingSystem(env).includes('Docker Desktop')
+    ? { args: ['--add-host=host.docker.internal:host-gateway'], host: 'host.docker.internal' }
+    : { args: ['--network', 'host'], host: '127.0.0.1' };
+}

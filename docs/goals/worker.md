@@ -54,7 +54,12 @@ workers do not overload the host:
 bun scripts/goal/goalctl.ts test <explicit test files> [-t <ID>]
 bun node_modules/typescript/bin/tsc --project services/main/tsconfig.json   # or the owner's tsconfig
 node_modules/.bin/biome lint <changed source directories>
+node_modules/.bin/oxlint --type-aware <changed source directories>        # promise rules
 ```
+
+Before the handoff, `bun scripts/goal/goalctl.ts test --affected --list` prints
+the other tests your change reaches without running them. List any that fall
+outside your claim in the handoff; the manager's wave runs them.
 
 Registered integration, model, fault/recovery and load files start their own
 disposable QA project through `yarn test`; keep one tier per command. Do not

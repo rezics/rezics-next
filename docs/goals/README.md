@@ -178,10 +178,10 @@ Duplicate work is prevented mechanically:
   concurrent QA stacks (default 8 slots, `GOAL_QA_SLOTS`).
 - Every 30–45 minutes, or sooner when handoffs accumulate, the manager runs an
   integration wave: merge ready tasks one at a time, regenerate derived artifacts
-  once (`yarn gen`), run `yarn check:backend` once and one combined selected run
-  of the merged tests, then commit plan status. Failures return to the
-  responsible session through `resume`; unrelated passing tasks are closed as
-  verified.
+  once (`yarn gen`), run `yarn check:backend` once and one
+  `goalctl test --affected <wave base>` run, then commit plan status. Failures
+  return to the responsible session through `resume`; unrelated passing tasks
+  are closed as verified.
 - Dispatch work on the longest remaining dependency chain first, then
   independent bundles that keep capacity busy. Dependent briefs dispatch only
   after their dependency is merged and its wave passed.

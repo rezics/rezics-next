@@ -1,0 +1,11 @@
+id: modules-receive-database-handles
+language: TypeScript
+severity: error
+message: Business modules receive database handles from composition code.
+note: Construct pg pools and clients in a service entry point or infrastructure adapter and pass them in.
+files:
+  - services/*/src/modules/**/*.ts
+rule:
+  any:
+    - pattern: new Pool($$$)
+    - pattern: new Client($$$)

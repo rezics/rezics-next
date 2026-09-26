@@ -1,0 +1,9 @@
+id: modules-do-not-exit
+language: TypeScript
+severity: error
+message: Business modules report failures to their caller instead of ending the process.
+note: Throw a typed error; only entry points decide the process exit status.
+files:
+  - services/*/src/modules/**/*.ts
+rule:
+  pattern: process.exit($$$)

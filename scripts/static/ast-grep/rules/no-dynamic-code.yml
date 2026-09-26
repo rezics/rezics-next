@@ -1,0 +1,11 @@
+id: no-dynamic-code
+language: TypeScript
+severity: error
+message: Backend code does not evaluate strings as code.
+files:
+  - services/*/src/**/*.ts
+  - packages/model/src/**/*.ts
+rule:
+  any:
+    - pattern: eval($$$)
+    - pattern: new Function($$$)

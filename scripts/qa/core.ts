@@ -42,10 +42,18 @@ export function parseArgs(args: string[]): { tier?: Tier; onlyFailed?: string; k
     ...(files.length ? { files } : {}), ...(id ? { id } : {}) };
 }
 
+// Bun shortens test output when it detects an agent. Tier logs must list every
+// test, so a tier killed at its budget still shows how far it got.
+const agentOutputVariables = ['AGENT', 'CLAUDECODE', 'REPL_ID'];
+export function testLogEnvironment(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+  return Object.fromEntries(Object.entries(env).filter(([key]) => !agentOutputVariables.includes(key)));
+}
+
 export function command(root: string, name: string, args: string[], timeoutMs: number,
   env: NodeJS.ProcessEnv = process.env): { ok: boolean; output: string; elapsedMs: number } {
   const start = Date.now();
-  const result = spawnSync(name, args, { cwd: root, env, encoding: 'utf8',
+  const result = spawnSync(name, args, { cwd: root,
+    env: name === 'bun' && args[0] === 'test' ? testLogEnvironment(env) : env, encoding: 'utf8',
     stdio: ['ignore', 'pipe', 'pipe'], timeout: timeoutMs });
   return { ok: result.status === 0 && !result.error,
     output: [result.stdout, result.stderr, result.error?.message].filter(Boolean).join('\n'),

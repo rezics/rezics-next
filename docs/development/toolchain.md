@@ -16,7 +16,9 @@ do not select tools.
   developers use. `toolchain:install` is a dependency-free, checked-in Yarn
   plugin command because Yarn's node-modules linker cannot launch package
   scripts before the first install. All other root commands remain
-  `package.json` scripts. Nx, Turbo, Task/go-task and Aspire are not used.
+  `package.json` scripts. Nx, Turbo, Task/go-task and Aspire are not used; the
+  [2026-09-27 re-evaluation](../research/agent-efficiency-tooling.md) records
+  the reasons and the conditions for revisiting them.
 - **Status values.** *Adopted*: use now. *Stage X*: adopt when that
   [dependency stage](../plan/README.md#dependency-order) starts, after rechecking
   the version. *Not used*: do not add.
@@ -89,8 +91,10 @@ databases. `search --report-only` refreshes explanation text without remeasureme
 `REZICS_BRIDGE_SNAPSHOT=1 yarn research:architecture bridge` runs the controlled
 concurrent-update counterexample and preserves the prior timing baseline.
 `yarn check` runs the existing workspace and external Eden Main consumer types,
-research types, documentation and `gen:check`, followed by Biome lint and format
-checks and dependency-cruiser import-boundary checks. The static tools run from
+research types, documentation and `gen:check`, followed by Biome lint, the
+ast-grep rule tests and scan, oxlint's type-aware promise rules, Knip's unused
+file and dependency report, Biome format checks and dependency-cruiser
+import-boundary checks. The static tools run from
 their exact root Yarn pins through the same command facade. The P0.4 static
 scope is intentionally explicit: Biome enforces six error-level correctness and
 suspicious-code rules over application and service workspaces, selected scripts
@@ -129,10 +133,14 @@ describe the target command surface; incomplete entries are called out explicitl
 | `yarn load:prepare --works <background-count> [--seed-workers 1]` | Build a reusable, command-created background corpus in an isolated persistent QA stack. Seed exact Work/Contribution/selection receipts and Content projection, validate public queries and owner checkpoints, expire the baseline actor's grants after its commands seal, retain a hashed corpus manifest and engine/schema identity, then stop all services while keeping the volumes. The baseline has no mixed traffic or host-capacity qualification. |
 | `yarn load:clone-probe --source-run-id <load-id> --run-id <target-id> [--read-only]` | Against a running cloned QA stack, compare retained cold Main, Realm and Content cases and sampled receipts, create ten newly admitted Works with disjoint tokens through real commands, verify the old and new results and Content projection, then restart storage and recheck. `--read-only` checks the untouched stopped-source stack after restarting it, to prove clone isolation. Writes probe evidence under `.artifacts/load-clone/<target-id>/`; failures leave the stack for inspection. This is the small falsifier for the clone candidate, not the 10,000-Work qualification. |
 | `yarn dev [--profile qa --run-id <id>]` | Runs `stack:up`, then Main and Account in watch mode on the host; it starts the web workspace when present. The isolated QA profile creates or loads a disposable local OAuth client and Access actor, then launches services with their registered credentials. |
-| `yarn gen` | Generates reviewed Turtle profiles, JSON-LD contexts, TypeBox schemas/types, vocabulary, arbitraries and registry from TypeScript IR, plus Main's public OpenAPI JSON; `yarn gen:check` detects drift. |
-| `yarn check` | Runs Main, Account, Content, model, UI and web workspace typechecks, the external Eden Main consumer gate, research types, `gen:check`, docs checks, the scoped Biome lint and format checks described above, and dependency-cruiser import boundaries with a nonempty graph assertion. Target under 2 minutes. |
-| `yarn check:backend` | Runs the same generated-contract, documentation, backend type, lint, format and import gates without UI or web source directories. This is the static tier for backend Goal qualification. |
-| `yarn test <paths> [-t <ID>]` | Runs explicit unit files through Bun; registered QA integration, model, fault/recovery and load files route through their isolated tiers, with an optional acceptance ID. Other legacy integration files retain their explicit environment requirements until migrated. |
+| `yarn gen` | Generates reviewed Turtle profiles, JSON-LD contexts, TypeBox schemas/types, vocabulary, arbitraries and registry from TypeScript IR, plus Main's public OpenAPI JSON, and stamps the content-addressed [Fuseki image tag](#fuseki-image-and-command-module) into `infra/dev/compose.yaml`; `yarn gen:check` detects drift in all of them. |
+| `yarn check` | Runs Main, Account, Content, model, UI and web workspace typechecks, the external Eden Main consumer gate, research types, `gen:check`, docs checks, the scoped Biome lint and format checks described above, ast-grep rule tests and scan, oxlint's type-aware promise rules over backend sources, Knip's unused files and dependencies, and dependency-cruiser import boundaries with a nonempty graph assertion. Target under 2 minutes. |
+| `yarn check:backend` | Runs the same generated-contract, documentation, backend type, lint, format, code-shape, promise, unused-file and import gates without UI or web source directories. This is the static tier for backend Goal qualification; it took 14.4 seconds on 2026-09-27. |
+| `yarn test <paths> [-t <ID>]` | Runs explicit unit files through Bun; registered QA integration, model, fault/recovery and load files route through their isolated tiers, with an optional acceptance ID. Other legacy integration files retain their explicit environment requirements until migrated. Direct Bun runs print only failures and the summary (`AGENT=1`); `AGENT=0` restores the per-test listing. |
+| `yarn test --affected [<base>] [--list]` | Selects the tests that can observe the changes since `<base>` (default: the merge base with `main`), including uncommitted and untracked files, and runs unit files through Bun and each stack tier once through `yarn qa --tier`; a widened tier runs its registered selection. `--list` prints the plan without running it. The [selection rules](../testing/test-harness.md#affected-test-selection) fail closed. |
+| `yarn check:unused [--include <kinds>]` | Knip report over backend workspaces, scripts and tests. `check` blocks unused files and dependencies only; unused exports and types are a cleanup report. |
+| `yarn ast-grep scan\|test` | Runs the pinned native ast-grep binary with `sgconfig.yml`. Rules and their valid/invalid cases live in `scripts/static/ast-grep/`; `check` runs `test --skip-snapshot-tests` and `scan`. |
+| `yarn api:fuzz [--max-examples <1-200>] [--seed <n> [--max-time <30-1800>]] [--update-baseline] [--keep]` | Starts an isolated QA stack with Account and Main, then runs the pinned Schemathesis image once against Main's generated public OpenAPI contract. The default is one deterministic pass compared with `tests/qa/api-fuzz/baseline.json`; `--update-baseline` records that pass's accepted failures and prunes fixed ones. `--seed` runs an exploratory random pass, and `--max-time` repeats its fuzzing and stateful phases until the budget is spent; neither can update the baseline. The log and JUnit report go to `.artifacts/api-fuzz/<run-id>/`, and the stack is reset unless `--keep`. See [API fuzzing](../testing/test-harness.md#schema-driven-api-fuzzing). |
 | `yarn qa:replay --seed <integer> <file> -t <ID>` | Re-runs one seeded fast-check acceptance test through the same unit or registered QA tier, preserving its exact seed and test selection. |
 | `yarn content:typecheck` | Checks the P0.8 Content owner workspace with the adopted TypeScript pin. |
 | `yarn main:typecheck` | Focused Main TypeScript diagnostic for a concrete implementation blocker; merged batches still run `yarn qa`. |
@@ -220,7 +228,8 @@ Development uses named volumes; QA uses tmpfs except in the recovery tier.
 | Fuseki prior (G-029) | `rezics/fuseki:6.2.0-cmd0.5.26`, built locally | Merged native/model `20260926t110725-868502` and API/recovery `20260926t110744-6cfcaf` passed | Adds the immutable aggregate-default policy profile while retaining earlier profile digests. |
 | Fuseki prior (G-028) | `rezics/fuseki:6.2.0-cmd0.5.28-title1`, built locally | Worker model/native `20260926t105709-004ea3`, title API `20260926t110130-337ca3`, Source API `20260926t105921-e4252f` and graph-loss recovery `20260926t110049-d25ec4` passed | Adds Work title control epoch, signed origin and exact control/protection CAS; merged qualification follows the combined image. |
 | Fuseki prior (G-028/G-029) | `rezics/fuseki:6.2.0-cmd0.5.29`, built locally | G-028/G-029 combined owner integration; merged model/native `20260926t111638-92c3d7`, title API `20260926t111657-90be23`, Source API `20260926t111739-c2ef74`, graph-loss recovery `20260926t111804-a91eab` and Rating recovery `20260926t111846-0ad0f6` passed | Combines the Rating policy and Work title control profiles with both native command guards. Built through `yarn toolchain:install` on merged `6f0404f`. |
-| Fuseki (G-035) | `rezics/fuseki:6.2.0-cmd0.5.29-scalar1`, built locally; image ID and local RepoDigest `sha256:7f20578694a47d3af2ee6fda6ceac3f2c162d7b6a3d85f88ff6741944e8c485a` | Selected native `20260926t131755-6d0a7c`, API `20260926t131838-6836e6` and recovery `20260926t131053-03fb93` passed; merged qualification pending | The reviewed Work shape adds one optional IRI-or-literal `rv:scalarValue` with cardinality one. The native command module stays at 0.5.29. A fresh tag is required because this host has served the prior tagged shape after an in-place rebuild. Built through `bun scripts/dev/cli.ts toolchain:install` in the isolated worktree on 2026-09-26. |
+| Fuseki prior (G-035) | `rezics/fuseki:6.2.0-cmd0.5.29-scalar1`, built locally; image ID and local RepoDigest `sha256:7f20578694a47d3af2ee6fda6ceac3f2c162d7b6a3d85f88ff6741944e8c485a` | Selected native `20260926t131755-6d0a7c`, API `20260926t131838-6836e6` and recovery `20260926t131053-03fb93` passed; merged qualification pending | The reviewed Work shape adds one optional IRI-or-literal `rv:scalarValue` with cardinality one. The native command module stays at 0.5.29. A fresh tag is required because this host has served the prior tagged shape after an in-place rebuild. Built through `bun scripts/dev/cli.ts toolchain:install` in the isolated worktree on 2026-09-26. |
+| Fuseki | `rezics/fuseki:6.2.0-cmd0.5.29-4dc9015683cb`, built locally; image ID `sha256:a084c9bbc1b4e222683278a02b16f839bd34950581913be2ba2771526ab7d4d5` | Adopted; selected model tier `20260926t160230-be4cb6` passed | Same build inputs as cmd0.5.29-scalar1 under the content-addressed tag scheme below. `bun scripts/dev/cli.ts toolchain:install` built it in 16 seconds on 2026-09-27. |
 | Object storage | `rustfs/rustfs:1.0.0` | Adopted, gate | S3 API for sealed semantic payloads/manifests, large Content pages, media and artifacts. Ordinary bounded bodies/revisions move to PostgreSQL in P0.8; preserve exact references when replacing the filesystem baseline. |
 | Fault proxy | `ghcr.io/shopify/toxiproxy:2.12.0` | Adopted (QA) | Latency, timeout, reset and lost-response faults between the apps and Fuseki/PostgreSQL, controlled through its HTTP API. |
 | Mail sink | `axllent/mailpit:v1.31.2` | Adopted | SMTP sink for Account email; tests read messages through its HTTP API. |
@@ -254,6 +263,16 @@ under [object storage](../storage/objects.md).
 3. The runtime stage uses `eclipse-temurin:21.0.12_8-jre-noble`. It copies the module jar into `$FUSEKI_BASE/extra/`
    (the pinned launcher appends `${FUSEKI_BASE}/extra/*` to the classpath), the
    generated shapes into `/fuseki/profiles/`, and the assembler.
+
+The Compose tag is `rezics/fuseki:<FUSEKI_VERSION>-cmd<module version>-<hash>`.
+The hash is the first 12 hex digits of SHA-256 over every build input's path and
+content digest: the Dockerfile and each local `COPY` source, which includes the
+command module, generated shapes and manifest, and both assemblers.
+`scripts/dev/fuseki-image.ts` derives it; `yarn gen` writes it into
+`infra/dev/compose.yaml` and `gen:check` fails when a Fuseki input changed without
+a regenerated tag. Any change therefore gets a fresh tag, which avoids this
+host's stale-tag reuse without manual suffixes. The load and restore commands
+also accept earlier plain `cmd<version>` tags.
 
 The product assembler moves from `docs/operations/examples/fuseki-text.ttl` to
 `infra/jena/fuseki-text.ttl` in Phase 0, and its references are updated. It
@@ -320,7 +339,7 @@ Do not invent new CLI flags or treat a proposal as implemented tooling.
 | TypeBox | 1.3.34 | Adopted | Schema library for Elysia and the generated model schemas. |
 | `@js-temporal/polyfill` | 0.5.1 | Adopted for G-015 daily Rating | Server-only named IANA timezone and ISO civil-day arithmetic. `startOfDay` resolves midnight transitions; stored UTC bounds and immutable timezone survive replay. Uses the pinned Bun runtime's ICU data; calendar regressions cover 23/25-hour and midnight-transition days. [Upstream release](https://github.com/js-temporal/temporal-polyfill/releases/tag/v0.5.1). |
 | aws4fetch | 1.0.20 | Adopted for P0.5 | Sign S3 object writes and reads. Immutable creation sends `If-None-Match: *` to RustFS; signed `fetch` reads bypass Bun S3Client's observed local proxy issue. |
-| `@elysia/openapi` | 2.0.0-beta.4 | Adopted | `yarn gen` writes `generated/openapi/main/public.json` from the live route schemas, excluding health routes and adding documented bearer/idempotency headers. `provider: null` drops the JSON route, so generation uses the default provider in an ephemeral app. `gen:check` detects drift. |
+| `@elysia/openapi` | 2.0.0-beta.4 | Adopted | `yarn gen` writes `generated/openapi/main/public.json` from the live route schemas, excluding health routes and adding documented bearer/idempotency headers. `provider: null` drops the JSON route, so generation uses the default provider in an ephemeral app. TypeBox's draft-07 tuples are rewritten as JSON Schema 2020-12 `prefixItems`. `gen:check` detects drift. |
 | `@scalar/types` | 0.18.3 | Adopted | Type-only peer required by the pinned OpenAPI plugin; the generated contract does not publish a Scalar UI. |
 | `@elysia/eden` | 2.0.0-beta.5 | Adopted, gate | Main exports `type MainApp` through a type-only package export. `yarn check` compiles an external Eden consumer under 30 seconds on TypeScript 7; Server Component and client BFF calls remain P0.6 work. |
 | openapi-typescript / openapi-fetch | — | Not used | Revisit when an external TypeScript SDK ships. |
@@ -373,6 +392,10 @@ neither dependency-cruiser nor TypeScript typechecking proves asymptotic cost.
 | Biome | 2.5.14 | Adopted, scoped gate | Lint the source paths and selected rules described above; format the listed TypeScript gate files and JSON manifests/configuration. ESLint and Prettier are not used. Full formatting and recommended-rule migration remain open. |
 | dependency-cruiser | 18.4.0 | Adopted, scoped gate | Enforce public web-to-Main type, browser/server, Main entrypoint and infrastructure direction rules. Broader explicit-interface migration remains open. This release requires the TypeScript 6 parser pin below; TypeScript 7 is not a supported analyzer API and otherwise yields a false zero-file scan. |
 | TypeScript parser for dependency-cruiser | 6.0.2, private dependency via Yarn `packageExtensions` | Adopted, gate | Dependency-cruiser accepts `typescript <7`; install a private 6.0.2 copy under that tool for graph extraction only. Product typechecks remain on TypeScript 7.0.2. The static gate asserts that modules were actually scanned. Remove this compatibility pin when the analyzer supports the TypeScript 7 API. |
+| oxlint, oxlint-tsgolint | 1.85.0, 7.0.2003 | Adopted, scoped gate | Type-aware `typescript/no-floating-promises` (with `checkThenables`, so unawaited Drizzle builders count) and `no-misused-promises` over backend sources; every other category is off in `.oxlintrc.json`. Biome 2.5.14's nursery `noFloatingPromises`/`noMisusedPromises` were rejected because a probe showed they miss unawaited `pg` `Pool.query` calls and Drizzle thenables. The gate's first run fixed 20 findings, including Main's shutdown not awaiting `app.stop()`. Check: `check:backend` and the static-gate fixture test passed on 2026-09-27. [Type-aware linting](https://oxc.rs/blog/2026-07-22-type-aware-linting-stable). |
+| Knip | 6.38.0 | Adopted, scoped gate | `knip.jsonc` covers backend workspaces, scripts and tests; web and UI are ignored outside the Goal. The gate blocks unused files and dependencies (zero findings on adoption); `yarn check:unused` also reports 31 unused exports and 16 unused types for cleanup. `scripts/static/knip.ts` clears proxy variables that make Knip warn. [Knip v6](https://knip.dev/blog/knip-v6). |
+| ast-grep (`@ast-grep/cli`) | 0.45.3 | Adopted, gate | Structural rules for module boundaries that Biome and dependency-cruiser cannot express: no `new Pool`/`new Client`, `process.env` or `process.exit` in `services/*/src/modules/`, no `Math.random` in service or model sources, and no `eval`/`new Function`. Each rule has valid and invalid cases. Yarn's `enableScripts: false` skips the package's postinstall, so `scripts/static/ast-grep.ts` resolves and runs the native binary directly. [CLI](https://ast-grep.github.io/reference/cli/scan.html). |
+| Schemathesis | 4.28.0 image `docker.io/schemathesis/schemathesis:4.28.0@sha256:0a71757c60ccdba270c154a859d9dd3d019625f782f23ab36ad604771e15f78b` | Adopted, diagnostic command | `yarn api:fuzz` only; not part of `yarn qa`. Its first run found that Main answered unknown routes and unsupported methods with 500 instead of 404, and that the generated contract carried 19 draft-07 tuples (`items` arrays), which OpenAPI 3.1 rejects; both are fixed. `filter_too_much` is suppressed because strict identifier patterns discard most generated values by design. Under Docker Desktop the container reaches host loopback services through `host.docker.internal`, not `--network host`. [CLI reference](https://schemathesis.readthedocs.io/en/stable/reference/cli/). |
 | Testcontainers, Polly, nock, Jest | — | Not used | The harness drives Docker Compose directly; remote fixtures use a content-addressed cache. |
 
 ## Agent orchestration
@@ -404,7 +427,9 @@ wrapper, not a separate process writing Lucene files. Required components must
 be self-hosted open-source or suitable source-available software.
 
 Aspire (the copied `aspire` skill does not apply to this repository), Task/go-task,
-Nx/Turbo, Redis, MinIO, openapi-fetch for the web, third-party Eden query wrappers
+Nx/Turbo, moon, mise, Lefthook, PGlite, oasdiff, Spectral (the
+[2026-09-27 re-evaluation](../research/agent-efficiency-tooling.md) records
+revisit triggers), Redis, MinIO, openapi-fetch for the web, third-party Eden query wrappers
 (`@ap0nia/eden-react-query`, `eden2query`), Vitest 5, Lingui, Paraglide, and Python
 model validators. Operations tooling (pgBackRest, restic, OpenTelemetry Collector,
 Prometheus, Grafana, VictoriaLogs, Caddy) is stage G; recheck versions from the

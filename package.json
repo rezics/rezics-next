@@ -35,9 +35,12 @@
     "qa": "bun scripts/qa/cli.ts",
     "load": "bun scripts/load/cli.ts",
     "qa:replay": "bun scripts/qa/replay.ts",
+    "api:fuzz": "bun scripts/qa/api-fuzz.ts",
     "research:architecture": "bun scripts/research/storage_architecture/lab.ts",
     "check": "bun scripts/research/storage_architecture/check.ts",
     "check:backend": "bun scripts/research/storage_architecture/check.ts --backend",
+    "check:unused": "bun scripts/static/knip.ts",
+    "ast-grep": "bun scripts/static/ast-grep.ts",
     "test": "bun scripts/qa/test.ts",
     "docs:check": "bun scripts/research/storage_architecture/docs-check.ts",
     "package:go-oracle": "bun scripts/package/go-oracle.ts",
@@ -56,8 +59,12 @@
     "main:test": "bun test services/main/tests"
   },
   "devDependencies": {
+    "@ast-grep/cli": "0.45.3",
     "@biomejs/biome": "2.5.14",
     "@playwright/test": "1.63.0",
-    "dependency-cruiser": "18.4.0"
+    "dependency-cruiser": "18.4.0",
+    "knip": "6.38.0",
+    "oxlint": "1.85.0",
+    "oxlint-tsgolint": "7.0.2003"
   }
 }

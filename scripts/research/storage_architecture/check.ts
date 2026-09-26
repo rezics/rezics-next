@@ -3,6 +3,20 @@ const backend = process.argv.slice(2).includes('--backend');
 if (process.argv.slice(2).some((arg) => arg !== '--backend')) {
   throw new Error('Unsupported check option');
 }
+const backendSources = [
+  'services',
+  'packages/model',
+  'scripts/api',
+  'scripts/dev',
+  'scripts/fixtures',
+  'scripts/goal',
+  'scripts/load',
+  'scripts/operations',
+  'scripts/package',
+  'scripts/qa',
+  'scripts/static',
+  'tests/qa',
+];
 const commands: string[][] = [
   ['bun', 'node_modules/typescript/bin/tsc', '--project', 'services/main/tsconfig.json'],
   ['bun', 'scripts/api/eden-gate.ts'],
@@ -39,9 +53,16 @@ const commands: string[][] = [
     'scripts/documentation',
     'scripts/operations',
     'scripts/research',
+    'scripts/static',
     'tests/qa',
     'tests/recovery',
   ],
+  // Code-shape rules and their fixtures, then type-aware promise handling.
+  ['bun', 'scripts/static/ast-grep.ts', 'test', '--skip-snapshot-tests'],
+  ['bun', 'scripts/static/ast-grep.ts', 'scan'],
+  ['node_modules/.bin/oxlint', '--type-aware', '--format=unix', ...backendSources],
+  // Unused files and dependencies block; unused exports stay a `yarn check:unused` report.
+  ['bun', 'scripts/static/knip.ts', '--include', 'files,dependencies'],
   [
     'node_modules/.bin/biome',
     'format',
@@ -54,6 +75,10 @@ const commands: string[][] = [
     ...(!backend ? ['packages/ui/package.json'] : []),
     'biome.json',
     '.dependency-cruiser.json',
+    '.oxlintrc.json',
+    'knip.jsonc',
+    'scripts/static/ast-grep.ts',
+    'scripts/static/knip.ts',
     'scripts/research/storage_architecture/check.ts',
     'tests/qa/unit/static-gates.test.ts',
   ],

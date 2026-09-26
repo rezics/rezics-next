@@ -6,6 +6,7 @@ import { Pool } from 'pg';
 import { ContentCore } from '../../services/content/src/core.ts';
 import { ContentProjectionCursor } from '../../services/content/src/projection-cursor.ts';
 import { FusekiClient } from '../../services/main/src/infrastructure/fuseki.ts';
+import { fusekiImageFromCompose } from '../load/image.ts';
 import { activateRebuiltPublicContentSearch, clearQuarantinedContentUnits,
   quarantinePublicContentSearch, replayQuarantinedContentCut, resumeActivatedContentRebuild }
   from '../../services/main/src/modules/content-publication/rebuild.ts';
@@ -111,7 +112,7 @@ try {
     const logPath = join(stack, `content-rebuild-${id}.log`);
     writeFileSync(logPath, offlineLog, { mode: 0o600 });
     const offlineIndexDigest = digest(JSON.stringify({ family: 'jena-textindexer-v1',
-      image: 'rezics/fuseki:6.2.0-cmd0.5.29',
+      image: fusekiImageFromCompose(readFileSync(join(root, 'infra/dev/compose.yaml'), 'utf8')).image,
       assembler: digest(readFileSync(join(root, 'infra/jena/fuseki-text.ttl'), 'utf8')),
       output: digest(offlineLog) }));
     const generation = await activateRebuiltPublicContentSearch(env, content, cursor, job,

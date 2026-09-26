@@ -1,0 +1,6 @@
+id: no-math-random
+valid:
+  - 'const id = randomUUID();'
+  - 'const bytes = randomBytes(16);'
+invalid:
+  - 'const jitter = Math.random() * 100;'

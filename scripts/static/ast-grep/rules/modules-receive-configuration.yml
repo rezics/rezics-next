@@ -1,0 +1,9 @@
+id: modules-receive-configuration
+language: TypeScript
+severity: error
+message: Business modules receive configuration from composition code.
+note: Read process.env in a service entry point or infrastructure adapter and pass typed values in.
+files:
+  - services/*/src/modules/**/*.ts
+rule:
+  pattern: process.env

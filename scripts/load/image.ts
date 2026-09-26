@@ -9,7 +9,9 @@ export function fusekiImageFromCompose(source: string): { image: string; jenaVer
       if (image) break;
     }
   }
-  const version = image?.match(/^rezics\/fuseki:(\d+\.\d+\.\d+)-cmd\d+\.\d+\.\d+$/)?.[1];
+  // Tags end with a build-input digest from scripts/dev/fuseki-image.ts; earlier
+  // retained evidence may name a bare command-module version.
+  const version = image?.match(/^rezics\/fuseki:(\d+\.\d+\.\d+)-cmd\d+\.\d+\.\d+(?:-[0-9a-f]{12})?$/)?.[1];
   if (!image || !version) throw new Error('Pinned Fuseki Compose image is missing or malformed');
   return { image, jenaVersion: version };
 }

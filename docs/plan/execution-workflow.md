@@ -128,13 +128,15 @@ to final acceptance.
 1. **Worker implementation.** A worker writes code and tests together for its
    claimed cases, then runs only its claimed test files through
    `goalctl test` and the relevant typecheck/lint once the bundle is coherent.
-   Do not test after each file or function. Registered integration, model,
-   fault/recovery and load files start their own disposable QA project.
+   `goalctl test --affected --list` shows which other tests the change reaches;
+   name them in the handoff rather than running them. Do not test after each
+   file or function. Registered integration, model, fault/recovery and load
+   files start their own disposable QA project.
 2. **Integration wave, every 30–45 minutes.** The manager merges ready tasks,
    regenerates derived artifacts once, runs `yarn check:backend` once and one
-   combined selected run of the merged tests. It does not run unrelated browser,
-   full recovery, corpus or capacity tiers. Keep the tested source stable during
-   the run.
+   `goalctl test --affected <wave base>` run, which selects every test the merged
+   changes reach. It does not run unrelated browser, full recovery, corpus or
+   capacity tiers. Keep the tested source stable during the run.
 3. **Repair.** Failures form one repair queue returned to the responsible worker
    sessions and fixed together before dependent work starts. Independent work on
    disjoint claims continues. `yarn qa --only-failed <run-id>` diagnoses recorded

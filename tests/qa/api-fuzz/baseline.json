@@ -1,0 +1,51 @@
+{
+  "format_version": 1,
+  "schemathesis_version": "4.28.0",
+  "entries": [
+    {
+      "id": "0a399d",
+      "operation": "POST /v1/content-publications",
+      "check": "not_a_server_error",
+      "failure": "ServerError",
+      "signature": "503",
+      "first_seen": "2026-09-26",
+      "last_seen": "2026-09-26"
+    },
+    {
+      "id": "19d91a",
+      "operation": "POST /v1/private-queries",
+      "check": "not_a_server_error",
+      "failure": "ServerError",
+      "signature": "503",
+      "first_seen": "2026-09-26",
+      "last_seen": "2026-09-26"
+    },
+    {
+      "id": "cbe7ea",
+      "operation": "POST /v1/queries",
+      "check": "not_a_server_error",
+      "failure": "ServerError",
+      "signature": "503",
+      "first_seen": "2026-09-26",
+      "last_seen": "2026-09-26"
+    },
+    {
+      "id": "2504f1",
+      "operation": "POST /v1/queries/page",
+      "check": "not_a_server_error",
+      "failure": "ServerError",
+      "signature": "503",
+      "first_seen": "2026-09-26",
+      "last_seen": "2026-09-26"
+    },
+    {
+      "id": "ec82ed",
+      "operation": "POST /v1/rating-aggregates",
+      "check": "not_a_server_error",
+      "failure": "ServerError",
+      "signature": "503",
+      "first_seen": "2026-09-26",
+      "last_seen": "2026-09-26"
+    }
+  ]
+}

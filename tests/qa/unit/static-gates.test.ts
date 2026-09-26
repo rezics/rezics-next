@@ -54,3 +54,13 @@ test('the lint gate rejects a dangerous debugger statement', () => {
   expect(result.code).not.toBe(0);
   expect(result.output).toContain('lint/suspicious/noDebugger');
 });
+
+test('the promise gate rejects floating and misused promises with type information', () => {
+  const result = run('oxlint', [
+    '--type-aware',
+    'tests/fixtures/static-boundaries/promise-failing/floating.ts',
+  ]);
+  expect(result.code).not.toBe(0);
+  expect(result.output).toContain('typescript(no-floating-promises)');
+  expect(result.output).toContain('typescript(no-misused-promises)');
+});

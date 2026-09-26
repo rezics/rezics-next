@@ -1,0 +1,10 @@
+id: no-math-random
+language: TypeScript
+severity: error
+message: Backend code uses node:crypto or an injected source instead of Math.random().
+note: Identifiers, tokens and sampling must be unpredictable or reproducible from an explicit seed.
+files:
+  - services/*/src/**/*.ts
+  - packages/model/src/**/*.ts
+rule:
+  pattern: Math.random()

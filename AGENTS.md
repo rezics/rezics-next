@@ -32,7 +32,8 @@ seeding; see `docs/storage/workload-budgets.md#data-preparation-and-import`.
 Write tests with implementation. Workers run only their claimed tests through
 `goalctl test` and relevant static checks; the manager runs affected checks per
 integration wave. Final acceptance performs the clean rebuild and full backend
-verification through `yarn qa --backend --record`. Use documented explicit
-`yarn test` paths and selected backend QA tiers; automatic affected selection is
-still pending. See `docs/plan/execution-workflow.md#batch-cadence`.
+verification through `yarn qa --backend --record`. Affected checks use
+`yarn test --affected [<base>]` (`--list` previews the plan); explicit `yarn test`
+paths and selected backend QA tiers remain for narrower diagnosis. See
+`docs/plan/execution-workflow.md#batch-cadence`.
 Documentation-only batches use `yarn docs:check`.

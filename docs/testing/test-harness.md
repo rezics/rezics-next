@@ -23,9 +23,9 @@ receipt replay, unrelated browser build or full recovery matrix belongs in norma
 setup. Follow the [preparation policy](../storage/workload-budgets.md#data-preparation-and-import).
 
 The root facade implements explicit `--backend` scope selection and scope-aware
-recording. Ordinary batches select affected files through documented `yarn test`
-paths or `yarn qa --backend --tier`; an automatic affected-test selector remains
-pending. The unscoped command below still includes web.
+recording. Ordinary batches run [`yarn test --affected`](#affected-test-selection);
+explicit `yarn test` paths and `yarn qa --backend --tier` remain available for a
+narrower diagnosis. The unscoped command below still includes web.
 
 The backend inventory retains every backend clause of mixed cases under the
 [scope rules](../plan/backend-acceptance.md#backend-only-scope). Unselected tests
@@ -52,6 +52,8 @@ qualification remains pending full case coverage.
 | Command | Behavior |
 | --- | --- |
 | `yarn test <paths> [-t <ID>]` | Runs explicit unit files through Bun. Registered stack-backed files, including `apps/web/tests/*.e2e.ts`, route through their isolated QA tier. A leading acceptance ID may select a named test; other legacy integration files still need their explicit environment until migrated. |
+| `yarn test --affected [<base>] [--list]` | Runs the [affected selection](#affected-test-selection) since `<base>`, which defaults to the merge base with `main`. `--list` prints the plan only. |
+| `yarn api:fuzz [options]` | Runs [schema-driven API fuzzing](#schema-driven-api-fuzzing) against an isolated stack. It is a diagnostic, not a tier. |
 | `yarn qa` | Orchestrates all tiers, respecting dependencies and parallelizing isolated work. The exit code is non-zero if any test fails or any tier exceeds its budget. |
 | `yarn qa --backend [--tier <name>]` | Selects the frozen backend cases and excludes the browser tier; a selected tier is diagnostic only. |
 | `yarn qa --backend --record` | Runs all six backend tiers from clean source and records only if every retained backend case is fully covered and passed. |
@@ -72,11 +74,84 @@ Each run writes `.artifacts/qa/<run-id>/`, which contains a JUnit file per tier,
 `acceptance.json`, `summary.md` and logs for failing files only. Agents read
 `summary.md` and the failing logs, not full console output.
 
+### Affected-test selection
+
+`yarn test --affected` derives the tests to run from the changed files. It
+narrows routine batches only; final acceptance still runs the complete backend
+suite through `yarn qa --backend --record`.
+
+1. **Changed files.** The command uses `git diff --no-renames` against the
+   base, plus untracked files, so uncommitted work is included. A rename counts
+   as a deletion and an addition.
+2. **Import graph.** dependency-cruiser builds one graph over `services`,
+   `packages/model`, `model`, `scripts`, `tests` and `infra`, mapping `@rezics/*`
+   package exports to their sources. Every test that reaches a changed module
+   through imports is selected. Importers of a deleted module count through
+   their unresolved import.
+3. **Files outside the graph.** A test or script that names a changed file,
+   its directory or a distinctive file name is selected, which covers fixtures
+   and spawned scripts. The rules below handle known inputs. Any other
+   unreferenced file fails closed and runs every tier.
+
+| Changed input | Selection |
+| --- | --- |
+| Documentation, agent/editor configuration, frontend workspaces | None; use `yarn docs:check` for documentation. |
+| Static configuration (Biome, dependency-cruiser, oxlint, Knip, ast-grep rules, `tsconfig`) | None; run `yarn check:backend`. |
+| Root or workspace manifests, lockfile, Yarn or Bun configuration | Every tier, except that a root `package.json` change confined to `scripts` runs the shared-stack smoke test. |
+| `infra/jena/`, generated shapes, `infra/dev/` | Whole model, integration and fault/recovery tiers. |
+| Service migrations | Whole integration and fault/recovery tiers. |
+| `scripts/dev/`, QA bootstrap, CLI or core | Graph selection plus `tests/qa/integration/shared-stack.test.ts`. |
+
+Affected unit files run in one direct `bun test` command, and each stack tier
+runs once through `yarn qa --tier` with `--file` selections. A widened tier runs
+its registered selection instead: for unit, `tests/qa/unit` plus its gate files,
+with affected unit tests outside that set still run directly.
+Every tier runs even after a failure, so one pass yields the whole repair queue,
+and the command prints a per-tier result. Load, `tests/live/` and legacy host-Jena
+files are listed as deferred and run only when named explicitly. The web e2e
+tier is outside the backend Goal.
+
+Direct Bun runs set `AGENT=1`, so Bun prints failures and the summary but not
+each passing test; set `AGENT=0` for the full listing. The QA harness removes
+`AGENT`, `CLAUDECODE` and `REPL_ID` from tier processes: in compact mode, a tier
+killed at its budget would leave an empty log.
+
+### Schema-driven API fuzzing
+
+`yarn api:fuzz` starts a disposable QA stack with Account and Main, then runs
+the pinned Schemathesis image against `generated/openapi/main/public.json`. It
+checks for server errors and for status codes, content types, headers and bodies
+that the contract does not declare. Requests are unauthenticated. Public
+operations are exercised fully; protected operations only through their
+validation and rejection responses. Authenticated fuzzing needs a
+per-run token and remains open.
+
+The default is one deterministic pass: 10 examples per operation, one worker,
+compared with the accepted failures in `tests/qa/api-fuzz/baseline.json`. The
+command fails only on a failure outside that baseline. On 2026-09-27 a pass
+covered all 145 operations with about 21,600 generated cases in 130 seconds;
+the whole command, including stack startup and reset, took 148 seconds. The baseline then held five documented `503` responses: the
+Content service is not started, and an empty stack cannot yet serve public or
+private search or Rating aggregates. After a fix or a
+deliberate contract change, rerun with `--update-baseline`. This records the
+pass's accepted failures, drops entries it no longer reproduces, and should be
+reviewed like any other diff. `--seed <n>` runs an exploratory random pass that
+the same seed reproduces. `--max-time`, which needs `--seed`, makes Schemathesis repeat its fuzzing and
+stateful phases until the budget is spent. Neither option can update the
+baseline. A guard stops the container 120 seconds after the expected end.
+
+Under Docker Desktop, `--network host` is the VM's network, so the container
+reaches host loopback services through `host.docker.internal`. Native engines
+and rootless Podman keep host networking. Reports stay under
+`.artifacts/api-fuzz/<run-id>/`: `schemathesis.log` and a JUnit file, which holds
+each failure's response and a curl reproduction. Stack, bootstrap and service
+logs are kept alongside.
+
 ## Tiers and budgets
 
 | Tier | Content | Isolation | Budget |
 | --- | --- | --- | --- |
-| static | `yarn check` for the full suite or `yarn check:backend` for backend scope: typechecks, Biome, dependency-cruiser, generated-artifact drift | none | 2 min |
+| static | `yarn check` for the full suite or `yarn check:backend` for backend scope: typechecks, Biome, ast-grep, oxlint promise rules, Knip, dependency-cruiser, generated-artifact drift | none | 2 min |
 | unit | Pure domain rules, command-client behavior and QA harness checks | in-process | 3 min |
 | integration | In-process Main/Account behavior plus host Main `/health/ready` with work dependencies against real Fuseki and PostgreSQL | shared QA stack | 8 min |
 | model | Reviewed shape generation, seeded node-local arbitraries, native Jena command fixtures and the strict 66-case matrix; broader command sequences pending | own QA Compose project, isolated from product integration data | 3 min test budget |
