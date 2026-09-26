@@ -40,7 +40,8 @@ const book: StructureProfileRegistration = {
 };
 
 function validUri(value: unknown): value is string {
-  try { return typeof value === 'string' && new URL(value).protocol === 'https:'; }
+  try { return typeof value === 'string' && /^https:\/\/[^\s<>"']+$/.test(value)
+    && new URL(value).protocol === 'https:'; }
   catch { return false; }
 }
 

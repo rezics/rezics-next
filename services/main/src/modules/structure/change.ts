@@ -391,8 +391,8 @@ export async function createComposition(env: WorkActivationEnvironment,
   const prior = await existing(env, intent.admission);
   if (prior) return { terminal: prior, committed: false };
   const owner = await env.fuseki.query(`ASK { GRAPH ${iri(GRAPHS.current)} {
-    ${iri(intent.work)} a ${iri(profile.ownerType)} ; ${iri(profile.componentPredicate)} ${iri(intent.mainVersion)} .
-    ${iri(intent.mainVersion)} a ${iri(profile.componentType)} . } }`);
+    ${iri(intent.work)} a <${profile.ownerType}> ; <${profile.componentPredicate}> ${iri(intent.mainVersion)} .
+    ${iri(intent.mainVersion)} a <${profile.componentType}> . } }`);
   if (owner.boolean !== true) throw new CompositionUnavailable('Structure owner is unavailable');
   const seed = `${intent.admission.id}\0composition`;
   const structure = derivedId(`${seed}\0structure`);
@@ -414,7 +414,7 @@ export async function createComposition(env: WorkActivationEnvironment,
       GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?next }
       GRAPH ${iri(GRAPHS.current)} {
         ${iri(structure)} a rv:Structure ; rv:structureOf ${iri(intent.mainVersion)} ;
-          rv:structureProfile ${iri(profile.graphProfile)} ; rv:structureHead ${iri(revision)} ;
+          rv:structureProfile <${profile.graphProfile}> ; rv:structureHead ${iri(revision)} ;
           rv:selectedGeneration ${iri(generation)} .
         ${iri(generation)} a rv:StructureGeneration ; rv:structure ${iri(structure)} ;
           rv:generationState rv:Active ; rv:stagedBy ${iri(operation)} ; rv:placementCount 0 .
@@ -428,9 +428,9 @@ export async function createComposition(env: WorkActivationEnvironment,
     }
     WHERE { ${controlGuard(env)}
       FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} ?p ?o } }
-      GRAPH ${iri(GRAPHS.current)} { ${iri(intent.work)} a ${iri(profile.ownerType)} ;
-        ${iri(profile.componentPredicate)} ${iri(intent.mainVersion)} .
-        ${iri(intent.mainVersion)} a ${iri(profile.componentType)} . }
+      GRAPH ${iri(GRAPHS.current)} { ${iri(intent.work)} a <${profile.ownerType}> ;
+        <${profile.componentPredicate}> ${iri(intent.mainVersion)} .
+        ${iri(intent.mainVersion)} a <${profile.componentType}> . }
       FILTER NOT EXISTS { ${occupied} }
       FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} { ${iri(structure)} ?sp ?so } }
       BIND(?n + 1 AS ?next) }`;

@@ -92,8 +92,8 @@ export async function readCompositionHeader(env: WorkActivationEnvironment,
   }
   const profile = structureProfileForGraph(value(row, 'profile')!);
   const owner = await env.fuseki.query(`SELECT ?work WHERE { GRAPH ${iri(GRAPHS.current)} {
-    ?work a ${iri(profile.ownerType)} ; ${iri(profile.componentPredicate)} ${iri(value(row, 'main')!)} .
-    ${iri(value(row, 'main')!)} a ${iri(profile.componentType)} . } } LIMIT 2`);
+    ?work a <${profile.ownerType}> ; <${profile.componentPredicate}> ${iri(value(row, 'main')!)} .
+    ${iri(value(row, 'main')!)} a <${profile.componentType}> . } } LIMIT 2`);
   const owners = owner.results?.bindings ?? [];
   if (owners.length !== 1 || !owners[0]?.work?.value) {
     throw new CompositionCorrupt('Structure authority resource is ambiguous');
