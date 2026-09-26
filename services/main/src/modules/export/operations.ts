@@ -130,5 +130,8 @@ export async function readAuthorizedExport(deps: ExportDependencies, request: Re
   } else throw new ExportSourceUnavailable('export source locator is unavailable');
   const current = await readExportPlan(deps.readers, principal, actor, selection, saved.plan.useScope);
   if (current.manifestDigest !== saved.manifestDigest) throw new ExportStale('export disclosure changed');
+  if (await deps.access.activePrincipalId(principal) !== principalId) {
+    throw new ExportDenied('export principal is inactive');
+  }
   return saved;
 }

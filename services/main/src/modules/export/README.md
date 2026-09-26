@@ -50,9 +50,13 @@ sorted object keys. The `work` object exposes counts and serialized bytes.
 The Content seal writes one receipt and one manifest, then `M + R + B + L`
 child rows in one transaction. It uses a single idempotency-key lookup and a
 single terminal receipt position; the read path uses the manifest primary-key
-lookup and receipt-position lookup. A focused integration test inserts 1,000
-unrelated manifests and checks an indexed read plan. This is a bounded SQL
-shape, not a full write-amplification measurement. The fixed-release reader
+lookup and receipt-position lookup. An authorized GET performs one indexed
+active-principal lookup before reading and repeats it after exact source and
+disclosure revalidation; a missing or changed principal withholds the manifest.
+This adds a fixed two Access checks independent of export size. A focused
+integration test inserts 1,000 unrelated manifests and checks an indexed read
+plan. This is a bounded SQL shape, not a full write-amplification measurement.
+The fixed-release reader
 performs the Work owner's exact graph/object reads. The semantic reader performs
 one root Access decision and one per distinct referenced resource, plus one
 exact graph/object revision read with at most 255 properties. The Structure

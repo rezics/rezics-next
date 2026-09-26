@@ -71,7 +71,9 @@ before the bounded run and one after it, independent of capture count; an exact
 replay makes no provider call. A protected source-run read performs one active
 principal lookup before returning its bounded result. The export read and
 package-install activation each make one initial lookup and one final fence
-lookup. `tests/qa/fault-recovery/sys-revocation.test.ts` instruments the real
+lookup. The export's final lookup follows exact source and disclosure
+revalidation, immediately before the saved manifest is returned.
+`tests/qa/fault-recovery/sys-revocation.test.ts` instruments the real
 Access registry around the QA database and asserts those fixed lookup counts,
 while barriers revoke the principal during provider I/O, export source
 revalidation and an installation hook. It also checks that export bytes are
