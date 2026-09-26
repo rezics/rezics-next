@@ -106,6 +106,18 @@ export const profileRegistry = {
       "selection"
     ]
   },
+  "rating-aggregate-default-policy-v1": {
+    "sha256": "0d9a0acbe78f4043628960ed5942b64bc7a90d915e5e1fe0cb40938bda5f6fe4",
+    "file": "shapes/rating-aggregate-default-policy-v1.ttl",
+    "shapes": [
+      "https://rezics.com/definition/rating-aggregate-default-policy-v1/context-shape",
+      "https://rezics.com/definition/rating-aggregate-default-policy-v1/revision-shape"
+    ],
+    "focusRoles": [
+      "context",
+      "revision"
+    ]
+  },
   "realm-daily-rating-context-v1": {
     "sha256": "a1819809844d44a1766a4dd20713e8c639eed5b71d158c4458f861de0842e149",
     "file": "shapes/realm-daily-rating-context-v1.ttl",

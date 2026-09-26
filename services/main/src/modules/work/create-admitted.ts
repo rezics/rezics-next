@@ -24,6 +24,7 @@ type PendingPhase = 'work-activation' | 'work-edit' | 'work-address' | 'work-add
   | 'contribution-publication' | 'publication-selection' | 'space-create'
   | 'realm-adoption' | 'realm-rejection' | 'classification-context'
   | 'classification-proposition' | 'classification-decision' | 'rating-context'
+  | 'rating-policy'
   | 'rating-observation';
 
 export class PendingAdmittedWork extends PendingActivation {

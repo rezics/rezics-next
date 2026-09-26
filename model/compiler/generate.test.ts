@@ -14,7 +14,7 @@ test('P0.3: reviewed profiles publish matching shape bytes and digests', () => {
   const manifest = JSON.parse(artifacts.get('generated/model/manifest.json')!) as {
     profiles: { id: string; sha256: string; file: string }[];
   };
-  expect(manifest.profiles).toHaveLength(27);
+  expect(manifest.profiles).toHaveLength(28);
   const work = manifest.profiles.find(profile => profile.id === 'work-metadata-v1');
   expect(work).toBeDefined();
   const shape = artifacts.get(`generated/model/${work!.file}`)!;
@@ -54,6 +54,7 @@ test('P0.3: authored constraints emit the exact recorded candidate profiles', ()
     'classification-context-v1', 'classification-direct-decision-v1', 'classification-proposition-v1',
     'content-match-unit-v1', 'content-publication-v1', 'content-search-eligibility-v1',
     'fixed-native-text-release-v1', 'main-default-selection-v1',
+    'rating-aggregate-default-policy-v1',
     'realm-daily-rating-context-v1', 'realm-daily-rating-observation-v1',
     'realm-experience-rating-context-v1', 'realm-experience-rating-observation-v1',
     'realm-local-rejection-v1', 'realm-local-selection-v1',
@@ -70,6 +71,7 @@ test('P0.3: authored constraints emit the exact recorded candidate profiles', ()
     'work-derivation-v1', 'source-open-library-work-v1', 'work-author-credit-v1',
     'realm-daily-rating-context-v1', 'realm-daily-rating-observation-v1',
     'realm-experience-rating-context-v1', 'realm-experience-rating-observation-v1',
+    'rating-aggregate-default-policy-v1',
   ].includes(item.id))) {
     const rendered = renderProfile(profile);
     const evidenceName = profile.id === 'work-metadata-v1' ? 'work-profile' : `${profile.id.slice(0, -3)}-profile`;

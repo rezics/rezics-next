@@ -181,8 +181,10 @@ never becomes native observations or fabricated accounts.
 ## Aggregation policy
 
 Select target, context, compatible scale, audience and time basis before reducing.
-Default: latest eligible observation per rater, then equal-rater arithmetic mean.
-A context may choose mean-per-rater; pooled observation means remain separately
+The creation revision fixes the initial default: latest eligible observation per
+rater, then equal-rater arithmetic mean. An experience Context may later select
+mean-per-rater or pooled observation means through an explicit policy revision;
+the three reductions also remain separately
 labeled. With A's observations 2,2,8 and B's 6: latest-per-rater is 7,
 mean-per-rater is 5, and pooled observations are 4.5. Preserve distributions and
 denominators rather than averaging daily means.
@@ -196,8 +198,60 @@ Cross-context synthesis is an explicitly named metric with its own definition.
 
 The aggregate API admits three explicit experience profiles for one immutable
 Context, Work and MainVersion. Selecting a query policy does not change the
-Context's default or create a new question. RATE05's governance operation remains
-separate.
+Context's default or create a new question.
+
+### Experience Context aggregate default v1
+
+The immutable Context creation revision is the initial aggregate-policy revision.
+New experience Contexts set `ratingPolicyHead` to that revision at creation. The
+question, scale, target grain, eligible population and experience cadence remain
+bound to `contextRevision` and its original manifest. `POST
+/v1/rating-contexts/{id}/policy-revisions` admits only
+`rating-aggregate-default-policy-v1`, the exact `expectedPolicyHead`, one of the
+three named reductions, an acting subject and an Idempotency-Key. It requires an
+active Account principal with `rating:configure` and Access action
+`rating.context.policy.set` at `rating:policy:{Context URI}`. The command writes
+one immutable successor manifest and revision anchor, then compare-and-swaps only
+`ratingPolicyHead`; it does not edit Context/Observation manifests or heads. A
+different question, scale, target grain, population or cadence requires the
+existing create-Context operation and a distinct Context identity.
+
+The policy receipt records the fixed `contextRevision`, predecessor, selected
+reduction and new policy revision. The same key and intent returns that receipt;
+a changed intent under the key conflicts. A stale expected head gives a terminal
+409 with no policy effect. Revocation, inactive principals, missing grants and
+recovery hold fence admission. A claimed command with unknown graph outcome is
+pending until its receipt is resolved; it is not retried as a new revision. An
+authorized exact `GET /v1/rating-contexts/{id}/policy-revisions/{revision}`
+requires `rating:read`, Access `rating.observation.read` at
+`rating:read:{Context URI}` and an active principal. It returns the immutable
+reduction and question/scale/target/population/cadence basis for both the creation
+revision and successors. A missing or damaged revision is unavailable.
+
+`realm-experience-context-default-v1` is the real public aggregate consumer. It
+uses the same bounded private inventory and graph transaction as the three
+explicit experience profiles, but resolves the Context's current policy head in
+that graph snapshot and returns its exact revision IRI, selected reduction,
+denominator unit, distribution and source position. The Access owner seals a
+private policy-head witness in the same transaction as the admission outcome;
+the default read requires that witness to match the graph head. Missing, rolled
+back, unsealed or corrupt policy evidence returns unavailable rather than
+silently using the creation reduction. The three explicit profiles keep their
+definition policy revisions and response shape. Pre-policy Contexts without a
+sealed policy-head witness require explicit reconstruction before default reads.
+
+The command and read add one point Context lookup and one current policy manifest,
+independent of unrelated Contexts or predecessor-chain length. The default read
+retains the existing one graph query, 1 MiB graph response, five Access SQL
+statements, 101 inventory rows, 512 KiB immutable bytes and ten-second deadline.
+One successful policy change writes one successor manifest, one revision anchor,
+one head replacement, one receipt and one retained event; old manifests remain
+untouched. Native operator work, hot-head contention and deployment capacity
+need separate qualification. [AIP-154](https://google.aip.dev/154) describes
+freshness checks for concurrent updates and [AIP-155](https://google.aip.dev/155)
+describes request deduplication (reviewed 2026-09-26). The exact head and key
+here serve those distinct purposes; the Access witness and graph restore rules
+are REZICS-specific deductions, tested through the owning fixtures.
 
 | Profile | Selected values and denominator |
 | --- | --- |

@@ -35,6 +35,7 @@ async function withInventoryClient<T>(pool: Pool, signal: AbortSignal,
 interface RatingProof extends GraphTerminalProof {
   context?: string; realm?: string; revision?: string; work?: string;
   mainVersion?: string; slot?: string; observation?: string; predecessor?: string | null;
+  contextRevision?: string; policyRevision?: string;
 }
 interface SealingRatingAdmission { id: string; action: string; principal_id: string }
 const nativeId = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
@@ -44,14 +45,26 @@ const nativeId = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
 export async function recordRatingAggregateHead(client: PoolClient,
   admitted: SealingRatingAdmission, proof: RatingProof): Promise<void> {
   if (proof.outcome !== 'succeeded'
-    || !['rating.context.create', 'rating.observation.set'].includes(admitted.action)) return;
-  if (![proof.context, proof.realm, proof.revision].every(value => typeof value === 'string' && nativeId.test(value))) {
+    || !['rating.context.create', 'rating.context.policy.set', 'rating.observation.set'].includes(admitted.action)) return;
+  const revision = admitted.action === 'rating.context.policy.set' ? proof.policyRevision : proof.revision;
+  if (![proof.context, proof.realm, revision].every(value => typeof value === 'string' && nativeId.test(value))) {
     throw new RatingInventoryConflict('Rating receipt lacks its inventory identity');
   }
   if (admitted.action === 'rating.context.create') {
     await client.query(`INSERT INTO access.rating_aggregate_context
-      (context, realm, revision, admission_id) VALUES ($1,$2,$3,$4)`,
+      (context, realm, revision, policy_revision, admission_id) VALUES ($1,$2,$3,$3,$4)`,
     [proof.context, proof.realm, proof.revision, admitted.id]);
+    return;
+  }
+  if (admitted.action === 'rating.context.policy.set') {
+    if (!nativeId.test(proof.contextRevision ?? '') || !nativeId.test(proof.predecessor ?? '')) {
+      throw new RatingInventoryConflict('Rating policy predecessor is invalid');
+    }
+    const changed = await client.query(`UPDATE access.rating_aggregate_context
+      SET policy_revision = $1 WHERE context = $2 AND realm = $3 AND revision = $4
+        AND policy_revision = $5`,
+    [proof.policyRevision, proof.context, proof.realm, proof.contextRevision, proof.predecessor]);
+    if (changed.rowCount !== 1) throw new RatingInventoryConflict('Rating policy predecessor seal is unavailable');
     return;
   }
   // One new observation cannot certify the earlier population of a legacy Context.
@@ -87,14 +100,33 @@ export interface RatingInventoryHead {
   requestDigest: string; receipt: string; dataEpoch: string; sequence: string;
 }
 export interface RatingAggregateInventory {
-  realm: string; contextRevision: string; recoveryGeneration: string;
+  realm: string; contextRevision: string; policyRevision: string | null; recoveryGeneration: string;
   contextReceipt: string; contextDataEpoch: string; contextSequence: string;
   heads: RatingInventoryHead[];
+}
+
+/** The sealed private head prevents a rolled-back graph from relabeling a default. */
+export async function readRatingContextPolicyWitness(pool: Pool, context: string,
+  signal = AbortSignal.timeout(10_000)): Promise<{ contextRevision: string; policyRevision: string }> {
+  if (!nativeId.test(context)) throw new RatingInventoryConflict('invalid Rating Context');
+  return withInventoryClient(pool, signal, async client => {
+    const result = await client.query(`SELECT c.revision, c.policy_revision, f.open,
+        a.state, a.graph_outcome FROM access.rating_aggregate_context c
+      JOIN access.admission a ON a.id = c.admission_id
+      CROSS JOIN access.recovery_fence f WHERE c.context = $1 AND f.id = true`, [context]);
+    const row = result.rows[0];
+    if (result.rows.length !== 1 || row.open !== true || row.state !== 'sealed'
+      || row.graph_outcome !== 'succeeded' || !nativeId.test(row.policy_revision ?? '')) {
+      throw new RatingInventoryConflict('Rating policy witness is unavailable');
+    }
+    return { contextRevision: row.revision, policyRevision: row.policy_revision };
+  });
 }
 
 // Leading-key equality plus index order stops at k+1 without scanning other
 // targets or admission history. Every admission join uses its primary key.
 export const RATING_INVENTORY_SQL = `SELECT c.realm, c.revision AS context_revision,
+    c.policy_revision,
     f.open, f.generation, ca.state AS context_state, ca.graph_outcome AS context_outcome,
     ca.graph_receipt AS context_receipt, ca.graph_data_epoch AS context_epoch,
     ca.graph_sequence AS context_sequence,
@@ -141,6 +173,7 @@ export async function readRatingAggregateInventory(pool: Pool, context: string,
     });
     await client.query('COMMIT');
     return { realm: first.realm, contextRevision: first.context_revision,
+      policyRevision: first.policy_revision ?? null,
       contextReceipt: first.context_receipt, contextDataEpoch: first.context_epoch,
       contextSequence: first.context_sequence, recoveryGeneration: first.generation, heads };
   } catch (error) {

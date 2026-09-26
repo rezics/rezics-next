@@ -19,6 +19,7 @@ import { sealClassificationContextAdmission } from '../classification/context.ts
 import { sealClassificationPropositionAdmission } from '../classification/proposition.ts';
 import { sealClassificationDecisionAdmission } from '../classification/decision.ts';
 import { sealRatingContextAdmission } from '../rating/context.ts';
+import { sealRatingPolicyAdmission } from '../rating/policy.ts';
 import { sealStandingRatingAdmission } from '../rating/observation.ts';
 import { sealWorkAddressAdmission } from '../address/claim.ts';
 import { sealWorkAddressRenameAdmission } from '../address/rename.ts';
@@ -91,6 +92,8 @@ export async function strongRevokeWorkScope(
               ? await sealClassificationDecisionAdmission(env, admission)
             : admission.action === 'rating.context.create'
               ? await sealRatingContextAdmission(env, admission)
+            : admission.action === 'rating.context.policy.set'
+              ? await sealRatingPolicyAdmission(env, admission)
             : admission.action === 'rating.observation.set'
               ? await sealStandingRatingAdmission(env, admission)
           : null;
@@ -168,6 +171,8 @@ export async function strongRevokeWorkPrincipal(
               ? await sealClassificationDecisionAdmission(env, admission)
             : admission.action === 'rating.context.create'
               ? await sealRatingContextAdmission(env, admission)
+            : admission.action === 'rating.context.policy.set'
+              ? await sealRatingPolicyAdmission(env, admission)
             : admission.action === 'rating.observation.set'
               ? await sealStandingRatingAdmission(env, admission)
           : null;

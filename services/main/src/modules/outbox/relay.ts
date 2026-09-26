@@ -190,6 +190,9 @@ export interface MainCloudEvent {
     | 'com.rezics.classification.decision-cancelled.v1'
     | 'com.rezics.rating.context-created.v1'
     | 'com.rezics.rating.context-cancelled.v1'
+    | 'com.rezics.rating.policy-changed.v1'
+    | 'com.rezics.rating.policy-stale.v1'
+    | 'com.rezics.rating.policy-cancelled.v1'
     | 'com.rezics.rating.observation-changed.v1'
     | 'com.rezics.rating.observation-stale.v1'
     | 'com.rezics.rating.observation-cancelled.v1'
@@ -200,7 +203,7 @@ export interface MainCloudEvent {
   datacontenttype: 'application/json';
   data: { batchId: string; sourcePosition: { datasetId: 'product'; dataEpoch: string;
     sequence: string }; routingEpoch: string; ordinal: number; receipt: {
-      id: string; action: 'work.create' | 'work.edit' | 'work.derive' | 'release.seal' | 'address.claim' | 'address.rename' | 'address.dispose' | 'contribution.create' | 'contribution.edit' | 'contribution.publish' | 'publication.select' | 'space.create' | 'publication.adopt' | 'publication.reject' | 'publication.reject.organization' | 'classification.context.configure' | 'classification.proposition.define' | 'classification.decision.set' | 'rating.context.create' | 'rating.observation.set' | 'translation.link' | 'translation.authorize';
+      id: string; action: 'work.create' | 'work.edit' | 'work.derive' | 'release.seal' | 'address.claim' | 'address.rename' | 'address.dispose' | 'contribution.create' | 'contribution.edit' | 'contribution.publish' | 'publication.select' | 'space.create' | 'publication.adopt' | 'publication.reject' | 'publication.reject.organization' | 'classification.context.configure' | 'classification.proposition.define' | 'classification.decision.set' | 'rating.context.create' | 'rating.context.policy.set' | 'rating.observation.set' | 'translation.link' | 'translation.authorize';
       outcome: 'succeeded' | 'cancelled';
       admissionId: string; requestDigest: string; authorityEpoch: string; scope: string;
       operation?: string; work?: string; mainVersion?: string; workRevision?: string;
@@ -221,6 +224,8 @@ export interface MainCloudEvent {
       application?: string; decision?: string; decisionManifest?: string;
       decisionOutcome?: 'accepted' | 'rejected';
       ratingContext?: string; ratingContextRevision?: string; ratingContextManifest?: string;
+      ratingPolicyRevision?: string; ratingPolicyManifest?: string;
+      ratingPolicyPredecessor?: string; ratingPolicy?: string;
       ratingSlot?: string; ratingObservation?: string; observationRevision?: string;
       observationManifest?: string; ratingAvailability?: 'available' | 'withdrawn';
       ratingValue?: number;
@@ -662,7 +667,8 @@ export async function readMainOutboxEnvelope(fuseki: FusekiClient, batch: MainOu
     ?spaceRevision ?realmRevision ?owner ?classificationContext ?contextRevision
     ?scheme ?concept ?path ?expression ?sense ?definitionRevision
     ?application ?decision ?decisionOutcome ?eventApplication
-    ?ratingContext ?ratingContextRevision ?ratingSlot ?ratingObservation
+    ?ratingContext ?ratingContextRevision ?ratingPolicyRevision ?ratingPolicyPredecessor
+    ?ratingPolicy ?ratingSlot ?ratingObservation
     ?observationRevision ?ratingAvailability ?ratingValue
     ?eventRatingContext ?eventRatingObservation
     ?eventVariant ?eventContentRevision ?eventPublicationDecision
@@ -743,6 +749,9 @@ export async function readMainOutboxEnvelope(fuseki: FusekiClient, batch: MainOu
       OPTIONAL { ?receipt rv:decisionOutcome ?decisionOutcome }
       OPTIONAL { ?receipt rv:ratingContext ?ratingContext }
       OPTIONAL { ?receipt rv:ratingContextRevision ?ratingContextRevision }
+      OPTIONAL { ?receipt rv:ratingPolicyRevision ?ratingPolicyRevision }
+      OPTIONAL { ?receipt rv:predecessor ?ratingPolicyPredecessor }
+      OPTIONAL { ?receipt rv:ratingAggregationPolicy ?ratingPolicy }
       OPTIONAL { ?receipt rv:ratingSlot ?ratingSlot }
       OPTIONAL { ?receipt rv:ratingObservation ?ratingObservation }
       OPTIONAL { ?receipt rv:observationRevision ?observationRevision }
@@ -969,7 +978,7 @@ export async function readMainOutboxEnvelope(fuseki: FusekiClient, batch: MainOu
     || !/^[0-9a-f-]{36}$/.test(admissionId)
     || value('epoch') !== batch.dataEpoch
     || value('sequence') !== batch.sequence
-    || !['work.create', 'work.edit', 'contribution.create', 'contribution.edit', 'contribution.publish', 'publication.select', 'space.create', 'publication.adopt', 'publication.reject', 'publication.reject.organization', 'classification.context.configure', 'classification.proposition.define', 'classification.decision.set', 'rating.context.create', 'rating.observation.set'].includes(action ?? '')
+    || !['work.create', 'work.edit', 'contribution.create', 'contribution.edit', 'contribution.publish', 'publication.select', 'space.create', 'publication.adopt', 'publication.reject', 'publication.reject.organization', 'classification.context.configure', 'classification.proposition.define', 'classification.decision.set', 'rating.context.create', 'rating.context.policy.set', 'rating.observation.set'].includes(action ?? '')
     || ![`${RV}Succeeded`, `${RV}Cancelled`].includes(outcome ?? '')) {
     throw new OutboxIncomplete('event does not match its committed source position or receipt');
   }
@@ -1010,6 +1019,9 @@ export async function readMainOutboxEnvelope(fuseki: FusekiClient, batch: MainOu
   const decisionOutcome = value('decisionOutcome');
   const ratingContext = value('ratingContext');
   const ratingContextRevision = value('ratingContextRevision');
+  const ratingPolicyRevision = value('ratingPolicyRevision');
+  const ratingPolicyPredecessor = value('ratingPolicyPredecessor');
+  const ratingPolicy = value('ratingPolicy');
   const ratingSlot = value('ratingSlot');
   const ratingObservation = value('ratingObservation');
   const observationRevision = value('observationRevision');
@@ -1057,6 +1069,9 @@ export async function readMainOutboxEnvelope(fuseki: FusekiClient, batch: MainOu
     [`${RV}ClassificationDecisionCancelledEvent`]: 'com.rezics.classification.decision-cancelled.v1',
     [`${RV}RatingContextCreatedEvent`]: 'com.rezics.rating.context-created.v1',
     [`${RV}RatingContextCancelledEvent`]: 'com.rezics.rating.context-cancelled.v1',
+    [`${RV}RatingPolicyChangedEvent`]: 'com.rezics.rating.policy-changed.v1',
+    [`${RV}RatingPolicyStaleEvent`]: 'com.rezics.rating.policy-stale.v1',
+    [`${RV}RatingPolicyCancelledEvent`]: 'com.rezics.rating.policy-cancelled.v1',
     [`${RV}RatingObservationChangedEvent`]: 'com.rezics.rating.observation-changed.v1',
     [`${RV}RatingObservationStaleEvent`]: 'com.rezics.rating.observation-stale.v1',
     [`${RV}RatingObservationCancelledEvent`]: 'com.rezics.rating.observation-cancelled.v1',
@@ -1218,6 +1233,23 @@ export async function readMainOutboxEnvelope(fuseki: FusekiClient, batch: MainOu
         || !scope.startsWith('rating:context:') || operation || realm || ratingContext
         || ratingContextRevision || reason || work || main || space || contribution
         || classificationContext || contextRevision || sense || application || decision))
+    || (type === 'com.rezics.rating.policy-changed.v1'
+      && (action !== 'rating.context.policy.set' || outcome !== `${RV}Succeeded`
+        || !operation || !realm || !ratingContext || !ratingContextRevision
+        || !ratingPolicyRevision || !ratingPolicyPredecessor
+        || !['https://rezics.com/definition/rating-latest-per-rater-mean-v1',
+          'https://rezics.com/definition/rating-mean-per-rater-v1',
+          'https://rezics.com/definition/rating-pooled-observation-mean-v1'].includes(ratingPolicy ?? '')
+        || scope !== `rating:policy:${ratingContext}` || reason
+        || value('eventOperation') !== operation || value('eventRatingContext') !== ratingContext))
+    || (type === 'com.rezics.rating.policy-stale.v1'
+      && (action !== 'rating.context.policy.set' || outcome !== `${RV}Cancelled`
+        || !scope.startsWith('rating:policy:') || reason !== `${RV}StaleHead`
+        || operation || ratingContext || ratingPolicyRevision))
+    || (type === 'com.rezics.rating.policy-cancelled.v1'
+      && (action !== 'rating.context.policy.set' || outcome !== `${RV}Cancelled`
+        || !scope.startsWith('rating:policy:') || reason
+        || operation || ratingContext || ratingPolicyRevision))
     || (type === 'com.rezics.rating.observation-changed.v1'
       && (action !== 'rating.observation.set' || outcome !== `${RV}Succeeded`
         || !operation || !realm || !ratingContext || !contextRevision || !work || !main
@@ -1290,6 +1322,10 @@ export async function readMainOutboxEnvelope(fuseki: FusekiClient, batch: MainOu
     ...(ratingContext ? { ratingContext } : {}),
     ...(ratingContextRevision ? { ratingContextRevision,
       ratingContextManifest: await revisionManifest(fuseki, ratingContextRevision) } : {}),
+    ...(ratingPolicyRevision ? { ratingPolicyRevision,
+      ratingPolicyManifest: await revisionManifest(fuseki, ratingPolicyRevision) } : {}),
+    ...(ratingPolicyPredecessor ? { ratingPolicyPredecessor } : {}),
+    ...(ratingPolicy ? { ratingPolicy } : {}),
     ...(ratingSlot ? { ratingSlot } : {}),
     ...(ratingObservation ? { ratingObservation } : {}),
     ...(observationRevision ? { observationRevision,

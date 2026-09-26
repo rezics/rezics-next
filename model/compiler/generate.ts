@@ -17,6 +17,7 @@ import { realmExperienceRatingContextProfile } from '../definitions/realm-experi
 import { realmExperienceRatingObservationProfile } from '../definitions/realm-experience-rating-observation-v1.ts';
 import { realmStandingRatingContextProfile } from '../definitions/realm-standing-rating-context-v1.ts';
 import { realmStandingRatingObservationProfile } from '../definitions/realm-standing-rating-observation-v1.ts';
+import { ratingAggregateDefaultPolicyProfile } from '../definitions/rating-aggregate-default-policy-v1.ts';
 import { spaceRealmProfile } from '../definitions/space-realm-v1.ts';
 import { sourceOpenLibraryWorkProfile } from '../definitions/source-open-library-work-v1.ts';
 import { textContributionProfile } from '../definitions/text-contribution-v1.ts';
@@ -57,6 +58,7 @@ export const authoredProfiles: readonly ProfileDefinition[] = [
   realmExperienceRatingObservationProfile,
   realmStandingRatingContextProfile,
   realmStandingRatingObservationProfile,
+  ratingAggregateDefaultPolicyProfile,
   spaceRealmProfile,
   sourceOpenLibraryWorkProfile,
   textContributionProfile,

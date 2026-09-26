@@ -98,3 +98,96 @@ test('RATE02/MODEL17: experience shapes bind occasion predecessor and immutable 
     }
   }
 }, 60_000);
+
+test('RATE05/MODEL17: native policy successor keeps the question head and rejects malformed revisions', async () => {
+  if (!Bun.env.FUSEKI_URL || !Bun.env.MODEL_NATIVE_EQUIVALENCE) throw new Error('Run through the native model tier');
+  const base = Bun.env.FUSEKI_URL.replace(/\/$/, ''), rv = 'https://rezics.com/vocab/';
+  const context = 'https://rezics.com/id/019cb49e-0ea2-7000-8000-000000000051';
+  const basis = 'https://rezics.com/id/019cb49e-0ea2-7000-8000-000000000052';
+  const successor = 'https://rezics.com/id/019cb49e-0ea2-7000-8000-000000000053';
+  const current = 'urn:rezics:graph:current', revisions = 'urn:rezics:graph:revisions';
+  const control = 'urn:rezics:graph:control', receipts = 'urn:rezics:graph:receipts';
+  const outbox = 'urn:rezics:graph:outbox', dataset = 'urn:rezics:dataset:product';
+  const profile = 'rating-aggregate-default-policy-v1';
+  const selected = 'https://rezics.com/definition/rating-mean-per-rater-v1';
+  const upload = async (query: string) => {
+    const response = await fetch(`${base}/update`, { method: 'POST',
+      headers: { 'content-type': 'application/sparql-update' }, body: query });
+    if (!response.ok) throw new Error(`model update ${response.status}: ${await response.text()}`);
+  };
+  const ask = async (query: string) => {
+    const response = await fetch(`${base}/query?query=${encodeURIComponent(query)}`,
+      { headers: { accept: 'application/sparql-results+json' } });
+    return (await response.json() as { boolean: boolean }).boolean;
+  };
+  for (const variant of ['valid', 'missing-predecessor', 'wrong-reduction', 'stale-head'] as const) {
+    const nonce = crypto.randomUUID(), receipt = `urn:rating-policy-model:${nonce}`;
+    await upload(`CLEAR SILENT GRAPH <${current}>; CLEAR SILENT GRAPH <${revisions}>;
+      CLEAR SILENT GRAPH <${control}>; CLEAR SILENT GRAPH <${receipts}>; CLEAR SILENT GRAPH <${outbox}>`);
+    await upload(`PREFIX rv: <${rv}> INSERT DATA {
+      GRAPH <${current}> { <https://rezics.com/id/019cb49e-0ea2-7000-8000-000000000050>
+        a rv:Realm ; rv:realmState rv:Active ; rv:ratingContext <${context}> .
+        <${context}> a rv:RatingContext, rv:ExperienceRatingContext ;
+        rv:contextState rv:Active ; rv:realm <https://rezics.com/id/019cb49e-0ea2-7000-8000-000000000050> ;
+        rv:question "Aggregate experience quality"@en ; rv:targetGrain rv:MainVersion ;
+        rv:ratingScaleMin 1 ; rv:ratingScaleMax 10 ;
+        rv:ratingPopulationPolicy <https://rezics.com/definition/rating-account-principal-population-v1> ;
+        rv:head <${basis}> ;
+        rv:ratingPolicyHead <${basis}> ;
+        rv:ratingCadence <https://rezics.com/definition/rating-experience-v1> ;
+        rv:ratingAggregationPolicy <https://rezics.com/definition/rating-latest-per-rater-mean-v1> . }
+      GRAPH <${revisions}> { <${basis}> a rv:RevisionAnchor ; rv:component <${context}> . }
+      GRAPH <${control}> { <${dataset}> rv:dataEpoch "${nonce}" ; rv:routingEpoch "1" ; rv:sequence 0 . }
+    }`);
+    const attemptedHead = variant === 'stale-head' ? successor : basis;
+    const revisionTriples = `<${successor}> a rv:RatingPolicyRevision, rv:RevisionAnchor ;
+      rv:component <${context}> ; rv:contextRevision <${basis}> ;
+      ${variant === 'missing-predecessor' ? '' : `rv:predecessor <${basis}> ;`}
+      rv:ratingAggregationPolicy <${variant === 'wrong-reduction' ? 'https://rezics.com/definition/rating-unreviewed-v1' : selected}> ;
+      rv:modelRevision <https://rezics.com/definition/${profile}> ;
+      rv:manifest <urn:rezics:sha256:${'a'.repeat(64)}> .`;
+    const update = `PREFIX rv: <${rv}>
+      DELETE { GRAPH <${control}> { <${dataset}> rv:sequence 0 }
+        GRAPH <${current}> { <${context}> rv:ratingPolicyHead <${attemptedHead}> } }
+      INSERT { GRAPH <${control}> { <${dataset}> rv:sequence 1 }
+        GRAPH <${current}> { <${context}> rv:ratingPolicyHead <${successor}> }
+        GRAPH <${revisions}> { ${revisionTriples} }
+        GRAPH <${receipts}> { <${receipt}> a rv:OperationReceipt ; rv:requestDigest "${nonce}" ;
+          rv:outcome rv:Succeeded ; rv:datasetId <${dataset}> ; rv:dataEpoch "${nonce}" ; rv:sequence 1 . }
+        GRAPH <${outbox}> { <${receipt}:batch> a rv:OutboxBatch ; rv:dataEpoch "${nonce}" ;
+          rv:sequence 1 ; rv:eventCount 1 ; rv:event <${receipt}:event> .
+          <${receipt}:event> a rv:RatingPolicyChangedEvent ; rv:ordinal 0 ;
+          rv:action "rating.context.policy.set" ; rv:receipt <${receipt}> . }
+      } WHERE { GRAPH <${control}> { <${dataset}> rv:sequence 0 ; rv:dataEpoch "${nonce}" ; rv:routingEpoch "1" . }
+        GRAPH <${current}> { <${context}> rv:ratingPolicyHead <${attemptedHead}> }
+        FILTER NOT EXISTS { GRAPH <${receipts}> { <${receipt}> ?p ?o } } }`;
+    const validations = [{ profile: 'realm-experience-rating-context-v1',
+      sha256: profileRegistry['realm-experience-rating-context-v1'].sha256,
+      shape: 'https://rezics.com/definition/realm-experience-rating-context-v1/realm-shape',
+      focus: ['https://rezics.com/id/019cb49e-0ea2-7000-8000-000000000050'], graphs: [current],
+      binding: { realm: 'https://rezics.com/id/019cb49e-0ea2-7000-8000-000000000050',
+        context, question: 'Aggregate experience quality' } },
+    { profile: 'realm-experience-rating-context-v1',
+      sha256: profileRegistry['realm-experience-rating-context-v1'].sha256,
+      shape: 'https://rezics.com/definition/realm-experience-rating-context-v1/context-shape',
+      focus: [context], graphs: [current],
+      binding: { realm: 'https://rezics.com/id/019cb49e-0ea2-7000-8000-000000000050',
+        context, question: 'Aggregate experience quality' } },
+    ...profileRegistry[profile].shapes.map((shape, index) => ({
+      profile, sha256: profileRegistry[profile].sha256, shape,
+      focus: [index === 0 ? context : successor], graphs: [current, revisions],
+      binding: { context, revision: successor, contextRevision: basis, predecessor: basis,
+        aggregationPolicy: 'mean-per-rater' },
+    }))];
+    const response = await fetch(`${base}/command`, { method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${Bun.env.FUSEKI_COMMAND_TOKEN}` },
+      body: JSON.stringify({ receipt, digest: nonce, deadlineMs: 10_000, validations, update }) });
+    const outcome = await response.json() as { status: string; report?: string };
+    if (variant === 'valid' && outcome.status !== 'committed') throw new Error(JSON.stringify(outcome));
+    expect(outcome.status).toBe(variant === 'valid' ? 'committed' : variant === 'stale-head' ? 'guard-unmatched' : 'invalid');
+    expect(await ask(`PREFIX rv: <${rv}> ASK { GRAPH <${current}> {
+      <${context}> rv:head <${basis}> ; rv:ratingPolicyHead <${variant === 'valid' ? successor : basis}> . } }`)).toBe(true);
+    expect(await ask(`PREFIX rv: <${rv}> ASK { GRAPH <${revisions}> {
+      <${successor}> a rv:RatingPolicyRevision . } }`)).toBe(variant === 'valid');
+  }
+}, 60_000);

@@ -21,7 +21,7 @@ import { standingRatingDigest, standingRatingSlotIri }
 import { readComponentState } from '../../../services/main/src/modules/work/history.ts';
 import { GRAPHS, ID, RV, iri, initializeFreshGraph, type WorkActivationEnvironment }
   from '../../../services/main/src/modules/work/activate.ts';
-import { reconcileRetainedRatingContext, reconcileRetainedStandingRating,
+import { reconcileRetainedRatingContext, reconcileRetainedRatingPolicy, reconcileRetainedStandingRating,
   reconcileRetainedRealmSpaceCreate, reconcileRetainedWorkCreate, reconcileRetainedAdmissionCancellation,
   RetainedEffectConflict } from '../../../services/main/src/modules/work/reconcile-restored.ts';
 import { cutoverRestoredGraphLineage }
@@ -44,7 +44,7 @@ interface Opinion {
   sourcePosition: { sequence: string }; replayed: boolean;
 }
 
-test('RATE01/RATE02/RATE03/OPS03: standing daily and experience identities survive real API races and graph loss', async () => {
+test('RATE01/RATE02/RATE03/RATE05/OPS03: Rating identities and policy survive real API races and graph loss', async () => {
   if (!Bun.env.REZICS_QA_RUN_ID) throw new Error('Run through the isolated fault/recovery tier');
   const nonce = randomUUID().slice(0, 12);
   const liveId = `rating-${nonce}-l`, restoredId = `rating-${nonce}-r`;
@@ -77,7 +77,7 @@ test('RATE01/RATE02/RATE03/OPS03: standing daily and experience identities survi
     const liveFuseki = new MeteredFuseki(apps.FUSEKI_URL!, apps.FUSEKI_MAINTENANCE_TOKEN!, apps.FUSEKI_COMMAND_TOKEN!);
     const restoredFuseki = new FusekiClient(restoredApps.FUSEKI_URL!,
       restoredApps.FUSEKI_MAINTENANCE_TOKEN!, restoredApps.FUSEKI_COMMAND_TOKEN!);
-    expect((await liveFuseki.commandHealth()).moduleVersion).toBe('0.5.25');
+    expect((await liveFuseki.commandHealth()).moduleVersion).toBe('0.5.26');
     const lineage = { dataEpoch: apps.MAIN_DATA_EPOCH!, routingEpoch: '1' };
     const env: WorkActivationEnvironment = { fuseki: liveFuseki, lineage,
       objectDirectory: join(directory, 'objects') };
@@ -437,6 +437,7 @@ test('RATE01/RATE02/RATE03/OPS03: standing daily and experience identities survi
       const replay = envelope.type === 'com.rezics.work.created.v1' ? reconcileRetainedWorkCreate
         : envelope.type === 'com.rezics.space.created.v1' ? reconcileRetainedRealmSpaceCreate
         : envelope.type === 'com.rezics.rating.context-created.v1' ? reconcileRetainedRatingContext
+        : envelope.type === 'com.rezics.rating.policy-changed.v1' ? reconcileRetainedRatingPolicy
         : envelope.type === 'com.rezics.rating.observation-changed.v1' ? reconcileRetainedStandingRating
         : reconcileRetainedAdmissionCancellation;
       await replay(recovered, accessPool, relayPool, coverage, sequence);

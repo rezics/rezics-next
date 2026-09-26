@@ -171,7 +171,7 @@ export async function createRatingContext(env: WorkActivationEnvironment,
           rv:ratingCadence ${iri(cadence)} ;
           rv:ratingPopulationPolicy ${iri(RATING_ACCOUNT_POPULATION)} ;
           rv:ratingAggregationPolicy ${iri(RATING_LATEST_MEAN_POLICY)} ;
-          rv:head ${iri(revision)} .
+          rv:head ${iri(revision)} ; rv:ratingPolicyHead ${iri(revision)} .
       }
       GRAPH ${iri(GRAPHS.revisions)} {
         ${iri(revision)} a rv:RevisionAnchor ; rv:component ${iri(context)} ;

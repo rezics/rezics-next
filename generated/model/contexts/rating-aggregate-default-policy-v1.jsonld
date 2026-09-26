@@ -1,0 +1,60 @@
+{
+  "@context": {
+    "sh": {
+      "@id": "http://www.w3.org/ns/shacl#",
+      "@prefix": true
+    },
+    "rdf": {
+      "@id": "http://www.w3.org/1999/02/22-rdf-syntax-ns#",
+      "@prefix": true
+    },
+    "rv": {
+      "@id": "https://rezics.com/vocab/",
+      "@prefix": true
+    },
+    "rdf:type": {
+      "@id": "http://www.w3.org/1999/02/22-rdf-syntax-ns#type",
+      "@type": "@id"
+    },
+    "rv:component": {
+      "@id": "https://rezics.com/vocab/component",
+      "@type": "@id"
+    },
+    "rv:contextRevision": {
+      "@id": "https://rezics.com/vocab/contextRevision",
+      "@type": "@id"
+    },
+    "rv:contextState": {
+      "@id": "https://rezics.com/vocab/contextState",
+      "@type": "@id"
+    },
+    "rv:head": {
+      "@id": "https://rezics.com/vocab/head",
+      "@type": "@id"
+    },
+    "rv:manifest": {
+      "@id": "https://rezics.com/vocab/manifest",
+      "@type": "@id"
+    },
+    "rv:modelRevision": {
+      "@id": "https://rezics.com/vocab/modelRevision",
+      "@type": "@id"
+    },
+    "rv:predecessor": {
+      "@id": "https://rezics.com/vocab/predecessor",
+      "@type": "@id"
+    },
+    "rv:ratingAggregationPolicy": {
+      "@id": "https://rezics.com/vocab/ratingAggregationPolicy",
+      "@type": "@id"
+    },
+    "rv:ratingCadence": {
+      "@id": "https://rezics.com/vocab/ratingCadence",
+      "@type": "@id"
+    },
+    "rv:ratingPolicyHead": {
+      "@id": "https://rezics.com/vocab/ratingPolicyHead",
+      "@type": "@id"
+    }
+  }
+}

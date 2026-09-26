@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { Pool, type PoolClient } from 'pg';
 import { recordRatingAggregateHead, readRatingAggregateInventory,
-  checkRatingAggregateFence } from './rating-aggregate-inventory.ts';
+  checkRatingAggregateFence, readRatingContextPolicyWitness } from './rating-aggregate-inventory.ts';
 import { directWorkCreateProof, selectedDirectWorkProof } from './direct-principal.ts';
 import { groupWorkCreateProof, GroupUnavailable } from './groups.ts';
 import { representedWorkProof, selectedRepresentedWorkProof } from './represented-work-proof.ts';
@@ -231,6 +231,10 @@ export class AccessAdmissionRegistry {
 
   checkRatingAggregateFence(generation: string, signal?: AbortSignal) {
     return checkRatingAggregateFence(this.pool, generation, signal);
+  }
+
+  readRatingContextPolicyWitness(context: string, signal?: AbortSignal) {
+    return readRatingContextPolicyWitness(this.pool, context, signal);
   }
 
   async withWorkEditAuthority<T>(principal: VerifiedPrincipal, actingSubject: string,
@@ -1192,6 +1196,8 @@ export class AccessAdmissionRegistry {
                               ? 'classification-direct-decision'
                               : row?.action === 'rating.context.create'
                                 ? 'rating-context-create'
+                                : row?.action === 'rating.context.policy.set'
+                                  ? 'rating-policy-set'
                                 : row?.action === 'rating.observation.set'
                                   ? 'standing-rating-observation' : null;
       const expectedReceipt = receiptFamily && `urn:rezics:receipt:${createHash('sha256')

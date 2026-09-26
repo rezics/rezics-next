@@ -182,11 +182,29 @@ export const experienceRatingObservationReadResult = t.Object({
 });
 export const experienceRatingContextWriteResult = t.Object({
   ...ratingContextWriteResult.properties, cadence: t.Literal('experience'),
+  policyRevision: ref,
   profile: t.Literal('realm-experience-rating-context-v1'),
 });
 export const experienceRatingContextReadResult = t.Object({
   ...ratingContextReadResult.properties, cadence: t.Literal('experience'),
+  policyRevision: ref,
+  aggregation: t.Union([t.Literal('latest-per-rater-mean'),
+    t.Literal('mean-per-rater'), t.Literal('pooled-observation-mean')]),
   profile: t.Literal('realm-experience-rating-context-v1'),
+});
+
+export const ratingPolicyWriteResult = t.Object({
+  context: ref, realm: ref, contextRevision: ref, policyRevision: ref,
+  predecessor: ref, aggregationPolicy: t.Union([t.Literal('latest-per-rater-mean'),
+    t.Literal('mean-per-rater'), t.Literal('pooled-observation-mean')]), ...replay,
+});
+
+export const ratingPolicyReadResult = t.Object({
+  context: ref, realm: ref, contextRevision: ref, policyRevision: ref,
+  predecessor: nullableRef, aggregationPolicy: t.Union([t.Literal('latest-per-rater-mean'),
+    t.Literal('mean-per-rater'), t.Literal('pooled-observation-mean')]),
+  basis: t.Object({ question: t.String(), targetGrain: t.Literal('mainVersion'), scale,
+    cadence: t.Literal('experience'), population: t.Literal('account-principal') }),
 });
 
 export const classificationResolutionResult = t.Object({

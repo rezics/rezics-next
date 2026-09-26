@@ -19,6 +19,18 @@ boundaries, source snapshots and positive/denied/partial outcomes.
 Record inputs, operation receipts, exact profiles/builds and failures. A mock-only
 pass cannot qualify storage, cross-service behavior or capacity.
 
+G-029 extends the real Rating owner fixture with a Context-default aggregate.
+For A's 2,2,8 and B's 6 it first resolves the creation default to 7, then
+changes only the exact policy head to mean-per-rater and resolves 5. The explicit
+latest, mean and pooled profiles remain 7, 5 and 4.5, and a second question with
+the same scale retains separate Context and observation identities. Both policy
+revisions have authorized exact reads with their immutable question basis. Tests
+cover same-key retry, changed-key intent, stale head, missing grant, graph policy
+manifest loss, graph-head rollback against Access, recovery hold, retained replay
+and the one-query/five-SQL default cost. The selected fixture uses the existing
+single bulk-built population and graph-loss restore; native Jena operator work,
+production owner-cut release and deployment capacity remain separate.
+
 G-025 registers a complete RATE01 candidate across the
 [exact-reduction units](../../services/main/tests/rating-aggregate.test.ts) and
 the existing real Account/Access/Main/Jena

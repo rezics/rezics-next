@@ -57,6 +57,8 @@ with the current safe revision supplied only when the caller can read it.
 | Main | `POST /rating-contexts` | Active Realm, English question and authority -> distinct standing RatingContext with fixed MainVersion grain, 1–10 scale and policies. |
 | Main | `POST /rating-observations` | RatingContext, target, admitted slot/value -> observation/revision. |
 | Main | `POST /rating-aggregates` | Active RatingContext and MainVersion -> bounded complete current-head distribution and latest-per-rater mean. |
+| Main | `POST /rating-contexts/{id}/policy-revisions` | Exact policy-head successor for one experience Context; Context question and observations stay fixed. |
+| Main | `GET /rating-contexts/{id}/policy-revisions/{revision}` | Authorized immutable default-policy revision and question basis. |
 | Main | `POST /structure-operations` | Structure, expected head, bounded edits/import plan -> revision or staged operation. |
 | Main | `POST /queries` | Typed context/filter/text/graph descriptor -> truthful result envelope. |
 | Main | `GET /resources/{id}` | Typed selection/context and optional fence -> resolved eligible representation. |

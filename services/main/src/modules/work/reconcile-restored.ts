@@ -62,6 +62,8 @@ import { CLASSIFICATION_DIRECT_DECISION_PROFILE, classificationDecisionDigest,
 import { REALM_STANDING_RATING_CONTEXT_PROFILE, RATING_ACCOUNT_POPULATION,
   RATING_LATEST_MEAN_POLICY, RATING_STANDING_CADENCE, ratingContextDigest,
   ratingContextReceiptIri, readRatingContextReceipt } from '../rating/context.ts';
+import { RATING_DEFAULT_POLICIES, RATING_DEFAULT_POLICY_PROFILE, ratingPolicyDigest,
+  ratingPolicyReceiptIri, readRatingPolicyReceipt, type RatingDefaultPolicy } from '../rating/policy.ts';
 import { readStandingRatingReceipt, standingRatingDigest, standingRatingReceiptIri,
   standingRatingSlotIri, STANDING_RATING_OBSERVATION_PROFILE,
   type SetStandingRatingInput } from '../rating/observation.ts';
@@ -807,7 +809,7 @@ export async function reconcileRetainedRatingContext(
             rv:ratingCadence ${iri(cadence)} ;
             rv:ratingPopulationPolicy ${iri(RATING_ACCOUNT_POPULATION)} ;
             rv:ratingAggregationPolicy ${iri(RATING_LATEST_MEAN_POLICY)} ;
-            rv:head ${iri(revision)} .
+            rv:head ${iri(revision)} ; rv:ratingPolicyHead ${iri(revision)} .
         }
         GRAPH ${iri(GRAPHS.revisions)} {
           ${iri(revision)} a rv:RevisionAnchor ; rv:component ${iri(context)} ;
@@ -871,7 +873,8 @@ export async function reconcileRetainedRatingContext(
       GRAPH ${iri(GRAPHS.current)} {
         ${iri(realm)} a rv:Realm ; rv:ratingContext ${iri(context)} .
         ${iri(context)} a rv:RatingContext ; rv:realm ${iri(realm)} ;
-          rv:question ${lit(question)}@en ; rv:head ${iri(revision)} . }
+          rv:question ${lit(question)}@en ; rv:head ${iri(revision)} ;
+          rv:ratingPolicyHead ${iri(revision)} . }
       GRAPH ${iri(GRAPHS.revisions)} { ${iri(revision)} a rv:RevisionAnchor ;
         rv:component ${iri(context)} ; rv:manifest ${iri(receipt.ratingContextManifest)} ;
         rv:dataEpoch ${lit(coverage.dataEpoch)} ; rv:sequence ${sequence} . }
@@ -894,6 +897,179 @@ export async function reconcileRetainedRatingContext(
     return { receipt: receipt.id, context, replayed: !!existing };
   } catch (error) {
     try { await client.query('ROLLBACK'); } catch { /* retain original error */ }
+    throw error;
+  } finally { client.release(); }
+}
+
+/** Replay one sealed default change without touching the question or observations. */
+export async function reconcileRetainedRatingPolicy(
+  env: WorkActivationEnvironment, accessPool: Pool, relayPool: Pool,
+  coverage: RelayCoverage, sequence: string,
+): Promise<{ receipt: string; policyRevision: string; replayed: boolean }> {
+  const { eventId, envelope } = await loadRetainedEvent(relayPool, coverage, sequence);
+  const data = envelope?.data, receipt = data?.receipt;
+  const selected = Object.entries(RATING_DEFAULT_POLICIES).find(([, value]) =>
+    value === receipt?.ratingPolicy)?.[0] as RatingDefaultPolicy | undefined;
+  if (envelope.id !== eventId || envelope.specversion !== '1.0'
+    || envelope.source !== 'https://rezics.com/services/main'
+    || envelope.type !== 'com.rezics.rating.policy-changed.v1'
+    || data.ordinal !== 0 || data.sourcePosition.datasetId !== 'product'
+    || data.sourcePosition.dataEpoch !== coverage.dataEpoch
+    || data.sourcePosition.sequence !== sequence
+    || receipt.action !== 'rating.context.policy.set' || receipt.outcome !== 'succeeded'
+    || !receipt.operation || !receipt.realm || !receipt.ratingContext
+    || !receipt.ratingContextRevision || !receipt.ratingPolicyRevision
+    || !receipt.ratingPolicyManifest || !receipt.ratingPolicyPredecessor || !selected
+    || receipt.scope !== `rating:policy:${receipt.ratingContext}`
+    || receipt.id !== ratingPolicyReceiptIri(receipt.admissionId)
+    || eventId !== `urn:rezics:event:${hash(receipt.operation)}`
+    || data.batchId !== `urn:rezics:outbox:${hash(receipt.id)}`) {
+    throw new RetainedEffectConflict('retained Rating policy envelope is incomplete');
+  }
+  const context = receipt.ratingContext, realm = receipt.realm;
+  const contextRevision = receipt.ratingContextRevision;
+  const revision = receipt.ratingPolicyRevision, predecessor = receipt.ratingPolicyPredecessor;
+  const operation = receipt.operation;
+  for (const value of [eventId, data.batchId, receipt.id, context, realm,
+    contextRevision, revision, predecessor, operation]) iri(value);
+  if (context === realm || revision === predecessor
+    || !/^urn:rezics:sha256:[0-9a-f]{64}$/.test(receipt.ratingPolicyManifest)) {
+    throw new RetainedEffectConflict('retained Rating policy references are invalid');
+  }
+  const state = readComponentState(env.objectDirectory, receipt.ratingPolicyManifest,
+    context, RATING_DEFAULT_POLICY_PROFILE);
+  if (state.context !== context || state.realm !== realm || state.contextRevision !== contextRevision
+    || state.revision !== revision || state.predecessor !== predecessor
+    || state.aggregationPolicy !== selected || typeof state.question !== 'string'
+    || state.question.length < 3) {
+    throw new RetainedEffectConflict('retained Rating policy bytes differ');
+  }
+  const client = await accessPool.connect();
+  try {
+    await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ');
+    const fence = await client.query<{ open: boolean }>(
+      'SELECT open FROM access.recovery_fence WHERE id = true FOR SHARE');
+    if (fence.rows[0]?.open !== false) throw new RetainedEffectConflict('Access recovery fence is not held');
+    const access = await client.query<AccessEffectRow & { acting_subject: string }>(
+      `SELECT action, state, scope_id, request_digest, authority_epoch, acting_subject,
+         graph_receipt, graph_outcome, graph_data_epoch, graph_sequence
+       FROM access.admission WHERE id = $1`, [receipt.admissionId]);
+    const admitted = access.rows[0];
+    const witness = await client.query<{ realm: string; revision: string }>(
+      'SELECT realm, revision FROM access.rating_aggregate_context WHERE context = $1', [context]);
+    if (!admitted || admitted.action !== 'rating.context.policy.set'
+      || admitted.state !== 'sealed' || admitted.scope_id !== receipt.scope
+      || admitted.request_digest !== receipt.requestDigest
+      || admitted.authority_epoch !== receipt.authorityEpoch
+      || admitted.graph_receipt !== receipt.id || admitted.graph_outcome !== 'succeeded'
+      || admitted.graph_data_epoch !== coverage.dataEpoch || admitted.graph_sequence !== sequence
+      || witness.rows.length !== 1 || witness.rows[0]?.realm !== realm
+      || witness.rows[0]?.revision !== contextRevision
+      || ratingPolicyDigest({ context, expectedPolicyHead: predecessor,
+        aggregationPolicy: selected, actingSubject: admitted.acting_subject }) !== receipt.requestDigest) {
+      throw new RetainedEffectConflict('Access does not prove retained Rating policy');
+    }
+    const marker = `urn:rezics:restore:${env.lineage.dataEpoch}`;
+    const update = `PREFIX rv: <${RV}>
+      DELETE { GRAPH ${iri(GRAPHS.control)} { ${iri(marker)} rv:reconciledPriorSequence ?last }
+        GRAPH ${iri(GRAPHS.current)} { ${iri(context)} rv:ratingPolicyHead ${iri(predecessor)} } }
+      INSERT {
+        GRAPH ${iri(GRAPHS.control)} { ${iri(marker)} rv:reconciledPriorSequence ${sequence} }
+        GRAPH ${iri(GRAPHS.current)} { ${iri(context)} rv:ratingPolicyHead ${iri(revision)} }
+        GRAPH ${iri(GRAPHS.revisions)} { ${iri(revision)} a rv:RatingPolicyRevision, rv:RevisionAnchor ;
+          rv:component ${iri(context)} ; rv:contextRevision ${iri(contextRevision)} ;
+          rv:predecessor ${iri(predecessor)} ; rv:ratingAggregationPolicy ${iri(RATING_DEFAULT_POLICIES[selected])} ;
+          rv:operation ${iri(operation)} ; rv:manifest ${iri(receipt.ratingPolicyManifest)} ;
+          rv:modelRevision ${iri(RATING_DEFAULT_POLICY_PROFILE)} ;
+          rv:shapeRevision ${iri(RATING_DEFAULT_POLICY_PROFILE)} ; rv:datasetId ${iri(DATASET)} ;
+          rv:dataEpoch ${lit(coverage.dataEpoch)} ; rv:sequence ${sequence} . }
+        GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt.id)} a rv:OperationReceipt ;
+          rv:operation ${iri(operation)} ; rv:requestDigest ${lit(receipt.requestDigest)} ;
+          rv:admissionId ${lit(receipt.admissionId)} ; rv:authorityEpoch ${lit(receipt.authorityEpoch)} ;
+          rv:admittedScope ${lit(receipt.scope)} ; rv:outcome rv:Succeeded ;
+          rv:ratingContext ${iri(context)} ; rv:realm ${iri(realm)} ;
+          rv:ratingContextRevision ${iri(contextRevision)} ;
+          rv:ratingPolicyRevision ${iri(revision)} ; rv:predecessor ${iri(predecessor)} ;
+          rv:ratingAggregationPolicy ${iri(RATING_DEFAULT_POLICIES[selected])} ;
+          rv:datasetId ${iri(DATASET)} ; rv:dataEpoch ${lit(coverage.dataEpoch)} ; rv:sequence ${sequence} . }
+        GRAPH ${iri(GRAPHS.outbox)} { ${iri(data.batchId)} a rv:OutboxBatch ;
+          rv:dataEpoch ${lit(coverage.dataEpoch)} ; rv:sequence ${sequence} ;
+          rv:eventCount 1 ; rv:event ${iri(eventId)} .
+          ${iri(eventId)} a rv:RatingPolicyChangedEvent ; rv:ordinal 0 ;
+          rv:action "rating.context.policy.set" ; rv:receipt ${iri(receipt.id)} ;
+          rv:operation ${iri(operation)} ; rv:ratingContext ${iri(context)} . }
+      }
+      WHERE {
+        GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:dataEpoch ${lit(env.lineage.dataEpoch)} ;
+          rv:routingEpoch ${lit(env.lineage.routingEpoch)} ; rv:sequence 0 ;
+          rv:restoreCutover ${iri(marker)} ; rv:restoreHold true .
+          ${iri(marker)} rv:priorDataEpoch ${lit(coverage.dataEpoch)} ; rv:priorSequence ?saved .
+          OPTIONAL { ${iri(marker)} rv:reconciledPriorSequence ?last }
+          BIND(COALESCE(?last, ?saved) AS ?previous)
+          FILTER(?previous + 1 = ${sequence})
+        }
+        GRAPH ${iri(GRAPHS.current)} { ${iri(context)} a rv:RatingContext, rv:ExperienceRatingContext ;
+          rv:realm ${iri(realm)} ; rv:head ${iri(contextRevision)} ;
+          rv:ratingPolicyHead ${iri(predecessor)} . }
+        FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt.id)} ?p ?o } }
+        FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.revisions)} { ${iri(revision)} ?p ?o } }
+        FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.outbox)} {
+          ?otherBatch rv:dataEpoch ${lit(coverage.dataEpoch)} ; rv:sequence ${sequence} . } }
+        FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.outbox)} { ${iri(eventId)} ?p ?o } }
+      }`;
+    const existing = await readRatingPolicyReceipt(env, receipt.admissionId);
+    let updateError: unknown;
+    if (!existing) {
+      try {
+        const graphs = [GRAPHS.current, GRAPHS.revisions];
+        const validations = [
+          ...await profileValidations(env.fuseki, EXPERIENCE_CONTEXT_ID, [
+            { shape: `${EXPERIENCE_CONTEXT_PROFILE}/realm-shape`, focus: [realm], graphs },
+            { shape: `${EXPERIENCE_CONTEXT_PROFILE}/context-shape`, focus: [context], graphs },
+          ], { realm, context, question: state.question }),
+          ...await profileValidations(env.fuseki, 'rating-aggregate-default-policy-v1', [
+            { shape: `${RATING_DEFAULT_POLICY_PROFILE}/context-shape`, focus: [context], graphs },
+            { shape: `${RATING_DEFAULT_POLICY_PROFILE}/revision-shape`, focus: [revision], graphs },
+          ], { context, revision, contextRevision, predecessor, aggregationPolicy: selected }),
+        ];
+        const result = await env.fuseki.commandWithReceipt({ receipt: receipt.id,
+          digest: receipt.requestDigest, update, validations, deadlineMs: 10_000 });
+        if (result.status === 'invalid' || result.status === 'unknown-profile') {
+          throw new Error(`retained policy validation ${result.status}`);
+        }
+      } catch (error) { updateError = error; }
+    }
+    const terminal = await readRatingPolicyReceipt(env, receipt.admissionId);
+    const cursor = await reconciledCursor(env, marker);
+    const graphCheck = await env.fuseki.query(`PREFIX rv: <${RV}> ASK {
+      GRAPH ${iri(GRAPHS.revisions)} { ${iri(revision)} a rv:RatingPolicyRevision, rv:RevisionAnchor ;
+        rv:component ${iri(context)} ; rv:contextRevision ${iri(contextRevision)} ;
+        rv:predecessor ${iri(predecessor)} ; rv:manifest ${iri(receipt.ratingPolicyManifest)} ;
+        rv:dataEpoch ${lit(coverage.dataEpoch)} ; rv:sequence ${sequence} . }
+      GRAPH ${iri(GRAPHS.outbox)} { ${iri(data.batchId)} a rv:OutboxBatch ;
+        rv:sequence ${sequence} ; rv:eventCount 1 ; rv:event ${iri(eventId)} .
+        ${iri(eventId)} a rv:RatingPolicyChangedEvent ; rv:receipt ${iri(receipt.id)} . }
+    }`);
+    if (!terminal || terminal.outcome !== 'succeeded' || terminal.receipt !== receipt.id
+      || terminal.requestDigest !== receipt.requestDigest || terminal.admissionId !== receipt.admissionId
+      || terminal.context !== context || terminal.realm !== realm
+      || terminal.contextRevision !== contextRevision || terminal.policyRevision !== revision
+      || terminal.predecessor !== predecessor || terminal.aggregationPolicy !== selected
+      || terminal.dataEpoch !== coverage.dataEpoch || terminal.sequence !== sequence
+      || cursor === null || cursor < BigInt(sequence) || graphCheck.boolean !== true) {
+      throw new RetainedEffectConflict(updateError
+        ? 'retained Rating policy update outcome is unknown' : 'retained Rating policy did not reconcile');
+    }
+    if (cursor === BigInt(sequence)) {
+      const head = await env.fuseki.query(`PREFIX rv: <${RV}> ASK {
+        GRAPH ${iri(GRAPHS.current)} { ${iri(context)} rv:ratingPolicyHead ${iri(revision)} . }
+      }`);
+      if (head.boolean !== true) throw new RetainedEffectConflict('retained Rating policy head differs');
+    }
+    await client.query('COMMIT');
+    return { receipt: receipt.id, policyRevision: revision, replayed: !!existing };
+  } catch (error) {
+    try { await client.query('ROLLBACK'); } catch { /* preserve failure */ }
     throw error;
   } finally { client.release(); }
 }
@@ -3188,10 +3364,12 @@ export async function reconcileRetainedAdmissionCancellation(
   const decisionStale = envelope.type === 'com.rezics.classification.decision-stale.v1';
   const decisionCancelled = envelope.type === 'com.rezics.classification.decision-cancelled.v1';
   const ratingContextCancelled = envelope.type === 'com.rezics.rating.context-cancelled.v1';
+  const ratingPolicyStale = envelope.type === 'com.rezics.rating.policy-stale.v1';
+  const ratingPolicyCancelled = envelope.type === 'com.rezics.rating.policy-cancelled.v1';
   const ratingObservationStale = envelope.type === 'com.rezics.rating.observation-stale.v1';
   const ratingObservationCancelled = envelope.type === 'com.rezics.rating.observation-cancelled.v1';
   const terminalRejected = rejected || realmRejected || suppressionRejected || decisionStale
-    || ratingObservationStale;
+    || ratingObservationStale || ratingPolicyStale;
   const suffix = terminalRejected ? 'stale' : 'cancel';
   const expectedEvent = receipt?.id && `urn:rezics:event:${hash(`${receipt.id}\0${suffix}`)}`;
   const expectedReceipt = receipt?.action === 'work.create'
@@ -3214,6 +3392,8 @@ export async function reconcileRetainedAdmissionCancellation(
                           ? classificationDecisionReceiptIri(receipt.admissionId)
                           : receipt?.action === 'rating.context.create'
                             ? ratingContextReceiptIri(receipt.admissionId)
+                          : receipt?.action === 'rating.context.policy.set'
+                            ? ratingPolicyReceiptIri(receipt.admissionId)
                             : receipt?.action === 'rating.observation.set'
                               ? standingRatingReceiptIri(receipt.admissionId) : null;
   if (envelope.id !== eventId || envelope.specversion !== '1.0'
@@ -3222,6 +3402,7 @@ export async function reconcileRetainedAdmissionCancellation(
       && !selectionCancelled && !spaceCancelled && !realmCancelled
       && !suppressionCancelled && !contextCancelled && !propositionCancelled
       && !decisionStale && !decisionCancelled && !ratingContextCancelled
+      && !ratingPolicyStale && !ratingPolicyCancelled
       && !ratingObservationStale && !ratingObservationCancelled)
     || data.ordinal !== 0 || data.sourcePosition.datasetId !== 'product'
     || data.sourcePosition.dataEpoch !== coverage.dataEpoch
@@ -3257,6 +3438,10 @@ export async function reconcileRetainedAdmissionCancellation(
       || !receipt.scope.startsWith('classification:decide:') || receipt.reason))
     || (ratingContextCancelled && (receipt.action !== 'rating.context.create'
       || !receipt.scope.startsWith('rating:context:') || receipt.reason))
+    || (ratingPolicyStale && (receipt.action !== 'rating.context.policy.set'
+      || !receipt.scope.startsWith('rating:policy:') || receipt.reason !== 'stale-head'))
+    || (ratingPolicyCancelled && (receipt.action !== 'rating.context.policy.set'
+      || !receipt.scope.startsWith('rating:policy:') || receipt.reason))
     || (ratingObservationStale && (receipt.action !== 'rating.observation.set'
       || !receipt.scope.startsWith('rating:observe:') || receipt.reason !== 'stale-head'))
     || (ratingObservationCancelled && (receipt.action !== 'rating.observation.set'
@@ -3275,6 +3460,8 @@ export async function reconcileRetainedAdmissionCancellation(
     || receipt.application || receipt.decision || receipt.decisionManifest
     || receipt.decisionOutcome
     || receipt.ratingContext || receipt.ratingContextRevision || receipt.ratingContextManifest
+    || receipt.ratingPolicyRevision || receipt.ratingPolicyManifest
+    || receipt.ratingPolicyPredecessor || receipt.ratingPolicy
     || receipt.ratingSlot || receipt.ratingObservation || receipt.observationRevision
     || receipt.observationManifest || receipt.ratingAvailability || receipt.ratingValue
     || receipt.author || receipt.language
@@ -3318,11 +3505,14 @@ export async function reconcileRetainedAdmissionCancellation(
       : decisionStale ? 'ClassificationDecisionStaleEvent'
       : decisionCancelled ? 'ClassificationDecisionCancelledEvent'
       : ratingContextCancelled ? 'RatingContextCancelledEvent'
+      : ratingPolicyStale ? 'RatingPolicyStaleEvent'
+      : ratingPolicyCancelled ? 'RatingPolicyCancelledEvent'
       : ratingObservationStale ? 'RatingObservationStaleEvent'
       : ratingObservationCancelled ? 'RatingObservationCancelledEvent'
       : contributionCancelled ? 'ContributionAdmissionCancelledEvent' : 'AdmissionCancelledEvent';
     const admissionTriple = (cancelled || spaceCancelled || contextCancelled
       || propositionCancelled || ratingContextCancelled)
+      || ratingPolicyStale || ratingPolicyCancelled
       ? ` ; rv:admissionId ${lit(receipt.admissionId)}` : '';
     const update = `PREFIX rv: <${RV}>
       DELETE { GRAPH ${iri(GRAPHS.control)} { ${iri(marker)} rv:reconciledPriorSequence ?last } }
@@ -3384,6 +3574,8 @@ export async function reconcileRetainedAdmissionCancellation(
                             ? readClassificationDecisionReceipt(env, receipt.admissionId)
                             : receipt.action === 'rating.context.create'
                               ? readRatingContextReceipt(env, receipt.admissionId)
+                            : receipt.action === 'rating.context.policy.set'
+                              ? readRatingPolicyReceipt(env, receipt.admissionId)
                               : readStandingRatingReceipt(env, receipt.admissionId);
     const existing = await readTerminal();
     let updateError: unknown;

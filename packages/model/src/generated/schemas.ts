@@ -190,6 +190,14 @@ export const RealmStandingRatingObservationV1RevisionShapeSchema = Type.Intersec
 
 export type RealmStandingRatingObservationV1RevisionShape = Static<typeof RealmStandingRatingObservationV1RevisionShapeSchema>;
 
+export const RatingAggregateDefaultPolicyV1ContextShapeSchema = Type.Object({ "@id": Type.String({ minLength: 1 }), "rdf:type": Type.Intersect([Type.Array(Type.String({}), { minItems: 1, contains: Type.Literal("https://rezics.com/vocab/RatingContext") }), Type.Array(Type.String({}), { minItems: 1, contains: Type.Literal("https://rezics.com/vocab/ExperienceRatingContext") })]), "rv:contextState": Type.Array(Type.Literal("https://rezics.com/vocab/Active"), { maxItems: 1, minItems: 1 }), "rv:head": Type.Array(Type.String({}), { minItems: 1, maxItems: 1 }), "rv:ratingPolicyHead": Type.Array(Type.String({}), { minItems: 1, maxItems: 1 }), "rv:ratingAggregationPolicy": Type.Array(Type.Literal("https://rezics.com/definition/rating-latest-per-rater-mean-v1"), { maxItems: 1, minItems: 1 }), "rv:ratingCadence": Type.Array(Type.Literal("https://rezics.com/definition/rating-experience-v1"), { maxItems: 1, minItems: 1 }) }, { additionalProperties: true });
+
+export type RatingAggregateDefaultPolicyV1ContextShape = Static<typeof RatingAggregateDefaultPolicyV1ContextShapeSchema>;
+
+export const RatingAggregateDefaultPolicyV1RevisionShapeSchema = Type.Object({ "@id": Type.String({ minLength: 1 }), "rdf:type": Type.Intersect([Type.Array(Type.String({}), { minItems: 1, contains: Type.Literal("https://rezics.com/vocab/RatingPolicyRevision") }), Type.Array(Type.String({}), { minItems: 1, contains: Type.Literal("https://rezics.com/vocab/RevisionAnchor") })]), "rv:component": Type.Array(Type.String({}), { minItems: 1, maxItems: 1 }), "rv:contextRevision": Type.Array(Type.String({}), { minItems: 1, maxItems: 1 }), "rv:predecessor": Type.Array(Type.String({}), { minItems: 1, maxItems: 1 }), "rv:ratingAggregationPolicy": Type.Array(Type.Union([Type.Literal("https://rezics.com/definition/rating-latest-per-rater-mean-v1"), Type.Literal("https://rezics.com/definition/rating-mean-per-rater-v1"), Type.Literal("https://rezics.com/definition/rating-pooled-observation-mean-v1")]), { minItems: 1, maxItems: 1 }), "rv:modelRevision": Type.Array(Type.Literal("https://rezics.com/definition/rating-aggregate-default-policy-v1"), { maxItems: 1, minItems: 1 }), "rv:manifest": Type.Array(Type.String({}), { minItems: 1, maxItems: 1 }) }, { additionalProperties: true });
+
+export type RatingAggregateDefaultPolicyV1RevisionShape = Static<typeof RatingAggregateDefaultPolicyV1RevisionShapeSchema>;
+
 export const SpaceRealmV1SpaceShapeSchema = Type.Object({ "@id": Type.String({ minLength: 1 }), "rdf:type": Type.Array(Type.String({}), { minItems: 1, contains: Type.Literal("https://rezics.com/vocab/Space") }), "rv:owner": Type.Array(Type.String({}), { minItems: 1, maxItems: 1 }), "rv:realmCapability": Type.Array(Type.String({}), { minItems: 1, maxItems: 1 }) }, { additionalProperties: true });
 
 export type SpaceRealmV1SpaceShape = Static<typeof SpaceRealmV1SpaceShapeSchema>;
@@ -322,6 +330,8 @@ export const shapeSchemas = {
   "https://rezics.com/definition/realm-standing-rating-observation-v1/main-shape": RealmStandingRatingObservationV1MainShapeSchema,
   "https://rezics.com/definition/realm-standing-rating-observation-v1/observation-shape": RealmStandingRatingObservationV1ObservationShapeSchema,
   "https://rezics.com/definition/realm-standing-rating-observation-v1/revision-shape": RealmStandingRatingObservationV1RevisionShapeSchema,
+  "https://rezics.com/definition/rating-aggregate-default-policy-v1/context-shape": RatingAggregateDefaultPolicyV1ContextShapeSchema,
+  "https://rezics.com/definition/rating-aggregate-default-policy-v1/revision-shape": RatingAggregateDefaultPolicyV1RevisionShapeSchema,
   "https://rezics.com/definition/space-realm-v1/space-shape": SpaceRealmV1SpaceShapeSchema,
   "https://rezics.com/definition/space-realm-v1/realm-shape": SpaceRealmV1RealmShapeSchema,
   "https://rezics.com/definition/source-open-library-work-v1/record-shape": SourceOpenLibraryWorkV1RecordShapeSchema,

@@ -26,7 +26,8 @@ final class BindingPolicy {
         "realm-standing-rating-observation-v1", "realm-daily-rating-context-v1",
         "realm-daily-rating-observation-v1", "realm-experience-rating-context-v1",
         "realm-experience-rating-observation-v1", "translation-link-v1", "work-derivation-v1",
-        "fixed-native-text-release-v1", "work-author-credit-v1");
+        "fixed-native-text-release-v1", "work-author-credit-v1",
+        "rating-aggregate-default-policy-v1");
 
     static boolean applies(String profile) { return BOUND.contains(profile); }
 
@@ -75,6 +76,7 @@ final class BindingPolicy {
             case "realm-standing-rating-context-v1" -> ratingContext(false);
             case "realm-daily-rating-context-v1" -> ratingContext(true);
             case "realm-experience-rating-context-v1" -> ratingContext(false);
+            case "rating-aggregate-default-policy-v1" -> ratingDefaultPolicy();
             case "realm-standing-rating-observation-v1" -> ratingObservation(false, false);
             case "realm-daily-rating-observation-v1" -> ratingObservation(true, false);
             case "realm-experience-rating-observation-v1" -> ratingObservation(false, true);
@@ -159,6 +161,23 @@ final class BindingPolicy {
         has("context", RV + "realm", iri(role("realm")));
         has("context", RV + "question", NodeFactory.createLiteralLang(arg("question"), "en"));
         if (daily) ratingTimeZone();
+    }
+    private void ratingDefaultPolicy() {
+        keys("context revision contextRevision predecessor aggregationPolicy", "");
+        roles("context revision");
+        String selected = switch (arg("aggregationPolicy")) {
+            case "latest-per-rater-mean" -> "rating-latest-per-rater-mean-v1";
+            case "mean-per-rater" -> "rating-mean-per-rater-v1";
+            case "pooled-observation-mean" -> "rating-pooled-observation-mean-v1";
+            default -> throw new IllegalArgumentException("unknown Rating aggregate default");
+        };
+        exact("context", RV + "head", iri(arg("contextRevision")));
+        exact("context", RV + "ratingPolicyHead", iri(role("revision")));
+        exact("revision", RV + "component", iri(role("context")));
+        exact("revision", RV + "contextRevision", iri(arg("contextRevision")));
+        exact("revision", RV + "predecessor", iri(arg("predecessor")));
+        exact("revision", RV + "ratingAggregationPolicy",
+            iri("https://rezics.com/definition/" + selected));
     }
     private void ratingObservation(boolean daily, boolean experience) {
         keys("realm context work main slot observation revision availability"

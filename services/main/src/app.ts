@@ -2,7 +2,8 @@ import { DAILY_CONTEXT_PROFILE, DAILY_CADENCE, DAILY_OBSERVATION_PROFILE, DAILY_
   dailyRatingSlotIri, canonicalRatingTimeZone, InvalidRatingCalendar } from './modules/rating/calendar.ts';
 import { readDailyRevisionPeriod } from './modules/rating/daily-period.ts';
 import { queryExperienceRatingAggregate } from './modules/rating/experience-aggregate.ts';
-import { experienceAggregateInput, experienceAggregateResult } from './modules/rating/aggregate-api.ts';
+import { experienceAggregateInput, experienceAggregateResult,
+  experienceContextDefaultInput, experienceContextDefaultResult } from './modules/rating/aggregate-api.ts';
 import { EXPERIENCE_CONTEXT_ID, EXPERIENCE_CONTEXT_PROFILE, EXPERIENCE_CADENCE,
   EXPERIENCE_OBSERVATION_ID, EXPERIENCE_OBSERVATION_PROFILE, OCCASION_PATTERN,
   experienceRatingIdentity, readExperienceRevision } from './modules/rating/experience.ts';
@@ -177,6 +178,10 @@ import { ClassificationDecisionUnavailable, InvalidClassificationDecisionInput,
 import { resolveClassification, InvalidClassificationResolution,
   ClassificationResolutionUnavailable, ClassificationTargetUnavailable } from './modules/classification/resolve.ts';
 import { createAdmittedRatingContext } from './modules/rating/context-admitted.ts';
+import { setAdmittedRatingDefaultPolicy } from './modules/rating/policy-admitted.ts';
+import { InvalidRatingPolicyInput, RatingPolicyUnavailable, StaleRatingPolicy,
+  readExactRatingPolicyRevision, readRatingPolicyBasis } from './modules/rating/policy.ts';
+import { RatingInventoryConflict } from './modules/access/rating-aggregate-inventory.ts';
 import { InvalidRatingContextInput, RatingRealmUnavailable,
   REALM_STANDING_RATING_CONTEXT_PROFILE, RATING_STANDING_CADENCE,
   RATING_ACCOUNT_POPULATION, RATING_LATEST_MEAN_POLICY } from './modules/rating/context.ts';
@@ -204,6 +209,7 @@ import { actingContextCheck, actingContextDiscovery, actingContextPreference,
   experienceRatingContextWriteResult, experienceRatingContextReadResult,
   experienceRatingObservationWriteResult, experienceRatingObservationReadResult,
   ratingAggregateResult, ratingContextReadResult, ratingContextWriteResult,
+  ratingPolicyReadResult, ratingPolicyWriteResult,
   ratingObservationReadResult, ratingObservationWriteResult, readProblems,
   realmSelectionReadResult, spaceReadResult, spaceWriteResult, writeProblems } from './api-responses.ts';
 
@@ -218,7 +224,8 @@ export interface MainWorkDependencies {
     'register' | 'claim' | 'recordGraphOutcome' | 'canReadWork' | 'canReadContributionDraft'
     | 'canReadStandingRating' | 'canLinkTranslation' | 'activePrincipalId'>
     & Partial<Pick<AccessAdmissionRegistry, 'verifyContentDraftProof'
-      | 'readRatingAggregateInventory' | 'checkRatingAggregateFence'>>;
+      | 'readRatingAggregateInventory' | 'checkRatingAggregateFence'
+      | 'readRatingContextPolicyWitness'>>;
   actingContexts?: AccessActingContexts;
   groups?: AccessGroups;
   grants?: AccessGrants;
@@ -1446,6 +1453,9 @@ function commandError(error: unknown): Response {
   if (error instanceof StaleRatingObservation) {
     return problem(409, 'stale_head', 'Expected standing rating revision is stale');
   }
+  if (error instanceof StaleRatingPolicy) {
+    return problem(409, 'stale_head', 'Expected Rating policy head is stale');
+  }
   if (error instanceof WorkEditUnavailable || error instanceof ContributionWorkUnavailable) {
     return problem(404, 'work_unavailable', 'Work is unavailable');
   }
@@ -1506,6 +1516,9 @@ function commandError(error: unknown): Response {
   if (error instanceof RatingRealmUnavailable) {
     return problem(404, 'realm_unavailable', 'Rating Realm is unavailable');
   }
+  if (error instanceof InvalidRatingPolicyInput) {
+    return problem(400, 'invalid_request', 'Rating policy request is invalid');
+  }
   if (error instanceof RatingObservationUnavailable) {
     return problem(409, 'rating_observation_unavailable', 'Rating observation is unavailable');
   }
@@ -1537,6 +1550,9 @@ function commandError(error: unknown): Response {
   }
   if (error instanceof RatingAggregateUnavailable) {
     return problem(503, 'rating_aggregate_unavailable', 'Rating aggregate snapshot is unavailable');
+  }
+  if (error instanceof RatingPolicyUnavailable || error instanceof RatingInventoryConflict) {
+    return problem(503, 'rating_policy_unavailable', 'Rating policy revision is unavailable');
   }
   if (error instanceof PublicQueryUnavailable) {
     return problem(503, 'query_unavailable', 'Public query snapshot is unavailable');
@@ -3269,8 +3285,9 @@ export function createMainApp(fuseki: FusekiClient, work?: MainWorkDependencies)
         context: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
         work: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
         mainVersion: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
-      }, { additionalProperties: false }), experienceAggregateInput]),
-      response: { 200: t.Union([ratingAggregateResult, experienceAggregateResult]), ...readProblems, 422: problemResult(422) },
+      }, { additionalProperties: false }), experienceAggregateInput, experienceContextDefaultInput]),
+      response: { 200: t.Union([ratingAggregateResult, experienceAggregateResult,
+        experienceContextDefaultResult]), ...readProblems, 422: problemResult(422) },
     }, async ({ body }) => {
       try {
         if (body.profile !== 'realm-standing-latest-mean-v1') {
@@ -3467,11 +3484,69 @@ export function createMainApp(fuseki: FusekiClient, work?: MainWorkDependencies)
           ...(body.profile === 'realm-daily-rating-context-v1'
             ? { timeZone: canonicalRatingTimeZone(body.timeZone), calendar: 'iso8601' } : {}), population: 'account-principal',
           aggregation: 'latest-per-rater-mean',
+          ...(body.profile === EXPERIENCE_CONTEXT_ID ? { policyRevision: receipt.revision } : {}),
           profile: body.profile,
           sourcePosition: { datasetId: 'product', dataEpoch: receipt.dataEpoch,
             sequence: receipt.sequence }, replayed: receipt.replayed }, {
           status: receipt.replayed ? 200 : 201, headers: { 'cache-control': 'no-store' },
         });
+      } catch (error) { return commandError(error); }
+    })
+    .post('/v1/rating-contexts/:id/policy-revisions', {
+      params: t.Object({ id: t.String({ pattern: '^[0-9a-f-]{36}$' }) }),
+      body: t.Object({ profile: t.Literal('rating-aggregate-default-policy-v1'),
+        expectedPolicyHead: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
+        aggregationPolicy: t.Union([t.Literal('latest-per-rater-mean'),
+          t.Literal('mean-per-rater'), t.Literal('pooled-observation-mean')]),
+        actingSubject: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
+      }, { additionalProperties: false }),
+      response: { 200: ratingPolicyWriteResult, 201: ratingPolicyWriteResult,
+        202: pendingOperation, ...writeProblems },
+    }, async ({ request, params, body }) => {
+      const idempotencyKey = request.headers.get('idempotency-key');
+      if (!idempotencyKey || !/^[A-Za-z0-9:_./-]{1,128}$/.test(idempotencyKey)) {
+        return problem(400, 'invalid_idempotency_key', 'A valid Idempotency-Key header is required');
+      }
+      try {
+        const receipt = await setAdmittedRatingDefaultPolicy(work.environment,
+          work.account, work.access, request, {
+            context: `https://rezics.com/id/${params.id}`,
+            expectedPolicyHead: body.expectedPolicyHead,
+            aggregationPolicy: body.aggregationPolicy,
+            actingSubject: body.actingSubject, idempotencyKey,
+          });
+        return Response.json({ context: receipt.context, realm: receipt.realm,
+          contextRevision: receipt.contextRevision, policyRevision: receipt.policyRevision,
+          predecessor: receipt.predecessor, aggregationPolicy: receipt.aggregationPolicy,
+          sourcePosition: { datasetId: 'product', dataEpoch: receipt.dataEpoch,
+            sequence: receipt.sequence }, replayed: receipt.replayed }, {
+          status: receipt.replayed ? 200 : 201, headers: { 'cache-control': 'no-store' },
+        });
+      } catch (error) { return commandError(error); }
+    })
+    .get('/v1/rating-contexts/:id/policy-revisions/:revision', {
+      params: t.Object({ id: t.String({ pattern: '^[0-9a-f-]{36}$' }),
+        revision: t.String({ pattern: '^[0-9a-f-]{36}$' }) }),
+      query: t.Object({ actingSubject: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }) }),
+      response: { 200: ratingPolicyReadResult, ...authorizedReadProblems },
+    }, async ({ request, params, query }) => {
+      try {
+        await assertGraphAdmissionOpen(fuseki, work.environment.lineage);
+        const context = `https://rezics.com/id/${params.id}`;
+        const principal = await work.account.verify(request, ['rating:read']);
+        if (!await work.access.canReadStandingRating(principal, query.actingSubject, context)
+          || !await work.access.activePrincipalId(principal)) {
+          return problem(403, 'authority_denied', 'Authority is not admitted');
+        }
+        const basis = await readRatingPolicyBasis(work.environment, context);
+        const witness = await work.access.readRatingContextPolicyWitness?.(context);
+        if (!witness || witness.contextRevision !== basis.contextRevision
+          || witness.policyRevision !== basis.policyHead) {
+          throw new RatingPolicyUnavailable('Rating policy witness differs');
+        }
+        const result = await readExactRatingPolicyRevision(work.environment,
+          context, `https://rezics.com/id/${params.revision}`);
+        return Response.json(result, { headers: { 'cache-control': 'no-store' } });
       } catch (error) { return commandError(error); }
     })
     .get('/v1/rating-contexts/:id', {
@@ -3524,11 +3599,23 @@ export function createMainApp(fuseki: FusekiClient, work?: MainWorkDependencies)
           || state.aggregationPolicy !== RATING_LATEST_MEAN_POLICY) {
           return problem(503, 'revision_unavailable', 'Committed revision bytes are unavailable');
         }
+        const policy = experience ? await readRatingPolicyBasis(work.environment, context) : undefined;
+        if (policy && policy.contextRevision !== row.revision.value) {
+          return problem(503, 'rating_policy_unavailable', 'Rating policy revision is unavailable');
+        }
+        if (policy) {
+          const witness = await work.access.readRatingContextPolicyWitness?.(context);
+          if (!witness || witness.contextRevision !== policy.contextRevision
+            || witness.policyRevision !== policy.policyHead) {
+            throw new RatingPolicyUnavailable('Rating policy witness differs');
+          }
+        }
         return Response.json({ context, realm: row.realm.value, question: row.question.value,
           contextRevision: row.revision.value, targetGrain: 'mainVersion',
           scale: { min: 1, max: 10, step: 1 }, cadence: experience ? 'experience' : daily ? 'daily' : 'standing',
           ...(daily ? { timeZone: state.timeZone, calendar: 'iso8601' } : {}),
-          population: 'account-principal', aggregation: 'latest-per-rater-mean',
+          population: 'account-principal', aggregation: policy?.aggregationPolicy ?? 'latest-per-rater-mean',
+          ...(policy ? { policyRevision: policy.policyHead } : {}),
           profile: experience ? EXPERIENCE_CONTEXT_ID : daily ? 'realm-daily-rating-context-v1' : 'realm-standing-rating-context-v1' },
         { headers: { 'cache-control': 'no-store' } });
       } catch (error) { return commandError(error); }

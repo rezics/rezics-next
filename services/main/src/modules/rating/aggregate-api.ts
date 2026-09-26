@@ -1,6 +1,7 @@
 import { t } from 'elysia';
 import { sourcePosition } from '../../api-contract.ts';
 import { EXPERIENCE_AGGREGATE_PROFILES, EXPERIENCE_POLICIES } from './experience-reduction.ts';
+import { EXPERIENCE_CONTEXT_DEFAULT_PROFILE } from './experience-aggregate.ts';
 
 const target = t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' });
 const integerText = t.String({ pattern: '^(0|[1-9][0-9]*)$', maxLength: 128 });
@@ -11,6 +12,11 @@ const unit = t.Union([t.Literal('rater'), t.Literal('observation')]);
 
 export const experienceAggregateInput = t.Object({
   profile: t.Union(EXPERIENCE_AGGREGATE_PROFILES.map(value => t.Literal(value))),
+  context: target, work: target, mainVersion: target,
+}, { additionalProperties: false });
+
+export const experienceContextDefaultInput = t.Object({
+  profile: t.Literal(EXPERIENCE_CONTEXT_DEFAULT_PROFILE),
   context: target, work: target, mainVersion: target,
 }, { additionalProperties: false });
 
@@ -34,3 +40,11 @@ export const experienceAggregateResult = t.Union(EXPERIENCE_AGGREGATE_PROFILES.m
     t.Object({ kind: t.Literal('exact-rational'), ...fraction })]),
   sourcePosition,
 })));
+
+export const experienceContextDefaultResult = t.Object({
+  ...experienceAggregateResult.anyOf[0]!.properties,
+  profile: t.Literal(EXPERIENCE_CONTEXT_DEFAULT_PROFILE),
+  aggregationPolicy: t.Union([t.Literal('latest-per-rater-mean'),
+    t.Literal('mean-per-rater'), t.Literal('pooled-observation-mean')]),
+  policyRevision: target,
+});

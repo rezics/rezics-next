@@ -11,11 +11,14 @@ import { EXPERIENCE_CADENCE, EXPERIENCE_CONTEXT_PROFILE, EXPERIENCE_OBSERVATION_
   validOccasion } from './experience.ts';
 import { EXPERIENCE_AGGREGATE_PROFILES, reduceExperienceRatings,
   type ExperienceAggregateProfile, type EffectiveExperience } from './experience-reduction.ts';
+import { RATING_DEFAULT_POLICIES, RATING_DEFAULT_POLICY_PROFILE } from './policy.ts';
 import { sameRatingInstant, standingRatingDigest } from './observation.ts';
 
 type Row = NonNullable<NonNullable<SparqlResult['results']>['bindings']>[number];
 type InventoryAccess = Pick<AccessAdmissionRegistry, 'readRatingAggregateInventory' | 'checkRatingAggregateFence'>;
 const nativeId = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
+export const EXPERIENCE_CONTEXT_DEFAULT_PROFILE = 'realm-experience-context-default-v1';
+export type ExperienceAggregateRequestProfile = ExperienceAggregateProfile | typeof EXPERIENCE_CONTEXT_DEFAULT_PROFILE;
 export const EXPERIENCE_AGGREGATE_BUDGET = { graphCalls: 1, graphBytes: 1_048_576,
   manifestBytes: 524_288, deadlineMs: 10_000 } as const;
 
@@ -23,9 +26,11 @@ function unavailable(): never { throw new RatingAggregateUnavailable('experience
 
 /** Root and candidates share one Jena read transaction. The candidate branch
  * does not require a head: damaged or unsealed slots must remain detectable. */
-export function experienceAggregateQuery(env: WorkActivationEnvironment, input: StandingRatingAggregateInput): string {
+export function experienceAggregateQuery(env: WorkActivationEnvironment, input: StandingRatingAggregateInput,
+  contextDefault = false): string {
   return `PREFIX rv: <${RV}> PREFIX schema: <https://schema.org/>
   SELECT ?kind ?epoch ?sequence ?realm ?contextRevision ?contextManifest ?question
+    ?policyHead ?policyManifest ?selectedPolicy ?policyPredecessor ?policyContextRevision
     ?contextEpoch ?contextSequence ?observation ?slot ?head ?occasion ?availability
     ?value ?manifest ?evaluatedAt ?submittedAt ?originalSubmissionAt ?revisedAt
     ?revisionEpoch ?revisionSequence ?receipt ?digest ?predecessor WHERE {
@@ -42,15 +47,22 @@ export function experienceAggregateQuery(env: WorkActivationEnvironment, input: 
         ${iri(input.context)} a rv:RatingContext, rv:ExperienceRatingContext ; rv:contextState rv:Active ;
           rv:realm ?realm ; rv:targetGrain rv:MainVersion ; rv:ratingScaleMin 1 ; rv:ratingScaleMax 10 ;
           rv:ratingCadence ${iri(EXPERIENCE_CADENCE)} ; rv:ratingPopulationPolicy ${iri(RATING_ACCOUNT_POPULATION)} ;
-          rv:ratingAggregationPolicy ${iri(RATING_LATEST_MEAN_POLICY)} ; rv:head ?contextRevision ; rv:question ?question .
+          rv:ratingAggregationPolicy ${iri(RATING_LATEST_MEAN_POLICY)} ; rv:head ?contextRevision ; rv:question ?question
+          ${contextDefault ? '; rv:ratingPolicyHead ?policyHead' : ''} .
         ${iri(input.work)} a schema:CreativeWork ; rv:mainVersion ${iri(input.mainVersion)} .
         ${iri(input.mainVersion)} a rv:MainVersion ; rv:work ${iri(input.work)} .
       }
       GRAPH ${iri(GRAPHS.revisions)} { ?contextRevision a rv:RevisionAnchor ; rv:component ${iri(input.context)} ;
-        rv:modelRevision ${iri(EXPERIENCE_CONTEXT_PROFILE)} ; rv:manifest ?contextManifest ;
+        rv:modelRevision ${iri(EXPERIENCE_CONTEXT_PROFILE)} ; rv:manifest ?contextManifest ; rv:operation ?contextOperation ;
         rv:dataEpoch ?contextEpoch ; rv:sequence ?contextSequence . }
+      ${contextDefault ? `OPTIONAL { GRAPH ${iri(GRAPHS.revisions)} {
+        ?policyHead a rv:RatingPolicyRevision, rv:RevisionAnchor ;
+          rv:component ${iri(input.context)} ; rv:contextRevision ?policyContextRevision ;
+          rv:predecessor ?policyPredecessor ; rv:ratingAggregationPolicy ?selectedPolicy ;
+          rv:modelRevision ${iri(RATING_DEFAULT_POLICY_PROFILE)} ; rv:manifest ?policyManifest .
+      } }` : ''}
       GRAPH ${iri(GRAPHS.receipts)} { ?receipt rv:ratingContext ${iri(input.context)} ;
-        rv:ratingContextRevision ?contextRevision ; rv:outcome rv:Succeeded . }
+        rv:ratingContextRevision ?contextRevision ; rv:operation ?contextOperation ; rv:outcome rv:Succeeded . }
     } UNION {
       BIND("observation" AS ?kind)
       { SELECT ?observation WHERE { GRAPH ${iri(GRAPHS.current)} {
@@ -77,13 +89,14 @@ export function experienceAggregateQuery(env: WorkActivationEnvironment, input: 
 }
 
 async function snapshot(env: WorkActivationEnvironment, access: InventoryAccess,
-  input: StandingRatingAggregateInput & { profile: ExperienceAggregateProfile }, signal: AbortSignal) {
+  input: StandingRatingAggregateInput & { profile: ExperienceAggregateRequestProfile }, signal: AbortSignal) {
   const inventory = await access.readRatingAggregateInventory(input.context, input.mainVersion, signal);
   if (inventory.heads.length > MAX_RATING_AGGREGATE_SLOTS) {
     throw new RatingAggregateBudgetExceeded('experience Rating population exceeds admitted bound');
   }
   signal.throwIfAborted();
-  const result = await env.fuseki.query(experienceAggregateQuery(env, input), EXPERIENCE_AGGREGATE_BUDGET.graphBytes);
+  const contextDefault = input.profile === EXPERIENCE_CONTEXT_DEFAULT_PROFILE;
+  const result = await env.fuseki.query(experienceAggregateQuery(env, input, contextDefault), EXPERIENCE_AGGREGATE_BUDGET.graphBytes);
   const rows = result.results?.bindings ?? [];
   const contexts = rows.filter(row => row.kind?.value === 'context'), context = contexts[0];
   if (contexts.length !== 1 || !context?.epoch || !/^[0-9]+$/.test(context.sequence?.value ?? '')
@@ -100,6 +113,27 @@ async function snapshot(env: WorkActivationEnvironment, access: InventoryAccess,
     || contextState.targetGrain !== 'MainVersion' || contextState.scaleMin !== 1 || contextState.scaleMax !== 10
     || contextState.cadence !== EXPERIENCE_CADENCE || contextState.populationPolicy !== RATING_ACCOUNT_POPULATION
     || contextState.aggregationPolicy !== RATING_LATEST_MEAN_POLICY) unavailable();
+  let reductionProfile: ExperienceAggregateProfile = contextDefault
+    ? 'realm-experience-latest-per-rater-mean-v1' : input.profile as ExperienceAggregateProfile;
+  if (contextDefault) {
+    const head = context.policyHead?.value;
+    if (!head || inventory.policyRevision !== head) unavailable();
+    if (head !== inventory.contextRevision) {
+      const selected = Object.entries(RATING_DEFAULT_POLICIES).find(([, policy]) =>
+        policy === context.selectedPolicy?.value)?.[0];
+      if (!selected || !context.policyManifest || !context.policyPredecessor
+        || context.policyContextRevision?.value !== inventory.contextRevision) unavailable();
+      const state = readComponentState(env.objectDirectory, context.policyManifest!.value,
+        input.context, RATING_DEFAULT_POLICY_PROFILE, budget);
+      if (state.context !== input.context || state.realm !== inventory.realm
+        || state.question !== context.question!.value || state.contextRevision !== inventory.contextRevision
+        || state.revision !== head || state.predecessor !== context.policyPredecessor!.value
+        || state.aggregationPolicy !== selected) unavailable();
+      reductionProfile = selected === 'mean-per-rater' ? 'realm-experience-mean-per-rater-v1'
+        : selected === 'pooled-observation-mean' ? 'realm-experience-pooled-observation-mean-v1'
+          : 'realm-experience-latest-per-rater-mean-v1';
+    } else if (context.policyManifest || context.selectedPolicy || context.policyPredecessor) unavailable();
+  }
   const graphHeads = rows.filter(row => row.kind?.value === 'observation');
   if (graphHeads.length !== inventory.heads.length || rows.length !== graphHeads.length + 1) unavailable();
   const byObservation = new Map<string, Row>();
@@ -139,17 +173,19 @@ async function snapshot(env: WorkActivationEnvironment, access: InventoryAccess,
   }
   if (!await access.checkRatingAggregateFence(inventory.recoveryGeneration, signal)) unavailable();
   signal.throwIfAborted();
+  const reduced = reduceExperienceRatings(reductionProfile, effective);
   return { profile: input.profile, complete: true as const,
     context: input.context, realm: inventory.realm, work: input.work, mainVersion: input.mainVersion,
     targetGrain: 'mainVersion' as const, scale: { min: 1, max: 10, step: 1 },
     cadence: 'experience' as const, populationPolicy: 'account-principal' as const,
-    ...reduceExperienceRatings(input.profile, effective),
+    ...reduced, ...(contextDefault ? { policyRevision: context.policyHead!.value } : {}),
     sourcePosition: { datasetId: 'product' as const, dataEpoch: context.epoch!.value, sequence: context.sequence!.value } };
 }
 
 export async function queryExperienceRatingAggregate(env: WorkActivationEnvironment, access: InventoryAccess,
-  input: StandingRatingAggregateInput & { profile: ExperienceAggregateProfile }) {
-  if (!EXPERIENCE_AGGREGATE_PROFILES.includes(input.profile)
+  input: StandingRatingAggregateInput & { profile: ExperienceAggregateRequestProfile }) {
+  if ((input.profile !== EXPERIENCE_CONTEXT_DEFAULT_PROFILE
+    && !(EXPERIENCE_AGGREGATE_PROFILES as readonly string[]).includes(input.profile))
     || ![input.context, input.work, input.mainVersion].every(value => nativeId.test(value))) {
     throw new InvalidRatingAggregateQuery('invalid experience Rating aggregate target');
   }

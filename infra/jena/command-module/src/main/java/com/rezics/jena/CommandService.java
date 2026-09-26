@@ -86,7 +86,7 @@ final class CommandService extends ActionService {
             return;
         }
         long privateEpoch = privateSearchWriteEpoch.get();
-        respond(action, 200, Map.of("moduleVersion", "0.5.25",
+        respond(action, 200, Map.of("moduleVersion", "0.5.26",
             "instanceId", instanceId, "publicSearchWriteEpoch", Long.toString(epoch),
             "publicSearchWriteActive", (epoch & 1L) != 0L,
             "privateSearchWriteEpoch", Long.toString(privateEpoch),
@@ -598,6 +598,8 @@ final class CommandService extends ActionService {
         if (dataset.contains(graph, node, type, NodeFactory.createURI(RV + "AuthorCredit"))
             || dataset.contains(graph, node, type, NodeFactory.createURI(RV + "AuthorCreditRevision")))
             return "work-author-credit-v1";
+        if (dataset.contains(graph, node, type, NodeFactory.createURI(RV + "RatingPolicyRevision")))
+            return "rating-aggregate-default-policy-v1";
         if (dataset.contains(graph, node, type, NodeFactory.createURI(RV + "ClassificationApplication"))
             || dataset.contains(graph, node, type, NodeFactory.createURI(RV + "ClassificationDecision")))
             return "classification-direct-decision-v1";
@@ -669,6 +671,8 @@ final class CommandService extends ActionService {
             canonical = new Canonical("realm-experience-rating-observation-v1", "observation-shape");
         else if (types.contains(RV + "ExperienceRatingObservationRevision"))
             canonical = new Canonical("realm-experience-rating-observation-v1", "revision-shape");
+        else if (types.contains(RV + "RatingPolicyRevision"))
+            canonical = new Canonical("rating-aggregate-default-policy-v1", "revision-shape");
         else if (types.contains(RV + "DailyRatingContext"))
             canonical = new Canonical("realm-daily-rating-context-v1", "context-shape");
         else if (types.contains(RV + "DailyRatingObservation"))

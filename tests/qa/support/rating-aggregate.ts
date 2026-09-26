@@ -9,6 +9,7 @@ import { fusekiReadBudget } from '../../../services/main/src/infrastructure/fuse
 import { RATING_INVENTORY_SQL, readRatingAggregateInventory } from '../../../services/main/src/modules/access/rating-aggregate-inventory.ts';
 import { EXPERIENCE_CONTEXT_ID, EXPERIENCE_OBSERVATION_ID } from '../../../services/main/src/modules/rating/experience.ts';
 import { EXPERIENCE_AGGREGATE_PROFILES, type ExperienceAggregateProfile } from '../../../services/main/src/modules/rating/experience-reduction.ts';
+import { EXPERIENCE_CONTEXT_DEFAULT_PROFILE } from '../../../services/main/src/modules/rating/experience-aggregate.ts';
 import { DATASET, GRAPHS, ID, RV, iri, type WorkActivationEnvironment } from '../../../services/main/src/modules/work/activate.ts';
 import { accessStateCoverage } from '../../../services/main/src/modules/work/access-recovery-coverage.ts';
 import { ratingAggregateBackground } from './rating-aggregate-background.ts';
@@ -16,6 +17,7 @@ import { ratingAggregateBackground } from './rating-aggregate-background.ts';
 interface Opinion { observation: string; observationRevision: string; context: string; value: number | null;
   sourcePosition: { sequence: string }; replayed: boolean }
 interface Result { profile: string; aggregationPolicy: string; count: number; mean: number | null;
+  policyRevision: string;
   precision: { kind: string; numerator?: string; denominator?: string };
   population: { observations: number; raters: number; availableObservations: number; withdrawnObservations: number; contributingRaters: number };
   distribution: { unit: string; points: { numerator: string; denominator: string; count: number }[] };
@@ -36,12 +38,16 @@ export async function exerciseRatingAggregates(f: Fixture) {
   const work = { work: f.work.work, mainVersion: f.work.mainVersion };
   const api = createMainApp(env.fuseki, { environment: env, access: f.access, account: f.account });
   const post = f.post, success = f.success;
-  const context = (await success<{ context: string }>(await post('/v1/rating-contexts', {
-    profile: EXPERIENCE_CONTEXT_ID, realm, question: 'Aggregate experience quality', actingSubject: personaA }))).context;
+  const created = await success<{ context: string; contextRevision: string; policyRevision: string }>(
+    await post('/v1/rating-contexts', {
+      profile: EXPERIENCE_CONTEXT_ID, realm, question: 'Aggregate experience quality', actingSubject: personaA }));
+  const context = created.context;
+  expect(created.policyRevision).toBe(created.contextRevision);
   for (const [actor, principal] of [[personaA, f.principalA], [personaB, f.principalA], [other, f.principalB]]) {
     await f.grant(`rating:observe:${context}`, 'rating.observation.set', actor, principal);
     await f.grant(`rating:read:${context}`, 'rating.observation.read', actor, principal);
   }
+  await f.grant(`rating:policy:${context}`, 'rating.context.policy.set');
   const sqlMeter = new AsyncLocalStorage<{ calls: number }>();
   const metered = new WeakSet<PoolClient>();
   accessPool.on('acquire', client => {
@@ -56,7 +62,8 @@ export async function exerciseRatingAggregates(f: Fixture) {
   });
   const costs: { branch: string; calls: number; sqlCalls: number; responseBytes: number; elapsedMs: number }[] = [];
   const graph = env.fuseki;
-  async function aggregate(profile: ExperienceAggregateProfile, target = { context, ...work }, app = api) {
+  async function aggregate(profile: ExperienceAggregateProfile | typeof EXPERIENCE_CONTEXT_DEFAULT_PROFILE,
+    target = { context, ...work }, app = api) {
     return app.handle(new Request('http://main.local/v1/rating-aggregates', {
       method: 'POST', headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ profile, ...target }) }));
@@ -97,6 +104,74 @@ export async function exerciseRatingAggregates(f: Fixture) {
   }
   initial.push(await success<Opinion>(await submit(6, markers[3]!, null, other, randomUUID(), f.tokenB)));
   const baseline = await all('2-2-8-and-6', [7, 5, 4.5]);
+  const initialDefault = await success<Result>(await aggregate(EXPERIENCE_CONTEXT_DEFAULT_PROFILE), 200);
+  expect(initialDefault).toMatchObject({ mean: 7, aggregationPolicy: 'latest-per-rater-mean',
+    policyRevision: created.contextRevision, denominatorUnit: 'rater' });
+  const policyPath = `/v1/rating-contexts/${context.split('/').at(-1)}/policy-revisions`;
+  const policyBody = (expectedPolicyHead: string, aggregationPolicy: 'latest-per-rater-mean' | 'mean-per-rater' | 'pooled-observation-mean',
+    actingSubject = personaA) => ({ profile: 'rating-aggregate-default-policy-v1',
+    expectedPolicyHead, aggregationPolicy, actingSubject });
+  const noGrant = await post(policyPath, policyBody(created.contextRevision, 'mean-per-rater', other), randomUUID(), f.tokenB);
+  expect(noGrant.status).toBe(403);
+  await f.grant(`rating:policy:${context}`, 'rating.context.policy.set', other, f.principalB);
+  await accessPool.query('UPDATE access.principal SET active = false WHERE id = $1', [f.principalB]);
+  expect((await post(policyPath, policyBody(created.contextRevision, 'mean-per-rater', other), randomUUID(), f.tokenB)).status).toBe(403);
+  await accessPool.query('UPDATE access.principal SET active = true WHERE id = $1', [f.principalB]);
+  const policyKey = randomUUID();
+  const command = graph.command.bind(graph);
+  graph.command = async envelope => {
+    await command(envelope);
+    graph.command = command;
+    throw new Error('fixture: policy command response lost after commit');
+  };
+  let changed: { policyRevision: string; predecessor: string; replayed: boolean };
+  try {
+    changed = await success(await post(policyPath, policyBody(created.contextRevision, 'mean-per-rater'), policyKey));
+  } finally { graph.command = command; }
+  expect(changed).toMatchObject({ predecessor: created.contextRevision, replayed: false });
+  expect((await success<Result>(await aggregate(EXPERIENCE_CONTEXT_DEFAULT_PROFILE), 200))
+    .mean).toBe(5);
+  expect(await success(await post(policyPath, policyBody(created.contextRevision, 'mean-per-rater'), policyKey), 200))
+    .toMatchObject({ policyRevision: changed.policyRevision, replayed: true });
+  expect((await post(policyPath, policyBody(created.contextRevision, 'pooled-observation-mean'), policyKey)).status).toBe(409);
+  expect((await post(policyPath, policyBody(created.contextRevision, 'pooled-observation-mean'))).status).toBe(409);
+  const exact = async (revision: string) => api.handle(new Request(`http://main.local${policyPath}/${revision.split('/').at(-1)}?actingSubject=${encodeURIComponent(personaA)}`,
+    { headers: { authorization: `Bearer ${f.tokenA}` } }));
+  expect(await success(await exact(created.contextRevision), 200)).toMatchObject({
+    policyRevision: created.contextRevision, predecessor: null,
+    aggregationPolicy: 'latest-per-rater-mean', basis: { question: 'Aggregate experience quality' } });
+  expect(await success(await exact(changed.policyRevision), 200)).toMatchObject({
+    policyRevision: changed.policyRevision, predecessor: created.contextRevision,
+    aggregationPolicy: 'mean-per-rater', basis: { question: 'Aggregate experience quality' } });
+  const policyManifest = (await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?manifest WHERE {
+    GRAPH ${iri(GRAPHS.revisions)} { ${iri(changed.policyRevision)} rv:manifest ?manifest } }`))
+    .results!.bindings![0]!.manifest!.value;
+  await env.fuseki.update(`PREFIX rv: <${RV}> DELETE DATA { GRAPH ${iri(GRAPHS.revisions)} {
+    ${iri(changed.policyRevision)} rv:manifest ${iri(policyManifest)} . } }`);
+  expect((await aggregate(EXPERIENCE_CONTEXT_DEFAULT_PROFILE)).status).toBe(503);
+  await env.fuseki.update(`PREFIX rv: <${RV}> INSERT DATA { GRAPH ${iri(GRAPHS.revisions)} {
+    ${iri(changed.policyRevision)} rv:manifest ${iri(policyManifest)} . } }`);
+  await env.fuseki.update(`PREFIX rv: <${RV}> WITH ${iri(GRAPHS.current)}
+    DELETE { ${iri(context)} rv:ratingPolicyHead ${iri(changed.policyRevision)} }
+    INSERT { ${iri(context)} rv:ratingPolicyHead ${iri(created.contextRevision)} } WHERE {}`);
+  expect((await aggregate(EXPERIENCE_CONTEXT_DEFAULT_PROFILE)).status).toBe(503);
+  await env.fuseki.update(`PREFIX rv: <${RV}> WITH ${iri(GRAPHS.current)}
+    DELETE { ${iri(context)} rv:ratingPolicyHead ${iri(created.contextRevision)} }
+    INSERT { ${iri(context)} rv:ratingPolicyHead ${iri(changed.policyRevision)} } WHERE {}`);
+  const contenders = await Promise.all([
+    post(policyPath, policyBody(changed.policyRevision, 'latest-per-rater-mean')),
+    post(policyPath, policyBody(changed.policyRevision, 'pooled-observation-mean')),
+  ]);
+  expect(contenders.map(result => result.status).sort()).toEqual([201, 409]);
+  const winner = await contenders.find(result => result.status === 201)!.json() as { policyRevision: string };
+  changed = await success(await post(policyPath, policyBody(winner.policyRevision, 'mean-per-rater')));
+  expect((await success<Result>(await aggregate(EXPERIENCE_CONTEXT_DEFAULT_PROFILE), 200)).mean).toBe(5);
+  const defaultCost = { signal: AbortSignal.timeout(10_000), callsLeft: 1, bytesLeft: 1_048_576 };
+  const defaultSql = { calls: 0 };
+  await sqlMeter.run(defaultSql, () => fusekiReadBudget.run(defaultCost,
+    () => aggregate(EXPERIENCE_CONTEXT_DEFAULT_PROFILE)));
+  expect(defaultCost.callsLeft).toBe(0);
+  expect(defaultSql.calls).toBe(5);
   expect(baseline.map(result => result.count)).toEqual([2, 2, 4]);
   expect(baseline.map(result => result.precision)).toEqual([
     { kind: 'exact-rational', numerator: '7', denominator: '1' },
@@ -172,8 +247,9 @@ export async function exerciseRatingAggregates(f: Fixture) {
     const c = (await success<{ context: string }>(await post('/v1/rating-contexts', {
       profile: EXPERIENCE_CONTEXT_ID, realm: selectedRealm, question: 'A separate question', actingSubject: personaA }))).context;
     await f.grant(`rating:observe:${c}`, 'rating.observation.set');
-    const marker = randomUUID();
+    const marker = markers[0]!;
     const opinion = await success<Opinion>(await post('/v1/rating-observations', body(3, marker, null, personaA, { context: c, ...work })));
+    expect(opinion.observation).not.toBe(initial[0]!.observation);
     await all('other-context', [3, 3, 3], { context: c, ...work });
     if (selectedRealm === otherRealm) {
       await success(await post('/v1/rating-observations', body(null, marker, opinion.observationRevision, personaA, { context: c, ...work })));
@@ -239,6 +315,7 @@ export async function exerciseRatingAggregates(f: Fixture) {
   }
   await graph.update(`PREFIX rv: <${RV}> INSERT DATA { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:restoreHold true } }`);
   expect((await aggregate(EXPERIENCE_AGGREGATE_PROFILES[0])).status).toBe(503);
+  expect((await post(policyPath, policyBody(changed.policyRevision, 'pooled-observation-mean'))).status).toBe(503);
   await graph.update(`PREFIX rv: <${RV}> DELETE DATA { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:restoreHold true } }`);
   // No inventory is a migration boundary, including for an otherwise intact Context.
   const legacy = (await success<{ context: string }>(await post('/v1/rating-contexts', {
@@ -313,7 +390,7 @@ export async function exerciseRatingAggregates(f: Fixture) {
   expect(await overflow.json()).toMatchObject({ code: 'query_budget_exceeded' });
   await boundary.clear();
   const finalResults = await all('before-recovery', finalMeans);
-  const evidence = { baseline, finalResults, recoveredResults: [] as Result[], inventoryCoverage, costs, plans,
+  const evidence = { baseline, initialDefault, changed, finalResults, recoveredResults: [] as Result[], inventoryCoverage, costs, plans,
     scope: 'Real APIs, owner inventory and graph/manifest recovery. Native Jena operator work and capacity remain unmeasured.' };
   function retainEvidence() {
     if (Bun.env.REZICS_QA_ARTIFACT_DIR) writeFileSync(join(Bun.env.REZICS_QA_ARTIFACT_DIR, 'rating-aggregate-evidence.json'), JSON.stringify(evidence, null, 2));
@@ -323,11 +400,15 @@ export async function exerciseRatingAggregates(f: Fixture) {
     async verifyRecovered(recovered: WorkActivationEnvironment) {
       const recoveredApi = createMainApp(recovered.fuseki, { environment: recovered, access: f.access, account: f.account });
       expect((await aggregate(EXPERIENCE_AGGREGATE_PROFILES[0], { context, ...work }, recoveredApi)).status).toBe(503);
+      expect((await aggregate(EXPERIENCE_CONTEXT_DEFAULT_PROFILE, { context, ...work }, recoveredApi)).status).toBe(503);
       // Test-only reopen after the fixture has replayed every retained receipt twice.
       // This proves aggregate reconstruction, not the production owner-cut release gate.
       await recovered.fuseki.update(`PREFIX rv: <${RV}> DELETE DATA { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:restoreHold true } }`);
       const fence = (await accessPool.query('SELECT generation FROM access.recovery_fence WHERE id = true')).rows[0]!.generation;
       await accessPool.query('UPDATE access.recovery_fence SET open = true, generation = generation + 1 WHERE id = true AND generation = $1', [fence]);
+      expect(await success<Result>(await aggregate(EXPERIENCE_CONTEXT_DEFAULT_PROFILE,
+        { context, ...work }, recoveredApi), 200)).toMatchObject({
+        policyRevision: changed.policyRevision, aggregationPolicy: 'mean-per-rater' });
       const results = await all('recovered', finalMeans, { context, ...work }, recoveredApi);
       expect(results.map(({ sourcePosition: _source, ...rest }) => rest))
         .toEqual(finalResults.map(({ sourcePosition: _source, ...rest }) => rest));
