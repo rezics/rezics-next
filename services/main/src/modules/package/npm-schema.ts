@@ -77,6 +77,36 @@ const npmPlatformOutcomeSchema = t.Union([
 ]);
 export const npmResolutionV2Schema = t.Object({ ...npmResolutionV1Schema.properties,
   profile: t.Literal('npm-lock-topology-receipt-v2'), request: npmRequestV2Schema, outcome: npmPlatformOutcomeSchema });
-export const npmRequestSchema = t.Union([npmRequestV1Schema, npmRequestV2Schema]);
-export const npmResolutionSchema = t.Union([npmResolutionV1Schema, npmResolutionV2Schema]);
+export const npmRequestV3Schema = t.Object({ ...npmRequestV1Schema.properties,
+  profile: t.Literal('npm-lock-v3-topology-v3'),
+  workspaces: t.Array(t.Object({ path: t.String({ minLength: 1, maxLength: 512 }), manifest: bytes },
+    { additionalProperties: false }), { maxItems: 16 }) }, { additionalProperties: false });
+const identityInstance = t.Object({ ...instance.properties,
+  kind: t.Union(['root', 'registry', 'workspace', 'link'].map(value => t.Literal(value))), slotName: nullable,
+  linkTarget: t.Union([t.Object({ id: t.String(), path: t.String() }), t.Null()]) });
+const identityEdge = t.Object({ ...edge.properties,
+  kind: t.Union([...edge.properties.kind.anyOf, t.Literal('workspace')]), requestedName: t.String() });
+const identityIssue = t.Object({ ...issue.properties,
+  kind: t.Union([...issue.properties.kind.anyOf, ...['missing-workspace-manifest', 'missing-workspace-target',
+    'missing-link-source', 'link-target-mismatch'].map(value => t.Literal(value))]) });
+const identityFields = { ...fields, cost: t.Object({ ...fields.cost.properties,
+  inputBytes: t.Integer({ minimum: 0, maximum: 4718592 }), workspaceCount: t.Integer({ minimum: 0, maximum: 16 }),
+  graphVisits: t.Integer({ minimum: 0, maximum: 65537 }) }) };
+const emptyIdentity = { instances: t.Array(identityInstance, { maxItems: 0 }), edges: t.Array(identityEdge, { maxItems: 0 }) };
+export const npmIdentityOutcomeSchema = t.Union([
+  t.Object({ ...identityFields, status: t.Literal('validated'), lockfileVersion: t.Literal(3),
+    instances: t.Array(identityInstance, { maxItems: 129 }), edges: t.Array(identityEdge, { maxItems: 256 }),
+    issues: t.Array(identityIssue, { maxItems: 0 }), unsupportedClauses: t.Array(t.String(), { maxItems: 0 }), budgetReason: t.Null() }),
+  t.Object({ ...identityFields, ...emptyIdentity, status: t.Union([t.Literal('incomplete-source-data'), t.Literal('invalid-topology')]),
+    issues: t.Array(identityIssue, { minItems: 1, maxItems: 804 }),
+    unsupportedClauses: t.Array(t.String(), { maxItems: 0 }), budgetReason: t.Null() }),
+  t.Object({ ...identityFields, ...emptyIdentity, status: t.Literal('unsupported-semantics'),
+    issues: t.Array(identityIssue, { maxItems: 0 }), unsupportedClauses: t.Array(t.String(), { minItems: 1, maxItems: 1 }), budgetReason: t.Null() }),
+  t.Object({ ...identityFields, ...emptyIdentity, status: t.Literal('budget-exhausted'),
+    issues: t.Array(identityIssue, { maxItems: 0 }), unsupportedClauses: t.Array(t.String(), { maxItems: 0 }), budgetReason: t.String() }),
+]);
+export const npmResolutionV3Schema = t.Object({ ...npmResolutionV1Schema.properties,
+  profile: t.Literal('npm-lock-topology-receipt-v3'), request: npmRequestV3Schema, outcome: npmIdentityOutcomeSchema });
+export const npmRequestSchema = t.Union([npmRequestV1Schema, npmRequestV2Schema, npmRequestV3Schema]);
+export const npmResolutionSchema = t.Union([npmResolutionV1Schema, npmResolutionV2Schema, npmResolutionV3Schema]);
 export const npmResolutionWriteSchema = t.Object({ resolution: npmResolutionSchema, replayed: t.Boolean() });

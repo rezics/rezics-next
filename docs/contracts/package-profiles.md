@@ -293,6 +293,73 @@ The conservative bound is O(B + V log V + E log E + E·D + V²·(V + E)), with
 the separate visit ceiling bounding adversarial optional-region work. Indexed
 owner read/replay costs remain independent of unrelated receipt history.
 
+### Alias and workspace identity profile
+
+G-023's separate `npm-lock-v3-topology-v3` request uses
+`policy: "literal-sources-alias-workspace-v3"`, npm 11.19.1, exact root
+`manifest`/`lock` bytes, and required `workspaces` entries with `path` and exact
+`manifest` bytes/digest. It validates required dependencies and peers plus exact
+`npm:name@major.minor.patch` aliases. V2 optional/platform projection is not
+composed into this profile; those clauses, overrides and engine policy remain
+explicitly unsupported. V1/v2 request bytes, receipt shapes and replay stay frozen.
+The existing immutable owner and signed Content coverage v4 store the new
+`npm-lock-topology-receipt-v3` without a migration or historical rewrite.
+
+Root `workspaces` is an optional list of exact relative directories, with at most
+16 entries. Globs, exclusions, nested/overlapping workspace roots, external paths,
+undeclared local packages and nested links are outside this profile. Workspace
+paths use at most eight safe components and never `node_modules`, `.` or `..`.
+The supplied workspace manifests must match those declarations; missing manifests
+or lock target records are incomplete source evidence. Extra/duplicate supplied
+paths, duplicate workspace names, and disagreeing manifest/lock names, versions
+or dependency maps are malformed. Directory basenames need not equal package
+names. The API never opens a caller-named server path.
+
+Each instance keeps `kind` (root, registry, workspace or link), exact lock `path`,
+`slotName` (null for root/workspace), package `name`, version, literal `resolved`
+and `integrity`, and `peerHosts`. A link retains its literal relative `resolved`
+path plus `linkTarget` with target ID/path, with no artifact SRI. Workspace/root
+sources and SRI are null; workspace source evidence is its supplied manifest.
+Edges keep declared `name`, verbatim `specifier` and `requestedName`, independently
+of the target's recorded package name. Synthetic root `workspace` edges use
+`file:<workspace-path>`; the oracle maps npm's absolute temporary-directory spec
+to that exact relative identity. Dependencies originate at the workspace target,
+never the link slot. Link-to-target reachability is explicit in `linkTarget`.
+Instance IDs bind the complete versioned request digest and these distinct facts.
+
+Lookup follows installation parents; a workspace target falls back to the root.
+Peers inside ordinary installed packages reject a child-local host. A workspace
+target is a native filesystem top and may use its own child as a peer host.
+Workspace edges must find a link at the package-name slot and its exact declared
+target. A different directory basename is valid; a wrong slot is missing and a
+wrong existing target is invalid topology. All supplied nodes must be reachable.
+Unknown grammar wins over topology claims, and failures return no usable graph.
+Missing sources/SRI/links return incomplete source data; malformed source/SRI/link
+types are rejected before receipt creation.
+
+Pinned native `dep-valid` checks an alias's version but does not authenticate its
+package name. V3 therefore returns unsupported semantics when an alias's requested
+name differs from the recorded package name or addresses a workspace link. It
+does not claim native invalidity or artifact verification for that refusal.
+Similarly, the virtual tree may accept missing or malformed SRI: the profile's
+stricter source admission is explicit. Sources retain literal canonical HTTPS
+identity; unfamiliar schemes remain unsupported.
+
+Each raw file remains limited to 65,536 bytes, with an aggregate 262,144-byte
+processing budget. Up to 16 workspace byte envelopes each retain the existing
+262,144-byte transport ceiling. JSON nesting is 32, nodes 129 including links and
+workspace targets, edges 256 including synthetic workspace edges, installed path
+depth 16, ancestor lookups 4,096 and graph visits 65,536. Workspace paths add at
+most one resolution hop. Counters include all supplied bytes and link traversal.
+Work is bounded by O(B + V log V + E log E + E·D); private read/replay still uses
+indexed exact owner rows independent of unrelated receipt history.
+
+The design uses the pinned npm [link implementation](https://github.com/npm/cli/blob/v11.19.1/workspaces/arborist/lib/link.js),
+[virtual loader](https://github.com/npm/cli/blob/v11.19.1/workspaces/arborist/lib/arborist/load-virtual.js)
+and [dependency validator](https://github.com/npm/cli/blob/v11.19.1/workspaces/arborist/lib/dep-valid.js).
+These are virtual-tree claims only; workspace file contents beyond the supplied
+manifests, physical symlinks, archive integrity and installation are unqualified.
+
 ## Go
 
 Use MVS over module requirements with module-path/major-version identity, pseudo-

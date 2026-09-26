@@ -1,15 +1,19 @@
 import { expect } from 'bun:test';
 import { randomUUID } from 'node:crypto';
+import { writeFile } from 'node:fs/promises';
+import { join } from 'node:path';
 import type { Pool } from 'pg';
 import { NpmResolutionStore, type NpmResolution } from '../../../services/main/src/modules/package/npm-resolution.ts';
 import { npmBytes, npmDocuments, npmFixture, npmRequest } from './npm-lock-snapshot.ts';
 import { assertNpmPlatformApi } from './npm-platform-api.ts';
+import { assertNpmIdentityApi } from './npm-identity-api.ts';
 
 export async function assertNpmLockApi(context: {
   call: (method: string, path: string, token: string, body?: unknown, key?: string) => Promise<Response>;
   pool: Pool; principalId: string; resolveToken: string; readToken: string; otherReadToken: string;
 }): Promise<{ body: ReturnType<typeof npmFixture>; key: string; path: string; readPath: string;
-  platform: Awaited<ReturnType<typeof assertNpmPlatformApi>> }> {
+  platform: Awaited<ReturnType<typeof assertNpmPlatformApi>>;
+  identity: Awaited<ReturnType<typeof assertNpmIdentityApi>> }> {
   const { call, pool, principalId, resolveToken, readToken, otherReadToken } = context;
   const path = '/v1/package-resolutions/npm';
   const body = npmFixture();
@@ -68,7 +72,10 @@ export async function assertNpmLockApi(context: {
     expect((await pool.query('SELECT id FROM pkg.npm_resolution WHERE idempotency_key = $1', [invalidKey])).rowCount).toBe(0);
   }
   const platform = await assertNpmPlatformApi(context);
+  const identity = await assertNpmIdentityApi(context);
   expect((await call('POST', path, resolveToken, platform.body, key)).status).toBe(409);
+  expect((await call('POST', path, resolveToken, identity.body, key)).status).toBe(409);
+  expect((await call('POST', path, resolveToken, identity.body, platform.key)).status).toBe(409);
   // Real owner calls and native plans at growing unrelated history sizes.
   // Background is bulk copied once per scale, never command seeded or revalidated.
   const statements: Array<{ sql: string; values: unknown[]; rows: number | null }> = [];
@@ -78,6 +85,7 @@ export async function assertNpmLockApi(context: {
     return result;
   } } as unknown as Pool);
   let previous = 0;
+  const evidence: unknown[] = [];
   for (const count of [64, 512, 4096]) {
     await pool.query(`INSERT INTO pkg.npm_resolution
       (id, principal_id, idempotency_key, request_digest, request, outcome)
@@ -91,7 +99,10 @@ export async function assertNpmLockApi(context: {
     expect(await observed.resolve(principalId, key, body)).toEqual({ resolution: receipt, replayed: true });
     expect(await observed.read(principalId, platform.id)).toEqual(platform.receipt);
     expect(await observed.resolve(principalId, platform.key, platform.body)).toEqual({ resolution: platform.receipt, replayed: true });
-    expect(statements.map(statement => statement.rows)).toEqual([1, 0, 1, 1, 0, 1]);
+    expect(await observed.read(principalId, identity.id)).toEqual(identity.receipt);
+    expect(await observed.resolve(principalId, identity.key, identity.body)).toEqual({ resolution: identity.receipt, replayed: true });
+    expect(statements.map(statement => statement.rows)).toEqual([1, 0, 1, 1, 0, 1, 1, 0, 1]);
+    const plans: Array<{ type: string; rows: number; filtered: number; blocks: number }> = [];
     for (const statement of statements.filter(statement => statement.sql.startsWith('SELECT'))) {
       const result = await pool.query(`EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON, TIMING OFF) ${statement.sql}`, statement.values);
       const plan = result.rows[0]['QUERY PLAN'][0].Plan;
@@ -101,9 +112,16 @@ export async function assertNpmLockApi(context: {
       if (count >= 512) expect(plan['Rows Removed by Filter'] ?? 0).toBeLessThanOrEqual(1);
       expect(plan['Shared Hit Blocks'] + plan['Shared Read Blocks']).toBeLessThan(32);
       expect(plan['Temp Read Blocks']).toBe(0);
+      plans.push({ type: plan['Node Type'], rows: plan['Actual Rows'], filtered: plan['Rows Removed by Filter'] ?? 0,
+        blocks: plan['Shared Hit Blocks'] + plan['Shared Read Blocks'] });
     }
+    evidence.push({ unrelatedReceipts: count, operationRows: statements.map(statement => statement.rows),
+      planOrder: ['v1-id', 'v1-key', 'v2-id', 'v2-key', 'v3-id', 'v3-key'], plans,
+      costs: [receipt.outcome.cost, platform.receipt.outcome.cost, identity.receipt.outcome.cost] });
     expect(receipt.outcome.cost).toEqual((await observed.read(principalId, id))!.outcome.cost);
     expect(platform.receipt.outcome.cost).toEqual((await observed.read(principalId, platform.id))!.outcome.cost);
+    expect(identity.receipt.outcome.cost).toEqual((await observed.read(principalId, identity.id))!.outcome.cost);
   }
-  return { body, key, path, readPath, platform };
+  await writeFile(join(Bun.env.REZICS_QA_ARTIFACT_DIR ?? '.temp', 'npm-receipt-reads.json'), JSON.stringify(evidence, null, 2));
+  return { body, key, path, readPath, platform, identity };
 }

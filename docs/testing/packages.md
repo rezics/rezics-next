@@ -115,9 +115,80 @@ malformed admitted snapshot contents return 422; neither creates a receipt.
 The manager must repeat affected checks after integration; these selected runs
 do not qualify the complete backend.
 
-These are partial PKG04/PKG12/PKG13 assertions. Alias/workspace/override/engine
-semantics, other npm strategies, pnpm/Yarn, registry solving, artifact validation,
-installation and complete-case qualification remain retained later work.
+These are partial PKG04/PKG12/PKG13 assertions. Override/engine semantics,
+composition with the separate alias/workspace profile below, other npm strategies,
+pnpm/Yarn, registry solving, artifact validation, installation and complete-case
+qualification remain retained later work.
+
+G-023 adds `npm-lock-v3-topology-v3` and `npm-lock-topology-receipt-v3` for
+required dependency/peer topology with exact aliases and caller-supplied workspace
+manifest bytes. Its 25 fixed npm 11.19.1/Arborist 9.9.1 counterexamples compare
+declared slots and resolved names, identical artifacts in two alias slots,
+scoped aliases, aliases in distinct peer environments, alias peer hosts,
+incompatible alias peers, workspace internal dependencies and
+root/local peer hosts, workspace directory/name differences, wrong link slots and
+targets, missing link/source/SRI, malformed evidence, unknown source grammar,
+overrides and engines. Results retain exact inputs, CLI output, native nodes,
+edges and loader errors, profile outcomes and each intentional admission
+difference in `.temp/package-npm-oracle/identity-result.json`. The existing eight
+v1 and 33 v2 comparisons remain in the same root command.
+
+The native probe exposed two material distinctions. Workspace targets are native
+filesystem tops and can resolve a peer in their own children. An alias edge
+checks the target version but does not authenticate its package name; a mismatch
+therefore returns unsupported identity evidence, not a native conflict claim.
+Missing source/SRI and malformed SRI may also survive native virtual loading;
+the profile separately requires bounded literal evidence. `loadVirtual` reads
+workspace manifests from disk, so the isolated oracle writes only the exact
+supplied bytes under its disposable fixture. Main itself reads no caller paths.
+The oracle records npm's absolute temporary workspace edge spec and verifies its
+explicit mapping to the request's relative path; registry URLs are never rewritten.
+No physical symlink, installed package tree, artifact verification or lifecycle
+execution is asserted.
+
+Identity tests cover byte/name/path bindings, duplicate and malformed workspace
+inputs, alias-name ambiguity, missing records, unsupported hidden metadata,
+source grammar, cycles, aggregate/file/workspace/node/edge/path/ancestor budgets,
+and counted 8/32/128-node work. The v1/v2 compatibility tests pin all 41 historical
+outcome hashes, including IDs, costs and v2 omission evidence. The shared real
+API fixture adds v3 concurrent same-key convergence, exact read/replay, changed
+root/workspace byte and profile conflicts, private/scope denial, malformed no-row
+admission, immutable owner rows and inactive-principal fencing. One bulk history
+corpus serves all three versions' reads/replays at 64/512/4,096 unrelated rows;
+`npm-receipt-reads.json` in the QA run records native plans, result/filter counts
+and page reads.
+The physical owner-cut fixture retains two v3 receipts with all previous npm,
+Go and Cargo receipts, and tampers alias and workspace-target evidence in the
+isolated restored copy to test exact-read and signed-hold-release denial.
+
+The worker's 25 npm unit/contract cases, all 66 native comparisons, generation,
+backend static and documentation checks passed. Selected real API run
+`20260926t090612-cad7b8` passed with stable source fingerprint `7f8e90e15f90`.
+Its retained `npm-receipt-reads.json` shows six exact read plans across v1/v2/v3:
+at 64 unrelated receipts PostgreSQL used five-block sequential scans; at 512 and
+4,096 it used three-block index scans, one result and zero filtered rows. V3's
+eight-node/eight-edge workspace fixture retained eleven ancestor lookups and
+21 graph visits at every history size. These bounded measurements do not qualify
+deployment capacity. Physical owner-cut run `20260926t090705-fe0189` passed on
+stable source `d01a36f0159b` after separating the two v3 tamper assertions; no
+package implementation changed between the API and recovery runs. Both selected
+runs cleaned up their own isolated stacks. PKG04/PKG12/PKG13 remain partial.
+Optional/platform plus alias/workspace composition, workspace globs/external
+links, override/engine policy, pnpm/Yarn, registry selection, artifact integrity
+and installation are unqualified. The manager repeats affected checks after merge;
+these virtual-tree results cannot close PKG04 or qualify the whole backend.
+
+The affected command set for this slice is:
+
+```sh
+yarn test tests/qa/unit/npm-identity-topology.test.ts tests/qa/unit/npm-v1-compatibility.test.ts tests/qa/unit/npm-v2-compatibility.test.ts tests/qa/unit/npm-lock-topology.test.ts tests/qa/unit/npm-platform-topology.test.ts tests/qa/unit/npm-lock-contract.test.ts
+yarn package:npm-oracle
+yarn gen
+yarn test tests/qa/integration/source-authenticated-api.test.ts
+yarn test tests/qa/fault-recovery/coordinated-owner-cut.test.ts
+yarn check:backend
+yarn docs:check
+```
 
 The G-008 Cargo slice adds `cargo-index-exact-resolver2-v1` with exact root
 manifest and registry-index bytes. The pinned Cargo 1.98.1 local-registry oracle

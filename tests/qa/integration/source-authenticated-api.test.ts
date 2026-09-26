@@ -925,7 +925,7 @@ test('IAM10/LIVE01/LIVE02/LIVE03/LIVE05/LIVE13/PKG01/PKG02/PKG03/PKG04/PKG05/PKG
     expect((await call('GET', cargoLinksReadPath, packageReadToken)).status).toBe(403);
     expect((await call('POST', cargoPath, packageResolveToken, cargoLock.body, cargoLock.key)).status).toBe(403);
     expect((await call('GET', cargoLock.readPath, packageReadToken)).status).toBe(403);
-    for (const npm of [npmLock, npmLock.platform]) {
+    for (const npm of [npmLock, npmLock.platform, npmLock.identity]) {
       const deniedNpmKey = `npm-denied-${randomUUID()}`;
       expect((await call('POST', npm.path, packageResolveToken, npm.body, deniedNpmKey)).status).toBe(403);
       expect((await contentPool.query('SELECT id FROM pkg.npm_resolution WHERE idempotency_key = $1',

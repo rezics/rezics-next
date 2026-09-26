@@ -2,19 +2,22 @@ import type { Pool } from 'pg';
 import { NpmResolutionInvalid, npmSha, npmStable, validateNpmSnapshot,
   type NpmOutcome, type NpmRequest } from './npm-lock.ts';
 import { validateNpmPlatformSnapshot, type NpmPlatformOutcome, type NpmPlatformRequest } from './npm-platform.ts';
+import { validateNpmIdentitySnapshot, type NpmIdentityOutcome, type NpmIdentityRequest } from './npm-identity.ts';
 export { NpmResolutionInvalid } from './npm-lock.ts';
 export class NpmResolutionConflict extends Error {}
 export class NpmResolutionUnavailable extends Error {}
-export type NpmSnapshotRequest = NpmRequest | NpmPlatformRequest;
-export interface NpmResolution { profile: 'npm-lock-topology-receipt-v1' | 'npm-lock-topology-receipt-v2';
+export type NpmSnapshotRequest = NpmRequest | NpmPlatformRequest | NpmIdentityRequest;
+type NpmSnapshotOutcome = NpmOutcome | NpmPlatformOutcome | NpmIdentityOutcome;
+export interface NpmResolution { profile: 'npm-lock-topology-receipt-v1' | 'npm-lock-topology-receipt-v2' | 'npm-lock-topology-receipt-v3';
   resolution: string; requestDigest: string; request: NpmSnapshotRequest;
-  outcome: NpmOutcome | NpmPlatformOutcome; createdAt: string }
+  outcome: NpmSnapshotOutcome; createdAt: string }
 interface Row { id: string; principal_id: string; idempotency_key: string;
-  request_digest: string; request: NpmSnapshotRequest; outcome: NpmOutcome | NpmPlatformOutcome; created_at: Date }
+  request_digest: string; request: NpmSnapshotRequest; outcome: NpmSnapshotOutcome; created_at: Date }
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const KEY = /^[A-Za-z0-9:_./-]{1,128}$/;
 function validate(request: NpmSnapshotRequest) {
-  return request?.profile === 'npm-lock-v3-topology-v2'
+  return request?.profile === 'npm-lock-v3-topology-v3' ? validateNpmIdentitySnapshot(request)
+    : request?.profile === 'npm-lock-v3-topology-v2'
     ? validateNpmPlatformSnapshot(request) : validateNpmSnapshot(request);
 }
 export class NpmResolutionStore {
@@ -25,7 +28,8 @@ export class NpmResolutionStore {
         || npmStable(row.outcome) !== npmStable(validate(row.request))) {
         throw new Error('stored npm receipt differs from its snapshot');
       }
-      return { profile: row.request.profile === 'npm-lock-v3-topology-v2'
+      return { profile: row.request.profile === 'npm-lock-v3-topology-v3' ? 'npm-lock-topology-receipt-v3'
+        : row.request.profile === 'npm-lock-v3-topology-v2'
         ? 'npm-lock-topology-receipt-v2' : 'npm-lock-topology-receipt-v1', resolution: `https://rezics.com/id/${row.id}`,
         requestDigest: row.request_digest, request: row.request, outcome: row.outcome,
         createdAt: row.created_at.toISOString() };

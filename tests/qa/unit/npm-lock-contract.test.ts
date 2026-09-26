@@ -41,4 +41,15 @@ test('PKG03/PKG12/PKG13: npm contract exposes private immutable topology receipt
     'instances', 'edges', 'activeInstances', 'activeEdges', 'omittedInstances', 'omittedEdges']) {
     expect(outcome.properties[field].maxItems).toBe(0);
   }
+  expect(requests[2].properties.profile.const).toBe('npm-lock-v3-topology-v3');
+  expect(requests[2].required).toContain('workspaces');
+  expect(requests[2].properties.workspaces.maxItems).toBe(16);
+  expect(requests[2].properties.workspaces.items.additionalProperties).toBe(false);
+  expect(receipts[2].properties.profile.const).toBe('npm-lock-topology-receipt-v3');
+  const identity = receipts[2].properties.outcome.anyOf;
+  expect(identity[0].properties.instances.items.required).toEqual(expect.arrayContaining(['kind', 'slotName', 'linkTarget', 'peerHosts']));
+  expect(identity[0].properties.edges.items.required).toContain('requestedName');
+  for (const outcome of identity.slice(1)) for (const field of ['instances', 'edges']) {
+    expect(outcome.properties[field].maxItems).toBe(0);
+  }
 });

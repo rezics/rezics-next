@@ -5,6 +5,10 @@ import { npmSha, npmStable, validateNpmSnapshot } from '../../services/main/src/
 import { npmPlatformCases, npmPlatformFixture, npmTargets } from '../../tests/qa/fixtures/npm-platform-snapshot.ts';
 import { validateNpmPlatformSnapshot } from '../../services/main/src/modules/package/npm-platform.ts';
 import { compareNpmPlatform } from './npm-platform-compare.ts';
+import { npmIdentityCases, npmIdentityFixture } from '../../tests/qa/fixtures/npm-identity-snapshot.ts';
+import { validateNpmIdentitySnapshot, type NpmIdentityOutcome } from '../../services/main/src/modules/package/npm-identity.ts';
+import { NpmResolutionInvalid } from '../../services/main/src/modules/package/npm-lock.ts';
+import { compareNpmIdentity } from './npm-identity-compare.ts';
 
 const base = resolve(import.meta.dir, '../../.temp/package-npm-oracle');
 await mkdir(base, { recursive: true });
@@ -111,6 +115,7 @@ await writeFile(resolve(base, 'result.json'), JSON.stringify({ nodeVersion: node
 console.log(`npm offline native topology matched ${npmNativeCases.length} scenarios; result: ${resolve(base, 'result.json')}`);
 const platformResults: Record<string, unknown> = {};
 const platformSummary: Record<string, unknown> = {};
+const platformCompatibility: Record<string, string> = {};
 for (const kind of npmPlatformCases) for (const target of npmTargets) {
   const request = npmPlatformFixture(kind, target);
   const key = `${kind}-${target.os}-${target.cpu}`;
@@ -125,6 +130,7 @@ for (const kind of npmPlatformCases) for (const target of npmTargets) {
   const native = JSON.parse(virtual.stdout);
   const rezics = validateNpmPlatformSnapshot(request);
   compareNpmPlatform(key, native, rezics);
+  platformCompatibility[key] = npmSha(npmStable(rezics));
   if (await readFile(resolve(directory, 'package.json'), 'base64') !== request.manifest.bytesBase64
     || await readFile(resolve(directory, 'package-lock.json'), 'base64') !== request.lock.bytesBase64) {
     throw new Error('native platform oracle changed exact input bytes');
@@ -137,5 +143,43 @@ for (const kind of npmPlatformCases) for (const target of npmTargets) {
     errors: rezics.issues, cost: rezics.cost };
 }
 await writeFile(resolve(base, 'platform-result.json'), JSON.stringify(platformResults, null, 2));
-await writeFile(resolve(base, 'summary.json'), JSON.stringify({ compatibility, platformSummary }, null, 2));
 console.log(`npm offline native platform comparison matched ${Object.keys(platformResults).length} cases; result: ${resolve(base, 'platform-result.json')}`);
+const identityResults: Record<string, unknown> = {};
+const identitySummary: Record<string, unknown> = {};
+for (const kind of npmIdentityCases) {
+  const request = npmIdentityFixture(kind);
+  const directory = resolve(base, `identity-${kind}`);
+  await rm(directory, { force: true, recursive: true });
+  await mkdir(directory, { recursive: true });
+  const inputs = [{ path: 'package.json', bytes: request.manifest }, { path: 'package-lock.json', bytes: request.lock },
+    ...request.workspaces.map(item => ({ path: `${item.path}/package.json`, bytes: item.manifest }))];
+  for (const input of inputs) {
+    await mkdir(dirname(resolve(directory, input.path)), { recursive: true });
+    await writeFile(resolve(directory, input.path), Buffer.from(input.bytes.bytesBase64, 'base64'));
+  }
+  const listing = await run([cli, 'ls', '--all', '--json', '--long', '--package-lock-only',
+    '--offline', '--ignore-scripts', '--strict-peer-deps', '--legacy-peer-deps=false'], directory);
+  const virtual = await run([resolve(import.meta.dir, 'npm-native-tree.cjs'), npmPackage, directory, 'identity'], directory);
+  const native = JSON.parse(virtual.stdout);
+  let rezics: NpmIdentityOutcome | { status: 'rejected'; message: string };
+  try { rezics = validateNpmIdentitySnapshot(request); }
+  catch (error) {
+    if (!(error instanceof NpmResolutionInvalid)) throw error;
+    rezics = { status: 'rejected', message: error.message };
+  }
+  const policyDifference = compareNpmIdentity(kind, directory, native, rezics);
+  for (const input of inputs) if (await readFile(resolve(directory, input.path), 'base64') !== input.bytes.bytesBase64) {
+    throw new Error('native identity oracle changed exact input bytes');
+  }
+  for (const path of ['', ...request.workspaces.map(item => item.path)]) {
+    if (await access(resolve(directory, path, 'node_modules')).then(() => true, () => false)) {
+      throw new Error('native identity oracle unexpectedly installed packages');
+    }
+  }
+  identityResults[kind] = { request, directory, listing, virtual, native, rezics, policyDifference };
+  identitySummary[kind] = { status: rezics.status, policyDifference,
+    ...(rezics.status === 'rejected' ? { message: rezics.message } : { issues: rezics.issues, cost: rezics.cost }) };
+}
+await writeFile(resolve(base, 'identity-result.json'), JSON.stringify(identityResults, null, 2));
+await writeFile(resolve(base, 'summary.json'), JSON.stringify({ compatibility, platformCompatibility, platformSummary, identitySummary }, null, 2));
+console.log(`npm offline native identity comparison matched ${npmIdentityCases.length} cases; result: ${resolve(base, 'identity-result.json')}`);

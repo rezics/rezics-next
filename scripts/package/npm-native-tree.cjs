@@ -11,16 +11,20 @@ for (const name of ['node:http', 'node:https', 'node:net']) {
 }
 globalThis.fetch = () => { throw new Error('native oracle forbids network'); };
 async function main() {
+  const identity = process.argv[4] === 'identity';
   const tree = await new Arborist({ path: process.argv[3], offline: true,
     ignoreScripts: true, strictPeerDeps: true, legacyPeerDeps: false }).loadVirtual();
   const nodes = [...tree.inventory.values()].map(node => ({
     path: node.location, name: node.package.name || node.name, version: node.version,
     resolved: node.resolved || null, integrity: node.integrity || null,
+    ...(identity ? { slotName: node.parent ? node.name : null, isLink: node.isLink,
+      linkTarget: node.isLink ? node.target.location : null, isWorkspace: !!node.isWorkspace,
+      parent: node.resolveParent?.location ?? null } : {}),
     edges: [...node.edgesOut.values()].map(edge => ({ name: edge.name, specifier: edge.spec,
       kind: edge.type, to: edge.to?.location ?? null, error: edge.error || null })),
   }));
   let projection;
-  if (process.argv[4]) {
+  if (process.argv[4] && !identity) {
     const target = JSON.parse(process.argv[4]);
     const path = require('node:path');
     const lib = path.dirname(requireNpm.resolve('@npmcli/arborist'));
@@ -56,4 +60,8 @@ async function main() {
     arboristVersion: requireNpm('@npmcli/arborist/package.json').version, nodes,
     ...(projection ? { projection } : {}) }));
 }
-main().catch(error => { console.error(error); process.exitCode = 1; });
+main().catch(error => {
+  if (process.argv[4] === 'identity') process.stdout.write(JSON.stringify({
+    error: { code: error.code || error.name, message: error.message } }));
+  console.error(error); process.exitCode = 1;
+});
