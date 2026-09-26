@@ -66,7 +66,8 @@ test('OPS03: recovery coverage discovers a new owner schema table and owner-row 
     // A future domain migration adds a schema and table; coverage needs no code change.
     const schema = `probe_${nonce}`;
     await contentPool.query(`CREATE SCHEMA ${schema};
-      CREATE TABLE ${schema}.evidence_item (id uuid PRIMARY KEY, body text NOT NULL)`);
+      CREATE TABLE ${schema}.evidence_item (id uuid, body text NOT NULL,
+        PRIMARY KEY (id) INCLUDE (body))`);
     const empty = await capture();
     expect(empty.tables[`${schema}.evidence_item`]).toEqual({ count: '0', digest: emptyDigest });
     expect(empty.catalogDigest).not.toBe(baseline.catalogDigest);
@@ -113,6 +114,14 @@ test('OPS03: recovery coverage discovers a new owner schema table and owner-row 
       <https://rezics.com/id/${randomUUID()}> rv:cites <urn:rezics:${schema}:scratch:1> } }`);
     await expect(capture()).rejects.toThrow('graph references excluded owner state');
     await fuseki.update(`DELETE WHERE { GRAPH <${graph}> { ?s ?p ?o } }`);
+
+    // The owner scan must resume at the actual primary key across its 128-row page boundary.
+    await contentPool.query(`INSERT INTO ${schema}.evidence_item (id, body)
+      SELECT ('00000000-0000-0000-0000-' || lpad(n::text, 12, '0'))::uuid, 'page'
+      FROM generate_series(1, 128) AS generated(n)`);
+    const paged = await capture();
+    expect(paged.tables[`${schema}.evidence_item`]?.count).toBe('129');
+    await expect(assertContentRecoveryCoverage(contentPool, fuseki, paged)).resolves.toBeUndefined();
 
     // Retained version-4 evidence fails with a version error instead of a row mismatch.
     await expect(assertContentRecoveryCoverage(contentPool, fuseki,

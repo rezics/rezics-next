@@ -61,7 +61,8 @@ extensions and partitions (covered by their parent) are skipped. A table enters
 coverage when its migration creates it; no recovery code changes. Each covered
 table needs a primary key, and capture fails closed on one without. Rows are
 digested in primary-key order as `to_jsonb` text under fixed UTC, ISO, hex and
-float output settings, so the digest does not depend on the connecting role. It
+float output settings, so the digest does not depend on the connecting role.
+An index's `INCLUDE` columns are row data, not primary-key components. The scan
 still assumes the same PostgreSQL major version, collation and schema, which a
 physical restore preserves. The catalog digest binds each table's name, key and
 column types and the exclusions. An empty new table or a changed column set
@@ -107,8 +108,8 @@ closed. Corpus-scale graph enumeration needs a streamed engine-side scan and is
 unverified. The [discovery fault test](../../tests/qa/fault-recovery/recovery-coverage-discovery.test.ts)
 adds a schema and table after migration, and the coverage picks them up. It also
 covers an owner-row IRI reference and its missing row, the primary-key and
-comment exclusion rules, and Access discovery. Version-four Content and Access
-evidence fails there by version.
+comment exclusion rules, a 129-row keyset page crossing, and Access discovery.
+Version-four Content and Access evidence fails there by version.
 
 Restore owners into isolation; fence publication, disclosure-sensitive reads and
 outbound effects. Reconcile graph references against exact Content revisions and

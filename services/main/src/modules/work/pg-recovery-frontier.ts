@@ -96,11 +96,11 @@ export async function ownerCatalog(client: PoolClient,
        COALESCE((SELECT array_agg(a.attname::text ORDER BY k.ord)
          FROM pg_index i CROSS JOIN LATERAL unnest(i.indkey::int2[]) WITH ORDINALITY AS k(attnum, ord)
          JOIN pg_attribute a ON a.attrelid = c.oid AND a.attnum = k.attnum
-         WHERE i.indrelid = c.oid AND i.indisprimary), '{}') AS key,
+         WHERE i.indrelid = c.oid AND i.indisprimary AND k.ord <= i.indnkeyatts), '{}') AS key,
        COALESCE((SELECT array_agg(format_type(a.atttypid, a.atttypmod) ORDER BY k.ord)
          FROM pg_index i CROSS JOIN LATERAL unnest(i.indkey::int2[]) WITH ORDINALITY AS k(attnum, ord)
          JOIN pg_attribute a ON a.attrelid = c.oid AND a.attnum = k.attnum
-         WHERE i.indrelid = c.oid AND i.indisprimary), '{}') AS key_types,
+         WHERE i.indrelid = c.oid AND i.indisprimary AND k.ord <= i.indnkeyatts), '{}') AS key_types,
        COALESCE((SELECT array_agg(a.attname::text || ' ' || format_type(a.atttypid, a.atttypmod)
            ORDER BY a.attname COLLATE "C")
          FROM pg_attribute a WHERE a.attrelid = c.oid AND a.attnum > 0 AND NOT a.attisdropped),
