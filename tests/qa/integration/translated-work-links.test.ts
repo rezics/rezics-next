@@ -62,7 +62,7 @@ function translationFixture(label: string) {
     await accessPool.query('INSERT INTO access.authority_subject (id, kind) VALUES ($1, $2)',
       [actor, 'agent']);
   };
-  const send = (app: ReturnType<typeof createMainApp>, body: object, key = randomUUID()) =>
+  const send = (app: ReturnType<typeof createMainApp>, body: object, key: string = randomUUID()) =>
     app.handle(new Request('http://main.local/v1/translation-links', {
       method: 'POST', headers: { authorization: 'Bearer qa',
         'content-type': 'application/json', 'idempotency-key': key },

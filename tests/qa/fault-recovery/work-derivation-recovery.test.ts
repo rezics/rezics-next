@@ -39,7 +39,7 @@ async function migrate(pool: Pool, owner: 'access' | 'relay'): Promise<void> {
   }
 }
 
-test('WORK04/OPS03: graph loss replays only the original admitted Work derivation', async () => {
+test('WORK04/OPS03: graph loss replays only the original admitted multi-source and corrected Work derivations', async () => {
   if (!Bun.env.REZICS_QA_RUN_ID) throw new Error('Run through the isolated fault/recovery QA tier');
   const prefix = randomUUID().slice(0, 12);
   const liveId = `derivation-${prefix}-l`;
@@ -111,13 +111,37 @@ test('WORK04/OPS03: graph loss replays only the original admitted Work derivatio
     expect(linked.sequence).toBe('3');
     const original = await readWorkDerivations(live, target.mainVersion, target.mainRevision);
     expect(original).toHaveLength(1);
-    for (let position = 1; position <= 3; position++) {
+    // A second exact source and a correction of the first declaration follow at 4-6.
+    const secondSource = await createAdmittedMetadataWork(live, account, access, request,
+      { title: 'Retained second derivation source', actingSubject: actor,
+        idempotencyKey: `second-source-${randomUUID()}` });
+    expect(secondSource.sequence).toBe('4');
+    const firstDeclaration = { targetWork: target.work, targetMainVersion: target.mainVersion,
+      expectedTargetHead: target.mainRevision, sourceWork: source.work,
+      sourceMainVersion: source.mainVersion, sourceMainRevision: source.mainRevision,
+      kind: 'software-fork' as const, evidence: 'https://creator.example/restored-source',
+      actingSubject: actor };
+    const secondLinked = await createAdmittedWorkDerivation(live, account, access, request, {
+      ...firstDeclaration, sourceWork: secondSource.work,
+      sourceMainVersion: secondSource.mainVersion, sourceMainRevision: secondSource.mainRevision,
+      kind: 'adaptation', evidence: 'https://creator.example/restored-second-source',
+      idempotencyKey: `derive-second-${randomUUID()}` });
+    expect(secondLinked.sequence).toBe('5');
+    const correction = await createAdmittedWorkDerivation(live, account, access, request, {
+      ...firstDeclaration, kind: 'adaptation', evidence: 'https://creator.example/restored-correction',
+      corrects: linked.derivation, idempotencyKey: `correct-${randomUUID()}` });
+    expect(correction.sequence).toBe('6');
+    const final = await readWorkDerivations(live, target.mainVersion, target.mainRevision);
+    expect(final.map(item => [item.derivation, item.status, item.corrects])).toEqual([
+      [linked.derivation, 'superseded', null], [secondLinked.derivation, 'effective', null],
+      [correction.derivation, 'effective', linked.derivation]]);
+    for (let position = 1; position <= 6; position++) {
       expect((await relayMainOutboxOnce(liveFuseki, relayPool, consumer))?.sequence)
         .toBe(String(position));
     }
     const coverage = await relayCoverage(relayPool, consumer);
-    expect(coverage).toMatchObject({ dataEpoch: lineage.dataEpoch, sequence: '3',
-      batchCount: '3', eventCount: '3' });
+    expect(coverage).toMatchObject({ dataEpoch: lineage.dataEpoch, sequence: '6',
+      batchCount: '6', eventCount: '6' });
     const originalEvent = (await relayPool.query<{ event_id: string; envelope: unknown }>(
       'SELECT event_id, envelope FROM relay.delivered_event WHERE data_epoch = $1 AND sequence = 3',
       [lineage.dataEpoch])).rows[0];
@@ -212,6 +236,21 @@ test('WORK04/OPS03: graph loss replays only the original admitted Work derivatio
       coverage, '3')).replayed).toBe(true);
     expect(await readWorkDerivations(restored, target.mainVersion, target.mainRevision))
       .toEqual(original);
+    expect((await reconcileRetainedWorkCreate(restored, accessPool, relayPool,
+      coverage, '4')).work).toBe(secondSource.work);
+    expect(await reconcileRetainedWorkDerivation(restored, accessPool, relayPool,
+      coverage, '5')).toEqual({ receipt: secondLinked.receipt,
+      derivation: secondLinked.derivation, replayed: false });
+    // The retained envelope omits the corrected ID; the held graph and Access digest restore it.
+    expect(await reconcileRetainedWorkDerivation(restored, accessPool, relayPool,
+      coverage, '6')).toEqual({ receipt: correction.receipt,
+      derivation: correction.derivation, replayed: false });
+    for (const position of ['6', '3']) {
+      expect((await reconcileRetainedWorkDerivation(restored, accessPool, relayPool,
+        coverage, position)).replayed).toBe(true);
+    }
+    expect(await readWorkDerivations(restored, target.mainVersion, target.mainRevision))
+      .toEqual(final);
     expect((await restoredFuseki.query(`PREFIX rv: <${RV}> ASK {
       GRAPH ${iri(GRAPHS.revisions)} { ${iri(linked.derivation)} a rv:WorkDerivation ;
         rv:dataEpoch ${lit(lineage.dataEpoch)} ; rv:sequence 3 ;

@@ -38,7 +38,9 @@ const workDerivationRef = t.Object({ derivation: t.String(), targetWork: t.Strin
   targetMainVersion: t.String(), targetMainRevision: t.String(),
   sourceWork: t.String(), sourceMainVersion: t.String(), sourceMainRevision: t.String(),
   kind: t.Union([t.Literal('adaptation'), t.Literal('new-recording'),
-    t.Literal('software-fork')]), evidence: t.String(), linkedBy: t.String() });
+    t.Literal('software-fork')]), evidence: t.String(), linkedBy: t.String(),
+  corrects: t.Nullable(t.String()), supersededBy: t.Nullable(t.String()),
+  status: t.Union([t.Literal('effective'), t.Literal('superseded')]) });
 
 const workDerivationWrite = t.Object({ profile: t.Literal('work-derivation-v1'),
   ...workDerivationRef.properties, receipt: t.String(), sourcePosition: t.Object({
@@ -154,6 +156,7 @@ export function workRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
         sourceWork: t.String(), sourceMainVersion: t.String(), sourceMainRevision: t.String(),
         kind: t.Union([t.Literal('adaptation'), t.Literal('new-recording'),
           t.Literal('software-fork')]), evidence: t.String(), actingSubject: t.String(),
+        corrects: t.Optional(t.String()),
       }, { additionalProperties: false }),
       response: { 200: workDerivationWrite, 201: workDerivationWrite, 202: pendingOperation,
         400: problemResult(400), 401: problemResult(401), 403: problemResult(403),
@@ -170,7 +173,7 @@ export function workRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
           expectedTargetHead: body.expectedTargetHead, sourceWork: body.sourceWork,
           sourceMainVersion: body.sourceMainVersion, sourceMainRevision: body.sourceMainRevision,
           kind: body.kind, evidence: body.evidence, actingSubject: body.actingSubject,
-          idempotencyKey };
+          ...(body.corrects === undefined ? {} : { corrects: body.corrects }), idempotencyKey };
         validateWorkDerivation(input);
         const receipt = await createAdmittedWorkDerivation(work.environment, work.account,
           work.access, request, input);

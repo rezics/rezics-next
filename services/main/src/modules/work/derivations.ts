@@ -15,6 +15,8 @@ const PROFILE = 'https://rezics.com/definition/work-derivation-v1';
 const SHAPE = `${PROFILE}/derivation-shape`;
 const kinds = { adaptation: 'Adaptation', 'new-recording': 'NewRecording',
   'software-fork': 'SoftwareFork' } as const;
+/** Declarations, including superseded ones, retained on one target revision. */
+export const MAX_REVISION_DERIVATIONS = 16;
 
 export class InvalidWorkDerivation extends Error {}
 export class WorkDerivationUnavailable extends Error {}
@@ -31,12 +33,18 @@ export interface WorkDerivationInput {
   kind: keyof typeof kinds;
   evidence: string;
   actingSubject: string;
+  /** The effective declaration for the same target revision and source this one supersedes. */
+  corrects?: string;
 }
 
-export interface WorkDerivation extends Omit<WorkDerivationInput, 'expectedTargetHead' | 'actingSubject'> {
+export interface WorkDerivation extends Omit<WorkDerivationInput,
+  'expectedTargetHead' | 'actingSubject' | 'corrects'> {
   derivation: string;
   targetMainRevision: string;
   linkedBy: string;
+  corrects: string | null;
+  supersededBy: string | null;
+  status: 'effective' | 'superseded';
 }
 
 export interface WorkDerivationReceipt {
@@ -51,6 +59,7 @@ export function validateWorkDerivation(input: WorkDerivationInput): void {
   if (![input.targetWork, input.targetMainVersion, input.expectedTargetHead,
     input.sourceWork, input.sourceMainVersion, input.sourceMainRevision,
     input.actingSubject].every(value => nativeId.test(value))
+    || (input.corrects !== undefined && !nativeId.test(input.corrects))
     || input.targetWork === input.sourceWork || !Object.hasOwn(kinds, input.kind)
     || !evidenceUrl.test(input.evidence)) {
     throw new InvalidWorkDerivation('invalid derivation identity, kind or evidence');
@@ -69,6 +78,8 @@ export function workDerivationDigest(input: WorkDerivationInput & { idempotencyK
     sourceWork: input.sourceWork, sourceMainVersion: input.sourceMainVersion,
     sourceMainRevision: input.sourceMainRevision, kind: input.kind,
     evidence: input.evidence, actingSubject: input.actingSubject,
+    // Absent for first declarations, so retained pre-correction digests stay valid.
+    ...(input.corrects === undefined ? {} : { corrects: input.corrects }),
     idempotencyKey: input.idempotencyKey }));
 }
 
@@ -159,19 +170,58 @@ export async function sealWorkDerivationAdmission(env: WorkActivationEnvironment
   return terminal;
 }
 
-async function relationState(env: WorkActivationEnvironment, input: WorkDerivationInput): Promise<{
-  target: boolean; head: boolean; source: boolean; linked: boolean;
-}> {
+interface RelationState {
+  target: boolean; head: boolean; source: boolean;
+  /** The target revision already declares this source Main Version. */
+  paired: boolean;
+  /** The corrected declaration exists for this target revision and source. */
+  correctable: boolean;
+  /** Another declaration already supersedes the corrected one. */
+  superseded: boolean;
+  /** The correction repeats the corrected kind, source revision and evidence. */
+  unchanged: boolean;
+  total: number;
+}
+
+/** Fixed-key guards; the count reads only one target revision's bounded declarations. */
+export function continuityGuard(input: WorkDerivationInput): string {
+  const revision = iri(input.expectedTargetHead);
+  const pair = input.corrects === undefined ? `
+    FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.revisions)} {
+      ?prior a rv:WorkDerivation ; rv:targetMainRevision ${revision} ;
+        rv:sourceMainVersion ${iri(input.sourceMainVersion)} . } }` : `
+    GRAPH ${iri(GRAPHS.revisions)} {
+      ${iri(input.corrects)} a rv:WorkDerivation ; rv:targetMainRevision ${revision} ;
+        rv:targetMainVersion ${iri(input.targetMainVersion)} ;
+        rv:sourceWork ${iri(input.sourceWork)} ;
+        rv:sourceMainVersion ${iri(input.sourceMainVersion)} .
+    }
+    FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.revisions)} {
+      ?later rv:corrects ${iri(input.corrects)} . } }
+    FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.revisions)} {
+      ${iri(input.corrects)} rv:derivationKind rv:${kinds[input.kind]} ;
+        rv:sourceMainRevision ${iri(input.sourceMainRevision)} ;
+        rv:evidence ${lit(input.evidence)} . } }`;
+  return `${pair}
+    { SELECT (COUNT(?declared) AS ?total) WHERE { GRAPH ${iri(GRAPHS.revisions)} {
+      ?declared a rv:WorkDerivation ; rv:targetMainRevision ${revision} . } } }
+    FILTER(?total < ${MAX_REVISION_DERIVATIONS})`;
+}
+
+async function relationState(env: WorkActivationEnvironment,
+  input: WorkDerivationInput): Promise<RelationState> {
+  const corrects = input.corrects === undefined ? null : iri(input.corrects);
+  const revision = iri(input.expectedTargetHead);
   const result = await env.fuseki.query(`PREFIX rv: <${RV}> SELECT
-    ?target ?head ?source ?linked WHERE {
+    ?target ?head ?source ?paired ?correctable ?superseded ?unchanged ?total WHERE {
     BIND(EXISTS { GRAPH ${iri(GRAPHS.current)} {
       ${iri(input.targetWork)} rv:mainVersion ${iri(input.targetMainVersion)} .
       ${iri(input.targetMainVersion)} a rv:MainVersion ; rv:work ${iri(input.targetWork)} .
     } } AS ?target)
     BIND(EXISTS { GRAPH ${iri(GRAPHS.current)} {
-      ${iri(input.targetMainVersion)} rv:head ${iri(input.expectedTargetHead)} .
+      ${iri(input.targetMainVersion)} rv:head ${revision} .
     } GRAPH ${iri(GRAPHS.revisions)} {
-      ${iri(input.expectedTargetHead)} a rv:RevisionAnchor ; rv:component ${iri(input.targetMainVersion)} .
+      ${revision} a rv:RevisionAnchor ; rv:component ${iri(input.targetMainVersion)} .
     } } AS ?head)
     BIND(EXISTS { GRAPH ${iri(GRAPHS.current)} {
       ${iri(input.sourceWork)} rv:mainVersion ${iri(input.sourceMainVersion)} .
@@ -180,13 +230,50 @@ async function relationState(env: WorkActivationEnvironment, input: WorkDerivati
       ${iri(input.sourceMainRevision)} a rv:RevisionAnchor ; rv:component ${iri(input.sourceMainVersion)} .
     } } AS ?source)
     BIND(EXISTS { GRAPH ${iri(GRAPHS.revisions)} {
-      ?derivation a rv:WorkDerivation ; rv:targetMainRevision ${iri(input.expectedTargetHead)} .
-    } } AS ?linked)
+      ?derivation a rv:WorkDerivation ; rv:targetMainRevision ${revision} ;
+        rv:sourceMainVersion ${iri(input.sourceMainVersion)} .
+    } } AS ?paired)
+    BIND(${corrects === null ? 'false' : `EXISTS { GRAPH ${iri(GRAPHS.revisions)} {
+      ${corrects} a rv:WorkDerivation ; rv:targetMainRevision ${revision} ;
+        rv:targetMainVersion ${iri(input.targetMainVersion)} ;
+        rv:sourceWork ${iri(input.sourceWork)} ;
+        rv:sourceMainVersion ${iri(input.sourceMainVersion)} .
+    } }`} AS ?correctable)
+    BIND(${corrects === null ? 'false' : `EXISTS { GRAPH ${iri(GRAPHS.revisions)} {
+      ?later rv:corrects ${corrects} . } }`} AS ?superseded)
+    BIND(${corrects === null ? 'false' : `EXISTS { GRAPH ${iri(GRAPHS.revisions)} {
+      ${corrects} rv:derivationKind rv:${kinds[input.kind]} ;
+        rv:sourceMainRevision ${iri(input.sourceMainRevision)} ;
+        rv:evidence ${lit(input.evidence)} . } }`} AS ?unchanged)
+    { SELECT (COUNT(?declared) AS ?total) WHERE { GRAPH ${iri(GRAPHS.revisions)} {
+      ?declared a rv:WorkDerivation ; rv:targetMainRevision ${revision} . } } }
   }`);
   const row = result.results?.bindings?.[0];
-  if (!row?.target || !row.head || !row.source || !row.linked) throw new Error('relation state unavailable');
-  return { target: row.target.value === 'true', head: row.head.value === 'true',
-    source: row.source.value === 'true', linked: row.linked.value === 'true' };
+  const flags = ['target', 'head', 'source', 'paired', 'correctable', 'superseded', 'unchanged'] as const;
+  if (!row || flags.some(flag => !row[flag]) || !row.total) throw new Error('relation state unavailable');
+  const total = Number(row.total.value);
+  if (!Number.isSafeInteger(total) || total < 0) throw new Error('relation state unavailable');
+  return { target: row.target!.value === 'true', head: row.head!.value === 'true',
+    source: row.source!.value === 'true', paired: row.paired!.value === 'true',
+    correctable: row.correctable!.value === 'true', superseded: row.superseded!.value === 'true',
+    unchanged: row.unchanged!.value === 'true', total };
+}
+
+/** The first failed continuity precondition, or null when the command may still commit. */
+function blockedBy(state: RelationState, input: WorkDerivationInput): Error | null {
+  if (!state.target || !state.source) return new WorkDerivationUnavailable('source or target unavailable');
+  if (!state.head) return new WorkDerivationStale('target Main Version head changed');
+  if (input.corrects === undefined) {
+    if (state.paired) return new WorkDerivationConflict('target revision already declares this source');
+  } else {
+    if (!state.correctable) return new WorkDerivationUnavailable('corrected derivation unavailable');
+    if (state.superseded) return new WorkDerivationConflict('corrected derivation is already superseded');
+    if (state.unchanged) return new InvalidWorkDerivation('correction repeats the corrected declaration');
+  }
+  if (state.total >= MAX_REVISION_DERIVATIONS) {
+    return new WorkDerivationConflict('target revision derivation limit reached');
+  }
+  return null;
 }
 
 async function activate(env: WorkActivationEnvironment, registered: RegisteredAdmission,
@@ -209,7 +296,9 @@ async function activate(env: WorkActivationEnvironment, registered: RegisteredAd
           rv:derivationKind rv:${kinds[input.kind]} ; rv:evidence ${lit(input.evidence)} ;
           rv:linkedBy ${iri(input.actingSubject)} ; rv:modelRevision ${iri(PROFILE)} ;
           rv:shapeRevision ${iri(PROFILE)} ; rv:datasetId ${iri(DATASET)} ;
-          rv:dataEpoch ${lit(env.lineage.dataEpoch)} ; rv:sequence ?next .
+          rv:dataEpoch ${lit(env.lineage.dataEpoch)} ; rv:sequence ?next${
+  input.corrects === undefined ? '' : ` ;
+          rv:corrects ${iri(input.corrects)}`} .
       }
       GRAPH ${iri(GRAPHS.receipts)} {
         ${iri(receipt)} a rv:OperationReceipt ; rv:requestDigest ${lit(digest)} ;
@@ -241,8 +330,7 @@ async function activate(env: WorkActivationEnvironment, registered: RegisteredAd
         ${iri(input.sourceMainRevision)} a rv:RevisionAnchor ;
           rv:component ${iri(input.sourceMainVersion)} .
       }
-      FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.revisions)} {
-        ?prior a rv:WorkDerivation ; rv:targetMainRevision ${iri(input.expectedTargetHead)} . } }
+      ${continuityGuard(input)}
       FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} ?p ?o } }
       FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:restoreHold true } }
       BIND(?n + 1 AS ?next)
@@ -258,8 +346,7 @@ async function activate(env: WorkActivationEnvironment, registered: RegisteredAd
     scope: registered.scope, epoch: registered.authorityEpoch });
   const result = await validatedCommand(env, { receipt, digest, update,
     validations, deadlineMs: 10_000 }, registered);
-  if (result.status === 'invalid' || result.status === 'unknown-profile'
-    || result.status === 'conflict') throw new CommandRejected(result);
+  if (result.status !== 'committed') throw new CommandRejected(result);
 }
 
 export async function createAdmittedWorkDerivation(env: WorkActivationEnvironment,
@@ -285,21 +372,27 @@ export async function createAdmittedWorkDerivation(env: WorkActivationEnvironmen
       if (!admission.dispatchEligible || admission.state === 'registered') {
         await sealWorkDerivationAdmission(env, admission);
       } else {
-        const state = await relationState(env, input);
-        if (!state.target || !state.source || !state.head || state.linked) {
-          await sealWorkDerivationAdmission(env, admission);
-          const cancelled = await readWorkDerivationTerminal(env, registered.id);
-          if (cancelled) await access.recordGraphOutcome(registered.id, cancelled);
-          if (!state.target || !state.source) throw new WorkDerivationUnavailable('source or target unavailable');
-          if (!state.head) throw new WorkDerivationStale('target Main Version head changed');
-          throw new WorkDerivationConflict('target revision already has a derivation');
-        }
-        try { await activate(env, admission, input, digest); }
-        catch (error) {
-          if (error instanceof IdempotencyConflict) throw error;
-          const state = await relationState(env, input);
-          if (!state.target || !state.source || !state.head || state.linked) {
-            await sealWorkDerivationAdmission(env, admission);
+        const blocked = blockedBy(await relationState(env, input), input);
+        if (blocked) {
+          // A lost response can find its own committed declaration blocking a retry.
+          const cancelled = await sealWorkDerivationAdmission(env, admission);
+          if (cancelled.outcome !== 'succeeded') {
+            await access.recordGraphOutcome(registered.id, cancelled);
+            throw blocked;
+          }
+        } else {
+          try { await activate(env, admission, input, digest); }
+          catch (error) {
+            if (error instanceof IdempotencyConflict) throw error;
+            // A concurrent declaration can win the guard between preflight and commit.
+            const lost = blockedBy(await relationState(env, input), input);
+            if (lost && !await readWorkDerivationTerminal(env, registered.id)) {
+              const cancelled = await sealWorkDerivationAdmission(env, admission);
+              if (cancelled.outcome !== 'succeeded') {
+                await access.recordGraphOutcome(registered.id, cancelled);
+                throw lost;
+              }
+            }
           }
         }
       }
@@ -318,12 +411,17 @@ export async function createAdmittedWorkDerivation(env: WorkActivationEnvironmen
       dataEpoch: terminal.dataEpoch, sequence: terminal.sequence, replayed: registered.replayed };
   } catch (error) {
     if (error instanceof IdempotencyConflict || error instanceof WorkDerivationConflict
-      || error instanceof WorkDerivationUnavailable || error instanceof WorkDerivationStale) throw error;
+      || error instanceof WorkDerivationUnavailable || error instanceof WorkDerivationStale
+      || error instanceof InvalidWorkDerivation) throw error;
     throw new PendingAdmittedWork(registered.id, 'work-derivation');
   }
 }
 
-/** One retained target revision has at most one explicit derivation. */
+/**
+ * The complete, bounded declaration inventory of one retained target revision, in
+ * commit order. Each source Main Version has one effective declaration; earlier
+ * corrected ones remain readable as superseded.
+ */
 export async function readWorkDerivations(env: WorkActivationEnvironment,
   mainVersion: string, mainRevision: string): Promise<WorkDerivation[]> {
   if (!nativeId.test(mainVersion) || !nativeId.test(mainRevision)) {
@@ -337,29 +435,47 @@ export async function readWorkDerivations(env: WorkActivationEnvironment,
   }`);
   if (available.boolean !== true) throw new WorkDerivationUnavailable('target revision unavailable');
   const result = await env.fuseki.query(`PREFIX rv: <${RV}> SELECT
-    ?derivation ?targetWork ?sourceWork ?sourceMain ?sourceRevision ?kind ?evidence ?linkedBy WHERE {
+    ?derivation ?targetWork ?sourceWork ?sourceMain ?sourceRevision ?kind ?evidence ?linkedBy
+    ?sequence ?corrects ?supersededBy WHERE {
     GRAPH ${iri(GRAPHS.revisions)} {
       ?derivation a rv:WorkDerivation ; rv:targetWork ?targetWork ;
         rv:targetMainVersion ${iri(mainVersion)} ; rv:targetMainRevision ${iri(mainRevision)} ;
         rv:sourceWork ?sourceWork ; rv:sourceMainVersion ?sourceMain ;
         rv:sourceMainRevision ?sourceRevision ; rv:derivationKind ?kind ;
-        rv:evidence ?evidence ; rv:linkedBy ?linkedBy ;
+        rv:evidence ?evidence ; rv:linkedBy ?linkedBy ; rv:sequence ?sequence ;
         rv:modelRevision ${iri(PROFILE)} ; rv:shapeRevision ${iri(PROFILE)} .
+      OPTIONAL { ?derivation rv:corrects ?corrects }
+      OPTIONAL { ?supersededBy rv:corrects ?derivation }
     }
-  } LIMIT 2`);
+  } ORDER BY ?sequence LIMIT ${MAX_REVISION_DERIVATIONS + 1}`);
   const rows = result.results?.bindings ?? [];
-  if (rows.length > 1) throw new WorkDerivationConflict('ambiguous target derivations');
-  return rows.map(row => {
+  if (rows.length > MAX_REVISION_DERIVATIONS) {
+    throw new WorkDerivationConflict('target revision exceeds its derivation bound');
+  }
+  const relations = rows.map(row => {
     const kind: WorkDerivation['kind'] | undefined = Object.entries(kinds)
       .find(([, value]) => row.kind?.value === `${RV}${value}`)?.[0] as WorkDerivation['kind'] | undefined;
     if (!kind || !row.derivation || !row.targetWork || !row.sourceWork || !row.sourceMain
-      || !row.sourceRevision || !row.evidence || !row.linkedBy) {
+      || !row.sourceRevision || !row.evidence || !row.linkedBy || !row.sequence) {
       throw new WorkDerivationConflict('incomplete derivation');
     }
+    const supersededBy = row.supersededBy?.value ?? null;
     return { derivation: row.derivation.value, targetWork: row.targetWork.value,
       targetMainVersion: mainVersion, targetMainRevision: mainRevision,
       sourceWork: row.sourceWork.value, sourceMainVersion: row.sourceMain.value,
       sourceMainRevision: row.sourceRevision.value, kind, evidence: row.evidence.value,
-      linkedBy: row.linkedBy.value };
+      linkedBy: row.linkedBy.value, corrects: row.corrects?.value ?? null, supersededBy,
+      status: supersededBy === null ? 'effective' as const : 'superseded' as const };
   });
+  // Duplicate rows mean a declaration was corrected twice or corrects two others.
+  const ids = new Set(relations.map(item => item.derivation));
+  const effective = relations.filter(item => item.status === 'effective');
+  if (ids.size !== relations.length
+    || new Set(effective.map(item => item.sourceMainVersion)).size !== effective.length
+    || relations.some(item => item.corrects !== null && (!ids.has(item.corrects)
+      || relations.find(prior => prior.derivation === item.corrects)?.sourceMainVersion
+        !== item.sourceMainVersion))) {
+    throw new WorkDerivationConflict('ambiguous target derivations');
+  }
+  return relations;
 }

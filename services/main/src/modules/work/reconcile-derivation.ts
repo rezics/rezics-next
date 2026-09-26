@@ -4,9 +4,9 @@ import { relayRetainedEventAt, RelayCheckpointConflict,
   type MainCloudEvent, type RelayCoverage } from '../outbox/relay.ts';
 import { DATASET, GRAPHS, RV, hash, iri, lit, type WorkActivationEnvironment }
   from './activate.ts';
-import { readWorkDerivationTerminal, readWorkDerivations, validateWorkDerivation,
-  workDerivationDigest, workDerivationReceiptIri, type WorkDerivationInput }
-  from './derivations.ts';
+import { continuityGuard, readWorkDerivationTerminal, readWorkDerivations,
+  validateWorkDerivation, workDerivationDigest, workDerivationReceiptIri,
+  type WorkDerivationInput } from './derivations.ts';
 import { reconciledCursor, RetainedEffectConflict }
   from './reconcile-restored.ts';
 
@@ -61,6 +61,28 @@ export function parseRetainedWorkDerivation(eventId: string, envelope: MainCloud
   return { input, derivation: receipt.workDerivation, batchId: data.batchId, receipt };
 }
 
+/**
+ * The retained envelope does not name a corrected declaration. Replay is sequential,
+ * so the original guard's choice is the pair's one effective declaration before this
+ * position, or none for a first declaration; Access's digest then proves the choice.
+ */
+async function retainedCorrection(env: WorkActivationEnvironment, input: WorkDerivationInput,
+  derivation: string, replayed: boolean): Promise<string | undefined> {
+  const pattern = replayed ? `${iri(derivation)} rv:corrects ?prior .` : `
+    ?prior a rv:WorkDerivation ; rv:targetMainRevision ${iri(input.expectedTargetHead)} ;
+      rv:sourceMainVersion ${iri(input.sourceMainVersion)} .
+    FILTER NOT EXISTS { ?later rv:corrects ?prior }
+    FILTER(?prior != ${iri(derivation)})`;
+  const result = await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?prior WHERE {
+    GRAPH ${iri(GRAPHS.revisions)} { ${pattern} }
+  } LIMIT 2`);
+  const rows = result.results?.bindings ?? [];
+  if (rows.length > 1 || (rows.length === 1 && !rows[0]?.prior?.value)) {
+    throw new RetainedEffectConflict('retained Work derivation correction is ambiguous');
+  }
+  return rows[0]?.prior?.value;
+}
+
 /** Rebuild one original relation under a held, sequential graph restore. */
 export async function reconcileRetainedWorkDerivation(
   env: WorkActivationEnvironment, accessPool: Pool, relayPool: Pool,
@@ -75,8 +97,12 @@ export async function reconcileRetainedWorkDerivation(
     throw error;
   }
   const { eventId, envelope, batch } = retained;
-  const { input, derivation, batchId, receipt } = parseRetainedWorkDerivation(
-    eventId, envelope, coverage, sequence);
+  const parsed = parseRetainedWorkDerivation(eventId, envelope, coverage, sequence);
+  const { derivation, batchId, receipt } = parsed;
+  const existing = await readWorkDerivationTerminal(env, receipt.admissionId);
+  const corrects = await retainedCorrection(env, parsed.input, derivation, !!existing);
+  const input: WorkDerivationInput = corrects === undefined ? parsed.input
+    : { ...parsed.input, corrects };
   if (batch.batchId !== batchId || batch.routingEpoch !== envelope.data.routingEpoch
     || batch.eventCount !== 1) {
     throw new RetainedEffectConflict('retained Work derivation batch header differs');
@@ -121,7 +147,9 @@ export async function reconcileRetainedWorkDerivation(
             rv:derivationKind rv:${kinds[input.kind]} ; rv:evidence ${lit(input.evidence)} ;
             rv:linkedBy ${iri(input.actingSubject)} ; rv:modelRevision ${iri(PROFILE)} ;
             rv:shapeRevision ${iri(PROFILE)} ; rv:datasetId ${iri(DATASET)} ;
-            rv:dataEpoch ${lit(coverage.dataEpoch)} ; rv:sequence ${sequence} .
+            rv:dataEpoch ${lit(coverage.dataEpoch)} ; rv:sequence ${sequence}${
+  corrects === undefined ? '' : ` ;
+            rv:corrects ${iri(corrects)}`} .
         }
         GRAPH ${iri(GRAPHS.receipts)} {
           ${iri(receipt.id)} a rv:OperationReceipt ; rv:requestDigest ${lit(receipt.requestDigest)} ;
@@ -160,15 +188,13 @@ export async function reconcileRetainedWorkDerivation(
           ${iri(input.sourceMainRevision)} a rv:RevisionAnchor ;
             rv:component ${iri(input.sourceMainVersion)} .
         }
-        FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.revisions)} {
-          ?prior a rv:WorkDerivation ; rv:targetMainRevision ${iri(input.expectedTargetHead)} . } }
+        ${continuityGuard(input)}
         FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.revisions)} { ${iri(derivation)} ?p ?o } }
         FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt.id)} ?p ?o } }
         FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.outbox)} {
           ?otherBatch rv:dataEpoch ${lit(coverage.dataEpoch)} ; rv:sequence ${sequence} . } }
         FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.outbox)} { ${iri(eventId)} ?p ?o } }
       }`;
-    const existing = await readWorkDerivationTerminal(env, receipt.admissionId);
     let updateError: unknown;
     if (!existing) {
       try {
@@ -201,9 +227,8 @@ export async function reconcileRetainedWorkDerivation(
           rv:linkedBy ${iri(input.actingSubject)} ; rv:modelRevision ${iri(PROFILE)} ;
           rv:shapeRevision ${iri(PROFILE)} ; rv:datasetId ${iri(DATASET)} ;
           rv:dataEpoch ${lit(coverage.dataEpoch)} ; rv:sequence ${sequence} .
-        FILTER NOT EXISTS { ?other a rv:WorkDerivation ;
-          rv:targetMainRevision ${iri(input.expectedTargetHead)} .
-          FILTER(?other != ${iri(derivation)}) }
+        ${corrects === undefined ? `FILTER NOT EXISTS { ${iri(derivation)} rv:corrects ?any }`
+    : `${iri(derivation)} rv:corrects ${iri(corrects)} .`}
       }
       GRAPH ${iri(GRAPHS.receipts)} {
         ${iri(receipt.id)} a rv:OperationReceipt ; rv:requestDigest ${lit(receipt.requestDigest)} ;
@@ -222,14 +247,14 @@ export async function reconcileRetainedWorkDerivation(
     }`);
     const relations = await readWorkDerivations(env, input.targetMainVersion,
       input.expectedTargetHead);
-    const relation = relations[0];
+    const relation = relations.find(item => item.derivation === derivation);
     if (!terminal || terminal.outcome !== 'succeeded' || terminal.derivation !== derivation
       || terminal.receipt !== receipt.id || terminal.requestDigest !== receipt.requestDigest
       || terminal.admissionId !== receipt.admissionId || terminal.scope !== receipt.scope
       || terminal.authorityEpoch !== receipt.authorityEpoch
       || terminal.dataEpoch !== coverage.dataEpoch || terminal.sequence !== sequence
       || cursor === null || cursor < BigInt(sequence) || graphCheck.boolean !== true
-      || relations.length !== 1 || !relation || relation.derivation !== derivation
+      || !relation || relation.corrects !== (corrects ?? null)
       || relation.targetWork !== input.targetWork
       || relation.targetMainVersion !== input.targetMainVersion
       || relation.targetMainRevision !== input.expectedTargetHead
