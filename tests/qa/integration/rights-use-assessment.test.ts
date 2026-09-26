@@ -6,6 +6,7 @@ import { migrateContent } from '../../../services/content/src/migrate.ts';
 import { SourceIntakeInvalid, SourceIntakeStore } from '../../../services/main/src/modules/source/intake.ts';
 import { SourceRunInvalid, SourceRunStore, type CaptureRequest,
   type SourceRunProviderAdapter } from '../../../services/main/src/modules/source/acquisition-run.ts';
+import { runGoProxyLive } from '../../../services/main/src/modules/package/go-refresh.ts';
 import { RightsInvalid, RightsStore, rightsExportUseScope, sourceRetentionScope,
   type AssessmentInput, type MaterialScope } from '../../../services/main/src/modules/rights/store.ts';
 import { planExport, type VerifiedExportMember } from '../../../services/main/src/modules/export/planner.ts';
@@ -18,7 +19,7 @@ const agent = () => `https://rezics.com/id/${randomUUID()}`;
 const provider = { scopeKind: 'source_provider', provider: 'open-library', namespace: 'work',
   sourceRecordId: null, contentVariantId: null, mediaAsset: null, component: 'response' };
 
-test('LIVE13/LIVE14/LIVE15/LIVE16/LIVE17: unknown rights, scoped reassessment, retention limits and export obligations stay exact',
+test('LIVE13/LIVE14/LIVE15/LIVE16: unknown rights, scoped reassessment, retention limits and export obligations stay exact',
   async () => {
     if (!Bun.env.REZICS_QA_RUN_ID) throw new Error('Use the QA integration tier');
     const databases = await cloneQaOwnerDatabases(Bun.env.REZICS_QA_RUN_ID, ['account', 'access', 'content']);
@@ -110,6 +111,51 @@ test('LIVE13/LIVE14/LIVE15/LIVE16/LIVE17: unknown rights, scoped reassessment, r
         return new Response('{}', { headers: { 'content-type': 'application/json' } });
       }, rawRetentionPermitted: (sourceProvider, namespace) =>
         store.rawRetentionPermitted(sourceProvider, namespace) });
+      const proxyProvider = { ...provider, provider: 'proxy.golang.org', namespace: 'go-proxy-response' };
+      const proxyScope = sourceRetentionScope(proxyProvider.provider, proxyProvider.namespace);
+      const proxyTerms = await assess({ ...common, material: proxyProvider, expressionKind: 'service',
+        family: 'service_terms', useKind: 'raw_retention', useScope: proxyScope, basis: 'service_terms',
+        outcome: 'supported', rationale: 'The provider terms allow frozen proxy response replay.',
+        evidence: { termsRevision: 'go-proxy-v1' }, idempotencyKey: 'go-proxy-terms-allow' });
+      expect(proxyTerms.status, JSON.stringify(proxyTerms.body)).toBe(201);
+      const goMain = 'module example.com/main\n\ngo 1.21\n\nrequire example.com/mod v1.0.0\n';
+      const goResponses = new Map<string, Uint8Array>([
+        ['example.com/mod/@v/v1.0.0.mod', new TextEncoder().encode('module example.com/mod\n\ngo 1.21\n')],
+        ['example.com/mod/@v/list', new TextEncoder().encode('v1.0.0\nv1.1.0\n')],
+        ['example.com/mod/@v/v1.1.0.mod', new TextEncoder().encode(
+          'module example.com/mod\n\ngo 1.21\n\nretract v1.0.0\n')],
+      ]);
+      let proxyReads = 0;
+      const goLoader = async (path: string) => {
+        proxyReads++;
+        const response = goResponses.get(path);
+        return response ? { status: 200 as const, bytes: response } : { status: 404 as const, bytes: null };
+      };
+      const goRunKey = 'rights-go-proxy-replay';
+      const goResult = await runGoProxyLive(runs, intakePrincipal, goRunKey,
+        { profile: 'go-proxy-live-run-v1', mainModule: goMain }, goLoader);
+      expect(goResult.resolution?.status).toBe('solved');
+      expect(proxyReads).toBe(3);
+      // Change the real service-terms head after run lookup but before its frozen-byte reads.
+      const isComplete = runs.isComplete.bind(runs);
+      let revokeAtReplayBoundary = true;
+      runs.isComplete = async runId => {
+        const complete = await isComplete(runId);
+        if (complete && revokeAtReplayBoundary) {
+          revokeAtReplayBoundary = false;
+          const prohibited = await assess({ ...common, material: proxyProvider, expressionKind: 'service',
+            family: 'service_terms', useKind: 'raw_retention', useScope: proxyScope, basis: 'service_terms',
+            outcome: 'not_supported', rationale: 'The current terms prohibit replay of retained proxy bytes.',
+            evidence: { termsRevision: 'go-proxy-v2' }, expectedAssessment: proxyTerms.body.assessmentId,
+            idempotencyKey: 'go-proxy-terms-prohibit' });
+          expect(prohibited.status, JSON.stringify(prohibited.body)).toBe(201);
+        }
+        return complete;
+      };
+      await expect(runGoProxyLive(runs, intakePrincipal, goRunKey,
+        { profile: 'go-proxy-live-run-v1', mainModule: goMain }, goLoader))
+        .rejects.toThrow('current source terms prohibit replaying retained bytes');
+      expect(proxyReads).toBe(3);
       const runKey = 'prohibited-source-run';
       await expect(runs.runOpenLibraryWorks(intakePrincipal, runKey, { profile: 'open-library-works-run-v1',
         workIds: ['OL123W'], editions: false, ratings: false, frontier: false })).rejects.toBeInstanceOf(SourceRunInvalid);

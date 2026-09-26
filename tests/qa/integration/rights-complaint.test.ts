@@ -96,8 +96,9 @@ test('GOV24/GOV25/LIVE18: a source synopsis restriction stays exact through deci
       const factsAssessment = await call('/v1/rights/use-assessments', account.tokenA, {
         profile: 'rights-use-assessment-v1', actingSubject: submitter, material: factMaterial,
         expressionKind: 'fact', family: 'data_rights', useKind: 'export',
-        useScope: rightsExportUseScope('full'), basis: 'unknown', outcome: 'undetermined',
-        licenseInstrument: null, exceptionKind: null, rationale: null, extent: {}, evidence: {}, obligations: [],
+        useScope: rightsExportUseScope('full'), basis: 'unprotected_fact', outcome: 'supported',
+        licenseInstrument: null, exceptionKind: null, rationale: null, extent: {},
+        evidence: { sourceObservation: observed.observation, field: 'facts', digest: observed.byteDigest }, obligations: [],
         expectedAssessment: null, idempotencyKey: 'source-record-export-unknown',
       });
       expect(factsAssessment.status, JSON.stringify(factsAssessment.body)).toBe(201);
@@ -164,6 +165,9 @@ test('GOV24/GOV25/LIVE18: a source synopsis restriction stays exact through deci
       const beforeRefresh = await planExport({ targetProfile: 'rezics-source-v1', useScope: 'full',
         members: [synopsisMember, factsMember], residuals: [] }, rightsStore.exportScope);
       expect(beforeRefresh.licenseScope).toBe('blocked');
+      expect(beforeRefresh.bases).toEqual(expect.arrayContaining([
+        expect.objectContaining({ basisKind: 'unprotected_fact', result: 'supported', memberOrdinals: [2] }),
+      ]));
 
       const step = (kind: string, actingSubject: string, partySubject: string | null, key: string) =>
         ({ profile: 'governance-process-step-v1', caseId: complaint.body.caseId,
@@ -190,11 +194,29 @@ test('GOV24/GOV25/LIVE18: a source synopsis restriction stays exact through deci
         .toMatchObject({ facts: ['first-publication'], synopsis: 'independent-text' });
       const refreshedMember = sourceExportMember('synopsis', synopsisMaterial, synopsisAssessment.body.materialId,
         refreshed.observation, refreshed.byteDigest!);
-      const refreshedFacts = sourceExportMember('record', factMaterial, factsAssessment.body.materialId,
+      // Reaffirm the independently supported fact against the new source snapshot. This
+      // human assessment advances its own use head; it cannot clear the synopsis fence.
+      const refreshedFactsAssessment = await call('/v1/rights/use-assessments', account.tokenA, {
+        profile: 'rights-use-assessment-v1', actingSubject: submitter, material: factMaterial,
+        expressionKind: 'fact', family: 'data_rights', useKind: 'export',
+        useScope: rightsExportUseScope('full'), basis: 'unprotected_fact', outcome: 'supported',
+        licenseInstrument: null, exceptionKind: null, rationale: null, extent: {},
+        evidence: { sourceObservation: refreshed.observation, field: 'facts', digest: refreshed.byteDigest }, obligations: [],
+        expectedAssessment: factsAssessment.body.assessmentId, idempotencyKey: 'source-record-export-refreshed',
+      });
+      expect(refreshedFactsAssessment.status, JSON.stringify(refreshedFactsAssessment.body)).toBe(201);
+      expect(refreshedFactsAssessment.body.predecessor).toBe(factsAssessment.body.assessmentId);
+      const refreshedFacts = sourceExportMember('record', factMaterial, refreshedFactsAssessment.body.materialId,
         refreshed.observation, refreshed.byteDigest!);
-      expect((await planExport({ targetProfile: 'rezics-source-v1', useScope: 'full',
-        members: [refreshedMember, refreshedFacts], residuals: [] }, rightsStore.exportScope)).licenseScope)
-        .toBe('blocked');
+      expect(refreshedFacts.data?.rightsIdentity).toMatchObject({ target: {
+        owner: 'source', resource: observed.record, component: 'record' } });
+      const refreshedPlan = await planExport({ targetProfile: 'rezics-source-v1', useScope: 'full',
+        members: [refreshedMember, refreshedFacts], residuals: [] }, rightsStore.exportScope);
+      expect(refreshedPlan.licenseScope).toBe('blocked');
+      expect(refreshedPlan.bases).toEqual(expect.arrayContaining([
+        expect.objectContaining({ basisKind: 'unprotected_fact', result: 'supported', memberOrdinals: [2] }),
+        expect.objectContaining({ result: 'prohibited', obligations: ['access_restriction'], memberOrdinals: [1] }),
+      ]));
       const final = await restrict(decision('final_restrict', '1', null, 'final-synopsis'));
       expect(final.status, JSON.stringify(final.body)).toBe(201);
       const replayedFinal = await restrict(decision('final_restrict', '1', null, 'final-synopsis'));
