@@ -1,7 +1,7 @@
 import { spawn, spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { createServer } from 'node:net';
-import { join, resolve } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { devPorts } from '../dev/config.ts';
 import { loadDockerEnvironment } from '../load/docker-env.ts';
 import { fusekiImageFromCompose } from '../load/image.ts';
@@ -10,7 +10,14 @@ export const root = resolve(import.meta.dir, '../..');
 export const composeFile = join(root, 'infra/dev/compose.yaml');
 export const VOLUME_KINDS = ['postgres_data', 'fuseki_data', 'rustfs_data'] as const;
 
-export function fixtureDirectory(id: string): string { return join(root, '.temp', 'fixture', id); }
+/** Backups are shared by every Goal worktree: manifests live beside the main checkout's `.temp`. */
+export const fixtureRoot = (() => {
+  const common = spawnSync('git', ['rev-parse', '--path-format=absolute', '--git-common-dir'],
+    { cwd: root, encoding: 'utf8' });
+  return join(common.status === 0 ? dirname(common.stdout.trim()) : root, '.temp', 'fixture');
+})();
+
+export function fixtureDirectory(id: string): string { return join(fixtureRoot, id); }
 /** Outside the `rezics-dev`/`rezics-qa-*` namespaces, so no stack command can start a backup. */
 export function fixtureProject(id: string): string { return `rezics-fixture-${id}`; }
 

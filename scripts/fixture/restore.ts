@@ -11,7 +11,7 @@ import { type FixtureManifest, type RestoreCompatibility, migrationInventory,
 import { migrateFixtureOwners } from './migrate.ts';
 import { fixtureOwners } from './owners/index.ts';
 import { assertGraphReady, checkSamples } from './smoke.ts';
-import { VOLUME_KINDS, copyVolume, currentEngines, dockerEnvironment, fixtureDirectory, fixtureProject,
+import { VOLUME_KINDS, copyVolume, currentEngines, dockerEnvironment, fixtureDirectory, fixtureProject, fixtureRoot,
   freshPorts, projectRunning, root, volumeExists } from './stack.ts';
 
 export const RESTORE_DEADLINE_MS = 600_000;
@@ -24,7 +24,7 @@ function currentInputs(docker: NodeJS.ProcessEnv): Parameters<typeof restoreComp
 
 /** Newest retained backup of this profile and seed that the current checkout can restore. */
 export function compatibleFixture(profile: FixtureProfile, seed = DEFAULT_SEED): FixtureManifest | undefined {
-  const directory = join(root, '.temp', 'fixture');
+  const directory = fixtureRoot;
   if (!existsSync(directory)) return undefined;
   const current = currentInputs(dockerEnvironment());
   return readdirSync(directory).map(id => readManifest(id))
