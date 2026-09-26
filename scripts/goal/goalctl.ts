@@ -453,9 +453,12 @@ async function dispatch(briefPath: string, flags: Set<string>): Promise<void> {
 }
 
 async function waitFor(id: string): Promise<void> {
+  // A killed waiter must never record the worker as ended (an expired monitor once marked live workers exited).
+  for (const signal of ['SIGTERM', 'SIGINT', 'SIGHUP'] as const) process.on(signal, () => process.exit(143));
   const initial = taskOf(readLedger(), id);
   const attempt = lastAttempt(initial);
-  while (pidAlive(attempt.pid, engineOf(attempt))) await Bun.sleep(5000);
+  const alive = () => pidAlive(attempt.pid, engineOf(attempt));
+  while (alive() || (await Bun.sleep(3000), alive())) await Bun.sleep(5000);
   const result = readResult(attempt);
   const task = await withLedger(ledger => {
     const current = taskOf(ledger, id);
