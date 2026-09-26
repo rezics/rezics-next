@@ -27,7 +27,8 @@ export const zoneCapabilityProfile = {
         { path: 'rv:space', minCount: 1, maxCount: 1, class: 'rv:Space' },
         { path: 'rv:zoneState', minCount: 1, maxCount: 1, in: ['rv:Active', 'rv:Retired'] },
         { path: 'rv:zoneHead', minCount: 1, maxCount: 1, class: 'rv:ZoneRevision' },
-        { path: 'rv:navigation', minCount: 1, maxCount: 1, class: 'rv:Structure' },
+        // The owner receipt precedes the recoverable Structure creation receipt.
+        { path: 'rv:navigation', maxCount: 1, class: 'rv:Structure' },
         { path: 'rv:disclosure', minCount: 1, maxCount: 1, in: ['rv:Public', 'rv:Private'] },
         { path: 'rv:defaultRealm', maxCount: 1, class: 'rv:Realm' },
         { path: 'rv:presentation', maxCount: 1, nodeKind: 'sh:IRI' },

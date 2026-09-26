@@ -14,6 +14,8 @@ import { classificationRoutes } from './routes/classification.ts';
 import { connectedAppRoutes } from './routes/connected-apps.ts';
 import { commerceRoutes } from './routes/commerce.ts';
 import { compositionRoutes } from './routes/compositions.ts';
+import { collectionRoutes } from './routes/collections.ts';
+import { zoneRoutes } from './routes/zones.ts';
 import { progressRoutes } from './routes/progress.ts';
 import { contentRoutes } from './routes/content.ts';
 import { contextRoutes } from './routes/contexts.ts';
@@ -103,6 +105,8 @@ function contentCommunityRoutes(fuseki: FusekiClient, work: SearchRouteDependenc
 
 function domainRoutes(fuseki: FusekiClient, work: SearchRouteDependencies) {
   return new Elysia()
+    .use(collectionRoutes(fuseki, work))
+    .use(zoneRoutes(fuseki, work))
     .use(hubDependencyRoutes(work))
     .use(packageInstallRequestRoutes(work))
     .use(agentRoutes(work))

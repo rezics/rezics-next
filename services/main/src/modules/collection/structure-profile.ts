@@ -12,6 +12,9 @@ export const structureProfiles: readonly StructureProfileRegistration[] = [{
     shape: 'https://rezics.com/definition/collection-curation-v1/collection-shape' },
   editScopePrefix: 'collection:edit:',
   editPermission: 'collection:edit',
+  targetReadPermission: 'work:read',
+  authorizeTarget: ({ access, principal, actingSubject, target }) =>
+    access.canReadWork(principal, actingSubject, target),
   editAction: 'collection.edit',
   receiptFamily: 'structure-command',
   roles: ['group', 'member'],

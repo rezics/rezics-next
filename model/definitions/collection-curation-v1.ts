@@ -34,7 +34,8 @@ export const collectionCurationProfile = {
       canonical: { types: ['rv:Collection'] },
       properties: [
         { path: 'rdf:type', hasValue: 'rv:Collection', maxCount: 1 },
-        { path: 'rv:structure', minCount: 1, maxCount: 1, class: 'rv:Structure' },
+        // A receipt-proven owner may await the second half of Structure bootstrap.
+        { path: 'rv:structure', maxCount: 1, class: 'rv:Structure' },
         oneIri('rv:curator'),
         { path: 'rv:disclosure', minCount: 1, maxCount: 1, in: ['rv:Public', 'rv:Private'] },
         { path: 'rv:collectionState', minCount: 1, maxCount: 1, in: ['rv:Active', 'rv:Retired'] },
