@@ -261,6 +261,13 @@ test('SEARCH12 foundation: durable private read admission, fences and two Main r
       principal, actingSubject, recoveryTarget);
     const receiptRecovery = '44'.repeat(32);
     await second.armContributionSearchSend(recoveryDelivery.id, receiptRecovery);
+    // Keep the 009-to-010 upgrade assertions above, then exercise the recovery
+    // fence against the current owner schema, including download read leases.
+    const migrationDirectory = join(root, 'services/main/migrations/access');
+    for (const file of [...new Bun.Glob('*.sql').scanSync({ cwd: migrationDirectory })]
+      .filter(file => Number(file.slice(0, 3)) >= 14).sort()) {
+      await pool.query(readFileSync(join(migrationDirectory, file), 'utf8'));
+    }
     const generation = await engageAccessRecoveryFence(pool);
     await expect(first.admitContributionSearchRead(principal,
       actingSubject, principalTarget)).rejects.toBeInstanceOf(AdmissionUnavailable);
