@@ -43,6 +43,7 @@ import { RealmReplyContentStore } from './modules/realm-reply/content-store.ts';
 import { RealmReplyStore } from './modules/realm-reply/store.ts';
 import { VerificationCorrectionPublisher, VerificationCorrectionWorker }
   from './modules/verification/correction-delivery.ts';
+import { verificationCorrectionSubjectReader } from './modules/verification/correction-delivery.ts';
 import { NotificationStore } from './modules/notification/store.ts';
 import { SourceIntakeStore } from './modules/source/intake.ts';
 import { sourceAcquisitionServices } from './modules/source/acquisition.ts';
@@ -216,6 +217,8 @@ const notificationProvider = notificationProviderConfigured ? new HttpDeliveryPr
 const notificationDispatcher = notificationProvider
   ? new NotificationDispatcher(pool, notificationProvider,
     currentContentSubjectReader(content, notificationStore, access)) : undefined;
+notificationDispatcher?.registerSubjectReader('verification-correction-subscription-v1',
+  verificationCorrectionSubjectReader(new VerificationStore(contentPool)));
 const notificationRealtime = relayPool ? new NotificationRealtimeHub(pool) : undefined;
 if (notificationRealtime) await notificationRealtime.start();
 const notificationDeliveryWorker = notificationDispatcher

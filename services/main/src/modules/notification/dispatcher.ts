@@ -57,6 +57,7 @@ export const DISPATCH_LIMITS = { batch: 32, attempts: 8, leaseMs: 60_000, retryM
  */
 export class NotificationDispatcher {
   private readonly retryMs: number;
+  private readonly scopedSubjects = new Map<string, NotificationSubjectReader>();
 
   constructor(private readonly pool: Pool, private readonly provider: DeliveryProvider,
     private readonly subjects: NotificationSubjectReader, options: { retryMs?: number } = {}) {
@@ -64,6 +65,14 @@ export class NotificationDispatcher {
   }
 
   get providerName(): string { return this.provider.name; }
+
+  /** Add an exact owner reader for one disclosure basis during process composition. */
+  registerSubjectReader(disclosureBasis: string, reader: NotificationSubjectReader): void {
+    if (!disclosureBasis || disclosureBasis.length > 128 || this.scopedSubjects.has(disclosureBasis)) {
+      throw new Error('notification subject reader basis is invalid or already registered');
+    }
+    this.scopedSubjects.set(disclosureBasis, reader);
+  }
 
   private async transaction<T>(work: (client: PoolClient) => Promise<T>): Promise<T> {
     const client = await this.pool.connect().catch(() => {
@@ -211,7 +220,8 @@ export class NotificationDispatcher {
       FROM access.notification_delivery d JOIN access.notification_item i ON i.id = d.item_id
       JOIN access.notification_endpoint e ON e.id = d.endpoint_id WHERE d.id = $1`, [row.id])).rows[0];
     if (!context) return { kind: 'cancel', reason: 'ineligible' };
-    const resolved = await this.subjects.resolve({ principalId: row.principal_id, owner: context.subject_owner,
+    const subjectReader = this.scopedSubjects.get(context.disclosure_basis) ?? this.subjects;
+    const resolved = await subjectReader.resolve({ principalId: row.principal_id, owner: context.subject_owner,
       ref: context.subject_ref, revision: context.subject_revision, disclosureBasis: context.disclosure_basis });
     if (resolved.status === 'erased') return { kind: 'cancel', reason: 'subject_erased' };
     if (resolved.status !== 'available') return { kind: 'cancel', reason: 'undisclosed' };

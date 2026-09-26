@@ -11,6 +11,9 @@ new graph action in `receipt-family.ts` and its exact outbox kind in
 notification owner. A lost Access acknowledgement replays by source event and
 recipient before the Content cursor advances. Delivery rereads the exact notice
 and the recipient's current subscription, exposing only support/dispute fields.
+Main composes that owner reader with the regular Content reader by disclosure
+basis, so verification corrections reach the production notification dispatcher
+without broadening the Content reader's admitted bases.
 
 ## Cost contract
 

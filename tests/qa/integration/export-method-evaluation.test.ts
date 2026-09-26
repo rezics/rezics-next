@@ -1,4 +1,6 @@
 import { expect, test } from 'bun:test';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { analyzeClaimSupport, type AnalysisInput, type Support }
   from '../../../services/main/src/modules/verification/analysis.ts';
 
@@ -6,14 +8,14 @@ const claim = { referent: 'urn:fact:1', context: 'urn:context:1', predicate: 'ur
   editionScope: null, validFrom: null, validUntil: null };
 const base = (): AnalysisInput => ({ claim, evaluationContext: claim.context,
   items: [], links: [], truncated: false, recordOf: new Map(),
-  referencedClaims: new Map(), reliability: [] });
+  observedAt: new Map(), referencedClaims: new Map(), reliability: [] });
 const evidence = (ordinal: number, observation: string,
   stance: 'supports' | 'contradicts' = 'supports', availability: 'available' | 'inaccessible' = 'available') =>
   ({ ordinal, stance, availability, observation, contentRevision: null, graphReference: null });
 const origin = (source: string, targetOrigin: string) => ({ source, relation: 'publishes-origin',
   targetObservation: null, targetOrigin, targetReference: null });
 
-/** Authored task labels; source-domain sampling and probability calibration remain open. */
+/** Authored task labels complement the representative FEVER subset below. */
 const labelled: Array<{ id: string; split: 'development' | 'held-out';
   input: AnalysisInput; expected: Support; coverage: string; dependence: string;
   knownError?: 'false-support' }> = [
@@ -41,14 +43,18 @@ const labelled: Array<{ id: string; split: 'development' | 'held-out';
   { id: 'single-reliable-primary-in-domain', split: 'development',
     input: { ...base(), items: [evidence(0, 'urn:obs:a')],
       links: [origin('urn:obs:a', 'urn:origin:a')], recordOf: new Map([['urn:obs:a', 'urn:source:a']]),
+      observedAt: new Map([['urn:obs:a', '2026-01-01T00:00:00Z']]),
       reliability: [{ assessment: 'urn:reliability:a', source: 'urn:source:a',
-        domain: claim.predicate, context: claim.context, result: 'ReliableForDomain' }] },
+        domain: claim.predicate, context: claim.context, result: 'ReliableForDomain',
+        applicableFrom: null, applicableUntil: null }] },
     expected: 'supported', coverage: 'complete', dependence: 'established' },
   { id: 'reliable-in-another-domain', split: 'development',
     input: { ...base(), items: [evidence(0, 'urn:obs:a')],
       links: [origin('urn:obs:a', 'urn:origin:a')], recordOf: new Map([['urn:obs:a', 'urn:source:a']]),
+      observedAt: new Map([['urn:obs:a', '2026-01-01T00:00:00Z']]),
       reliability: [{ assessment: 'urn:reliability:a', source: 'urn:source:a',
-        domain: 'urn:predicate:other', context: claim.context, result: 'ReliableForDomain' }] },
+        domain: 'urn:predicate:other', context: claim.context, result: 'ReliableForDomain',
+        applicableFrom: null, applicableUntil: null }] },
     expected: 'insufficient', coverage: 'complete', dependence: 'established' },
   { id: 'held-out-circular-copying', split: 'held-out',
     input: { ...base(), items: [evidence(0, 'urn:obs:a')], links: [
@@ -93,4 +99,48 @@ test('FACT05: labelled method set reports held-out errors, coverage and abstenti
   expect(report.filter(row => row.split === 'held-out'
     && row.actual.support === row.expected)).toHaveLength(4);
   expect(report.every(row => !('probability' in row.actual))).toBe(true);
+});
+
+test('FACT05: FEVER subset reports held-out class calibration baseline and its evidence-text limit', () => {
+  type FeverLabel = 'SUPPORTS' | 'REFUTES' | 'NOT ENOUGH INFO';
+  type FeverRow = { id: number; label: FeverLabel; domain: string; claim: string;
+    evidence: [string, number][] };
+  const rows = readFileSync(resolve(import.meta.dir, '../fixtures/fact-calibration/claims.jsonl'), 'utf8')
+    .trim().split('\n').map(line => JSON.parse(line) as FeverRow);
+  const labels: FeverLabel[] = ['SUPPORTS', 'REFUTES', 'NOT ENOUGH INFO'];
+  const counts = Object.fromEntries(labels.map(label => [label,
+    rows.filter(row => row.label === label).length])) as Record<FeverLabel, number>;
+  const strata = new Map<string, number>();
+  for (const row of rows) {
+    const key = `${row.label}\0${row.domain}`;
+    strata.set(key, (strata.get(key) ?? 0) + 1);
+  }
+  const probabilities = Object.fromEntries(labels.map(label => [label, counts[label] / rows.length])) as
+    Record<FeverLabel, number>;
+  const brier = rows.reduce((total, row) => total + labels.reduce((sum, label) =>
+    sum + (probabilities[label] - Number(row.label === label)) ** 2, 0), 0) / rows.length;
+  const logLoss = rows.reduce((total, row) => total - Math.log(probabilities[row.label]), 0) / rows.length;
+  const predicted = labels[0]!; // Stable tie break for the uniform-prior baseline.
+  const accuracy = rows.filter(row => row.label === predicted).length / rows.length;
+  const confidence = probabilities[predicted];
+  const calibrationError = Math.abs(confidence - accuracy);
+  const report = { dataset: 'fact-calibration-v1', n: rows.length, counts, accuracy,
+    multiclassBrier: brier, logLoss, topLabelCalibrationError: calibrationError,
+    predictor: 'uniform class-prior baseline; not the REZICS support method' };
+
+  expect(rows).toHaveLength(384);
+  expect(counts).toEqual({ SUPPORTS: 128, REFUTES: 128, 'NOT ENOUGH INFO': 128 });
+  expect(new Set(rows.map(row => row.domain)).size).toBe(8);
+  expect(strata.size).toBe(24);
+  expect([...strata.values()].every(count => count === 16)).toBe(true);
+  expect(rows.every(row => row.claim.length > 0
+    && row.evidence.every(([page, sentence]) => page.length > 0 && Number.isInteger(sentence)))).toBe(true);
+  expect(report.accuracy).toBeCloseTo(1 / 3, 12);
+  expect(report.multiclassBrier).toBeCloseTo(2 / 3, 12);
+  expect(report.logLoss).toBeCloseTo(Math.log(3), 12);
+  expect(report.topLabelCalibrationError).toBeCloseTo(0, 12);
+  // FEVER contributes labels, claims and Wikipedia sentence pointers, but no
+  // evidence text; it cannot generate predictions for the lineage method.
+  expect(rows.every(row => !('evidenceText' in row))).toBe(true);
+  console.info('FACT05 FEVER balanced-prior baseline:', JSON.stringify(report));
 });

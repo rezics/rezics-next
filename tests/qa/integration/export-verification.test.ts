@@ -115,13 +115,25 @@ test('FACT05: exact claim and assessment export retains method output while reda
       expect(response.status, await response.clone().text()).toBe(201);
       const raw = await response.text();
       const saved = JSON.parse(raw) as { manifestId: string; plan: { members: Array<{ sourceGrain: string;
-        data: Record<string, unknown> }>; residuals: Array<{ kind: string }> } };
+        data: Record<string, unknown> }>; residuals: Array<{ kind: string; path: string;
+          detail: Record<string, unknown> }> } };
       expect(saved.plan.members.map(item => item.sourceGrain)).toEqual(['claim', 'assessment']);
       expect(saved.plan.members[0]?.data.valueQualifiers).toEqual(['inferred']);
-      expect(saved.plan.members[1]?.data.scoreKind).toBe('method-output');
-      expect(saved.plan.members[1]?.data.scorePerMillion).toBe(800_000);
-      expect(saved.plan.members[1]?.data.calibration).toBeNull();
-      expect(saved.plan.residuals.map(item => item.kind)).toEqual(['private_dependency', 'unavailable']);
+      expect(saved.plan.members[1]?.data).toMatchObject({ method: SUPPORT_METHOD,
+        methodRevision: SUPPORT_METHOD, policyRevision: SUMMARY_POLICY,
+        evaluationContext: 'urn:context:export-fixture', coverage: 'complete',
+        support: 'insufficient', dependence: 'established', independentOrigins: 1,
+        scoreKind: 'method-output', scorePerMillion: 800_000, calibration: null,
+        limitations: 'This method output has no representative probability calibration.' });
+      expect(saved.plan.members[1]?.data.evidence).toMatchObject({ itemCount: 1,
+        items: [{ ordinal: 0, stance: 'supports', recordedAvailability: 'available',
+          currentAvailability: 'available' }] });
+      expect(saved.plan.residuals.map(item => ({ kind: item.kind, path: item.path }))).toEqual([
+        { kind: 'private_dependency', path: '/evidence/items/0/anchor' },
+        { kind: 'unavailable', path: '/methodCalibration' },
+      ]);
+      expect(saved.plan.residuals[1]?.detail.reason)
+        .toBe('No representative labelled calibration record was verified for this method');
       expect(raw).not.toContain(privateBody);
       expect(raw).not.toContain(draft.revisionId);
       expect(raw).not.toContain('probability:');
@@ -145,10 +157,14 @@ test('FACT05: exact claim and assessment export retains method output while reda
       expect(outsider.status, await outsider.clone().text()).toBe(201);
       const outsiderRaw = await outsider.text();
       const outsiderPlan = JSON.parse(outsiderRaw) as { plan: { members: Array<{
-        data: Record<string, unknown> }>; residuals: Array<{ kind: string; path: string }> } };
+        data: Record<string, unknown> }>; residuals: Array<{ kind: string; path: string;
+          detail: Record<string, unknown> }> } };
       expect(outsiderPlan.plan.members[1]?.data.evidence).toBeNull();
       expect(outsiderPlan.plan.residuals).toContainEqual(expect.objectContaining({
         kind: 'private_dependency', path: '/evidence',
+      }));
+      expect(outsiderPlan.plan.residuals).toContainEqual(expect.objectContaining({
+        kind: 'unavailable', path: '/methodCalibration',
       }));
       expect(outsiderRaw).not.toContain(privateBody);
       expect(outsiderRaw).not.toContain(draft.revisionId);

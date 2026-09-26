@@ -23,7 +23,7 @@ const short = (value: string) => value.split('/').at(-1)!;
 test('FACT01/FACT02/FACT03/FACT04/FACT06: claim verification preserves origin, history and correction', async () => {
   if (!Bun.env.REZICS_QA_RUN_ID) throw new Error('Run through the isolated integration tier');
   const apps = Bun.env as Record<string, string>;
-  const account = await ratingAccount(apps, 'openid work:read subscription:manage claim:create claim:read claim:evidence claim:lineage claim:reliability claim:assess claim:challenge');
+  const account = await ratingAccount(apps, 'openid work:read subscription:manage notification:manage claim:create claim:read claim:evidence claim:lineage claim:reliability claim:assess claim:challenge');
   const accessPool = new Pool({ connectionString: apps.ACCESS_DATABASE_URL });
   const contentPool = new Pool({ connectionString: apps.CONTENT_DATABASE_URL });
   const paymentSecret = 'claim-funding-test-secret';
@@ -49,7 +49,9 @@ test('FACT01/FACT02/FACT03/FACT04/FACT06: claim verification preserves origin, h
     const notificationStore = new NotificationStore(accessPool);
     const deliveryProvider = new FakeDeliveryProvider();
     const dispatcher = new NotificationDispatcher(accessPool, deliveryProvider,
-      verificationCorrectionSubjectReader(verification), { retryMs: 0 });
+      { resolve: async () => ({ status: 'unavailable' }) }, { retryMs: 0 });
+    dispatcher.registerSubjectReader('verification-correction-subscription-v1',
+      verificationCorrectionSubjectReader(verification));
     const publisher = new VerificationCorrectionPublisher(verification, notificationStore);
     const commerce = new CommerceStore(accessPool, new HttpPaymentProvider(paymentProvider.url),
       reference => reference === 'claim:payment-callback' ? paymentSecret : undefined);

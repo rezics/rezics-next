@@ -10,7 +10,7 @@ schema: Access migrations 062–064; cases GOV05–GOV08.
 | --- | --- |
 | `schema.ts` | Drizzle declarations checked against the migrated DB (`services/main/tests/governance-schema.test.ts`). |
 | `store.ts` | `NotificationStore`: producer intake (`enqueue`), recipient commands (preference CAS with receipt, endpoint rotation, stream reset), reads (stream page, hint, delivery), the monotonic watermark and retained erasure reconciliation. |
-| `dispatcher.ts` | `NotificationDispatcher`: leases due deliveries (`SKIP LOCKED`), rechecks eligibility and disclosure, calls the `DeliveryProvider` outside transactions, finishes under the lease token, reconciles `uncertain` by stable delivery id, records provider events once, and delegates retained erasure reconciliation to the store. |
+| `dispatcher.ts` | `NotificationDispatcher`: leases due deliveries (`SKIP LOCKED`), rechecks eligibility and disclosure, selects an exact subject reader by disclosure basis, calls the `DeliveryProvider` outside transactions, finishes under the lease token, reconciles `uncertain` by stable delivery id, records provider events once, and delegates retained erasure reconciliation to the store. |
 | `delivery-worker.ts` | Periodic bounded runner; durable due rows and leases remain the schedule. |
 | `http-provider.ts` | Configured REZICS v1 HTTP provider bridge with bounded responses, timeout, stable idempotency key and lookup. |
 | `realtime.ts` | One shared Access `LISTEN` connection per Main process; fans out committed stream cursor hints. |
@@ -32,6 +32,9 @@ schema: Access migrations 062–064; cases GOV05–GOV08.
   late callbacks never reopen them. Provider evidence may settle `pending`.
 - Items pin an exact subject revision and store no rendered copy; erasure and
   disclosure are decided by the subject owner at delivery time.
+- Main registers owner readers by exact disclosure basis during composition.
+  The selected reader is authoritative for that basis; denied or unavailable
+  results never fall through to another owner's reader.
 - Other recipients' state is indistinguishable from missing (404).
 - Content events using the production reader carry
   `content-work-reader-v1:<actingSubject>` as their disclosure basis. Unsupported
@@ -65,6 +68,7 @@ schema: Access migrations 062–064; cases GOV05–GOV08.
 | --- | --- |
 | `enqueue` | O(recipients ≤ 256 × endpoints ≤ 8) rows; one stream row lock per recipient in canonical order. |
 | `runOnce(n)` | n ≤ 32 leased rows; ≤ 16 statements per row plus one provider call and at most one lookup. |
+| Subject reader selection | One map lookup and exactly one owner-specific read per delivery; registrations are fixed during Main startup. |
 | Scheduled delivery tick | At most 32 expired leases recovered plus 32 due rows dispatched; one active tick per Main process. |
 | `readStream` | 9 statements; one index range on `(principal_id, stream, generation, sequence)` of ≤ 51 rows, independent of other recipients (EXPLAIN checked at 100/1,000/10,000). |
 | `advanceWatermark`, `setPreference`, `readDelivery` | Constant statements on primary/unique keys. |
