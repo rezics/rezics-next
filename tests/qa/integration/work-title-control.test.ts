@@ -72,7 +72,11 @@ test('LIVE03/MODEL17: exact title control races, return authority, immutable rec
 
     const current = await f.state(work.work);
     const invalidBasis = { ...current, basis: { ...current.basis, epoch: '0' } };
-    expect((await f.edit(invalidBasis, 'Third refresh')).status).toBe(409);
+    // A retained control head with epoch zero is malformed (field-control.ts).
+    expect((await f.edit(invalidBasis, 'Third refresh')).status).toBe(400);
+    const staleBasis = { ...current, basis: { ...current.basis,
+      epoch: (BigInt(current.basis.epoch) - 1n).toString() } };
+    expect((await f.edit(staleBasis, 'Third refresh')).status).toBe(409);
     // Supplying neither control nor protection cannot use the legacy owner writer.
     expect((await f.call('POST', '/v1/content-edits', { profile: 'metadata-only-v1', work: work.work, expectedHead: current.contentHead,
       title: 'bypass', actingSubject: f.actor })).status).not.toBe(200);
