@@ -15,6 +15,7 @@ import { healthRoutes } from './routes/health.ts';
 import { operationsRoutes } from './routes/operations.ts';
 import { packageRoutes } from './routes/packages.ts';
 import { problem } from './routes/problems.ts';
+import { protectionRoutes } from './routes/protection.ts';
 import { publicationRoutes } from './routes/publication.ts';
 import { ratingRoutes } from './routes/ratings.ts';
 import { resourceRoutes } from './routes/resources.ts';
@@ -65,6 +66,7 @@ export function createMainApp(fuseki: FusekiClient, work?: SearchRouteDependenci
       .use(addressRoutes(work))
       .use(commerceRoutes(fuseki, work))
       .use(resourceRoutes(fuseki, work))
+      .use(protectionRoutes(work))
       .use(workRoutes(fuseki, work));
   }
   return app;
