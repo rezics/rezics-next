@@ -5,6 +5,8 @@ import { Pool } from 'pg';
 import { migrateContent } from '../../../services/content/src/migrate.ts';
 import { ownerEvidenceCapture } from '../../../services/main/src/modules/governance/evidence.ts';
 import { GovernanceStore } from '../../../services/main/src/modules/governance/store.ts';
+import { RightsStore, rightsExportUseScope } from '../../../services/main/src/modules/rights/store.ts';
+import { planExport, type VerifiedExportMember } from '../../../services/main/src/modules/export/planner.ts';
 import { SourceIntakeStore } from '../../../services/main/src/modules/source/intake.ts';
 import type { MainWorkDependencies } from '../../../services/main/src/routes/dependencies.ts';
 import { reportRoutes } from '../../../services/main/src/routes/reports.ts';
@@ -15,7 +17,7 @@ import { ratingAccount } from '../support/rating-account.ts';
 const agent = () => `https://rezics.com/id/${randomUUID()}`;
 const digest = (value: string) => createHash('sha256').update(value).digest('hex');
 
-test('GOV24/GOV25: a source cover complaint stays scoped through interim restriction, counter-notice and refresh',
+test('GOV24/GOV25/LIVE18: a source synopsis restriction stays exact through decision replay and refresh',
   async () => {
     if (!Bun.env.REZICS_QA_RUN_ID) throw new Error('Use the QA integration tier');
     const databases = await cloneQaOwnerDatabases(Bun.env.REZICS_QA_RUN_ID, ['account', 'access', 'content']);
@@ -24,7 +26,7 @@ test('GOV24/GOV25: a source cover complaint stays scoped through interim restric
     try {
       await migrateContent(content);
       const account = await ratingAccount({ ...Bun.env, ACCOUNT_DATABASE_URL: databases.urls.account } as
-        Record<string, string>, 'openid governance:report rights:decide');
+        Record<string, string>, 'openid governance:report rights:decide rights:assess');
       const source = new SourceIntakeStore(content);
       const principals = new Map([[account.a.id, randomUUID()], [account.b.id, randomUUID()]]);
       for (const [subject, id] of principals) {
@@ -47,6 +49,10 @@ test('GOV24/GOV25: a source cover complaint stays scoped through interim restric
       };
       await grant(account.a.id, submitter, 'governance.appeal');
       await grant(account.b.id, decider, 'governance.rights.decide');
+      await access.query(`INSERT INTO access.scope_gate (id) VALUES ('rights:assess') ON CONFLICT DO NOTHING`);
+      await access.query(`INSERT INTO access.permission_grant (id, issuer_subject, recipient_subject, scope_id,
+        action, valid_until) VALUES ($1, $2, $2, 'rights:assess', 'rights.assess', now() + interval '1 hour')`,
+      [randomUUID(), submitter]);
 
       const intake = (revision: string) => source.submit(principals.get(account.a.id)!, `intake-${revision}`,
         { provider: 'fixture', namespace: 'book', externalId: 'reported-book', sourceRevision: revision,
@@ -64,7 +70,8 @@ test('GOV24/GOV25: a source cover complaint stays scoped through interim restric
         return value && value.record.endsWith(recordId) ? { record: value.record, retention: value.retention,
           byteDigest: value.byteDigest, mediaType: value.mediaType } : null;
       } }), { current: async () => null }, { current: async ref => rules.get(ref) ?? null });
-      const deps = { account: account.verifier, governance: { store } } as unknown as MainWorkDependencies;
+      const rightsStore = new RightsStore(content, access);
+      const deps = { account: account.verifier, governance: { store }, rights: { store: rightsStore } } as unknown as MainWorkDependencies;
       const app = new Elysia().use(reportRoutes(deps)).use(rightsRoutes(deps));
       const call = async (path: string, token: string, body: object) => {
         const response = await app.handle(new Request(`http://main.local${path}`, { method: 'POST',
@@ -74,20 +81,52 @@ test('GOV24/GOV25: a source cover complaint stays scoped through interim restric
         const text = await response.text();
         return { status: response.status, body: text ? JSON.parse(text) : null };
       };
-      const evidence = [{ owner: 'source', resource: observed.record, component: 'cover',
+      const sourceRecordId = observed.record.split('/').at(-1)!;
+      const synopsisMaterial = { scopeKind: 'source_record', provider: null, namespace: null,
+        sourceRecordId, contentVariantId: null, mediaAsset: null, component: 'synopsis' } as const;
+      const factMaterial = { ...synopsisMaterial, component: 'record' };
+      const synopsisAssessment = await call('/v1/rights/use-assessments', account.tokenA, {
+        profile: 'rights-use-assessment-v1', actingSubject: submitter, material: synopsisMaterial,
+        expressionKind: 'expression', family: 'data_rights', useKind: 'export',
+        useScope: rightsExportUseScope('full'), basis: 'unknown', outcome: 'undetermined',
+        licenseInstrument: null, exceptionKind: null, rationale: null, extent: {}, evidence: {}, obligations: [],
+        expectedAssessment: null, idempotencyKey: 'source-synopsis-export-unknown',
+      });
+      expect(synopsisAssessment.status, JSON.stringify(synopsisAssessment.body)).toBe(201);
+      const factsAssessment = await call('/v1/rights/use-assessments', account.tokenA, {
+        profile: 'rights-use-assessment-v1', actingSubject: submitter, material: factMaterial,
+        expressionKind: 'fact', family: 'data_rights', useKind: 'export',
+        useScope: rightsExportUseScope('full'), basis: 'unknown', outcome: 'undetermined',
+        licenseInstrument: null, exceptionKind: null, rationale: null, extent: {}, evidence: {}, obligations: [],
+        expectedAssessment: null, idempotencyKey: 'source-record-export-unknown',
+      });
+      expect(factsAssessment.status, JSON.stringify(factsAssessment.body)).toBe(201);
+      const sourceExportMember = (component: string, material: object, materialId: string,
+        revision: string, revisionDigest: string): VerifiedExportMember => ({
+        sourceOwner: 'source', sourceNamespace: 'fixture:book', sourceGrain: 'source_observation',
+        exactRef: revision, contentRevisionId: null, refDigest: revisionDigest,
+        ownerDataEpoch: 'fixture-epoch', ownerSequence: '1', sourcePosition: null,
+        targetGrain: 'source-record', mapping: 'exact', data: { rightsIdentity: { materialId,
+          material, target: { owner: 'source', resource: observed.record, component, revision } } },
+      });
+      const synopsisMember = sourceExportMember('synopsis', synopsisMaterial, synopsisAssessment.body.materialId,
+        observed.observation, observed.byteDigest!);
+      const factsMember = sourceExportMember('record', factMaterial, factsAssessment.body.materialId,
+        observed.observation, observed.byteDigest!);
+      const evidence = [{ owner: 'source', resource: observed.record, component: 'synopsis',
         revision: observed.observation, locator: null }];
       const complaint = await call('/v1/rights/complaints', account.tokenA, {
         profile: 'rights-complaint-v1', actingSubject: submitter,
         authority: { kind: 'platform', scopeId: scope }, context: 'urn:rezics:context:global',
-        target: { owner: 'source', resource: observed.record, component: 'cover' },
-        disclosure: 'parties', reasonCode: 'claimed_cover', statement: 'This cover is disputed.',
-        evidence, idempotencyKey: 'cover-complaint', complaint: { process: 'dmca_512',
+        target: { owner: 'source', resource: observed.record, component: 'synopsis' },
+        disclosure: 'parties', reasonCode: 'claimed_synopsis', statement: 'This synopsis is disputed.',
+        evidence, idempotencyKey: 'synopsis-complaint', complaint: { process: 'dmca_512',
           claimantKind: 'rights_holder', claimantName: 'Fixture claimant', claimantContact: null,
-          claimedWork: 'Reported book cover', claimedRight: 'copyright',
+          claimedWork: 'Reported book synopsis', claimedRight: 'copyright',
           noticeDigest: digest('fixture notice'), noticeReceivedAt: new Date().toISOString() },
       });
       expect(complaint.status, JSON.stringify(complaint.body)).toBe(201);
-      expect(complaint.body.evidence).toEqual([expect.objectContaining({ owner: 'source', component: 'cover',
+      expect(complaint.body.evidence).toEqual([expect.objectContaining({ owner: 'source', component: 'synopsis',
         revision: observed.observation, state: 'available', revisionDigest: observed.byteDigest })]);
       expect((await access.query('SELECT process, claimed_right FROM access.rights_complaint WHERE report_id = $1',
         [complaint.body.reportId])).rows[0]).toMatchObject({ process: 'dmca_512', claimed_right: 'copyright' });
@@ -95,33 +134,36 @@ test('GOV24/GOV25: a source cover complaint stays scoped through interim restric
       expect((await call('/v1/rights/complaints', account.tokenB, { profile: 'rights-complaint-v1',
         actingSubject: decider, authority: { kind: 'platform', scopeId: scope },
         context: 'urn:rezics:context:global', target: { owner: 'source', resource: observed.record,
-          component: 'cover' }, disclosure: 'private', reasonCode: 'claimed_cover', statement: null,
+          component: 'synopsis' }, disclosure: 'private', reasonCode: 'claimed_synopsis', statement: null,
         evidence, idempotencyKey: 'foreign-complaint', complaint: { process: 'dmca_512',
           claimantKind: 'unknown', claimantName: 'Other', claimantContact: null, claimedWork: 'Book',
           claimedRight: 'copyright', noticeDigest: digest('foreign'), noticeReceivedAt: new Date().toISOString() },
       })).status).toBe(403);
 
-      const targets = ['media_delivery', 'search', 'source_apply'].map(effect => ({ owner: 'source',
-        resource: observed.record, component: 'cover', locator: null, scopeKind: 'component',
+      const targets = ['export', 'media_delivery', 'search', 'source_apply'].map(effect => ({ owner: 'source',
+        resource: observed.record, component: 'synopsis', locator: null, scopeKind: 'component',
         revision: null, expectedHead: null, effect }));
       const decision = (outcome: string, generation: string, answersStepId: string | null,
         idempotencyKey: string) => ({ profile: 'rights-restriction-v1', outcome,
         caseId: complaint.body.caseId, expectedGeneration: generation, actingSubject: decider,
         targets, rule: { ref: 'urn:rezics:rule:source-rights', revision: 'v1', digest: digest('rule-v1') },
         evidenceDigest: complaint.body.evidenceDigest, reversesDecisionId: null, answersStepId,
-        rationale: 'Interim cover access restriction pending process.', disclosure: 'parties', idempotencyKey });
+        rationale: 'Synopsis access restriction pending process.', disclosure: 'parties', idempotencyKey });
       const restrict = (body: object) => call('/v1/rights/restrictions', account.tokenB, body);
       const interim = await restrict(decision('interim_restrict', '0', null, 'interim-cover'));
       expect(interim.status, JSON.stringify(interim.body)).toBe(201);
-      expect(interim.body.enforcement).toHaveLength(3);
+      expect(interim.body.enforcement).toHaveLength(4);
       expect(interim.body.enforcement.every((item: { state: string }) => item.state === 'restricted')).toBe(true);
       expect(await store.readEnforcement({ owner: 'source', resource: observed.record, component: 'synopsis' }))
-        .toEqual([]);
+        .not.toEqual([]);
       expect(await store.readEnforcement({ owner: 'source', resource: observed.record, component: 'record' }))
         .toEqual([]);
       // A complaint is not a blanket right to restrict an unrelated component.
       expect((await restrict({ ...decision('final_restrict', '1', null, 'wrong-component'), targets: [{
-        ...targets[0], component: 'synopsis' }] })).status).toBe(403);
+        ...targets[0], component: 'cover' }] })).status).toBe(403);
+      const beforeRefresh = await planExport({ targetProfile: 'rezics-source-v1', useScope: 'full',
+        members: [synopsisMember, factsMember], residuals: [] }, rightsStore.exportScope);
+      expect(beforeRefresh.licenseScope).toBe('blocked');
 
       const step = (kind: string, actingSubject: string, partySubject: string | null, key: string) =>
         ({ profile: 'governance-process-step-v1', caseId: complaint.body.caseId,
@@ -138,16 +180,34 @@ test('GOV24/GOV25: a source cover complaint stays scoped through interim restric
       const refreshed = (await intake('r2')).observation;
       expect(refreshed.record).toBe(observed.record);
       expect(refreshed.observation).not.toBe(observed.observation);
-      expect((await store.readEnforcement({ owner: 'source', resource: observed.record, component: 'cover' }))
+      expect((await store.readEnforcement({ owner: 'source', resource: observed.record, component: 'synopsis' }))
         .every(item => item.state === 'restricted')).toBe(true);
-      expect((await restrict(decision('restore', '1', null, 'unanswered-restore'))).status).toBe(400);
-      const restored = await restrict(decision('restore', '1', counter.body.stepId, 'answered-restore'));
+      const replayedIntake = await intake('r1');
+      expect(replayedIntake.replayed).toBe(true);
+      expect(replayedIntake.observation.observation).toBe(observed.observation);
+      const retainedRefresh = await source.read(principals.get(account.a.id)!, refreshed.observation.split('/').at(-1)!);
+      expect(JSON.parse(Buffer.from(retainedRefresh!.rawBytesBase64!, 'base64').toString('utf8')))
+        .toMatchObject({ facts: ['first-publication'], synopsis: 'independent-text' });
+      const refreshedMember = sourceExportMember('synopsis', synopsisMaterial, synopsisAssessment.body.materialId,
+        refreshed.observation, refreshed.byteDigest!);
+      const refreshedFacts = sourceExportMember('record', factMaterial, factsAssessment.body.materialId,
+        refreshed.observation, refreshed.byteDigest!);
+      expect((await planExport({ targetProfile: 'rezics-source-v1', useScope: 'full',
+        members: [refreshedMember, refreshedFacts], residuals: [] }, rightsStore.exportScope)).licenseScope)
+        .toBe('blocked');
+      const final = await restrict(decision('final_restrict', '1', null, 'final-synopsis'));
+      expect(final.status, JSON.stringify(final.body)).toBe(201);
+      const replayedFinal = await restrict(decision('final_restrict', '1', null, 'final-synopsis'));
+      expect(replayedFinal.status).toBe(200);
+      expect(replayedFinal.body).toMatchObject({ decisionId: final.body.decisionId, replayed: true });
+      expect((await restrict(decision('restore', '2', null, 'unanswered-restore'))).status).toBe(400);
+      const restored = await restrict(decision('restore', '2', counter.body.stepId, 'answered-restore'));
       expect(restored.status, JSON.stringify(restored.body)).toBe(201);
       expect(restored.body.enforcement.every((item: { state: string }) => item.state === 'released')).toBe(true);
-      expect((await restrict(decision('restore', '1', counter.body.stepId, 'stale-restore'))).status).toBe(409);
+      expect((await restrict(decision('restore', '2', counter.body.stepId, 'stale-restore'))).status).toBe(409);
       expect((await access.query(`SELECT outcome FROM access.moderation_decision WHERE case_id = $1
         ORDER BY case_sequence`, [complaint.body.caseId])).rows.map(row => row.outcome))
-        .toEqual(['interim_restrict', 'restore']);
+        .toEqual(['interim_restrict', 'final_restrict', 'restore']);
     } finally {
       await Promise.all([access.end(), content.end()]);
       await databases.close();

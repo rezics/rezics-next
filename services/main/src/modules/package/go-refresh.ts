@@ -85,7 +85,8 @@ export function goProxyRunAdapter(loader: GoProxyResponseLoader): SourceRunProvi
     } };
 }
 
-const goSurface = [{ surface: 'proxy-metadata', required: true, captureLimit: GO_PROXY_CAPTURE_LIMIT }];
+const goSurface = [{ surface: 'proxy-metadata', namespace: 'go-proxy-response', required: true,
+  captureLimit: GO_PROXY_CAPTURE_LIMIT }];
 
 /**
  * Acquire and solve one Go module graph from a frozen source run. The run admits at most
@@ -119,6 +120,9 @@ export async function runGoProxyLive(runs: SourceRunStore, principalId: string, 
       deadline: performance.now() + GO_PROXY_LIVE_RUN_TIMEOUT_MS,
       loader: async (path, signal) => {
         if (signal?.aborted) return null;
+        if (!(await runs.retentionPermitted(adapter.provider, 'go-proxy-response'))) {
+          throw new SourceRunUnavailable('current source terms prohibit replaying retained bytes');
+        }
         const capture = await runs.frozen(started.runId, `GET ${path}`);
         if (!capture) throw new SourceRunUnavailable('Go proxy replay needs an uncaptured request');
         return capture.bytes === null ? null : adapter.decode(capture.bytes, capture.status) as Uint8Array | null;

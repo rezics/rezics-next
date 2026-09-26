@@ -127,6 +127,8 @@ const contentPool = new Pool({ connectionString: required('CONTENT_DATABASE_URL'
 await migrateContent(contentPool);
 const content = new ContentCore(contentPool);
 const sourceIntake = new SourceIntakeStore(contentPool);
+const rightsStore = new RightsStore(contentPool, pool);
+sourceIntake.setRawRetentionGate((provider, namespace) => rightsStore.rawRetentionPermitted(provider, namespace));
 const sourceConversions = new OpenLibraryConversionStore(contentPool, sourceIntake);
 const packageCaptures = new GoProxyCaptureStore(contentPool);
 const comments = new ContentComments(contentPool);
@@ -249,6 +251,7 @@ const app = createMainApp(fuseki, {
   exports: new ExportStore(contentPool),
   exportVerification: new VerificationStore(contentPool),
   exportVerificationPrivate: new VerificationStore(contentPool),
+  exportRights: rightsStore.exportScope,
   actingContexts: new AccessActingContexts(pool),
   groups: new AccessGroups(pool),
   grants: new AccessGrants(pool),
@@ -266,7 +269,8 @@ const app = createMainApp(fuseki, {
   accessPolicy: new AccessPolicyOwner(pool),
   sourceIntake,
   sourceAcquisitions: sourceAcquisitionServices(contentPool,
-    { reserve: () => sourceIntake.reserveOpenLibrarySlot() }),
+    { reserve: () => sourceIntake.reserveOpenLibrarySlot(),
+      rawRetentionPermitted: (provider, namespace) => rightsStore.rawRetentionPermitted(provider, namespace) }),
   sourceConversions,
   sourceCorrespondences,
   sourceAuthorCredits: new SourceAuthorCreditStore(contentPool, sourceProposals, sourceConversions,

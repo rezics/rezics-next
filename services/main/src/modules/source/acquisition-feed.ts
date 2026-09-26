@@ -178,7 +178,8 @@ export class SourceFeedStore {
     const digest = createHash('sha256').update(JSON.stringify({ feed: feedId, maxPages,
       pageItems: feed.max_page_items })).digest('hex');
     const started = await this.runs.start(principalId, key, this.runs.openLibraryAdapter.provider,
-      OPEN_LIBRARY_CHANGES_RUN, digest, [{ surface: 'changes', required: true, captureLimit: maxPages }],
+      OPEN_LIBRARY_CHANGES_RUN, digest, [{ surface: 'changes', namespace: 'recent-changes', required: true,
+        captureLimit: maxPages }],
       this.runs.openLibraryAdapter.termsReference);
     await this.runs.exclusive(started.runId, async () => {
       if ((await this.runs.settledSurfaces(started.runId)).has('changes')) return;

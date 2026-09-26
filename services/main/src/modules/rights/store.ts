@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
 import type { VerifiedPrincipal } from '../access/admission.ts';
+import type { ExportBasis, LicenseScopeHook, VerifiedExportMember } from '../export/planner.ts';
 import { assessmentFamilies, assessmentOutcomes, expressionKinds, materialScopes, obligationKinds, rightsBases,
   useKinds } from './schema.ts';
 
@@ -43,7 +44,51 @@ const agentPattern = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
 const keyPattern = /^[A-Za-z0-9:_./-]{1,128}$/;
 const scopePattern = /^[a-z0-9][a-z0-9:_./-]{0,127}$/;
 const componentPattern = /^[a-z][a-z0-9_.-]{0,63}$/;
+const governanceOwnerNames = new Set(['graph', 'content', 'source', 'media']);
+const governanceComponentNames = new Set(['name', 'title', 'body', 'structure', 'media_use', 'synopsis',
+  'cover', 'publication', 'record']);
 const sha256 = (value: string) => createHash('sha256').update(value).digest('hex');
+
+/** Provider-specific scope used for an exact service-terms retention assessment. */
+export function sourceRetentionScope(provider: string, namespace: string): string {
+  return `source-provider:${sha256(`${provider}\0${namespace}`)}`;
+}
+
+export function rightsExportUseScope(scope: Parameters<LicenseScopeHook>[1]): string {
+  return `rezics:export:${scope}`;
+}
+
+interface ExportRightsIdentity {
+  materialId: string;
+  material: MaterialScope;
+  target: { owner: string; resource: string; component: string; revision: string | null } | null;
+}
+
+function exportRightsIdentity(member: VerifiedExportMember): ExportRightsIdentity | null | false {
+  const candidate = member.data?.rightsIdentity;
+  if (candidate === undefined) return null;
+  if (!candidate || typeof candidate !== 'object' || Array.isArray(candidate)) return false;
+  const value = candidate as Partial<ExportRightsIdentity>;
+  if (typeof value.materialId !== 'string' || !/^[0-9a-f-]{36}$/.test(value.materialId)
+    || !value.material || !validMaterial(value.material)
+    || value.target === undefined) return false;
+  if (value.target !== null && (!governanceOwnerNames.has(value.target.owner)
+    || !governanceComponentNames.has(value.target.component)
+    || typeof value.target.resource !== 'string' || value.target.resource.length < 1
+    || value.target.resource.length > 512
+    || !(value.target.revision === null || typeof value.target.revision === 'string'
+      && value.target.revision.length <= 512)
+    || value.material.component !== value.target.component
+    || value.target.revision !== (member.contentRevisionId ?? member.exactRef))) return false;
+  return value as ExportRightsIdentity;
+}
+
+const unassessedBasis = (useScope: Parameters<LicenseScopeHook>[1], memberOrdinal: number) => ({
+  basisKind: 'unprotected_fact' as const, basisRef: null, licenseExpression: null, notice: null,
+  obligations: [] as Array<'attribution' | 'share_alike' | 'non_commercial' | 'no_derivatives'
+    | 'notice_retention' | 'access_restriction'>,
+  useScope, result: 'undetermined' as const, memberOrdinals: [memberOrdinal],
+});
 
 async function rollback(client: PoolClient): Promise<void> {
   try { await client.query('ROLLBACK'); } catch { /* preserve the original failure */ }
@@ -117,6 +162,16 @@ export class RightsStore {
   async assess(principal: VerifiedPrincipal, input: AssessmentInput): Promise<Assessment & { replayed: boolean }> {
     if (!agentPattern.test(input.actingSubject) || !validMaterial(input.material) || !scopePattern.test(input.useScope)
       || !keyPattern.test(input.idempotencyKey) || input.obligations.length > 16
+      || !(assessmentFamilies as readonly string[]).includes(input.family)
+      || !(useKinds as readonly string[]).includes(input.useKind)
+      || !(expressionKinds as readonly string[]).includes(input.expressionKind)
+      || !(rightsBases as readonly string[]).includes(input.basis)
+      || !(assessmentOutcomes as readonly string[]).includes(input.outcome)
+      || ((input.family === 'service_terms') !== (input.basis === 'service_terms'))
+      || (input.family === 'service_terms'
+        && (input.material.scopeKind !== 'source_provider' || input.expressionKind !== 'service'))
+      || (input.family === 'data_rights' && input.expressionKind === 'service')
+      || (input.basis === 'unprotected_fact' && input.expressionKind !== 'fact')
       || (input.expectedAssessment !== null && !/^[0-9a-f-]{36}$/.test(input.expectedAssessment))) {
       throw new RightsInvalid('rights assessment does not match its profile');
     }
@@ -212,5 +267,126 @@ export class RightsStore {
       if (!head) return { status: 'unassessed', materialId: found.id };
       return { status: 'assessed', assessment: await this.read(client, head.assessment_id) };
     });
+  }
+
+  /**
+   * Export hook for one exact use. Owner readers attach `rightsIdentity` only
+   * after verifying the selected member and its Content rights material.
+   */
+  readonly exportScope: LicenseScopeHook = async (members, useScope) => {
+    const identities = members.map(exportRightsIdentity);
+    const malformed = identities.flatMap((identity, index) => identity === false ? [index] : []);
+    const valid = identities.flatMap((identity, index) => identity !== null && identity !== false
+      ? [{ ordinal: index + 1, identity }] : []);
+    const materialIds = valid.map(({ identity }) => identity.materialId);
+    const enforceable = valid.filter(item => item.identity.target !== null);
+    const scope = rightsExportUseScope(useScope);
+    const useKind = useScope === 'excerpt' || useScope === 'quotation' ? 'quotation' : 'export';
+    const [materialRows, restrictionRows] = await Promise.all([
+      materialIds.length ? this.content.query<{ ordinal: number; id: string; expression_kind: string;
+        assessment_id: string | null; basis: string | null; outcome: string | null;
+        license_instrument: string | null; exception_kind: string | null; rationale: string | null;
+        extent: Record<string, unknown> | null; obligations: Array<{ kind: string; instrument: string;
+          applies_to: string; notice: string | null }> }>(`WITH requested AS (
+          SELECT * FROM unnest($1::int[], $2::uuid[], $3::text[], $4::text[], $5::text[], $6::uuid[],
+            $7::text[], $8::text[], $9::text[]) AS r(ordinal, material_id, scope_kind, provider,
+              namespace, source_record_id, content_variant_id, media_asset, component)
+        )
+        SELECT r.ordinal, m.id, m.expression_kind, a.id AS assessment_id, a.basis, a.outcome,
+          a.license_instrument, a.exception_kind, a.rationale, a.extent,
+          COALESCE(o.items, '[]'::jsonb) AS obligations
+        FROM requested r JOIN rights.material m ON m.id = r.material_id
+          AND m.scope_kind = r.scope_kind AND m.provider IS NOT DISTINCT FROM r.provider
+          AND m.namespace IS NOT DISTINCT FROM r.namespace AND m.source_record_id IS NOT DISTINCT FROM r.source_record_id
+          AND m.content_variant_id IS NOT DISTINCT FROM r.content_variant_id
+          AND m.media_asset IS NOT DISTINCT FROM r.media_asset AND m.component = r.component
+        LEFT JOIN rights.use_assessment_head h ON h.material_id = m.id AND h.family = 'data_rights'
+          AND h.use_kind = $10 AND h.use_scope = $11
+        LEFT JOIN rights.use_assessment a ON a.id = h.assessment_id
+        LEFT JOIN LATERAL (SELECT jsonb_agg(jsonb_build_object('kind', b.kind, 'instrument', b.instrument,
+          'applies_to', b.applies_to, 'notice', b.notice) ORDER BY b.ordinal) AS items
+          FROM rights.obligation b WHERE b.assessment_id = a.id
+            AND b.applies_to IN ('export', 'redistribution', 'all')) o ON true`, [
+        valid.map(item => item.ordinal), materialIds,
+        valid.map(item => item.identity.material.scopeKind), valid.map(item => item.identity.material.provider),
+        valid.map(item => item.identity.material.namespace), valid.map(item => item.identity.material.sourceRecordId),
+        valid.map(item => item.identity.material.contentVariantId), valid.map(item => item.identity.material.mediaAsset),
+        valid.map(item => item.identity.material.component), useKind, scope,
+      ]) : Promise.resolve({ rows: [] }),
+      enforceable.length ? this.access.query<{ ordinal: number; decision_id: string | null }>(`WITH requested AS (
+          SELECT * FROM unnest($1::int[], $2::text[], $3::text[], $4::text[], $5::text[]) AS r(
+            ordinal, owner, resource, component, revision)
+        )
+        SELECT r.ordinal, e.decision_id FROM requested r
+        LEFT JOIN LATERAL (SELECT decision_id FROM access.governance_enforcement e
+          WHERE e.owner = r.owner AND e.resource = r.resource AND e.component = r.component
+            AND e.effect = 'export' AND e.state = 'restricted'
+            AND (e.revision IS NULL OR r.revision IS NULL OR e.revision = r.revision)
+          ORDER BY e.fence_epoch DESC, e.id LIMIT 1) e ON true`, [
+        enforceable.map(item => item.ordinal), enforceable.map(item => item.identity.target!.owner),
+        enforceable.map(item => item.identity.target!.resource), enforceable.map(item => item.identity.target!.component),
+        enforceable.map(item => item.identity.target!.revision),
+      ]) : Promise.resolve({ rows: [] }),
+    ]).catch(() => { throw new RightsUnavailable('rights export basis is unavailable'); });
+    const byOrdinal = new Map(materialRows.rows.map(row => [row.ordinal, row]));
+    const restrictions = new Map(restrictionRows.rows.filter(row => row.decision_id)
+      .map(row => [row.ordinal, row.decision_id!]));
+    const bases: ExportBasis[] = members.map((_member, index) => {
+      const ordinal = index + 1;
+      if (malformed.includes(index)) return { ...unassessedBasis(useScope, ordinal),
+        result: 'prohibited' as const, obligations: ['access_restriction' as const],
+        notice: 'The selected member has an invalid rights identity.' };
+      const identity = identities[index];
+      const row = byOrdinal.get(ordinal);
+      const decision = restrictions.get(ordinal);
+      if (decision) {
+        return { ...(row?.assessment_id ? {
+          basisKind: 'use_assessment' as const, basisRef: row.assessment_id,
+        } : unassessedBasis(useScope, ordinal)),
+        licenseExpression: null, notice: `Export restricted by decision ${decision}.`,
+        obligations: ['access_restriction' as const], useScope, result: 'prohibited' as const,
+        memberOrdinals: [ordinal] };
+      }
+      if (!identity || !row || !row.assessment_id || !row.basis || !row.outcome) {
+        return { ...unassessedBasis(useScope, ordinal) };
+      }
+      const supportedObligations: Record<string, 'attribution' | 'share_alike' | 'non_commercial'
+        | 'no_derivatives' | 'notice_retention'> = {
+        attribution: 'attribution', share_alike: 'share_alike', non_commercial: 'non_commercial',
+        no_derivatives: 'no_derivatives', notice_retention: 'notice_retention',
+      };
+      const obligations = row.obligations.map(item => supportedObligations[item.kind]);
+      const notices = row.obligations.map(item => item.notice).filter((item): item is string => item !== null);
+      const rationale = row.basis === 'statutory_exception'
+        ? JSON.stringify({ rationale: row.rationale, extent: row.extent }) : null;
+      const unsupportedCondition = obligations.some(item => !item) || obligations.length > 6
+        || (rationale !== null && Buffer.byteLength(rationale) > 4000)
+        || (row.expression_kind !== 'fact' && row.basis === 'unprotected_fact');
+      const mappedBasis = row.basis === 'original_contribution' ? 'native_contribution'
+        : row.basis === 'public_domain' ? 'public_domain'
+          : row.basis === 'unprotected_fact' ? 'unprotected_fact'
+            : row.basis === 'statutory_exception' ? 'statutory_exception' : 'use_assessment';
+      const result: ExportBasis['result'] = unsupportedCondition ? 'undetermined'
+        : row.outcome === 'not_supported' ? 'prohibited' : row.outcome as ExportBasis['result'];
+      return { basisKind: mappedBasis, basisRef: row.assessment_id,
+        licenseExpression: row.basis === 'license' ? row.license_instrument : null,
+        notice: rationale ?? (notices.length ? JSON.stringify(notices) : null),
+        obligations: unsupportedCondition ? [] : obligations as Array<'attribution' | 'share_alike'
+          | 'non_commercial' | 'no_derivatives' | 'notice_retention'>,
+        useScope, result, memberOrdinals: [ordinal] };
+    });
+    return bases;
+  };
+
+  /** Only an explicit current provider non-retention decision blocks raw capture. */
+  async rawRetentionPermitted(provider: string, namespace: string): Promise<boolean> {
+    const result = await this.content.query<{ outcome: string }>(`SELECT a.outcome FROM rights.material m
+      JOIN rights.use_assessment_head h ON h.material_id = m.id AND h.family = 'service_terms'
+        AND h.use_kind = 'raw_retention' AND h.use_scope = $3
+      JOIN rights.use_assessment a ON a.id = h.assessment_id
+      WHERE m.scope_kind = 'source_provider' AND m.provider = $1 AND m.namespace = $2
+        AND m.component = 'response' LIMIT 2`, [provider, namespace, sourceRetentionScope(provider, namespace)]);
+    if (result.rows.length > 1) throw new RightsUnavailable('provider retention assessment is ambiguous');
+    return result.rows[0]?.outcome !== 'not_supported';
   }
 }

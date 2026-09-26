@@ -153,7 +153,14 @@ async function readRow(client: PoolClient, principalId: string,
 }
 
 export class SourceIntakeStore {
+  private rawRetentionGate?: (provider: string, namespace: string) => Promise<boolean>;
+
   constructor(private readonly pool: Pool) {}
+
+  /** Install the current provider-terms check at Main's retained-capture boundary. */
+  setRawRetentionGate(gate: (provider: string, namespace: string) => Promise<boolean>): void {
+    this.rawRetentionGate = gate;
+  }
 
   async reserveOpenLibrarySlot(): Promise<void> {
     const client = await this.pool.connect();
@@ -201,6 +208,12 @@ export class SourceIntakeStore {
     Promise<{ observation: StagedSourceObservation; replayed: boolean }> {
     if (!UUID.test(principalId) || !idempotencyKey || idempotencyKey.length > 200) {
       throw new SourceIntakeInvalid('invalid source intake identity');
+    }
+    if (input.retention === 'retained' && this.rawRetentionGate) {
+      let permitted: boolean;
+      try { permitted = await this.rawRetentionGate(input.provider, input.namespace); }
+      catch { throw new SourceIntakeUnavailable('provider retention policy is unavailable'); }
+      if (!permitted) throw new SourceIntakeInvalid('provider terms prohibit raw response retention');
     }
     const { bytes, digest: byteDigest } = checkedInput(input);
     if (capture && (capture.profile !== 'open-library-work-acquisition-v1'

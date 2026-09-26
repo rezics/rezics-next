@@ -27,6 +27,7 @@ export interface OpenLibraryWorksRunRequest {
 
 export interface SurfacePlan {
   surface: string;
+  namespace: string;
   required: boolean;
   captureLimit: number;
 }
@@ -102,6 +103,7 @@ export interface FrozenCapture { id: string; ordinal: number; requestKey: string
 
 export interface SourceRunOptions {
   reserve: () => Promise<void>;
+  rawRetentionPermitted?: (provider: string, namespace: string) => Promise<boolean>;
   fetcher?: typeof fetch;
 }
 
@@ -132,11 +134,12 @@ export function checkedWorksRun(request: OpenLibraryWorksRunRequest): OpenLibrar
 export function worksRunSurfaces(request: OpenLibraryWorksRunRequest): SurfacePlan[] {
   const n = request.workIds.length;
   return [
-    ...(request.frontier ? [{ surface: 'frontier', required: true, captureLimit: 1 }] : []),
-    { surface: 'works', required: true, captureLimit: n },
-    ...(request.editions ? [{ surface: 'editions', required: true, captureLimit: n * EDITION_PAGES_PER_WORK }] : []),
+    ...(request.frontier ? [{ surface: 'frontier', namespace: 'recent-changes', required: true, captureLimit: 1 }] : []),
+    { surface: 'works', namespace: 'work', required: true, captureLimit: n },
+    ...(request.editions ? [{ surface: 'editions', namespace: 'work-editions', required: true,
+      captureLimit: n * EDITION_PAGES_PER_WORK }] : []),
     // Provider scores are optional source statistics; their absence never blocks the run.
-    ...(request.ratings ? [{ surface: 'ratings', required: false, captureLimit: n }] : []),
+    ...(request.ratings ? [{ surface: 'ratings', namespace: 'work-ratings', required: false, captureLimit: n }] : []),
   ];
 }
 
@@ -225,6 +228,8 @@ export class SourceRunStore {
   async start(principalId: string, key: string, provider: string, profile: string, requestDigest: string,
     surfaces: readonly SurfacePlan[], termsReference: string): Promise<{ runId: string; created: boolean }> {
     checkedRunKey(principalId, key);
+    const permitted = await Promise.all(surfaces.map(surface => this.retentionPermitted(provider, surface.namespace)));
+    if (permitted.some(allowed => !allowed)) throw new SourceRunInvalid('source terms prohibit raw retention');
     const client = await this.pool.connect();
     try {
       await client.query('BEGIN');
@@ -307,6 +312,13 @@ export class SourceRunStore {
     return { id: row.id, ordinal: row.ordinal, requestKey, status: row.status, bytes: row.raw_bytes };
   }
 
+  /** Read the current provider-terms decision for one exact source namespace. */
+  async retentionPermitted(provider: string, namespace: string): Promise<boolean> {
+    if (!this.options.rawRetentionPermitted) return true;
+    try { return await this.options.rawRetentionPermitted(provider, namespace); }
+    catch { throw new SourceRunUnavailable('source retention assessment is unavailable'); }
+  }
+
   /**
    * Reuse the frozen capture for this request or perform one gated fetch. A provider
    * failure is returned for surface settlement; it never becomes an empty capture.
@@ -314,6 +326,9 @@ export class SourceRunStore {
   async acquire(principalId: string, runId: string, surface: string, request: CaptureRequest,
     adapter: SourceRunProviderAdapter, signal?: AbortSignal):
     Promise<{ ok: true; capture: FrozenCapture; parsed: unknown } | { ok: false; outcome: 'failed' | 'unqualified'; reason: string }> {
+    if (!(await this.retentionPermitted(adapter.provider, request.namespace))) {
+      return { ok: false, outcome: 'unqualified', reason: 'retention-prohibited' };
+    }
     const prior = await this.frozen(runId, request.requestKey);
     if (prior) return { ok: true, capture: prior,
       parsed: prior.bytes ? adapter.decode(prior.bytes, prior.status) : undefined };
@@ -322,6 +337,9 @@ export class SourceRunStore {
     if (!fetched.ok) return { ok: false, outcome: fetched.outcome, reason: fetched.reason };
     const invalid = request.validate(fetched.parsed);
     if (invalid) return { ok: false, outcome: 'failed', reason: invalid };
+    if (!(await this.retentionPermitted(adapter.provider, request.namespace))) {
+      return { ok: false, outcome: 'unqualified', reason: 'retention-prohibited' };
+    }
     const capture = await this.insertCapture(principalId, runId, surface, request, adapter.provider, fetched);
     return { ok: true, capture, parsed: fetched.parsed };
   }
