@@ -35,7 +35,7 @@ The Claude program starts when the maintainer runs the [Goal prompt](#goal-promp
 | Role | Model and effort | Responsibility |
 | --- | --- | --- |
 | Manager | Interactive Claude Code, Opus 5.5, `xhigh`, bypass permission mode, session name `goal-manager` | Closure map, decomposition, briefs, claims, dispatch, merges, wave QA, commits, plan status and forecast. It writes no feature code except small integration fixes. |
-| Worker (default) | `claude -p`, Opus 5.5, `medium` | Template-following API bundles, tests, coverage declarations, fixtures, routine repairs. |
+| Worker (default) | `claude -p`, Opus 5.5, `medium`, bypass permission mode | Template-following API bundles, tests, coverage declarations, fixtures, routine repairs. |
 | Worker (complex) | Opus 5.5, `high` | Non-trivial semantics after a template exists, cross-module consumers, failed-wave repairs, merge conflicts. |
 | Worker (hardest) | Opus 5.5, `xhigh` | Owner schemas, the first template of each operation family, authority/IAM, transactions, erasure, recovery and owner reconciliation. |
 | Scout | Opus 5.5, `medium`, no path claims | Read-only closure-map and audit tasks. |
@@ -103,7 +103,8 @@ recovery manifests) come first because every domain depends on them. The
 
 ## Worker processes
 
-Workers are separate `claude -p` processes, not in-session subagents. All state
+Workers are separate `claude -p` processes in bypass permission mode, not
+in-session subagents. All state
 changes go through `bun scripts/goal/goalctl.ts`, run by the manager from the
 main checkout:
 

@@ -129,12 +129,12 @@ export function usageLevel(snapshot: UsageSnapshot | undefined, nowMs: number):
   return { level: used >= 95 ? 'critical' : used >= 80 ? 'restricted' : 'normal', used, ageSeconds };
 }
 
-// Workers keep the auto-mode permission classifier and accept no inbound session messages;
-// the manager changes a worker's instructions only by stopping or resuming it.
+// Workers run in bypass permission mode, as the manager does, and accept no inbound session
+// messages; the manager changes a worker's instructions only by stopping or resuming it.
 export function launchCommand(options: { id: string; effort: string; session: string; prompt: string;
   resume: boolean }): [string, string[]] {
   const { id, effort, session, prompt, resume } = options;
-  return ['claude', ['-p', prompt, '--model', MODEL, '--effort', effort, '--permission-mode', 'auto',
+  return ['claude', ['-p', prompt, '--model', MODEL, '--effort', effort, '--dangerously-skip-permissions',
     ...(resume ? ['--resume', session] : ['--session-id', session]), '-n', id.toLowerCase(),
     '--output-format', 'json']];
 }

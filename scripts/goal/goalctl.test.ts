@@ -75,11 +75,11 @@ describe('goalctl runtime policy', () => {
     expect(usageLevel(undefined, now).level).toBe('unknown');
   });
 
-  test('pins the Opus model, effort and auto permission mode without inbound session messages', () => {
+  test('pins the Opus model, effort and bypass permission mode without inbound session messages', () => {
     const [program, args] = launchCommand({ id: 'G-040', effort: 'medium', session: 's', prompt: 'p', resume: false });
     expect(program).toBe('claude');
     expect(args).toEqual(expect.arrayContaining(['--model', 'claude-opus-5-5', '--effort', 'medium',
-      '--permission-mode', 'auto', '--session-id', 's', '-n', 'g-040']));
+      '--dangerously-skip-permissions', '--session-id', 's', '-n', 'g-040']));
     expect(args.join(' ')).not.toContain('crossSessionInbound');
     expect(launchCommand({ id: 'G-040', effort: 'high', session: 's', prompt: 'p', resume: true })[1])
       .toEqual(expect.arrayContaining(['--resume', 's']));

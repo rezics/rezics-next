@@ -2,7 +2,7 @@
 
 A worker is a separate `claude -p` process started by the manager through
 `bun scripts/goal/goalctl.ts dispatch`. It runs Claude Opus 5.5 at the effort in
-its brief, in auto permission mode, inside its own worktree under
+its brief, in bypass permission mode, inside its own worktree under
 `.temp/worktrees/`. The [program](README.md) owns scheduling; this page owns
 what a worker does between start and handoff.
 
