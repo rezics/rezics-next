@@ -377,6 +377,7 @@ neither dependency-cruiser nor TypeScript typechecking proves asymptotic cost.
 | Tool | Version | Status | Use |
 | --- | --- | --- | --- |
 | `bun test` | Bun 1.4.2 | Adopted | Backend unit, property, integration, model-based and recovery tests with `--parallel`, `--shard`, `--timings` and the JUnit reporter. |
+| Nix native oracle container | Nix 2.35.2, `docker.io/nixos/nix:2.35.2@sha256:617d914dba5384bf75adf17081583b69371031ec7defce36c34c5fa14fc819b0` (linux/amd64) | Adopted for PKG06 | Main's bounded adapter and `bun scripts/package/nix-oracle.ts` run this exact image through the adopted Docker CLI against disposable fixtures under `.temp/`, with network disabled. They record the flake lock, selected derivation and observed output closure separately; evaluation and building are executable native Nix operations. The image manifest digest was inspected with the adopted Docker CLI on 2026-09-27. [Official image](https://hub.docker.com/r/nixos/nix/tags), [Nix derivation format](https://nix.dev/manual/nix/stable/command-ref/new-cli/nix3-derivation-show). |
 | fast-check | 4.10.2 | Adopted | Properties, model-based command sequences, shrinking and logged seeds. |
 | Vitest, `@vitest/browser-playwright` | 4.1.11 | Adopted | Storybook component tests. Vitest 5 is not used while `@storybook/addon-vitest` 10.6 accepts only `^3 \|\| ^4`. |
 | Storybook | 10.6.0 (`storybook`, `@storybook/react-vite`, `@storybook/addon-vitest`, `@storybook/addon-a11y`) | Adopted | Component states and accessibility checks. |

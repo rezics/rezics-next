@@ -19,6 +19,7 @@ import { operationsRoutes } from './routes/operations.ts';
 import { notificationRoutes } from './routes/notifications.ts';
 import { packageRoutes } from './routes/packages.ts';
 import { packageLockRoutes } from './routes/package-locks.ts';
+import { packageNixRoutes } from './routes/package-nix.ts';
 import { problem } from './routes/problems.ts';
 import { protectionRoutes } from './routes/protection.ts';
 import { publicationRoutes } from './routes/publication.ts';
@@ -110,6 +111,28 @@ export function createMainApp(fuseki: FusekiClient, work?: SearchRouteDependenci
       .use(accessSearchRoutes(fuseki, work))
       .use(contentCommunityRoutes(fuseki, work))
       .use(domainRoutes(fuseki, work));
+      .use(operationsRoutes(work))
+      .use(actingContextRoutes(work))
+      .use(sourceRoutes(work))
+      .use(sourceRunRoutes(work))
+      .use(packageRoutes(work))
+      .use(packageNixRoutes(work))
+      .use(sourceSupportRoutes(fuseki, work))
+      .use(accessAuthorityRoutes(work))
+      .use(accessMembershipRoutes(work))
+      .use(accessRoleRoutes(work))
+      .use(accessPolicyRoutes(work))
+      .use(searchRoutes(fuseki, work))
+      .use(contentRoutes(fuseki, work))
+      .use(ratingRoutes(fuseki, work))
+      .use(classificationRoutes(fuseki, work))
+      .use(spaceRoutes(fuseki, work))
+      .use(publicationRoutes(fuseki, work))
+      .use(contributionRoutes(fuseki, work))
+      .use(addressRoutes(work))
+      .use(commerceRoutes(fuseki, work))
+      .use(resourceRoutes(fuseki, work))
+      .use(workRoutes(fuseki, work));
   }
   return app;
 }

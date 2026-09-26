@@ -24,6 +24,7 @@ import type { SourceChildCorrespondenceStore }
 import type { GoMvsResolutionStore } from '../modules/package/go-mvs.ts';
 import type { CargoResolutionStore } from '../modules/package/cargo-resolution.ts';
 import type { NpmResolutionStore } from '../modules/package/npm-resolution.ts';
+import type { NixResolutionStore } from '../modules/package/nix-resolution.ts';
 import type { GoProxyCaptureStore } from '../modules/package/go-proxy-capture.ts';
 import type { GoSumdbTrustStore } from '../modules/package/go-sumdb-trust.ts';
 import type { OpenLibrarySourceGraph } from '../modules/source/graph-projection.ts';
@@ -79,6 +80,7 @@ export interface MainWorkDependencies {
   packageResolutions?: GoMvsResolutionStore;
   packageCargoResolutions?: CargoResolutionStore;
   packageNpmResolutions?: NpmResolutionStore;
+  packageNixResolutions?: NixResolutionStore;
   packageCaptures?: GoProxyCaptureStore;
   packageVerifications?: GoSumdbTrustStore;
   sourceGraph?: OpenLibrarySourceGraph;

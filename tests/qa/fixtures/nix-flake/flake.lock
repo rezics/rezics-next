@@ -1,0 +1,26 @@
+{
+  "nodes": {
+    "base": {
+      "flake": false,
+      "locked": {
+        "path": "./base",
+        "type": "path"
+      },
+      "original": {
+        "path": "./base",
+        "type": "path"
+      },
+      "parent": []
+    },
+    "root": {
+      "inputs": {
+        "alias": [
+          "base"
+        ],
+        "base": "base"
+      }
+    }
+  },
+  "root": "root",
+  "version": 7
+}
