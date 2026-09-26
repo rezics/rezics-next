@@ -231,7 +231,7 @@ final class CommandService extends ActionService {
             if (existing != null) return existing.equals(digest) ? committed(dataset, receipt) : Map.of("status", "conflict");
             String preflight = CommandInvariant.preflight(dataset, receipt, plan);
             if (preflight != null) return invalid(preflight);
-            String erasure = ErasurePolicy.preflight(dataset, plan);
+            String erasure = ErasurePolicy.preflight(dataset, plan, receipt);
             if (erasure != null) return invalid(erasure);
             String authorCredit = AuthorCreditPolicy.preflight(dataset, plan);
             if (authorCredit != null) return invalid(authorCredit);
@@ -260,6 +260,8 @@ final class CommandService extends ActionService {
             if (scope != null) return scope;
             String sourceBinding = SourceProjectionPolicy.check(dataset, receipt, plan);
             if (sourceBinding != null) return invalid(sourceBinding);
+            String erasureInvariant = ErasurePolicy.check(dataset, plan);
+            if (erasureInvariant != null) return invalid(erasureInvariant);
             Map<String, List<Validation>> grouped = new LinkedHashMap<>();
             for (Validation entry : validations) grouped.computeIfAbsent(entry.profileId(), ignored -> new ArrayList<>()).add(entry);
             for (var group : grouped.entrySet()) {

@@ -113,7 +113,9 @@ final class CommandPolicy {
             throw new IllegalArgumentException("search probe graph is bootstrap only");
         if (graphs.contains(PUBLIC_SEARCH) && !bootstrap && !rebuild && current.isEmpty() && revisions.isEmpty())
             throw new IllegalArgumentException("search projection requires a product change");
-        if (graphs.contains(PRIVATE_SEARCH) && (bootstrap || rebuild || current.isEmpty() || revisions.isEmpty()))
+        boolean erasure = receipt.matches("urn:rezics:receipt:erasure-graph:[0-9a-f]{64}");
+        if (graphs.contains(PRIVATE_SEARCH) && (bootstrap || rebuild || revisions.isEmpty()
+            || current.isEmpty() && !erasure))
             throw new IllegalArgumentException("private projection requires a product revision change");
         if (rebuild) {
             String family = receipt.substring("urn:rezics:receipt:content-rebuild:".length());

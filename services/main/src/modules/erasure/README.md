@@ -37,3 +37,12 @@ rejects later inserts naming that IRI. Operators must inventory and keep the
 old fileset inaccessible. This command does not activate the candidate or
 complete the Content owner erasure; those steps require journal and graph
 release proof before the published revision's preparation pin can be cleared.
+
+`graph.ts` supplies the bounded live suppression primitive for one journal
+identity and up to 64 exact Content revisions. It inventories public and private
+indexed units, removes their triples in one native command, writes exact
+tombstones and a graph outbox receipt, then reads the receipt and absence proof.
+`outbox-event.ts` is the discovered handler for that graph event. The native
+gate rejects replay that names an erased revision. Published Content requests
+still stop at the active publication pin: connecting this primitive to the
+HTTP command also needs a durable pin supersession and Content rebuild rule.
