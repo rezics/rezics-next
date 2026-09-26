@@ -15,6 +15,7 @@ import { contributionRoutes } from './routes/contributions.ts';
 import { erasureRoutes } from './routes/erasures.ts';
 import { healthRoutes } from './routes/health.ts';
 import { operationsRoutes } from './routes/operations.ts';
+import { notificationRoutes } from './routes/notifications.ts';
 import { packageRoutes } from './routes/packages.ts';
 import { packageLockRoutes } from './routes/package-locks.ts';
 import { problem } from './routes/problems.ts';
@@ -76,6 +77,7 @@ export function createMainApp(fuseki: FusekiClient, work?: SearchRouteDependenci
       .use(protectionRoutes(work))
       .use(claimRoutes(work))
       .use(erasureRoutes(work))
+      .use(notificationRoutes(work))
       .use(workRoutes(fuseki, work));
   }
   return app;
