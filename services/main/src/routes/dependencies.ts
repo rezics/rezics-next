@@ -68,6 +68,7 @@ import type { NotificationStore } from '../modules/notification/store.ts';
 import type { NotificationDispatcher } from '../modules/notification/dispatcher.ts';
 import type { NotificationRealtimeHub } from '../modules/notification/realtime.ts';
 import type { RightsStore } from '../modules/rights/store.ts';
+import type { ConnectedAppStore } from '../modules/connected-apps/store.ts';
 
 export interface MainWorkDependencies {
   agentProvisioning?: AgentProvisioning;
@@ -129,6 +130,7 @@ export interface MainWorkDependencies {
   packageLocks?: PackageLockStore;
   packageInstallations?: PackageInstallationStore;
   hub?: HubStore;
+  connectedApps?: ConnectedAppStore;
   packageCaptures?: GoProxyCaptureStore;
   packageVerifications?: GoSumdbTrustStore;
   sourceGraph?: OpenLibrarySourceGraph;

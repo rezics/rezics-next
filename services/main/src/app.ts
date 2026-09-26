@@ -10,6 +10,7 @@ import { actingContextRoutes } from './routes/acting-contexts.ts';
 import { addressRoutes } from './routes/addresses.ts';
 import { claimRoutes } from './routes/claims.ts';
 import { classificationRoutes } from './routes/classification.ts';
+import { connectedAppRoutes } from './routes/connected-apps.ts';
 import { commerceRoutes } from './routes/commerce.ts';
 import { compositionRoutes } from './routes/compositions.ts';
 import { progressRoutes } from './routes/progress.ts';
@@ -102,6 +103,11 @@ function domainRoutes(fuseki: FusekiClient, work: SearchRouteDependencies) {
     .use(rightsRoutes(work))
     .use(recommendationRoutes(work))
     .use(graphLayoutRoutes(work));
+    .use(graphLayoutRoutes(work))
+    .use(workRoutes(fuseki, work))
+    .use(packageNixRoutes(work))
+    .use(compositionRoutes(fuseki, work))
+    .use(connectedAppRoutes(work));
 }
 
 function extraRoutes1(fuseki: FusekiClient, work: SearchRouteDependencies) {

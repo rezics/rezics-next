@@ -58,6 +58,7 @@ import { PackageLockStore } from './modules/package/lock.ts';
 import { PackageInstallationStore } from './modules/package/install.ts';
 import { DockerNodeHookExecutor } from './modules/package/install-hooks.ts';
 import { HubStore } from './modules/hub/store.ts';
+import { ConnectedAppStore } from './modules/connected-apps/store.ts';
 import { GoProxyCaptureStore } from './modules/package/go-proxy-capture.ts';
 import { GoSumdbTrustStore } from './modules/package/go-sumdb-trust.ts';
 import { OpenLibrarySourceGraph } from './modules/source/graph-projection.ts';
@@ -210,6 +211,7 @@ if (notificationRealtime) await notificationRealtime.start();
 const notificationDeliveryWorker = notificationDispatcher
   ? new NotificationDeliveryWorker(notificationDispatcher, Number(Bun.env.MAIN_NOTIFICATION_INTERVAL_MS ?? '1000'))
   : undefined;
+const connectedApps = new ConnectedAppStore(contentPool);
 const sourceAdoptions = new SourceNativeWorkAdoptionStore(contentPool, sourceProposals,
   environment, account, access);
 const sourceCorrespondences = new SourceChildCorrespondenceStore(contentPool, sourceConversions);
@@ -278,6 +280,7 @@ const app = createMainApp(fuseki, {
   packageLocks,
   packageInstallations,
   hub,
+  connectedApps,
   packageCaptures,
   packageVerifications: new GoSumdbTrustStore(contentPool, packageCaptures),
   sourceGraph,

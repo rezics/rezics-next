@@ -10,7 +10,7 @@ export interface ServerObservationRow {
   principal_id: string;
   idempotency_key: string;
   endpoint: string;
-  /** MCP protocol revision date, e.g. `2025-11-25`. */
+  /** Pinned stateless MCP protocol revision date. */
   protocol_version: string;
   server_info: Record<string, unknown>;
   capabilities: Record<string, unknown>;

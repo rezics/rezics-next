@@ -12,6 +12,16 @@ export interface AccountAssertionConfig {
   timeoutMs?: number;
 }
 
+/** Account-signed consent basis exposed only after current introspection succeeds. */
+export interface VerifiedAccountAssertion extends VerifiedPrincipal {
+  accountAuthMode?: string;
+  accountClientId?: string;
+  accountConsentId?: string;
+  accountConsentGeneration?: string;
+  accountAudiences?: readonly string[];
+  accountScopes?: readonly string[];
+}
+
 export class AccountAssertionDenied extends Error {}
 export class AccountAssertionUnavailable extends Error {}
 
@@ -48,7 +58,7 @@ export class AccountAssertionVerifier {
     }
   }
 
-  async verify(request: Request, requiredScopes: readonly string[]): Promise<VerifiedPrincipal> {
+  async verify(request: Request, requiredScopes: readonly string[]): Promise<VerifiedAccountAssertion> {
     const input = requestToResourceInput(request);
     // The first profile accepts bearer JWTs. DPoP needs a shared, persistent
     // proof replay store across Main replicas before it can be admitted.
@@ -88,7 +98,16 @@ export class AccountAssertionVerifier {
     if (requiredScopes.some(scope => !granted.has(scope))) {
       throw new AccountAssertionDenied('Account assertion lacks a required scope');
     }
-    return { issuer: signed.iss!, subject: signed.sub };
+    const aud = typeof signed.aud === 'string' ? [signed.aud]
+      : Array.isArray(signed.aud) ? signed.aud.filter((value): value is string => typeof value === 'string') : [];
+    return { issuer: signed.iss!, subject: signed.sub,
+      accountAuthMode: typeof signed.rezics_auth_mode === 'string' ? signed.rezics_auth_mode : undefined,
+      accountClientId: typeof current.client_id === 'string' ? current.client_id : undefined,
+      accountConsentId: typeof signed.rezics_consent_id === 'string' ? signed.rezics_consent_id : undefined,
+      accountConsentGeneration: typeof signed.rezics_consent_generation === 'string'
+        ? signed.rezics_consent_generation : undefined,
+      accountAudiences: aud,
+      accountScopes: typeof current.scope === 'string' ? current.scope.split(' ').filter(Boolean) : [] };
   }
 
   private async fetchJwks(): ReturnType<JwksSource> {
