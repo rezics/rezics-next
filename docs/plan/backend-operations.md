@@ -25,7 +25,7 @@ defines the 276-ID denominator and the one rendered-only exclusion.
 | IAM15-IAM17 | P `POST /v1/access/policy-decisions`; P `POST /v1/access/policy-changes`. |
 | IAM18-IAM20 | P `POST /v1/access/interaction-decisions`; P `POST /v1/access/policy-decisions`. |
 | IAM21-IAM22 | E `GET /v1/content-revisions/{revision}`; P `POST /v1/access/policy-decisions`. |
-| IAM23-IAM24 | P `POST /v1/realms/{realm}/participation-changes`; P `POST /v1/organizations/{organization}/realm-changes`. |
+| IAM23-IAM24 | E `POST /v1/access/org-realm-proposals`, E `POST /v1/access/org-realm-changes` and E `GET /v1/access/org-realm-participation` for independent Org/Realm participation; P explicitly managed authority, publication moderation, cross-Realm move, quota/review and paid benefits. |
 | IAM25-IAM27 | E `POST /v1/me/acting-context-checks`; E `POST /v1/me/representation-requests`; E `GET /v1/access/representation-requests/{requestId}`; E `POST /v1/access/representation-changes`; E `GET /v1/access/representations/{representationId}`; P composed representation. |
 | IAM28-IAM29 | E `POST /v1/me/acting-context-checks`; P multi-obligation and independent-proof operations. |
 | IAM30-IAM32 | E `POST /v1/access/group-changes`; E `POST /v1/access/group-impact-approvals`; E `POST /v1/access/role-bindings`; P protected representation and role approval operations. |
