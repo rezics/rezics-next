@@ -103,32 +103,26 @@ function domainRoutes(fuseki: FusekiClient, work: SearchRouteDependencies) {
     .use(rightsRoutes(work))
     .use(recommendationRoutes(work))
     .use(graphLayoutRoutes(work));
-    .use(graphLayoutRoutes(work))
-    .use(workRoutes(fuseki, work))
-    .use(packageNixRoutes(work))
-    .use(compositionRoutes(fuseki, work))
-    .use(connectedAppRoutes(work));
 }
 
 function extraRoutes1(fuseki: FusekiClient, work: SearchRouteDependencies) {
   return new Elysia()
     .use(workRoutes(fuseki, work))
-    .use(ownerRoutes(work))
     .use(packageNixRoutes(work))
     .use(compositionRoutes(fuseki, work))
+    .use(connectedAppRoutes(work))
+    .use(ownerRoutes(work))
     .use(packageModRoutes(work))
     .use(realmReplyRoutes(work))
     .use(pollRoutes(work))
-    .use(semanticRoutes(fuseki, work))
-    .use(relationRoutes(fuseki, work));
+    .use(semanticRoutes(fuseki, work));
 }
 
 function extraRoutes2(fuseki: FusekiClient, work: SearchRouteDependencies) {
   return new Elysia()
+    .use(relationRoutes(fuseki, work))
     .use(hubRoutes(work))
     .use(progressRoutes(fuseki, work));
-    .use(relationRoutes(fuseki, work))
-    .use(hubRoutes(work));
 }
 
 /** Composition root: each domain plugin under `routes/` owns its registrations. */
