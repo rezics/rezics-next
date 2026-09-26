@@ -168,6 +168,20 @@ export const profileRegistry = {
       "unit"
     ]
   },
+  "content-private-match-unit-v1": {
+    "sha256": "4842523abc660d6edd620947dc2c0e8fdf85031268bff6c71d8de6f5599c7288",
+    "file": "shapes/content-private-match-unit-v1.ttl",
+    "shapes": [
+      "https://rezics.com/definition/content-private-match-unit-v1/state-shape",
+      "https://rezics.com/definition/content-private-match-unit-v1/projection-shape",
+      "https://rezics.com/definition/content-private-match-unit-v1/unit-shape"
+    ],
+    "focusRoles": [
+      "state",
+      "projection",
+      "unit"
+    ]
+  },
   "content-publication-v1": {
     "sha256": "19f83eac251b0e11dcae8cfe4d69a02f311133d979bf4fabb4f92f4dc0b5736f",
     "file": "shapes/content-publication-v1.ttl",

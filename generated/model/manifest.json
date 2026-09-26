@@ -1,5 +1,5 @@
 {
-  "commandModule": "0.5.32",
+  "commandModule": "0.5.33",
   "profiles": [
     {
       "id": "agent-provision-v1",
@@ -118,6 +118,11 @@
       "id": "content-match-unit-v1",
       "sha256": "c21cad7776103f50a982a1820fd5719da156d97edf07e8c856dd00bcd2f18478",
       "file": "shapes/content-match-unit-v1.ttl"
+    },
+    {
+      "id": "content-private-match-unit-v1",
+      "sha256": "4842523abc660d6edd620947dc2c0e8fdf85031268bff6c71d8de6f5599c7288",
+      "file": "shapes/content-private-match-unit-v1.ttl"
     },
     {
       "id": "content-publication-v1",
@@ -1357,6 +1362,26 @@
       ]
     },
     {
+      "type": "https://rezics.com/vocab/ContentPrivateProjection",
+      "routes": [
+        {
+          "profile": "content-private-match-unit-v1",
+          "shape": "https://rezics.com/definition/content-private-match-unit-v1/projection-shape",
+          "when": []
+        }
+      ]
+    },
+    {
+      "type": "https://rezics.com/vocab/ContentPrivateSearchState",
+      "routes": [
+        {
+          "profile": "content-private-match-unit-v1",
+          "shape": "https://rezics.com/definition/content-private-match-unit-v1/state-shape",
+          "when": []
+        }
+      ]
+    },
+    {
       "type": "https://rezics.com/vocab/ContextEntry",
       "routes": [
         {
@@ -2276,6 +2301,7 @@
     "contexts/classification-proposition-v1.jsonld": "7ab9c49c7ef448e67b8f4b76ba43a74437d60ef7953ed82b02b5c0057e7b75e9",
     "contexts/collection-curation-v1.jsonld": "94386b01056b31206b3bc6c68dd1e964fa457c0b40d67f5910e56986951a25ef",
     "contexts/content-match-unit-v1.jsonld": "b44765b92ad6ce55a282bdb5aea5fceffa4543d079f53726ebe3a691af0055fd",
+    "contexts/content-private-match-unit-v1.jsonld": "05e9e12365b96c24f6bc2e201db8f4e80953031a3318d83f8b3083d49054c12c",
     "contexts/content-publication-v1.jsonld": "82eed979cbf46281029903d58d8b3ff51a1e58f989d861cedeb8ce7a5a0c2e0c",
     "contexts/content-search-eligibility-v1.jsonld": "a0ddcafdaad7f73ea5b7881817f9d2739bedb403eb3863fd716173f457c42dd5",
     "contexts/context-selection-v1.jsonld": "645aaf7d6789bcbf69d14516cd3a03248c47342c4a6b05f50cf24b9d6c699dcc",
@@ -2348,6 +2374,7 @@
     "shapes/classification-proposition-v1.ttl": "8bc799783d7d2c43da737b01d2b1f10bba4dc643716f1ac09524d1ef0e86dbd0",
     "shapes/collection-curation-v1.ttl": "fa4ef6efc1e7932f945a202ad4b51704e83ac7c34f8cd231bddfa91317c3d0f4",
     "shapes/content-match-unit-v1.ttl": "c21cad7776103f50a982a1820fd5719da156d97edf07e8c856dd00bcd2f18478",
+    "shapes/content-private-match-unit-v1.ttl": "4842523abc660d6edd620947dc2c0e8fdf85031268bff6c71d8de6f5599c7288",
     "shapes/content-publication-v1.ttl": "19f83eac251b0e11dcae8cfe4d69a02f311133d979bf4fabb4f92f4dc0b5736f",
     "shapes/content-search-eligibility-v1.ttl": "b8d630d9b5206bbdff3b979f815ac41a537d6569667b4859198896d56a22d3c1",
     "shapes/context-selection-v1.ttl": "4f8db2ae8afffc2e935afcac0fad2047c37474a3b3efb69b0a0d32e5d87efdc4",
@@ -2408,9 +2435,9 @@
     "shapes/work-metadata-v1.ttl": "ac918cf0458150520bf03f9683e6a363ad702376ebc50eaa729f98d84b3b8760",
     "shapes/work-title-control-v1.ttl": "100dddad43cac4fd47c3090e987ef9dc9aa272d189fc4240cc08302340c5d42d",
     "shapes/zone-capability-v1.ttl": "b0374ad8d4506ef6a3337f784e77d97470a3df881f211c74a3281d2430365015",
-    "packages/model/src/generated/arbitraries.ts": "7cc93c9c08cf0bccf83fbd8edb20c013d6c8ab44de5f1fa5a9ac5161ce3608af",
-    "packages/model/src/generated/profiles.ts": "2e431f06dba710a5d9770452e813cd37d175403a6d46b28a29d575eae1121ab6",
-    "packages/model/src/generated/schemas.ts": "350544c666be517add74bf3cf8fe41c6b2e380e671f044ebd8ff68c4a80a5d2c",
-    "packages/model/src/generated/vocabulary.ts": "c9e660dfa3b14644561d999e239d79214e2b44e13933c79beac3fe00c521accd"
+    "packages/model/src/generated/arbitraries.ts": "4c05130715675e439bcc6dae2aeb4fb16a83f05563bf58bf4359aae86a299882",
+    "packages/model/src/generated/profiles.ts": "4c6908468350898e99f11dccc3910014acd041d5dc4a9591c3dd43bb57e2971c",
+    "packages/model/src/generated/schemas.ts": "05cbfec9cefac39ead403298e420a52ecc57e236b5c1cbfdf3b3a998df67ff63",
+    "packages/model/src/generated/vocabulary.ts": "37319bd504c7fce3af47cd28766fe80ea0bc00b498c8c212369f34e47075add8"
   }
 }

@@ -146,6 +146,18 @@ export const ContentMatchUnitV1UnitShapeSchema = Type.Object({ "@id": Type.Strin
 
 export type ContentMatchUnitV1UnitShape = Static<typeof ContentMatchUnitV1UnitShapeSchema>;
 
+export const ContentPrivateMatchUnitV1StateShapeSchema = Type.Object({ "@id": Type.String({ minLength: 1 }), "rdf:type": Type.Array(Type.Literal("https://rezics.com/vocab/ContentPrivateSearchState"), { maxItems: 1, minItems: 1 }), "rv:resource": Type.Array(Type.String({}), { minItems: 1, maxItems: 1 }), "rv:variant": Type.Array(Type.String({}), { minItems: 1, maxItems: 1 }), "rv:privateSearchHead": Type.Array(Type.String({}), { minItems: 1, maxItems: 1 }) }, { additionalProperties: true });
+
+export type ContentPrivateMatchUnitV1StateShape = Static<typeof ContentPrivateMatchUnitV1StateShapeSchema>;
+
+export const ContentPrivateMatchUnitV1ProjectionShapeSchema = Type.Object({ "@id": Type.String({ minLength: 1 }), "rdf:type": Type.Array(Type.Union([Type.Literal("https://rezics.com/vocab/ContentPrivateProjection"), Type.Literal("https://rezics.com/vocab/RevisionAnchor")]), { minItems: 2, maxItems: 2 }), "rv:component": Type.Array(Type.String({}), { minItems: 1, maxItems: 1 }), "rv:resource": Type.Array(Type.String({}), { minItems: 1, maxItems: 1 }), "rv:variant": Type.Array(Type.String({}), { minItems: 1, maxItems: 1 }), "rv:contentRevision": Type.Array(Type.String({"pattern":"^urn:rezics:content:revision:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"}), { minItems: 1, maxItems: 1 }), "rv:matchUnit": Type.Array(Type.String({}), { minItems: 1, maxItems: 1 }), "rv:byteDigest": Type.Array(Type.String({"pattern":"^[0-9a-f]{64}$"}), { minItems: 1, maxItems: 1 }), "rv:ownerDataEpoch": Type.Array(Type.String({"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"}), { minItems: 1, maxItems: 1 }), "rv:ownerSequence": Type.Array(Type.String({"pattern":"^(0|[1-9][0-9]*)$"}), { minItems: 1, maxItems: 1 }), "rv:modelRevision": Type.Array(Type.Literal("https://rezics.com/definition/content-private-match-unit-v1"), { maxItems: 1, minItems: 1 }) }, { additionalProperties: true });
+
+export type ContentPrivateMatchUnitV1ProjectionShape = Static<typeof ContentPrivateMatchUnitV1ProjectionShapeSchema>;
+
+export const ContentPrivateMatchUnitV1UnitShapeSchema = Type.Object({ "@id": Type.String({ minLength: 1 }), "rdf:type": Type.Array(Type.Literal("https://rezics.com/vocab/MatchUnit"), { maxItems: 1, minItems: 1 }), "rv:resource": Type.Array(Type.String({}), { minItems: 1, maxItems: 1 }), "rv:variant": Type.Array(Type.String({}), { minItems: 1, maxItems: 1 }), "rv:revision": Type.Array(Type.String({"pattern":"^urn:rezics:content:revision:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"}), { minItems: 1, maxItems: 1 }), "rv:projection": Type.Array(Type.String({}), { minItems: 1, maxItems: 1 }), "rv:language": Type.Array(Type.String({"pattern":"^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$"}), { minItems: 1, maxItems: 1 }), "rv:field": Type.Array(Type.Literal("https://rezics.com/vocab/Body"), { maxItems: 1, minItems: 1 }), "rv:disclosure": Type.Array(Type.Literal("https://rezics.com/vocab/Private"), { maxItems: 1, minItems: 1 }), "rv:privateSearchBody": Type.Array(Type.Object({ "@value": Type.String({"minLength":1,"maxLength":65536}), "@language": Type.String({ pattern: "^[a-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$" }) }, { additionalProperties: false }), { minItems: 1, maxItems: 1 }) }, { additionalProperties: true });
+
+export type ContentPrivateMatchUnitV1UnitShape = Static<typeof ContentPrivateMatchUnitV1UnitShapeSchema>;
+
 export const ContentPublicationV1VariantShapeSchema = Type.Object({ "@id": Type.String({ minLength: 1 }), "rdf:type": Type.Array(Type.Literal("https://rezics.com/vocab/ContentVariant"), { maxItems: 1, minItems: 1 }), "rv:resource": Type.Array(Type.String({}), { minItems: 1, maxItems: 1 }), "rv:contentPublicationHead": Type.Array(Type.String({}), { minItems: 1, maxItems: 1 }), "rv:publicSearchEligibilityHead": Type.Optional(Type.Array(Type.String({}), { maxItems: 1 })) }, { additionalProperties: true });
 
 export type ContentPublicationV1VariantShape = Static<typeof ContentPublicationV1VariantShapeSchema>;
@@ -795,6 +807,9 @@ export const shapeSchemas = {
   "https://rezics.com/definition/collection-curation-v1/definition-revision-shape": CollectionCurationV1DefinitionRevisionShapeSchema,
   "https://rezics.com/definition/content-match-unit-v1/projection-shape": ContentMatchUnitV1ProjectionShapeSchema,
   "https://rezics.com/definition/content-match-unit-v1/unit-shape": ContentMatchUnitV1UnitShapeSchema,
+  "https://rezics.com/definition/content-private-match-unit-v1/state-shape": ContentPrivateMatchUnitV1StateShapeSchema,
+  "https://rezics.com/definition/content-private-match-unit-v1/projection-shape": ContentPrivateMatchUnitV1ProjectionShapeSchema,
+  "https://rezics.com/definition/content-private-match-unit-v1/unit-shape": ContentPrivateMatchUnitV1UnitShapeSchema,
   "https://rezics.com/definition/content-publication-v1/variant-shape": ContentPublicationV1VariantShapeSchema,
   "https://rezics.com/definition/content-publication-v1/decision-shape": ContentPublicationV1DecisionShapeSchema,
   "https://rezics.com/definition/content-search-eligibility-v1/decision-shape": ContentSearchEligibilityV1DecisionShapeSchema,
