@@ -12,10 +12,10 @@ and `model/definitions/value-exact-v1.ts`.
 Committed semantic and relation changes have distinct owner-declared outbox
 events in `outbox-event.ts`, each bound to its Access admission, receipt and
 exact revision. Their deterministic receipt families live in each owner's
-`receipt-family.ts`. Internal model generation records a zero-event outbox batch
-so the relay advances its sequence without fabricating Access authority. The Access owner also
-needs a semantic Resource read grant check; until then current and exact reads
-of semantic Resources and relation occurrences remain unavailable.
+`receipt-family.ts`. Internal model generation emits an event that needs a relay
+contract for an operation without Access admission. Access admission owns the
+current `semantic:read:<resource>` decision; the semantic routes use that check
+for current and exact reads.
 
 To extend a semantic operation, copy the admission, digest, expected-head guard,
 poststate validation, terminal receipt resolution and exact-manifest read from

@@ -12,6 +12,15 @@ const repo = resolve(import.meta.dir, '../..');
 const temporary: string[] = [];
 afterEach(() => { for (const dir of temporary.splice(0)) rmSync(dir, { recursive: true, force: true }); });
 
+test('MODEL14: compiler closes owner shapes and keeps the shared Resource shape open', () => {
+  const profile = authoredProfiles.find(item => item.id === 'semantic-resource-v1')!;
+  const rendered = renderProfile(profile);
+  const [resource, revision] = rendered.split('<https://rezics.com/definition/semantic-resource-v1/revision-shape>');
+  expect(resource).not.toContain('sh:closed');
+  expect(revision).toContain('sh:closed true');
+  expect(revision).toContain('sh:path rv:component');
+});
+
 test('P0.3: reviewed profiles publish matching shape bytes and digests', () => {
   const artifacts = buildArtifacts(repo);
   const manifest = JSON.parse(artifacts.get('generated/model/manifest.json')!) as {

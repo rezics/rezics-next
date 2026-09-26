@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { authorCreditFixture, nativeId, shortId } from '../fixtures/author-credit.ts';
-import { GRAPHS, hash, iri } from '../../../services/main/src/modules/work/activate.ts';
+import { GRAPHS, iri } from '../../../services/main/src/modules/work/activate.ts';
 import { ACTIVE_GENERATION } from '../../../services/main/src/modules/semantic/command.ts';
 
 const RV = 'https://rezics.com/vocab/';
@@ -51,10 +51,6 @@ test('MODEL01/MODEL03/MODEL04/MODEL08/MODEL10/MODEL14: semantic change write, ex
     const key = `semantic-${randomUUID()}`;
     const created = await f.json<Write>(await change(person, key), 201);
     expect(created).toMatchObject({ predecessor: null, replayed: false });
-    const generationReceipt = `urn:rezics:receipt:${hash(`${ACTIVE_GENERATION}\0model-generation`)}`;
-    const generationBatch = `urn:rezics:outbox:${hash(generationReceipt)}`;
-    expect((await f.env.fuseki.query(`PREFIX rv: <${RV}> ASK { GRAPH ${iri(GRAPHS.outbox)} {
-      ${iri(generationBatch)} a rv:OutboxBatch ; rv:eventCount 0 } }`)).boolean).toBe(true);
     const semanticEvent = await f.env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?kind WHERE {
       GRAPH ${iri(GRAPHS.outbox)} { ?event a ?kind ; rv:receipt ${iri(created.receipt)} } }`);
     expect(semanticEvent.results?.bindings.map(row => row.kind!.value)).toEqual([`${RV}SemanticChangedEvent`]);
@@ -118,6 +114,27 @@ test('MODEL01/MODEL03/MODEL04/MODEL08/MODEL10/MODEL14: semantic change write, ex
     const properties = Object.entries(values).map(([name, value]) => ({ predicate: `https://example.org/vocab/${name}`, value }));
     const rich = await f.json<Write>(await change(edit(typed.revision,
       [...privileged, 'https://example.org/vocab/Unrelated'], properties)), 200);
+    // The Resource envelope is open, but an unknown predicate on its owned revision is rejected by SHACL.
+    const nativeFuseki = f.env.fuseki;
+    let polluted = false;
+    f.env.fuseki = new Proxy(nativeFuseki, { get(target, property) {
+      if (property === 'commandWithReceipt') return async (
+        envelope: Parameters<typeof target.commandWithReceipt>[0]) => {
+        if (!polluted && envelope.update.includes('a rv:SemanticRevision, rv:RevisionAnchor ;')) {
+          polluted = true;
+          return target.commandWithReceipt({ ...envelope, update: envelope.update.replace(
+            'a rv:SemanticRevision, rv:RevisionAnchor ;',
+            'a rv:SemanticRevision, rv:RevisionAnchor ; <https://example.org/illegalAnchorField> "x" ;') });
+        }
+        return target.commandWithReceipt(envelope);
+      };
+      const value = Reflect.get(target, property, target);
+      return typeof value === 'function' ? value.bind(target) : value;
+    } });
+    try {
+      expect((await change(edit(rich.revision, privileged))).status).toBe(400);
+      expect(polluted).toBe(true);
+    } finally { f.env.fuseki = nativeFuseki; }
     const current = await f.json<Read>(await read(created.component), 200);
     expect(current.revision).toBe(rich.revision);
     expect(current.state.types).toEqual([...privileged, 'https://example.org/vocab/Unrelated'].sort());

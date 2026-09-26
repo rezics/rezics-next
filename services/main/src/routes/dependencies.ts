@@ -70,6 +70,7 @@ export interface MainWorkDependencies {
     'register' | 'claim' | 'recordGraphOutcome' | 'canReadWork' | 'canReadContributionDraft'
     | 'canReadStandingRating' | 'canLinkTranslation' | 'activePrincipalId'>
     & Partial<Pick<AccessAdmissionRegistry, 'verifyContentDraftProof'
+      | 'canReadSemanticResource'
       | 'readRatingAggregateInventory' | 'checkRatingAggregateFence'
       | 'readRatingContextPolicyWitness' | 'issueTitleAdmission'>>;
   releaseRatingInventory?: ReleaseRatingInventoryStore;

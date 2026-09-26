@@ -56,6 +56,8 @@ export interface BindingRequirement {
 export interface ShapeDefinition {
   iri: string;
   properties: readonly PropertyDefinition[];
+  /** The owner lists every predicate on this component; shared Resource envelopes stay open. */
+  closed?: true;
   /** SHACL disjunction of local property groups. */
   or?: readonly (readonly PropertyDefinition[])[];
   /** Command-registry metadata; it does not change the rendered shape. */
@@ -167,9 +169,10 @@ export function renderProfile(profile: ProfileDefinition): string {
   const header = `${profile.comments.map(comment => `# ${comment}\n`).join('')}${profile.prefixes.map(([name, iri]) => `@prefix ${name}: <${iri}> .\n`).join('')}\n`;
   const shapes = profile.shapes.map(shape => {
     const properties = shape.properties.map(property => renderProperty(property, profile.layout));
-    const propertyLines = properties.map((property, index) =>
-      `${property}${index === properties.length - 1 && !shape.or ? ' .' : ' ;'}`);
-    if (shape.or) propertyLines.push(`${renderOr(shape.or)} .`);
+    const clauses = [...(shape.closed ? ['    sh:closed true'] : []), ...properties,
+      ...(shape.or ? [renderOr(shape.or)] : [])];
+    const propertyLines = clauses.map((clause, index) =>
+      `${clause}${index === clauses.length - 1 ? ' .' : ' ;'}`);
     return `<${shape.iri}>\n    a sh:NodeShape ;\n${propertyLines.join('\n')}\n`;
   });
   return `${header}${shapes.join('\n')}`;

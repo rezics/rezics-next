@@ -17,7 +17,7 @@ export const semanticDefinitionProfile = {
   layout: 'compact',
   shapes: [
     { iri: 'https://rezics.com/definition/semantic-definition-v1/definition-shape',
-      canonical: { types: ['rv:SemanticDefinition'] }, properties: [
+      canonical: { types: ['rv:SemanticDefinition'] }, closed: true, properties: [
       { path: 'rdf:type', hasValue: 'rv:SemanticDefinition' },
       { path: 'rv:definitionKind', minCount: 1, maxCount: 1, in: kinds },
       { path: 'rv:definitionHead', minCount: 1, maxCount: 1, class: 'rv:DefinitionRevision' },
@@ -26,7 +26,7 @@ export const semanticDefinitionProfile = {
       { path: 'owl:hasKey', maxCount: 0 },
     ] },
     { iri: 'https://rezics.com/definition/semantic-definition-v1/revision-shape',
-      canonical: { types: ['rv:DefinitionRevision'] }, properties: [
+      canonical: { types: ['rv:DefinitionRevision'] }, closed: true, properties: [
       { path: 'rdf:type', in: ['rv:DefinitionRevision', 'rv:RevisionAnchor'], minCount: 2, maxCount: 2 },
       { path: 'rv:component', minCount: 1, maxCount: 1, class: 'rv:SemanticDefinition' },
       { path: 'rv:predecessor', maxCount: 1, class: 'rv:DefinitionRevision' },

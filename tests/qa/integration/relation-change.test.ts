@@ -65,6 +65,14 @@ test('MODEL05/MODEL06: repeated participants keep two identified occurrences and
     expect(readFirst.definition.roles.map(role => role.key)).toEqual(['source', 'target']);
     expect(readFirst.participations.map(item => item.participation)).not.toEqual(
       readSecond.participations.map(item => item.participation));
+    const nativeRoles = await f.env.fuseki.query(`PREFIX rv: <https://rezics.com/vocab/> SELECT ?part ?role ?participant WHERE {
+      GRAPH ${iri(GRAPHS.revisions)} { ?part a rv:RelationParticipation ; rv:occurrence ${iri(first.occurrence)} ;
+        rv:role ?role ; rv:participant ?participant } }`);
+    expect(nativeRoles.results?.bindings).toHaveLength(2);
+    expect(nativeRoles.results?.bindings.map(row => row.part!.value).sort())
+      .toEqual(readFirst.participations.map(item => item.participation).sort());
+    expect(nativeRoles.results?.bindings.map(row => row.participant!.value).sort())
+      .toEqual([actor.component, target.component].sort());
     expect(readFirst.participations.map(item => item.participant.ref).sort())
       .toEqual([actor.component, target.component].sort());
     expect(readFirst.participations.every(item => item.availability === 'available')).toBe(true);

@@ -12,9 +12,9 @@ import { changeSemanticComponent, checkedComponentState, readSemanticChangeTermi
 import { cancelSemanticAdmission, checkedSemanticTerminal, familyReceiptIri, SemanticChangeRejected,
   SemanticTargetUnavailable, StaleSemanticHead, type SemanticAdmission, type SemanticTerminal } from './command.ts';
 
-export type SemanticAccess = Pick<AccessAdmissionRegistry, 'register' | 'claim' | 'recordGraphOutcome' | 'canReadWork'>
-  & { canReadSemanticResource?: (principal: VerifiedPrincipal, actingSubject: string,
-    resource: string) => Promise<boolean> };
+export type SemanticAccess = Pick<AccessAdmissionRegistry,
+  'register' | 'claim' | 'recordGraphOutcome' | 'canReadWork'>
+  & Partial<Pick<AccessAdmissionRegistry, 'canReadSemanticResource'>>;
 
 /** Coarse OAuth capability; fine authority is the Access `semantic.*` grant on the exact scope. */
 export const SEMANTIC_WRITE_SCOPE = 'work:edit';
@@ -35,10 +35,10 @@ export function referenceReader(access: Pick<SemanticAccess, 'canReadSemanticRes
       || await access.canReadWork(principal, actingSubject, ref);
 }
 
-/** Without the Access semantic read check every semantic Resource reads as unavailable. */
 export async function canReadSemantic(access: Pick<SemanticAccess, 'canReadWork' | 'canReadSemanticResource'>,
   principal: VerifiedPrincipal, actingSubject: string, resource: string): Promise<boolean> {
-  return access.canReadSemanticResource ? access.canReadSemanticResource(principal, actingSubject, resource) : false;
+  if (!access.canReadSemanticResource) throw new Error('semantic Resource read authority is unavailable');
+  return access.canReadSemanticResource(principal, actingSubject, resource);
 }
 
 interface AdmittedCall<T> {

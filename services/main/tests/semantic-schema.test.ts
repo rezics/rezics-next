@@ -53,7 +53,9 @@ test('MODEL14 schema: owner profiles compile, stay open on the resource and pin 
   }
   const resource = renderProfile(byId('semantic-resource-v1'));
   // Open resource: no closure and no fixed type; only the component head and forbidden merge axiom.
-  expect(resource).not.toContain('sh:closed');
+  expect(resource.split('<https://rezics.com/definition/semantic-resource-v1/revision-shape>')[0])
+    .not.toContain('sh:closed');
+  expect(resource).toContain('revision-shape>\n    a sh:NodeShape ;\n    sh:closed true');
   // The routing type rdfs:Resource is stored alongside up to 32 caller types.
   expect(resource).toContain('sh:path rdf:type ; sh:maxCount 33 ; sh:nodeKind sh:IRI ; sh:hasValue rdfs:Resource');
   expect(resource).toContain('sh:path owl:sameAs ; sh:maxCount 0');
@@ -62,6 +64,12 @@ test('MODEL14 schema: owner profiles compile, stay open on the resource and pin 
   expect(renderProfile(byId('semantic-model-generation-v1'))).toContain('sh:hasValue rv:Excluded');
   expect(renderProfile(byId('value-exact-v1'))).toContain('sh:in ( "ltr" "rtl" )');
   expect(renderProfile(byId('relation-occurrence-v1'))).toContain('sh:path rv:occurrence ; sh:minCount 1 ; sh:maxCount 1');
+  for (const id of ['semantic-definition-v1', 'relation-occurrence-v1', 'value-exact-v1',
+    'semantic-model-generation-v1']) {
+    const profile = byId(id);
+    expect(profile.shapes.every(shape => renderProfile(profile).includes(
+      `<${shape.iri}>\n    a sh:NodeShape ;\n    sh:closed true`))).toBe(true);
+  }
   expect(definitionKindIri('relation')).toBe('https://rezics.com/vocab/RelationDefinition');
   expect(DEFINITION_KINDS.map(definitionKindIri).every(kind =>
     renderProfile(byId('semantic-definition-v1')).includes(kind.replace('https://rezics.com/vocab/', 'rv:')))).toBe(true);

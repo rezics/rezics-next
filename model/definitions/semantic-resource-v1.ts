@@ -24,7 +24,7 @@ export const semanticResourceProfile = {
       { path: 'owl:sameAs', maxCount: 0 },
     ] },
     { iri: 'https://rezics.com/definition/semantic-resource-v1/revision-shape',
-      canonical: { types: ['rv:SemanticRevision'] }, properties: [
+      canonical: { types: ['rv:SemanticRevision'] }, closed: true, properties: [
       { path: 'rdf:type', in: ['rv:SemanticRevision', 'rv:RevisionAnchor'], minCount: 2, maxCount: 2 },
       { path: 'rv:component', minCount: 1, maxCount: 1, nodeKind: 'sh:IRI' },
       { path: 'rv:predecessor', maxCount: 1, class: 'rv:SemanticRevision' },

@@ -17,7 +17,7 @@ export const valueExactProfile = {
   layout: 'compact',
   shapes: [
     { iri: 'https://rezics.com/definition/value-exact-v1/quantity-shape',
-      canonical: { types: ['schema:QuantitativeValue'] }, properties: [
+      canonical: { types: ['schema:QuantitativeValue'] }, closed: true, properties: [
       { path: 'rdf:type', hasValue: 'schema:QuantitativeValue' },
       { path: 'schema:value', minCount: 1, maxCount: 1, nodeKind: 'sh:IRIOrLiteral' },
       { path: 'schema:unitCode', minCount: 1, maxCount: 1, nodeKind: 'sh:IRI' },
@@ -27,7 +27,7 @@ export const valueExactProfile = {
       { path: 'rv:uncertainty', maxCount: 1, nodeKind: 'sh:IRIOrLiteral' },
     ] },
     { iri: 'https://rezics.com/definition/value-exact-v1/temporal-shape',
-      canonical: { types: ['time:GeneralDateTimeDescription'] }, properties: [
+      canonical: { types: ['time:GeneralDateTimeDescription'] }, closed: true, properties: [
       { path: 'rdf:type', hasValue: 'time:GeneralDateTimeDescription' },
       { path: 'rv:lexicalForm', minCount: 1, maxCount: 1, datatype: 'xsd:string', maxLength: 64 },
       { path: 'time:unitType', minCount: 1, maxCount: 1, in: ['time:unitYear', 'time:unitMonth',
@@ -41,7 +41,7 @@ export const valueExactProfile = {
       { path: 'rv:latest', maxCount: 1, datatype: 'xsd:dateTime' },
     ] },
     { iri: 'https://rezics.com/definition/value-exact-v1/directional-text-shape',
-      canonical: { types: ['rdf:CompoundLiteral'] }, properties: [
+      canonical: { types: ['rdf:CompoundLiteral'] }, closed: true, properties: [
       { path: 'rdf:type', hasValue: 'rdf:CompoundLiteral' },
       { path: 'rdf:value', minCount: 1, maxCount: 1, datatype: 'xsd:string', maxLength: 8000 },
       { path: 'rdf:language', minCount: 1, maxCount: 1, datatype: 'xsd:string',
@@ -49,7 +49,7 @@ export const valueExactProfile = {
       { path: 'rdf:direction', minCount: 1, maxCount: 1, datatype: 'xsd:string', in: ['"ltr"', '"rtl"'] },
     ] },
     { iri: 'https://rezics.com/definition/value-exact-v1/external-reference-shape',
-      canonical: { types: ['rv:ExternalReference'] }, properties: [
+      canonical: { types: ['rv:ExternalReference'] }, closed: true, properties: [
       { path: 'rdf:type', hasValue: 'rv:ExternalReference' },
       { path: 'rv:externalProvider', minCount: 1, maxCount: 1, datatype: 'xsd:string', pattern: slug },
       { path: 'rv:externalNamespace', minCount: 1, maxCount: 1, datatype: 'xsd:string', pattern: slug },

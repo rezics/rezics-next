@@ -281,6 +281,14 @@ export class AccessAdmissionRegistry {
     return this.canReadScopedResource(principal, actingSubject, `work:read:${work}`, 'work.read');
   }
 
+  /** Current disclosure decision for a semantic Resource or relation occurrence. */
+  async canReadSemanticResource(principal: VerifiedPrincipal, actingSubject: string,
+    resource: string): Promise<boolean> {
+    if (!/^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/.test(resource)
+      || !/^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/.test(actingSubject)) return false;
+    return this.canReadScopedResource(principal, actingSubject, `semantic:read:${resource}`, 'semantic.read');
+  }
+
   /** Official links also need a source-revision admission; this is target edit authority. */
   async canLinkTranslation(principal: VerifiedPrincipal, actingSubject: string,
     work: string): Promise<boolean> {

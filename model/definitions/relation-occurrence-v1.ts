@@ -15,7 +15,7 @@ export const relationOccurrenceProfile = {
   layout: 'compact',
   shapes: [
     { iri: 'https://rezics.com/definition/relation-occurrence-v1/occurrence-shape',
-      canonical: { types: ['rv:RelationOccurrence'] }, properties: [
+      canonical: { types: ['rv:RelationOccurrence'] }, closed: true, properties: [
       { path: 'rdf:type', hasValue: 'rv:RelationOccurrence' },
       { path: 'rv:relationDefinition', minCount: 1, maxCount: 1, class: 'rv:DefinitionRevision' },
       { path: 'rv:occurrenceHead', minCount: 1, maxCount: 1, class: 'rv:RelationOccurrenceRevision' },
@@ -23,7 +23,7 @@ export const relationOccurrenceProfile = {
       { path: 'owl:sameAs', maxCount: 0 },
     ] },
     { iri: 'https://rezics.com/definition/relation-occurrence-v1/participation-shape',
-      canonical: { types: ['rv:RelationParticipation'] }, properties: [
+      canonical: { types: ['rv:RelationParticipation'] }, closed: true, properties: [
       { path: 'rdf:type', hasValue: 'rv:RelationParticipation' },
       { path: 'rv:occurrence', minCount: 1, maxCount: 1, class: 'rv:RelationOccurrence' },
       { path: 'rv:role', minCount: 1, maxCount: 1, nodeKind: 'sh:IRI' },
@@ -31,7 +31,7 @@ export const relationOccurrenceProfile = {
       { path: 'schema:position', maxCount: 1, datatype: 'xsd:integer', minInclusive: 0, maxInclusive: 1023 },
     ] },
     { iri: 'https://rezics.com/definition/relation-occurrence-v1/revision-shape',
-      canonical: { types: ['rv:RelationOccurrenceRevision'] }, properties: [
+      canonical: { types: ['rv:RelationOccurrenceRevision'] }, closed: true, properties: [
       { path: 'rdf:type', in: ['rv:RelationOccurrenceRevision', 'rv:RevisionAnchor'], minCount: 2, maxCount: 2 },
       { path: 'rv:component', minCount: 1, maxCount: 1, class: 'rv:RelationOccurrence' },
       { path: 'rv:predecessor', maxCount: 1, class: 'rv:RelationOccurrenceRevision' },

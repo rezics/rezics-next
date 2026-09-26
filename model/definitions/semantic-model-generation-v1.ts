@@ -14,7 +14,7 @@ export const semanticModelGenerationProfile = {
   layout: 'compact',
   shapes: [
     { iri: 'https://rezics.com/definition/semantic-model-generation-v1/generation-shape',
-      canonical: { types: ['rv:ModelGeneration'] }, properties: [
+      canonical: { types: ['rv:ModelGeneration'] }, closed: true, properties: [
       { path: 'rdf:type', in: ['rv:ModelGeneration', 'rv:RevisionAnchor'], minCount: 2, maxCount: 2 },
       { path: 'rv:component', hasValue: '<urn:rezics:model:product>', maxCount: 1 },
       { path: 'rv:generationNumber', minCount: 1, maxCount: 1, datatype: 'xsd:integer', minInclusive: 1 },
@@ -32,7 +32,7 @@ export const semanticModelGenerationProfile = {
       { path: 'rv:sequence', minCount: 1, maxCount: 1, datatype: 'xsd:integer', minInclusive: 1 },
     ] },
     { iri: 'https://rezics.com/definition/semantic-model-generation-v1/head-shape',
-      canonical: { types: ['rv:ModelComponent'] }, properties: [
+      canonical: { types: ['rv:ModelComponent'] }, closed: true, properties: [
       { path: 'rdf:type', hasValue: 'rv:ModelComponent', maxCount: 1 },
       { path: 'rv:generationHead', minCount: 1, maxCount: 1, class: 'rv:ModelGeneration' },
     ] },
