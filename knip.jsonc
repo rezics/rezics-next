@@ -39,7 +39,10 @@
       // Consumed by the root OpenAPI generator and Eden type gate.
       "ignoreDependencies": ["@elysia/eden", "@elysia/openapi", "@scalar/types"]
     },
-    "services/account": { "entry": ["src/*.ts"], "project": ["src/**/*.ts", "tests/**/*.ts"] },
+    "services/account": {
+      "entry": ["src/*.ts", "src/oauth-scopes/*.ts"],
+      "project": ["src/**/*.ts", "tests/**/*.ts"]
+    },
     "services/content": { "entry": ["src/*.ts"], "project": ["src/**/*.ts", "tests/**/*.ts"] },
     "packages/model": { "project": ["src/**/*.ts", "tests/**/*.ts"] }
   },

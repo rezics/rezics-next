@@ -39,6 +39,56 @@ import { workRoutes } from './routes/works.ts';
 
 export type { MainWorkDependencies } from './routes/dependencies.ts';
 
+function identitySourceRoutes(fuseki: FusekiClient, work: SearchRouteDependencies) {
+  return new Elysia()
+    .use(operationsRoutes(work))
+    .use(actingContextRoutes(work))
+    .use(sourceRoutes(work))
+    .use(sourceRunRoutes(work))
+    .use(packageRoutes(work))
+    .use(packageLockRoutes(work))
+    .use(sourceSupportRoutes(fuseki, work))
+    .use(accessAuthorityRoutes(work))
+    .use(accessMembershipRoutes(work));
+}
+
+function accessSearchRoutes(fuseki: FusekiClient, work: SearchRouteDependencies) {
+  return new Elysia()
+    .use(accessRoleRoutes(work))
+    .use(accessPolicyRoutes(work))
+    .use(accessTopologyRoutes(work))
+    .use(searchRoutes(fuseki, work))
+    .use(searchGenerationRoutes(fuseki, work))
+    .use(contentRoutes(fuseki, work))
+    .use(ratingRoutes(fuseki, work))
+    .use(globalRatingRoutes(work))
+    .use(classificationRoutes(fuseki, work));
+}
+
+function contentCommunityRoutes(fuseki: FusekiClient, work: SearchRouteDependencies) {
+  return new Elysia()
+    .use(contextRoutes(fuseki, work))
+    .use(spaceRoutes(fuseki, work))
+    .use(publicationRoutes(fuseki, work))
+    .use(contributionRoutes(fuseki, work))
+    .use(addressRoutes(work))
+    .use(commerceRoutes(fuseki, work))
+    .use(resourceRoutes(fuseki, work))
+    .use(protectionRoutes(work))
+    .use(claimRoutes(work));
+}
+
+function domainRoutes(fuseki: FusekiClient, work: SearchRouteDependencies) {
+  return new Elysia()
+    .use(erasureRoutes(work))
+    .use(notificationRoutes(work))
+    .use(reportRoutes(work))
+    .use(rightsRoutes(work))
+    .use(recommendationRoutes(work))
+    .use(graphLayoutRoutes(work))
+    .use(workRoutes(fuseki, work));
+}
+
 /** Composition root: each domain plugin under `routes/` owns its registrations. */
 export function createMainApp(fuseki: FusekiClient, work?: SearchRouteDependencies) {
   // Registered first so it also handles every plugin route mounted below.
@@ -53,41 +103,13 @@ export function createMainApp(fuseki: FusekiClient, work?: SearchRouteDependenci
     })
     .use(healthRoutes(fuseki, work));
   if (work) {
+    // Nested groups keep each .use() chain short enough for TypeScript to infer MainApp;
+    // add a new domain plugin to the last group.
     return app
-      .use(operationsRoutes(work))
-      .use(actingContextRoutes(work))
-      .use(sourceRoutes(work))
-      .use(sourceRunRoutes(work))
-      .use(packageRoutes(work))
-      .use(packageLockRoutes(work))
-      .use(sourceSupportRoutes(fuseki, work))
-      .use(accessAuthorityRoutes(work))
-      .use(accessMembershipRoutes(work))
-      .use(accessRoleRoutes(work))
-      .use(accessPolicyRoutes(work))
-      .use(accessTopologyRoutes(work))
-      .use(searchRoutes(fuseki, work))
-      .use(searchGenerationRoutes(fuseki, work))
-      .use(contentRoutes(fuseki, work))
-      .use(ratingRoutes(fuseki, work))
-      .use(globalRatingRoutes(work))
-      .use(classificationRoutes(fuseki, work))
-      .use(contextRoutes(fuseki, work))
-      .use(spaceRoutes(fuseki, work))
-      .use(publicationRoutes(fuseki, work))
-      .use(contributionRoutes(fuseki, work))
-      .use(addressRoutes(work))
-      .use(commerceRoutes(fuseki, work))
-      .use(resourceRoutes(fuseki, work))
-      .use(protectionRoutes(work))
-      .use(claimRoutes(work))
-      .use(erasureRoutes(work))
-      .use(notificationRoutes(work))
-      .use(reportRoutes(work))
-      .use(rightsRoutes(work))
-      .use(recommendationRoutes(work))
-      .use(graphLayoutRoutes(work))
-      .use(workRoutes(fuseki, work));
+      .use(identitySourceRoutes(fuseki, work))
+      .use(accessSearchRoutes(fuseki, work))
+      .use(contentCommunityRoutes(fuseki, work))
+      .use(domainRoutes(fuseki, work));
   }
   return app;
 }
