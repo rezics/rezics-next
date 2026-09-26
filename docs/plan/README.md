@@ -34,8 +34,8 @@ does not supply a current backend completion percentage.
 | [G-003](../goals/tasks/G-003.md) / IAM06 | Exact membership-episode dependency for group grants and role bindings; Access admission/claim and recovery owner. | Integrated and affected-verified on `ec52812` (including repair commit): three Access integration files passed together on stable merged source in `20260926t043554-36f7ab`; `yarn check:backend` passed. Test DB clone isolation and role recovery digest coverage were repaired. IAM06/IAM33 remain partial. Worker task `01a0dbee-930a-7da1-8f08-d837374cfb0c` finished. |
 | [G-004](../goals/tasks/G-004.md) / IAM06 | Recipient-verified consent artifact for one membership episode; depends on integrated G-003. | Integrated and affected-verified on `2ef77f2`: four Access integration files passed together in `20260926t045038-2bda5c`; isolated Access PITR `20260926t045038-360a3a` and `yarn check:backend` passed on stable merged source. Recipient issue/revoke/one-use, exact generation and current mandate checks are present. IAM06 remains partial for private-principal and wider Realm participation. Worker task `01a0dc00-925a-7d40-8578-388f6c47a690` finished. |
 | [G-005](../goals/tasks/G-005.md) / PKG05 | Exact local Go module replacement snapshot and pinned native oracle; independent of G-004 Access consent. | Integrated and affected-verified on `87d5d11`: unit Go MVS 10/10, real PostgreSQL/Main API `20260926t044924-01fc3a`, Go 1.27.1 native oracle and `yarn check:backend` passed on merged source. PKG05/PKG12 remain partial; worker task `01a0dc02-72a1-7ca0-8881-fce754cd1b13` finished. |
-| [G-006](../goals/tasks/G-006.md) / IAM06 | Private-principal Org/Realm membership and authority; depends on G-004 consent owner. | Isolated worktree setup queued from clean `1958dcd` as `client-new-thread:54fa2312-e396-4ef5-97a3-4bbc92f28b03`; owner schema and recipient identity come first. IAM06 remains partial. |
-| [G-007](../goals/tasks/G-007.md) / PKG05 | Captured Go 1.17+ module graph pruning and pinned native differential oracle; depends on integrated G-005. | Isolated worktree setup queued from clean `1958dcd` as `client-new-thread:327d6c7b-fe65-4ab2-b292-4cf400b7d473`. Preserve separate Go 1.16 profile and partial PKG05/PKG12/PKG13 status. |
+| [G-006](../goals/tasks/G-006.md) / IAM06 | Private-principal Org/Realm membership and authority; depends on G-004 consent owner. | Running in worktree task `01a0dc0e-79c1-7750-8c1e-d64e7c2c85b0` from clean `1958dcd`; an independent private Access tuple is being built rather than a public Agent surrogate. IAM06 remains partial. |
+| [G-007](../goals/tasks/G-007.md) / PKG05 | Captured Go 1.17+ module graph pruning and pinned native differential oracle; depends on integrated G-005. | Running in isolated package worktree from clean `1958dcd`, dispatched as `client-new-thread:327d6c7b-fe65-4ab2-b292-4cf400b7d473`. Preserve separate Go 1.16 profile and partial PKG05/PKG12/PKG13 status. |
 | Authority and model backlog | IAM07–IAM37 and MODEL05–MODEL27 gaps, sequenced behind required Access and semantic owner decisions. | Planned at the [operation map](backend-operations.md); create bounded briefs when interfaces stabilize. |
 | Content, Space and community backlog | CTX, WORK, RATE, GRAPH, VIEW, BOOK, RECIPE, SUB and other M01–M10 gaps. | Planned at the operation map; retain all backend assertions. |
 | Search, sources and packages backlog | SEARCH, LIVE, PKG and HUB gaps after B75, with source/owner integration and recovery. | Planned at the operation map; selected B14–B74 evidence remains partial where named. |
@@ -64,6 +64,23 @@ to miss: two integrated slices have produced zero newly complete IDs against
 the 276 retained cases. The remaining dependency graph is not yet measured well
 enough for a defensible later finish timestamp. Continue the full scope and
 revise this forecast at the next checkpoint or sooner on a material change.
+
+**30-minute checkpoint, 2026-09-26 04:57 UTC.** G-003, G-004 and G-005 joined
+G-001/G-002 on clean `main`. The merged selections passed real Access membership,
+grant, group and role integration, recipient-consent PITR, local Go replacement
+API, native Go oracle and backend static checks; no newly complete retained
+backend ID has been established by these partial slices. G-006 and G-007 occupy
+the two permitted independent worktree slots, with no committed handoff waiting
+for integration. The critical path still includes private-principal and wider
+Realm admission, the remaining package ecosystems, source field/child/withdrawal
+owners, most M01–M10 operation families, a complete reusable fixture, fresh
+construction and full recorded backend QA. The small stopped-state restore
+probe does not qualify the complete fixture. The 13:57 UTC ten-hour target is
+still forecast to miss: five integrated slices in one hour produced zero newly
+complete IDs against 276 retained backend cases. A later finish time is not
+defensible until the remaining owner interfaces and full-case throughput are
+measured. Keep the full acceptance set and dispatch immediately on handoff or
+blocker; revisit by 05:27 UTC or sooner on a material change.
 
 ### Backend-only ten-hour proposal
 
