@@ -363,7 +363,7 @@ export const profileRegistry = {
     ]
   },
   "poll-snapshot-v1": {
-    "sha256": "3ec7e743c3f0d69b20bb231c7deb1988aba0b23fffbb3a91a8d3855e5b365751",
+    "sha256": "f9471026df8866e1ce6379325f83fe20f7be7b3b68d160386e5a1319665b8214",
     "file": "shapes/poll-snapshot-v1.ttl",
     "shapes": [
       "https://rezics.com/definition/poll-snapshot-v1/poll-shape",

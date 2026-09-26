@@ -451,6 +451,7 @@ export const iri = {
   "rv:FloatingCivilTime": "https://rezics.com/vocab/FloatingCivilTime",
   "rv:FollowContext": "https://rezics.com/vocab/FollowContext",
   "rv:FrozenAtOpening": "https://rezics.com/vocab/FrozenAtOpening",
+  "rv:frozenProxyRoute": "https://rezics.com/vocab/frozenProxyRoute",
   "rv:generation": "https://rezics.com/vocab/generation",
   "rv:generationHead": "https://rezics.com/vocab/generationHead",
   "rv:generationNumber": "https://rezics.com/vocab/generationNumber",

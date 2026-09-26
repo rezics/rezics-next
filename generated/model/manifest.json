@@ -251,7 +251,7 @@
     },
     {
       "id": "poll-snapshot-v1",
-      "sha256": "3ec7e743c3f0d69b20bb231c7deb1988aba0b23fffbb3a91a8d3855e5b365751",
+      "sha256": "f9471026df8866e1ce6379325f83fe20f7be7b3b68d160386e5a1319665b8214",
       "file": "shapes/poll-snapshot-v1.ttl"
     },
     {
@@ -2186,7 +2186,7 @@
     "contexts/main-default-selection-v1.jsonld": "f08bbc6a41d97eef45c81812c1938ede21b1a8a4a5a34abbbfa07c9d04ec3cd3",
     "contexts/poll-allocation-v1.jsonld": "d9e2c115b4ede5d0d2e6e63bc246f59c90f17ce112d9047bc8c669f12aab9a57",
     "contexts/poll-resolution-v1.jsonld": "b3ceb6ec3f789b15b77014d610facbb77100f46ed31bc7fb211b3963f08273a7",
-    "contexts/poll-snapshot-v1.jsonld": "4e9cbdcdcf22422d5e7b1bd49548a2b8f96991b26585f6a44b4edfba326d2424",
+    "contexts/poll-snapshot-v1.jsonld": "9fb3fab241d6162821eee026cd8678198c5c819be32ac318a4eb00fce78a23f7",
     "contexts/proposal-v1.jsonld": "9b15fd249376b05db294eafb5296b6209d8f51451801b07c111f5acc4e57bc23",
     "contexts/protection-revision-v1.jsonld": "a34ff68ba13da88dbdfb1e08ba33757dda7cfebefc0390972bf72861173b27b2",
     "contexts/rating-aggregate-default-policy-v1.jsonld": "a2e6e731c50a827471cefd97aaeca10ba0b6e8a87a1ddf912258c5e7fe759d38",
@@ -2255,7 +2255,7 @@
     "shapes/main-default-selection-v1.ttl": "92f91c7e990901a457bd688dd47f576178ffa1daa90f35a4d2d1c53f751de52a",
     "shapes/poll-allocation-v1.ttl": "c277302719c0570563b7889276e106b9a1cee676551b2932299ad7cf03910ae4",
     "shapes/poll-resolution-v1.ttl": "47413e42bb40731c023a3129dd1c878b335e73ea20bc6e45204cb166bf2a4654",
-    "shapes/poll-snapshot-v1.ttl": "3ec7e743c3f0d69b20bb231c7deb1988aba0b23fffbb3a91a8d3855e5b365751",
+    "shapes/poll-snapshot-v1.ttl": "f9471026df8866e1ce6379325f83fe20f7be7b3b68d160386e5a1319665b8214",
     "shapes/proposal-v1.ttl": "5fa5082efb1b4215773347902cf82a11dc925ed9bdb4396cc2461006fe8291ce",
     "shapes/protection-revision-v1.ttl": "92a6e82e55849a2c3ab4bae1076cb8d17f18a4516870d3d46bbd7f050bcdb396",
     "shapes/rating-aggregate-default-policy-v1.ttl": "0d9a0acbe78f4043628960ed5942b64bc7a90d915e5e1fe0cb40938bda5f6fe4",
@@ -2298,8 +2298,8 @@
     "shapes/work-title-control-v1.ttl": "100dddad43cac4fd47c3090e987ef9dc9aa272d189fc4240cc08302340c5d42d",
     "shapes/zone-capability-v1.ttl": "b0374ad8d4506ef6a3337f784e77d97470a3df881f211c74a3281d2430365015",
     "packages/model/src/generated/arbitraries.ts": "cd866acec979e18f2f5abda479bc38bc1e077be23120864581821869168d907b",
-    "packages/model/src/generated/profiles.ts": "e36cb925ee49982863b8de20870f22764324d4a39266bae1f82f106c8f33730d",
-    "packages/model/src/generated/schemas.ts": "66613f98186042e67e52c5d9c550b140cb4e91a8f9d1ef58f50dcc313a79f55c",
-    "packages/model/src/generated/vocabulary.ts": "f392b39ee8f2e632dd2247deb2aac7dd34231f1be5957acf6c56519501b89d84"
+    "packages/model/src/generated/profiles.ts": "c3bf9754d8b5799ab2f97cf5449848260cec1cfbf2f27e1b06af149ebce438cf",
+    "packages/model/src/generated/schemas.ts": "d07f50defeab9e402e2db937d47edbdbae5ac4799e00b0c6493841a2fa7a4028",
+    "packages/model/src/generated/vocabulary.ts": "0a51ca818097bdda4c89788f35c85197dd46ffeb39b9213ec0c46e0a6f3faf42"
   }
 }

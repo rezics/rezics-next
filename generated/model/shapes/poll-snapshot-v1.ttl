@@ -13,6 +13,7 @@
     sh:property [ sh:path rv:governingBody ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
     sh:property [ sh:path rv:electorateCharter ; sh:minCount 1 ; sh:maxCount 1 ; sh:class rv:ElectorateCharterRevision ] ;
     sh:property [ sh:path rv:questionHead ; sh:minCount 1 ; sh:maxCount 1 ; sh:class rv:PollQuestionRevision ] ;
+    sh:property [ sh:path rv:proposalRevision ; sh:maxCount 1 ; sh:class rv:ProposalRevision ] ;
     sh:property [ sh:path rv:pollState ; sh:minCount 1 ; sh:maxCount 1 ; sh:in ( rv:PollDraft rv:PollOpen rv:PollClosed rv:PollFinalized ) ] ;
     sh:property [ sh:path rv:electorateSnapshot ; sh:maxCount 1 ; sh:class rv:ElectorateSnapshot ] ;
     sh:property [ sh:path rv:pollOpening ; sh:maxCount 1 ; sh:class rv:PollOpening ] ;
@@ -85,6 +86,7 @@
     sh:property [ sh:path rv:electorateSnapshot ; sh:minCount 1 ; sh:maxCount 1 ; sh:class rv:ElectorateSnapshot ] ;
     sh:property [ sh:path rv:allocationManifestDigest ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:string ; sh:pattern "^[0-9a-f]{64}$" ] ;
     sh:property [ sh:path rv:proxyRouteManifestDigest ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:string ; sh:pattern "^[0-9a-f]{64}$" ] ;
+    sh:property [ sh:path rv:frozenProxyRoute ; sh:class rv:ProxyRouteRevision ] ;
     sh:property [ sh:path rv:seatCount ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:integer ; sh:minInclusive 1 ; sh:maxInclusive 2000000 ] ;
     sh:property [ sh:path rv:countedUnits ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:integer ; sh:minInclusive 1 ; sh:maxInclusive 2000000000 ] ;
     sh:property [ sh:path rv:openingDigest ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:string ; sh:pattern "^[0-9a-f]{64}$" ] ;

@@ -51,6 +51,10 @@
       "@id": "https://rezics.com/vocab/entitlementCount",
       "@type": "xsd:integer"
     },
+    "rv:frozenProxyRoute": {
+      "@id": "https://rezics.com/vocab/frozenProxyRoute",
+      "@type": "@id"
+    },
     "rv:governingBody": {
       "@id": "https://rezics.com/vocab/governingBody",
       "@type": "@id"
