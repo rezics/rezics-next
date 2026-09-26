@@ -620,7 +620,11 @@ async function closeTask(id: string, outcome: string): Promise<void> {
     if (outcome === 'verified' && task.state !== 'merged' && !readOnly) {
       throw new Error(`${task.id} is ${task.state}, not merged`);
     }
-    if (existsSync(task.worktree)) git(root, ['worktree', 'remove', '--force', task.worktree]);
+    if (existsSync(task.worktree)) {
+      // Tasks may leave intentionally read-only artifacts (for example immutable release trees).
+      spawnSync('chmod', ['-R', 'u+w', task.worktree]);
+      git(root, ['worktree', 'remove', '--force', task.worktree]);
+    }
     if (task.state === 'merged') git(root, ['branch', '-d', task.branch], true);
     task.state = outcome;
     task.closedAt = new Date().toISOString();
