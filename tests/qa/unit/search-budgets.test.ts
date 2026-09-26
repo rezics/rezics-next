@@ -13,7 +13,8 @@ import { queryPublicContentPhrase }
 import { profileRegistry } from '../../../packages/model/src/generated/profiles.ts';
 import type { ContentCore } from '../../../services/content/src/core.ts';
 import type { ContentProjectionCursor } from '../../../services/content/src/projection-cursor.ts';
-import { assertPublicTextReady, assertQuerySnapshotMoved, SearchIndexUnavailable, SearchRequestTimedOut,
+import { assertPublicTextReady, assertQuerySnapshotMoved, SearchIndexBudgetExceeded,
+  SearchIndexUnavailable, SearchRequestTimedOut,
   SearchSnapshotMoved, withStableSearchSnapshot, type SearchAttemptDiagnostic }
   from '../../../services/main/src/modules/work/search-readiness.ts';
 import { COMMAND_MODULE_VERSION } from '../../../services/main/src/infrastructure/profile.ts';
@@ -24,11 +25,11 @@ const main = 'https://rezics.com/id/22222222-2222-4222-8222-222222222222';
 const sense = 'https://rezics.com/id/33333333-3333-4333-8333-333333333333';
 const binding = (value: string) => ({ type: 'literal', value });
 
-function fake() {
+function fake(initialPopulation = 102) {
   let sequence = '7';
   let generationCurrent = generation;
-  let population = 102;
-  let indexed = 102;
+  let population = initialPopulation;
+  let indexed = initialPopulation;
   let instanceId = '11111111-1111-4111-8111-111111111111';
   let publicSearchWriteEpoch = 0;
   let publicSearchWriteActive = false;
@@ -282,6 +283,33 @@ test('SEARCH07/SEARCH15/SEARCH18: certified affected-unit replay avoids a corpus
   source.commitDelta([{ unit: 'urn:rezics:match:new', before: true, after: true }]);
   expect((await assertPublicTextReady(source.fuseki, lineage)).population).toBe(102);
   expect(source.counts()).toMatchObject({ inventories: 1, deltaCalls: 3 });
+});
+
+test('SEARCH07/SEARCH10: replay work is fixed by affected units across unrelated corpus sizes', async () => {
+  const lineage = { dataEpoch: 'epoch', routingEpoch: 'routing' };
+  for (const corpus of [100, 1_000, 10_000]) {
+    for (const affected of [1, 8, 64]) {
+      const source = fake(corpus);
+      source.enableDelta();
+      expect((await assertPublicTextReady(source.fuseki, lineage)).population).toBe(corpus);
+      source.commitDelta(Array.from({ length: affected }, (_, index) => ({
+        unit: `urn:rezics:match:changed-${corpus}-${affected}-${index}`,
+        before: true, after: true,
+      })));
+      expect((await assertPublicTextReady(source.fuseki, lineage)).population).toBe(corpus);
+      expect(source.counts()).toMatchObject({ inventories: 1, deltaCalls: 2 });
+    }
+  }
+  const overAffected = fake(10_000);
+  overAffected.enableDelta();
+  await assertPublicTextReady(overAffected.fuseki, lineage);
+  overAffected.commitDelta(Array.from({ length: 65 }, (_, index) => ({
+    unit: `urn:rezics:match:over-${index}`, before: true, after: true,
+  })));
+  await assertPublicTextReady(overAffected.fuseki, lineage);
+  expect(overAffected.counts()).toMatchObject({ inventories: 2, deltaCalls: 3 });
+  await expect(assertPublicTextReady(fake(20_001).fuseki, lineage))
+    .rejects.toBeInstanceOf(SearchIndexBudgetExceeded);
 });
 
 test('SEARCH15/SEARCH17/SEARCH18: gap, bypass gate, restart and generation force a full audit', async () => {
