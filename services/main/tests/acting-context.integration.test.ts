@@ -167,7 +167,7 @@ test('IAM01/IAM03/IAM04: Account and Access check explicit Agents without poolin
       contexts: Array<{ actingSubject: string }>;
       directContexts: Array<{ actingSubject: string }>;
       preferredActingSubject: string | null; preferenceRevision: string | null };
-    expect(firstBody.contexts.map(item => item.actingSubject).sort())
+    expect(firstBody.contexts.map(item => item.actingSubject))
       .toEqual([agentA, agentB].sort());
     expect(firstBody.preferredActingSubject).toBeNull();
     expect(firstBody.preferenceRevision).toBeNull();
@@ -560,8 +560,9 @@ test('IAM01/IAM03/IAM04: Account and Access check explicit Agents without poolin
     const countedDiscovery = await new AccessActingContexts(countedPool).discover({
       issuer: `${base}/api/auth`, subject: first.id,
     });
-    // Transaction setup, one bounded group path and one direct proof account
-    // for the fixed 15 calls; growth in the candidate set adds no round trips.
+    // Transaction setup, the active bounds profile and candidates in one read,
+    // one bounded group path and one direct proof account for the fixed 15 calls.
+    // Growth in the candidate set adds no round trips.
     expect(discoveryQueries).toBeLessThanOrEqual(15);
     for (const agent of groupedAgents) {
       expect(countedDiscovery.contexts).toContainEqual({ actingSubject: agent });

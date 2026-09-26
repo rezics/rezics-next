@@ -88,15 +88,15 @@ function validProfile(profile: OperationalBoundsProfile): void {
   }
 }
 
-type ProfileRow = { id: string } & Record<string, number | string>;
+export type ProfileRow = { id: string } & Record<string, number | string | null>;
 
-function fromRow(row: ProfileRow): OperationalBoundsProfile {
+export function accessBoundsFromRow(row: ProfileRow): OperationalBoundsProfile {
   const profile = { id: row.id } as OperationalBoundsProfile;
   for (const bound of BOUNDS) profile[bound] = Number(row[COLUMNS[bound]]);
   return profile;
 }
 
-const ACTIVE_PROFILE = `SELECT p.* FROM access.operational_bounds_activation a
+export const ACTIVE_ACCESS_BOUNDS_SQL = `SELECT p.* FROM access.operational_bounds_activation a
   JOIN access.operational_bounds_profile p ON p.id = a.profile_id WHERE a.singleton`;
 
 /**
@@ -107,9 +107,9 @@ const ACTIVE_PROFILE = `SELECT p.* FROM access.operational_bounds_activation a
  */
 export async function readAccessBounds(client: Pick<PoolClient, 'query'>,
   unavailable: (message: string) => Error, lock = false): Promise<OperationalBoundsProfile> {
-  const result = await client.query<ProfileRow>(`${ACTIVE_PROFILE}${lock ? ' FOR SHARE OF a' : ''}`);
+  const result = await client.query<ProfileRow>(`${ACTIVE_ACCESS_BOUNDS_SQL}${lock ? ' FOR SHARE OF a' : ''}`);
   if (!result.rows[0]) throw unavailable('operational bounds profile is not activated');
-  return fromRow(result.rows[0]);
+  return accessBoundsFromRow(result.rows[0]);
 }
 
 /**
@@ -227,7 +227,7 @@ export async function activateOperationalBounds(pool: Pool,
       FROM access.operational_bounds_activation WHERE singleton FOR UPDATE`);
     const activation = current.rows[0];
     if (!activation) throw new OperationalBoundsInvalid('operational bounds activation is missing');
-    const active = fromRow((await client.query<ProfileRow>(
+    const active = accessBoundsFromRow((await client.query<ProfileRow>(
       'SELECT * FROM access.operational_bounds_profile WHERE id = $1', [activation.profile_id])).rows[0]!);
     const stored = (await client.query<ProfileRow>(
       'SELECT * FROM access.operational_bounds_profile WHERE id = $1', [requested.id])).rows[0];
