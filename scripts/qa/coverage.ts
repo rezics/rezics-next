@@ -1,274 +1,29 @@
-import { isQaE2ePath, titleIds, type Case, type TestResult } from './acceptance.ts';
+import { isQaE2ePath, titleIds, type Case } from './acceptance.ts';
+import type { CaseDeclarations, TestIdentity } from './coverage/declaration.ts';
+import { modelCases } from './coverage/model.ts';
+import { iamCases } from './coverage/iam.ts';
+import { viewCases } from './coverage/view.ts';
+import { sysCases } from './coverage/sys.ts';
+import { workCases } from './coverage/work.ts';
+import { rateCases } from './coverage/rate.ts';
+import { searchCases } from './coverage/search.ts';
 
-type TestIdentity = Pick<TestResult, 'tier' | 'file' | 'name'>;
+/** Declare only cases whose full scenario is exercised by the named tests. Each
+ * acceptance ID prefix owns one declaration file under `coverage/`. */
+const completeCases: Record<string, readonly TestIdentity[]> = mergeCaseDeclarations([
+  modelCases, iamCases, viewCases, sysCases, workCases, rateCases, searchCases,
+]);
 
-/** Declare only cases whose full scenario is exercised by the named tests. */
-const completeCases: Record<string, readonly TestIdentity[]> = {
-  MODEL02: [{
-    tier: 'integration',
-    file: 'tests/qa/integration/work-scalar-value.test.ts',
-    name: 'MODEL02: real Account/Access/Main/Jena scalar write, exact read, denial and stale guard',
-  }, {
-    tier: 'fault/recovery',
-    file: 'tests/qa/fault-recovery/work-scalar-recovery.test.ts',
-    name: 'MODEL02/OPS03: held graph restore replays exact scalar and title Work revisions',
-  }, {
-    tier: 'model',
-    file: 'model/tests/native-equivalence.test.ts',
-    name: 'MODEL02: Work scalar native fixture preserves recorded outcomes and digest',
-  }],
-  IAM01: [{
-    tier: 'integration',
-    file: 'services/main/tests/acting-context.integration.test.ts',
-    name: 'IAM01/IAM03/IAM04: Account and Access check explicit Agents without pooling or tab state',
-  }],
-  IAM03: [{
-    tier: 'integration',
-    file: 'services/main/tests/acting-context.integration.test.ts',
-    name: 'IAM01/IAM03/IAM04: Account and Access check explicit Agents without pooling or tab state',
-  }],
-  IAM06: [{
-    tier: 'integration',
-    file: 'tests/qa/integration/access-membership-api.test.ts',
-    name: 'IAM06: Org/Realm leave and rejoin fence dependent grants but retain bans',
-  }, {
-    tier: 'integration',
-    file: 'tests/qa/integration/access-private-membership-api.test.ts',
-    name: 'IAM06/IAM10/IAM33/IAM34: private membership binds exact direct, group and role authority',
-  }, {
-    tier: 'integration',
-    file: 'tests/qa/integration/access-org-realm-api.test.ts',
-    name: 'IAM23/IAM24/IAM06: independent Org/Realm participation requires two exact authorities',
-  }, {
-    tier: 'fault/recovery',
-    file: 'services/main/tests/access-pitr.integration.test.ts',
-    name: 'OPS03/IAM07/IAM06/IAM23/IAM24/IAM25/IAM26: archived Access WAL restores exact authority and participation (partial)',
-  }],
-  VIEW01: [{
-    tier: 'integration',
-    file: 'tests/qa/integration/work-address-api.test.ts',
-    name: 'VIEW01/VIEW02: Work address claims, renames and dispositions preserve exact identities',
-  }],
-  VIEW02: [{
-    tier: 'integration',
-    file: 'tests/qa/integration/work-address-api.test.ts',
-    name: 'VIEW01/VIEW02: Work address claims, renames and dispositions preserve exact identities',
-  }, {
-    tier: 'unit',
-    file: 'tests/qa/unit/work-address-chain.test.ts',
-    name: 'VIEW02: bounded redirect traversal preserves a valid last hop',
-  }, {
-    tier: 'unit',
-    file: 'tests/qa/unit/work-address-chain.test.ts',
-    name: 'VIEW02: a valid chain past the bound is unavailable, not missing',
-  }, {
-    tier: 'unit',
-    file: 'tests/qa/unit/work-address-chain.test.ts',
-    name: 'VIEW02: a cycle or missing redirect target is unavailable',
-  }],
-  IAM10: [{
-    tier: 'integration',
-    file: 'tests/qa/integration/authenticated-api-journey.test.ts',
-    name: 'IAM01/IAM10/IAM21/MODEL01/MODEL08/WORK01/WORK05/WORK09/BOOK04/CTX01/CTX02/SEARCH01: authenticated S2 API journey',
-  }],
-  IAM23: [{
-    tier: 'integration',
-    file: 'tests/qa/integration/access-org-realm-api.test.ts',
-    name: 'IAM23/IAM24/IAM06: independent Org/Realm participation requires two exact authorities',
-  }, {
-    tier: 'integration',
-    file: 'tests/qa/integration/organization-publication-moderation.test.ts',
-    name: 'IAM23/IAM24: exact organization publication moderation and suspension affect only the admitted Realm',
-  }, {
-    tier: 'fault/recovery',
-    file: 'tests/qa/fault-recovery/organization-publication-recovery.test.ts',
-    name: 'IAM23/OPS03: isolated Access cuts and graph replay preserve one exact local organization rejection',
-  }],
-  IAM24: [{
-    tier: 'integration',
-    file: 'tests/qa/integration/access-org-realm-api.test.ts',
-    name: 'IAM23/IAM24/IAM06: independent Org/Realm participation requires two exact authorities',
-  }, {
-    tier: 'integration',
-    file: 'tests/qa/integration/access-managed-organization-api.test.ts',
-    name: 'IAM24/IAM23/IAM06: explicit managed organization grants protect a real roster policy operation (partial)',
-  }, {
-    tier: 'integration',
-    file: 'tests/qa/integration/access-org-realm-move-api.test.ts',
-    name: 'IAM24/IAM06: atomic Org Realm moves bind exact authorities, paired history and bounded receipts',
-  }, {
-    tier: 'integration',
-    file: 'tests/qa/integration/organization-publication-moderation.test.ts',
-    name: 'IAM23/IAM24: exact organization publication moderation and suspension affect only the admitted Realm',
-  }, {
-    tier: 'fault/recovery',
-    file: 'services/main/tests/access-pitr.integration.test.ts',
-    name: 'OPS03/IAM07/IAM06/IAM23/IAM24/IAM25/IAM26: archived Access WAL restores exact authority and participation (partial)',
-  }],
-  IAM25: [{
-    tier: 'integration',
-    file: 'tests/qa/integration/access-eligible-org-member-set-api.test.ts',
-    name: 'IAM25: B grants the exact eligible A-member set; P exercises it as P',
-  }, {
-    tier: 'fault/recovery',
-    file: 'services/main/tests/access-pitr.integration.test.ts',
-    name: 'OPS03/IAM07/IAM06/IAM23/IAM24/IAM25/IAM26: archived Access WAL restores exact authority and participation (partial)',
-  }],
-  IAM26: [{
-    tier: 'integration',
-    file: 'tests/qa/integration/access-representation-api.test.ts',
-    name: 'IAM26: exact P-to-A mandate and B-to-A grant change only B roster with private P proof',
-  }, {
-    tier: 'fault/recovery',
-    file: 'services/main/tests/access-pitr.integration.test.ts',
-    name: 'OPS03/IAM07/IAM06/IAM23/IAM24/IAM25/IAM26: archived Access WAL restores exact authority and participation (partial)',
-  }],
-  SYS02: [{
-    tier: 'fault/recovery',
-    file: 'tests/qa/fault-recovery/lost-response.test.ts',
-    name: 'SYS02: a real lost Fuseki response resolves to one Main Work receipt and outbox batch',
-  }],
-  WORK01: [{
-    tier: 'integration',
-    file: 'tests/qa/integration/web-auth-bootstrap.test.ts',
-    name: 'IAM01/WORK01: authenticated metadata-only Work has an empty Main Version',
-  }, {
-    tier: 'e2e',
-    file: 'apps/web/tests/authenticated-create.e2e.ts',
-    name: 'WORK01: authenticated member creates a metadata-only Work with an empty Main Version',
-  }],
-  WORK02: [{
-    tier: 'integration',
-    file: 'tests/qa/integration/native-variants.test.ts',
-    name: 'WORK02: two same-language native variants keep one Main spine and sparse reader choice',
-  }, {
-    tier: 'integration',
-    file: 'tests/qa/integration/translated-work-links.test.ts',
-    name: 'WORK02: independent translated Works retain exact and unresolved source provenance',
-  }, {
-    tier: 'fault/recovery',
-    file: 'tests/qa/fault-recovery/translated-work-recovery.test.ts',
-    name: 'WORK02/OPS03: isolated graph loss restores exact translated Work links from retained events',
-  }],
-  WORK03: [{
-    tier: 'integration',
-    file: 'tests/qa/integration/public-selection-oracle.test.ts',
-    name: 'CTX02/CTX03/WORK03/SEARCH07/SEARCH19: joined decisions and Realm selection refresh only affected roots',
-  }],
-  WORK05: [{
-    tier: 'integration',
-    file: 'tests/qa/integration/authenticated-api-journey.test.ts',
-    name: 'IAM01/IAM10/IAM21/MODEL01/MODEL08/WORK01/WORK05/WORK09/BOOK04/CTX01/CTX02/SEARCH01: authenticated S2 API journey',
-  }, {
-    tier: 'fault/recovery',
-    file: 'tests/qa/fault-recovery/fixed-release-recovery.test.ts',
-    name: 'MODEL01/WORK05/OPS03: graph loss restores only the admitted fixed release and exact bytes',
-  }],
-  WORK09: [{
-    tier: 'integration',
-    file: 'tests/qa/integration/content-publication-native.test.ts',
-    name: 'WORK09/WORK10/SEARCH03/SEARCH19: Content CAS, private drafts and exact public search',
-  }],
-  RATE01: [{
-    tier: 'fault/recovery',
-    file: 'tests/qa/fault-recovery/rating-daily.test.ts',
-    name: 'RATE01/RATE02/RATE03/RATE05/OPS03: Rating identities and policy survive real API races and graph loss',
-  }, {
-    tier: 'unit',
-    file: 'services/main/tests/rating-aggregate.test.ts',
-    name: 'RATE01: separately labeled exact reductions preserve rater and observation denominators',
-  }, {
-    tier: 'unit',
-    file: 'services/main/tests/rating-aggregate.test.ts',
-    name: 'RATE01/RATE04: latest selection includes tombstones and deterministic evaluation ties',
-  }, {
-    tier: 'unit',
-    file: 'services/main/tests/rating-aggregate.test.ts',
-    name: 'RATE01: rational distributions retain noninteger rater means and empty populations',
-  }],
-  RATE02: [{
-    tier: 'fault/recovery',
-    file: 'tests/qa/fault-recovery/rating-daily.test.ts',
-    name: 'RATE01/RATE02/RATE03/RATE05/OPS03: Rating identities and policy survive real API races and graph loss',
-  }, {
-    tier: 'model',
-    file: 'model/tests/experience-rating.test.ts',
-    name: 'RATE02/MODEL17: experience shapes bind occasion predecessor and immutable evaluation times',
-  }, {
-    tier: 'unit',
-    file: 'services/main/tests/rating-experience.test.ts',
-    name: 'RATE02: intentional occasions and request identity are independent of private ownership',
-  }],
-  RATE03: [{
-    tier: 'fault/recovery',
-    file: 'tests/qa/fault-recovery/rating-daily.test.ts',
-    name: 'RATE01/RATE02/RATE03/RATE05/OPS03: Rating identities and policy survive real API races and graph loss',
-  }, {
-    tier: 'model',
-    file: 'model/tests/daily-rating.test.ts',
-    name: 'RATE03/MODEL17: daily shapes and native bindings reject missing or mismatched calendar fields',
-  }, {
-    tier: 'unit',
-    file: 'services/main/tests/rating-calendar.test.ts',
-    name: 'RATE03: server civil periods resolve DST, repeated hours and skipped midnight',
-  }, {
-    tier: 'unit',
-    file: 'services/main/tests/rating-calendar.test.ts',
-    name: 'RATE03: daily slots count the private principal and civil day independently of personas',
-  }],
-  RATE04: [{
-    tier: 'integration',
-    file: 'tests/qa/integration/rating-withdrawal.test.ts',
-    name: 'RATE04: a withdrawn latest opinion keeps earlier immutable revisions without resurrecting their values',
-  }],
-  RATE05: [{
-    tier: 'fault/recovery',
-    file: 'tests/qa/fault-recovery/rating-daily.test.ts',
-    name: 'RATE01/RATE02/RATE03/RATE05/OPS03: Rating identities and policy survive real API races and graph loss',
-  }, {
-    tier: 'model',
-    file: 'model/tests/experience-rating.test.ts',
-    name: 'RATE05/MODEL17: native policy successor keeps the question head and rejects malformed revisions',
-  }],
-  SEARCH02: [{
-    tier: 'integration',
-    file: 'tests/qa/integration/public-search-scale.test.ts',
-    name: 'SEARCH01/SEARCH02/SEARCH04/SEARCH07/SEARCH08/SEARCH16/SEARCH18: rated Realm join, bounded paging and author switch',
-  }, {
-    tier: 'unit',
-    file: 'tests/qa/unit/search-budgets.test.ts',
-    name: 'SEARCH02/SEARCH10: a 513th raw hit cannot become a false complete empty result',
-  }, {
-    tier: 'fault/recovery',
-    file: 'tests/qa/fault-recovery/search-candidate-overflow.test.ts',
-    name: 'SEARCH02/SEARCH10: 513 real text hits with no eligible relation return a budget outcome',
-  }],
-  SEARCH05: [{
-    tier: 'integration',
-    file: 'tests/qa/integration/public-search-unsupported.test.ts',
-    name: 'SEARCH05: every public phrase lane rejects declared multi-dataset policy before native index access',
-  }],
-  SEARCH06: [{
-    tier: 'integration',
-    file: 'tests/qa/integration/public-search-cjk.test.ts',
-    name: 'SEARCH06: versioned CJK Main and Realm phrases bind exact selected bodies and languages',
-  }],
-  SEARCH09: [{
-    tier: 'integration',
-    file: 'tests/qa/integration/public-search-unsupported.test.ts',
-    name: 'SEARCH09: every current-only public phrase lane rejects an as-of source position',
-  }],
-  SEARCH13: [{
-    tier: 'integration',
-    file: 'tests/qa/integration/search-graph-sentinel.test.ts',
-    name: 'SEARCH13: a retained named graph exposes deletion of its last indexed literal',
-  }],
-  SEARCH17: [{
-    tier: 'fault/recovery',
-    file: 'tests/qa/fault-recovery/search-raw-import.test.ts',
-    name: 'SEARCH17: quarantined bare-TDB2 import stays unavailable until exact offline rebuild',
-  }],
-};
+function mergeCaseDeclarations(groups: readonly CaseDeclarations[]): Record<string, readonly TestIdentity[]> {
+  const merged: Record<string, readonly TestIdentity[]> = {};
+  for (const group of groups) {
+    for (const [id, tests] of Object.entries(group)) {
+      if (Object.hasOwn(merged, id)) throw new Error(`Duplicate complete-case declaration: ${id}`);
+      merged[id] = tests;
+    }
+  }
+  return merged;
+}
 
 export function declaredCaseCoverage(cases: readonly Case[], scope: 'all' | 'backend' = 'all'): ReadonlyMap<string, readonly string[]> {
   const inventory = new Set(cases.map(item => item.id));
