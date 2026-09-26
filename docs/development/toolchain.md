@@ -48,9 +48,9 @@ limitations. Reuse installed binaries where their versions match.
 | Dgraph research container | `docker.io/dgraph/dgraph:v25.4.1`, release commit `759e242be62c91f8d084da06ad0c8d21256d9c07`; inspected image ID `023abcb91868d151df1889342041529670580773b8de48a48d2bb6dd466007d0`, manifest digest `sha256:056bd94a3cd67da552fe6ddb575a1d6f0b5597eb9d96da73827bcb1e80cf5f8f` | Bounded challenger probe of relation occurrences, scoped selection and application-owned history/CAS, requested during the broader architecture review. Run an isolated Zero/Alpha pair or standalone mode with the admitted Podman runtime, private loopback endpoints and `.temp/storage-architecture/dgraph/` data; never touch product services. `dgraph --prepare-only` inspected the image before execution. [Release](https://github.com/dgraph-io/dgraph/releases/tag/v25.4.1). |
 | fluree-sql-bridge | Source from the same Fluree commit; package version 4.1.6 | Candidate SQL federation; compile with its checked-in lockfile and record source digest. |
 | Rust / Cargo | 1.98.1 | Build the upstream SQL bridge only, with `--locked`; no product Rust dependency is adopted. |
-| Docker CLI | 29.8.1 | Inspect local images and run disposable search comparison containers; record image digests before use. |
+| Docker CLI / Docker Desktop engine | 29.8.1 / 29.7.2 | Compose-backed product and isolated QA stacks use the host's `desktop-linux` context. The CLI also inspects local images and runs disposable search comparison containers; record image digests before use. |
 | Host inspection/archive utilities | Installed `lscpu`, `df`, `tar` | Read host/storage metadata and extract checksum-verified upstream archives through the research runner. |
-| Podman | 5.8.7 | Disposable rootless search containers and image inventory; Docker Desktop is unavailable on this host. |
+| Podman | 5.8.7 | Disposable rootless search containers and image inventory; it is not the default Compose QA engine on this host. |
 | PGroonga research image | PostgreSQL 18.6 / PGroonga 4.0.8; local image ID `df9394ae660618227f519eeb0c2a4d9721c0b590ffaf4c49652747a601c1bf91`, manifest digest `sha256:c8052fbed36391ce9c01825ede5f70d78ddac575ae00b2c2f6f72642736afe81` | Reuse the old repository's inspected image with a new isolated data directory; verify extension version inside the probe. |
 | OpenSearch research image | `docker.io/opensearchproject/opensearch:3.6.0`; image ID `b1b447d0d021b051fdb1ae6be100e106667bbe302aa8d6855a4f6d726863d766`, manifest digest `sha256:b5dd1512af2a99748c942cfbbd7f32162623336b210667d0fc6333c6321f171d` | Isolated relation-aware ranked-search probe using the existing Podman runtime. Verify and retain image identity before measuring, run by that ID, and verify server version. This is a research pin, not a claim of the newest release or a production selection. [Release](https://opensearch.org/blog/introducing-opensearch-3-6/). |
 | Virtuoso Open Source research image | `docker.io/openlink/virtuoso-opensource-7:7.2.17-r25-g6eb68b6-ubuntu`; image ID `a6cbc2c869d23c04b131fa2c0e1663abc347747f12efe9bd62453eab1ea8575e`, manifest digest `sha256:2a9914b95f8a52927a73947c87ec2727f78f87d38e41c38c379efb121f9cbed1`. The initially inspected `7.2.17-r25.1-g2850f18-ubuntu` image (ID `07263730abf06071e50b89b03c0f027cd37e3205df13134ace7dc97bb5817d08`, digest `sha256:0dbe1ab4fa0cb7bbafc1f6c0c2b0a5d6f22d918dbd17672f2ddb24580aa6756a`) was rejected because its binary reports `7.2.18-dev.3243` (`8439c5e52f`) despite the tag. | Disposable native RDF plus free-text challenger on loopback only, with data under `.temp/storage-architecture/virtuoso/`. Run by inspected image ID and verify binary version. This is research, not a product dependency. [Release](https://github.com/openlink/virtuoso-opensource/releases/tag/v7.2.17), [official image](https://hub.docker.com/r/openlink/virtuoso-opensource-7/tags). |
@@ -68,6 +68,14 @@ probe does not qualify distributed scale or change the production selection.
 loopback-bound container, retaining fixture/query/latency/update evidence under
 `.temp/storage-architecture/opensearch/`. It must clean up its own container and
 never change the application's services or host-wide kernel settings.
+
+Docker Desktop's user service stopped when the graphical session disappeared on
+2026-09-26. If the `desktop-linux` socket disappears, check `docker info`, start
+the existing service with `systemctl --user start docker-desktop`, then verify
+Compose readiness through the documented
+`yarn test tests/qa/integration/shared-stack.test.ts` selection. This restored
+Docker engine 29.7.2 and the shared-stack selection passed on 2026-09-26;
+neither result certifies a backend acceptance case or the final recorded QA.
 `virtuoso --prepare-only` may pull and inspect the pinned image without starting
 it; record the resulting image ID and manifest digest above before executing the
 bounded probe. The probe retains its queries, results and logs under
