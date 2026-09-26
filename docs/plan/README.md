@@ -9,9 +9,9 @@
 | Agent strategy | The current management Goal dispatches up to two justified, independent worktree tasks from fresh briefs under the [delegation policy](execution-workflow.md#delegation-and-worker-lifecycle). Workers finish after handoff. Compare accepted results against total manager and worker usage under [efficiency measurement](execution-workflow.md#efficiency-measurement); expand only after measured integrated throughput supports it. |
 | Authority | This active Goal authorizes local backend implementation, dependency setup, disposable QA stacks and coherent local commits on `main`. Remote pushes, production publication and paid provisioning remain outside this scope. |
 | Deployment premise | Principal services concentrated on one assessed host; the other primarily API and unrelated workloads. Account placement remains assessed. |
-| Status | The current management Goal started at 03:57:20 UTC on clean `f2c8aa1`. G-001 through G-013 are integrated and affected-verified on `main`; their named retained IDs remain partial. The last broad historical run `20260925t151147-02d115` passed 11 of 277 mixed cases; it is not a complete backend qualification. No `yarn qa --backend --record` result exists yet. See the [active management program](#active-management-program) and generated [qualification page](qualification.md). |
-| Next action | G-014 owns independent two-source Work support; G-015 owns daily Rating calendar behavior in separate worktrees. G-016 Go pruning/directives is prepared for the next package slot; G-017 explicit managed-organization authority is prepared after G-014's Access handoff. Integrate each clean handoff with merged affected checks. Preserve source child adoption, complete field control, other package ecosystems, recovery and the remaining owner schemas; final reconstruction and recorded backend QA remain the final gate. |
-| Forecast | At activation, 276 backend IDs are retained and the prior full run passed only 11; B14's selected checks still count WORK05 as partial. The ten-hour 100% target is forecast to miss based on this measured backlog. Continue authorized backend implementation and report the actual qualified scope without counting partial IDs as complete. |
+| Status | The current management Goal started at 03:57:20 UTC on clean `f2c8aa1`. G-001 through G-014 are integrated and affected-verified on `main`; G-015 is merged with selected unit, static and docs checks passing while merged owner/recovery checks finish. RATE03 is a declared complete-case candidate, not recorded backend qualification. The last broad historical run `20260925t151147-02d115` passed 11 of 277 mixed cases; no `yarn qa --backend --record` result exists. See the [active management program](#active-management-program) and generated [qualification page](qualification.md). |
+| Next action | Finish G-015 merged owner, native model and recovery checks. G-016 owns Go pruning/directives and G-017 owns explicit managed-organization authority in separate worktrees. Preserve source child adoption, complete field control, other package ecosystems, recovery and the remaining owner schemas; final reconstruction and recorded backend QA remain the final gate. |
+| Forecast | The 276-case retained backend scope and measured partial-slice throughput forecast a miss of the 13:57:20 UTC ten-hour target. RATE03 is a candidate, not a recorded pass. Continue the full authorized scope and report only actually qualified cases; no defensible later completion timestamp exists yet. |
 
 ### Active management program
 
@@ -42,10 +42,10 @@ does not supply a current backend completion percentage.
 | [G-011](../goals/tasks/G-011.md) / PKG02 | Versioned exact Cargo `links` conflict proof against pinned native Cargo. | Integrated and affected-verified on `10cbafd`: Cargo unit 8/8, pinned native oracle (v1 and ten v2 scenarios), combined real API `20260926t055142-cf5e59`, coordinated physical restore `20260926t055206-dc75de`, backend static and docs checks passed on merged source. PKG01/PKG02/PKG12/PKG13/PKG14/PKG19/IAM10/OPS03 remain partial; worker task `01a0dc33-44c5-7983-9a49-b6534e58717c` finished. |
 | [G-012](../goals/tasks/G-012.md) / IAM23 | Independent Org-to-Realm participation episode with two-party admission and no implicit management. | Integrated and affected-verified on `f1852f7`: three-file real Account/Main/Access API selection `20260926t061701-47ed20`, isolated Access WAL restore `20260926t061811-6b4fd0`, backend static and docs checks passed on merged source. Two-party invitation/acceptance, exact proofs, ban/history and independent tuple are present; IAM06/IAM23/IAM24/OPS03 remain partial. Worker task `01a0dc42-aaf7-7901-8add-b2881ea2a622` finished. |
 | [G-013](../goals/tasks/G-013.md) / PKG02 | Versioned Cargo admitted-lock yanked eligibility versus fresh selection. | Integrated and affected-verified on `704cc7f`: Cargo unit 15/15, pinned native oracle (baseline, ten `links`, 16 lock and three format scenarios), real API `20260926t062113-a74da4`, coordinated physical restore `20260926t062132-64e94a`, backend static and docs checks passed on merged source. PKG02/PKG12/PKG13 remain partial; worker task `01a0dc48-e285-70a0-9f06-ba896b1d5a1b` finished. |
-| [G-014](../goals/tasks/G-014.md) / LIVE05 | Two independent title supports for one native Work, with per-support withdrawal. | Running in Source worktree task `01a0dc5d-0539-70c0-9fa5-b1a1f05ce1d9` from clean `f1852f7`; preserve G-010 v1 singular receipts and design exact attachment/collection/withdrawal schema before implementation. LIVE03/LIVE05/OPS03 remain partial. |
-| [G-015](../goals/tasks/G-015.md) / RATE03 | Daily Rating slot keyed by server calendar and private principal across DST/persona changes. | Running in Rating/model worktree task `01a0dc60-fe32-73c2-ae38-942dbbbdb527` from clean `704cc7f`; seek full RATE03 real-owner proof while preserving standing receipts and recovery. RATE02/RATE03 remain open until merged evidence. |
-| [G-016](../goals/tasks/G-016.md) / PKG05 | Go 1.17+ pruned graph with main remote replace/exclude against pinned Go. | Prepared for the next independent package slot; preserve older request/receipt profiles and capture provenance. PKG05/PKG12/PKG13 remain partial. |
-| [G-017](../goals/tasks/G-017.md) / IAM24 | Explicit managed-organization authority with one real protected operation. | Prepared for an Access slot after G-014 handoff and merged Access review; G-012 independent participation cannot imply management. IAM06/IAM23/IAM24 remain partial. |
+| [G-014](../goals/tasks/G-014.md) / LIVE05 | Two independent title supports for one native Work, with per-support withdrawal. | Integrated and affected-verified on `629496b`: merged Source API `20260926t064709-3f8ca0`, held-graph recovery `20260926t064753-ff858c`, unit, generation, backend static and docs passed. RustFS-backed human heads, independent withdrawal and Access revocation races are exercised. Abrupt Access connection loss and a coordinated Source backup cut remain unqualified; LIVE03/LIVE05/OPS03 are partial. Worker task `01a0dc5d-0539-70c0-9fa5-b1a1f05ce1d9` finished. |
+| [G-015](../goals/tasks/G-015.md) / RATE03 | Daily Rating slot keyed by server calendar and private principal across DST/persona changes. | Merged on `cfcb5a1`; merged generation, 35 affected unit tests, backend static and docs pass. Real Account/API plus graph-loss worker run `20260926t065038-2881ad`, full selected native model and standing compatibility passed; merged recovery/native model checks are in flight. Exact RATE03 complete-case declaration is a candidate pending merged and final recorded backend evidence; RATE02 remains partial. Worker task `01a0dc60-fe32-73c2-ae38-942dbbbdb527` finished. |
+| [G-016](../goals/tasks/G-016.md) / PKG05 | Go 1.17+ pruned graph with main remote replace/exclude against pinned Go. | Running in independent Go worktree task `01a0dc77-47f7-72d2-9107-af093722638b` from clean `68cf3e7`; native differential and real API evidence pending. PKG05/PKG12/PKG13 remain partial. |
+| [G-017](../goals/tasks/G-017.md) / IAM24 | Explicit managed-organization authority with one real protected operation. | Running in independent Access worktree task `01a0dc7f-9f18-7443-a567-4d5bd4e15dc3` from clean `cfcb5a1`; G-012 participation cannot imply management. IAM06/IAM23/IAM24 remain partial. |
 | Authority and model backlog | IAM07–IAM37 and MODEL05–MODEL27 gaps, sequenced behind required Access and semantic owner decisions. | Planned at the [operation map](backend-operations.md); create bounded briefs when interfaces stabilize. |
 | Content, Space and community backlog | CTX, WORK, RATE, GRAPH, VIEW, BOOK, RECIPE, SUB and other M01–M10 gaps. | Planned at the operation map; retain all backend assertions. |
 | Search, sources and packages backlog | SEARCH, LIVE, PKG and HUB gaps after B75, with source/owner integration and recovery. | Planned at the operation map; selected B14–B74 evidence remains partial where named. |
@@ -157,6 +157,29 @@ produced no fully qualified ID. The 13:57 UTC target remains forecast to miss;
 the available evidence still cannot support a later complete finish time. Keep
 the full acceptance contract, dispatch on handoff or blocker, and reconcile again
 by 06:57 UTC.
+
+**30-minute checkpoint, 2026-09-26 06:57 UTC.** G-014 joined G-001–G-013 on
+clean `main` after passing merged Source API, held-graph recovery, unit, generation,
+backend static and docs checks. The new attachment preserves singular receipts,
+checks an S3-backed human Work head and holds a bounded live Access authority
+envelope through the Source SQL commit. Abrupt Access connection loss and a
+coordinated cross-owner backup cut remain explicit unqualified boundaries. G-015
+is merged and its selected unit, generation, backend static and docs checks pass;
+the merged real-owner recovery run is still preparing the updated native Jena
+image and its remaining owner/model checks follow. RATE03 has a complete-case
+declaration and passing worker evidence but is only a candidate until merged and
+final recorded backend verification. G-016 and G-017 immediately took the two
+independent worktree slots after the handoffs; no completed worker waits in the
+integration queue. An unrelated editorial-protection documentation batch was
+committed separately at `5d54e6a`; its new prospective assertions are retained,
+without counting documentation as implemented backend behavior. The critical
+path remains wider Access/Realm authority, Source child and field control, package
+ecosystems and installation, the other M01–M10 owner APIs, reusable complete
+fixture and recovery, host/capacity qualification, clean reconstruction and a
+recorded full backend QA. Fourteen fully merged/verified slices and one merged
+slice under checks have added zero newly recorded complete backend IDs against
+276; the 13:57 UTC target remains forecast to miss, with no defensible later
+finish timestamp. Continue all retained requirements and reconcile by 07:27 UTC.
 
 ### Backend-only ten-hour proposal
 
