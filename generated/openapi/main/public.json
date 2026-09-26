@@ -79575,80 +79575,191 @@
           "content": {
             "application/json": {
               "schema": {
-                "additionalProperties": false,
-                "properties": {
-                  "kind": {
-                    "const": "revision_recovery",
-                    "type": "string"
+                "anyOf": [
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "kind": {
+                        "const": "revision_recovery",
+                        "type": "string"
+                      },
+                      "profile": {
+                        "const": "owner-reconciliation-v1",
+                        "type": "string"
+                      },
+                      "revision": {
+                        "maxLength": 300,
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "profile",
+                      "kind",
+                      "revision"
+                    ],
+                    "type": "object"
                   },
-                  "profile": {
-                    "const": "owner-reconciliation-v1",
-                    "type": "string"
-                  },
-                  "revision": {
-                    "maxLength": 300,
-                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
-                    "type": "string"
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "kind": {
+                        "const": "restore",
+                        "type": "string"
+                      },
+                      "profile": {
+                        "const": "owner-reconciliation-v1",
+                        "type": "string"
+                      },
+                      "sealedCoverage": {
+                        "maxLength": 1000000,
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "sealedDeletionSets": {
+                        "items": {
+                          "maxLength": 100000,
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "maxItems": 10000,
+                        "type": "array"
+                      }
+                    },
+                    "required": [
+                      "profile",
+                      "kind",
+                      "sealedCoverage"
+                    ],
+                    "type": "object"
                   }
-                },
-                "required": [
-                  "profile",
-                  "kind",
-                  "revision"
-                ],
-                "type": "object"
+                ]
               }
             },
             "application/x-www-form-urlencoded": {
               "schema": {
-                "additionalProperties": false,
-                "properties": {
-                  "kind": {
-                    "const": "revision_recovery",
-                    "type": "string"
+                "anyOf": [
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "kind": {
+                        "const": "revision_recovery",
+                        "type": "string"
+                      },
+                      "profile": {
+                        "const": "owner-reconciliation-v1",
+                        "type": "string"
+                      },
+                      "revision": {
+                        "maxLength": 300,
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "profile",
+                      "kind",
+                      "revision"
+                    ],
+                    "type": "object"
                   },
-                  "profile": {
-                    "const": "owner-reconciliation-v1",
-                    "type": "string"
-                  },
-                  "revision": {
-                    "maxLength": 300,
-                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
-                    "type": "string"
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "kind": {
+                        "const": "restore",
+                        "type": "string"
+                      },
+                      "profile": {
+                        "const": "owner-reconciliation-v1",
+                        "type": "string"
+                      },
+                      "sealedCoverage": {
+                        "maxLength": 1000000,
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "sealedDeletionSets": {
+                        "items": {
+                          "maxLength": 100000,
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "maxItems": 10000,
+                        "type": "array"
+                      }
+                    },
+                    "required": [
+                      "profile",
+                      "kind",
+                      "sealedCoverage"
+                    ],
+                    "type": "object"
                   }
-                },
-                "required": [
-                  "profile",
-                  "kind",
-                  "revision"
-                ],
-                "type": "object"
+                ]
               }
             },
             "multipart/form-data": {
               "schema": {
-                "additionalProperties": false,
-                "properties": {
-                  "kind": {
-                    "const": "revision_recovery",
-                    "type": "string"
+                "anyOf": [
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "kind": {
+                        "const": "revision_recovery",
+                        "type": "string"
+                      },
+                      "profile": {
+                        "const": "owner-reconciliation-v1",
+                        "type": "string"
+                      },
+                      "revision": {
+                        "maxLength": 300,
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "profile",
+                      "kind",
+                      "revision"
+                    ],
+                    "type": "object"
                   },
-                  "profile": {
-                    "const": "owner-reconciliation-v1",
-                    "type": "string"
-                  },
-                  "revision": {
-                    "maxLength": 300,
-                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
-                    "type": "string"
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "kind": {
+                        "const": "restore",
+                        "type": "string"
+                      },
+                      "profile": {
+                        "const": "owner-reconciliation-v1",
+                        "type": "string"
+                      },
+                      "sealedCoverage": {
+                        "maxLength": 1000000,
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "sealedDeletionSets": {
+                        "items": {
+                          "maxLength": 100000,
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "maxItems": 10000,
+                        "type": "array"
+                      }
+                    },
+                    "required": [
+                      "profile",
+                      "kind",
+                      "sealedCoverage"
+                    ],
+                    "type": "object"
                   }
-                },
-                "required": [
-                  "profile",
-                  "kind",
-                  "revision"
-                ],
-                "type": "object"
+                ]
               }
             }
           },
@@ -79659,60 +79770,120 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "properties": {
-                    "disposition": {
-                      "~elyTyp": 7,
-                      "enum": [
-                        "matched",
-                        "unavailable",
-                        "corrupt"
+                  "anyOf": [
+                    {
+                      "properties": {
+                        "disposition": {
+                          "~elyTyp": 7,
+                          "enum": [
+                            "matched",
+                            "unavailable",
+                            "corrupt"
+                          ],
+                          "nullable": true,
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "id": {
+                          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                          "type": "string"
+                        },
+                        "kind": {
+                          "const": "revision_recovery",
+                          "type": "string"
+                        },
+                        "profile": {
+                          "const": "owner-reconciliation-v1",
+                          "type": "string"
+                        },
+                        "replayed": {
+                          "type": "boolean"
+                        },
+                        "revision": {
+                          "maxLength": 300,
+                          "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                          "type": "string"
+                        },
+                        "state": {
+                          "enum": [
+                            "running",
+                            "held",
+                            "reconciled",
+                            "failed"
+                          ],
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "profile",
+                        "id",
+                        "kind",
+                        "revision",
+                        "state",
+                        "disposition",
+                        "replayed"
                       ],
-                      "nullable": true,
-                      "type": [
-                        "string",
-                        "null"
-                      ]
+                      "type": "object"
                     },
-                    "id": {
-                      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
-                      "type": "string"
-                    },
-                    "kind": {
-                      "const": "revision_recovery",
-                      "type": "string"
-                    },
-                    "profile": {
-                      "const": "owner-reconciliation-v1",
-                      "type": "string"
-                    },
-                    "replayed": {
-                      "type": "boolean"
-                    },
-                    "revision": {
-                      "maxLength": 300,
-                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
-                      "type": "string"
-                    },
-                    "state": {
-                      "enum": [
-                        "running",
-                        "held",
-                        "reconciled",
-                        "failed"
+                    {
+                      "properties": {
+                        "disposition": {
+                          "~elyTyp": 7,
+                          "enum": [
+                            "matched",
+                            "conflict",
+                            "unavailable",
+                            "corrupt"
+                          ],
+                          "nullable": true,
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "id": {
+                          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                          "type": "string"
+                        },
+                        "kind": {
+                          "const": "restore",
+                          "type": "string"
+                        },
+                        "profile": {
+                          "const": "owner-reconciliation-v1",
+                          "type": "string"
+                        },
+                        "replayed": {
+                          "type": "boolean"
+                        },
+                        "scope": {
+                          "const": "product",
+                          "type": "string"
+                        },
+                        "state": {
+                          "enum": [
+                            "running",
+                            "held",
+                            "reconciled",
+                            "failed"
+                          ],
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "profile",
+                        "id",
+                        "kind",
+                        "scope",
+                        "state",
+                        "disposition",
+                        "replayed"
                       ],
-                      "type": "string"
+                      "type": "object"
                     }
-                  },
-                  "required": [
-                    "profile",
-                    "id",
-                    "kind",
-                    "revision",
-                    "state",
-                    "disposition",
-                    "replayed"
-                  ],
-                  "type": "object"
+                  ]
                 }
               }
             },
@@ -79722,60 +79893,120 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "properties": {
-                    "disposition": {
-                      "~elyTyp": 7,
-                      "enum": [
-                        "matched",
-                        "unavailable",
-                        "corrupt"
+                  "anyOf": [
+                    {
+                      "properties": {
+                        "disposition": {
+                          "~elyTyp": 7,
+                          "enum": [
+                            "matched",
+                            "unavailable",
+                            "corrupt"
+                          ],
+                          "nullable": true,
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "id": {
+                          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                          "type": "string"
+                        },
+                        "kind": {
+                          "const": "revision_recovery",
+                          "type": "string"
+                        },
+                        "profile": {
+                          "const": "owner-reconciliation-v1",
+                          "type": "string"
+                        },
+                        "replayed": {
+                          "type": "boolean"
+                        },
+                        "revision": {
+                          "maxLength": 300,
+                          "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                          "type": "string"
+                        },
+                        "state": {
+                          "enum": [
+                            "running",
+                            "held",
+                            "reconciled",
+                            "failed"
+                          ],
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "profile",
+                        "id",
+                        "kind",
+                        "revision",
+                        "state",
+                        "disposition",
+                        "replayed"
                       ],
-                      "nullable": true,
-                      "type": [
-                        "string",
-                        "null"
-                      ]
+                      "type": "object"
                     },
-                    "id": {
-                      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
-                      "type": "string"
-                    },
-                    "kind": {
-                      "const": "revision_recovery",
-                      "type": "string"
-                    },
-                    "profile": {
-                      "const": "owner-reconciliation-v1",
-                      "type": "string"
-                    },
-                    "replayed": {
-                      "type": "boolean"
-                    },
-                    "revision": {
-                      "maxLength": 300,
-                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
-                      "type": "string"
-                    },
-                    "state": {
-                      "enum": [
-                        "running",
-                        "held",
-                        "reconciled",
-                        "failed"
+                    {
+                      "properties": {
+                        "disposition": {
+                          "~elyTyp": 7,
+                          "enum": [
+                            "matched",
+                            "conflict",
+                            "unavailable",
+                            "corrupt"
+                          ],
+                          "nullable": true,
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "id": {
+                          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                          "type": "string"
+                        },
+                        "kind": {
+                          "const": "restore",
+                          "type": "string"
+                        },
+                        "profile": {
+                          "const": "owner-reconciliation-v1",
+                          "type": "string"
+                        },
+                        "replayed": {
+                          "type": "boolean"
+                        },
+                        "scope": {
+                          "const": "product",
+                          "type": "string"
+                        },
+                        "state": {
+                          "enum": [
+                            "running",
+                            "held",
+                            "reconciled",
+                            "failed"
+                          ],
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "profile",
+                        "id",
+                        "kind",
+                        "scope",
+                        "state",
+                        "disposition",
+                        "replayed"
                       ],
-                      "type": "string"
+                      "type": "object"
                     }
-                  },
-                  "required": [
-                    "profile",
-                    "id",
-                    "kind",
-                    "revision",
-                    "state",
-                    "disposition",
-                    "replayed"
-                  ],
-                  "type": "object"
+                  ]
                 }
               }
             },
@@ -79994,60 +80225,120 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "properties": {
-                    "disposition": {
-                      "~elyTyp": 7,
-                      "enum": [
-                        "matched",
-                        "unavailable",
-                        "corrupt"
+                  "anyOf": [
+                    {
+                      "properties": {
+                        "disposition": {
+                          "~elyTyp": 7,
+                          "enum": [
+                            "matched",
+                            "unavailable",
+                            "corrupt"
+                          ],
+                          "nullable": true,
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "id": {
+                          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                          "type": "string"
+                        },
+                        "kind": {
+                          "const": "revision_recovery",
+                          "type": "string"
+                        },
+                        "profile": {
+                          "const": "owner-reconciliation-v1",
+                          "type": "string"
+                        },
+                        "replayed": {
+                          "type": "boolean"
+                        },
+                        "revision": {
+                          "maxLength": 300,
+                          "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                          "type": "string"
+                        },
+                        "state": {
+                          "enum": [
+                            "running",
+                            "held",
+                            "reconciled",
+                            "failed"
+                          ],
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "profile",
+                        "id",
+                        "kind",
+                        "revision",
+                        "state",
+                        "disposition",
+                        "replayed"
                       ],
-                      "nullable": true,
-                      "type": [
-                        "string",
-                        "null"
-                      ]
+                      "type": "object"
                     },
-                    "id": {
-                      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
-                      "type": "string"
-                    },
-                    "kind": {
-                      "const": "revision_recovery",
-                      "type": "string"
-                    },
-                    "profile": {
-                      "const": "owner-reconciliation-v1",
-                      "type": "string"
-                    },
-                    "replayed": {
-                      "type": "boolean"
-                    },
-                    "revision": {
-                      "maxLength": 300,
-                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
-                      "type": "string"
-                    },
-                    "state": {
-                      "enum": [
-                        "running",
-                        "held",
-                        "reconciled",
-                        "failed"
+                    {
+                      "properties": {
+                        "disposition": {
+                          "~elyTyp": 7,
+                          "enum": [
+                            "matched",
+                            "conflict",
+                            "unavailable",
+                            "corrupt"
+                          ],
+                          "nullable": true,
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "id": {
+                          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                          "type": "string"
+                        },
+                        "kind": {
+                          "const": "restore",
+                          "type": "string"
+                        },
+                        "profile": {
+                          "const": "owner-reconciliation-v1",
+                          "type": "string"
+                        },
+                        "replayed": {
+                          "type": "boolean"
+                        },
+                        "scope": {
+                          "const": "product",
+                          "type": "string"
+                        },
+                        "state": {
+                          "enum": [
+                            "running",
+                            "held",
+                            "reconciled",
+                            "failed"
+                          ],
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "profile",
+                        "id",
+                        "kind",
+                        "scope",
+                        "state",
+                        "disposition",
+                        "replayed"
                       ],
-                      "type": "string"
+                      "type": "object"
                     }
-                  },
-                  "required": [
-                    "profile",
-                    "id",
-                    "kind",
-                    "revision",
-                    "state",
-                    "disposition",
-                    "replayed"
-                  ],
-                  "type": "object"
+                  ]
                 }
               }
             },
