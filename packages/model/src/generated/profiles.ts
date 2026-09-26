@@ -353,7 +353,7 @@ export const profileRegistry = {
     ]
   },
   "work-metadata-v1": {
-    "sha256": "f0c4443ef63c3ff56a52217533c2c642c5076f923cbaf6db33bf49dc78ef3907",
+    "sha256": "ac918cf0458150520bf03f9683e6a363ad702376ebc50eaa729f98d84b3b8760",
     "file": "shapes/work-metadata-v1.ttl",
     "shapes": [
       "https://rezics.com/definition/work-metadata-v1/work-shape",

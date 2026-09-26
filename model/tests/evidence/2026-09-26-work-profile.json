@@ -1,0 +1,19 @@
+{
+  "cases": [
+    "MODEL02-work-scalar-state",
+    "MODEL15-fixed-work-profile",
+    "MODEL17-explicit-focus-subset"
+  ],
+  "profile_sha256": "ac918cf0458150520bf03f9683e6a363ad702376ebc50eaa729f98d84b3b8760",
+  "jena_shacl": "Apache Jena SHACL version 6.2.0",
+  "native_run": "20260926t131645-ee7366",
+  "outcomes": {
+    "valid": { "conforms": true },
+    "scalar-valid": { "conforms": true },
+    "scalar-blank-node": { "conforms": false },
+    "scalar-multiple": { "conforms": false },
+    "missing-type": { "conforms": false },
+    "missing-main": { "conforms": false }
+  },
+  "result": "pass"
+}

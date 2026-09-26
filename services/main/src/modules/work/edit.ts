@@ -5,6 +5,9 @@ import { CONTINUITY, DATASET, GRAPHS, ID, PROFILE, RV, hash, iri, lit,
   metadataWorkRequestDigest, prepareComponent, prepareWorkComponent, workMetadataValidations,
   normalizeWorkSemanticTypes, PendingActivation, IdempotencyConflict,
   type WorkActivationEnvironment } from './activate.ts';
+import { readWorkPayloadForRevision, RevisionCorrupt } from './history.ts';
+import { checkedWorkScalarValue, sameScalar, scalarFromBinding, scalarRdfTerm,
+  SCALAR_PREDICATE, type WorkScalarValue } from './scalar-value.ts';
 
 export class StaleWorkHead extends Error {}
 export class WorkEditUnavailable extends Error {}
@@ -14,6 +17,10 @@ export interface EditMetadataWorkIntent {
   work: string;
   expectedHead: string;
   title: string;
+}
+
+export interface SetWorkScalarIntent extends Omit<EditMetadataWorkIntent, 'title'> {
+  scalarValue?: WorkScalarValue;
 }
 
 export interface WorkEditReceipt {
@@ -47,6 +54,13 @@ export function metadataWorkEditDigest(work: string, expectedHead: string, title
   iri(expectedHead);
   metadataWorkRequestDigest(title);
   return hash(JSON.stringify({ family: 'edit-metadata-work-v1', work, expectedHead, title }));
+}
+
+export function workScalarEditDigest(work: string, expectedHead: string,
+  scalarValue: WorkScalarValue | undefined): string {
+  iri(work); iri(expectedHead);
+  return hash(JSON.stringify({ family: 'work-scalar-state-v1', work, expectedHead,
+    ...(scalarValue === undefined ? {} : { scalarValue: checkedWorkScalarValue(scalarValue) }) }));
 }
 
 export function workEditReceiptIri(admissionId: string): string {
@@ -89,7 +103,8 @@ export async function readWorkEditTerminalReceipt(env: WorkActivationEnvironment
     dataEpoch: row.epoch.value, sequence: row.sequence.value };
 }
 
-function checkedTerminal(terminal: TerminalWorkEdit, intent: EditMetadataWorkIntent, digest: string): WorkEditReceipt {
+function checkedTerminal(terminal: TerminalWorkEdit,
+  intent: Omit<EditMetadataWorkIntent, 'title'>, digest: string): WorkEditReceipt {
   if (terminal.admissionId !== intent.admission.id || terminal.requestDigest !== digest
     || terminal.authorityEpoch !== intent.admission.authorityEpoch || terminal.scope !== intent.admission.scope) {
     throw new IdempotencyConflict('Work edit receipt does not match admission');
@@ -106,7 +121,8 @@ function checkedTerminal(terminal: TerminalWorkEdit, intent: EditMetadataWorkInt
     dataEpoch: terminal.dataEpoch, sequence: terminal.sequence, replayed: true };
 }
 
-async function sealStaleHead(env: WorkActivationEnvironment, intent: EditMetadataWorkIntent, digest: string): Promise<TerminalWorkEdit | null> {
+async function sealStaleHead(env: WorkActivationEnvironment,
+  intent: Omit<EditMetadataWorkIntent, 'title'>, digest: string): Promise<TerminalWorkEdit | null> {
   const receipt = workEditReceiptIri(intent.admission.id);
   const batch = `urn:rezics:outbox:${hash(`${receipt}\0stale`)}`;
   const event = `urn:rezics:event:${hash(`${receipt}\0stale`)}`;
@@ -193,28 +209,53 @@ export async function sealMetadataWorkEditAdmission(
 
 /** Internal guarded Work title edit; Access binding is the next boundary. */
 export async function editMetadataWork(env: WorkActivationEnvironment, intent: EditMetadataWorkIntent): Promise<WorkEditReceipt> {
+  return editWorkRevision(env, intent, { kind: 'title', title: intent.title });
+}
+
+export async function setWorkScalar(env: WorkActivationEnvironment,
+  intent: SetWorkScalarIntent): Promise<WorkEditReceipt> {
+  return editWorkRevision(env, intent, { kind: 'scalar', value: checkedWorkScalarValue(intent.scalarValue) });
+}
+
+async function editWorkRevision(env: WorkActivationEnvironment,
+  intent: EditMetadataWorkIntent | SetWorkScalarIntent,
+  change: { kind: 'title'; title: string } | { kind: 'scalar'; value: WorkScalarValue | undefined },
+): Promise<WorkEditReceipt> {
   if (intent.admission.action !== 'work.edit' || !/^[0-9a-f-]{36}$/.test(intent.admission.id)
     || !/^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/.test(intent.work)
     || !/^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/.test(intent.expectedHead)
     || !/^[0-9]+$/.test(intent.admission.authorityEpoch)) throw new Error('invalid Work edit admission');
-  const digest = metadataWorkEditDigest(intent.work, intent.expectedHead, intent.title);
+  const digest = change.kind === 'title'
+    ? metadataWorkEditDigest(intent.work, intent.expectedHead, change.title)
+    : workScalarEditDigest(intent.work, intent.expectedHead, change.value);
   if (digest !== intent.admission.requestDigest) throw new IdempotencyConflict('Work edit digest differs');
   await assertNotInvalidProfileReceipt(env.fuseki, workEditReceiptIri(intent.admission.id));
   const existing = await readWorkEditTerminalReceipt(env, intent.admission.id);
   if (existing) return checkedTerminal(existing, intent, digest);
   if (Date.parse(intent.admission.expiresAt) <= Date.now()) throw new PendingActivation('Work edit admission expired');
-  const current = await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?main ?head ?type WHERE {
+  const current = await env.fuseki.query(`PREFIX rv: <${RV}>
+    PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+    SELECT ?main ?head ?type ?title ?scalar ?manifest WHERE {
     GRAPH ${iri(GRAPHS.current)} { ${iri(intent.work)} rv:mainVersion ?main ;
-      rv:head ?head ; a ?type . }
+      rv:head ?head ; rdfs:label ?title ; a ?type .
+      OPTIONAL { ${iri(intent.work)} <${SCALAR_PREDICATE}> ?scalar } }
+    GRAPH ${iri(GRAPHS.revisions)} { ?head a rv:RevisionAnchor ;
+      rv:component ${iri(intent.work)} ; rv:manifest ?manifest ;
+      rv:modelRevision ${iri(PROFILE)} ; rv:shapeRevision ${iri(PROFILE)} . }
   }`);
   const rows = current.results?.bindings ?? [];
-  if (!rows.length || rows.some(row => !row.main || !row.head || !row.type)) {
+  if (!rows.length || rows.some(row => !row.main || !row.head || !row.type || !row.title || !row.manifest)) {
     throw new WorkEditUnavailable('Work is unavailable');
   }
   const mains = new Set(rows.map(row => row.main!.value));
   const heads = new Set(rows.map(row => row.head!.value));
   const types = new Set(rows.map(row => row.type!.value));
+  const titles = new Set(rows.map(row => row.title!.value));
+  const manifests = new Set(rows.map(row => row.manifest!.value));
+  const scalarBindings = rows.map(row => row.scalar).filter(binding => binding !== undefined);
+  const scalarKeys = new Set(scalarBindings.map(binding => JSON.stringify(binding)));
   if (mains.size !== 1 || heads.size !== 1 || types.size !== rows.length
+    || titles.size !== 1 || manifests.size !== 1 || scalarKeys.size > 1
     || !types.has('https://schema.org/CreativeWork')) {
     throw new WorkEditUnavailable('Work is unavailable');
   }
@@ -228,9 +269,21 @@ export async function editMetadataWork(env: WorkActivationEnvironment, intent: E
     throw new PendingActivation('stale Work edit outcome not sealed');
   }
   const main = mains.values().next().value!;
+  const prior = await readWorkPayloadForRevision(env, manifests.values().next().value!, intent.work);
+  let currentScalar: WorkScalarValue | undefined;
+  try { currentScalar = scalarFromBinding(scalarBindings[0]); }
+  catch { throw new RevisionCorrupt('Work scalar graph term is invalid'); }
+  if (prior.mainVersion !== main || prior.title !== titles.values().next().value
+    || !sameScalar(prior.scalarValue, currentScalar)
+    || JSON.stringify(prior.semanticTypes) !== JSON.stringify(semanticTypes)) {
+    throw new RevisionCorrupt('Work graph differs from its retained head');
+  }
   const validations = await workMetadataValidations(env, intent.work, main);
-  const state = { mainVersion: main, continuityProfile: CONTINUITY, title: intent.title,
-    language: 'en', ...(semanticTypes.length ? { semanticTypes } : {}) };
+  const nextTitle = change.kind === 'title' ? change.title : prior.title;
+  const nextScalar = change.kind === 'scalar' ? change.value : prior.scalarValue;
+  const state = { mainVersion: main, continuityProfile: CONTINUITY, title: nextTitle,
+    language: 'en', ...(semanticTypes.length ? { semanticTypes } : {}),
+    ...(nextScalar === undefined ? {} : { scalarValue: nextScalar }) };
   const manifest = env.workObjects
     ? await prepareWorkComponent(env.workObjects, intent.work, state)
     : prepareComponent(env.objectDirectory, intent.work, state);
@@ -240,14 +293,17 @@ export async function editMetadataWork(env: WorkActivationEnvironment, intent: E
   const receipt = workEditReceiptIri(intent.admission.id);
   const batch = `urn:rezics:outbox:${hash(receipt)}`;
   const event = `urn:rezics:event:${hash(operation)}`;
+  const nextScalarTerm = scalarRdfTerm(nextScalar);
   const update = `PREFIX rv: <${RV}> PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
     DELETE {
       GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?n }
-      GRAPH ${iri(GRAPHS.current)} { ${iri(intent.work)} rv:head ${iri(intent.expectedHead)} ; rdfs:label ?oldTitle . }
+      GRAPH ${iri(GRAPHS.current)} { ${iri(intent.work)} rv:head ${iri(intent.expectedHead)} ; rdfs:label ?oldTitle .
+        ${iri(intent.work)} <${SCALAR_PREDICATE}> ?oldScalar . }
     }
     INSERT {
       GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?next }
-      GRAPH ${iri(GRAPHS.current)} { ${iri(intent.work)} rv:head ${iri(revision)} ; rdfs:label ${lit(intent.title)}@en . }
+      GRAPH ${iri(GRAPHS.current)} { ${iri(intent.work)} rv:head ${iri(revision)} ; rdfs:label ${lit(nextTitle)}@en .
+        ${nextScalarTerm ? `${iri(intent.work)} <${SCALAR_PREDICATE}> ${nextScalarTerm} .` : ''} }
       GRAPH ${iri(GRAPHS.revisions)} { ${iri(revision)} a rv:RevisionAnchor ; rv:component ${iri(intent.work)} ;
         rv:predecessor ${iri(intent.expectedHead)} ; rv:operation ${iri(operation)} ;
         rv:manifest ${iri(`urn:rezics:sha256:${manifest}`)} ; rv:modelRevision ${iri(PROFILE)} ;
@@ -269,7 +325,8 @@ export async function editMetadataWork(env: WorkActivationEnvironment, intent: E
         rv:routingEpoch ${lit(env.lineage.routingEpoch)} ; rv:sequence ?n ;
         rv:modelHead ${iri(PROFILE)} ; rv:shapeHead ${iri(PROFILE)} . }
       GRAPH ${iri(GRAPHS.current)} { ${iri(intent.work)} rv:head ${iri(intent.expectedHead)} ;
-        rv:mainVersion ${iri(main)} ; rdfs:label ?oldTitle . }
+        rv:mainVersion ${iri(main)} ; rdfs:label ?oldTitle .
+        OPTIONAL { ${iri(intent.work)} <${SCALAR_PREDICATE}> ?oldScalar } }
       FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:restoreHold true } }
       FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} ?p ?o } }
       BIND(?n + 1 AS ?next)

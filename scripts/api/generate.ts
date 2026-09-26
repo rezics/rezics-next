@@ -15,7 +15,7 @@ const commands = [
   '/v1/classification-propositions', '/v1/classification-contexts', '/v1/spaces',
   '/v1/publication-selections', '/v1/publication-rejections',
   '/v1/contribution-publications', '/v1/contribution-edits', '/v1/contributions',
-  '/v1/works', '/v1/translation-links', '/v1/content-edits',
+  '/v1/works', '/v1/works/{id}/scalar-value', '/v1/translation-links', '/v1/content-edits',
   '/v1/access/group-changes', '/v1/access/group-impact-proposals',
   '/v1/access/group-impact-approvals',
   '/v1/access/grant-changes',
@@ -36,6 +36,8 @@ const commands = [
 ] as const;
 const privateReads = [
   '/v1/works/{id}/title-control',
+  '/v1/works/{id}/scalar-value',
+  '/v1/works/{id}/scalar-value/revisions/{revision}',
   '/v1/works/{id}/author-credits/{credit}/revisions/{revision}',
   '/v1/me/acting-contexts',
   '/v1/me/main-versions/{mainVersion}/selection',
@@ -135,7 +137,7 @@ export async function buildMainOpenApi(): Promise<string> {
   if (response.status !== 200) throw new Error('Main OpenAPI generator did not return a document');
   const document = await response.json() as Document;
   const paths = Object.entries(document.paths ?? {});
-  if (!document.openapi?.startsWith('3.1.') || paths.length !== 137
+  if (!document.openapi?.startsWith('3.1.') || paths.length !== 139
     || paths.some(([path, methods]) => !/^\/v[12]\//.test(path)
       || Object.values(methods).some(operation => !operation.responses
         || (!operation.responses['200'] && !operation.responses['201']

@@ -3,6 +3,8 @@ import { join } from 'node:path';
 import { ObjectIntegrityError, ObjectUnavailable, type ImmutableObjects } from '../../infrastructure/immutable-objects.ts';
 import { DATASET, GRAPHS, PROFILE, hash, iri, normalizeWorkSemanticTypes,
   type WorkActivationEnvironment } from './activate.ts';
+import { checkedWorkScalarValue, InvalidWorkScalarValue,
+  type WorkScalarValue } from './scalar-value.ts';
 
 export class RevisionNotFound extends Error {}
 export class RevisionUnavailable extends Error {}
@@ -19,6 +21,7 @@ export interface ExactWorkRevision {
   title: string;
   language: 'en';
   semanticTypes: string[];
+  scalarValue?: WorkScalarValue;
   sourcePosition: { datasetId: 'product'; dataEpoch: string; sequence: string };
 }
 
@@ -45,6 +48,7 @@ export interface WorkPayload {
   title: string;
   language: 'en';
   semanticTypes: string[];
+  scalarValue?: WorkScalarValue;
 }
 
 function objectBytes(directory: string, digest: string, budget?: RevisionReadBudget): Buffer {
@@ -151,7 +155,17 @@ export function readWorkPayloadFromManifest(
     throw new RevisionCorrupt('payload does not match Work profile');
   }
   return { mainVersion: state.mainVersion, title: state.title, language: 'en',
-    semanticTypes: checkedWorkSemanticTypes(state.semanticTypes) };
+    semanticTypes: checkedWorkSemanticTypes(state.semanticTypes),
+    ...checkedScalarPayload(state) };
+}
+
+function checkedScalarPayload(state: Record<string, unknown>): { scalarValue?: WorkScalarValue } {
+  if (!Object.hasOwn(state, 'scalarValue')) return {};
+  try {
+    const value = checkedWorkScalarValue(state.scalarValue);
+    if (value === undefined) throw new InvalidWorkScalarValue('undefined scalar payload');
+    return { scalarValue: value };
+  } catch { throw new RevisionCorrupt('Work scalar manifest state is invalid'); }
 }
 
 function checkedWorkSemanticTypes(value: unknown): string[] {
@@ -177,7 +191,8 @@ export async function readWorkPayloadForRevision(
     throw new RevisionCorrupt('payload does not match Work profile');
   }
   return { mainVersion: state.mainVersion, title: state.title, language: 'en',
-    semanticTypes: checkedWorkSemanticTypes(state.semanticTypes) };
+    semanticTypes: checkedWorkSemanticTypes(state.semanticTypes),
+    ...checkedScalarPayload(state) };
 }
 
 export async function readMainPayloadForRevision(
@@ -286,6 +301,7 @@ export async function readExactWorkRevision(
   return { revision, work, ...(row.predecessor ? { predecessor: row.predecessor.value } : {}),
     operation: row.operation.value, mainVersion: state.mainVersion, title: state.title,
     language: 'en', semanticTypes: state.semanticTypes,
+    ...(state.scalarValue === undefined ? {} : { scalarValue: state.scalarValue }),
     sourcePosition: { datasetId: 'product', dataEpoch: row.epoch.value,
       sequence: row.sequence.value } };
 }

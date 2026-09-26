@@ -239,6 +239,7 @@ export const iri = {
   "rv:routeNamespace": "https://rezics.com/vocab/routeNamespace",
   "rv:routeRevision": "https://rezics.com/vocab/routeRevision",
   "rv:routeState": "https://rezics.com/vocab/routeState",
+  "rv:scalarValue": "https://rezics.com/vocab/scalarValue",
   "rv:schemeState": "https://rezics.com/vocab/schemeState",
   "rv:sealedBy": "https://rezics.com/vocab/sealedBy",
   "rv:searchBody": "https://rezics.com/vocab/searchBody",

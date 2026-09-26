@@ -32,6 +32,9 @@
       "@id": "https://rezics.com/vocab/mainVersion",
       "@type": "@id"
     },
+    "rv:scalarValue": {
+      "@id": "https://rezics.com/vocab/scalarValue"
+    },
     "rv:work": {
       "@id": "https://rezics.com/vocab/work",
       "@type": "@id"

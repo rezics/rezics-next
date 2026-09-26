@@ -15,13 +15,14 @@ function expand(term: Term | string, prefixes: ReadonlyMap<string, string>): str
   return `${namespace}${term.slice(colon + 1)}`;
 }
 
-function valueKind(property: PropertyDefinition): 'integer' | 'dateTime' | 'langString' | 'string' | 'iri' | 'absent' {
+function valueKind(property: PropertyDefinition): 'integer' | 'dateTime' | 'langString' | 'string' | 'iri' | 'mixed' | 'absent' {
   if (property.maxCount === 0) return 'absent';
   if (property.hasValue && /^-?\d+$/.test(property.hasValue)) return 'integer';
   if (property.datatype === 'xsd:integer') return 'integer';
   if (property.datatype === 'xsd:dateTime') return 'dateTime';
   if (property.datatype === 'rdf:langString') return 'langString';
   if (property.datatype === 'xsd:string') return 'string';
+  if (property.nodeKind === 'sh:IRIOrLiteral') return 'mixed';
   if (property.nodeKind === 'sh:IRI' || property.class || property.in || property.hasValue) return 'iri';
   throw new Error(`No supported JSON value mapping for ${property.path}`);
 }
@@ -42,6 +43,7 @@ function valueExpression(property: PropertyDefinition, prefixes: ReadonlyMap<str
     return `Type.Integer(${quote(options)})`;
   }
   if (kind === 'dateTime') return `Type.String({ pattern: ${quote('^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?(?:Z|[+-]\\d{2}:\\d{2})$')} })`;
+  if (kind === 'mixed') return 'Type.Unknown()';
   if (kind === 'langString') {
     const language = property.languageIn?.length
       ? unionLiterals(property.languageIn)
@@ -135,6 +137,7 @@ function arbitraryValue(property: PropertyDefinition, prefixes: ReadonlyMap<stri
     return `fc.constant(${quote(example)})`;
   }
   if (kind === 'iri') return `fc.integer({ min: 0, max: 1000000 }).map(value => ${quote(`urn:rezics:sample:${property.path}:`)} + value)`;
+  if (kind === 'mixed') return 'fc.constant("sample")';
   return `fc.string({ minLength: ${property.minLength ?? 1}, maxLength: ${property.maxLength ?? 20} })`;
 }
 

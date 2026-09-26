@@ -14,7 +14,7 @@ test('P0.3: reviewed profiles publish matching shape bytes and digests', () => {
   const manifest = JSON.parse(artifacts.get('generated/model/manifest.json')!) as {
     profiles: { id: string; sha256: string; file: string }[];
   };
-  expect(manifest.profiles).toHaveLength(28);
+  expect(manifest.profiles).toHaveLength(29);
   const work = manifest.profiles.find(profile => profile.id === 'work-metadata-v1');
   expect(work).toBeDefined();
   const shape = artifacts.get(`generated/model/${work!.file}`)!;
@@ -62,20 +62,22 @@ test('P0.3: authored constraints emit the exact recorded candidate profiles', ()
     'source-open-library-work-v1', 'space-realm-v1', 'text-contribution-v1', 'text-publication-v1',
     'translation-link-v1', 'work-address-claim-v1', 'work-address-disposition-v1',
     'work-address-lifecycle-v1', 'work-author-credit-v1',
-    'work-derivation-v1', 'work-metadata-v1',
+    'work-derivation-v1', 'work-metadata-v1', 'work-title-control-v1',
   ]);
   for (const profile of authoredProfiles.filter(item => ![
     'content-match-unit-v1', 'content-publication-v1', 'content-search-eligibility-v1',
     'fixed-native-text-release-v1', 'translation-link-v1', 'work-address-claim-v1',
     'work-address-lifecycle-v1', 'work-address-disposition-v1',
     'work-derivation-v1', 'source-open-library-work-v1', 'work-author-credit-v1',
+    'work-title-control-v1',
     'realm-daily-rating-context-v1', 'realm-daily-rating-observation-v1',
     'realm-experience-rating-context-v1', 'realm-experience-rating-observation-v1',
     'rating-aggregate-default-policy-v1',
   ].includes(item.id))) {
     const rendered = renderProfile(profile);
     const evidenceName = profile.id === 'work-metadata-v1' ? 'work-profile' : `${profile.id.slice(0, -3)}-profile`;
-    const evidence = JSON.parse(readFileSync(join(repo, `model/tests/evidence/2026-09-24-${evidenceName}.json`), 'utf8')) as {
+    const evidenceDate = profile.id === 'work-metadata-v1' ? '2026-09-26' : '2026-09-24';
+    const evidence = JSON.parse(readFileSync(join(repo, `model/tests/evidence/${evidenceDate}-${evidenceName}.json`), 'utf8')) as {
       profile_sha256: string;
       outcomes: Record<string, { conforms: boolean }>;
     };

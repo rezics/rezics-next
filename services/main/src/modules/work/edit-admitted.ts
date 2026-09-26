@@ -7,8 +7,10 @@ import { assertGraphAdmissionOpen } from './restore-lineage.ts';
 import { changeTitleControl, TitleControlInvalid, type TitleControlBasis } from './title-control.ts';
 import { GRAPHS, RV, iri } from './activate.ts';
 import { editMetadataWork, metadataWorkEditDigest, readWorkEditTerminalReceipt,
-  sealMetadataWorkEditAdmission, StaleWorkHead, WorkEditUnavailable,
+  sealMetadataWorkEditAdmission, setWorkScalar, workScalarEditDigest,
+  StaleWorkHead, WorkEditUnavailable,
   type TerminalWorkEdit, type WorkEditReceipt } from './edit.ts';
+import { checkedWorkScalarValue, type WorkScalarValue } from './scalar-value.ts';
 
 export interface AdmittedMetadataEditInput {
   work: string;
@@ -20,7 +22,7 @@ export interface AdmittedMetadataEditInput {
 }
 
 function checkedResult(terminal: TerminalWorkEdit, registered: RegisteredAdmission,
-  input: AdmittedMetadataEditInput, digest: string): WorkEditReceipt {
+  input: Pick<AdmittedMetadataEditInput, 'work' | 'expectedHead'>, digest: string): WorkEditReceipt {
   if (terminal.admissionId !== registered.id || terminal.requestDigest !== digest
     || terminal.authorityEpoch !== registered.authorityEpoch || terminal.scope !== registered.scope) {
     throw new IdempotencyConflict('Work edit receipt differs from admission');
@@ -35,6 +37,62 @@ function checkedResult(terminal: TerminalWorkEdit, registered: RegisteredAdmissi
   return { work: terminal.work, revision: terminal.revision!, predecessor: terminal.predecessor,
     receipt: terminal.receipt, admissionId: registered.id, dataEpoch: terminal.dataEpoch,
     sequence: terminal.sequence, replayed: true };
+}
+
+export interface AdmittedWorkScalarInput {
+  work: string;
+  expectedHead: string;
+  scalarValue?: WorkScalarValue;
+  actingSubject: string;
+  idempotencyKey: string;
+}
+
+/** One bounded Work property edit under the existing Work edit authority. */
+export async function setAdmittedWorkScalar(
+  env: WorkActivationEnvironment,
+  account: Pick<AccountAssertionVerifier, 'verify'>,
+  access: Pick<AccessAdmissionRegistry, 'register' | 'claim' | 'recordGraphOutcome'>,
+  request: Request,
+  input: AdmittedWorkScalarInput,
+): Promise<WorkEditReceipt> {
+  const value = checkedWorkScalarValue(input.scalarValue);
+  const digest = workScalarEditDigest(input.work, input.expectedHead, value);
+  await assertGraphAdmissionOpen(env.fuseki, env.lineage);
+  const principal = await account.verify(request, ['work:edit']);
+  const registered = await access.register({ principal, actingSubject: input.actingSubject,
+    scope: `work:edit:${input.work}`, action: 'work.edit',
+    idempotencyKey: input.idempotencyKey, requestDigest: digest });
+  try {
+    let admission = registered;
+    if (registered.state !== 'sealed' && registered.dispatchEligible) {
+      try { admission = await access.claim(registered.id, digest); }
+      catch (error) {
+        if (!(error instanceof AdmissionDenied || error instanceof AdmissionExpired)) throw error;
+      }
+    }
+    let result: WorkEditReceipt | undefined;
+    if (admission.state === 'sealed') {
+      // Resolve the exact graph receipt after a lost response.
+    } else if (!admission.dispatchEligible || admission.state === 'registered') {
+      await sealMetadataWorkEditAdmission(env, admission);
+    } else {
+      try {
+        result = await setWorkScalar(env, { admission, work: input.work,
+          expectedHead: input.expectedHead, ...(value === undefined ? {} : { scalarValue: value }) });
+      } catch (error) {
+        if (error instanceof IdempotencyConflict) throw error;
+      }
+    }
+    const terminal = await readWorkEditTerminalReceipt(env, registered.id);
+    if (!terminal) throw new PendingAdmittedWork(registered.id, 'work-edit');
+    await access.recordGraphOutcome(registered.id, terminal);
+    const checked = checkedResult(terminal, registered, input, digest);
+    return result ? { ...checked, replayed: result.replayed } : checked;
+  } catch (error) {
+    if (error instanceof IdempotencyConflict || error instanceof StaleWorkHead
+      || error instanceof WorkEditUnavailable) throw error;
+    throw new PendingAdmittedWork(registered.id, 'work-edit');
+  }
 }
 
 /** Current Account and exact Work-scoped Access grant precede any edit dispatch. */

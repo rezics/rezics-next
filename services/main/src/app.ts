@@ -105,11 +105,13 @@ import { createAdmittedWorkDerivation, InvalidWorkDerivation, readWorkDerivation
   WorkDerivationUnavailable } from './modules/work/derivations.ts';
 import { createAdmittedFixedRelease, FixedReleaseStale, FixedReleaseUnavailable,
   InvalidFixedRelease, readFixedRelease } from './modules/work/fixed-release.ts';
-import { editAdmittedMetadataWork } from './modules/work/edit-admitted.ts';
+import { editAdmittedMetadataWork, setAdmittedWorkScalar } from './modules/work/edit-admitted.ts';
 import { StaleWorkHead, WorkEditUnavailable } from './modules/work/edit.ts';
 import { readTitleControl, TitleControlConflict, TitleControlInvalid, TitleControlUnavailable } from './modules/work/title-control.ts';
 import { readExactMainRevision, readExactWorkRevision, RevisionCorrupt, RevisionNotFound,
   RevisionUnavailable } from './modules/work/history.ts';
+import { InvalidWorkScalarValue, sameScalar, scalarExport, scalarFromBinding,
+  SCALAR_PREDICATE } from './modules/work/scalar-value.ts';
 import { assertGraphAdmissionOpen, RecoveryHold } from './modules/work/restore-lineage.ts';
 import { CancelledActivation, IdempotencyConflict, iri, type WorkActivationEnvironment } from './modules/work/activate.ts';
 import { createAdmittedTextContribution } from './modules/contribution/create-admitted.ts';
@@ -196,7 +198,7 @@ import { InvalidRatingAggregateQuery, queryStandingRatingAggregate,
   RatingAggregateBudgetExceeded, RatingAggregateUnavailable } from './modules/rating/aggregate.ts';
 import { exactMainRevision, exactWorkRevision, pendingOperation, problemResult, publicPhrasePageRequest,
   publicPhrasePageResult, publicQueryResult, unsupportedPublicSearchSelectors,
-  workResult } from './api-contract.ts';
+  workResult, workScalarRead, workScalarValue, workScalarWrite } from './api-contract.ts';
 import { actingContextCheck, actingContextDiscovery, actingContextPreference,
   authorizedReadProblems, classificationContextReadResult,
   classificationContextWriteResult, classificationDecisionWriteResult,
@@ -1553,6 +1555,9 @@ function commandError(error: unknown): Response {
   if (error instanceof TitleControlInvalid) return problem(400, 'invalid_title_control', error.message);
   if (error instanceof TitleControlUnavailable) return problem(503, 'title_control_unavailable', error.message);
   if (error instanceof StaleWorkHead) return problem(409, 'stale_head', 'Expected Work revision is stale');
+  if (error instanceof InvalidWorkScalarValue) {
+    return problem(400, 'invalid_scalar_value', 'Work scalar value is invalid');
+  }
   if (error instanceof StaleContributionDraftHead) {
     return problem(409, 'stale_head', 'Expected Contribution draft revision is stale');
   }
@@ -5269,6 +5274,98 @@ export function createMainApp(fuseki: FusekiClient, work?: MainWorkDependencies)
           });
         return Response.json({ profile: 'fixed-native-text-release-v1', ...exact },
           { headers: { 'cache-control': 'no-store' } });
+      } catch (error) { return commandError(error); }
+    })
+    .post('/v1/works/:id/scalar-value', {
+      params: t.Object({ id: groupUuid }),
+      body: t.Object({ profile: t.Literal('work-scalar-state-v1'),
+        expectedHead: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
+        scalarValue: t.Optional(workScalarValue),
+        actingSubject: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
+      }, { additionalProperties: false }),
+      response: { 200: workScalarWrite, 202: pendingOperation,
+        ...writeProblems, 404: problemResult(404) },
+    }, async ({ request, params, body }) => {
+      const idempotencyKey = request.headers.get('idempotency-key');
+      if (!idempotencyKey || !/^[A-Za-z0-9:_./-]{1,128}$/.test(idempotencyKey)) {
+        return problem(400, 'invalid_idempotency_key', 'A valid Idempotency-Key header is required');
+      }
+      try {
+        const value = body.scalarValue;
+        const receipt = await setAdmittedWorkScalar(work.environment, work.account, work.access,
+          request, { work: `https://rezics.com/id/${params.id}`, expectedHead: body.expectedHead,
+            ...(value === undefined ? {} : { scalarValue: value }),
+            actingSubject: body.actingSubject, idempotencyKey });
+        return Response.json({ profile: 'work-scalar-state-v1', work: receipt.work,
+          revision: receipt.revision, predecessor: receipt.predecessor,
+          ...(value === undefined ? {} : { scalarValue: value }),
+          sourcePosition: { datasetId: 'product', dataEpoch: receipt.dataEpoch,
+            sequence: receipt.sequence }, replayed: receipt.replayed },
+        { headers: { 'cache-control': 'no-store' } });
+      } catch (error) { return commandError(error); }
+    })
+    .get('/v1/works/:id/scalar-value', {
+      params: t.Object({ id: groupUuid }),
+      query: t.Object({ actingSubject: t.String({
+        pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$',
+      }) }, { additionalProperties: false }),
+      response: { 200: workScalarRead, ...authorizedReadProblems },
+    }, async ({ request, params, query }) => {
+      try {
+        const target = `https://rezics.com/id/${params.id}`;
+        await assertGraphAdmissionOpen(fuseki, work.environment.lineage);
+        const principal = await work.account.verify(request, ['work:read']);
+        if (!await work.access.canReadWork(principal, query.actingSubject, target)) {
+          return problem(404, 'work_unavailable', 'Work is unavailable');
+        }
+        const graph = await fuseki.query(`PREFIX rv: <https://rezics.com/vocab/>
+          PREFIX schema: <https://schema.org/>
+          SELECT ?head ?scalar WHERE { GRAPH <urn:rezics:graph:current> {
+            ${iri(target)} a schema:CreativeWork ; rv:head ?head .
+            OPTIONAL { ${iri(target)} <${SCALAR_PREDICATE}> ?scalar }
+          } } LIMIT 2`);
+        const rows = graph.results?.bindings ?? [];
+        if (!rows.length) return problem(404, 'work_unavailable', 'Work is unavailable');
+        if (rows.length !== 1 || !rows[0]?.head) throw new RevisionCorrupt('Work scalar graph is ambiguous');
+        let graphValue;
+        try { graphValue = scalarFromBinding(rows[0].scalar); }
+        catch { throw new RevisionCorrupt('Work scalar graph term is invalid'); }
+        const exact = await readExactWorkRevision(work.environment, rows[0].head.value,
+          async owner => owner === target);
+        if (!sameScalar(graphValue, exact.scalarValue)) {
+          throw new RevisionCorrupt('Work scalar graph differs from exact revision');
+        }
+        return Response.json({ profile: 'work-scalar-state-v1', work: target,
+          revision: exact.revision,
+          ...(exact.scalarValue === undefined ? {} : { scalarValue: exact.scalarValue }),
+          export: scalarExport(target, exact.scalarValue), sourcePosition: exact.sourcePosition },
+        { headers: { 'cache-control': 'no-store' } });
+      } catch (error) { return commandError(error); }
+    })
+    .get('/v1/works/:id/scalar-value/revisions/:revision', {
+      params: t.Object({ id: groupUuid, revision: groupUuid }),
+      query: t.Object({ actingSubject: t.String({
+        pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$',
+      }) }, { additionalProperties: false }),
+      response: { 200: workScalarRead, ...authorizedReadProblems },
+    }, async ({ request, params, query }) => {
+      try {
+        const target = `https://rezics.com/id/${params.id}`;
+        await assertGraphAdmissionOpen(fuseki, work.environment.lineage);
+        const principal = await work.account.verify(request, ['work:read']);
+        if (!await work.access.canReadWork(principal, query.actingSubject, target)) {
+          return problem(404, 'revision_unavailable', 'Revision is unavailable');
+        }
+        const current = await fuseki.query(`PREFIX schema: <https://schema.org/>
+          ASK { GRAPH <urn:rezics:graph:current> { ${iri(target)} a schema:CreativeWork } }`);
+        if (current.boolean !== true) return problem(404, 'revision_unavailable', 'Revision is unavailable');
+        const exact = await readExactWorkRevision(work.environment,
+          `https://rezics.com/id/${params.revision}`, async owner => owner === target);
+        return Response.json({ profile: 'work-scalar-state-v1', work: target,
+          revision: exact.revision,
+          ...(exact.scalarValue === undefined ? {} : { scalarValue: exact.scalarValue }),
+          export: scalarExport(target, exact.scalarValue), sourcePosition: exact.sourcePosition },
+        { headers: { 'cache-control': 'no-store' } });
       } catch (error) { return commandError(error); }
     })
     .post('/v1/content-edits', {

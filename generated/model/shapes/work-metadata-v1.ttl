@@ -25,6 +25,11 @@
         sh:minCount 1 ;
         sh:maxCount 1 ;
         sh:nodeKind sh:IRI ;
+    ] ;
+    sh:property [
+        sh:path rv:scalarValue ;
+        sh:maxCount 1 ;
+        sh:nodeKind sh:IRIOrLiteral ;
     ] .
 
 <https://rezics.com/definition/work-metadata-v1/main-version-shape>

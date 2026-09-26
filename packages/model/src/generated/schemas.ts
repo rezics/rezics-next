@@ -266,7 +266,7 @@ export const WorkAddressDispositionV1RetiredRevisionShapeSchema = Type.Object({ 
 
 export type WorkAddressDispositionV1RetiredRevisionShape = Static<typeof WorkAddressDispositionV1RetiredRevisionShapeSchema>;
 
-export const WorkMetadataV1WorkShapeSchema = Type.Object({ "@id": Type.String({ minLength: 1 }), "rdf:type": Type.Array(Type.String({}), { minItems: 1, contains: Type.Literal("https://schema.org/CreativeWork") }), "rv:mainVersion": Type.Array(Type.String({}), { minItems: 1, maxItems: 1 }), "rv:continuityProfile": Type.Array(Type.String({}), { minItems: 1, maxItems: 1 }) }, { additionalProperties: true });
+export const WorkMetadataV1WorkShapeSchema = Type.Object({ "@id": Type.String({ minLength: 1 }), "rdf:type": Type.Array(Type.String({}), { minItems: 1, contains: Type.Literal("https://schema.org/CreativeWork") }), "rv:mainVersion": Type.Array(Type.String({}), { minItems: 1, maxItems: 1 }), "rv:continuityProfile": Type.Array(Type.String({}), { minItems: 1, maxItems: 1 }), "rv:scalarValue": Type.Optional(Type.Array(Type.Unknown(), { maxItems: 1 })) }, { additionalProperties: true });
 
 export type WorkMetadataV1WorkShape = Static<typeof WorkMetadataV1WorkShapeSchema>;
 

@@ -69,6 +69,53 @@ to the existing Work manifest. It uses the existing Work command, admission and
 exact-revision lookup paths; its owner-call count and indexed exact lookup bound
 do not grow with the number of Works. Physical engine work is qualified separately.
 
+### Bounded Work scalar state profile
+
+`work-scalar-state-v1` admits one `rv:scalarValue` on one metadata Work. The
+request is `POST /v1/works/{id}/scalar-value` with `expectedHead`,
+`actingSubject`, a stable `Idempotency-Key`, and an optional `scalarValue`.
+`GET /v1/works/{id}/scalar-value` reads the current graph and exact Work manifest;
+`GET /v1/works/{id}/scalar-value/revisions/{revision}` reads an exact immutable
+Work revision. Both reads require current `work:read` authority and return an
+expanded JSON-LD `export` object. The write requires `work:edit` and produces a
+new Work component revision, leaving MainVersion and other Works untouched.
+Title edits preserve the scalar field; scalar edits preserve title, type set and
+MainVersion. This is one bounded property, not a general semantic-change API.
+
+| State | API and immutable Work state | Current RDF `rv:scalarValue` and JSON-LD export |
+| --- | --- | --- |
+| Zero | `{ "kind": "integer", "lexical": "0" }` | `"0"^^xsd:integer`; export `@value: "0"`, `@type: xsd:integer` |
+| False | `{ "kind": "boolean", "lexical": "false" }` | `"false"^^xsd:boolean`; export typed boolean lexical |
+| Empty string | `{ "kind": "string", "lexical": "" }` | `""^^xsd:string`; export typed empty string |
+| Absent | Omit `scalarValue` entirely; JSON null is invalid | No triple and no export property |
+| Explicit unknown | `{ "kind": "unknown" }` | `rv:ExplicitUnknown` IRI; export `@id` |
+| Explicit no-value | `{ "kind": "no-value" }` | `rv:ExplicitNoValue` IRI; export `@id` |
+
+The lexical spaces above are intentionally exact for this first profile.
+`0`, `false` and the empty string remain literals; unknown and known absence of a
+value are separate named states. The Work manifest preserves the tagged sum so
+an old revision does not rely on a mutable graph snapshot or JavaScript number
+conversion. The current query compares its RDF term with the exact current
+manifest. Missing or corrupt manifest/payload bytes produce a typed unavailable
+response; a read never substitutes the current head for requested history.
+
+The existing `work.edit` admission and `edit-metadata-work` receipt family bind
+the new command through a distinct `work-scalar-state-v1` request digest that
+includes the state tag and lexical. Identical keys replay one terminal receipt;
+changed intent conflicts; the expected Work head is guarded in the Jena command.
+Held-graph replay validates the retained digest against its immutable Work
+manifest before rebuilding the property triple. A separate property component
+was considered, but it would require another Access receipt family and relay
+recovery dispatch, including a special null first head. The Work component is
+the narrow owner boundary for this one-property profile.
+
+The representation decision uses [RDF 1.1 Concepts](https://www.w3.org/TR/rdf11-concepts/)
+for the distinction between literal lexical form, datatype and IRI, and
+[JSON-LD 1.1](https://www.w3.org/TR/json-ld11/) for expanded typed values and
+IRI objects. Those standards define exchange meaning; they do not prove this
+application's admission, exact history or recovery. The tagged manifest and
+fixed Work revision command are REZICS choices, checked by the MODEL02 tests.
+
 ## Values and relations
 
 Preserve zero, false, empty, absent, unknown, no-value, inapplicable, unobserved,

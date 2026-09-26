@@ -25,6 +25,7 @@ export const workMetadataProfile = {
         { path: 'rdf:type', hasValue: 'schema:CreativeWork' },
         { path: 'rv:mainVersion', minCount: 1, maxCount: 1, nodeKind: 'sh:IRI', class: 'rv:MainVersion' },
         { path: 'rv:continuityProfile', minCount: 1, maxCount: 1, nodeKind: 'sh:IRI' },
+        { path: 'rv:scalarValue', maxCount: 1, nodeKind: 'sh:IRIOrLiteral' },
       ],
     },
     {

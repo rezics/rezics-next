@@ -29,7 +29,9 @@ async function retainedCommand(env: WorkActivationEnvironment, update: string,
 }
 import { readComponentState, readMainPayloadForRevision, readWorkComponentState,
   readWorkPayloadForRevision } from './history.ts';
-import { readWorkEditTerminalReceipt, workEditReceiptIri } from './edit.ts';
+import { scalarRdfTerm, SCALAR_PREDICATE } from './scalar-value.ts';
+import { metadataWorkEditDigest, readWorkEditTerminalReceipt,
+  workEditReceiptIri, workScalarEditDigest } from './edit.ts';
 import { readWorkTerminalReceipt, workReceiptIri } from './receipt.ts';
 import { relayCoverage, relayRetainedEventAt, RelayCheckpointConflict,
   type MainCloudEvent, type RelayCoverage } from '../outbox/relay.ts';
@@ -236,6 +238,12 @@ export async function reconcileRetainedWorkEdit(
     throw new RetainedEffectConflict('retained Work manifest reference is invalid');
   }
   const payload = await readWorkPayloadForRevision(env, receipt.workManifest, receipt.work);
+  if (receipt.requestDigest !== metadataWorkEditDigest(receipt.work, receipt.expectedHead, payload.title)
+    && receipt.requestDigest !== workScalarEditDigest(receipt.work, receipt.expectedHead,
+      payload.scalarValue)) {
+    throw new RetainedEffectConflict('retained Work edit digest differs from its exact payload');
+  }
+  const scalarTerm = scalarRdfTerm(payload.scalarValue);
   const client = await accessPool.connect();
   try {
     await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ');
@@ -259,12 +267,13 @@ export async function reconcileRetainedWorkEdit(
       DELETE {
         GRAPH ${iri(GRAPHS.control)} { ${iri(marker)} rv:reconciledPriorSequence ?last }
         GRAPH ${iri(GRAPHS.current)} { ${iri(receipt.work)} rv:head ${iri(receipt.expectedHead)} ;
-          rdfs:label ?oldTitle . }
+          rdfs:label ?oldTitle . ${iri(receipt.work)} <${SCALAR_PREDICATE}> ?oldScalar . }
       }
       INSERT {
         GRAPH ${iri(GRAPHS.control)} { ${iri(marker)} rv:reconciledPriorSequence ${sequence} }
         GRAPH ${iri(GRAPHS.current)} { ${iri(receipt.work)} rv:head ${iri(receipt.workRevision)} ;
-          rdfs:label ${lit(payload.title)}@en . }
+          rdfs:label ${lit(payload.title)}@en .
+          ${scalarTerm ? `${iri(receipt.work)} <${SCALAR_PREDICATE}> ${scalarTerm} .` : ''} }
         GRAPH ${iri(GRAPHS.revisions)} {
           ${iri(receipt.workRevision)} a rv:RevisionAnchor ; rv:component ${iri(receipt.work)} ;
             rv:predecessor ${iri(receipt.expectedHead)} ; rv:operation ${iri(receipt.operation)} ;
@@ -303,6 +312,7 @@ export async function reconcileRetainedWorkEdit(
         GRAPH ${iri(GRAPHS.current)} {
           ${iri(receipt.work)} rv:head ${iri(receipt.expectedHead)} ;
             rv:mainVersion ${iri(payload.mainVersion)} ; rdfs:label ?oldTitle .
+          OPTIONAL { ${iri(receipt.work)} <${SCALAR_PREDICATE}> ?oldScalar }
         }
         FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt.id)} ?p ?o } }
         FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.revisions)} { ${iri(receipt.workRevision)} ?p ?o } }
@@ -335,7 +345,9 @@ export async function reconcileRetainedWorkEdit(
       ? await env.fuseki.query(`PREFIX rv: <${RV}>
           PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#> ASK {
           GRAPH ${iri(GRAPHS.current)} { ${iri(receipt.work)} rv:head ${iri(receipt.workRevision)} ;
-            rv:mainVersion ${iri(payload.mainVersion)} ; rdfs:label ${lit(payload.title)}@en . }
+            rv:mainVersion ${iri(payload.mainVersion)} ; rdfs:label ${lit(payload.title)}@en .
+            ${scalarTerm ? `${iri(receipt.work)} <${SCALAR_PREDICATE}> ${scalarTerm} .` :
+    `FILTER NOT EXISTS { ${iri(receipt.work)} <${SCALAR_PREDICATE}> ?scalar }`} }
         }`)
       : { boolean: true };
     if (!terminal || terminal.outcome !== 'succeeded' || terminal.receipt !== receipt.id

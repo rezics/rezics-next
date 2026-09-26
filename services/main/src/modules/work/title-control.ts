@@ -8,6 +8,8 @@ import { CONTINUITY, DATASET, GRAPHS, ID, PROFILE, RV, hash, iri, lit, metadataW
   IdempotencyConflict, type WorkActivationEnvironment } from './activate.ts';
 import { PendingAdmittedWork } from './create-admitted.ts';
 import { assertGraphAdmissionOpen } from './restore-lineage.ts';
+import { readWorkPayloadForRevision, RevisionCorrupt } from './history.ts';
+import { sameScalar, scalarFromBinding, SCALAR_PREDICATE } from './scalar-value.ts';
 
 export const TITLE_PROFILE = 'https://rezics.com/definition/work-title-control-v1';
 const NATIVE = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
@@ -155,12 +157,30 @@ export async function titleControlCommand(env: WorkActivationEnvironment, admiss
   intent: TitleControlIntent, retained?: TitleControlReceipt): Promise<CommandEnvelope> {
   const digest = titleControlDigest(intent);
   if (digest !== admission.requestDigest || intent.action !== admission.action) throw new IdempotencyConflict('title admission differs');
-  const current = await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?main ?type WHERE {
-    GRAPH ${iri(GRAPHS.current)} { ${iri(intent.work)} rv:mainVersion ?main ; a ?type . } } LIMIT 10`, 4096);
+  const current = await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?main ?type ?scalar ?workManifest WHERE {
+    GRAPH ${iri(GRAPHS.current)} { ${iri(intent.work)} rv:mainVersion ?main ; a ?type .
+      OPTIONAL { ${iri(intent.work)} <${SCALAR_PREDICATE}> ?scalar } }
+    GRAPH ${iri(GRAPHS.revisions)} { ${iri(intent.expectedHead)} a rv:RevisionAnchor ;
+      rv:component ${iri(intent.work)} ; rv:manifest ?workManifest ;
+      rv:modelRevision ${iri(PROFILE)} ; rv:shapeRevision ${iri(PROFILE)} . }
+  } LIMIT 10`, 4096);
   const rows = current.results?.bindings ?? [];
   const main = rows[0]?.main?.value;
   if (!main || rows.some(row => row.main?.value !== main)) throw new TitleControlUnavailable('Work is unavailable');
   const semanticTypes = normalizeWorkSemanticTypes(rows.map(row => row.type!.value).filter(type => type !== 'https://schema.org/CreativeWork'));
+  const priorManifests = new Set(rows.map(row => row.workManifest?.value));
+  const scalarBindings = rows.map(row => row.scalar).filter(binding => binding !== undefined);
+  if (priorManifests.size !== 1 || !priorManifests.values().next().value
+    || new Set(scalarBindings.map(binding => JSON.stringify(binding))).size > 1) {
+    throw new TitleControlUnavailable('Work scalar state is ambiguous');
+  }
+  const prior = await readWorkPayloadForRevision(env, priorManifests.values().next().value!, intent.work);
+  let currentScalar;
+  try { currentScalar = scalarFromBinding(scalarBindings[0]); }
+  catch { throw new RevisionCorrupt('Work scalar graph term is invalid'); }
+  if (prior.mainVersion !== main || !sameScalar(prior.scalarValue, currentScalar)) {
+    throw new RevisionCorrupt('Work scalar state differs from its retained head');
+  }
   const control = retained?.control ?? ID + Bun.randomUUIDv7(), operation = retained?.operation ?? ID + Bun.randomUUIDv7();
   const revision = retained?.revision ?? (intent.action === 'work.title.return' ? intent.expectedHead : ID + Bun.randomUUIDv7());
   const receipt = titleControlReceiptIri(admission.id), batch = `urn:rezics:outbox:${hash(receipt)}`;
@@ -170,7 +190,8 @@ export async function titleControlCommand(env: WorkActivationEnvironment, admiss
     : Promise.resolve(prepareComponent(env.objectDirectory, intent.work, state, profile));
   const manifest = retained?.controlManifest?.slice(-64) ?? await put({ intent, control, revision, operation }, TITLE_PROFILE);
   const workManifest = intent.action === 'work.title.return' ? null : retained?.workManifest?.slice(-64) ?? await put({ mainVersion: main,
-    continuityProfile: CONTINUITY, title: intent.title, language: 'en', ...(semanticTypes.length ? { semanticTypes } : {}) }, PROFILE);
+    continuityProfile: CONTINUITY, title: intent.title, language: 'en', ...(semanticTypes.length ? { semanticTypes } : {}),
+    ...(prior.scalarValue === undefined ? {} : { scalarValue: prior.scalarValue }) }, PROFILE);
   const expected = intent.basis.head ? iri(intent.basis.head) : 'rv:Absent';
   let update = `PREFIX rv: <${RV}> PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
     DELETE { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?n }

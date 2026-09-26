@@ -28,6 +28,29 @@ partial MODEL05/MODEL06 evidence for one append-only relation and its pinned exa
 history; semantic-definition retirement, editable credit history, arbitrary
 participants and the general relation-change operation remain unqualified.
 
+The bounded [Work scalar profile](../contracts/semantic-model.md#bounded-work-scalar-state-profile)
+provides a MODEL02 case for one `rv:scalarValue` on a metadata Work. Selected
+real Account/Access/Main/Jena integration `20260926t131838-6836e6` passed all
+six states through writes, current and exact old-revision reads, RDF queries
+and expanded JSON-LD export. It also passed denied and stale requests, same-key
+replay, changed-intent conflict, title preservation and missing/corrupt exact
+object handling. The initial one-state template passed
+`20260926t130425-0fa17d`. Isolated held-graph replay
+`20260926t131053-03fb93` rebuilt all six scalar states and a title edit from
+sealed Access admissions, relay events and immutable objects; a changed Access
+digest blocked recovery. These selected artifacts reported source stable and used the
+local `rezics/fuseki:6.2.0-cmd0.5.29-scalar1` image, config ID
+`sha256:7f20578694a47d3af2ee6fda6ceac3f2c162d7b6a3d85f88ff6741944e8c485a`.
+The six reviewed Work shape candidates, including an IRI scalar, blank-node
+rejection and multiple-value rejection, passed native command validation in
+`20260926t131755-6d0a7c`; the prior shape evidence remains archived.
+The current read uses one bounded Work graph lookup (`LIMIT 2`) and one exact
+revision lookup; exact history uses the immutable revision anchor and objects.
+These are path bounds, not a load or latency measurement. The profile does not
+qualify arbitrary values/properties, the general semantic-change API, MODEL03
+or MODEL04. The manager-owned QA case map and merged qualification remain
+separate from these selected runs.
+
 | ID | Scenario | Required result |
 | --- | --- | --- |
 | MODEL01 | Create multiple semantic types on one Resource | Stable identity; capability admission remains independent. |

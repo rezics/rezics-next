@@ -17,10 +17,48 @@ export const workResult = t.Object({
   mainRevision: t.String(), sourcePosition, replayed: t.Boolean(),
 });
 
+/** Wire values are lexical and tagged; omission is the absent state. Null is invalid. */
+export const workScalarValue = t.Union([
+  t.Object({ kind: t.Literal('integer'), lexical: t.Literal('0') }, { additionalProperties: false }),
+  t.Object({ kind: t.Literal('boolean'), lexical: t.Literal('false') }, { additionalProperties: false }),
+  t.Object({ kind: t.Literal('string'), lexical: t.Literal('') }, { additionalProperties: false }),
+  t.Object({ kind: t.Literal('unknown') }, { additionalProperties: false }),
+  t.Object({ kind: t.Literal('no-value') }, { additionalProperties: false }),
+]);
+
+const rdfScalarObject = t.Union([
+  t.Object({ '@value': t.Literal('0'), '@type': t.Literal('http://www.w3.org/2001/XMLSchema#integer') },
+    { additionalProperties: false }),
+  t.Object({ '@value': t.Literal('false'), '@type': t.Literal('http://www.w3.org/2001/XMLSchema#boolean') },
+    { additionalProperties: false }),
+  t.Object({ '@value': t.Literal(''), '@type': t.Literal('http://www.w3.org/2001/XMLSchema#string') },
+    { additionalProperties: false }),
+  t.Object({ '@id': t.Union([
+    t.Literal('https://rezics.com/vocab/ExplicitUnknown'),
+    t.Literal('https://rezics.com/vocab/ExplicitNoValue'),
+  ]) }, { additionalProperties: false }),
+]);
+
+export const workScalarRead = t.Object({
+  profile: t.Literal('work-scalar-state-v1'), work: t.String(), revision: t.String(),
+  scalarValue: t.Optional(workScalarValue),
+  export: t.Object({ '@id': t.String(),
+    'https://rezics.com/vocab/scalarValue': t.Optional(t.Tuple([rdfScalarObject])),
+  }, { additionalProperties: false }),
+  sourcePosition,
+}, { additionalProperties: false });
+
+export const workScalarWrite = t.Object({
+  profile: t.Literal('work-scalar-state-v1'), work: t.String(), revision: t.String(),
+  predecessor: t.String(), scalarValue: t.Optional(workScalarValue),
+  sourcePosition, replayed: t.Boolean(),
+}, { additionalProperties: false });
+
 export const exactWorkRevision = t.Object({
   revision: t.String(), work: t.String(), predecessor: t.Optional(t.String()),
   operation: t.String(), mainVersion: t.String(), title: t.String(),
   language: t.Literal('en'), semanticTypes: t.Array(t.String()), sourcePosition,
+  scalarValue: t.Optional(workScalarValue),
 });
 
 export const exactMainRevision = t.Object({

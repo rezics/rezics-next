@@ -3,6 +3,7 @@ import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import manifest from '../../generated/model/manifest.json';
 import { nativeFixtures } from './fixtures/native/index.ts';
+import type { NativeProfileFixture } from './native-fixture-types.ts';
 
 const root = resolve(import.meta.dir, '../..');
 const current = 'urn:rezics:graph:current';
@@ -19,7 +20,8 @@ type PathDifference = { profile: string; case: string; expectedPath: string; rep
 
 function evidencePath(id: string): string {
   const name = id === 'work-metadata-v1' ? 'work-profile' : `${id.slice(0, -3)}-profile`;
-  return resolve(root, `model/tests/evidence/2026-09-24-${name}.json`);
+  const date = id === 'work-metadata-v1' ? '2026-09-26' : '2026-09-24';
+  return resolve(root, `model/tests/evidence/${date}-${name}.json`);
 }
 
 function sparqlData(turtle: string): { prefixes: string; body: string } {
@@ -59,7 +61,8 @@ function pathIri(hint: string): string {
 }
 
 /** Verify the reviewed candidate outcomes through command poststate bindings. */
-export async function runNativeEquivalence(baseUrl: string): Promise<{
+export async function runNativeEquivalence(baseUrl: string,
+  fixtures: readonly NativeProfileFixture[] = nativeFixtures): Promise<{
   moduleVersion: string; profiles: Record<string, string>; cases: number;
   expectedConforming: number; expectedRejected: number;
   mismatches: Mismatch[]; pathDifferences: PathDifference[];
@@ -73,7 +76,7 @@ export async function runNativeEquivalence(baseUrl: string): Promise<{
   let index = 0;
   let expectedConforming = 0;
   let checkedMissingBinding = false;
-  for (const fixture of nativeFixtures) {
+  for (const fixture of fixtures) {
     if (health.profiles[fixture.id] !== fixture.sha256) {
       throw new Error(`Command image has wrong ${fixture.id} digest: ${health.profiles[fixture.id]}`);
     }
@@ -172,7 +175,11 @@ export async function runNativeEquivalence(baseUrl: string): Promise<{
       }
     }
   }
-  if (!checkedMissingBinding) throw new Error('binding omission probe was not exercised');
+  if (fixtures.some(fixture => ['classification-context-v1', 'classification-direct-decision-v1',
+    'classification-proposition-v1', 'realm-standing-rating-context-v1',
+    'realm-standing-rating-observation-v1'].includes(fixture.id)) && !checkedMissingBinding) {
+    throw new Error('binding omission probe was not exercised');
+  }
   return { moduleVersion: health.moduleVersion, profiles: health.profiles,
     cases: index, expectedConforming, expectedRejected: index - expectedConforming,
     mismatches, pathDifferences };
@@ -196,10 +203,31 @@ test('P0.3: TypeScript candidate fixtures preserve all recorded profile digests 
       cases++;
     }
   }
-  expect(cases).toBe(66);
+  expect(cases).toBe(69);
 });
 
 const nativeTest = process.env.MODEL_NATIVE_EQUIVALENCE === '1' && base ? test : test.skip;
+test('MODEL02: Work scalar native fixture preserves recorded outcomes and digest', () => {
+  const work = nativeFixtures.find(fixture => fixture.id === 'work-metadata-v1');
+  if (!work) throw new Error('Work metadata native fixture absent');
+  const evidence = JSON.parse(readFileSync(evidencePath(work.id), 'utf8')) as {
+    profile_sha256: string; outcomes: Record<string, { conforms: boolean }>;
+  };
+  expect(work.sha256).toBe(evidence.profile_sha256);
+  expect(manifest.profiles.find(profile => profile.id === work.id)?.sha256).toBe(work.sha256);
+  expect(Object.keys(work.cases).sort()).toEqual(Object.keys(evidence.outcomes).sort());
+  for (const [name, candidate] of Object.entries(work.cases)) {
+    expect(candidate.expected).toBe(evidence.outcomes[name]?.conforms);
+  }
+});
+nativeTest('MODEL02: reviewed Work scalar shape candidates match native command validation', async () => {
+  const work = nativeFixtures.find(fixture => fixture.id === 'work-metadata-v1');
+  if (!work) throw new Error('Work metadata native fixture absent');
+  const result = await runNativeEquivalence(base!, [work]);
+  expect(result.cases).toBe(6);
+  expect(result.mismatches).toEqual([]);
+  expect(result.pathDifferences).toEqual([]);
+});
 nativeTest('MODEL17/MODEL27: generated profiles match recorded candidates through native command validation', async () => {
   const result = await runNativeEquivalence(base!);
   const reportPath = process.env.REZICS_QA_ARTIFACT_DIR
@@ -210,7 +238,7 @@ nativeTest('MODEL17/MODEL27: generated profiles match recorded candidates throug
   console.log(`P0.3 native matrix ${result.moduleVersion}: ${result.cases - result.mismatches.length}/${result.cases} outcomes matched, ${result.pathDifferences.length} violation paths absent from bounded reports; ${reportPath}`);
   if (process.env.MODEL_NATIVE_EQUIVALENCE_STRICT === '1') {
     expect(result.moduleVersion).toBe('0.5.29');
-    expect(result.cases).toBe(66);
+    expect(result.cases).toBe(69);
     expect(result.mismatches).toEqual([]);
     expect(result.pathDifferences).toEqual([]);
   }
