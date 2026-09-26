@@ -47,7 +47,7 @@ async function migrate(pool: Pool, owner: 'access' | 'relay'): Promise<void> {
   }
 }
 
-test('OPS03/LIVE01/LIVE02/LIVE03/LIVE05/LIVE13: source and withdrawn title support survive held graph restore', async () => {
+test('MODEL09/OPS03/LIVE01/LIVE02/LIVE03/LIVE05/LIVE13: source Statements survive held graph restore', async () => {
   if (!Bun.env.REZICS_QA_RUN_ID) throw new Error('Run through the isolated fault/recovery QA tier');
   const prefix = randomUUID().slice(0, 12);
   const liveId = `source-replay-${prefix}-l`;
@@ -218,6 +218,15 @@ test('OPS03/LIVE01/LIVE02/LIVE03/LIVE05/LIVE13: source and withdrawn title suppo
     expect(await replay()).toEqual({ ...first, replayed: true });
     const restoredSource = new OpenLibrarySourceGraph(restoredFuseki, nextLineage, conversions);
     expect(await restoredSource.read(principalId, conversionId)).toEqual(original);
+    expect((await restoredFuseki.query(`PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+      PREFIX prov: <http://www.w3.org/ns/prov#> PREFIX rv: <https://rezics.com/vocab/>
+      SELECT (COUNT(DISTINCT ?statement) AS ?count) WHERE {
+        GRAPH <urn:rezics:graph:source> {
+          <${original!.conversion}> rv:sourceStatement ?statement .
+          ?statement a rdf:Statement ; prov:wasDerivedFrom <${original!.observation}> ;
+            rv:sourceByteDigest "${original!.sourceDigest}" .
+        }
+      }`)).results?.bindings?.[0]?.count?.value).toBe('2');
     const retained = await relayRetainedEventAt(relayPool, coverage, '1');
     const envelope = await readMainOutboxEnvelope(restoredFuseki, {
       batchId: retained.batch.batchId, dataEpoch: coverage.dataEpoch, sequence: '1',

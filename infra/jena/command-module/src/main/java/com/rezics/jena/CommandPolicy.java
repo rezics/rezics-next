@@ -103,7 +103,7 @@ final class CommandPolicy {
         if (graphs.contains(SOURCE) != sourceProjection) {
             throw new IllegalArgumentException("source graph requires its fixed receipt family");
         }
-        if (sourceProjection && (source.size() != 3
+        if (sourceProjection && (source.size() < 4 || source.size() > 5
             || !graphs.equals(Set.of(CONTROL, RECEIPTS, OUTBOX, SOURCE))
             || delete.stream().anyMatch(quad -> SOURCE.equals(quad.getGraph().getURI())))) {
             throw new IllegalArgumentException("source projection graph footprint differs");

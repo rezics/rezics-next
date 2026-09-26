@@ -143,20 +143,30 @@ resolution of missing/unmapped lists require a later explicit profile.
 
 `POST /v1/sources/conversions/{conversion}/source-graph` projects one verified,
 complete Open Library Work conversion into Jena's private
-`urn:rezics:graph:source` graph. Its three source-qualified nodes are the
+`urn:rezics:graph:source` graph. Its three base source-qualified nodes are the
 SourceRecord, Observation and Conversion. The graph contains source key, title,
 description, digest, coverage, revision, rights evidence and ordered author and
-subject arrays as JSON literals. It does not create a native Work, publish text or
-grant reuse. Main verifies the immutable PostgreSQL conversion and observation,
-requires `source:convert` and an active Access principal, then sends one fixed
-source command with three reviewed SHACL focuses. The command gate restricts the
+subject arrays as JSON literals. It also contains one identified `rdf:Statement`
+for the source title and, when present, one for the source description. Each
+statement's subject is the source Conversion, its predicate is the corresponding
+source-only field predicate, and its object preserves the exact lexical value.
+`prov:wasDerivedFrom` and local observation, byte digest, mapping revision and
+disposition fields bind each claim to the immutable capture. These staged
+statements do not assert an accepted native Work edge; adoption remains a separate
+explicit operation. It does not create a native Work, publish text or grant reuse.
+Main verifies the immutable PostgreSQL conversion and observation, requires
+`source:convert` and an active Access principal, then sends one fixed source
+command with reviewed SHACL focuses for the base nodes and each statement. The command gate restricts the
 source graph to this receipt family, rejects source deletions and unreviewed
 predicates, binds all three identities and the digest to its receipt, and records
 the product sequence and an outbox event atomically. Repeating the operation uses
 the conversion-derived receipt and returns its original graph position.
 `GET` on the same path requires `source:read` and the observation's principal;
 it verifies the exact source triples and receipt before returning the private
-projection. A lost graph write response can be resolved by its receipt. Full
+projection. Reification uses a versioned receipt identity so a retained older
+three-node projection can be extended without mutating its original receipt; reads
+continue to resolve that earlier graph position while verifying added statements.
+A lost graph write response can be resolved by its receipt. Full
 source-graph restore and native adoption remain separate qualification work.
 The first held-restore replayer verifies one retained source event against the
 relay's exact batch/coverage and immutable PostgreSQL conversion and observation,
@@ -405,11 +415,16 @@ matching in the two list lengths, with no provider call or native write.
 Recording a selected ambiguous pair adds one immutable indexed PostgreSQL
 insert/read and the same bounded verification. Its exact read is one indexed row
 lookup plus bounded re-verification; neither path scans unrelated source records.
-Projection has a fixed three-subject graph footprint and one native transaction
-with a fixed receipt/outbox event. It reads one conversion and its at-most-64 KiB
-observation through indexed private owner lookups, validates the three selected
-source nodes, then uses bounded receipt and graph checks for the private read.
-No corpus scan or provider call occurs during projection or replay.
+Projection has at most five source subjects: the three base nodes, one title
+Statement and one optional description Statement. Reification adds at most 24
+source triples and validates the statement shape once per statement. Each project
+command has one native transaction, one receipt and one outbox event; its new
+receipt identity can extend an older projection while leaving that receipt
+immutable. It reads one conversion and its at-most-64 KiB observation through
+indexed private owner lookups, validates at most five source nodes and uses a fixed
+number of receipt and graph checks. Projection and replay do no corpus scan or
+provider call. The integration complexity check asserts the 2-statement and
+24-triple bounds at the largest admitted source field set.
 Proposal creation performs an indexed conversion/observation read, a bounded
 source-graph verification and one immutable PostgreSQL insert/read keyed by the
 conversion. The private read uses an indexed proposal lookup and verifies its

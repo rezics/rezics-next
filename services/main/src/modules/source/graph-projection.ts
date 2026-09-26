@@ -6,6 +6,8 @@ import { assertGraphAdmissionOpen } from '../work/restore-lineage.ts';
 import { OpenLibraryConversionStore, type OpenLibraryConversion }
   from './open-library-conversion.ts';
 import type { StagedSourceObservation } from './intake.ts';
+import { sourceReificationValidations, sourceStatementTriples }
+  from './reification.ts';
 
 const SOURCE = 'urn:rezics:graph:source';
 const PROFILE = 'source-open-library-work-v1';
@@ -26,6 +28,15 @@ export interface SourceGraphProjection {
 }
 
 export function sourceProjectionIdentity(conversion: OpenLibraryConversion) {
+  const receipt = `urn:rezics:receipt:source-projection:${hash(`source-reification-v1\0${conversion.conversion}`)}`;
+  const digest = hash(JSON.stringify({ family: 'source-open-library-work-v1', reification: 'source-reification-v1',
+    conversion: conversion.conversion, observation: conversion.observation,
+    mappingRevision: conversion.mappingRevision, sourceDigest: conversion.sourceDigest,
+    projection: conversion.projection, fieldInventory: conversion.fieldInventory }));
+  return { receipt, digest };
+}
+
+export function legacySourceProjectionIdentity(conversion: OpenLibraryConversion) {
   const receipt = `urn:rezics:receipt:source-projection:${hash(conversion.conversion)}`;
   const digest = hash(JSON.stringify({ family: 'source-open-library-work-v1',
     conversion: conversion.conversion, observation: conversion.observation,
@@ -34,7 +45,7 @@ export function sourceProjectionIdentity(conversion: OpenLibraryConversion) {
   return { receipt, digest };
 }
 
-export function sourceTriples(conversion: OpenLibraryConversion,
+export function sourceBaseTriples(conversion: OpenLibraryConversion,
   observation: StagedSourceObservation): string {
   const record = iri(observation.record);
   const observed = iri(observation.observation);
@@ -59,11 +70,18 @@ export function sourceTriples(conversion: OpenLibraryConversion,
       ${value.description !== null ? `; rv:sourceDescription ${lit(value.description)}` : ''} .`;
 }
 
+export function sourceTriples(conversion: OpenLibraryConversion,
+  observation: StagedSourceObservation): string {
+  return `${sourceBaseTriples(conversion, observation)}\n${sourceStatementTriples(conversion, observation)}`;
+}
+
 function update(lineage: GraphLineage, conversion: OpenLibraryConversion,
   observation: StagedSourceObservation, receipt: string, digest: string): string {
   const batch = `urn:rezics:outbox:${hash(receipt)}`;
   const event = `urn:rezics:event:${hash(`${receipt}\0source`)}`;
   return `PREFIX rv: <${RV}>
+    PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+    PREFIX prov: <http://www.w3.org/ns/prov#>
     DELETE { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?n } }
     INSERT {
       GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?next }
@@ -88,7 +106,6 @@ function update(lineage: GraphLineage, conversion: OpenLibraryConversion,
         rv:routingEpoch ${lit(lineage.routingEpoch)} ; rv:sequence ?n . }
       FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:restoreHold true } }
       FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} ?p ?o } }
-      FILTER NOT EXISTS { GRAPH ${iri(SOURCE)} { ${iri(conversion.conversion)} ?p ?o } }
       BIND(?n + 1 AS ?next)
     }`;
 }
@@ -122,11 +139,12 @@ export class OpenLibrarySourceGraph {
       { shape: `${SHAPE}/observation-shape`, focus: [observation.observation], graphs: [SOURCE] },
       { shape: `${SHAPE}/conversion-shape`, focus: [conversion.conversion], graphs: [SOURCE] },
     ]);
+    validations.push(...await sourceReificationValidations(this.fuseki, conversion, observation));
     const result = await this.fuseki.commandWithReceipt({ receipt, digest,
       update: update(this.lineage, conversion, observation, receipt, digest),
       validations, deadlineMs: 10_000 });
     if (result.status !== 'committed') throw new CommandRejected(result);
-    const retained = await this.readVerified(conversion, observation);
+    const retained = await this.readVerified(conversion, observation, false);
     if (!retained || retained.sourcePosition.dataEpoch !== result.position.dataEpoch
       || retained.sourcePosition.sequence !== result.position.sequence) {
       throw new SourceGraphUnavailable('committed source projection cannot be read exactly');
@@ -140,9 +158,16 @@ export class OpenLibrarySourceGraph {
     return this.readVerified(evidence.conversion, evidence.observation);
   }
 
+  async readReified(principalId: string, conversionId: string): Promise<SourceGraphProjection | null> {
+    const evidence = await this.conversions.verifiedRead(principalId, conversionId);
+    if (!evidence) return null;
+    return this.readVerified(evidence.conversion, evidence.observation, false);
+  }
+
   private async readVerified(conversion: OpenLibraryConversion,
-    observation: StagedSourceObservation): Promise<SourceGraphProjection | null> {
+    observation: StagedSourceObservation, preferLegacy = true): Promise<SourceGraphProjection | null> {
     const { receipt, digest } = sourceProjectionIdentity(conversion);
+    const { receipt: legacyReceipt, digest: legacyDigest } = legacySourceProjectionIdentity(conversion);
     const answer = await this.fuseki.query(`PREFIX rv: <${RV}>
       SELECT ?digest ?epoch ?sequence WHERE { GRAPH ${iri(GRAPHS.receipts)} {
         ${iri(receipt)} a rv:OperationReceipt ; rv:requestDigest ?digest ;
@@ -156,8 +181,32 @@ export class OpenLibrarySourceGraph {
       } } LIMIT 2`, 16_384);
     const rows = answer.results?.bindings ?? [];
     if (!rows.length) {
+      const legacy = await this.fuseki.query(`PREFIX rv: <${RV}>
+        SELECT ?digest ?epoch ?sequence WHERE { GRAPH ${iri(GRAPHS.receipts)} {
+          ${iri(legacyReceipt)} a rv:OperationReceipt ; rv:requestDigest ?digest ;
+            rv:outcome rv:Succeeded ; rv:datasetId ${iri(DATASET)} ;
+            rv:sourceRecord ${iri(observation.record)} ;
+            rv:sourceObservation ${iri(observation.observation)} ;
+            rv:sourceConversion ${iri(conversion.conversion)} ;
+            rv:sourceByteDigest ${lit(conversion.sourceDigest)} ;
+            rv:sourceMappingRevision ${lit(conversion.mappingRevision)} ;
+            rv:dataEpoch ?epoch ; rv:sequence ?sequence . } } LIMIT 2`, 16_384);
+      const legacyRows = legacy.results?.bindings ?? [];
+      if (legacyRows.length === 1 && legacyRows[0]?.digest?.value === legacyDigest
+        && legacyRows[0]?.epoch?.value && legacyRows[0]?.sequence?.value) {
+        const graph = await this.fuseki.query(`PREFIX rv: <${RV}> ASK {
+          GRAPH ${iri(SOURCE)} { ${preferLegacy
+            ? sourceBaseTriples(conversion, observation)
+            : sourceTriples(conversion, observation)} }
+        }`, 4096);
+        if (graph.boolean === true) return projectionResult(conversion, observation, legacyReceipt, {
+          datasetId: DATASET, dataEpoch: legacyRows[0].epoch.value,
+          sequence: legacyRows[0].sequence.value });
+        if (!preferLegacy) return null;
+        throw new SourceGraphUnavailable('source graph differs from retained conversion');
+      }
       const exists = await this.fuseki.query(`ASK { GRAPH ${iri(GRAPHS.receipts)} {
-        ${iri(receipt)} ?p ?o . } }`, 4096);
+        { ${iri(receipt)} ?p ?o . } UNION { ${iri(legacyReceipt)} ?p ?o . } } }`, 4096);
       if (exists.boolean === true) throw new SourceGraphUnavailable('source projection receipt is incomplete');
       return null;
     }
@@ -165,10 +214,30 @@ export class OpenLibrarySourceGraph {
       || !rows[0].epoch?.value || !rows[0].sequence?.value) {
       throw new SourceGraphUnavailable('source projection receipt differs');
     }
-    const graph = await this.fuseki.query(`PREFIX rv: <${RV}> ASK {
+    const graph = await this.fuseki.query(`PREFIX rv: <${RV}>
+      PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+      PREFIX prov: <http://www.w3.org/ns/prov#> ASK {
       GRAPH ${iri(SOURCE)} { ${sourceTriples(conversion, observation)} }
     }`, 4096);
     if (graph.boolean !== true) throw new SourceGraphUnavailable('source graph differs from retained conversion');
+    const legacy = await this.fuseki.query(`PREFIX rv: <${RV}>
+      SELECT ?digest ?epoch ?sequence WHERE { GRAPH ${iri(GRAPHS.receipts)} {
+        ${iri(legacyReceipt)} a rv:OperationReceipt ; rv:requestDigest ?digest ;
+          rv:outcome rv:Succeeded ; rv:datasetId ${iri(DATASET)} ;
+          rv:sourceRecord ${iri(observation.record)} ;
+          rv:sourceObservation ${iri(observation.observation)} ;
+          rv:sourceConversion ${iri(conversion.conversion)} ;
+          rv:sourceByteDigest ${lit(conversion.sourceDigest)} ;
+          rv:sourceMappingRevision ${lit(conversion.mappingRevision)} ;
+          rv:dataEpoch ?epoch ; rv:sequence ?sequence .
+      } } LIMIT 2`, 16_384);
+    const legacyRows = legacy.results?.bindings ?? [];
+    if (preferLegacy && legacyRows.length === 1 && legacyRows[0]?.digest?.value === legacyDigest
+      && legacyRows[0]?.epoch?.value && legacyRows[0]?.sequence?.value) {
+      return projectionResult(conversion, observation, legacyReceipt, {
+        datasetId: DATASET, dataEpoch: legacyRows[0].epoch.value,
+        sequence: legacyRows[0].sequence.value });
+    }
     return projectionResult(conversion, observation, receipt, {
       datasetId: DATASET, dataEpoch: rows[0].epoch.value,
       sequence: rows[0].sequence.value });

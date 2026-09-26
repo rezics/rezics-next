@@ -165,6 +165,14 @@ Database-internal shard fanout is a separate bound for the admitted deployment;
 federated requests/extra SQL calls must be observable rather than hidden by the
 front door. A topology or query-profile change requires requalification.
 
+The private Open Library source-graph projection has a fixed work bound per
+conversion: three base source subjects plus at most two reified field Statements
+(title and optional description), at most 24 statement/link triples, and at most
+five source-subject validations. It makes one guarded Jena write transaction and
+does not iterate over provider fields, source records or graph history. Its
+integration complexity check exercises both Statements and asserts the maximum
+triple footprint.
+
 The physical plan must justify these ceilings before admission; a shared runtime
 budget must also stop nested adapters from exceeding them. Budgets are not reset
 by a retry or subcall. Do not refill filtered pages, follow context parents,

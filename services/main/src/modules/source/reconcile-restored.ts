@@ -7,7 +7,9 @@ import { relayRetainedEventAt, RelayCheckpointConflict, type RelayCoverage,
   type SourceBoundaryCloudEvent } from '../outbox/relay.ts';
 import { OpenLibraryConversionStore } from './open-library-conversion.ts';
 import { SourceIntakeStore } from './intake.ts';
-import { OpenLibrarySourceGraph, sourceProjectionIdentity, sourceTriples }
+import { sourceReificationValidations } from './reification.ts';
+import { OpenLibrarySourceGraph, legacySourceProjectionIdentity,
+  sourceProjectionIdentity, sourceTriples }
   from './graph-projection.ts';
 
 const SOURCE = 'urn:rezics:graph:source';
@@ -66,7 +68,10 @@ export async function reconcileRetainedSourceProjection(
   if (!evidence) throw new RetainedEffectConflict('retained source evidence is unavailable');
   const { conversion, observation } = evidence;
   const expected = sourceProjectionIdentity(conversion);
-  if (expected.receipt !== receipt.id || expected.digest !== receipt.requestDigest
+  const legacy = legacySourceProjectionIdentity(conversion);
+  const exactReceipt = (expected.receipt === receipt.id && expected.digest === receipt.requestDigest)
+    || (legacy.receipt === receipt.id && legacy.digest === receipt.requestDigest);
+  if (!exactReceipt
     || observation.record !== receipt.record || observation.observation !== receipt.observation
     || conversion.conversion !== receipt.conversion
     || conversion.sourceDigest !== receipt.byteDigest
@@ -74,15 +79,19 @@ export async function reconcileRetainedSourceProjection(
     throw new RetainedEffectConflict('retained source event differs from immutable evidence');
   }
   const graph = new OpenLibrarySourceGraph(env.fuseki, env.lineage, conversions);
-  const existing = await graph.read(principalId, conversionId);
+  const existing = await graph.readReified(principalId, conversionId);
+  const fullyReified = existing?.receipt === expected.receipt;
   const marker = `urn:rezics:restore:${env.lineage.dataEpoch}`;
-  if (!existing) {
+  if (!fullyReified) {
     const validations = await profileValidations(env.fuseki, PROFILE, [
       { shape: `${SHAPE}/record-shape`, focus: [observation.record], graphs: [SOURCE] },
       { shape: `${SHAPE}/observation-shape`, focus: [observation.observation], graphs: [SOURCE] },
       { shape: `${SHAPE}/conversion-shape`, focus: [conversion.conversion], graphs: [SOURCE] },
     ]);
+    validations.push(...await sourceReificationValidations(env.fuseki, conversion, observation));
     const update = `PREFIX rv: <${RV}>
+      PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+      PREFIX prov: <http://www.w3.org/ns/prov#>
       DELETE { GRAPH ${iri(GRAPHS.control)} { ${iri(marker)} rv:reconciledPriorSequence ?last } }
       INSERT {
         GRAPH ${iri(GRAPHS.control)} { ${iri(marker)} rv:reconciledPriorSequence ${sequence} }
@@ -121,10 +130,10 @@ export async function reconcileRetainedSourceProjection(
     const result = await env.fuseki.commandWithReceipt({ receipt: receipt.id,
       digest: receipt.requestDigest, update, validations, deadlineMs: 10_000 });
     if (result.status !== 'committed') {
-      throw new RetainedEffectConflict(`retained source command ${result.status}`);
+      throw new RetainedEffectConflict(`retained source command ${result.status}: ${JSON.stringify(result)}`);
     }
   }
-  const restored = await graph.read(principalId, conversionId);
+  const restored = await graph.readReified(principalId, conversionId);
   const cursor = await reconciledCursor(env, marker);
   if (!restored || restored.receipt !== receipt.id
     || restored.sourcePosition.dataEpoch !== coverage.dataEpoch
@@ -132,5 +141,5 @@ export async function reconcileRetainedSourceProjection(
     || cursor === null || cursor < BigInt(sequence)) {
     throw new RetainedEffectConflict('retained source projection did not reconcile');
   }
-  return { receipt: receipt.id, conversion: conversion.conversion, replayed: !!existing };
+  return { receipt: receipt.id, conversion: conversion.conversion, replayed: fullyReified };
 }

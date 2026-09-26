@@ -171,7 +171,7 @@ final class CommandService extends ActionService {
                 && !((translationLinkShape || workDerivationShape || fixedReleaseShape || authorCreditShape) && (graph.equals(CommandPolicy.RECEIPTS)
                     || graph.equals(CommandPolicy.CONTROL)))
                 && !(graph.equals(CommandPolicy.SOURCE)
-                    && profileId.equals("source-open-library-work-v1"))
+                    && Set.of("source-open-library-work-v1", "source-reification-v1").contains(profileId))
                 && !(graph.equals(CommandPolicy.PUBLIC_SEARCH)
                     && profileId.equals("content-match-unit-v1")
                     && shape.equals("https://rezics.com/definition/content-match-unit-v1/unit-shape"))))
@@ -309,7 +309,8 @@ final class CommandService extends ActionService {
             if (validation.graphs().contains(CommandPolicy.CURRENT)) directCurrent.addAll(validation.focus());
             if (validation.graphs().contains(CommandPolicy.REVISIONS)) revisionFocus.addAll(validation.focus());
             if (validation.graphs().contains(CommandPolicy.SOURCE)
-                && validation.profileId().equals("source-open-library-work-v1")) {
+                && Set.of("source-open-library-work-v1", "source-reification-v1")
+                    .contains(validation.profileId())) {
                 sourceFocus.addAll(validation.focus());
             }
         }
