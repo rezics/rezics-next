@@ -54,9 +54,11 @@ Parallel workers must not collide on derived or registry files:
   `scripts/qa/coverage/` when the brief claims it; otherwise give the exact tier,
   file and test name in the handoff and the manager declares it.
 - Add new Main routes in a route module the brief claims, registered by one
-  import and one `.use()` line in `services/main/src/app.ts`. That composition
-  root uses git's union merge driver, so it needs no claim; change nothing else
-  in it. Declare bearer security and the `Idempotency-Key` header for your new
+  import and one `.use()` line in `services/main/src/app.ts`. Wire new owner
+  stores by adding lines to `services/main/src/index.ts` and fields to
+  `services/main/src/routes/dependencies.ts`. These composition roots use git's
+  union merge driver and need no claim; only add lines, never edit or remove
+  existing ones. Declare bearer security and the `Idempotency-Key` header for your new
   routes by exporting `openApiOperations` from your route module; do not edit
   `scripts/api/generate.ts`.
 
