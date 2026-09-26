@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { Pool, type QueryResult } from 'pg';
 import { migrateContent } from '../../../services/content/src/migrate.ts';
+import { projectVndbConceptCaptures } from '../../../services/main/src/modules/source/field-vndb.ts';
 
 const migrations = resolve(import.meta.dir, '../../../services/content/migrations');
 const HEAD = ['005_source_intake.sql', '006_source_capture.sql', '007_source_conversion.sql',
@@ -158,6 +159,42 @@ test('LIVE01/LIVE02/LIVE06: source run, field and identity schema installs empty
   [randomUUID(), await o.observation(recordId, principal), principal, 'a'.repeat(64)]))
     .rejects.toMatchObject({ constraint: 'conversion_field_inventory' });
   await expect(o.run('UPDATE source.conversion SET principal_id = $1', [randomUUID()])).rejects.toThrow('immutable');
+}, 30_000);
+
+test('LIVE01: VNDB field catalog installs over the owner head with sealed native and source-only dispositions', async () => {
+  const o = owner('vndb');
+  await o.apply([...HEAD, ...NEW, '046_source_vndb_concept_map.sql']);
+  const rows = (await o.run(`SELECT grain, field_key, disposition, value_kind, native_target
+    FROM source.field_disposition WHERE mapping_revision = 'vndb-concept-map-v1'
+    ORDER BY grain, field_key`)).rows;
+  expect(rows).toHaveLength(31);
+  expect(rows.find(row => row.grain === 'vn' && row.field_key === 'tags.rating'))
+    .toMatchObject({ disposition: 'structured-source-only', value_kind: 'statistic', native_target: null });
+  expect(rows.find(row => row.grain === 'character' && row.field_key === 'traits.id'))
+    .toMatchObject({ disposition: 'native', native_target: 'statement-v1#classification' });
+  expect(rows.find(row => row.grain === 'character' && row.field_key === 'vns.release.id'))
+    .toMatchObject({ disposition: 'native', native_target: 'statement-v1#appearance' });
+  expect(rows.find(row => row.grain === 'trait' && row.field_key === 'group_name'))
+    .toMatchObject({ disposition: 'structured-source-only' });
+  const capture = (kind: 'vn' | 'character' | 'tag' | 'trait', results: unknown[]) => {
+    const bytes = Buffer.from(JSON.stringify({ results, more: false }));
+    return { kind, bytes, digest: createHash('sha256').update(bytes).digest('hex'), complete: true };
+  };
+  const projection = projectVndbConceptCaptures([
+    capture('vn', [{ id: 'v1', tags: [{ id: 'g1', name: 'Lead', rating: 2.5, spoiler: 1, lie: false }] }]),
+    capture('character', [{ id: 'c1', name: 'A', traits: [{ id: 'i1', name: 'Lead', group_id: 'i9',
+      group_name: 'Role', spoiler: 0, lie: false }],
+    vns: [{ id: 'v1', release: { id: 'r1' }, role: 'main', spoiler: 0 }] }]),
+    capture('tag', [{ id: 'g1', name: 'Lead', description: 'Tag', category: 'cont' }]),
+    capture('trait', [{ id: 'i1', name: 'Lead', description: 'Trait', group_id: 'i9', group_name: 'Role' }]),
+  ]);
+  for (const field of projection.fieldInventory) {
+    const declared = rows.find(row => row.grain === field.grain && row.field_key === field.field);
+    expect(declared?.disposition).toBe(field.disposition);
+  }
+  await expect(o.run(`INSERT INTO source.field_disposition (mapping_revision, grain, field_key,
+    disposition, value_kind, reason) VALUES ('vndb-concept-map-v1','vn','new-field','unsupported','metadata','new')`))
+    .rejects.toMatchObject({ constraint: 'field_mapping_sealed' });
 }, 30_000);
 
 test('LIVE02/LIVE09/LIVE11/LIVE16: frozen run captures, retention terms and derived completion receipt', async () => {

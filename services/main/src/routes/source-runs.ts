@@ -8,6 +8,16 @@ import type { MainWorkDependencies } from './dependencies.ts';
 import { commandError, problem } from './problems.ts';
 import { groupUuid } from './shared.ts';
 
+export const openApiOperations = {
+  '/v1/sources/acquisitions': { post: { bearer: true } },
+  '/v1/sources/runs/{run}': { get: { bearer: true } },
+  '/v1/sources/runs/{base}/drift/{candidate}': { get: { bearer: true } },
+  '/v1/sources/feeds': { post: { bearer: true } },
+  '/v1/sources/feeds/{feed}': { get: { bearer: true } },
+  '/v1/sources/feeds/{feed}/baselines': { post: { bearer: true } },
+  '/v1/sources/feeds/{feed}/windows': { post: { bearer: true } },
+};
+
 const nullableString = t.Nullable(t.String());
 const surfaceOutcome = t.Union([t.Literal('qualified'), t.Literal('unqualified'), t.Literal('failed')]);
 const runState = t.Union([t.Literal('running'), t.Literal('completed'), t.Literal('incomplete'),

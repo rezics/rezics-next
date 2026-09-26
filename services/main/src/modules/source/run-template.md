@@ -49,3 +49,20 @@ surfaces (LIVE01/02/09/11/12). Copy it for a new provider or surface.
   history; feed reads return the head, at most 64 open gaps and 20 checkpoints.
 - The owner-growth plans are asserted in `source-run-schema.test.ts` at 256 and
   2048 runs/checkpoints.
+
+## VNDB concept fixture
+
+`field-vndb.ts` projects four complete, digest-verified Kana query captures from
+one frozen set: VN tags, character traits/appearances, tag definitions and trait
+definitions. `046_source_vndb_concept_map.sql` seals the elected field/grain
+dispositions. Copy this projection and its unit fixture for a provider concept
+surface; preserve the source IDs, occurrence and release qualifiers, group label,
+score, spoiler and unresolved ID before any explicit native command. A `native`
+disposition names an eligible target slot, not automatic native acceptance.
+
+The projection holds at most four 64 KiB responses, 100 root items per response
+and 100 associations per VN or character. Its work is linear in captured bytes,
+items, associations and observed fields. It performs no provider call or owner
+write. The export disposition is explicitly **partial**: no export-owner template
+yet preserves the exact Statement definition, Context revision, speaker and
+separate acceptance basis, so the fixture returns an unsupported residual.
