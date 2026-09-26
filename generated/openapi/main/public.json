@@ -45555,6 +45555,9 @@
                         "null"
                       ]
                     },
+                    "graphStarted": {
+                      "type": "boolean"
+                    },
                     "holder": {
                       "~elyTyp": 7,
                       "nullable": true,
@@ -45586,6 +45589,9 @@
                         "integer",
                         "null"
                       ]
+                    },
+                    "projectionBatches": {
+                      "type": "integer"
                     },
                     "records": {
                       "type": "integer"
@@ -45622,6 +45628,8 @@
                     "records",
                     "bytes",
                     "manifest",
+                    "graphStarted",
+                    "projectionBatches",
                     "placementCount",
                     "graphReceipt",
                     "graphDataEpoch",
@@ -45703,6 +45711,9 @@
                         "null"
                       ]
                     },
+                    "graphStarted": {
+                      "type": "boolean"
+                    },
                     "holder": {
                       "~elyTyp": 7,
                       "nullable": true,
@@ -45734,6 +45745,9 @@
                         "integer",
                         "null"
                       ]
+                    },
+                    "projectionBatches": {
+                      "type": "integer"
                     },
                     "records": {
                       "type": "integer"
@@ -45770,6 +45784,8 @@
                     "records",
                     "bytes",
                     "manifest",
+                    "graphStarted",
+                    "projectionBatches",
                     "placementCount",
                     "graphReceipt",
                     "graphDataEpoch",
@@ -46150,6 +46166,9 @@
                         "null"
                       ]
                     },
+                    "graphStarted": {
+                      "type": "boolean"
+                    },
                     "holder": {
                       "~elyTyp": 7,
                       "nullable": true,
@@ -46181,6 +46200,9 @@
                         "integer",
                         "null"
                       ]
+                    },
+                    "projectionBatches": {
+                      "type": "integer"
                     },
                     "records": {
                       "type": "integer"
@@ -46217,6 +46239,8 @@
                     "records",
                     "bytes",
                     "manifest",
+                    "graphStarted",
+                    "projectionBatches",
                     "placementCount",
                     "graphReceipt",
                     "graphDataEpoch",
@@ -46298,6 +46322,9 @@
                         "null"
                       ]
                     },
+                    "graphStarted": {
+                      "type": "boolean"
+                    },
                     "holder": {
                       "~elyTyp": 7,
                       "nullable": true,
@@ -46329,6 +46356,9 @@
                         "integer",
                         "null"
                       ]
+                    },
+                    "projectionBatches": {
+                      "type": "integer"
                     },
                     "records": {
                       "type": "integer"
@@ -46365,6 +46395,8 @@
                     "records",
                     "bytes",
                     "manifest",
+                    "graphStarted",
+                    "projectionBatches",
                     "placementCount",
                     "graphReceipt",
                     "graphDataEpoch",
@@ -46702,6 +46734,9 @@
                         "null"
                       ]
                     },
+                    "graphStarted": {
+                      "type": "boolean"
+                    },
                     "holder": {
                       "~elyTyp": 7,
                       "nullable": true,
@@ -46733,6 +46768,9 @@
                         "integer",
                         "null"
                       ]
+                    },
+                    "projectionBatches": {
+                      "type": "integer"
                     },
                     "records": {
                       "type": "integer"
@@ -46769,6 +46807,8 @@
                     "records",
                     "bytes",
                     "manifest",
+                    "graphStarted",
+                    "projectionBatches",
                     "placementCount",
                     "graphReceipt",
                     "graphDataEpoch",
@@ -46850,6 +46890,9 @@
                         "null"
                       ]
                     },
+                    "graphStarted": {
+                      "type": "boolean"
+                    },
                     "holder": {
                       "~elyTyp": 7,
                       "nullable": true,
@@ -46881,6 +46924,9 @@
                         "integer",
                         "null"
                       ]
+                    },
+                    "projectionBatches": {
+                      "type": "integer"
                     },
                     "records": {
                       "type": "integer"
@@ -46917,6 +46963,8 @@
                     "records",
                     "bytes",
                     "manifest",
+                    "graphStarted",
+                    "projectionBatches",
                     "placementCount",
                     "graphReceipt",
                     "graphDataEpoch",
@@ -47297,6 +47345,9 @@
                         "null"
                       ]
                     },
+                    "graphStarted": {
+                      "type": "boolean"
+                    },
                     "holder": {
                       "~elyTyp": 7,
                       "nullable": true,
@@ -47328,6 +47379,9 @@
                         "integer",
                         "null"
                       ]
+                    },
+                    "projectionBatches": {
+                      "type": "integer"
                     },
                     "records": {
                       "type": "integer"
@@ -47364,6 +47418,8 @@
                     "records",
                     "bytes",
                     "manifest",
+                    "graphStarted",
+                    "projectionBatches",
                     "placementCount",
                     "graphReceipt",
                     "graphDataEpoch",
@@ -47445,6 +47501,9 @@
                         "null"
                       ]
                     },
+                    "graphStarted": {
+                      "type": "boolean"
+                    },
                     "holder": {
                       "~elyTyp": 7,
                       "nullable": true,
@@ -47476,6 +47535,9 @@
                         "integer",
                         "null"
                       ]
+                    },
+                    "projectionBatches": {
+                      "type": "integer"
                     },
                     "records": {
                       "type": "integer"
@@ -47512,6 +47574,8 @@
                     "records",
                     "bytes",
                     "manifest",
+                    "graphStarted",
+                    "projectionBatches",
                     "placementCount",
                     "graphReceipt",
                     "graphDataEpoch",
@@ -47940,6 +48004,9 @@
                         "null"
                       ]
                     },
+                    "graphStarted": {
+                      "type": "boolean"
+                    },
                     "holder": {
                       "~elyTyp": 7,
                       "nullable": true,
@@ -47971,6 +48038,9 @@
                         "integer",
                         "null"
                       ]
+                    },
+                    "projectionBatches": {
+                      "type": "integer"
                     },
                     "records": {
                       "type": "integer"
@@ -48007,6 +48077,8 @@
                     "records",
                     "bytes",
                     "manifest",
+                    "graphStarted",
+                    "projectionBatches",
                     "placementCount",
                     "graphReceipt",
                     "graphDataEpoch",
@@ -48088,6 +48160,9 @@
                         "null"
                       ]
                     },
+                    "graphStarted": {
+                      "type": "boolean"
+                    },
                     "holder": {
                       "~elyTyp": 7,
                       "nullable": true,
@@ -48119,6 +48194,9 @@
                         "integer",
                         "null"
                       ]
+                    },
+                    "projectionBatches": {
+                      "type": "integer"
                     },
                     "records": {
                       "type": "integer"
@@ -48155,6 +48233,8 @@
                     "records",
                     "bytes",
                     "manifest",
+                    "graphStarted",
+                    "projectionBatches",
                     "placementCount",
                     "graphReceipt",
                     "graphDataEpoch",
@@ -48601,6 +48681,9 @@
                         "null"
                       ]
                     },
+                    "graphStarted": {
+                      "type": "boolean"
+                    },
                     "holder": {
                       "~elyTyp": 7,
                       "nullable": true,
@@ -48632,6 +48715,9 @@
                         "integer",
                         "null"
                       ]
+                    },
+                    "projectionBatches": {
+                      "type": "integer"
                     },
                     "records": {
                       "type": "integer"
@@ -48668,6 +48754,8 @@
                     "records",
                     "bytes",
                     "manifest",
+                    "graphStarted",
+                    "projectionBatches",
                     "placementCount",
                     "graphReceipt",
                     "graphDataEpoch",
@@ -48749,6 +48837,9 @@
                         "null"
                       ]
                     },
+                    "graphStarted": {
+                      "type": "boolean"
+                    },
                     "holder": {
                       "~elyTyp": 7,
                       "nullable": true,
@@ -48780,6 +48871,9 @@
                         "integer",
                         "null"
                       ]
+                    },
+                    "projectionBatches": {
+                      "type": "integer"
                     },
                     "records": {
                       "type": "integer"
@@ -48816,6 +48910,8 @@
                     "records",
                     "bytes",
                     "manifest",
+                    "graphStarted",
+                    "projectionBatches",
                     "placementCount",
                     "graphReceipt",
                     "graphDataEpoch",
@@ -49223,6 +49319,9 @@
                         "null"
                       ]
                     },
+                    "graphStarted": {
+                      "type": "boolean"
+                    },
                     "holder": {
                       "~elyTyp": 7,
                       "nullable": true,
@@ -49254,6 +49353,9 @@
                         "integer",
                         "null"
                       ]
+                    },
+                    "projectionBatches": {
+                      "type": "integer"
                     },
                     "records": {
                       "type": "integer"
@@ -49290,6 +49392,8 @@
                     "records",
                     "bytes",
                     "manifest",
+                    "graphStarted",
+                    "projectionBatches",
                     "placementCount",
                     "graphReceipt",
                     "graphDataEpoch",
@@ -49371,6 +49475,9 @@
                         "null"
                       ]
                     },
+                    "graphStarted": {
+                      "type": "boolean"
+                    },
                     "holder": {
                       "~elyTyp": 7,
                       "nullable": true,
@@ -49402,6 +49509,9 @@
                         "integer",
                         "null"
                       ]
+                    },
+                    "projectionBatches": {
+                      "type": "integer"
                     },
                     "records": {
                       "type": "integer"
@@ -49438,6 +49548,8 @@
                     "records",
                     "bytes",
                     "manifest",
+                    "graphStarted",
+                    "projectionBatches",
                     "placementCount",
                     "graphReceipt",
                     "graphDataEpoch",
