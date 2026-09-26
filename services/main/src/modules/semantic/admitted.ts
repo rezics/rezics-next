@@ -5,6 +5,7 @@ import { CommandRejected } from '../../infrastructure/fuseki.ts';
 import { CancelledActivation, IdempotencyConflict, type WorkActivationEnvironment } from '../work/activate.ts';
 import { PendingAdmittedWork } from '../work/create-admitted.ts';
 import { assertGraphAdmissionOpen } from '../work/restore-lineage.ts';
+import { ModelGenerationChanged } from './generation-guard.ts';
 import { canonicalRelation, changeRelationOccurrence, readExactDefinition, readRelationChangeTerminal, RELATION_CHANGE_FAMILY,
   relationChangeDigest, type RelationChangeResult, type RelationInput } from '../relation/change.ts';
 import { changeSemanticComponent, checkedComponentState, readSemanticChangeTerminal, referencedResources,
@@ -99,7 +100,8 @@ async function admitted<T>(call: AdmittedCall<T>): Promise<T> {
   } catch (error) {
     if (error instanceof IdempotencyConflict || error instanceof StaleSemanticHead
       || error instanceof SemanticChangeRejected || error instanceof CommandRejected
-      || error instanceof SemanticTargetUnavailable || error instanceof CancelledActivation) throw error;
+      || error instanceof SemanticTargetUnavailable || error instanceof CancelledActivation
+      || error instanceof ModelGenerationChanged) throw error;
     throw new PendingSemanticChange(registered.id, phase);
   }
 }

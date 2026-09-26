@@ -10,6 +10,7 @@ import { assertSemanticDispatchable, checkedSemanticTerminal, ensureModelGenerat
 import { checkedNativeIri, DEFINITION_KINDS, definitionKindIri, MODEL_COMPONENT, PROFILES, SEMANTIC_CHANGE_LIMITS,
   semanticPredicateOutcome, semanticTypeOutcome, type DefinitionKind, type Lifecycle } from './schema.ts';
 import { checkedSemanticValue, semanticValueRdf, type SemanticValue, type ValueRdf } from './value.ts';
+import { modelGenerationHeadGuard } from './generation-guard.ts';
 
 const RDFS_RESOURCE = 'http://www.w3.org/2000/01/rdf-schema#Resource';
 export const SEMANTIC_CHANGE_FAMILY = 'semantic-change';
@@ -319,8 +320,7 @@ export async function changeSemanticComponent(env: WorkActivationEnvironment,
     inserts: `GRAPH ${iri(GRAPHS.current)} { ${next.map(triple => `${iri(target)} ${triple} .`).join('\n')} }
       GRAPH ${iri(GRAPHS.revisions)} { ${anchor}
         ${rdf.flatMap(item => item.node ? item.node.triples.map(triple => `${triple} .`) : []).join('\n')} }`,
-    where: `GRAPH ${iri(GRAPHS.revisions)} { ${iri(generation)} a rv:ModelGeneration }
-      GRAPH ${iri(GRAPHS.current)} { ${iri(MODEL_COMPONENT)} rv:generationHead ${iri(generation)} }
+    where: `${modelGenerationHeadGuard(generation)}
       ${current ? `GRAPH ${iri(GRAPHS.current)} { ${old.map(triple => `${iri(target)} ${triple} .`).join('\n')} }`
         : `FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} { ${iri(target)} ?anyP ?anyO } }`}
       ${references.map(ref => `FILTER EXISTS { GRAPH ${iri(GRAPHS.current)} { ${iri(ref)} a ?refType } }`).join('\n')}
@@ -333,6 +333,13 @@ export async function changeSemanticComponent(env: WorkActivationEnvironment,
   });
   const committed = await readSemanticTerminal(env, receipt);
   if (committed) return checkedResult(committed, intent, committed.revision !== revision);
+  const changedGeneration = await sealSemanticRejection(env, receipt, digest, intent.admission, 'generation-changed',
+    `FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} {
+      ${iri(MODEL_COMPONENT)} rv:generationHead ${iri(generation)} } }`);
+  if (changedGeneration) {
+    const terminal = checkedSemanticTerminal(changedGeneration, intent.admission, digest);
+    return checkedResult(terminal, intent, terminal.revision !== revision);
+  }
   if (intent.target) {
     const now = await readCurrentComponent(env, target, state.component).catch(() => null);
     if (now && now.head !== intent.expectedHead) return sealStale(env, intent, receipt, digest, target, state);

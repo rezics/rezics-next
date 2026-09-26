@@ -11,6 +11,7 @@ const migrations = join(root, 'services/content/migrations');
 const STAGE_MIGRATION = 110;
 const native = () => `https://rezics.com/id/${Bun.randomUUIDv7()}`;
 const digest = () => randomBytes(32).toString('hex');
+const modelGeneration = () => `urn:rezics:model-generation:${digest()}`;
 
 async function rejects(pool: Pool, sql: string, params: unknown[], code: string, constraint?: string): Promise<void> {
   const error = await pool.query(sql, params).then(() => null, (caught: unknown) => caught as { code?: string; constraint?: string });
@@ -64,7 +65,7 @@ test('MODEL21/MODEL22 schema: semantic staging installs empty and upgrades the c
       .toEqual(epoch);
 
     for (const pool of [empty, upgrade]) {
-      const generation = native(); const nextGeneration = native();
+      const generation = modelGeneration(); const nextGeneration = modelGeneration();
       const stage = randomUUID(); const principal = randomUUID();
       const insertStage = (id: string, key: string, posture = 'reject', pages = 2) => pool.query(`INSERT INTO semantic.change_stage
         (id, admission_id, principal_id, acting_subject, idempotency_key, request_digest, profile, model_generation,

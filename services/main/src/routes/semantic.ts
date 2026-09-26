@@ -4,6 +4,7 @@ import { admittedSemanticChange, canReadSemantic, referenceReader, SEMANTIC_READ
 import { SemanticChangeRejected, SemanticTargetUnavailable, StaleSemanticHead } from '../modules/semantic/command.ts';
 import { readSemanticCurrent, readSemanticRevision, type SemanticRead } from '../modules/semantic/read.ts';
 import { InvalidSemanticValue, UnsupportedSemanticValue } from '../modules/semantic/value.ts';
+import { ModelGenerationChanged } from '../modules/semantic/generation-guard.ts';
 import { assertGraphAdmissionOpen } from '../modules/work/restore-lineage.ts';
 import { pendingOperation, problemResult } from '../api-contract.ts';
 import { authorizedReadProblems, writeProblems } from '../api-responses.ts';
@@ -38,6 +39,7 @@ export function semanticError(error: unknown): Response {
   if (error instanceof InvalidSemanticValue) return problem(400, 'invalid_semantic_value', 'Semantic value is invalid');
   if (error instanceof UnsupportedSemanticValue) return problem(400, 'unsupported_semantic_value', 'Semantic value is not admitted');
   if (error instanceof StaleSemanticHead) return problem(409, 'stale_head', 'Expected semantic revision is stale');
+  if (error instanceof ModelGenerationChanged) return problem(409, 'generation_changed', 'Model generation changed during preparation');
   if (error instanceof SemanticTargetUnavailable) return problem(404, 'semantic_unavailable', 'Semantic resource is unavailable');
   return commandError(error);
 }

@@ -8,6 +8,7 @@ import { CancelledActivation, DATASET, GRAPHS, IdempotencyConflict, PendingActiv
   prepareComponent, prepareWorkComponent, type WorkActivationEnvironment } from '../work/activate.ts';
 import { readWorkComponentState } from '../work/history.ts';
 import { MODEL_COMPONENT, PROFILES } from './schema.ts';
+import { ModelGenerationChanged } from './generation-guard.ts';
 
 /**
  * Shared graph command path of the semantic families. It reuses the Work family
@@ -19,7 +20,7 @@ import { MODEL_COMPONENT, PROFILES } from './schema.ts';
 export type SemanticAdmission = Pick<RegisteredAdmission,
   'id' | 'scope' | 'action' | 'requestDigest' | 'authorityEpoch' | 'expiresAt'>;
 
-export type SemanticRejection = 'stale-head' | 'retired-definition' | 'unavailable-reference';
+export type SemanticRejection = 'stale-head' | 'retired-definition' | 'unavailable-reference' | 'generation-changed';
 
 export class SemanticChangeRejected extends Error {
   constructor(readonly code: 'invalid' | 'unsupported' | 'identity-axiom' | 'schema-axiom' | 'reserved-owner'
@@ -45,7 +46,7 @@ export interface SemanticTerminal {
 
 const REASONS: Record<string, SemanticRejection> = {
   [`${RV}StaleHead`]: 'stale-head', [`${RV}RetiredDefinition`]: 'retired-definition',
-  [`${RV}UnavailableReference`]: 'unavailable-reference',
+  [`${RV}UnavailableReference`]: 'unavailable-reference', [`${RV}GenerationChanged`]: 'generation-changed',
 };
 const REASON_TERMS = Object.fromEntries(Object.entries(REASONS).map(([term, reason]) =>
   [reason, `rv:${term.slice(RV.length)}`])) as
@@ -95,6 +96,9 @@ export function checkedSemanticTerminal(terminal: SemanticTerminal, admission: P
     throw new IdempotencyConflict('semantic receipt does not match its admission');
   }
   if (terminal.outcome === 'cancelled') {
+    if (terminal.reason === 'generation-changed') {
+      throw new ModelGenerationChanged('model generation changed after semantic preparation');
+    }
     if (terminal.reason === 'stale-head') throw new StaleSemanticHead('expected semantic head is stale');
     if (terminal.reason === 'retired-definition') {
       throw new SemanticChangeRejected('retired-definition', 'relation definition revision is not current');
