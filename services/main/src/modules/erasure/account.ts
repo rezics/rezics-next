@@ -1,0 +1,49 @@
+import type { Pool } from 'pg';
+import { ensureRetentionDomain, markErasureSuppressed, recordErasureInventory,
+  relayTransaction } from './journal.ts';
+
+export const ACCOUNT_LIVE_DOMAIN = 'account:postgresql:live';
+export const ACCOUNT_LIVE_RETENTION =
+  'Account PostgreSQL keeps prior credential row versions and WAL until a qualified rewrite';
+
+/**
+ * Settle Account erasures journaled by the subject tombstone trigger. An entry is
+ * suppressed only after Account no longer has the user and any bound Access
+ * principal is inactive with its retained deletion intent; the entry then links
+ * that intent and records the credential copy inventory. Run from the operator
+ * relay command after Account deletion intents are mirrored.
+ */
+export async function settleAccountErasures(relay: Pool, access: Pool, account: Pool,
+  limit = 100): Promise<number> {
+  const pending = (await relay.query<{ id: string; account_issuer: string; account_subject: string }>(
+    `SELECT id, account_issuer, account_subject FROM relay.erasure
+     WHERE kind = 'account' AND stage = 'requested' ORDER BY erasure_epoch LIMIT $1`,
+    [Math.min(Math.max(limit, 1), 100)])).rows;
+  let settled = 0;
+  for (const entry of pending) {
+    const live = await account.query('SELECT 1 FROM "user" WHERE id = $1 LIMIT 1', [entry.account_subject]);
+    if (live.rowCount) continue;
+    const principal = (await access.query<{ id: string; active: boolean }>(
+      `SELECT id, active FROM access.principal WHERE account_issuer = $1 AND account_subject = $2`,
+      [entry.account_issuer, entry.account_subject])).rows[0];
+    if (principal?.active) continue;
+    const linked = await relayTransaction(relay, async client => {
+      if (principal) {
+        const intent = await client.query(
+          'SELECT 1 FROM relay.account_deletion_intent WHERE principal_id = $1', [principal.id]);
+        if (!intent.rowCount) return false;
+        await client.query(`UPDATE relay.erasure SET deleted_principal_id = $2
+          WHERE id = $1 AND deleted_principal_id IS NULL`, [entry.id, principal.id]);
+      }
+      await markErasureSuppressed(client, entry.id);
+      return true;
+    });
+    if (!linked) continue;
+    await ensureRetentionDomain(relay, { label: ACCOUNT_LIVE_DOMAIN, owner: 'account',
+      store: 'postgresql', custody: 'live' });
+    await recordErasureInventory(relay, entry.id,
+      { owners: ['account'], liveRetentionReason: ACCOUNT_LIVE_RETENTION });
+    settled++;
+  }
+  return settled;
+}

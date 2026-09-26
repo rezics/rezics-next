@@ -12,6 +12,8 @@ import { commerceRoutes } from './routes/commerce.ts';
 import { contentRoutes } from './routes/content.ts';
 import { contextRoutes } from './routes/contexts.ts';
 import { contributionRoutes } from './routes/contributions.ts';
+import { erasureRoutes } from './routes/erasures.ts';
+import type { MainWorkDependencies } from './routes/dependencies.ts';
 import { healthRoutes } from './routes/health.ts';
 import { operationsRoutes } from './routes/operations.ts';
 import { packageRoutes } from './routes/packages.ts';
@@ -71,6 +73,7 @@ export function createMainApp(fuseki: FusekiClient, work?: SearchRouteDependenci
       .use(resourceRoutes(fuseki, work))
       .use(protectionRoutes(work))
       .use(claimRoutes(work))
+      .use(erasureRoutes(work))
       .use(workRoutes(fuseki, work));
   }
   return app;
