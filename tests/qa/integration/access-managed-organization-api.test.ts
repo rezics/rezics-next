@@ -33,7 +33,7 @@ async function freePort(): Promise<number> {
   });
 }
 
-test('IAM24/IAM23/IAM06: explicit managed organization grants protect a real roster policy operation (partial)', async () => {
+test('IAM24/IAM23/IAM06: explicit managed organization grants protect a real roster policy operation', async () => {
   if (!Bun.env.REZICS_QA_RUN_ID || !Bun.env.FUSEKI_URL || !Bun.env.ACCOUNT_MAIN_RESOURCE) {
     throw new Error('Run through the isolated QA integration tier');
   }

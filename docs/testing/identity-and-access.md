@@ -64,7 +64,19 @@ requests; discovery and selection responses expose neither Account subject nor
 Access principal ID. The selected real-owner test `20260926t110324-ddd7ee`,
 coverage unit and backend static checks passed on merged `main`, making IAM03
 a complete-case candidate pending final recorded backend QA.
-IAM04's complete-proof and no-pooling requirements remain separate.
+
+IAM04 is declared through that fixture and the
+[`access-iam-reconcile`](../../tests/qa/integration/access-iam-reconcile.test.ts)
+mid-selection case. The acting-context fixture rejects a principal grant used as
+a represented Agent path and an Agent grant or attribution used as a direct path.
+The reconcile case holds one Access owner transaction that removes a
+representation and principal grant while granting the Agent, then reverses it,
+while Main checks, discovery and registrations wait on the moved rows. Each
+waiting selection is denied or unavailable, or reports one whole committed
+state; none combines a direct grant with a represented path. Saved admissions
+keep their own path and are denied after it changes, while a fresh admission
+pins the new complete path. Compound multi-obligation commands belong to IAM28
+and multi-hop representation to IAM27.
 
 The `organization-publication-moderation` fixture targets IAM23 through real
 Account OAuth, Main, Access and Jena. It exercises the separate Realm action,
@@ -104,7 +116,8 @@ deny new effects. The Access PITR fixture restores the participation episode,
 ban, exact proofs, immutable history and receipt replay from archived WAL after
 the base backup. This fixture alone does not qualify managed mode, Realm
 publication moderation, moves, quota/review, paid benefits or deployment
-capacity; IAM06 and IAM24 remain partial. The combined G-020 fixture above
+capacity, so alone it is partial evidence for IAM06 and IAM24; their
+declarations combine it with the fixtures below. The combined G-020 fixture above
 adds the missing IAM23 moderation and declares that full row as a candidate.
 
 The `access-managed-organization-api` fixture adds partial IAM24/IAM23/IAM06
@@ -123,7 +136,8 @@ The isolated Access PITR case issues, uses and revokes the grant after its base
 backup, then checks WAL-restored payload, events, policy history and exact receipt
 replay while denying a new effect. These tests do not qualify founding grants,
 general control/recovery, voting, publication moderation, paid benefits, moves,
-complete quota/review or host capacity; the retained IAM IDs remain partial.
+complete quota/review or host capacity. Alone it is partial evidence; it is one
+of the five tests declared for IAM24.
 
 The G-024 `access-org-realm-move-api` fixture adds an actual atomic move through
 Account OAuth/introspection, Main and Access. It covers exact source identity,
@@ -211,6 +225,19 @@ the signed current Account, Access and Content coverage and deletion set. IAM11
 remains partial: historical physical copies are not sanitized, and production
 off-host journal and backup custody are unproven.
 
+IAM21 is declared through the authenticated Work API journey and the Access
+WAL fixture. In the journey, a reader Agent granted after the Work, Main, Content,
+release and comment revisions were written reads them all under that current
+grant. Revoking only that grant, with the scope open and the owner still
+reading, returns 404 for every historical read. The owner then saves the old
+Content body as a new revision; the reader cannot read it or the older
+revisions, and the revoked grant row stays inactive. Only a new grant opens the
+same history again. A later scope close denies both. In the WAL fixture, the
+reader grant is in the base backup and its revocation exists only in archived WAL.
+The incomplete-WAL copy still holds the active grant and fails frontier and
+manifest verification. The fully restored copy has the revoked generation and
+denies the reader, including after its gate is reopened.
+
 The authenticated Work API journey also exercises IAM10 with a real Account
 bearer. Main instances whose Account verification endpoint or Access database is
 unavailable each return `503 dependency_unavailable` for a protected Work create;
@@ -226,9 +253,9 @@ reactivated Agent/principal generations, and a stale scope epoch in both modes.
 It also checks that 50 combined choices are complete and a 51st returns
 unavailable without a truncated success. The owner cost contract records the
 remaining SQL-plan and composed-route work checks.
-It exercises direct command registration and claim. This is an IAM04
-slice; browser tab storage, grant mutation, compound multi-obligation commands,
-and multi-hop representation remain unqualified. The QA integration tier runs
+It exercises direct command registration and claim. Grant mutation during
+selection is in the IAM04 reconcile case; browser tab storage is outside the
+backend Goal. The QA integration tier runs
 this fixture against Account and Access databases cloned from its migrated templates, so its
 scope closure cannot change another file's authority state.
 The same fixture saves and clears a private task preference, proves exact replay
@@ -244,10 +271,9 @@ owner mutation boundary. It checks child-only grant isolation from a parent
 member, ancestor grant reachability by a child member, discovered context
 privacy, represented command registration and selected-path claim, grant
 revocation before claim, stale generation, populated reparent denial, cycle
-rejection and the 32-edge admission limit. This remains a partial IAM36/IAM05
-slice until central QA executes it and until impact approval, general roles,
-principal membership and broader capacity/concurrency profiles are qualified.
-Source/type checks alone are not runtime evidence.
+rejection and the 32-edge admission limit. Its title does not carry IAM36, so
+it is supporting evidence rather than part of that declaration. IAM05 remains
+partial. Source/type checks alone are not runtime evidence.
 
 The IAM05/IAM36 public group API extension uses a real Account OAuth bearer,
 Main route and Access owner. It checks unauthorized and unrepresented callers,
@@ -256,9 +282,20 @@ winner under concurrent scope CAS, empty reparent, assignment-lifetime ceiling,
 current object-generation read, selected `work.create` proof and its invalidation
 after revocation, populated reparent denial, a grant receipt replay after expiry,
 and an over-cap state read that returns unavailable rather than a truncated list.
-Selected integration `20260925t174136-90d043` passed. This remains partial
-IAM05/IAM36 because independent impact approval, general roles and broader
-capacity/physical-cost qualification are not implemented.
+Selected integration `20260925t174136-90d043` passed. It remains partial IAM05
+because independent impact approval, general roles and broader
+capacity/physical-cost qualification are not implemented. For IAM36 it supplies
+public-route evidence that a child member receives an ancestor grant.
+
+IAM36 is declared through that test and the `access-iam-reconcile` inheritance
+case. That case builds a parent and a child with different grants through the
+public group-change route under real Account OAuth. The child member is eligible
+through its own grant alone, while the parent member is not. With both grants
+active, a parent admission pins the parent grant. Revoking the parent grant
+denies the parent member's check, discovery, new registration and saved claim,
+while the child member keeps its own grant. After the child grant is revoked,
+a renewed parent grant is what the child member's check and admission use.
+A stale group generation is rejected.
 
 The IAM05/IAM30 populated-reparent extension stages a bounded potential-impact
 preview through the manager's Account token and reads it under a separate
@@ -296,8 +333,9 @@ one exact `work.create` admission; revocation denies the selected context and
 its saved claim. A new request and mandate restore current eligibility while
 the old claim stays denied. Request and change receipts reject mutation.
 Selected integration `20260925t181322-6dc851` passed. Protected mandate policy,
-recipient self-revocation, composed representation and physical cost remain open;
-IAM25/IAM26/IAM33 are partial.
+recipient self-revocation, composed representation and physical cost remain open.
+This first fixture alone is partial evidence; IAM33 remains partial, and IAM25
+and IAM26 are declared through the separate cases below.
 
 The distinct IAM26 represented Org roster case uses real Account OAuth,
 Main routes and an isolated Access PostgreSQL clone. P is already a private
@@ -324,7 +362,8 @@ and acceptance receipts after reopening. That IAM26 selection does not exercise
 IAM25's eligible-member-set selector or physical high-contention/cold-cache
 qualification. Selected
 IAM26 integration `20260926t120451-3065ca` and Access WAL recovery
-`20260926t115441-8de944` passed; both are partial backend selections.
+`20260926t115441-8de944` passed. These two tests form the IAM26 complete-case
+declaration; the selected runs are not recorded backend qualification.
 
 The IAM25 selected-set case uses real Account OAuth, Main routes and a cloned
 Access owner. It first denies P when P has only A's private membership,
@@ -340,8 +379,9 @@ records and the recovery fence. The selected proof runs under `EXPLAIN ANALYZE`
 after 64 and 16,000 unrelated set grants; bounded selected-row visits are the
 cost criterion, not a fixed latency. The paired Access PITR case writes a
 selected grant, effect and receipts after its base backup, then verifies exact
-restored rows, state digest and replay. These selections do not qualify physical
-cold-cache, high-contention or deployment-scale capacity.
+restored rows, state digest and replay. These two tests form the IAM25
+complete-case declaration. They do not qualify physical cold-cache,
+high-contention or deployment-scale capacity.
 
 The IAM05/IAM30/IAM33 first role profile fixture uses verified Account OAuth,
 Main API routes and the Access owner. It creates an empty role revision and
@@ -366,6 +406,23 @@ saved path; a fresh registration may use independent valid support. An
 idempotent retry returns its original receipt with dispatch disabled after the
 saved proof becomes stale. This is a partial IAM33 profile pending central QA
 and the broader leave/rejoin, role-revision and multi-operation dependency graph.
+
+IAM34 is declared through the `access-iam-reconcile` diamond case, which
+exercises the Access owner group boundary. One Agent reaches a
+granted root through a one-edge branch and a 32-edge branch at exactly the
+supported depth limit. The ancestor query keeps per-path depth and visited state
+rather than a shared visited set. Discovery lists the Agent once, and the
+selected check's SQL call count is unchanged when the second branch is added.
+Removing the shallow membership leaves the 32-edge support eligible for checks,
+discovery and a fresh admission. A saved admission pinned to the removed edge is
+denied rather than rescued. A short-lived grant on the deep group and the
+long-lived root grant are separate supports: the pinned short grant expires and
+its admission is denied, while the root grant still admits. Revoking the last
+support removes eligibility. Any group mutation still changes the scope-wide
+group generation (migration 013), so a saved group admission on an unchanged
+path must register again. This fences dispatch but revokes no authority. The
+`access-private-membership-api` title also carries IAM34 as partial private-path
+evidence.
 
 The IAM04/IAM36 discovery cost fixture adds 20 Agents through inherited group
 permission, fills the mixed represented/direct context list to 50, and rejects

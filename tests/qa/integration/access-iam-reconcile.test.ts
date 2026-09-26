@@ -401,7 +401,7 @@ test('IAM36: child membership inherits the parent grant; parent membership never
   });
 }, 120_000);
 
-test('IAM34: diamond group paths keep distinct bounded support; removing one edge revokes nothing else', async () => {
+test('IAM34: diamond group paths keep distinct bounded support when one edge is removed', async () => {
   await withOwners('iam34', async owners => {
     const { accessPool, access, groups, principal, check } = owners;
     const manager = agent(), subject = agent();

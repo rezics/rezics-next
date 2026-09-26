@@ -41,7 +41,7 @@ async function freePort(): Promise<number> {
   });
 }
 
-test('OPS03/IAM07/IAM06/IAM23/IAM24/IAM25/IAM26: archived Access WAL restores exact authority and participation (partial)', async () => {
+test('OPS03/IAM07/IAM06/IAM21/IAM23/IAM24/IAM25/IAM26: archived Access WAL restores exact authority and participation', async () => {
   const state = join(root, '.temp', `access-pitr-${Bun.randomUUIDv7()}`);
   const manifestKey = 'ab'.repeat(32);
   const primaryData = join(state, 'primary');
@@ -117,6 +117,25 @@ test('OPS03/IAM07/IAM06/IAM23/IAM24/IAM25/IAM26: archived Access WAL restores ex
     const registry = new AccessAdmissionRegistry(primary);
     const admitted = await registry.register(request);
     expect(admitted.authorityEpoch).toBe('0');
+    // IAM21: the base backup holds a reader's grant; its revocation exists only in WAL.
+    const readerPrincipal = { issuer: principal.issuer, subject: 'pitr-reader' };
+    const reader = `https://rezics.com/id/${Bun.randomUUIDv7()}`;
+    const readWork = `https://rezics.com/id/${Bun.randomUUIDv7()}`;
+    const readerGrant = Bun.randomUUIDv7();
+    const readerPrincipalId = Bun.randomUUIDv7();
+    await primary.query('INSERT INTO access.principal (id, account_issuer, account_subject) VALUES ($1, $2, $3)',
+      [readerPrincipalId, readerPrincipal.issuer, readerPrincipal.subject]);
+    await primary.query("INSERT INTO access.authority_subject (id, kind) VALUES ($1, 'agent')", [reader]);
+    await primary.query('INSERT INTO access.scope_gate (id) VALUES ($1)', [`work:read:${readWork}`]);
+    await primary.query(`INSERT INTO access.representation
+      (id, principal_id, subject_id, action, valid_until)
+      VALUES ($1, $2, $3, 'work.read', now() + interval '1 hour')`,
+    [Bun.randomUUIDv7(), readerPrincipalId, reader]);
+    await primary.query(`INSERT INTO access.permission_grant
+      (id, issuer_subject, recipient_subject, scope_id, action, valid_until)
+      VALUES ($1, $2, $2, $3, 'work.read', now() + interval '1 hour')`,
+    [readerGrant, reader, `work:read:${readWork}`]);
+    expect(await registry.canReadWork(readerPrincipal, reader, readWork)).toBe(true);
 
     execFileSync('pg_basebackup', ['-D', baseBackup, '-Fp', '-Xs', '--checkpoint=fast',
       '-h', '127.0.0.1', '-p', String(primaryPort), '-U', process.env.USER ?? 'edge'], { cwd: state });
@@ -414,6 +433,9 @@ test('OPS03/IAM07/IAM06/IAM23/IAM24/IAM25/IAM26: archived Access WAL restores ex
         recipientSubject: A, expectedRecipientGeneration: '0',
         expectedOwnerGeneration: '0', expectedAuthorityEpoch: await representedEpoch() } };
     const selectedEffect = await new AccessMemberships(primary).change(selectedChange);
+    await primary.query(`UPDATE access.permission_grant SET active = false,
+      generation = generation + 1 WHERE id = $1`, [readerGrant]);
+    expect(await registry.canReadWork(readerPrincipal, reader, readWork)).toBe(false);
     const beforeClosureEpoch = await representedEpoch();
     const closure = await registry.strongCloseScope('work:create:root', beforeClosureEpoch);
     const closedEpoch = (BigInt(beforeClosureEpoch) + 1n).toString();
@@ -470,6 +492,9 @@ test('OPS03/IAM07/IAM06/IAM23/IAM24/IAM25/IAM26: archived Access WAL restores ex
     expect(incompleteGate.rows[0]).toEqual({ authority_epoch: '0', open: true, dispatch_open: true });
     expect((await incomplete.query<{ active: boolean }>(
       'SELECT active FROM access.principal WHERE id = $1', [principalId])).rows[0]?.active).toBe(true);
+    // The old physical snapshot still holds the reader grant, so it must not qualify.
+    expect((await incomplete.query<{ active: boolean }>(
+      'SELECT active FROM access.permission_grant WHERE id = $1', [readerGrant])).rows[0]?.active).toBe(true);
     expect(await accessOutboxCoverage(incomplete)).not.toEqual(sourceOutbox);
     expect(await accessStateCoverage(incomplete)).not.toEqual(sourceState);
     await expect(assertPgRecoveryFrontier(incomplete, frontier))
@@ -600,6 +625,10 @@ test('OPS03/IAM07/IAM06/IAM23/IAM24/IAM25/IAM26: archived Access WAL restores ex
         RECOVERY_MANIFEST_HMAC_KEY: manifestKey }, encoding: 'utf8',
     })).toContain('matches retained WAL and row coverage');
     const recovered = new AccessAdmissionRegistry(restored);
+    expect((await restored.query<{ active: boolean; generation: string }>(
+      'SELECT active, generation FROM access.permission_grant WHERE id = $1', [readerGrant])).rows[0])
+      .toEqual({ active: false, generation: '1' });
+    expect(await recovered.canReadWork(readerPrincipal, reader, readWork)).toBe(false);
     await expect(recovered.claim(admitted.id, request.requestDigest)).rejects.toBeInstanceOf(AdmissionDenied);
     await expect(recovered.register({ ...request, idempotencyKey: 'after-recovery' }))
       .rejects.toBeInstanceOf(AdmissionDenied);
@@ -612,6 +641,7 @@ test('OPS03/IAM07/IAM06/IAM23/IAM24/IAM25/IAM26: archived Access WAL restores ex
       .rejects.toBeInstanceOf(ManagedOrgDenied);
     // Reopening is local to this isolated copy, after exact source coverage verification.
     await restored.query("UPDATE access.scope_gate SET open = true, dispatch_open = true WHERE id = 'work:create:root'");
+    expect(await recovered.canReadWork(readerPrincipal, reader, readWork)).toBe(false);
     expect(await new AccessMemberships(restored).change(representedChange))
       .toEqual({ ...representedEffect, replayed: true });
     expect(await new AccessMemberships(restored).change(selectedChange))
