@@ -235,6 +235,64 @@ substitution. The offline native oracle compares the same lock bytes and records
 paths, peer hosts and source/SRI; it does not fetch or verify artifact bytes.
 Full npm/pnpm/Yarn solving and installation remain outside this profile.
 
+The separately versioned `npm-lock-v3-topology-v2` uses
+`policy: "literal-sources-optional-platform-v2"` and a required `target` object
+with explicit `os` (`linux` or `win32`) and `cpu` (`x64` or `arm64`). No host
+default is inferred. Unknown target strings are unsupported; malformed target
+fields are rejected. Its `npm-lock-topology-receipt-v2` uses the existing immutable
+`pkg.npm_resolution` owner and Content recovery coverage v4: no migration or
+historical receipt rewrite is needed. Request/profile/policy/target and exact
+manifest/lock bytes all participate in the request digest and instance identity.
+V1 request validation, receipts, reads and exact replay retain their original shape.
+
+V2 adds exact `optionalDependencies`, `peerDependenciesMeta` with boolean
+`optional` on a declared peer, non-root boolean `optional`, and `os`/`cpu`
+selectors. Selectors admit strings or arrays of at most 16 tokens: the supported
+target values, their `!` negations, or the singleton `any`. Empty arrays permit
+all targets; exclusions win over inclusions, matching npm. Unknown well-formed
+tokens are unsupported; malformed tokens/types are rejected. Raw bytes retain
+selector syntax; outcome selectors normalize a string to one element and preserve
+absence as null. All dependency classes remain disjoint; overlapping declarations
+are unsupported. Engines, libc, aliases, workspaces, overrides, development
+dependencies, fresh solving and installation remain outside the grammar.
+
+Every supplied node and required edge is checked before target projection,
+including inactive branches. An absent optional dependency or optional peer is
+reported as `absent-optional`, never as a platform observation. A present but
+incompatible optional peer is invalid, and an incompatible nearer peer still
+shadows a compatible ancestor. Missing required nodes or literal source/SRI stay
+`incomplete-source-data`. Declared optional flags must agree with reachability
+through required edges; an incorrect optional flag cannot hide a required package.
+An incompatible required platform returns `invalid-topology` with an explicit
+`platform-incompatible` issue. All failed outcomes have empty graphs/projections.
+
+A validated result retains **all** locked `instances` and resolved `edges`, adding
+optional edge/peer flags, node selectors and computed optional flags. It separately
+returns `activeInstances` (IDs), `activeEdges`, `omittedInstances` and
+`omittedEdges`. Platform failures omit the optional dependency region: first walk
+incoming required edges to the optional boundary, then remove dependencies with
+no remaining external dependents. Shared required dependencies survive. Each
+omitted instance binds its ID/path, `reason: platform`, and the exact incompatible
+`causePath`; omitted edges distinguish absent optional targets and platform
+removal. Neither array represents an observed installation. Missing optional
+targets do not invent identities or artifact provenance.
+
+This is a REZICS target projection over npm's virtual tree. The pinned
+[platform checker](https://github.com/npm/cli/blob/v11.19.1/node_modules/npm-install-checks/lib/index.js),
+[optional region algorithm](https://github.com/npm/cli/blob/v11.19.1/workspaces/arborist/lib/optional-set.js)
+and [optional peer edge errors](https://github.com/npm/cli/blob/v11.19.1/workspaces/arborist/lib/edge.js)
+define its native counterexamples. `loadVirtual` alone does not filter platforms;
+the offline oracle explicitly applies npm's checker with the declared target and
+its optional-region helper, without ideal-tree solving or reification. This
+avoids treating CLI host defaults as the requested target environment.
+
+V2 keeps v1 byte/node/edge/path/ancestor bounds and adds 16 tokens per selector
+and 65,536 graph visits, reported as `graphVisits`. Graph work includes required
+reachability and optional-region pruning; exhaustion yields no partial graph.
+The conservative bound is O(B + V log V + E log E + E·D + V²·(V + E)), with
+the separate visit ceiling bounding adversarial optional-region work. Indexed
+owner read/replay costs remain independent of unrelated receipt history.
+
 ## Go
 
 Use MVS over module requirements with module-path/major-version identity, pseudo-

@@ -55,7 +55,7 @@ async function freePort(): Promise<number> {
   });
 }
 
-test('IAM10/LIVE01/LIVE02/LIVE03/LIVE05/LIVE13/PKG01/PKG02/PKG03/PKG05/PKG12/PKG13/PKG14/PKG20: real Account and Access fence source and package operations', async () => {
+test('IAM10/LIVE01/LIVE02/LIVE03/LIVE05/LIVE13/PKG01/PKG02/PKG03/PKG04/PKG05/PKG12/PKG13/PKG14/PKG20: real Account and Access fence source and package operations', async () => {
   if (!Bun.env.REZICS_QA_RUN_ID || !Bun.env.CONTENT_DATABASE_URL
     || !Bun.env.ACCESS_DATABASE_URL || !Bun.env.ACCOUNT_DATABASE_URL
     || !Bun.env.ACCOUNT_MAIN_RESOURCE || !Bun.env.FUSEKI_URL
@@ -925,12 +925,14 @@ test('IAM10/LIVE01/LIVE02/LIVE03/LIVE05/LIVE13/PKG01/PKG02/PKG03/PKG05/PKG12/PKG
     expect((await call('GET', cargoLinksReadPath, packageReadToken)).status).toBe(403);
     expect((await call('POST', cargoPath, packageResolveToken, cargoLock.body, cargoLock.key)).status).toBe(403);
     expect((await call('GET', cargoLock.readPath, packageReadToken)).status).toBe(403);
-    const deniedNpmKey = `npm-denied-${randomUUID()}`;
-    expect((await call('POST', npmLock.path, packageResolveToken, npmLock.body, deniedNpmKey)).status).toBe(403);
-    expect((await contentPool.query('SELECT id FROM pkg.npm_resolution WHERE idempotency_key = $1',
-      [deniedNpmKey])).rowCount).toBe(0);
-    expect((await call('POST', npmLock.path, packageResolveToken, npmLock.body, npmLock.key)).status).toBe(403);
-    expect((await call('GET', npmLock.readPath, packageReadToken)).status).toBe(403);
+    for (const npm of [npmLock, npmLock.platform]) {
+      const deniedNpmKey = `npm-denied-${randomUUID()}`;
+      expect((await call('POST', npm.path, packageResolveToken, npm.body, deniedNpmKey)).status).toBe(403);
+      expect((await contentPool.query('SELECT id FROM pkg.npm_resolution WHERE idempotency_key = $1',
+        [deniedNpmKey])).rowCount).toBe(0);
+      expect((await call('POST', npm.path, packageResolveToken, npm.body, npm.key)).status).toBe(403);
+      expect((await call('GET', npm.readPath, packageReadToken)).status).toBe(403);
+    }
     expect((await call('POST', capturePath, packageCaptureToken,
       captureBody)).status).toBe(403);
     expect((await call('GET', `${capturePath}/${captureId}`,

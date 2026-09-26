@@ -60,3 +60,7 @@ void client.v1['package-resolutions'].npm.post({ profile: 'npm-lock-v3-topology-
   npmVersion: '11.19.1', policy: 'literal-sources-required-peers-v1',
   manifest: { bytesBase64: 'e30=', sha256: '0'.repeat(64) },
   lock: { bytesBase64: 'e30=', sha256: '0'.repeat(64) } });
+void client.v1['package-resolutions'].npm.post({ profile: 'npm-lock-v3-topology-v2',
+  npmVersion: '11.19.1', policy: 'literal-sources-optional-platform-v2', target: { os: 'win32', cpu: 'x64' },
+  manifest: { bytesBase64: 'e30=', sha256: '0'.repeat(64) },
+  lock: { bytesBase64: 'e30=', sha256: '0'.repeat(64) } });

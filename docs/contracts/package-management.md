@@ -115,10 +115,21 @@ literal HTTPS source, SRI and actual required peer-host identity survive the
 private owner boundary. Response status `validated` establishes only the admitted
 locked topology. Incomplete data, invalid topology, unsupported semantics and
 budget exhaustion are durable distinct outcomes with no usable partial graph.
-Malformed inputs are 422 without a row; changed bytes or policy under one key
+Malformed snapshot inputs are 422 without a row (malformed request envelopes
+fail the shared transport validation with 400); changed bytes or policy under one key
 are 409. HTTP creation is 201 and exact replay is 200; all receipts use `no-store`.
 Required peer resolution cannot fall back to a same-name instance in another
 branch or beyond an incompatible nearer instance.
+
+The same routes also accept `npm-lock-v3-topology-v2` and return
+`npm-lock-topology-receipt-v2`. The required target declares Linux/Windows and
+x64/arm64 without using a server-host default. V2 preserves optional dependencies,
+optional peer hosts and OS/CPU selectors, retaining the complete locked graph
+alongside active IDs/edges and explicit omission witnesses. Missing optional
+targets and platform-inactive instances have different reasons. A required
+dependency cannot be silently omitted; present incompatible optional peers still
+fail topology validation. Changed target or profile under an existing key is 409.
+V1 requests and exact receipts retain their original shape and interpretation.
 
 The npm operation reads no filesystem paths, registry or artifact. The
 [profile cost contract](package-profiles.md#npm-pnpm-and-yarn) bounds every supplied

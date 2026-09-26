@@ -1,7 +1,10 @@
 import { mkdir, readFile, realpath, rm, writeFile, access } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { npmFixture, npmNativeCases } from '../../tests/qa/fixtures/npm-lock-snapshot.ts';
-import { npmStable, validateNpmSnapshot } from '../../services/main/src/modules/package/npm-lock.ts';
+import { npmSha, npmStable, validateNpmSnapshot } from '../../services/main/src/modules/package/npm-lock.ts';
+import { npmPlatformCases, npmPlatformFixture, npmTargets } from '../../tests/qa/fixtures/npm-platform-snapshot.ts';
+import { validateNpmPlatformSnapshot } from '../../services/main/src/modules/package/npm-platform.ts';
+import { compareNpmPlatform } from './npm-platform-compare.ts';
 
 const base = resolve(import.meta.dir, '../../.temp/package-npm-oracle');
 await mkdir(base, { recursive: true });
@@ -36,6 +39,7 @@ if (nodeVersion.exitCode !== 0 || nodeVersion.stdout.trim() !== 'v26.8.2') throw
 const version = await run([cli, '--version'], base);
 if (version.exitCode !== 0 || version.stdout.trim() !== '11.19.1') throw new Error('wrong npm CLI');
 const results: Record<string, unknown> = {};
+const compatibility: Record<string, string> = {};
 for (const kind of npmNativeCases) {
   const request = npmFixture(kind);
   const directory = resolve(base, kind);
@@ -62,6 +66,7 @@ for (const kind of npmNativeCases) {
   }
   if (!expected && listing.exitCode !== 0) throw new Error(`${kind}: ${listing.stderr}`);
   const rezics = validateNpmSnapshot(request);
+  compatibility[kind] = npmSha(npmStable(rezics));
   const status = expected === 'MISSING' ? 'incomplete-source-data'
     : expected ? 'invalid-topology' : 'validated';
   if (rezics.status !== status) throw new Error(`${kind}: native/REZICS status differs: ${JSON.stringify(rezics)}`);
@@ -104,3 +109,33 @@ for (const kind of npmNativeCases) {
 await writeFile(resolve(base, 'result.json'), JSON.stringify({ nodeVersion: nodeVersion.stdout.trim(),
   npmVersion: version.stdout.trim(), results }, null, 2));
 console.log(`npm offline native topology matched ${npmNativeCases.length} scenarios; result: ${resolve(base, 'result.json')}`);
+const platformResults: Record<string, unknown> = {};
+const platformSummary: Record<string, unknown> = {};
+for (const kind of npmPlatformCases) for (const target of npmTargets) {
+  const request = npmPlatformFixture(kind, target);
+  const key = `${kind}-${target.os}-${target.cpu}`;
+  const directory = resolve(base, key);
+  await rm(directory, { force: true, recursive: true });
+  await mkdir(directory, { recursive: true });
+  await writeFile(resolve(directory, 'package.json'), Buffer.from(request.manifest.bytesBase64, 'base64'));
+  await writeFile(resolve(directory, 'package-lock.json'), Buffer.from(request.lock.bytesBase64, 'base64'));
+  const virtual = await run([resolve(import.meta.dir, 'npm-native-tree.cjs'), npmPackage, directory,
+    JSON.stringify(target)], directory);
+  if (virtual.exitCode !== 0) throw new Error(virtual.stderr);
+  const native = JSON.parse(virtual.stdout);
+  const rezics = validateNpmPlatformSnapshot(request);
+  compareNpmPlatform(key, native, rezics);
+  if (await readFile(resolve(directory, 'package.json'), 'base64') !== request.manifest.bytesBase64
+    || await readFile(resolve(directory, 'package-lock.json'), 'base64') !== request.lock.bytesBase64) {
+    throw new Error('native platform oracle changed exact input bytes');
+  }
+  if (await access(resolve(directory, 'node_modules')).then(() => true, () => false)) {
+    throw new Error('native platform oracle unexpectedly installed packages');
+  }
+  platformResults[key] = { request, native, rezics };
+  platformSummary[key] = { status: rezics.status, omissions: native.projection.omissions,
+    errors: rezics.issues, cost: rezics.cost };
+}
+await writeFile(resolve(base, 'platform-result.json'), JSON.stringify(platformResults, null, 2));
+await writeFile(resolve(base, 'summary.json'), JSON.stringify({ compatibility, platformSummary }, null, 2));
+console.log(`npm offline native platform comparison matched ${Object.keys(platformResults).length} cases; result: ${resolve(base, 'platform-result.json')}`);

@@ -3,11 +3,13 @@ import { randomUUID } from 'node:crypto';
 import type { Pool } from 'pg';
 import { NpmResolutionStore, type NpmResolution } from '../../../services/main/src/modules/package/npm-resolution.ts';
 import { npmBytes, npmDocuments, npmFixture, npmRequest } from './npm-lock-snapshot.ts';
+import { assertNpmPlatformApi } from './npm-platform-api.ts';
 
 export async function assertNpmLockApi(context: {
   call: (method: string, path: string, token: string, body?: unknown, key?: string) => Promise<Response>;
   pool: Pool; principalId: string; resolveToken: string; readToken: string; otherReadToken: string;
-}): Promise<{ body: ReturnType<typeof npmFixture>; key: string; path: string; readPath: string }> {
+}): Promise<{ body: ReturnType<typeof npmFixture>; key: string; path: string; readPath: string;
+  platform: Awaited<ReturnType<typeof assertNpmPlatformApi>> }> {
   const { call, pool, principalId, resolveToken, readToken, otherReadToken } = context;
   const path = '/v1/package-resolutions/npm';
   const body = npmFixture();
@@ -65,6 +67,8 @@ export async function assertNpmLockApi(context: {
     expect((await call('POST', path, resolveToken, malformed, invalidKey)).status).toBe(422);
     expect((await pool.query('SELECT id FROM pkg.npm_resolution WHERE idempotency_key = $1', [invalidKey])).rowCount).toBe(0);
   }
+  const platform = await assertNpmPlatformApi(context);
+  expect((await call('POST', path, resolveToken, platform.body, key)).status).toBe(409);
   // Real owner calls and native plans at growing unrelated history sizes.
   // Background is bulk copied once per scale, never command seeded or revalidated.
   const statements: Array<{ sql: string; values: unknown[]; rows: number | null }> = [];
@@ -85,7 +89,9 @@ export async function assertNpmLockApi(context: {
     statements.length = 0;
     expect(await observed.read(principalId, id)).toEqual(receipt);
     expect(await observed.resolve(principalId, key, body)).toEqual({ resolution: receipt, replayed: true });
-    expect(statements.map(statement => statement.rows)).toEqual([1, 0, 1]);
+    expect(await observed.read(principalId, platform.id)).toEqual(platform.receipt);
+    expect(await observed.resolve(principalId, platform.key, platform.body)).toEqual({ resolution: platform.receipt, replayed: true });
+    expect(statements.map(statement => statement.rows)).toEqual([1, 0, 1, 1, 0, 1]);
     for (const statement of statements.filter(statement => statement.sql.startsWith('SELECT'))) {
       const result = await pool.query(`EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON, TIMING OFF) ${statement.sql}`, statement.values);
       const plan = result.rows[0]['QUERY PLAN'][0].Plan;
@@ -97,6 +103,7 @@ export async function assertNpmLockApi(context: {
       expect(plan['Temp Read Blocks']).toBe(0);
     }
     expect(receipt.outcome.cost).toEqual((await observed.read(principalId, id))!.outcome.cost);
+    expect(platform.receipt.outcome.cost).toEqual((await observed.read(principalId, platform.id))!.outcome.cost);
   }
-  return { body, key, path, readPath };
+  return { body, key, path, readPath, platform };
 }

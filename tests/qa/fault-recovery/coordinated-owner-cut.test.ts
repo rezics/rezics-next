@@ -48,6 +48,7 @@ import latestGoSumdb from '../fixtures/go-sumdb-latest.json';
 import { cargoLinksFixture } from '../fixtures/cargo-links-snapshot.ts';
 import { cargoLockFixture } from '../fixtures/cargo-lock-snapshot.ts';
 import { npmFixture } from '../fixtures/npm-lock-snapshot.ts';
+import { npmPlatformFixture, npmTargets } from '../fixtures/npm-platform-snapshot.ts';
 import { NpmResolutionStore, NpmResolutionUnavailable }
   from '../../../services/main/src/modules/package/npm-resolution.ts';
 import { goManifest, goPrunedFixtureResponse, goPrunedMain, goPrunedSources,
@@ -312,13 +313,21 @@ test('OPS03/PKG14: signed owner cut restores Content and exact Go checksum proof
     const npmReceipt = (await npmStore.resolve(principalId, npmKey, npmRequest)).resolution;
     const npmId = npmReceipt.resolution.split('/').at(-1)!;
     expect(npmReceipt.outcome.status).toBe('validated');
+    const npmPlatformReceipts = [];
+    for (const target of npmTargets.slice(0, 2)) {
+      const request = npmPlatformFixture('platform-branch', target);
+      const key = `${npmKey}-${target.os}`;
+      const receipt = (await npmStore.resolve(principalId, key, request)).resolution;
+      expect(receipt).toMatchObject({ profile: 'npm-lock-topology-receipt-v2', outcome: { status: 'validated', target } });
+      npmPlatformReceipts.push({ request, key, receipt, id: receipt.resolution.split('/').at(-1)! });
+    }
     const packageOnlyCoverage = await captureContentRecoveryCoverage(contentPool, []);
     expect(packageOnlyCoverage.graphReferencesCount).toBe('0');
     expect(packageOnlyCoverage.packageTables.go_proxy_capture.count).toBe('7');
     expect(packageOnlyCoverage.packageTables.go_resolution.count).toBe('6');
     expect(packageOnlyCoverage.packageTables.go_sumdb_verification.count).toBe('1');
     expect(packageOnlyCoverage.packageTables.cargo_resolution.count).toBe('3');
-    expect(packageOnlyCoverage.packageTables.npm_resolution.count).toBe('1');
+    expect(packageOnlyCoverage.packageTables.npm_resolution.count).toBe('3');
     await grant(`content:publish:${variantId}`, 'content.publish');
     const published = await publishAdmittedContent(env, content, account, access,
       new Request(request.url, { headers: { authorization: bearer } }), {
@@ -355,7 +364,7 @@ test('OPS03/PKG14: signed owner cut restores Content and exact Go checksum proof
     expect(coverage.content.packageTables.go_resolution.count).toBe('6');
     expect(coverage.content.packageTables.go_sumdb_verification.count).toBe('1');
     expect(coverage.content.packageTables.cargo_resolution.count).toBe('3');
-    expect(coverage.content.packageTables.npm_resolution.count).toBe('1');
+    expect(coverage.content.packageTables.npm_resolution.count).toBe('3');
     const sealedCoverage = JSON.stringify(sealRecoveryPayload(
       coverage, recoveryKey, 'graph-recovery-coverage'));
     await retainRecoveryCoverageHead(relayPool, sealedCoverage, recoveryKey);
@@ -447,6 +456,11 @@ test('OPS03/PKG14: signed owner cut restores Content and exact Go checksum proof
     expect(await restoredNpm.resolve(principalId, npmKey, npmRequest))
       .toEqual({ resolution: npmReceipt, replayed: true });
     expect(await restoredNpm.read(randomUUID(), npmId)).toBeNull();
+    for (const { request, key, receipt, id } of npmPlatformReceipts) {
+      expect(await restoredNpm.read(principalId, id)).toEqual(receipt);
+      expect(await restoredNpm.resolve(principalId, key, request)).toEqual({ resolution: receipt, replayed: true });
+      expect(await restoredNpm.read(randomUUID(), id)).toBeNull();
+    }
     const restoredEvidence = { sealedCoverage, hmacKey: recoveryKey,
       accountPool: restoredAccount, contentPool: restoredContent };
 
@@ -498,6 +512,15 @@ test('OPS03/PKG14: signed owner cut restores Content and exact Go checksum proof
         'Content owner or graph references differ from recovery coverage');
       await restoredContent.query('UPDATE pkg.npm_resolution SET outcome = $2 WHERE id = $1',
         [npmId, JSON.stringify(npmReceipt.outcome)]);
+      for (const { id, receipt } of npmPlatformReceipts) {
+        await restoredContent.query('UPDATE pkg.npm_resolution SET outcome = $2 WHERE id = $1',
+          [id, JSON.stringify({ ...receipt.outcome, omittedInstances: [] })]);
+        await expect(restoredNpm.read(principalId, id)).rejects.toBeInstanceOf(NpmResolutionUnavailable);
+        await expect(releaseRestoredGraphHold(fuseki, restoredAccess, restoredRelay,
+          nextLineage, restoredEvidence)).rejects.toThrow('Content owner or graph references differ from recovery coverage');
+        await restoredContent.query('UPDATE pkg.npm_resolution SET outcome = $2 WHERE id = $1',
+          [id, JSON.stringify(receipt.outcome)]);
+      }
     } finally {
       await restoredContent.query('ALTER TABLE pkg.npm_resolution ENABLE TRIGGER pkg_npm_resolution_immutable');
     }

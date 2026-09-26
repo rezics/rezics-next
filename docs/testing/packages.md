@@ -77,6 +77,48 @@ Partial PKG03/PKG12/PKG13 only: live registry resolution, range solving,
 optional/platform/alias/workspace behavior, artifact verification and installation
 remain unqualified. A lock parser or source-only graph does not close PKG03.
 
+G-021 adds `npm-lock-v3-topology-v2` and `npm-lock-topology-receipt-v2`, with
+an explicit OS/CPU target, exact optional dependencies and optional peers.
+Its 33 native comparisons cover eleven fixed cases on Linux x64, Windows x64
+and Linux arm64: an OS/CPU-gated optional parent, an incompatible optional
+child, a shared required platform failure, a missing required dependency,
+absent optional dependencies/peers, incompatible required and optional peer
+shadowing, a present optional peer host, an optional cycle, a dependency shared
+by optional parents, and positive/negative/any/empty platform selectors.
+`yarn package:npm-oracle` retains the original eight native cases and compares
+exact paths, versions, source/SRI, optional flags, edges, peer hosts, active
+paths and omission causes. Results remain under `.temp/package-npm-oracle/`.
+The virtual tree itself retains every locked package; the oracle explicitly
+applies the pinned npm platform and optional-region helpers to the declared
+target. This is evidence for the bounded projection, not npm installation.
+
+`npm-platform-topology.test.ts` adds malformed and unknown targets/selectors,
+unsupported inactive metadata, immutable target identity, optional-flag
+disagreement, required source failures inside inactive branches, child-local
+optional peers, and byte/node/edge/selector/path/ancestor limits. Multi-scale
+optional graphs retain bounded visit and lookup counters.
+`npm-v1-compatibility.test.ts` fixes canonical hashes for all eight original
+G-019 outcomes, including identity and costs. The shared real API fixture adds
+both receipt versions, private exact replay, target/byte/profile key conflicts,
+no-row malformed admission and inactive-principal fencing. It checks both
+versions' indexed reads/replays at the same 64/512/4,096 unrelated-history scales,
+without constructing a second background corpus. The physical owner-cut fixture
+adds Linux and Windows v2 receipts alongside v1 and the retained Go/Cargo rows;
+changed omission evidence must fail both exact read and signed hold release.
+The worker's 17 selected npm unit/contract tests, all 41 native comparisons,
+generation and backend static checks passed. Selected real API run
+`20260926t082809-7a0af6` and physical owner-cut run
+`20260926t082839-21d09a` passed on the same stable source fingerprint
+`342e7a1b6426`. The earlier API attempt corrected a test expectation for the
+existing transport boundary: malformed target envelopes return 400, while
+malformed admitted snapshot contents return 422; neither creates a receipt.
+The manager must repeat affected checks after integration; these selected runs
+do not qualify the complete backend.
+
+These are partial PKG04/PKG12/PKG13 assertions. Alias/workspace/override/engine
+semantics, other npm strategies, pnpm/Yarn, registry solving, artifact validation,
+installation and complete-case qualification remain retained later work.
+
 The G-008 Cargo slice adds `cargo-index-exact-resolver2-v1` with exact root
 manifest and registry-index bytes. The pinned Cargo 1.98.1 local-registry oracle
 compares lock selection and active root dependency kinds on a fixed resolver 2

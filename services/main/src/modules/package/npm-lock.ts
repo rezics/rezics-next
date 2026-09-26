@@ -306,3 +306,7 @@ export function validateNpmSnapshot(request: NpmRequest): NpmOutcome {
     return outcome;
   }
 }
+
+// V2 reuses byte/syntax admission only. The v1 topology and result shape above stay frozen.
+export const npmSnapshotSyntax = { object, keys, decode, parseJson, name, version, location,
+  provenance, dependencyMap, invalid, Unsupported, Budget, MAX_BYTES };

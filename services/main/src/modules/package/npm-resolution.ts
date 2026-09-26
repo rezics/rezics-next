@@ -1,32 +1,40 @@
 import type { Pool } from 'pg';
 import { NpmResolutionInvalid, npmSha, npmStable, validateNpmSnapshot,
   type NpmOutcome, type NpmRequest } from './npm-lock.ts';
+import { validateNpmPlatformSnapshot, type NpmPlatformOutcome, type NpmPlatformRequest } from './npm-platform.ts';
 export { NpmResolutionInvalid } from './npm-lock.ts';
 export class NpmResolutionConflict extends Error {}
 export class NpmResolutionUnavailable extends Error {}
-export interface NpmResolution { profile: 'npm-lock-topology-receipt-v1';
-  resolution: string; requestDigest: string; request: NpmRequest; outcome: NpmOutcome; createdAt: string }
+export type NpmSnapshotRequest = NpmRequest | NpmPlatformRequest;
+export interface NpmResolution { profile: 'npm-lock-topology-receipt-v1' | 'npm-lock-topology-receipt-v2';
+  resolution: string; requestDigest: string; request: NpmSnapshotRequest;
+  outcome: NpmOutcome | NpmPlatformOutcome; createdAt: string }
 interface Row { id: string; principal_id: string; idempotency_key: string;
-  request_digest: string; request: NpmRequest; outcome: NpmOutcome; created_at: Date }
+  request_digest: string; request: NpmSnapshotRequest; outcome: NpmOutcome | NpmPlatformOutcome; created_at: Date }
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const KEY = /^[A-Za-z0-9:_./-]{1,128}$/;
+function validate(request: NpmSnapshotRequest) {
+  return request?.profile === 'npm-lock-v3-topology-v2'
+    ? validateNpmPlatformSnapshot(request) : validateNpmSnapshot(request);
+}
 export class NpmResolutionStore {
   constructor(private readonly pool: Pool) {}
   private verified(row: Row): NpmResolution {
     try {
       if (row.request_digest !== npmSha(npmStable(row.request))
-        || npmStable(row.outcome) !== npmStable(validateNpmSnapshot(row.request))) {
+        || npmStable(row.outcome) !== npmStable(validate(row.request))) {
         throw new Error('stored npm receipt differs from its snapshot');
       }
-      return { profile: 'npm-lock-topology-receipt-v1', resolution: `https://rezics.com/id/${row.id}`,
+      return { profile: row.request.profile === 'npm-lock-v3-topology-v2'
+        ? 'npm-lock-topology-receipt-v2' : 'npm-lock-topology-receipt-v1', resolution: `https://rezics.com/id/${row.id}`,
         requestDigest: row.request_digest, request: row.request, outcome: row.outcome,
         createdAt: row.created_at.toISOString() };
     } catch { throw new NpmResolutionUnavailable('stored npm receipt evidence is unavailable'); }
   }
-  async resolve(principalId: string, key: string, request: NpmRequest):
+  async resolve(principalId: string, key: string, request: NpmSnapshotRequest):
     Promise<{ resolution: NpmResolution; replayed: boolean }> {
     if (!UUID.test(principalId) || !KEY.test(key)) throw new NpmResolutionInvalid('invalid npm resolution key');
-    const outcome = validateNpmSnapshot(request);
+    const outcome = validate(request);
     const digest = npmSha(npmStable(request));
     const inserted = await this.pool.query(`INSERT INTO pkg.npm_resolution
       (id, principal_id, idempotency_key, request_digest, request, outcome)
