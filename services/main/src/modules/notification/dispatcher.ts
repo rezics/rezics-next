@@ -333,4 +333,30 @@ export class NotificationDispatcher {
       return { deliveries, items };
     });
   }
+
+  /**
+   * Replays the relay's retained Account erasure intents (kept outside Access
+   * backups) onto notification state after an Access restore. Paged in
+   * principal order; idempotent, so a repeated or interrupted run is safe.
+   */
+  async reconcileRetainedErasures(relay: Pool, page = 500): Promise<{ recipients: number; deliveries: number;
+    items: number }> {
+    if (!Number.isInteger(page) || page < 1 || page > 500) {
+      throw new NotificationInvalid('erasure reconciliation page is out of bounds');
+    }
+    const total = { recipients: 0, deliveries: 0, items: 0 };
+    let after: string | null = null;
+    while (true) {
+      const rows: { principal_id: string }[] = (await relay.query<{ principal_id: string }>(
+        `SELECT principal_id::text FROM relay.account_deletion_intent
+         WHERE ($1::uuid IS NULL OR principal_id > $1::uuid) ORDER BY principal_id LIMIT $2`, [after, page])).rows;
+      if (!rows.length) return total;
+      const result = await this.reconcileErasedRecipients(rows.map(row => row.principal_id));
+      total.recipients += rows.length;
+      total.deliveries += result.deliveries;
+      total.items += result.items;
+      after = rows.at(-1)!.principal_id;
+      if (rows.length < page) return total;
+    }
+  }
 }
