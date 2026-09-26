@@ -161,8 +161,67 @@ export const npmPolicyOutcomeSchema = t.Union([
 ]);
 export const npmResolutionV5Schema = t.Object({ ...npmResolutionV1Schema.properties,
   profile: t.Literal('npm-lock-topology-receipt-v5'), request: npmRequestV5Schema, outcome: npmPolicyOutcomeSchema });
+export const npmRegistryRequestSchema = t.Object({ profile: t.Literal('npm-registry-range-v1'),
+  npmVersion: t.String({ minLength: 1, maxLength: 32 }), policy: t.String({ minLength: 1, maxLength: 64 }),
+  strategy: t.String({ minLength: 1, maxLength: 64 }), registry: t.String({ minLength: 1, maxLength: 128 }),
+  target, engineTarget, artifacts: t.Union([t.Literal('verify-sri'), t.Literal('metadata-only')]), manifest: bytes,
+  workspaces: t.Array(t.Object({ path: t.String({ minLength: 1, maxLength: 256 }), manifest: bytes },
+    { additionalProperties: false }), { maxItems: 16 }) }, { additionalProperties: false });
+const specs = t.Record(t.String(), t.String());
+const list = t.Union([t.Array(t.String()), t.Null()]);
+const registryRecord = t.Object({ version: t.String(), deprecated: t.Boolean(),
+  engines: t.Object({ node: nullable, npm: nullable }), dependencies: specs, optionalDependencies: specs,
+  peerDependencies: specs, peerOptional: t.Array(t.String()), os: list, cpu: list, libc: list,
+  tarball: nullable, integrity: nullable, hasInstallScript: t.Boolean(), bundled: t.Boolean(), hasShrinkwrap: t.Boolean() });
+const nullableInteger = t.Union([t.Integer(), t.Null()]);
+const registrySnapshot = t.Object({ origin: t.Literal('https://registry.npmjs.org'),
+  packuments: t.Array(t.Object({ name: t.String(), url: t.String(),
+    status: t.Union(['captured', 'unavailable', 'malformed', 'budget-exhausted'].map(value => t.Literal(value))),
+    reason: nullable, httpStatus: nullableInteger, sha256: nullable, byteLength: nullableInteger,
+    versionCount: t.Integer({ minimum: 0 }), distTags: specs, records: t.Array(registryRecord, { maxItems: 4096 }) }),
+  { maxItems: 64 }),
+  artifacts: t.Array(t.Object({ name: t.String(), version: t.String(), tarball: t.String(), integrity: t.String(),
+    status: t.Union(['verified', 'integrity-mismatch', 'unavailable', 'budget-exhausted'].map(value => t.Literal(value))),
+    algorithm: nullable, observed: nullable, byteLength: nullableInteger, httpStatus: nullableInteger }),
+  { maxItems: 256 }),
+  deadlineExceeded: nullable });
+const edgeType = t.Union(['prod', 'optional', 'peer', 'peerOptional', 'dev', 'workspace'].map(value => t.Literal(value)));
+const registryInstance = t.Object({ id: t.String(), path: t.String(),
+  kind: t.Union(['root', 'workspace', 'link', 'registry'].map(value => t.Literal(value))), slotName: nullable,
+  name: t.String(), version: t.String(), resolved: nullable, integrity: nullable, linkTarget: nullable,
+  dev: t.Boolean(), optional: t.Boolean(), devOptional: t.Boolean(), peer: t.Boolean(), active: t.Boolean(),
+  hasInstallScript: t.Boolean(),
+  engineOk: t.Boolean(),
+  selection: t.Union([t.Object({ spec: t.String(), requestedBy: t.String(),
+    reason: t.Union(['latest-tag', 'dist-tag', 'exact-version', 'highest-satisfying',
+      'engine-or-deprecation-preference', 'workspace-link'].map(value => t.Literal(value))),
+    higherSatisfying: t.Array(t.String()) }), t.Null()]),
+  peerHosts: t.Array(t.Object({ name: t.String(), spec: t.String(), optional: t.Boolean(), hostPath: nullable })) });
+const registryEdge = t.Object({ from: t.String(), to: nullable, type: edgeType, name: t.String(), spec: t.String(),
+  effectiveSpec: t.String(), requestedName: t.String(), valid: t.Boolean() });
+export const npmRegistryOutcomeSchema = t.Object({
+  status: t.Union(['solved', 'unsatisfiable', 'incomplete-source-data', 'inconsistent-source-data',
+    'unsupported-semantics', 'budget-exhausted'].map(value => t.Literal(value))),
+  resolutionId: t.String(), snapshotDigest: t.String(), strategy: t.String(), target, engineTarget,
+  instances: t.Array(registryInstance, { maxItems: 1024 }), edges: t.Array(registryEdge, { maxItems: 4112 }),
+  omitted: t.Array(t.Object({ id: t.String(), path: t.String(), reason: t.Literal('platform'), causePath: t.String() })),
+  engineWarnings: t.Array(t.Object({ path: t.String(), required: t.Object({ node: nullable, npm: nullable }) })),
+  conflict: t.Union([t.Object({ kind: t.Union(['peer-conflict', 'no-matching-version', 'platform', 'missing-workspace']
+    .map(value => t.Literal(value))), path: t.String(), name: t.String(), spec: t.String(), foundPath: nullable,
+  foundVersion: nullable, candidates: t.Array(t.String()) }), t.Null()]),
+  issues: t.Array(t.Object({ kind: t.Union(['unavailable-packument', 'malformed-packument', 'unavailable-artifact',
+    'integrity-mismatch', 'missing-workspace'].map(value => t.Literal(value))), name: t.String(), version: nullable,
+  detail: t.String() })),
+  unsupportedClauses: t.Array(t.String(), { maxItems: 1 }), budgetReason: nullable,
+  artifactVerification: t.Union(['verified', 'not-requested', 'failed', 'not-reached'].map(value => t.Literal(value))),
+  cost: t.Object(Object.fromEntries(['inputBytes', 'packuments', 'packumentBytes', 'retainedRecords', 'nodes', 'edges',
+    'placementChecks', 'lookups', 'artifacts', 'artifactBytes'].map(key => [key, t.Integer({ minimum: 0 })]))),
+  sourceSnapshot: registrySnapshot });
+export const npmRegistryResolutionSchema = t.Object({ ...npmResolutionV1Schema.properties,
+  profile: t.Literal('npm-registry-resolution-receipt-v1'), request: npmRegistryRequestSchema,
+  outcome: npmRegistryOutcomeSchema });
 export const npmRequestSchema = t.Union([npmRequestV1Schema, npmRequestV2Schema, npmRequestV3Schema,
-  npmRequestV4Schema, npmRequestV5Schema]);
+  npmRequestV4Schema, npmRequestV5Schema, npmRegistryRequestSchema]);
 export const npmResolutionSchema = t.Union([npmResolutionV1Schema, npmResolutionV2Schema, npmResolutionV3Schema,
-  npmResolutionV4Schema, npmResolutionV5Schema]);
+  npmResolutionV4Schema, npmResolutionV5Schema, npmRegistryResolutionSchema]);
 export const npmResolutionWriteSchema = t.Object({ resolution: npmResolutionSchema, replayed: t.Boolean() });
