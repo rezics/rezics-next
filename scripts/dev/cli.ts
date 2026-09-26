@@ -36,17 +36,7 @@ function runtimeEnv(): NodeJS.ProcessEnv {
     run('docker', ['info', '--format', '{{.ServerVersion}}']);
     return process.env;
   } catch {
-    const socket = join(process.env.XDG_RUNTIME_DIR ?? `/run/user/${process.getuid?.() ?? ''}`, 'podman/podman.sock');
-    if (!existsSync(socket)) {
-      try { run('systemctl', ['--user', 'start', 'podman.socket']); } catch { /* diagnostic below */ }
-    }
-    const env = { ...process.env, DOCKER_HOST: `unix://${socket}` };
-    try {
-      run('docker', ['info', '--format', '{{.ServerVersion}}'], env);
-      return env;
-    } catch {
-      throw new Error('No Docker-compatible daemon is available. Start Docker, or enable the Podman user socket with `systemctl --user start podman.socket`, then retry.');
-    }
+    throw new Error('Docker is unavailable. Start Docker Desktop with `systemctl --user start docker-desktop`, then retry.');
   }
 }
 

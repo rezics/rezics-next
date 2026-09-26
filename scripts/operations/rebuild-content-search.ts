@@ -6,6 +6,7 @@ import { Pool } from 'pg';
 import { ContentCore } from '../../services/content/src/core.ts';
 import { ContentProjectionCursor } from '../../services/content/src/projection-cursor.ts';
 import { FusekiClient } from '../../services/main/src/infrastructure/fuseki.ts';
+import { loadDockerEnvironment } from '../load/docker-env.ts';
 import { fusekiImageFromCompose } from '../load/image.ts';
 import { activateRebuiltPublicContentSearch, clearQuarantinedContentUnits,
   quarantinePublicContentSearch, replayQuarantinedContentCut, resumeActivatedContentRebuild }
@@ -34,15 +35,6 @@ function digest(value: string): string {
   return createHash('sha256').update(value).digest('hex');
 }
 
-function dockerEnvironment(): NodeJS.ProcessEnv {
-  const probe = (env: NodeJS.ProcessEnv) => spawnSync('docker', ['info', '--format', '{{.ServerVersion}}'],
-    { env, encoding: 'utf8', timeout: 5_000 }).status === 0;
-  if (probe(process.env)) return process.env;
-  const socket = join(process.env.XDG_RUNTIME_DIR ?? `/run/user/${process.getuid?.() ?? ''}`, 'podman/podman.sock');
-  const fallback = { ...process.env, DOCKER_HOST: `unix://${socket}` };
-  if (existsSync(socket) && probe(fallback)) return fallback;
-  throw new Error('Docker or the adopted Podman user socket is unavailable');
-}
 
 function compose(args: string[], env: NodeJS.ProcessEnv): string {
   const result = spawnSync('docker', ['compose', '--env-file', join(stack, 'compose.env'),
@@ -76,7 +68,7 @@ const saved = existsSync(jobFile) ? JSON.parse(readFileSync(jobFile, 'utf8')) as
 if (saved && !UUID.test(saved.id)) throw new Error('saved Content rebuild job is invalid');
 if (saved && jobArg && saved.id !== jobArg) throw new Error('resume the saved Content rebuild job');
 const id = saved?.id ?? jobArg ?? randomUUID();
-const docker = dockerEnvironment();
+const docker = loadDockerEnvironment();
 await assertWritersStopped(apps.MAIN_ORIGIN!);
 const fuseki = new FusekiClient(apps.FUSEKI_URL!, apps.FUSEKI_MAINTENANCE_TOKEN!, apps.FUSEKI_COMMAND_TOKEN!);
 if ((await fuseki.commandHealth()).moduleVersion !== '0.5.29') {

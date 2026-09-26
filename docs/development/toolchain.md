@@ -52,7 +52,7 @@ limitations. Reuse installed binaries where their versions match.
 | Rust / Cargo | 1.98.1 | Build the upstream SQL bridge only, with `--locked`; no product Rust dependency is adopted. |
 | Docker CLI / Docker Desktop engine | 29.8.1 / 29.7.2 | Compose-backed product and isolated QA stacks use the host's `desktop-linux` context. The CLI also inspects local images and runs disposable search comparison containers; record image digests before use. |
 | Host inspection/archive utilities | Installed `lscpu`, `df`, `tar` | Read host/storage metadata and extract checksum-verified upstream archives through the research runner. |
-| Podman | 5.8.7 | Disposable rootless search containers and image inventory; it is not the default Compose QA engine on this host. |
+| Podman | 5.8.7 | Only the retained `yarn research:architecture` search, OpenSearch, Dgraph and Virtuoso probes call it directly. Product, development and QA stacks never use Podman. |
 | PGroonga research image | PostgreSQL 18.6 / PGroonga 4.0.8; local image ID `df9394ae660618227f519eeb0c2a4d9721c0b590ffaf4c49652747a601c1bf91`, manifest digest `sha256:c8052fbed36391ce9c01825ede5f70d78ddac575ae00b2c2f6f72642736afe81` | Reuse the old repository's inspected image with a new isolated data directory; verify extension version inside the probe. |
 | OpenSearch research image | `docker.io/opensearchproject/opensearch:3.6.0`; image ID `b1b447d0d021b051fdb1ae6be100e106667bbe302aa8d6855a4f6d726863d766`, manifest digest `sha256:b5dd1512af2a99748c942cfbbd7f32162623336b210667d0fc6333c6321f171d` | Isolated relation-aware ranked-search probe using the existing Podman runtime. Verify and retain image identity before measuring, run by that ID, and verify server version. This is a research pin, not a claim of the newest release or a production selection. [Release](https://opensearch.org/blog/introducing-opensearch-3-6/). |
 | Virtuoso Open Source research image | `docker.io/openlink/virtuoso-opensource-7:7.2.17-r25-g6eb68b6-ubuntu`; image ID `a6cbc2c869d23c04b131fa2c0e1663abc347747f12efe9bd62453eab1ea8575e`, manifest digest `sha256:2a9914b95f8a52927a73947c87ec2727f78f87d38e41c38c379efb121f9cbed1`. The initially inspected `7.2.17-r25.1-g2850f18-ubuntu` image (ID `07263730abf06071e50b89b03c0f027cd37e3205df13134ace7dc97bb5817d08`, digest `sha256:0dbe1ab4fa0cb7bbafc1f6c0c2b0a5d6f22d918dbd17672f2ddb24580aa6756a`) was rejected because its binary reports `7.2.18-dev.3243` (`8439c5e52f`) despite the tag. | Disposable native RDF plus free-text challenger on loopback only, with data under `.temp/storage-architecture/virtuoso/`. Run by inspected image ID and verify binary version. This is research, not a product dependency. [Release](https://github.com/openlink/virtuoso-opensource/releases/tag/v7.2.17), [official image](https://hub.docker.com/r/openlink/virtuoso-opensource-7/tags). |
@@ -185,7 +185,7 @@ and never committed. SOPS/age apply at the deployment stage.
 | Rust / Cargo | 1.98.1, installed stable toolchain | Adopted for package oracle only | `yarn package:cargo-oracle` checks the exact binary version before any native resolution. It uses an isolated local registry, cache and target directory; product Main does not invoke Cargo. The [Cargo resolver](https://doc.rust-lang.org/cargo/reference/resolver.html), [registry index](https://doc.rust-lang.org/cargo/reference/registry-index.html) and [metadata](https://doc.rust-lang.org/cargo/commands/cargo-metadata.html) references define the comparison surface. |
 | npm CLI and its bundled Arborist | 11.19.1, installed with Node 26.8.2 | Adopted for package oracle only | Run only through `yarn package:npm-oracle`; check CLI/package identity before interpreting virtual trees. The installed official [npm source](https://github.com/npm/cli/tree/v11.19.1) and [lockfile semantics](https://docs.npmjs.com/cli/v11/configuring-npm/package-lock-json) supply the bounded comparison. Main does not invoke npm or import its implementation. |
 | Docker CLI / Compose | 29.8.1 / 5.5.1 | Adopted | Root facade for pinned image build, local service lifecycle and disposable QA projects. The Compose version supports the QA overlay's `!override` and `!reset` tags; both configurations resolved and the dev stack started on 2026-09-25. |
-| Podman | 5.8.7 | Adopted local fallback | User-socket Docker API where Docker Engine is unavailable on this host; verified with the P0.1 stack startup and teardown. |
+| Podman | 5.8.7 | Research probes only | Not a Docker fallback. The root facade, load, fuzz and operations scripts require the Docker Desktop daemon and fail when it is unavailable, so a run never switches engines silently. |
 
 ## Local services
 
@@ -194,23 +194,17 @@ web app run as host processes for fast reload in development and are started by
 the harness for end-to-end and load tiers. They are not containerized in the
 first delivery; production placement stays with [deployment](../operations/deployment.md).
 
-On the current development host Docker Engine is installed but its daemon is
-inactive and cannot be started without administrator access. Podman 5.8.7 is an
-adopted local Docker-API fallback for the same root `docker compose` commands,
-using its user socket and `DOCKER_HOST`; the root command facade selects it only
-after a Docker daemon probe fails. This does not change the Compose topology or
-production runtime. P0.1 verified the Fuseki image build, Compose startup,
-Main/Account readiness and teardown through this socket on 2026-09-25. A fresh
-clone with no Yarn install state then ran `yarn toolchain:install && yarn dev`;
-Main and Account each returned HTTP 200 from `/health/ready`, and the stack was
-stopped without removing volumes. The observed host check was Docker CLI
-29.8.1/Compose 5.5.1 with both Docker daemon
-sockets absent, Podman 5.8.7 available, and `docker.socket` requiring an
-unavailable administrator password. The P0.1 clean-clone command exit is met;
-the broader OPS01/OPS14/OPS16 acceptance cases remain in the QA program.
-The disposable QA overlay uses permissive tmpfs mount modes because this Podman
-Docker API rejects Compose `uid`/`gid` tmpfs options; the services remain isolated
-inside the per-run Compose project.
+Docker Desktop's `desktop-linux` context is the only container engine for the
+root `docker compose` commands, load, API fuzz and operations scripts. Each probes
+`docker info` and stops with a `systemctl --user start docker-desktop` hint when
+the daemon is unavailable; none falls back to Podman, because a silent engine
+switch changes memory limits and host networking mid-run. On 2026-09-27 the
+maintainer retired the earlier Podman user-socket fallback, which P0.1 had used on
+2026-09-25 while the host Docker Engine daemon was inactive. The P0.1 clean-clone
+command exit is met; the broader OPS01/OPS14/OPS16 acceptance cases remain in the
+QA program. The disposable QA overlay still uses permissive tmpfs mount modes,
+originally because the Podman Docker API rejected Compose `uid`/`gid` tmpfs
+options; the services remain isolated inside the per-run Compose project.
 
 The topology lives in `infra/dev/compose.yaml` (project `rezics-dev`, or
 `rezics-qa-<run>` for the harness). Every published port binds to `127.0.0.1`.

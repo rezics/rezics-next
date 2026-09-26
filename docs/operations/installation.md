@@ -9,8 +9,8 @@ and remaining [acceptance gates](../plan/README.md#execution-program).
 ## Fresh checkout
 
 Use the exact Bun, Node and Yarn versions in the [toolchain lock](../development/toolchain.md#runtimes-and-languages)
-and a working Docker-compatible daemon. The root facade uses the Podman user
-socket when Docker Engine is unavailable. From the repository root:
+and a running Docker daemon (Docker Desktop on the development host). The root
+facade fails rather than switching to another engine when Docker is unavailable. From the repository root:
 
 ```sh
 yarn toolchain:install

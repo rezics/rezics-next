@@ -8,17 +8,15 @@ test('OPS05: load inspection uses the daemon that stack startup can reach', () =
     seen.push(candidate.DOCKER_HOST ?? '');
     return candidate.DOCKER_HOST === env.DOCKER_HOST;
   };
-  expect(loadDockerEnvironment(env, probe, () => true).DOCKER_HOST).toBe(env.DOCKER_HOST);
+  expect(loadDockerEnvironment(env, probe).DOCKER_HOST).toBe(env.DOCKER_HOST);
   expect(seen).toEqual([env.DOCKER_HOST]);
 });
 
-test('OPS05: unavailable Docker falls back only to a responding Podman socket', () => {
-  const env = { XDG_RUNTIME_DIR: '/tmp/runtime' };
-  const socket = 'unix:///tmp/runtime/podman/podman.sock';
-  expect(loadDockerEnvironment(env, candidate => candidate.DOCKER_HOST === socket,
-    path => path === '/tmp/runtime/podman/podman.sock').DOCKER_HOST).toBe(socket);
-  expect(() => loadDockerEnvironment(env, () => false, () => true))
-    .toThrow('Podman socket is not responding');
-  expect(() => loadDockerEnvironment(env, () => false, () => false))
-    .toThrow('No Docker-compatible daemon');
+test('OPS05: unavailable Docker fails instead of switching engines', () => {
+  const seen: string[] = [];
+  expect(() => loadDockerEnvironment({ XDG_RUNTIME_DIR: '/tmp/runtime' }, candidate => {
+    seen.push(candidate.DOCKER_HOST ?? '');
+    return false;
+  })).toThrow('Docker is unavailable');
+  expect(seen).toEqual(['']);
 });

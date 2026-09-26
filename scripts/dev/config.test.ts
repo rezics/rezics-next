@@ -83,12 +83,12 @@ test('P0.1 QA projects keep independent credentials and endpoints', () => {
   expect(appEnvironment(a, root).FUSEKI_URL).toContain(':13001/');
   expect(appEnvironment(b, root).FUSEKI_URL).toContain(':13002/');
   expect(appEnvironment(a, root).MAIN_ORIGIN).toContain(`:${a.MAIN_PORT}`);
-  const nested = composeProcessEnvironment({ ...a, DOCKER_HOST: 'unix:///run/podman.sock' }, b);
+  const nested = composeProcessEnvironment({ ...a, DOCKER_HOST: 'unix:///run/docker.sock' }, b);
   expect(nested.FUSEKI_MAINTENANCE_TOKEN).toBe(b.FUSEKI_MAINTENANCE_TOKEN);
   expect(nested.FUSEKI_COMMAND_TOKEN).toBe(b.FUSEKI_COMMAND_TOKEN);
   expect(nested.POSTGRES_PASSWORD).toBe(b.POSTGRES_PASSWORD);
   expect(nested.FUSEKI_PORT).toBe(b.FUSEKI_PORT);
-  expect(nested.DOCKER_HOST).toBe('unix:///run/podman.sock');
+  expect(nested.DOCKER_HOST).toBe('unix:///run/docker.sock');
 });
 
 test('OPS01/OPS14 PostgreSQL stack readiness waits for its final TCP server', () => {

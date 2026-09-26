@@ -141,8 +141,8 @@ stateful phases until the budget is spent. Neither option can update the
 baseline. A guard stops the container 120 seconds after the expected end.
 
 Under Docker Desktop, `--network host` is the VM's network, so the container
-reaches host loopback services through `host.docker.internal`. Native engines
-and rootless Podman keep host networking. Reports stay under
+reaches host loopback services through `host.docker.internal`. A native Docker
+engine keeps host networking. Reports stay under
 `.artifacts/api-fuzz/<run-id>/`: `schemathesis.log` and a JUnit file, which holds
 each failure's response and a curl reproduction. Stack, bootstrap and service
 logs are kept alongside.

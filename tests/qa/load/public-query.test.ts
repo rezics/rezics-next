@@ -3,6 +3,7 @@ import { spawn, spawnSync } from 'node:child_process';
 import { closeSync, existsSync, mkdirSync, openSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { Pool } from 'pg';
+import { hostLoopbackAccess, loadDockerEnvironment } from '../../../scripts/load/docker-env.ts';
 import { FusekiClient } from '../../../services/main/src/infrastructure/fuseki.ts';
 import type { WorkActivationEnvironment } from '../../../services/main/src/modules/work/activate.ts';
 import { seedLoadCorpus, type LoadCase, type LoadCorpus } from './corpus.ts';
@@ -54,13 +55,6 @@ function checkSnapshot(snapshot: Record<string, any>, item: LoadCase, corpus: Lo
     if (item.expectedContribution) expect(snapshot.results[0].contribution).toBe(item.expectedContribution);
     if (item.expectedReason) expect(snapshot.results[0].reason).toBe(item.expectedReason);
   }
-}
-
-function dockerEnvironment() {
-  const socket = join(process.env.XDG_RUNTIME_DIR ?? `/run/user/${process.getuid()}`, 'podman/podman.sock');
-  return { ...process.env,
-    ...(!process.env.DOCKER_HOST || process.env.DOCKER_HOST.includes('/.docker/desktop/')
-      ? existsSync(socket) ? { DOCKER_HOST: `unix://${socket}` } : {} : {}) };
 }
 
 async function k6Run(args: string[], env: NodeJS.ProcessEnv) {
@@ -144,11 +138,12 @@ test('OPS05/SEARCH18/SEARCH19: bounded skewed Main, Realm and Content phrase loa
     writeFileSync(join(loadDir, 'load-cases.json'), JSON.stringify({ realm: corpus.realm,
       graphPopulation: corpus.mainUnits + corpus.contentUnits, contentPopulation: corpus.contentUnits,
       cases: corpus.cases }, null, 2) + '\n');
-    const dockerEnv = dockerEnvironment();
+    const dockerEnv = loadDockerEnvironment();
+    const access = hostLoopbackAccess(dockerEnv);
     const script = join(import.meta.dir, 'public-query.k6.js');
-    const run = await k6Run(['run', '--rm', '--network', 'host', '--user', '0:0',
+    const run = await k6Run(['run', '--rm', ...access.args, '--user', '0:0',
       '--volume', `${script}:/scripts/public-query.js:ro,Z`,
-      '--volume', `${loadDir}:/artifacts:Z`, '--env', `MAIN_BASE_URL=${baseUrl}`,
+      '--volume', `${loadDir}:/artifacts:Z`, '--env', `MAIN_BASE_URL=http://${access.host}:${port}`,
       'grafana/k6:2.3.0', 'run', '--summary-export=/artifacts/k6-summary.json',
       '/scripts/public-query.js'], dockerEnv);
     evidence.k6Exit = run.status;
