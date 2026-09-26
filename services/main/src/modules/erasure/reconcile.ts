@@ -1,5 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
+import type { FusekiClient } from '../../infrastructure/fuseki.ts';
+import type { ObjectRecoveryStore } from '../owner/object-coverage.ts';
+import type { GraphLineage } from '../work/activate.ts';
 import { releaseAccessRecoveryFence } from '../access/admission.ts';
 import { AccountDeletionJournalConflict, assertAccountDeletionJournalCoverage } from
   '../outbox/account-deletion-journal.ts';
@@ -9,6 +12,8 @@ import { assertRetainedAuthorityCoverage, type RetainedAuthorityCoverage } from 
 import { applyContentErasure, ContentErasureGraphRequired, contentErasureResource,
   ContentErasureStale, probeContentErasure } from './content.ts';
 import { ErasureUnavailable, readErasure, relayTransaction, sha256 } from './journal.ts';
+import { assertGraphErasure, graphLineageSequence, replayGraphErasure } from './replay-graph.ts';
+import { objectErasureAbsent, protectedObjectDigests, replayObjectErasure } from './replay-objects.ts';
 
 /** The restored owners stay fenced: a later journal entry or authority fact is unreconciled. */
 export class ErasureRestoreHold extends Error {}
@@ -157,7 +162,11 @@ export async function verifyErasure(relay: Pool, owners: { content?: Pool; accou
   return (await summary(relay, operationId))!;
 }
 
-export interface RestoredOwners { content: Pool; access: Pool; account: Pool }
+export interface RestoredOwners {
+  content: Pool; access: Pool; account: Pool;
+  graph?: { fuseki: FusekiClient; lineage: GraphLineage };
+  objects?: ObjectRecoveryStore;
+}
 
 function restoreRequestDigest(consumer: string, replay: boolean,
   authority: RetainedAuthorityCoverage): string {
@@ -184,11 +193,12 @@ export async function retainErasureCoverage(relay: Pool, consumer: string): Prom
 
 /**
  * Compare an isolated restored owner set with the retained erasure and Account
- * deletion journals. Suppressed Content erasures the restore lacks are replayed
- * into it only when `replay` is set; restored credentials of an erased Account,
- * unresolved journal entries, a missing coverage head or differing Access
- * authority/deletion evidence keep the restore held. Work is O(journal + Access
- * rows + Access outbox rows) and runs offline.
+ * deletion journals. Suppressed Content and graph erasures and exact object
+ * targets the restore lacks are replayed only when `replay` is set. Restored
+ * credentials of an erased Account, unresolved journal entries, a missing
+ * coverage head or differing Access authority/deletion evidence keep the restore
+ * held. Work is O(journal targets + Access rows + Access outbox rows + referenced
+ * graph manifests); each graph write is bounded to 64 targets and 64 units.
  */
 export async function reconcileRestoredErasures(relay: Pool, restored: RestoredOwners, input: {
   operationId: string; consumer: string; replay: boolean;
@@ -206,12 +216,15 @@ export async function reconcileRestoredErasures(relay: Pool, restored: RestoredO
   }
   const { head, journal } = await journalFrontier(relay, input.consumer);
   const content: Item[] = [];
+  const graph: Item[] = [];
+  const objects: Item[] = [];
   let after = '0';
   while (true) {
     const entries = (await relay.query<{ id: string; epoch: string;
       suppression_status: string; refs: string[] }>(`SELECT e.id, e.erasure_epoch::text AS epoch,
         e.suppression_status, array_agg(t.target_ref ORDER BY t.ordinal) AS refs
-      FROM relay.erasure e JOIN relay.erasure_target t ON t.erasure_id = e.id AND t.owner = 'content'
+      FROM relay.erasure e JOIN relay.erasure_target t ON t.erasure_id = e.id
+        AND t.owner = 'content' AND t.target_kind = 'content_revision'
       WHERE e.erasure_epoch > $1::bigint GROUP BY e.id ORDER BY e.erasure_epoch LIMIT ${JOURNAL_PAGE}`,
     [after])).rows;
     for (const entry of entries) {
@@ -237,24 +250,62 @@ export async function reconcileRestoredErasures(relay: Pool, restored: RestoredO
           disposition: probe === 'erased' || probe === 'absent' ? 'erased'
             : probe === 'available' && replayed ? 'replayed' : 'conflict' });
       }
+      if (restored.graph) {
+        const disposition = entry.refs.length > 64 ? 'conflict'
+          : await replayGraphErasure(restored.graph.fuseki, restored.graph.lineage,
+            entry.id, entry.epoch, entry.refs, input.replay);
+        graph.push({ owner: 'graph', kind: 'erasure', ref: entry.id, disposition });
+      }
     }
     if (entries.length < JOURNAL_PAGE) break;
     after = entries[entries.length - 1]!.epoch;
   }
-  // A restored graph, source or object copy needs its own qualified owner replay.
-  // An erasure without exact Content targets is likewise not proved by this drill.
+  // Explicit object targets are exact digests. Other non-Content target families
+  // remain held until their own owner supplies a replay and release proof.
+  let protectedDigests: Set<string> | null = null;
+  let objectProtectionFailed = false;
   after = '0';
   while (true) {
     const entries = (await relay.query<{ id: string; epoch: string }>(
       `SELECT e.id, e.erasure_epoch::text AS epoch FROM relay.erasure e
        WHERE e.kind <> 'account' AND e.erasure_epoch > $1::bigint
          AND (NOT EXISTS (SELECT 1 FROM relay.erasure_target t
-              WHERE t.erasure_id = e.id AND t.owner = 'content')
+              WHERE t.erasure_id = e.id AND t.owner = 'content'
+                AND t.target_kind = 'content_revision')
            OR EXISTS (SELECT 1 FROM relay.erasure_target t
-              WHERE t.erasure_id = e.id AND t.owner <> 'content'))
+              WHERE t.erasure_id = e.id AND NOT (t.owner = 'content'
+                AND t.target_kind = 'content_revision')))
        ORDER BY e.erasure_epoch LIMIT ${JOURNAL_PAGE}`, [after])).rows;
     for (const entry of entries) {
-      content.push({ owner: 'relay', kind: 'erasure', ref: entry.id, disposition: 'conflict' });
+      const report = await readErasure(relay, entry.id);
+      if (report.targets.some(target => target.owner === 'object')
+        && !protectedDigests && !objectProtectionFailed && restored.objects && restored.graph) {
+        try { protectedDigests = await protectedObjectDigests(
+          restored.graph.fuseki, restored.objects); }
+        catch { objectProtectionFailed = true; }
+      }
+      const foreign = report.targets.filter(target => !(target.owner === 'content'
+        && target.kind === 'content_revision') && !(target.owner === 'object' && target.kind === 'object'));
+      if (!report.targets.some(target => target.owner === 'content' && target.kind === 'content_revision')
+        && !report.targets.some(target => target.owner === 'object')) {
+        content.push({ owner: 'relay', kind: 'erasure', ref: entry.id, disposition: 'conflict' });
+      }
+      for (const target of foreign) {
+        const finding: Item = { owner: target.owner as Item['owner'], kind: 'erasure', ref: target.ref,
+          disposition: 'conflict' };
+        if (target.owner === 'content') content.push(finding);
+        else graph.push(finding);
+      }
+      for (const target of report.targets.filter(target => target.owner === 'object')) {
+        let disposition: Item['disposition'] = 'conflict';
+        if (report.suppression === 'suppressed' && restored.objects && restored.graph
+          && protectedDigests && !objectProtectionFailed) {
+          try { disposition = await replayObjectErasure(restored.objects, target.ref,
+            protectedDigests, input.replay); }
+          catch { /* malformed or unavailable target keeps the restore held */ }
+        }
+        objects.push({ owner: 'object', kind: 'erasure', ref: target.ref, disposition });
+      }
     }
     if (entries.length < JOURNAL_PAGE) break;
     after = entries[entries.length - 1]!.epoch;
@@ -288,18 +339,30 @@ export async function reconcileRestoredErasures(relay: Pool, restored: RestoredO
     ref: 'current-retained-authority-coverage', disposition: 'matched' };
   try { await assertRetainedAuthorityCoverage(relay, restored.access, input.consumer, input.authority); }
   catch { currentAuthority = { ...currentAuthority, disposition: 'conflict' }; }
-  const items = [...content, ...account, authority, currentAuthority];
+  let graphSequence: string | null = null;
+  if (restored.graph) {
+    try { graphSequence = await graphLineageSequence(restored.graph.fuseki, restored.graph.lineage); }
+    catch { /* an unavailable graph cannot be released */ }
+    if (graphSequence === null) graph.push({ owner: 'graph', kind: 'authority_fence',
+      ref: 'restored-graph-lineage', disposition: 'conflict' });
+  }
+  const items = [...content, ...graph, ...objects, ...account, authority, currentAuthority];
   const open = items.filter(item => OPEN.has(item.disposition));
   const holdReason = !head ? 'no retained recovery coverage head'
     : open.length ? `${open.length} journal items are missing from the restore` : null;
   const control = (await restored.content.query<{ data_epoch: string; sequence: string }>(
     'SELECT data_epoch::text AS data_epoch, sequence::text AS sequence FROM content.owner_control')).rows[0];
   const status = (subset: readonly Item[]): Cut['status'] =>
-    subset.some(item => item.disposition !== 'erased' && item.disposition !== 'matched') ? 'behind' : 'matched';
+    subset.some(item => !['erased', 'matched', 'replayed'].includes(item.disposition)) ? 'behind' : 'matched';
   const cuts: Cut[] = [
     { owner: 'content', dataEpoch: control?.data_epoch ?? null, sequence: control?.sequence ?? null,
       status: status(content), digest: itemsDigest(content) },
     { owner: 'account', dataEpoch: null, sequence: null, status: status(account), digest: itemsDigest(account) },
+    ...(restored.graph ? [{ owner: 'graph' as const,
+      dataEpoch: graphSequence === null ? null : restored.graph.lineage.dataEpoch,
+      sequence: graphSequence, status: status(graph), digest: itemsDigest(graph) }] : []),
+    ...(restored.objects ? [{ owner: 'object' as const, dataEpoch: null, sequence: null,
+      status: status(objects), digest: itemsDigest(objects) }] : []),
     { owner: 'access', dataEpoch: null, sequence: null, status: status([authority, currentAuthority]),
       digest: itemsDigest([authority, currentAuthority]) },
     { owner: 'relay', dataEpoch: null, sequence: null, status: head ? 'matched' : 'missing',
@@ -321,20 +384,56 @@ async function assertRestoredErasuresCurrent(relay: PoolClient, restored: Restor
   const unsupported = await relay.query(`SELECT 1 FROM relay.erasure e
     WHERE e.kind <> 'account' AND (NOT EXISTS (SELECT 1 FROM relay.erasure_target t
       WHERE t.erasure_id = e.id) OR EXISTS (SELECT 1 FROM relay.erasure_target t
-      WHERE t.erasure_id = e.id AND (t.owner <> 'content' OR t.target_kind <> 'content_revision')))
+      WHERE t.erasure_id = e.id AND NOT (t.owner = 'content' AND t.target_kind = 'content_revision'
+        OR t.owner = 'object' AND t.target_kind = 'object')))
     LIMIT 1`);
   if (unsupported.rowCount) throw new ErasureRestoreHold('an erasure owner is not reconciled');
+  if (restored.graph && await graphLineageSequence(restored.graph.fuseki,
+    restored.graph.lineage) === null) {
+    throw new ErasureRestoreHold('restored graph lineage is unavailable');
+  }
   let after = '0';
   while (true) {
     const entries = (await relay.query<{ id: string; epoch: string; refs: string[] }>(
       `SELECT e.id, e.erasure_epoch::text AS epoch, array_agg(t.target_ref ORDER BY t.ordinal) AS refs
        FROM relay.erasure e JOIN relay.erasure_target t ON t.erasure_id = e.id
+         AND t.owner = 'content' AND t.target_kind = 'content_revision'
        WHERE e.kind <> 'account' AND e.erasure_epoch > $1::bigint
        GROUP BY e.id ORDER BY e.erasure_epoch LIMIT ${JOURNAL_PAGE}`, [after])).rows;
     for (const entry of entries) {
       const probes = await probeContentErasure(restored.content, entry.id, entry.refs);
       if (entry.refs.some(ref => !['erased', 'absent'].includes(probes.get(ref) ?? 'foreign'))) {
         throw new ErasureRestoreHold('restored Content still exposes an erased revision');
+      }
+      if (restored.graph && (entry.refs.length > 64 || !await assertGraphErasure(
+        restored.graph.fuseki, restored.graph.lineage, entry.id, entry.epoch, entry.refs))) {
+        throw new ErasureRestoreHold('restored graph still exposes an erased revision');
+      }
+    }
+    if (entries.length < JOURNAL_PAGE) break;
+    after = entries[entries.length - 1]!.epoch;
+  }
+  after = '0';
+  let protectedDigests: Set<string> | null = null;
+  while (true) {
+    const entries = (await relay.query<{ id: string; epoch: string }>(`SELECT e.id,
+        e.erasure_epoch::text AS epoch FROM relay.erasure e
+      WHERE e.erasure_epoch > $1::bigint AND EXISTS
+        (SELECT 1 FROM relay.erasure_target t WHERE t.erasure_id = e.id AND t.owner = 'object')
+      ORDER BY e.erasure_epoch LIMIT ${JOURNAL_PAGE}`, [after])).rows;
+    if (entries.length && (!restored.objects || !restored.graph)) {
+      throw new ErasureRestoreHold('restored graph and object copies are required');
+    }
+    if (entries.length && !protectedDigests) {
+      protectedDigests = await protectedObjectDigests(restored.graph!.fuseki, restored.objects!);
+    }
+    for (const entry of entries) {
+      const report = await readErasure(relay, entry.id);
+      for (const target of report.targets.filter(target => target.owner === 'object')) {
+        if (protectedDigests!.has(target.ref.slice(7))
+          || !await objectErasureAbsent(restored.objects!, target.ref)) {
+          throw new ErasureRestoreHold('restored object copy still exposes an erased digest');
+        }
       }
     }
     if (entries.length < JOURNAL_PAGE) break;
