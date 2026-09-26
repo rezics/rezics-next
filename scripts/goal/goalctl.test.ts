@@ -75,6 +75,26 @@ describe('goalctl runtime policy', () => {
     expect(usageLevel(undefined, now).level).toBe('unknown');
   });
 
+  test('paces dispatch against the time left before the 5h reset', () => {
+    const now = 1_800_000_000;
+    const snap = (used: number, resetIn: number, week?: number) => ({ at: now, rate_limits: {
+      five_hour: { used_percentage: used, resets_at: now + resetIn },
+      seven_day: week === undefined ? null : { used_percentage: week, resets_at: now + 3 * 86400 } } });
+    // 80% after 4h (20%/h) with 1h left projects exactly 100%: no new dispatch.
+    expect(usageLevel(snap(80, 3600), now * 1000).level).toBe('restricted');
+    // 80% with 15 min left (about 17%/h) projects 84%: keep using the window.
+    expect(usageLevel(snap(80, 900), now * 1000)).toMatchObject({ level: 'normal', projected: 84 });
+    // A slower recent slope (width already reduced) reopens dispatch with the same used percentage.
+    const resets = now + 3600;
+    const history = [{ at: now - 1200, used: 76, resets }];
+    expect(usageLevel(snap(80, 3600), now * 1000, history)).toMatchObject({ level: 'normal', projected: 92 });
+    // 50% after 1h projects 250%: stop early instead of waiting for 80%.
+    expect(usageLevel(snap(50, 4 * 3600), now * 1000).level).toBe('restricted');
+    expect(usageLevel(snap(96, 60), now * 1000).level).toBe('critical');
+    // The weekly window also bounds dispatch: 90% after 4 days projects about 157%.
+    expect(usageLevel(snap(10, 4 * 3600, 90), now * 1000)).toMatchObject({ level: 'restricted' });
+  });
+
   test('pins the Opus model, effort and bypass permission mode without inbound session messages', () => {
     const [program, args] = launchCommand({ id: 'G-040', effort: 'medium', session: 's', prompt: 'p', resume: false });
     expect(program).toBe('claude');

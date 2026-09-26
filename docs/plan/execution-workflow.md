@@ -81,8 +81,9 @@ startup, review and integration cost.
   `.temp/worktrees/` on a `goal/<id>` branch. The manager alone rebases,
   fast-forwards `main`, runs wave QA and commits.
 - **Concurrency.** Up to 25 live workers and 8 concurrent QA stacks, limited
-  further by merge throughput and the 5-hour usage governor: at 80% of the
-  window used, dispatch nothing new; at 95%, only merge and test. Widen or narrow
+  further by merge throughput and the paced [usage governor](../goals/README.md#capacity-and-usage):
+  dispatch nothing new while the burn rate projects 95% or more of the 5-hour
+  or 7-day window at its reset; at 95% used, only merge and test. Widen or narrow
   from merged passing cases and rework, not from occupied slots.
 - **Lifecycle.** A worker returns one handoff (result, cases, commits, checks,
   proposed tasks, blockers, next action) and exits. The manager waits on the

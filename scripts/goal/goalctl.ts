@@ -21,8 +21,15 @@ export interface Task extends Brief {
   mergedCommit?: string; closedAt?: string;
 }
 export interface Ledger { startedAt?: string; manager?: string; tasks: Record<string, Task> }
+export interface UsageWindow { used_percentage?: number; resets_at?: string | number }
 export interface UsageSnapshot {
-  at?: number; rate_limits?: { five_hour?: { used_percentage?: number; resets_at?: string | number } | null } | null;
+  at?: number; rate_limits?: { five_hour?: UsageWindow | null; seven_day?: UsageWindow | null } | null;
+}
+export interface UsageSample { at: number; used: number; resets: number }
+export type UsageLevel = 'unknown' | 'normal' | 'restricted' | 'critical';
+export interface UsageReport {
+  level: UsageLevel; used?: number; ageSeconds?: number; resetInMinutes?: number;
+  ratePerHour?: number; projected?: number; weekUsed?: number; weekProjected?: number; reason?: string;
 }
 
 export const MODEL = 'claude-opus-5-5';
@@ -120,13 +127,64 @@ export function outOfScope(files: string[], patterns: string[]): string[] {
   return files.filter(file => !globs.some(glob => glob.match(file)));
 }
 
-export function usageLevel(snapshot: UsageSnapshot | undefined, nowMs: number):
-  { level: 'unknown' | 'normal' | 'restricted' | 'critical'; used?: number; ageSeconds?: number } {
-  const used = snapshot?.rate_limits?.five_hour?.used_percentage;
+const FIVE_HOURS = 5 * 3600;
+const SEVEN_DAYS = 7 * 24 * 3600;
+// Dispatch stays open while the burn rate would end the window below PROJECTED_LIMIT; only
+// merge and test at CRITICAL_USED, because the manager itself must not hit the hard limit.
+export const PROJECTED_LIMIT = 95;
+export const CRITICAL_USED = 95;
+
+function resetSeconds(value: string | number | undefined): number | undefined {
+  if (typeof value === 'number') return value > 1e12 ? value / 1000 : value;
+  if (typeof value === 'string') { const ms = Date.parse(value); return Number.isNaN(ms) ? undefined : ms / 1000; }
+  return undefined;
+}
+
+// Percent per second: the recent slope of the current window when goalctl has at least ten
+// minutes of samples from the last half hour (it tracks the present worker width), otherwise
+// the window average, counted over at least 15 minutes so an early spike is not extrapolated.
+export function burnRate(used: number, now: number, resets: number, windowSeconds: number,
+  history: UsageSample[] = []): number {
+  const recent = history.filter(s => s.resets === resets && s.at >= now - 1800 && s.at <= now - 600);
+  if (recent.length) {
+    const first = recent.reduce((a, b) => (a.at <= b.at ? a : b));
+    return Math.max(0, used - first.used) / (now - first.at);
+  }
+  return used / Math.max(900, now - (resets - windowSeconds));
+}
+
+export function usageLevel(snapshot: UsageSnapshot | undefined, nowMs: number,
+  history: UsageSample[] = []): UsageReport {
+  const five = snapshot?.rate_limits?.five_hour;
+  const used = five?.used_percentage;
   if (!snapshot?.at || typeof used !== 'number') return { level: 'unknown' };
-  const ageSeconds = Math.round(nowMs / 1000 - snapshot.at);
+  const now = nowMs / 1000;
+  const ageSeconds = Math.round(now - snapshot.at);
   if (ageSeconds > 1800) return { level: 'unknown', used, ageSeconds };
-  return { level: used >= 95 ? 'critical' : used >= 80 ? 'restricted' : 'normal', used, ageSeconds };
+  if (used >= CRITICAL_USED) return { level: 'critical', used, ageSeconds, reason: `used >= ${CRITICAL_USED}%` };
+  const resets = resetSeconds(five?.resets_at);
+  // Without a reset time the window cannot be paced; fall back to the fixed 80% threshold.
+  if (resets === undefined || resets <= now) {
+    return { level: used >= 80 ? 'restricted' : 'normal', used, ageSeconds, reason: 'no reset time; fixed 80%' };
+  }
+  const rate = burnRate(used, now, resets, FIVE_HOURS, history);
+  const projected = Math.round(used + rate * (resets - now));
+  const report: UsageReport = { level: 'normal', used, ageSeconds, resetInMinutes: Math.round((resets - now) / 60),
+    ratePerHour: Math.round(rate * 36000) / 10, projected };
+  const week = snapshot.rate_limits?.seven_day;
+  const weekResets = resetSeconds(week?.resets_at);
+  if (typeof week?.used_percentage === 'number' && weekResets !== undefined && weekResets > now) {
+    report.weekUsed = week.used_percentage;
+    report.weekProjected = Math.round(week.used_percentage
+      + burnRate(week.used_percentage, now, weekResets, SEVEN_DAYS) * (weekResets - now));
+  }
+  if (projected >= PROJECTED_LIMIT) {
+    return { ...report, level: 'restricted', reason: `5h projected ${projected}% at reset` };
+  }
+  if ((report.weekProjected ?? 0) >= PROJECTED_LIMIT) {
+    return { ...report, level: 'restricted', reason: `7d projected ${report.weekProjected}% at reset` };
+  }
+  return report;
 }
 
 // Workers run in bypass permission mode, as the manager does, and accept no inbound session
@@ -157,6 +215,7 @@ const root = dirname(git(process.cwd(), ['rev-parse', '--path-format=absolute', 
 const stateDir = join(root, '.temp', 'goal-orchestration');
 const ledgerPath = join(stateDir, 'ledger.json');
 const usagePath = process.env.GOAL_USAGE_FILE ?? join(homedir(), '.claude', 'usage', 'latest.json');
+const usageHistoryPath = join(stateDir, 'usage-history.json');
 
 function readLedger(): Ledger {
   return existsSync(ledgerPath) ? JSON.parse(readFileSync(ledgerPath, 'utf8')) as Ledger : { tasks: {} };
@@ -209,6 +268,24 @@ async function withLedger<T>(change: (ledger: Ledger) => T | Promise<T>): Promis
 
 function readUsage(): UsageSnapshot | undefined {
   try { return JSON.parse(readFileSync(usagePath, 'utf8')) as UsageSnapshot; } catch { return undefined; }
+}
+
+// The status line keeps only the latest snapshot, so goalctl records its own two-hour history
+// to measure the recent burn rate.
+function currentUsage(): UsageReport {
+  const snapshot = readUsage();
+  let history: UsageSample[] = [];
+  try { history = JSON.parse(readFileSync(usageHistoryPath, 'utf8')) as UsageSample[]; } catch { /* first sample */ }
+  const five = snapshot?.rate_limits?.five_hour;
+  const resets = resetSeconds(five?.resets_at);
+  if (snapshot?.at && typeof five?.used_percentage === 'number' && resets !== undefined
+    && !history.some(s => s.at === snapshot.at)) {
+    history = [...history.filter(s => s.at >= snapshot.at! - 7200),
+      { at: snapshot.at, used: five.used_percentage, resets }];
+    try { mkdirSync(stateDir, { recursive: true }); writeFileSync(usageHistoryPath, JSON.stringify(history)); }
+    catch { /* history is an optimisation */ }
+  }
+  return usageLevel(snapshot, Date.now(), history);
 }
 
 function taskOf(ledger: Ledger, id: string): Task {
@@ -299,9 +376,10 @@ async function dispatch(briefPath: string, flags: Set<string>): Promise<void> {
     const live = tasks.filter(running).length;
     const limit = Number(process.env.GOAL_MAX_WORKERS ?? 25);
     if (live >= limit) throw new Error(`Concurrency limit reached: ${live}/${limit} live workers`);
-    const usage = usageLevel(readUsage(), Date.now());
+    const usage = currentUsage();
     if (['restricted', 'critical'].includes(usage.level) && !flags.has('--force-usage')) {
-      throw new Error(`5h usage is ${usage.used}% (${usage.level}); reduce concurrency or pass --force-usage`);
+      throw new Error(`5h usage is ${usage.used}% (${usage.level}: ${usage.reason}); `
+        + 'let running workers finish or pass --force-usage');
     }
     if (flags.has('--dry-run')) { console.log(`${brief.id}: claims ok; ${live}/${limit} live; usage ${usage.level}`); return; }
     const worktree = join(root, '.temp', 'worktrees', brief.id.toLowerCase());
@@ -445,11 +523,13 @@ async function status(): Promise<void> {
     return current;
   });
   const tasks = Object.values(ledger.tasks);
-  const usage = usageLevel(readUsage(), Date.now());
+  const usage = currentUsage();
   const live = tasks.filter(running);
   console.log(`program elapsed ${ledger.startedAt ? elapsed(ledger.startedAt) : 'not started'}; `
     + `live ${live.length}/${process.env.GOAL_MAX_WORKERS ?? 25}; `
-    + `5h usage ${usage.used ?? '?'}% ${usage.level}${usage.ageSeconds !== undefined ? ` (${usage.ageSeconds}s old)` : ''}`);
+    + `5h usage ${usage.used ?? '?'}% ${usage.level}`
+    + (usage.projected !== undefined ? `, projected ${usage.projected}% at reset in ${usage.resetInMinutes}m` : '')
+    + (usage.ageSeconds !== undefined ? ` (${usage.ageSeconds}s old)` : ''));
   for (const task of tasks.filter(t => !['verified', 'cancelled'].includes(t.state))) {
     const attempt = lastAttempt(task);
     console.log(`${task.id} ${task.state.padEnd(8)} ${attempt.effort} #${attempt.n} `
@@ -510,7 +590,7 @@ async function main(argv: string[]): Promise<number> {
     case 'merge': await mergeTask(positional[0] ?? '', flags); return 0;
     case 'close': await closeTask(positional[0] ?? '', positional[1] ?? ''); return 0;
     case 'status': await status(); return 0;
-    case 'usage': console.log(JSON.stringify({ ...usageLevel(readUsage(), Date.now()), file: usagePath })); return 0;
+    case 'usage': console.log(JSON.stringify({ ...currentUsage(), file: usagePath })); return 0;
     case 'test': return withSlot(['corepack', 'yarn', 'test', ...rest]);
     case 'slot': return withSlot(rest[0] === '--' ? rest.slice(1) : rest);
     default:

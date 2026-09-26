@@ -111,14 +111,14 @@ main checkout:
 | Command | Effect |
 | --- | --- |
 | `init --manager goal-manager` | Records the program start used for elapsed time and the manager session name. |
-| `dispatch docs/goals/tasks/G-NNN.md [--dry-run]` | Validates the brief, refuses overlapping claims, unmet dependencies, the live-worker limit and a restricted 5-hour usage level, then creates `.temp/worktrees/g-nnn` on branch `goal/g-nnn` from `main`, installs dependencies (about 6 s), copies the brief and starts a detached worker. |
+| `dispatch docs/goals/tasks/G-NNN.md [--dry-run]` | Validates the brief, refuses overlapping claims, unmet dependencies, the live-worker limit and a restricted or critical usage level, then creates `.temp/worktrees/g-nnn` on branch `goal/g-nnn` from `main`, installs dependencies (about 6 s), copies the brief and starts a detached worker. |
 | `wait G-NNN` | Run in the background. Blocks until the worker process exits, then prints branch, cleanliness, scope check and the handoff. |
 | `resume G-NNN -m <text> [--effort e] [--fresh]` | Continues the same worker session with full context after it exited, optionally at another effort; `--fresh` starts a new session on the same worktree. |
 | `stop G-NNN` | Terminates the worker's process group and confirms exit. Claims and worktree remain. |
 | `scope G-NNN` | Lists commits ahead, dirty files and files outside the claim. |
 | `merge G-NNN [--allow-scope]` | Requires an exited worker, a clean worktree and in-scope files; rebases the branch onto `main` and fast-forwards `main`. A conflict marks the task `conflict` for the worker to resolve. |
 | `close G-NNN verified|cancelled` | Removes the worktree and releases the claims. |
-| `status` / `usage` | Live workers, states, elapsed time and the 5-hour usage level. |
+| `status` / `usage` | Live workers, states, elapsed time, the usage level, burn rate and projected usage at reset. |
 | `test <yarn test args>` / `slot -- <cmd>` | Runs a check inside one of the shared QA slots. |
 
 The lifecycle is dispatch, background `wait`, handoff, then merge or resume,
@@ -195,10 +195,15 @@ Duplicate work is prevented mechanically:
   8–12 in phases A and B and up to 25 in phase C while the merge queue stays
   short. Merge throughput, not the slot count, sets the useful width.
 - The interactive status line writes `~/.claude/usage/latest.json`; `goalctl
-  usage` classifies it. At 80% or more of the 5-hour window used (under 20%
-  remaining), dispatch no new workers and let running ones finish; at 95%, only
-  merge and test. Resume dispatching after the window resets. A snapshot older
-  than 30 minutes is unknown; refresh it by taking a manager turn.
+  usage` paces it against the reset time instead of a fixed threshold. It
+  projects the 5-hour usage at `resets_at` from the burn rate: the slope of
+  goalctl's own samples over the last 10–30 minutes (the current worker width),
+  otherwise the window average. While the projection stays under 95%, dispatch
+  normally, even at 80% used when the reset is close; at 95% or more, dispatch
+  no new workers and let running ones finish. The same projection over the
+  7-day window also blocks dispatch at 95%. At 95% actually used, only merge
+  and test. Without a reset time, the fixed 80% threshold applies. A snapshot
+  older than 30 minutes is unknown; refresh it by taking a manager turn.
 - Back off on API rate-limit errors instead of retrying in a loop.
 - Docker Desktop has 24 GB for QA stacks. If its socket disappears, run
   `systemctl --user start docker-desktop` and re-run the affected check.
