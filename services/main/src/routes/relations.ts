@@ -1,0 +1,105 @@
+import { Elysia, t } from 'elysia';
+import type { FusekiClient } from '../infrastructure/fuseki.ts';
+import { readCurrentOccurrence, readExactDefinition, readExactOccurrence } from '../modules/relation/change.ts';
+import { admittedRelationChange, canReadSemantic, referenceReader, SEMANTIC_READ_SCOPE } from '../modules/semantic/admitted.ts';
+import { assertGraphAdmissionOpen } from '../modules/work/restore-lineage.ts';
+import { RevisionCorrupt } from '../modules/work/history.ts';
+import { pendingOperation, problemResult } from '../api-contract.ts';
+import { authorizedReadProblems, writeProblems } from '../api-responses.ts';
+import type { MainWorkDependencies } from './dependencies.ts';
+import { problem } from './problems.ts';
+import { semanticError } from './semantic.ts';
+import { groupUuid } from './shared.ts';
+
+const native = t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' });
+const position = t.Object({ datasetId: t.Literal('product'), dataEpoch: t.String(), sequence: t.String() });
+const relationWrite = t.Object({ profile: t.Literal('relation-change-v1'), occurrence: t.String(),
+  revision: t.String(), predecessor: t.Nullable(t.String()), receipt: t.String(), sourcePosition: position,
+  replayed: t.Boolean() });
+const relationRead = t.Object({ profile: t.Literal('relation-change-v1'), occurrence: t.String(),
+  revision: t.String(), predecessor: t.Nullable(t.String()), lifecycle: t.String(),
+  definition: t.Object({ revision: t.String(), definition: t.String(), lifecycle: t.String(),
+    roles: t.Array(t.Unknown()) }),
+  participations: t.Array(t.Object({ participation: t.String(), role: t.String(), participant: t.Unknown(),
+    position: t.Optional(t.Integer()), availability: t.String() })),
+  applicability: t.Array(t.String()), sourcePosition: position });
+
+export function relationRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
+  const exact = async (request: Request, actingSubject: string, occurrence: string, revision?: string) => {
+    await assertGraphAdmissionOpen(fuseki, work.environment.lineage);
+    const principal = await work.account.verify(request, [SEMANTIC_READ_SCOPE]);
+    if (!await canReadSemantic(work.access, principal, actingSubject, occurrence)) return null;
+    const head = revision ?? (await readCurrentOccurrence(work.environment, occurrence))?.head;
+    if (!head) return null;
+    const read = await readExactOccurrence(work.environment, occurrence, head);
+    if (!read) return null;
+    // The occurrence pins its exact DefinitionRef; a later retirement never retargets it.
+    const definition = await readExactDefinition(work.environment, read.state.definition);
+    if (!definition) throw new RevisionCorrupt('occurrence definition revision is unavailable');
+    const canRead = referenceReader(work.access, principal, actingSubject);
+    return { profile: 'relation-change-v1' as const, occurrence, revision: read.revision,
+      predecessor: read.predecessor, lifecycle: read.state.lifecycle,
+      definition: { revision: definition.revision, definition: definition.definition, lifecycle: definition.lifecycle,
+        roles: definition.roles.map(role => ({ ...role, key: definition.roleKeys[role.role] })) },
+      participations: await Promise.all(read.state.participations.map(async item => {
+        const availability = item.participant.kind === 'external' ? 'external'
+          : await canRead(item.participant.ref) ? 'available' : 'unavailable';
+        return { participation: item.iri, role: definition.roleKeys[item.role] ?? item.role,
+          participant: availability === 'unavailable' ? { kind: 'unavailable-reference' } : item.participant,
+          ...(item.position === undefined ? {} : { position: item.position }), availability };
+      })),
+      applicability: read.state.applicability, sourcePosition: read.sourcePosition };
+  };
+  return new Elysia()
+    .post('/v1/relations/changes', {
+      body: t.Object({ profile: t.Literal('relation-change-v1'), occurrence: t.Optional(native),
+        expectedHead: t.Nullable(native), definition: native,
+        participations: t.Array(t.Object({ role: t.String({ maxLength: 32 }), participant: t.Record(t.String(), t.Unknown()),
+          position: t.Optional(t.Integer()) }, { additionalProperties: false }), { maxItems: 64 }),
+        applicability: t.Optional(t.Array(native, { maxItems: 8 })),
+        lifecycle: t.Optional(t.Union([t.Literal('active'), t.Literal('retired')])), actingSubject: native },
+      { additionalProperties: false }),
+      response: { 200: relationWrite, 201: relationWrite, 202: pendingOperation, ...writeProblems,
+        404: problemResult(404), 422: problemResult(422) },
+    }, async ({ request, body }) => {
+      const idempotencyKey = request.headers.get('idempotency-key');
+      if (!idempotencyKey || !/^[A-Za-z0-9:_./-]{1,128}$/.test(idempotencyKey)) {
+        return problem(400, 'invalid_idempotency_key', 'A valid Idempotency-Key header is required');
+      }
+      try {
+        const result = await admittedRelationChange(work.environment, work.account, work.access, request, {
+          ...(body.occurrence ? { occurrence: body.occurrence } : {}), expectedHead: body.expectedHead,
+          input: { definition: body.definition, participations: body.participations,
+            ...(body.applicability ? { applicability: body.applicability } : {}),
+            ...(body.lifecycle ? { lifecycle: body.lifecycle } : {}) },
+          actingSubject: body.actingSubject, idempotencyKey });
+        return Response.json({ profile: 'relation-change-v1', occurrence: result.occurrence, revision: result.revision,
+          predecessor: result.predecessor, receipt: result.receipt, sourcePosition: { datasetId: 'product',
+            dataEpoch: result.dataEpoch, sequence: result.sequence }, replayed: result.replayed },
+        { status: body.occurrence ? 200 : 201, headers: { 'cache-control': 'no-store' } });
+      } catch (error) { return semanticError(error); }
+    })
+    .get('/v1/relations/:id', {
+      params: t.Object({ id: groupUuid }),
+      query: t.Object({ actingSubject: native }, { additionalProperties: false }),
+      response: { 200: relationRead, ...authorizedReadProblems },
+    }, async ({ request, params, query }) => {
+      try {
+        const read = await exact(request, query.actingSubject, `https://rezics.com/id/${params.id}`);
+        if (!read) return problem(404, 'relation_unavailable', 'Relation occurrence is unavailable');
+        return Response.json(read, { headers: { 'cache-control': 'no-store' } });
+      } catch (error) { return semanticError(error); }
+    })
+    .get('/v1/relations/:id/revisions/:revision', {
+      params: t.Object({ id: groupUuid, revision: groupUuid }),
+      query: t.Object({ actingSubject: native }, { additionalProperties: false }),
+      response: { 200: relationRead, ...authorizedReadProblems },
+    }, async ({ request, params, query }) => {
+      try {
+        const read = await exact(request, query.actingSubject, `https://rezics.com/id/${params.id}`,
+          `https://rezics.com/id/${params.revision}`);
+        if (!read) return problem(404, 'revision_unavailable', 'Revision is unavailable');
+        return Response.json(read, { headers: { 'cache-control': 'no-store' } });
+      } catch (error) { return semanticError(error); }
+    });
+}

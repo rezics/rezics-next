@@ -13,7 +13,8 @@ export const semanticModelGenerationProfile = {
     ['xsd', 'http://www.w3.org/2001/XMLSchema#'], ['rv', 'https://rezics.com/vocab/']],
   layout: 'compact',
   shapes: [
-    { iri: 'https://rezics.com/definition/semantic-model-generation-v1/generation-shape', properties: [
+    { iri: 'https://rezics.com/definition/semantic-model-generation-v1/generation-shape',
+      canonical: { types: ['rv:ModelGeneration'] }, properties: [
       { path: 'rdf:type', in: ['rv:ModelGeneration', 'rv:RevisionAnchor'], minCount: 2, maxCount: 2 },
       { path: 'rv:component', hasValue: '<urn:rezics:model:product>', maxCount: 1 },
       { path: 'rv:generationNumber', minCount: 1, maxCount: 1, datatype: 'xsd:integer', minInclusive: 1 },
@@ -30,7 +31,8 @@ export const semanticModelGenerationProfile = {
       { path: 'rv:dataEpoch', minCount: 1, maxCount: 1, datatype: 'xsd:string' },
       { path: 'rv:sequence', minCount: 1, maxCount: 1, datatype: 'xsd:integer', minInclusive: 1 },
     ] },
-    { iri: 'https://rezics.com/definition/semantic-model-generation-v1/head-shape', properties: [
+    { iri: 'https://rezics.com/definition/semantic-model-generation-v1/head-shape',
+      canonical: { types: ['rv:ModelComponent'] }, properties: [
       { path: 'rdf:type', hasValue: 'rv:ModelComponent', maxCount: 1 },
       { path: 'rv:generationHead', minCount: 1, maxCount: 1, class: 'rv:ModelGeneration' },
     ] },

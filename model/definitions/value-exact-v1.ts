@@ -5,7 +5,8 @@ const slug = '^[a-z0-9]+(-[a-z0-9]+)*$';
 export const valueExactProfile = {
   id: 'value-exact-v1',
   comments: [
-    'Identified value nodes for exact quantities, temporal descriptions, directional text and external references.',
+    'Immutable value nodes (revisions graph) for exact quantities, temporal descriptions, directional text',
+    'and external references. Directional text is the JSON-LD 1.1 rdf:CompoundLiteral form.',
     'Numbers keep exact RDF lexicals (xsd:integer, xsd:decimal, owl:rational); JSON carries them only as strings.',
     'Original temporal lexicals survive engine normalization; derived UTC bounds are query aids only.',
   ],
@@ -15,7 +16,8 @@ export const valueExactProfile = {
     ['rv', 'https://rezics.com/vocab/']],
   layout: 'compact',
   shapes: [
-    { iri: 'https://rezics.com/definition/value-exact-v1/quantity-shape', properties: [
+    { iri: 'https://rezics.com/definition/value-exact-v1/quantity-shape',
+      canonical: { types: ['schema:QuantitativeValue'] }, properties: [
       { path: 'rdf:type', hasValue: 'schema:QuantitativeValue' },
       { path: 'schema:value', minCount: 1, maxCount: 1, nodeKind: 'sh:IRIOrLiteral' },
       { path: 'schema:unitCode', minCount: 1, maxCount: 1, nodeKind: 'sh:IRI' },
@@ -24,7 +26,8 @@ export const valueExactProfile = {
       { path: 'rv:decimalPlaces', maxCount: 1, datatype: 'xsd:integer', minInclusive: 1, maxInclusive: 1024 },
       { path: 'rv:uncertainty', maxCount: 1, nodeKind: 'sh:IRIOrLiteral' },
     ] },
-    { iri: 'https://rezics.com/definition/value-exact-v1/temporal-shape', properties: [
+    { iri: 'https://rezics.com/definition/value-exact-v1/temporal-shape',
+      canonical: { types: ['time:GeneralDateTimeDescription'] }, properties: [
       { path: 'rdf:type', hasValue: 'time:GeneralDateTimeDescription' },
       { path: 'rv:lexicalForm', minCount: 1, maxCount: 1, datatype: 'xsd:string', maxLength: 64 },
       { path: 'time:unitType', minCount: 1, maxCount: 1, in: ['time:unitYear', 'time:unitMonth',
@@ -37,13 +40,16 @@ export const valueExactProfile = {
       { path: 'rv:earliest', maxCount: 1, datatype: 'xsd:dateTime' },
       { path: 'rv:latest', maxCount: 1, datatype: 'xsd:dateTime' },
     ] },
-    { iri: 'https://rezics.com/definition/value-exact-v1/directional-text-shape', properties: [
+    { iri: 'https://rezics.com/definition/value-exact-v1/directional-text-shape',
+      canonical: { types: ['rdf:CompoundLiteral'] }, properties: [
+      { path: 'rdf:type', hasValue: 'rdf:CompoundLiteral' },
       { path: 'rdf:value', minCount: 1, maxCount: 1, datatype: 'xsd:string', maxLength: 8000 },
       { path: 'rdf:language', minCount: 1, maxCount: 1, datatype: 'xsd:string',
         pattern: '^[A-Za-z]{2,8}(-[A-Za-z0-9]{1,8})*$' },
       { path: 'rdf:direction', minCount: 1, maxCount: 1, datatype: 'xsd:string', in: ['"ltr"', '"rtl"'] },
     ] },
-    { iri: 'https://rezics.com/definition/value-exact-v1/external-reference-shape', properties: [
+    { iri: 'https://rezics.com/definition/value-exact-v1/external-reference-shape',
+      canonical: { types: ['rv:ExternalReference'] }, properties: [
       { path: 'rdf:type', hasValue: 'rv:ExternalReference' },
       { path: 'rv:externalProvider', minCount: 1, maxCount: 1, datatype: 'xsd:string', pattern: slug },
       { path: 'rv:externalNamespace', minCount: 1, maxCount: 1, datatype: 'xsd:string', pattern: slug },

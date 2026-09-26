@@ -278,6 +278,7 @@ export function semanticValueRdf(value: SemanticValue, allocateNode: () => strin
       if (!value.direction) return { object: `${JSON.stringify(value.lexical)}@${value.language}` };
       const node = allocateNode();
       return { object: `<${node}>`, node: { iri: node, shape: 'directional-text', triples: [
+        `<${node}> a <${RDF}CompoundLiteral>`,
         `<${node}> <${RDF}value> ${literal(value.lexical, `${XSD}string`)}`,
         `<${node}> <${RDF}language> ${literal(value.language, `${XSD}string`)}`,
         `<${node}> <${RDF}direction> ${literal(value.direction, `${XSD}string`)}`] } };

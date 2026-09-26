@@ -48,6 +48,8 @@ export type Lifecycle = 'active' | 'retired';
 export const SEMANTIC_CHANGE_LIMITS = {
   typesPerResource: 32,
   assertionsPerChange: 256,
+  /** New immutable value nodes per change; the module admits at most 100 subjects. */
+  valueNodesPerChange: 64,
   nameRecordsPerResource: 64,
   requestBytes: 262_144,
 } as const;
