@@ -304,6 +304,26 @@ export function planShards(estimates: ReadonlyMap<string, number>, count: number
   return shards.filter(shard => shard.files.length).map(shard => shard.files.sort());
 }
 
+// These tests initialize, clear or temporarily remove state in the shared
+// product graph. Run each against its own bootstrapped QA project so no later
+// integration file observes a changed lineage, sequence or outbox gap.
+export const isolatedIntegrationFiles = new Set([
+  'tests/qa/integration/validation-command.test.ts',
+  'tests/qa/integration/owner-operations.test.ts',
+  'tests/qa/integration/owner-relay-gap.test.ts',
+  'tests/qa/integration/owner-outbox-recovery.test.ts',
+  'tests/qa/integration/sys-receipt-relay-gap.test.ts',
+]);
+
+export function planStackProjects(estimates: ReadonlyMap<string, number>, count: number,
+  tier: 'integration' | 'fault/recovery'): string[][] {
+  if (tier !== 'integration') return planShards(estimates, count);
+  const isolated = [...estimates.keys()].filter(file => isolatedIntegrationFiles.has(file)).sort();
+  const shared = new Map([...estimates].filter(([file]) => !isolatedIntegrationFiles.has(file)));
+  const sharedSlots = Math.max(1, count - Number(isolated.length > 0 && shared.size > 0));
+  return [...(shared.size ? planShards(shared, sharedSlots) : []), ...isolated.map(file => [file])];
+}
+
 export function maximumShards(env: NodeJS.ProcessEnv): number {
   const value = env.REZICS_QA_SHARDS;
   if (value === undefined) return 4;

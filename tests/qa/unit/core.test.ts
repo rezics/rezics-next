@@ -2,7 +2,8 @@ import { expect, test } from 'bun:test';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { acquireFullLock, acquireQaSlots, estimatedDurations, expandTestPaths, expectedFusekiModuleVersion,
-  isolationCandidates, junitSuites, matchedNoTests, maximumShards, mergeJUnit, parseArgs, planShards,
+  isolatedIntegrationFiles, isolationCandidates, junitSuites, matchedNoTests, maximumShards,
+  mergeJUnit, parseArgs, planShards, planStackProjects,
   recordedFileDurations, shardCount, shardResolved, splitTestArgs, testLogEnvironment, writeSummary,
   implementedTiers, tierArtifactName,
   xmlForCommand, type Tier } from '../../../scripts/qa/core.ts';
@@ -184,6 +185,23 @@ test('QA shards: shard count keeps each project near half its budget and plannin
   expect(maximumShards({ REZICS_QA_SHARDS: '6' })).toBe(6);
   expect(() => maximumShards({ REZICS_QA_SHARDS: '0' })).toThrow('1 to 8');
   expect(() => maximumShards({ REZICS_QA_SHARDS: '9' })).toThrow('1 to 8');
+});
+
+test('QA shards: graph reset and outbox gap files get singleton integration projects', () => {
+  const files = new Map<string, number>([
+    ['tests/qa/integration/claim-template.test.ts', 100],
+    ['tests/qa/integration/governance-report.test.ts', 80],
+    ...[...isolatedIntegrationFiles].map(file => [file, 10] as const),
+  ]);
+  const plan = planStackProjects(files, 3, 'integration');
+  expect(plan.flat().sort()).toEqual([...files.keys()].sort());
+  expect(plan.filter(project => project.some(file => isolatedIntegrationFiles.has(file))))
+    .toEqual([...isolatedIntegrationFiles].sort().map(file => [file]));
+  expect(planStackProjects(new Map([...files].reverse()), 3, 'integration')).toEqual(plan);
+  expect(planStackProjects(files, 3, 'fault/recovery')).toEqual(planShards(files, 3));
+  const one = new Map([['tests/qa/integration/validation-command.test.ts', 1]]);
+  expect(planStackProjects(one, 1, 'integration'))
+    .toEqual([['tests/qa/integration/validation-command.test.ts']]);
 });
 
 test('QA shards: shard JUnit merges per file, keeps nested suites and replaces isolated files', () => {
