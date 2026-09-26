@@ -527,10 +527,23 @@ its participant is an explicit `open-library/author` external reference, never
 an inferred native Agent. It retains native position and the `author` role;
 the source author key, nullable source role key, observation-qualified occurrence,
 source ordinal, conversion, proposal and correspondence decision remain separate.
-Two repetitions of one provider key can therefore be two credits. The first
-profile is deliberately append-only: correction, retirement and native credit
-revision editing require a later operation. Ordinary native Work title edits
-preserve these independently owned credits.
+Two repetitions of one provider key can therefore be two credits. The adoption
+revision is immutable; correction and native credit revision editing require
+later operations. Ordinary native Work title edits preserve these independently
+owned credits.
+
+`POST /v1/works/{work}/author-credits/{credit}/retirements` explicitly retires
+one selected native credit under a current represented `work:edit` grant. It
+requires the exact native credit revision, Work head, acting subject, bounded
+reason and idempotency key. The Jena command checks the Work head, credit
+identity, absence of protection and absence of prior retirement in one write
+transaction. Its immutable receipt and `rv:retiredBy` marker preserve the
+original credit revision and sibling credits; source withdrawal never calls this
+command. An exact retry returns the same result, while stale and competing
+intents conflict. A private `GET` for the retirement requires Work read authority.
+A later source support cannot attach to a retired credit. One credit lookup, one
+Work head check and one constant-size graph write bound retirement independently
+of the Work's number of credits.
 
 `POST /v1/works/{work}/source-author-credits` accepts one explicit occurrence,
 exact proposal/conversion, expected Work head, acting Agent and idempotency key.

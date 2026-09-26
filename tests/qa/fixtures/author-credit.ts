@@ -33,16 +33,21 @@ export async function authorCreditFixture(apps: Record<string, string>, objectDi
   let loseCertificate = false;
   let mutate: ((envelope: CommandEnvelope) => CommandEnvelope) | undefined;
   let loseGraphResponse = false;
+  let loseRetirementResponse = false;
   const creditCommands: Array<{ bytes: number; focuses: number }> = [];
   const fuseki = new Proxy(nativeFuseki, { get(target, property) {
     if (property === 'commandWithReceipt') return async (envelope: CommandEnvelope) => {
       const credit = envelope.update.includes('AuthorCreditAdoptedEvent');
+      const retirement = envelope.update.includes('AuthorCreditRetiredEvent');
       const changed = credit && mutate ? mutate(envelope) : envelope;
       if (credit) mutate = undefined;
       if (credit) creditCommands.push({ bytes: Buffer.byteLength(JSON.stringify(changed)),
         focuses: changed.validations.reduce((total, entry) => total + entry.focus.length, 0) });
       const result = await target.commandWithReceipt(changed);
       if (credit && loseGraphResponse) { loseGraphResponse = false; throw new Error('lost graph acknowledgement'); }
+      if (retirement && loseRetirementResponse) {
+        loseRetirementResponse = false; throw new Error('lost retirement acknowledgement');
+      }
       return result;
     };
     const value = Reflect.get(target, property, target);
@@ -126,6 +131,7 @@ export async function authorCreditFixture(apps: Record<string, string>, objectDi
   return { account, pool, accessPool, env, access, intake, conversions, graph, proposals, credits, principalId, actor,
     call, json, grant, propose, adoptWork, input, nativeFuseki, creditCommands,
     failCertificate: () => { loseCertificate = true; }, loseGraph: () => { loseGraphResponse = true; },
+    loseRetirementGraph: () => { loseRetirementResponse = true; },
     mutateCredit: (fn: (envelope: CommandEnvelope) => CommandEnvelope) => { mutate = fn; },
     close: async () => { await account.close(); await Promise.all([pool.end(), accessPool.end()]); } };
 }

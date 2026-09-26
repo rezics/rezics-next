@@ -248,6 +248,8 @@ final class CommandService extends ActionService {
             if (!stored.equals(digest)) return Map.of("status", "conflict");
             String invariant = CommandInvariant.check(dataset, receipt, digest, plan, before);
             if (invariant != null) return invalid(invariant);
+            String creditInvariant = AuthorCreditPolicy.check(dataset, plan);
+            if (creditInvariant != null) return invalid(creditInvariant);
             String headInvariant = HeadCasPolicy.check(dataset, receipt, heads);
             if (headInvariant != null) return invalid(headInvariant);
             String titleInvariant = TitleControlPolicy.check(dataset, receipt, title);

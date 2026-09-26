@@ -227,6 +227,7 @@ export interface MainCloudEvent {
   id: string;
   source: typeof SOURCE;
   type: 'com.rezics.work.title-control.v1' | 'com.rezics.work.created.v1' | 'com.rezics.work.edited.v1' | 'com.rezics.work.author-credit-adopted.v1'
+    | 'com.rezics.work.author-credit-retired.v1'
     | 'com.rezics.work.edit-rejected.v1' | 'com.rezics.work.admission-cancelled.v1'
     | 'com.rezics.contribution.draft-created.v1'
     | 'com.rezics.contribution.draft-edited.v1'
@@ -761,7 +762,7 @@ export async function readMainOutboxEnvelope(fuseki: FusekiClient, batch: MainOu
     ?sourceAddress ?sourceRevision ?newAddress ?newRevision ?oldSlug
     ?eventRedirectWork ?redirectWork ?eventSourceConversion
     ?sourceRecord ?sourceObservation ?sourceConversion ?sourceByteDigest
-    ?sourceMappingRevision ?authorCredit ?creditRevision ?sourceIntent WHERE {
+    ?sourceMappingRevision ?authorCredit ?creditRevision ?sourceIntent ?retirementReason WHERE {
     GRAPH ${iri(GRAPHS.outbox)} {
       ${iri(eventId)} a ?kind ; rv:ordinal ?ordinal ; rv:action ?action ; rv:receipt ?receipt .
       OPTIONAL { ${iri(eventId)} rv:operation ?eventOperation }
@@ -798,6 +799,7 @@ export async function readMainOutboxEnvelope(fuseki: FusekiClient, batch: MainOu
       OPTIONAL { ?receipt rv:authorCredit ?authorCredit }
       OPTIONAL { ?receipt rv:creditRevision ?creditRevision }
       OPTIONAL { ?receipt rv:sourceIntent ?sourceIntent }
+      OPTIONAL { ?receipt rv:retirementReason ?retirementReason }
       OPTIONAL { ?receipt rv:mainRevision ?mainRevision }
       OPTIONAL { ?receipt rv:expectedHead ?expectedHead }
       OPTIONAL { ?receipt rv:reason ?reason }
@@ -921,6 +923,32 @@ export async function readMainOutboxEnvelope(fuseki: FusekiClient, batch: MainOu
         routingEpoch: batch.routingEpoch, ordinal, receipt: { id: receiptId, action: 'work.edit', outcome: 'succeeded',
           admissionId, requestDigest, authorityEpoch, scope, work, workRevision: head, expectedHead: head,
           authorCredit: credit, creditRevision: revision, sourceIntent: intent } } };
+  }
+  if (kind === `${RV}AuthorCreditRetiredEvent`) {
+    const credit = value('authorCredit'), revision = value('creditRevision');
+    const work = value('work'), head = value('expectedHead'), reason = value('retirementReason');
+    if (action !== 'work.edit' || outcome !== `${RV}Succeeded` || !receiptId || !requestDigest
+      || !admissionId || !authorityEpoch || !scope || !credit || !revision || !work || !head || !reason
+      || scope !== `work:edit:${work}` || value('workRevision') !== head || value('eventWork') !== work
+      || value('epoch') !== batch.dataEpoch || value('sequence') !== batch.sequence
+      || eventId !== `urn:rezics:event:${hash(`${receiptId}\0author-credit-retired`)}`
+      || batch.batchId !== `urn:rezics:outbox:${hash(receiptId)}`) {
+      throw new OutboxIncomplete('author credit retirement event differs from receipt');
+    }
+    const graph = await fuseki.query(`PREFIX rv: <${RV}> ASK {
+      GRAPH ${iri(GRAPHS.current)} { ${iri(credit)} a rv:AuthorCredit ; rv:work ${iri(work)} ;
+        rv:creditRevision ${iri(revision)} ; rv:retiredBy ${iri(receiptId)} . }
+      GRAPH ${iri(GRAPHS.revisions)} { ${iri(revision)} a rv:AuthorCreditRevision ;
+        rv:component ${iri(credit)} . }
+    }`);
+    if (!graph.boolean) throw new OutboxIncomplete('native author credit retirement is missing');
+    return { specversion: '1.0', id: eventId, source: SOURCE,
+      type: 'com.rezics.work.author-credit-retired.v1', datacontenttype: 'application/json',
+      data: { batchId: batch.batchId,
+        sourcePosition: { datasetId: 'product', dataEpoch: batch.dataEpoch, sequence: batch.sequence },
+        routingEpoch: batch.routingEpoch, ordinal, receipt: { id: receiptId, action: 'work.edit', outcome: 'succeeded',
+          admissionId, requestDigest, authorityEpoch, scope, work, workRevision: head, expectedHead: head,
+          authorCredit: credit, creditRevision: revision, retirementReason: reason } } };
   }
   if (kind === `${RV}SourceProjectedEvent`) {
     const record = value('sourceRecord');

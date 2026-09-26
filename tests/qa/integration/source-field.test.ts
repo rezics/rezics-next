@@ -3,9 +3,10 @@ import { randomUUID } from 'node:crypto';
 import { rmSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { authorCreditFixture, author, shortId } from '../fixtures/author-credit.ts';
-import { GRAPHS, RV } from '../../../services/main/src/modules/work/activate.ts';
+import { GRAPHS, RV, hash } from '../../../services/main/src/modules/work/activate.ts';
 import { nativeSupportLookupSql } from '../../../services/main/src/modules/source/withdrawal.ts';
 import { fusekiReadBudget } from '../../../services/main/src/infrastructure/fuseki.ts';
+import { readMainOutboxEnvelope } from '../../../services/main/src/modules/outbox/relay.ts';
 import { identityHarness, iri, sha } from './source-identity-harness.ts';
 
 const short = (value: string) => value.split('/').at(-1)!;
@@ -109,7 +110,7 @@ test('LIVE04/LIVE05: one withdrawal route preserves native credits and independe
       await h.call('POST', creditPath, h.input(proposal, work, 0)), 201);
     const creditB = await h.json<{ support: { support: string; credit: { credit: string; revision: string } } }>(
       await h.call('POST', creditPath, h.input(proposal, work, 1, '/authors/OL2A')), 201);
-    const secondProposal = await h.propose('OL993102W', [author('/authors/OL1A')]);
+    const secondProposal = await h.propose('OL993102W', [author('/authors/OL1A'), author('/authors/OL2A')]);
     const attachment = await h.json<{ attachment: { binding: string } }>(await h.call('POST',
       `/v2/works/${shortId(work.work)}/source-supports`, {
         profile: 'native-work-source-title-attachment-v2', proposal: secondProposal.proposal,
@@ -158,6 +159,55 @@ test('LIVE04/LIVE05: one withdrawal route preserves native credits and independe
     expect((await h.call('POST', '/v1/sources/withdrawals', { ...childBody,
       reason: 'changed' }, childKey)).status).toBe(409);
     expect((await h.call('GET', `/v1/sources/supports/${shortId(creditB.support.support)}`)).status).toBe(200);
+    expect((await nativeHead()).boolean).toBe(true);
+    const retirementPath = `/v1/works/${shortId(work.work)}/author-credits/${shortId(creditB.support.credit.credit)}`
+      + '/retirements';
+    const retirement = { profile: 'work-author-credit-retirement-v1',
+      revision: creditB.support.credit.revision, expectedHead: work.workRevision,
+      actingSubject: h.actor, reason: 'Explicit human retirement' };
+    expect((await h.call('POST', retirementPath, retirement, randomUUID(), h.account.noScope)).status).toBe(401);
+    expect((await h.call('POST', retirementPath, retirement, randomUUID(), h.account.tokenB)).status).toBe(403);
+    const retirementKey = randomUUID();
+    h.loseRetirementGraph();
+    const retirementBudget = { signal: AbortSignal.timeout(10_000), callsLeft: 64, bytesLeft: 262_144 };
+    const retired = await h.json<{ retirement: { retirement: string;
+      sourcePosition: { dataEpoch: string; sequence: string } }; replayed: boolean }>(
+      await fusekiReadBudget.run(retirementBudget, () => h.call('POST',
+        retirementPath, retirement, retirementKey)), 201);
+    expect(retired.replayed).toBe(false);
+    expect(64 - retirementBudget.callsLeft).toBeLessThanOrEqual(32);
+    expect(262_144 - retirementBudget.bytesLeft).toBeLessThan(128_000);
+    const eventId = `urn:rezics:event:${hash(`${retired.retirement.retirement}\0author-credit-retired`)}`;
+    const envelope = await readMainOutboxEnvelope(h.env.fuseki, {
+      batchId: `urn:rezics:outbox:${hash(retired.retirement.retirement)}`,
+      dataEpoch: retired.retirement.sourcePosition.dataEpoch,
+      sequence: retired.retirement.sourcePosition.sequence,
+      routingEpoch: h.env.lineage.routingEpoch, eventIds: [eventId],
+    }, eventId);
+    expect(envelope.type).toBe('com.rezics.work.author-credit-retired.v1');
+    expect((await h.call('POST', retirementPath, retirement, retirementKey)).status).toBe(200);
+    expect((await h.call('POST', retirementPath, { ...retirement,
+      reason: 'Changed reason' }, retirementKey)).status).toBe(409);
+    const retiredRead = `/v1/works/${shortId(work.work)}/author-credits/${shortId(creditB.support.credit.credit)}`
+      + `/retirement?actingSubject=${encodeURIComponent(h.actor)}`;
+    expect((await h.call('GET', retiredRead)).status).toBe(200);
+    expect((await h.call('GET', retiredRead, undefined, randomUUID(), h.account.tokenB)).status).toBe(404);
+    const retiredNative = await h.env.fuseki.query(`ASK { GRAPH <${GRAPHS.current}> {
+      <${creditB.support.credit.credit}> <${RV}retiredBy> <${retired.retirement.retirement}> .
+      <${creditB.support.credit.credit}> <${RV}creditRevision> <${creditB.support.credit.revision}> .
+      <${creditA.support.credit.credit}> <${RV}creditRevision> <${creditA.support.credit.revision}> .
+      <${work.work}> <${RV}head> <${work.workRevision}> . } }`);
+    expect(retiredNative.boolean).toBe(true);
+    expect((await h.call('POST', creditPath, { ...h.input(secondProposal, work, 1, '/authors/OL2A'),
+      baseSupport: creditB.support.support })).status).toBe(409);
+    const firstRetirementPath = `/v1/works/${shortId(work.work)}`
+      + `/author-credits/${shortId(creditA.support.credit.credit)}/retirements`;
+    const firstRetirement = { ...retirement, revision: creditA.support.credit.revision };
+    expect((await h.call('POST', firstRetirementPath, {
+      ...firstRetirement, expectedHead: iri(randomUUID()) })).status).toBe(409);
+    const race = await Promise.all([h.call('POST', firstRetirementPath, firstRetirement, randomUUID()),
+      h.call('POST', firstRetirementPath, firstRetirement, randomUUID())]);
+    expect(race.map(response => response.status).sort()).toEqual([201, 409]);
     expect((await nativeHead()).boolean).toBe(true);
   } finally { await h.close(); rmSync(directory, { recursive: true, force: true }); }
 }, 60_000);

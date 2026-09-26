@@ -3,6 +3,7 @@ import type { FusekiClient } from '../infrastructure/fuseki.ts';
 import { authorCreditBody, authorCreditSupportResult, authorCreditWriteResult,
   nativeAuthorCreditResult } from '../modules/source/author-credit-schema.ts';
 import { readAuthorCredit } from '../modules/work/author-credit.ts';
+import { readAuthorCreditRetirement, retireAuthorCredit } from '../modules/work/author-credit-retirement.ts';
 import { readTitleControl } from '../modules/work/title-control.ts';
 import { FieldWithdrawalConflict, FieldWithdrawalInvalid, FieldWithdrawalPending,
   FieldWithdrawalUnavailable } from '../modules/source/withdrawal.ts';
@@ -14,6 +15,8 @@ import { commandError, problem } from './problems.ts';
 import { groupAgent, groupUuid, sourceRightsEvidence, titleControlBasis } from './shared.ts';
 
 export const openApiOperations = {
+  '/v1/works/{id}/author-credits/{credit}/retirements': { post: { bearer: true, idempotencyKey: true } },
+  '/v1/works/{id}/author-credits/{credit}/retirement': { get: { bearer: true } },
   '/v1/sources/supports/{support}': { get: { bearer: true } },
   '/v1/sources/field-supports/{support}': { get: { bearer: true } },
   '/v1/sources/withdrawals': { post: { bearer: true, idempotencyKey: true } },
@@ -31,6 +34,12 @@ const fieldSupport = t.Object({ profile: t.Literal('source-field-support-v1'),
   headGuarantee: t.Union([t.Literal('transaction-guarded'), t.Literal('verified-before-commit')]),
   outcome: t.Union([t.Literal('applied'), t.Literal('attached'), t.Literal('returned')]),
   createdAt: t.String(), withdrawal: t.Nullable(fieldWithdrawal) });
+
+const creditRetirement = t.Object({ profile: t.Literal('work-author-credit-retirement-v1'),
+  state: t.Literal('retired'), retirement: t.String(), work: t.String(), credit: t.String(),
+  revision: t.String(), workHead: t.String(), reason: t.String(), admissionId: t.String(),
+  requestDigest: t.String(), sourcePosition: t.Object({ datasetId: t.Literal('product'),
+    dataEpoch: t.String(), sequence: t.String() }) });
 
 function fieldError(error: unknown): Response {
   if (error instanceof FieldWithdrawalInvalid) return problem(400, 'invalid_source_withdrawal', 'Field withdrawal is invalid');
@@ -158,6 +167,45 @@ const sourceTitleApplicationWriteResult = t.Object({ application: sourceTitleApp
 
 export function sourceSupportRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
   return new Elysia()
+    .post('/v1/works/:id/author-credits/:credit/retirements', {
+      params: t.Object({ id: groupUuid, credit: groupUuid }),
+      body: t.Object({ profile: t.Literal('work-author-credit-retirement-v1'),
+        revision: groupAgent, expectedHead: groupAgent, actingSubject: groupAgent,
+        reason: t.String({ minLength: 1, maxLength: 500 }) }, { additionalProperties: false }),
+      response: { 200: t.Object({ retirement: creditRetirement, replayed: t.Boolean() }),
+        201: t.Object({ retirement: creditRetirement, replayed: t.Boolean() }),
+        202: pendingOperation, ...writeProblems, 404: problemResult(404) },
+    }, async ({ request, params, body }) => {
+      try {
+        const key = request.headers.get('idempotency-key');
+        if (!key) return problem(400, 'invalid_idempotency_key', 'Idempotency-Key is required');
+        const result = await retireAuthorCredit(work.environment, work.account, work.access, request, {
+          work: `https://rezics.com/id/${params.id}`, credit: `https://rezics.com/id/${params.credit}`,
+          revision: body.revision, expectedHead: body.expectedHead, actingSubject: body.actingSubject,
+          reason: body.reason, idempotencyKey: key });
+        return Response.json(result, { status: result.replayed ? 200 : 201,
+          headers: { 'cache-control': 'no-store' } });
+      } catch (error) { return commandError(error); }
+    })
+    .get('/v1/works/:id/author-credits/:credit/retirement', {
+      params: t.Object({ id: groupUuid, credit: groupUuid }),
+      query: t.Object({ actingSubject: groupAgent }),
+      response: { 200: creditRetirement, ...authorizedReadProblems },
+    }, async ({ request, params, query }) => {
+      try {
+        const principal = await work.account.verify(request, ['work:read']);
+        const native = `https://rezics.com/id/${params.id}`;
+        if (!await work.access.canReadWork(principal, query.actingSubject, native)) {
+          return problem(404, 'author_credit_unavailable', 'Author credit is unavailable');
+        }
+        const retirement = await readAuthorCreditRetirement(work.environment,
+          `https://rezics.com/id/${params.credit}`);
+        if (!retirement || retirement.work !== native) {
+          return problem(404, 'author_credit_unavailable', 'Author credit is unavailable');
+        }
+        return Response.json(retirement, { headers: { 'cache-control': 'no-store' } });
+      } catch (error) { return commandError(error); }
+    })
     .get('/v1/sources/supports/:support', {
       params: t.Object({ support: groupUuid }),
       response: { 200: anySupportResult, ...authorizedReadProblems },

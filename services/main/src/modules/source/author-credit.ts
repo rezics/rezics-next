@@ -6,6 +6,7 @@ import { GRAPHS, RV, hash, iri, type WorkActivationEnvironment } from '../work/a
 import { adoptAuthorCredit, authorCreditDigest, readAuthorCredit, readAuthorCreditReceipt,
   AuthorCreditInvalid, AuthorCreditConflict, AuthorCreditUnavailable,
   type AuthorCreditValue, type NativeAuthorCredit, type AuthorCreditReceipt } from '../work/author-credit.ts';
+import { readAuthorCreditRetirement } from '../work/author-credit-retirement.ts';
 import { compareSourceChildren, sourceChildOccurrence } from './child-correspondence.ts';
 import type { OpenLibraryConversionStore } from './open-library-conversion.ts';
 import type { SourceNativeWorkProposalStore } from './native-work-proposal.ts';
@@ -188,6 +189,9 @@ export class SourceAuthorCreditStore {
     const original = base.row ? await this.read(principalId, base.row.id) : null;
     if (base.row && !original) throw new AuthorCreditUnavailable('base credit is not committed');
     if (!prior && original?.state === 'withdrawn') throw new AuthorCreditConflict('base support is withdrawn');
+    if (!prior && base.row && await readAuthorCreditRetirement(this.env, base.row.credit)) {
+      throw new AuthorCreditConflict('native credit is retired');
+    }
     if (!prior) {
       const observed = await this.env.fuseki.query(`PREFIX rv: <${RV}> ASK { GRAPH ${iri(GRAPHS.current)} {
         ${iri(work)} rv:head ${iri(input.expectedHead)} .
