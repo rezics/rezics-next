@@ -111,29 +111,24 @@ function domainRoutes(fuseki: FusekiClient, work: SearchRouteDependencies) {
     .use(exportRoutes(work))
     .use(notificationRoutes(work))
     .use(reportRoutes(work));
-    .use(reportRoutes(work))
-    .use(rightsRoutes(work))
-    .use(recommendationRoutes(work))
-    .use(graphLayoutRoutes(work))
-    .use(graphQueryRoutes(work))
-    .use(workRoutes(fuseki, work));
 }
 
 function extraRoutes1(fuseki: FusekiClient, work: SearchRouteDependencies) {
   return new Elysia()
     .use(rightsRoutes(work))
-    .use(judgmentRoutes(work))
-    .use(proposalRoutes(work))
     .use(recommendationRoutes(work))
     .use(graphLayoutRoutes(work))
-    .use(recipeRoutes(fuseki, work))
-    .use(themeRoutes(work))
+    .use(graphQueryRoutes(work))
     .use(workRoutes(fuseki, work))
-    .use(packageNixRoutes(work));
+    .use(judgmentRoutes(work))
+    .use(proposalRoutes(work))
+    .use(recipeRoutes(fuseki, work))
+    .use(themeRoutes(work));
 }
 
 function extraRoutes2(fuseki: FusekiClient, work: SearchRouteDependencies) {
   return new Elysia()
+    .use(packageNixRoutes(work))
     .use(compositionRoutes(fuseki, work))
     .use(connectedAppRoutes(work))
     .use(ownerRoutes(work))
@@ -141,12 +136,12 @@ function extraRoutes2(fuseki: FusekiClient, work: SearchRouteDependencies) {
     .use(realmReplyRoutes(work))
     .use(pollRoutes(work))
     .use(semanticRoutes(fuseki, work))
-    .use(relationRoutes(fuseki, work))
-    .use(hubRoutes(work));
+    .use(relationRoutes(fuseki, work));
 }
 
 function extraRoutes3(fuseki: FusekiClient, work: SearchRouteDependencies) {
   return new Elysia()
+    .use(hubRoutes(work))
     .use(progressRoutes(fuseki, work));
 }
 
