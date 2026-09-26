@@ -137,7 +137,8 @@ async function admissibleMount(root: string, path: string, generations: string[]
  */
 export class PackageInstallationStore {
   constructor(private readonly pool: Pool, private readonly locks: PackageLockStore,
-    private readonly options: { rootDirectory: string; hookExecutor?: HookExecutor; fault?: InstallFault }) {}
+    private readonly options: { rootDirectory: string; hookExecutor?: HookExecutor;
+      fault?: InstallFault | ((point: InstallFault) => void) }) {}
 
   async createInstallation(principalId: string, key: string, request: InstallationRequest):
     Promise<{ installation: InstallationView; replayed: boolean }> {
@@ -584,6 +585,7 @@ export class PackageInstallationStore {
   }
 
   private fault(point: InstallFault): void {
+    if (typeof this.options.fault === 'function') this.options.fault(point);
     if (this.options.fault === point) throw new SimulatedInstallCrash(`simulated crash ${point}`);
   }
 
@@ -671,6 +673,9 @@ export class PackageInstallationStore {
       steps.push({ action: 'remove', stepKey: 'remove', artifact: null, executesCode: false, idempotent: true,
         approved: false, compensation: 'none' });
       return { reason: null, violations, steps, paths };
+    }
+    if (sources.some(item => item.lock.ecosystem !== 'npm')) {
+      throw new PackageInstallInvalid('this installation layout admits npm archives only');
     }
     const digests = (await this.pool.query<{ id: string; sha256: string; state: string }>(`SELECT id, sha256, state
       FROM pkg.artifact WHERE id = ANY($1::uuid[])`, [sources.map(item => item.artifact)])).rows;

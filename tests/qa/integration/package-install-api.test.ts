@@ -8,13 +8,17 @@ import { createMainApp } from '../../../services/main/src/app.ts';
 import { FusekiClient } from '../../../services/main/src/infrastructure/fuseki.ts';
 import { S3ImmutableObjects } from '../../../services/main/src/infrastructure/immutable-objects.ts';
 import { AccessAdmissionRegistry } from '../../../services/main/src/modules/access/admission.ts';
-import { AccountAssertionDenied } from '../../../services/main/src/modules/account/verify-assertion.ts';
+import { AccountAssertionDenied, AccountAssertionVerifier }
+  from '../../../services/main/src/modules/account/verify-assertion.ts';
 import { PackageInstallationStore, PackageInstallDenied, type HookExecutor, type InstallFault }
   from '../../../services/main/src/modules/package/install.ts';
+import { DockerNodeHookExecutor, NODE_HOOK_PROFILE } from '../../../services/main/src/modules/package/install-hooks.ts';
 import { PackageArtifactStore } from '../../../services/main/src/modules/package/lock-artifacts.ts';
 import { PackageLockStore, strongestIntegrity } from '../../../services/main/src/modules/package/lock.ts';
 import { NpmResolutionStore } from '../../../services/main/src/modules/package/npm-resolution.ts';
 import { npmRegistryRequest } from '../fixtures/npm-registry-scenarios.ts';
+import { cloneQaAccountAccessDatabases } from '../support/databases.ts';
+import { qaEnvironment, startAccount } from './account-boundary-fixture.ts';
 import { archiveNpmFetcher, packageFiles, type ArchiveRegistry } from './package-install-fixtures.ts';
 
 const root = resolve(import.meta.dir, '../../..');
@@ -44,10 +48,11 @@ afterAll(async () => { await Promise.all([contentPool?.end(), accessPool?.end()]
 
 interface Fixture {
   call: (method: string, path: string, token: string, body?: unknown, key?: string) => Promise<Response>;
+  withAccount: (verifier: AccountAssertionVerifier) => Fixture['call'];
   registry: ArchiveRegistry;
   provider: ReturnType<typeof archiveNpmFetcher>;
   owner: { id: string; subject: string };
-  store: (fault?: InstallFault) => PackageInstallationStore;
+  store: (fault?: InstallFault, executor?: HookExecutor) => PackageInstallationStore;
   hookRuns: string[];
   rootOf: (target: string) => string;
 }
@@ -67,30 +72,35 @@ async function fixture(packages: ArchiveRegistry['packages']): Promise<Fixture> 
   const npm = new NpmResolutionStore(contentPool, { fetcher: provider.fetcher });
   const locks = new PackageLockStore(contentPool, npm, new PackageArtifactStore(contentPool, namespaces),
     { fetcher: provider.fetcher });
-  const store = (fault?: InstallFault) => new PackageInstallationStore(contentPool, locks,
-    { rootDirectory, hookExecutor, fault });
+  const store = (fault?: InstallFault, executor: HookExecutor = hookExecutor) =>
+    new PackageInstallationStore(contentPool, locks, { rootDirectory, hookExecutor: executor, fault });
   let installations = store();
   const fuseki = new FusekiClient(Bun.env.FUSEKI_URL!);
-  const app = () => createMainApp(fuseki, {
+  const fakeAccount = { verify: async (request: Request, required: readonly string[]) => {
+    const [who, scope] = (request.headers.get('authorization') ?? '').replace('Bearer ', '').split(' ');
+    if (scope && scope !== required[0]) throw new AccountAssertionDenied('package scope is unavailable');
+    if (who === 'owner') return { issuer, subject: owner.subject };
+    if (who === 'other') return { issuer, subject: other.subject };
+    throw new AccountAssertionDenied('unknown test token');
+  } };
+  const app = (account: typeof fakeAccount | AccountAssertionVerifier = fakeAccount) => createMainApp(fuseki, {
     environment: { fuseki, lineage: { dataEpoch: Bun.env.MAIN_DATA_EPOCH!, routingEpoch: Bun.env.MAIN_ROUTING_EPOCH! },
       objectDirectory: '.temp/package-install-unused' },
-    account: { verify: async (request: Request, required: readonly string[]) => {
-      const [who, scope] = (request.headers.get('authorization') ?? '').replace('Bearer ', '').split(' ');
-      if (scope && scope !== required[0]) throw new AccountAssertionDenied('package scope is unavailable');
-      if (who === 'owner') return { issuer, subject: owner.subject };
-      if (who === 'other') return { issuer, subject: other.subject };
-      throw new AccountAssertionDenied('unknown test token');
-    } },
+    account,
     access: new AccessAdmissionRegistry(accessPool),
     packageNpmResolutions: npm, packageLocks: locks, packageInstallations: installations,
   });
+  const call = (method: string, path: string, token: string, body?: unknown, key?: string,
+    verifier?: AccountAssertionVerifier) => app(verifier).handle(new Request(`http://main.local${path}`, { method,
+    headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json',
+      ...key ? { 'idempotency-key': key } : {} }, ...body === undefined ? {} : { body: JSON.stringify(body) } }));
   return {
     registry, provider, owner, hookRuns,
     rootOf: target => join(rootDirectory, 'roots', new Bun.CryptoHasher('sha256').update(target).digest('hex')),
-    store: fault => { installations = store(fault); return installations; },
-    call: (method, path, token, body, key) => app().handle(new Request(`http://main.local${path}`, { method,
-      headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json',
-        ...key ? { 'idempotency-key': key } : {} }, ...body === undefined ? {} : { body: JSON.stringify(body) } })),
+    store: (fault, executor) => { installations = store(fault, executor); return installations; },
+    call,
+    withAccount: verifier => (method, path, token, body, key) =>
+      call(method, path, token, body, key, verifier),
   };
 }
 
@@ -386,6 +396,48 @@ test('PKG16: interrupted activation, update and removal recover from the journal
   expect((await plan(f, id, { operation: 'install', lock: v1.lock })).status).toBe(409);
 });
 
+test('PKG15: approved hook runs in the pinned production container through Main API', async () => {
+  const script = `node -e "const fs=require('node:fs');if(process.env.CONTENT_DATABASE_URL)`
+    + `throw Error('host secret leaked');try{fs.writeFileSync('/root/probe','x');`
+    + `throw Error('writable root')}catch(e){if(e.message==='writable root')throw e}`
+    + `if(Object.keys(require('node:os').networkInterfaces()).some(n=>n!=='lo'))`
+    + `throw Error('network available');`
+    + `fs.writeFileSync('built.txt','isolated')"`;
+  const f = await fixture({ hooked: { versions: { '1.0.0': { scripts: { postinstall: script },
+    installScript: true } } } });
+  f.store(undefined, new DockerNodeHookExecutor(rootDirectory));
+  const lock = await resolveLock(f, { hooked: '1.0.0' });
+  await verifiedReplay(f, lock.lock);
+  const target = `qa-hook-${randomUUID()}`;
+  const id = await installation(f, target);
+  const denied = await json(await plan(f, id, { operation: 'install', lock: lock.lock }), 201);
+  expect(denied.generation).toMatchObject({ state: 'rejected', terminalReason: 'unapproved-hook' });
+  const approved = await json(await plan(f, id, { operation: 'install', lock: lock.lock,
+    approveHooks: ['node_modules/hooked'] }), 201);
+  expect(approved.generation.steps.find((step: any) => step.action === 'build'))
+    .toMatchObject({ approved: true, executesCode: true });
+  const profile = (await contentPool.query<{ executor_profile: string }>(`SELECT executor_profile
+    FROM pkg.installation_step WHERE generation_id = $1 AND action = 'build'`,
+  [approved.generation.generation])).rows[0]?.executor_profile;
+  expect(profile).toBe(NODE_HOOK_PROFILE);
+  expect((await json(await apply(f, id, approved.generation.generation), 200)).state).toBe('active');
+  expect(await readFile(join(f.rootOf(target), 'node_modules/hooked/built.txt'), 'utf8')).toBe('isolated');
+
+  const unsafe = await fixture({ bad: { versions: { '1.0.0': {
+    scripts: { postinstall: `node -e "require('node:fs').symlinkSync('/etc/passwd','host-file')"` },
+    installScript: true } } } });
+  unsafe.store(undefined, new DockerNodeHookExecutor(rootDirectory));
+  const badLock = await resolveLock(unsafe, { bad: '1.0.0' });
+  await verifiedReplay(unsafe, badLock.lock);
+  const badTarget = `qa-unsafe-hook-${randomUUID()}`;
+  const badId = await installation(unsafe, badTarget);
+  const bad = await json(await plan(unsafe, badId, { operation: 'install', lock: badLock.lock,
+    approveHooks: ['node_modules/bad'] }), 201);
+  expect(await json(await apply(unsafe, badId, bad.generation.generation), 200))
+    .toMatchObject({ state: 'failed', terminalReason: 'step-failed' });
+  expect(await readdir(unsafe.rootOf(badTarget)).then(names => names.includes('node_modules'))).toBe(false);
+});
+
 test('PKG17: rollback after artifact or authority revocation enforces current policy without resurrection', async () => {
   const f = await fixture({ p: { versions: { '1.0.0': {}, '2.0.0': {} } } });
   const target = `qa-root-${randomUUID()}`;
@@ -450,3 +502,58 @@ test('PKG17: rollback after artifact or authority revocation enforces current po
   await accessPool.query('UPDATE access.principal SET active = true WHERE id = $1', [f.owner.id]);
   expect((await json(await apply(f, id, g5.generation), 200)).state).toBe('active');
 });
+
+test('PKG17: Account consent withdrawal fences a staged rollback through the real Main API', async () => {
+  const f = await fixture({ consent: { versions: { '1.0.0': {}, '2.0.0': {} } } });
+  const target = `qa-root-${randomUUID()}`;
+  const id = await installation(f, target);
+  const first = await resolveLock(f, { consent: '1.0.0' });
+  await verifiedReplay(f, first.lock);
+  const second = await resolveLock(f, { consent: '2.0.0' });
+  await verifiedReplay(f, second.lock);
+  const g1 = (await json(await plan(f, id, { operation: 'install', lock: first.lock }), 201)).generation;
+  await json(await apply(f, id, g1.generation), 200);
+  const g2 = (await json(await plan(f, id, { operation: 'update', lock: second.lock,
+    expectedGeneration: g1.generation }), 201)).generation;
+  await json(await apply(f, id, g2.generation), 200);
+
+  const env = qaEnvironment();
+  const databases = await cloneQaAccountAccessDatabases(env.runId);
+  const account = await startAccount({ pool: { connectionString: databases.urls.account, max: 8 },
+    secret: env.secret, resource: env.resource });
+  try {
+    const scopes = 'openid package:read package:install offline_access';
+    const client = await account.nativeApp('Package rollback App', scopes);
+    const verifierClient = await account.workloadApp('Package Main verifier', ['package:read']);
+    const member = await account.signUp('package-consent');
+    const issued = await account.issue(client.client_id, member, scopes);
+    const verifier = new AccountAssertionVerifier(account.verifierConfig(verifierClient));
+    await accessPool.query(`UPDATE access.principal SET account_issuer = $1, account_subject = $2
+      WHERE id = $3`, [account.issuer, member.id, f.owner.id]);
+    const real = f.withAccount(verifier);
+    expect((await real('GET', `/v1/package-installations/${id}`, issued.access_token)).status).toBe(200);
+    const rollback = await json(await real('POST', `/v1/package-installations/${id}/generations`,
+      issued.access_token, { operation: 'rollback', lock: null, rollbackOf: g1.generation,
+        expectedGeneration: g2.generation, userData: [], approveHooks: [] },
+    `consent-rollback-${randomUUID()}`), 201);
+    expect(rollback.generation.state).toBe('planned');
+    const consentsResponse = await fetch(`${account.local}/api/auth/oauth2/get-consents`,
+      { headers: { cookie: member.cookie } });
+    expect(consentsResponse.status).toBe(200);
+    const consents = await consentsResponse.json() as Array<{ id: string; clientId: string }>;
+    const consent = consents.find(item => item.clientId === client.client_id);
+    expect(consent?.id).toBeTruthy();
+    expect((await account.post('/api/auth/oauth2/delete-consent', { id: consent!.id },
+      member.cookie)).status).toBe(200);
+    expect(await account.introspect(verifierClient, issued.access_token)).toEqual({ active: false });
+    expect((await real('POST', `/v1/package-installations/${id}/generations/`
+      + `${rollback.generation.generation}/apply`, issued.access_token)).status).toBe(401);
+    expect((await real('GET', `/v1/package-installations/${id}`, issued.access_token)).status).toBe(401);
+    expect(await mountTarget(f, target, 'node_modules/consent')).toContain(g2.generation);
+    expect(await readFile(join(f.rootOf(target), 'node_modules/consent/index.js'), 'utf8'))
+      .toContain('consent@2.0.0');
+  } finally {
+    await account.stop();
+    await databases.close();
+  }
+}, 60_000);

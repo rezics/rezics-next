@@ -28,7 +28,8 @@ export const openApiOperations = {
 
 const sha256 = t.String({ pattern: '^[0-9a-f]{64}$' });
 const lockRequest = t.Object({ profile: t.Literal('rezics-package-lock-v1'),
-  segments: t.Array(t.Object({ ecosystem: t.Literal('npm'), resolution: groupUuid,
+  segments: t.Array(t.Object({ ecosystem: t.Union([
+    t.Literal('npm'), t.Literal('cargo'), t.Literal('go')]), resolution: groupUuid,
     scope: t.Object({ kind: t.Union([t.Literal('process'), t.Literal('path'), t.Literal('abi')]),
       label: t.String({ pattern: '^[A-Za-z0-9:_./-]{1,128}$' }) }, { additionalProperties: false }) },
   { additionalProperties: false }), { minItems: 1, maxItems: 16 }) }, { additionalProperties: false });

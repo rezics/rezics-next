@@ -56,6 +56,7 @@ import { ModResolutionStore } from './modules/package/mod-resolution.ts';
 import { PackageArtifactStore } from './modules/package/lock-artifacts.ts';
 import { PackageLockStore } from './modules/package/lock.ts';
 import { PackageInstallationStore } from './modules/package/install.ts';
+import { DockerNodeHookExecutor } from './modules/package/install-hooks.ts';
 import { HubStore } from './modules/hub/store.ts';
 import { GoProxyCaptureStore } from './modules/package/go-proxy-capture.ts';
 import { GoSumdbTrustStore } from './modules/package/go-sumdb-trust.ts';
@@ -153,8 +154,12 @@ await mediaObjects('media/').initialize();
 await mediaObjects('package/artifact/public/').initialize();
 const packageArtifacts = new PackageArtifactStore(contentPool, mediaObjects);
 const packageLocks = new PackageLockStore(contentPool, new NpmResolutionStore(contentPool), packageArtifacts);
+packageLocks.registerResolutionOwners({ cargo: new CargoResolutionStore(contentPool),
+  go: new GoMvsResolutionStore(contentPool, packageCaptures),
+  sumdb: new GoSumdbTrustStore(contentPool, packageCaptures), captures: packageCaptures });
 const packageInstallations = new PackageInstallationStore(contentPool, packageLocks,
-  { rootDirectory: join(environment.objectDirectory, 'package-installations') });
+  { rootDirectory: join(environment.objectDirectory, 'package-installations'),
+    hookExecutor: new DockerNodeHookExecutor(join(environment.objectDirectory, 'package-installations')) });
 const media = { store: new MediaStore(contentPool, content), content, objects: mediaObjects };
 const account = new AccountAssertionVerifier({
   issuer: required('ACCOUNT_ISSUER'), audience: required('ACCOUNT_MAIN_RESOURCE'),

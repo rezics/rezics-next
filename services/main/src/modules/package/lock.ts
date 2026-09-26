@@ -3,7 +3,13 @@ import type { Pool, PoolClient } from 'pg';
 import { npmRegistryLimits, npmRegistryTarballAllowed, type NpmRegistryOutcome }
   from './npm-registry.ts';
 import type { NpmResolutionStore } from './npm-resolution.ts';
+import type { CargoResolutionStore, CargoResolution } from './cargo-resolution.ts';
+import type { GoMvsResolutionStore, GoMvsResolution, GoModuleRequirement }
+  from './go-mvs.ts';
+import type { GoSumdbTrustStore } from './go-sumdb-trust.ts';
+import type { GoProxyCaptureStore } from './go-proxy-capture.ts';
 import { PackageArtifactStore } from './lock-artifacts.ts';
+import { goModuleZipH1 } from './lock-go-zip.ts';
 import { stableJson, type LockArtifactRow, type LockReplayArtifactRow, type LockReplayRow,
   type LockRow } from './lock-schema.ts';
 
@@ -16,21 +22,22 @@ export const LOCK_REPLAY_POLICY = 'exact-artifact-replay-v1';
 
 export interface PackageLockRequest {
   profile: typeof PACKAGE_LOCK_PROFILE;
-  segments: Array<{ ecosystem: 'npm'; resolution: string;
+  segments: Array<{ ecosystem: 'npm' | 'cargo' | 'go'; resolution: string;
     scope: { kind: 'process' | 'path' | 'abi'; label: string } }>;
 }
 
 export interface LockedArtifact {
-  ordinal: number; segment: number; ecosystem: 'npm'; instanceKey: string;
-  coordinate: { registry: string; name: string; version: string; path: string; hasInstallScript: boolean };
+  ordinal: number; segment: number; ecosystem: 'npm' | 'cargo' | 'go'; instanceKey: string;
+  coordinate: Record<string, unknown>;
   locator: string; mutableReference: string | null;
-  integrity: { basis: 'registry-digest'; algorithm: 'sha1' | 'sha256' | 'sha384' | 'sha512'; value: string };
+  integrity: { basis: 'registry-digest'; algorithm: 'sha1' | 'sha256' | 'sha384' | 'sha512' | 'go-h1';
+    value: string };
 }
 
 export interface PackageLockView {
   lock: string; contractVersion: typeof PACKAGE_LOCK_PROFILE; lockSha256: string;
   manifest: { contractVersion: string; lockId: string; request: PackageLockRequest;
-    segments: Array<{ ordinal: number; ecosystem: 'npm'; adapterProfile: string;
+    segments: Array<{ ordinal: number; ecosystem: 'npm' | 'cargo' | 'go'; adapterProfile: string;
       scope: { kind: string; label: string }; resolution: string; resolutionRequestDigest: string;
       environment: unknown }>;
     artifacts: LockedArtifact[]; provenance: { operation: 'package-lock-create-v1' } };
@@ -50,6 +57,51 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const KEY = /^[A-Za-z0-9:_./-]{1,128}$/;
 const sha = (value: string | Uint8Array): string => createHash('sha256').update(value).digest('hex');
 const REQUEST_TIMEOUT_MS = 30_000;
+const CARGO_INDEX = 'https://index.crates.io/';
+const GO_PROXY = 'https://proxy.golang.org/';
+const SHA256 = /^[0-9a-f]{64}$/;
+const GO_H1 = /^h1:[A-Za-z0-9+/]{43}=$/;
+
+function cargoChecksums(resolution: CargoResolution): Map<string, string> {
+  const checksums = new Map<string, string>();
+  try {
+    for (const file of resolution.request.indexFiles) {
+      for (const line of Buffer.from(file.bytesBase64, 'base64').toString('utf8').trimEnd().split('\n')) {
+        const item = JSON.parse(line) as { name?: unknown; vers?: unknown; cksum?: unknown };
+        if (item.name !== file.name || typeof item.vers !== 'string'
+          || typeof item.cksum !== 'string' || !SHA256.test(item.cksum)) {
+          throw new Error('index entry differs');
+        }
+        const key = `${item.name}@${item.vers}`;
+        if (checksums.has(key)) throw new Error('duplicate index entry');
+        checksums.set(key, item.cksum);
+      }
+    }
+  } catch { throw new PackageLockInvalid('retained Cargo index is unreadable'); }
+  return checksums;
+}
+
+function cargoLocator(name: string, version: string): string {
+  return `https://static.crates.io/crates/${name}/${name}-${version}.crate`;
+}
+
+function goLocator(source: GoModuleRequirement): string {
+  return `${GO_PROXY}${source.path}/@v/${source.version}.zip`;
+}
+
+function sourceOf(resolution: GoMvsResolution, selected: GoModuleRequirement):
+  { source: GoModuleRequirement; captureId: string } {
+  const selectedEvidence = resolution.outcome.selectedSourceEvidence?.find(item =>
+    item.original.path === selected.path && item.original.version === selected.version);
+  if (selectedEvidence && !selectedEvidence.capture) {
+    throw new PackageLockInvalid('selected Go module has no retained proxy capture');
+  }
+  const source = selectedEvidence?.source ?? selected;
+  const capture = selectedEvidence?.capture ?? resolution.request.captureEvidence?.find(item =>
+    item.path === source.path && item.version === source.version);
+  if (!capture?.captureId) throw new PackageLockInvalid('selected Go module lacks capture evidence');
+  return { source, captureId: capture.captureId };
+}
 
 /** SRI -> the strongest algorithm as lowercase hex, or null when none is admitted. */
 export function strongestIntegrity(integrity: string):
@@ -100,7 +152,58 @@ async function transaction<T>(pool: Pool, work: (client: PoolClient) => Promise<
  */
 export class PackageLockStore {
   constructor(private readonly pool: Pool, private readonly npm: Pick<NpmResolutionStore, 'read'>,
-    readonly artifacts: PackageArtifactStore, private readonly options: { fetcher?: typeof fetch } = {}) {}
+    readonly artifacts: PackageArtifactStore, private readonly options: { fetcher?: typeof fetch;
+      cargo?: Pick<CargoResolutionStore, 'read'>; go?: Pick<GoMvsResolutionStore, 'read'>;
+      sumdb?: Pick<GoSumdbTrustStore, 'read'>;
+      captures?: Pick<GoProxyCaptureStore, 'read'> } = {}) {}
+
+  /** Composition roots attach the non-npm owners after constructing the shared lock store. */
+  registerResolutionOwners(owners: { cargo: Pick<CargoResolutionStore, 'read'>;
+    go: Pick<GoMvsResolutionStore, 'read'>; sumdb: Pick<GoSumdbTrustStore, 'read'>;
+    captures: Pick<GoProxyCaptureStore, 'read'> }): void {
+    Object.assign(this.options, owners);
+  }
+
+  private async validateGoCaptures(principalId: string, resolution: GoMvsResolution): Promise<void> {
+    const evidence = resolution.request.captureEvidence;
+    if (!evidence || !this.options.captures || evidence.length !== resolution.request.releases.length) {
+      throw new PackageLockInvalid('Go solution lacks a complete retained capture set');
+    }
+    const releases = new Map(resolution.request.releases.map(item => [`${item.path}@${item.version}`, item]));
+    if (releases.size !== evidence.length) throw new PackageLockInvalid('Go capture identities are duplicated');
+    for (const item of evidence) {
+      const capture = await this.options.captures.read(principalId, item.captureId);
+      const release = releases.get(`${item.path}@${item.version}`);
+      if (!capture || !release || capture.path !== item.path || capture.version !== item.version
+        || capture.manifest.rawSha256 !== item.modSha256
+        || capture.info.rawSha256 !== item.infoSha256
+        || (item.listSha256 !== undefined && capture.versionList?.rawSha256 !== item.listSha256)
+        || stableJson(capture.manifest.parsed.requirements) !== stableJson(release.requirements)
+        || (release.goDirective !== undefined
+          && release.goDirective !== capture.manifest.parsed.goDirective)) {
+        throw new PackageLockInvalid('Go resolution differs from its retained proxy capture');
+      }
+    }
+  }
+
+  private async goChecksum(principalId: string, captureId: string,
+    source: GoModuleRequirement): Promise<string> {
+    if (!this.options.sumdb) throw new PackageLockUnavailable('Go checksum owner is unavailable');
+    const row = (await this.pool.query<{ id: string; evidence: { recordTextBase64?: string } }>(
+      `SELECT id, evidence FROM pkg.go_sumdb_verification WHERE principal_id = $1
+        AND capture_id = $2 ORDER BY created_at DESC, id LIMIT 1`, [principalId, captureId])).rows[0];
+    if (!row || !await this.options.sumdb.read(principalId, row.id)) {
+      throw new PackageLockInvalid('selected Go module lacks a verified checksum receipt');
+    }
+    const record = Buffer.from(row.evidence.recordTextBase64 ?? '', 'base64').toString('utf8');
+    const prefix = `${source.path} ${source.version} `;
+    const values = record.split('\n').filter(line => line.startsWith(prefix)
+      && !line.startsWith(`${source.path} ${source.version}/go.mod `)).map(line => line.slice(prefix.length));
+    if (values.length !== 1 || !GO_H1.test(values[0]!)) {
+      throw new PackageLockInvalid('verified Go record lacks the module ZIP hash');
+    }
+    return values[0]!;
+  }
 
   async create(principalId: string, key: string, request: PackageLockRequest):
     Promise<{ lock: PackageLockView; replayed: boolean }> {
@@ -118,8 +221,57 @@ export class PackageLockStore {
     const segments: PackageLockView['manifest']['segments'] = [];
     const artifacts: LockedArtifact[] = [];
     for (const [ordinal, segment] of request.segments.entries()) {
-      if (segment.ecosystem !== 'npm' || !UUID.test(segment.resolution)) {
-        throw new PackageLockInvalid('only npm registry resolution segments are admitted');
+      if (!['npm', 'cargo', 'go'].includes(segment.ecosystem) || !UUID.test(segment.resolution)) {
+        throw new PackageLockInvalid('invalid ecosystem resolution segment');
+      }
+      if (segment.ecosystem === 'cargo') {
+        if (!this.options.cargo) throw new PackageLockUnavailable('Cargo resolution owner is unavailable');
+        const resolution = await this.options.cargo.read(principalId, segment.resolution);
+        if (!resolution) throw new PackageLockUnavailable('Cargo resolution is unavailable');
+        if (resolution.outcome.status !== 'solved' || resolution.request.registryIndexUrl !== CARGO_INDEX) {
+          throw new PackageLockInvalid('only a solved crates.io snapshot can be locked');
+        }
+        segments.push({ ordinal, ecosystem: 'cargo', adapterProfile: resolution.profile,
+          scope: segment.scope, resolution: segment.resolution,
+          resolutionRequestDigest: resolution.requestDigest,
+          environment: { host: resolution.request.host, target: resolution.request.target } });
+        const checksums = cargoChecksums(resolution);
+        for (const selected of resolution.outcome.selected.filter(item => item.source !== 'root')
+          .sort((a, b) => a.id.localeCompare(b.id))) {
+          const checksum = checksums.get(`${selected.name}@${selected.version}`);
+          if (!checksum) throw new PackageLockInvalid('selected Cargo crate lacks an exact archive checksum');
+          artifacts.push({ ordinal: artifacts.length, segment: ordinal, ecosystem: 'cargo',
+            instanceKey: selected.id, coordinate: { registry: CARGO_INDEX,
+              name: selected.name, version: selected.version },
+            locator: cargoLocator(selected.name, selected.version), mutableReference: null,
+            integrity: { basis: 'registry-digest', algorithm: 'sha256', value: checksum } });
+        }
+        continue;
+      }
+      if (segment.ecosystem === 'go') {
+        if (!this.options.go) throw new PackageLockUnavailable('Go resolution owner is unavailable');
+        const resolution = await this.options.go.read(principalId, segment.resolution);
+        if (!resolution) throw new PackageLockUnavailable('Go resolution is unavailable');
+        if (resolution.outcome.status !== 'solved' || !resolution.request.captureEvidence) {
+          throw new PackageLockInvalid('only a solved captured Go graph can be locked');
+        }
+        await this.validateGoCaptures(principalId, resolution);
+        segments.push({ ordinal, ecosystem: 'go', adapterProfile: resolution.profile,
+          scope: segment.scope, resolution: segment.resolution,
+          resolutionRequestDigest: resolution.requestDigest,
+          environment: { goDirective: resolution.request.goDirective,
+            mainModule: resolution.request.mainModule } });
+        for (const selected of resolution.outcome.buildList) {
+          const { source, captureId } = sourceOf(resolution, selected);
+          const checksum = await this.goChecksum(principalId, captureId, source);
+          artifacts.push({ ordinal: artifacts.length, segment: ordinal, ecosystem: 'go',
+            instanceKey: `${selected.path}@${selected.version}`,
+            coordinate: { path: selected.path, version: selected.version,
+              sourcePath: source.path, sourceVersion: source.version, capture: captureId },
+            locator: goLocator(source), mutableReference: null,
+            integrity: { basis: 'registry-digest', algorithm: 'go-h1', value: checksum } });
+        }
+        continue;
       }
       const resolution = await this.npm.read(principalId, segment.resolution);
       if (!resolution) throw new PackageLockUnavailable('resolution is unavailable');
@@ -159,15 +311,20 @@ export class PackageLockStore {
         canonical.toString('utf8'), segments.length, artifacts.length]);
       for (const segment of segments) {
         await client.query(`INSERT INTO pkg.lock_segment (lock_id, ordinal, principal_id, ecosystem,
-            adapter_profile, scope_kind, scope_label, npm_resolution_id)
-          VALUES ($1, $2, $3, 'npm', $4, $5, $6, $7)`, [id, segment.ordinal, principalId,
-          segment.adapterProfile, segment.scope.kind, segment.scope.label, segment.resolution]);
+            adapter_profile, scope_kind, scope_label, go_resolution_id, cargo_resolution_id,
+            npm_resolution_id)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`, [id, segment.ordinal, principalId,
+          segment.ecosystem, segment.adapterProfile, segment.scope.kind, segment.scope.label,
+          segment.ecosystem === 'go' ? segment.resolution : null,
+          segment.ecosystem === 'cargo' ? segment.resolution : null,
+          segment.ecosystem === 'npm' ? segment.resolution : null]);
       }
       for (const item of artifacts) {
         await client.query(`INSERT INTO pkg.lock_artifact (lock_id, ordinal, segment_ordinal, ecosystem,
             instance_key, coordinate, locator, mutable_reference, integrity_basis, digest_algorithm,
-            digest_value) VALUES ($1, $2, $3, 'npm', $4, $5, $6, $7, 'registry-digest', $8, $9)`,
-        [id, item.ordinal, item.segment, item.instanceKey, JSON.stringify(item.coordinate), item.locator,
+            digest_value) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'registry-digest', $9, $10)`,
+        [id, item.ordinal, item.segment, item.ecosystem, item.instanceKey,
+          JSON.stringify(item.coordinate), item.locator,
           item.mutableReference, item.integrity.algorithm, item.integrity.value]);
       }
       return { lock: this.view((await client.query<LockRow>('SELECT * FROM pkg.lock WHERE id = $1',
@@ -205,20 +362,33 @@ export class PackageLockStore {
       const base = { artifact_ordinal: row.ordinal, observed_sha256: null, observed_byte_length: null,
         artifact_id: null, artifact_sha256: null };
       const coordinate = row.coordinate as LockedArtifact['coordinate'];
-      if (row.integrity_basis === 'unverifiable' || !row.digest_algorithm || row.digest_algorithm === 'go-h1') {
+      if (row.integrity_basis === 'unverifiable' || !row.digest_algorithm) {
         results.push({ ...base, result: 'unverifiable' });
         continue;
       }
-      const fetched = npmRegistryTarballAllowed(coordinate.name, row.locator)
-        ? await this.fetchBounded(row.locator, npmRegistryLimits.totalArtifactBytes - total) : null;
+      const allowed = row.ecosystem === 'npm'
+        ? npmRegistryTarballAllowed(String(coordinate.name), row.locator)
+        : row.ecosystem === 'cargo'
+          ? row.locator === cargoLocator(String(coordinate.name), String(coordinate.version))
+            && coordinate.registry === CARGO_INDEX
+          : row.ecosystem === 'go'
+            ? row.locator === goLocator({ path: String(coordinate.sourcePath),
+              version: String(coordinate.sourceVersion) }) : false;
+      const fetched = allowed ? await this.fetchBounded(row.locator,
+        npmRegistryLimits.totalArtifactBytes - total) : null;
       if (!fetched) { results.push({ ...base, result: 'unavailable' }); continue; }
       total += fetched.byteLength;
       const observed = sha(fetched);
-      const locked = createHash(row.digest_algorithm).update(fetched).digest('hex');
+      let locked: string;
+      try { locked = row.digest_algorithm === 'go-h1'
+        ? goModuleZipH1(fetched, String(coordinate.sourcePath), String(coordinate.sourceVersion))
+        : createHash(row.digest_algorithm).update(fetched).digest('hex'); }
+      catch { locked = ''; }
       const measured = { ...base, observed_sha256: observed, observed_byte_length: String(fetched.byteLength) };
       if (locked !== row.digest_value) { results.push({ ...measured, result: 'digest-mismatch' }); continue; }
       if ((await this.artifacts.revoked([observed])).size) { results.push({ ...measured, result: 'revoked' }); continue; }
-      const retained = await this.artifacts.retain(fetched, 'application/gzip', null);
+      const retained = await this.artifacts.retain(fetched, row.ecosystem === 'go'
+        ? 'application/zip' : row.ecosystem === 'cargo' ? 'application/gzip' : 'application/gzip', null);
       results.push({ ...measured, result: 'verified', artifact_id: retained.id, artifact_sha256: observed });
     }
     const id = randomUUID();
