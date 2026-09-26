@@ -18,6 +18,8 @@ export class SearchIndexBudgetExceeded extends Error {}
 /** A committed graph position changed between separate read snapshots. */
 export class SearchSnapshotMoved extends SearchIndexUnavailable {}
 export class SearchRequestTimedOut extends SearchIndexUnavailable {}
+/** The JVM started after an unclean stop; only an empty-index rebuild clears it (OPS15). */
+export class SearchIndexUncertain extends SearchIndexUnavailable {}
 
 export const MAX_SEARCH_REQUEST_MS = 1_500;
 export const MAX_SEARCH_FUSEKI_CALLS = 72;
@@ -121,6 +123,10 @@ async function serverState(fuseki: FusekiClient): Promise<{
   const instanceId = (health as { instanceId?: unknown }).instanceId;
   if (typeof instanceId !== 'string' || !instanceIdPattern.test(instanceId)) {
     throw new SearchIndexUnavailable('Fuseki process identity is unavailable');
+  }
+  // Older modules omit the field; the pinned image always reports it.
+  if ((health as { textIndexUncertain?: unknown }).textIndexUncertain === true) {
+    throw new SearchIndexUncertain('Fuseki text index is uncertain after an unclean stop');
   }
   const epoch = health.publicSearchWriteEpoch;
   if (typeof epoch !== 'string' || !decimal.test(epoch)
@@ -405,4 +411,82 @@ async function replayMembership(fuseki: FusekiClient, previous: MembershipProof,
   return { population, ordinal: proof.ordinal, sequence: position.sequence,
     writeEpoch: position.publicSearchWriteEpoch, instanceId: position.serverInstanceId,
     dataEpoch: position.dataEpoch, generation: position.generation };
+}
+
+export type SearchGenerationState = 'active' | 'uncertain' | 'quarantined' | 'restore-held'
+  | 'unqualified' | 'over-budget';
+
+export interface SearchGenerationActivation {
+  receipt: string;
+  graphSequence: string;
+  priorGeneration: string;
+  sourceCut: { dataEpoch: string; sequence: string };
+  indexDigest: string;
+}
+
+export interface CurrentSearchGeneration {
+  contractVersion: '1';
+  profile: string | null;
+  state: SearchGenerationState;
+  dataEpoch: string;
+  sequence: string;
+  generation: string | null;
+  /** The receipt that activated this generation; null for the bootstrap generation. */
+  activation: SearchGenerationActivation | null;
+  population: number | null;
+}
+
+/**
+ * OPS15/OPS16 operator read: the recorded generation/fence pair and whether the
+ * public text gate qualifies it now. One bounded control read, then the same
+ * readiness proof as public phrase search; a failed proof is reported as a
+ * state, never as a usable generation. Unreadable control is an error.
+ */
+export async function readCurrentSearchGeneration(fuseki: FusekiClient, lineage: GraphLineage,
+  qualify: () => Promise<{ population: number }>): Promise<CurrentSearchGeneration> {
+  const result = await fuseki.query(`PREFIX rv: <${RV}>
+    SELECT ?epoch ?sequence ?profile ?generation ?held ?anchored ?receipt ?graphSequence
+      ?prior ?ownerEpoch ?ownerSequence ?digest WHERE {
+      GRAPH ${iri(GRAPHS.control)} {
+        ${iri(DATASET)} rv:dataEpoch ?epoch ; rv:sequence ?sequence .
+        OPTIONAL { ${iri(DATASET)} rv:textIndexProfile ?profile }
+        OPTIONAL { ${iri(DATASET)} rv:textIndexGeneration ?generation }
+        BIND(EXISTS { ${iri(DATASET)} rv:restoreHold true } AS ?held)
+      }
+      BIND(EXISTS { GRAPH ${iri(PUBLIC_SEARCH_GRAPH)} {
+        ${iri(PUBLIC_SEARCH_ANCHOR)} a rv:SearchGraphAnchor . } } AS ?anchored)
+      OPTIONAL { GRAPH ${iri(GRAPHS.receipts)} {
+        ?receipt rv:textIndexGeneration ?activated ; rv:outcome rv:Succeeded ;
+          rv:dataEpoch ?receiptEpoch ; rv:sequence ?graphSequence ;
+          rv:priorIndexGeneration ?prior ; rv:indexRebuildDigest ?digest ;
+          rv:ownerDataEpoch ?ownerEpoch ; rv:ownerSequence ?ownerSequence . }
+        # An unbound control generation makes this condition an error, so no match.
+        FILTER(?activated = ?generation && ?receiptEpoch = ?epoch) }
+    } LIMIT 2`, MAX_PROOF_RESPONSE_BYTES);
+  const rows = result.results?.bindings ?? [];
+  const row = rows[0];
+  if (rows.length !== 1 || row?.epoch?.value !== lineage.dataEpoch
+    || !decimal.test(row.sequence?.value ?? '')
+    || (row.generation && !generationIri.test(row.generation.value))) {
+    throw new SearchIndexUnavailable('search generation control is unavailable or ambiguous');
+  }
+  const activation = row.receipt ? { receipt: row.receipt.value,
+    graphSequence: row.graphSequence!.value, priorGeneration: row.prior!.value,
+    sourceCut: { dataEpoch: row.ownerEpoch!.value, sequence: row.ownerSequence!.value },
+    indexDigest: row.digest!.value } : null;
+  const read = { contractVersion: '1' as const, profile: row.profile?.value ?? null,
+    dataEpoch: row.epoch.value, sequence: row.sequence!.value,
+    generation: row.generation?.value ?? null, activation };
+  if (row.held?.value === 'true') return { ...read, state: 'restore-held', population: null };
+  try {
+    const { population } = await qualify();
+    return { ...read, state: 'active', population };
+  } catch (error) {
+    if (error instanceof SearchSnapshotMoved) throw error;
+    if (error instanceof SearchIndexUncertain) return { ...read, state: 'uncertain', population: null };
+    if (error instanceof SearchIndexBudgetExceeded) return { ...read, state: 'over-budget', population: null };
+    if (!(error instanceof SearchIndexUnavailable)) throw error;
+    return { ...read, state: row.anchored?.value === 'true' ? 'unqualified' : 'quarantined',
+      population: null };
+  }
 }

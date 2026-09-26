@@ -1,5 +1,5 @@
 import { spawnSync } from 'node:child_process';
-import { createHash, randomUUID } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
 import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { Pool } from 'pg';
@@ -7,35 +7,38 @@ import { ContentCore } from '../../services/content/src/core.ts';
 import { ContentProjectionCursor } from '../../services/content/src/projection-cursor.ts';
 import { FusekiClient } from '../../services/main/src/infrastructure/fuseki.ts';
 import { loadDockerEnvironment } from '../load/docker-env.ts';
-import { fusekiImageFromCompose } from '../load/image.ts';
-import { activateRebuiltPublicContentSearch, clearQuarantinedContentUnits,
-  quarantinePublicContentSearch, replayQuarantinedContentCut, resumeActivatedContentRebuild }
+import { resumeActivatedContentRebuild }
   from '../../services/main/src/modules/content-publication/rebuild.ts';
 import { assertSavedStackRawUpdate, assertSavedStackStorage, composeProcessEnvironment,
   parseOptions, projectName,
   readEnv, stackDirectory } from '../dev/config.ts';
 import { COMMAND_MODULE_VERSION } from '../../services/main/src/infrastructure/profile.ts';
+import { DEFAULT_RESERVE_BYTES, rebuildPublicContentSearch, repositoryPins,
+  type FusekiStateRunner } from './search-state.ts';
 
 const root = resolve(import.meta.dir, '../..');
 const UUID = /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i;
+const USAGE = 'Usage: yarn search:rebuild [--job <uuid>] [--reserve-bytes <n>] [--profile qa --run-id <id> --persistent [--raw-update]]';
 const args = process.argv.slice(2);
-const jobAt = args.indexOf('--job');
-const jobArg = jobAt < 0 ? undefined : args[jobAt + 1];
-if (jobAt >= 0 && (!jobArg || !UUID.test(jobArg))) {
-  throw new Error('Usage: yarn search:rebuild [--job <uuid>] [--profile qa --run-id <id> --persistent [--raw-update]]');
+function option(name: string, pattern: RegExp): string | undefined {
+  const at = args.indexOf(name);
+  if (at < 0) return undefined;
+  const value = args[at + 1];
+  if (!value || !pattern.test(value)) throw new Error(USAGE);
+  args.splice(at, 2);
+  return value;
 }
-const stackArgs = jobAt < 0 ? args : args.filter((_, index) => index !== jobAt && index !== jobAt + 1);
+const jobArg = option('--job', UUID);
+const reserveArg = option('--reserve-bytes', /^(0|[1-9][0-9]{0,15})$/);
+const reserveBytes = reserveArg === undefined ? DEFAULT_RESERVE_BYTES : Number(reserveArg);
+if (!Number.isSafeInteger(reserveBytes)) throw new Error(USAGE);
+const stackArgs = args;
 const options = parseOptions(stackArgs);
 if (options.profile === 'qa' && (!options.runId || !options.persistent)) {
   throw new Error('QA rebuild requires --profile qa --run-id <id> --persistent');
 }
 const stack = stackDirectory(root, options);
 const jobFile = join(stack, 'content-rebuild.json');
-
-function digest(value: string): string {
-  return createHash('sha256').update(value).digest('hex');
-}
-
 
 function compose(args: string[], env: NodeJS.ProcessEnv): string {
   const result = spawnSync('docker', ['compose', '--env-file', join(stack, 'compose.env'),
@@ -70,6 +73,13 @@ if (saved && !UUID.test(saved.id)) throw new Error('saved Content rebuild job is
 if (saved && jobArg && saved.id !== jobArg) throw new Error('resume the saved Content rebuild job');
 const id = saved?.id ?? jobArg ?? randomUUID();
 const docker = loadDockerEnvironment();
+const runner: FusekiStateRunner = {
+  exec: script => compose(['exec', '-T', 'fuseki', 'sh', '-ec', script], docker),
+  offline: script => compose(['run', '--rm', '--no-deps', '-T', '--entrypoint', 'sh', 'fuseki', '-ec', script], docker),
+  stop: () => { compose(['stop', 'fuseki'], docker); },
+  start: () => { compose(['up', '-d', '--wait', 'fuseki'], docker); },
+  container: () => compose(['ps', '-q', 'fuseki'], docker).trim(),
+};
 await assertWritersStopped(apps.MAIN_ORIGIN!);
 const fuseki = new FusekiClient(apps.FUSEKI_URL!, apps.FUSEKI_MAINTENANCE_TOKEN!, apps.FUSEKI_COMMAND_TOKEN!);
 if ((await fuseki.commandHealth()).moduleVersion !== COMMAND_MODULE_VERSION) {
@@ -88,30 +98,17 @@ try {
     rmSync(jobFile);
     console.log(JSON.stringify({ job: id, generation: activated, resumed: true }));
   } else {
-    const job = await quarantinePublicContentSearch(env, content, id);
-    const removed = await clearQuarantinedContentUnits(env, job);
-    const replayed = await replayQuarantinedContentCut(env, content, cursor, job);
-    await assertWritersStopped(apps.MAIN_ORIGIN!);
-    let offlineLog = '';
-    let stopped = false;
-    try {
-      compose(['stop', 'fuseki'], docker);
-      stopped = true;
-      offlineLog = compose(['run', '--rm', '--no-deps', '--entrypoint', 'sh', 'fuseki', '-ec',
-        'rm -rf /fuseki/databases/rezics/lucene && mkdir -p /fuseki/databases/rezics/lucene && java -Xmx2g -cp /opt/apache-jena-fuseki-6.2.0/fuseki-server.jar jena.textindexer --desc=/fuseki/fuseki-text.ttl'], docker);
-    } finally {
-      if (stopped) compose(['up', '-d', '--wait', 'fuseki'], docker);
-    }
+    const result = await rebuildPublicContentSearch({ runner, dockerEnv: docker, env, content, cursor,
+      id, publicConsumer, reserveBytes, assertWritersStopped: () => assertWritersStopped(apps.MAIN_ORIGIN!),
+      expected: repositoryPins(root, docker, `${projectName(options)}_fuseki_data`) });
     const logPath = join(stack, `content-rebuild-${id}.log`);
-    writeFileSync(logPath, offlineLog, { mode: 0o600 });
-    const offlineIndexDigest = digest(JSON.stringify({ family: 'jena-textindexer-v1',
-      image: fusekiImageFromCompose(readFileSync(join(root, 'infra/dev/compose.yaml'), 'utf8')).image,
-      assembler: digest(readFileSync(join(root, 'infra/jena/fuseki-text.ttl'), 'utf8')),
-      output: digest(offlineLog) }));
-    const generation = await activateRebuiltPublicContentSearch(env, content, cursor, job,
-      publicConsumer, offlineIndexDigest);
+    writeFileSync(logPath, result.offlineLog, { mode: 0o600 });
     rmSync(jobFile);
-    console.log(JSON.stringify({ job: id, removed, replayed, generation, logPath }));
+    console.log(JSON.stringify({ job: id, removed: result.removed, replayed: result.replayed,
+      generation: result.generation, logPath, storage: result.storage,
+      pins: { imageId: result.pins.imageId, stateVolume: result.pins.stateVolume,
+        assembler: result.pins.indexerAssemblerSha256, analyzer: result.pins.facts.analyzer,
+        moduleVersion: result.pins.moduleVersion }, elapsedMs: result.elapsedMs }));
   }
 } finally {
   await pool.end();

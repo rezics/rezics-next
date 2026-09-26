@@ -24,6 +24,7 @@ COPY --from=distribution /opt/apache-jena-fuseki-6.2.0 /opt/apache-jena-fuseki-6
 COPY --from=module /build/target/fuseki-command.jar /fuseki/extra/fuseki-command.jar
 COPY infra/jena/fuseki-text.ttl /fuseki/fuseki-text.ttl
 COPY infra/jena/fuseki-text-qa.ttl /fuseki/fuseki-text-qa.ttl
+COPY --chmod=0755 infra/jena/fuseki-owner.sh /usr/local/bin/fuseki-owner
 COPY generated/model/manifest.json /fuseki/profiles/manifest.json
 COPY generated/model/shapes/ /fuseki/profiles/shapes/
 RUN mkdir -p /fuseki/databases/rezics/tdb2 /fuseki/databases/rezics/lucene \
@@ -31,4 +32,5 @@ RUN mkdir -p /fuseki/databases/rezics/tdb2 /fuseki/databases/rezics/lucene \
 USER 10001:10001
 WORKDIR /fuseki
 EXPOSE 3030
+ENTRYPOINT ["/usr/local/bin/fuseki-owner"]
 CMD ["/opt/apache-jena-fuseki-6.2.0/fuseki-server", "--port=3030", "--no-cors", "--timeout=10000", "--config=/fuseki/fuseki-text.ttl"]

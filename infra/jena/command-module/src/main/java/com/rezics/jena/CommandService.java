@@ -45,6 +45,10 @@ final class CommandService extends ActionService {
     // for a rolled-back attempt, which conservatively invalidates cached proof.
     private final AtomicLong publicSearchWriteEpoch = new AtomicLong();
     private final AtomicLong privateSearchWriteEpoch = new AtomicLong();
+    // The image entrypoint leaves this marker after an unclean stop; only the
+    // offline empty-index rebuild removes it. Its state is fixed for this JVM.
+    private final boolean textIndexUncertain = java.nio.file.Files.exists(java.nio.file.Path.of(
+        System.getenv().getOrDefault("FUSEKI_BASE", "."), "databases/rezics/lucene.uncertain"));
 
     CommandService(ProfileRegistry profiles) {
         this.profiles = profiles;
@@ -95,7 +99,8 @@ final class CommandService extends ActionService {
             "publicSearchWriteActive", (epoch & 1L) != 0L,
             "privateSearchWriteEpoch", Long.toString(privateEpoch),
             "privateSearchWriteActive", (privateEpoch & 1L) != 0L,
-            "publicSearchDeltaAvailable", deltaExclusive, "profiles", profiles.digests()));
+            "publicSearchDeltaAvailable", deltaExclusive, "textIndexUncertain", textIndexUncertain,
+            "profiles", profiles.digests()));
     }
     @Override public void execPost(HttpAction action) {
         if (!"application/json".equalsIgnoreCase(action.getRequestContentType())) {
