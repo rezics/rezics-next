@@ -17,6 +17,7 @@ import { InvalidPublicQuery, PublicQueryBudgetExceeded, PublicQueryUnavailable,
 import { statementCutoverActive } from '../statement/migrate-v1.ts';
 import { CLASSIFIED_AS, STATEMENT_DECISION_PROFILE }
   from '../statement/schema.ts';
+import { exactDecisionSupports, readSearchDecisionSupports } from './search-supports.ts';
 
 const nativeId = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
 const MAX_SLOTS = 100;
@@ -56,7 +57,7 @@ export async function queryPublicRealmClassifiedRatedPhrase(env: WorkActivationE
     SELECT DISTINCT ?epoch ?sequence ?indexGeneration ?candidateCount ?ratingPopulation ?ratingRows
       ?ratingUniqueSlots ?ratingValidRows ?unit ?score ?work ?main
       ?contribution ?revision ?selection ?language ?reason ?decision ?application
-      ?source ?sourceContext ?ratingCount ?ratingSum ?ratingTargetPopulation ?key WHERE {
+      ?source ?sourceContext ?ratingCount ?ratingSum ?ratingTargetPopulation ?key ?concept WHERE {
       GRAPH ${iri(GRAPHS.control)} {
         ${iri(DATASET)} rv:dataEpoch ?epoch ; rv:sequence ?sequence ;
           rv:textIndexGeneration ?indexGeneration . }
@@ -308,7 +309,7 @@ export async function queryPublicRealmClassifiedRatedPhrase(env: WorkActivationE
     if (!row.unit || !row.score || !row.work || !row.main || !row.contribution
       || !row.revision || !row.selection || !row.language || !row.reason
       || !row.decision || (!cutover && !row.application) || !row.source || !row.sourceContext
-      || (cutover && !row.key)
+      || (cutover && (!row.key || !row.concept))
       || !row.ratingCount || !row.ratingSum || !row.ratingTargetPopulation) {
       throw new PublicQueryUnavailable('joined public query result is incomplete');
     }
@@ -331,7 +332,7 @@ export async function queryPublicRealmClassifiedRatedPhrase(env: WorkActivationE
       classification: { sense: input.sense, decision: row.decision.value,
         application: cutover ? null : row.application!.value, source: row.source.value,
         sourceContext: row.sourceContext.value,
-        ...(cutover ? { meaningKey: row.key!.value } : {}) },
+        ...(cutover ? { meaningKey: row.key!.value, concept: row.concept!.value } : {}) },
       rating: { context: input.ratingContext, count, sum, mean: sum / count,
         precision: { kind: 'exact-rational' as const, numerator: sum, denominator: count } } };
   });
@@ -343,6 +344,17 @@ export async function queryPublicRealmClassifiedRatedPhrase(env: WorkActivationE
   matches.sort((left, right) => right.score - left.score
     || left.mainVersion.localeCompare(right.mainVersion)
     || left.matchUnit.localeCompare(right.matchUnit));
+  const supports = cutover ? await readSearchDecisionSupports(env,
+    { dataEpoch: first.epoch.value, sequence: first.sequence.value },
+    matches.map(match => ({ mainVersion: match.mainVersion,
+      meaningKey: match.classification.meaningKey!, decision: match.classification.decision,
+      sourceContext: match.classification.sourceContext }))) : null;
+  const qualified = supports ? matches.map(match => ({ ...match,
+    classification: { ...match.classification,
+      supportingStatements: exactDecisionSupports(supports, match.mainVersion,
+        match.classification.decision),
+      supportingStatementCount: exactDecisionSupports(supports, match.mainVersion,
+        match.classification.decision).length } })) : matches;
   return { profile: 'public-realm-classified-rated-phrase-v1' as const,
     contractVersion: '1', resultGrain: 'mainVersion' as const,
     context: input.context, classificationSense: input.sense,
@@ -350,7 +362,7 @@ export async function queryPublicRealmClassifiedRatedPhrase(env: WorkActivationE
       minimumMeanTimes10: input.minimumMeanTimes10, policy: 'latest-per-rater-mean' as const },
     complete: true as const, population: index.population, ratingPopulation,
     indexGeneration: index.generation,
-    total: matches.length, results: matches,
+    total: qualified.length, results: qualified,
     sourcePosition: { datasetId: 'product' as const,
       dataEpoch: first.epoch.value, sequence: first.sequence.value } };
 }

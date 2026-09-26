@@ -3,7 +3,7 @@ import { expect, test } from 'bun:test';
 import { createPresentationMuteFilter } from '../../../services/main/src/modules/presentation/realm-mutes.ts';
 import { governedWiki, memberOf, policyHarness, realm, rule } from './access-policy-harness.ts';
 
-test('IAM18 partial: mute, interaction block and resource exclusion keep separate owners and effects', async () => {
+test('IAM18: mute, interaction block and resource exclusion keep separate owners and effects', async () => {
   const h = await policyHarness();
   try {
     const wiki = await governedWiki(h);

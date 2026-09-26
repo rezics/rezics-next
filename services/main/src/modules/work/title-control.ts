@@ -11,6 +11,8 @@ import { assertGraphAdmissionOpen } from './restore-lineage.ts';
 import { readWorkPayloadForRevision, RevisionCorrupt } from './history.ts';
 import { sameScalar, scalarFromBinding, SCALAR_PREDICATE } from './scalar-value.ts';
 import { validEditorialControlBasis, type EditorialControlBasis } from '../protection/field-control.ts';
+import { publicTitleProjection } from '../content-publication/projection-recipes.ts';
+import { PUBLIC_SEARCH_GRAPH } from './select-main.ts';
 
 export const TITLE_PROFILE = 'https://rezics.com/definition/work-title-control-v1';
 const NATIVE = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
@@ -217,10 +219,12 @@ export async function titleControlCommand(env: WorkActivationEnvironment, admiss
   let update = `PREFIX rv: <${RV}> PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
     DELETE { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?n }
       GRAPH ${iri(GRAPHS.current)} { ${iri(intent.work)} rv:titleControlHead ?oldControl .
-        ${workManifest ? `${iri(intent.work)} rv:head ${iri(intent.expectedHead)} ; rdfs:label ?oldTitle .` : ''} } }
+        ${workManifest ? `${iri(intent.work)} rv:head ${iri(intent.expectedHead)} ; rdfs:label ?oldTitle .` : ''} }
+      ${workManifest ? `GRAPH ${iri(PUBLIC_SEARCH_GRAPH)} { ?titleUnit rv:publicTitle ?oldPublicTitle . }` : ''} }
     INSERT { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?next }
       GRAPH ${iri(GRAPHS.current)} { ${iri(intent.work)} rv:titleControlHead ${iri(control)} .
         ${workManifest ? `${iri(intent.work)} rv:head ${iri(revision)} ; rdfs:label ${lit(intent.title)}@en .` : ''} }
+      ${workManifest ? `GRAPH ${iri(PUBLIC_SEARCH_GRAPH)} { ?titleUnit rv:publicTitle ${publicTitleProjection(intent.title)} . }` : ''}
       GRAPH ${iri(GRAPHS.revisions)} { ${iri(control)} a rv:RevisionAnchor, rv:EditorialControlRevision ;
         rv:component ${iri(intent.work)} ; rv:controlField "title:en" ; rv:controlMode rv:${intent.action === 'work.edit' ? 'HumanControlled' : 'SourceManaged'} ;
         rv:controlEpoch ${BigInt(intent.basis.epoch) + 1n} ; rv:workRevision ${iri(revision)} ; rv:operation ${iri(operation)} ;
@@ -246,6 +250,10 @@ export async function titleControlCommand(env: WorkActivationEnvironment, admiss
       GRAPH ${iri(GRAPHS.current)} { ${iri(intent.work)} rv:head ${iri(intent.expectedHead)} ; rdfs:label ?oldTitle .
         OPTIONAL { ${iri(intent.work)} rv:titleControlHead ?oldControl }
         OPTIONAL { ${iri(intent.work)} rv:protectionHead ?oldProtection } }
+      ${workManifest ? `OPTIONAL { GRAPH ${iri(PUBLIC_SEARCH_GRAPH)} {
+        ?titleUnit a rv:MatchUnit ; rv:work ${iri(intent.work)} ; rv:disclosure rv:Public .
+        OPTIONAL { ?titleUnit rv:publicTitle ?oldPublicTitle }
+      } }` : ''}
       FILTER(${intent.basis.head ? `?oldControl = ${iri(intent.basis.head)}` : '!BOUND(?oldControl)'})
       FILTER(${intent.basis.protection ? `?oldProtection = ${iri(intent.basis.protection)}` : '!BOUND(?oldProtection)'})
       FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:restoreHold true } }

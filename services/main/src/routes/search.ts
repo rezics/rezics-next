@@ -9,11 +9,17 @@ import { queryPublicMainClassifiedPhrase, queryPublicMainPhrase, queryPublicReal
 import { InvalidSearchContinuation, pageCompletePublicRelation, SearchContinuationRestart }
   from '../modules/work/search-continuation.ts';
 import { queryPublicRealmClassifiedRatedPhrase } from '../modules/work/search-joined.ts';
+import { queryPublicMainTitleBody } from '../modules/work/search-multifield.ts';
 import { withStableSearchSnapshot, SearchIndexUnavailable, type SearchAttemptDiagnostic }
   from '../modules/work/search-readiness.ts';
+import { SearchSnapshotMoved } from '../modules/work/search-readiness.ts';
+import { applyWorkSearchMutes } from '../modules/work/search-presentation.ts';
+import type { ActivePresentationMute } from '../modules/presentation/realm-mutes.ts';
 import { ContentProjectionUnavailable } from '../modules/content-publication/relay.ts';
 import { queryPublicContentPhrase } from '../modules/content-publication/search.ts';
 import { pageCompleteContentRelation } from '../modules/content-publication/search-continuation.ts';
+import { checkJudgmentProtection } from '../modules/judgment/protection.ts';
+import { PublicQueryBudgetExceeded, PublicQueryUnavailable } from '../modules/work/search-budget.ts';
 import { problemResult, publicPhrasePageRequest, publicPhrasePageResult, publicQueryResult,
   unsupportedPublicSearchSelectors } from '../api-contract.ts';
 import type { MainWorkDependencies } from './dependencies.ts';
@@ -41,6 +47,65 @@ function unsupportedSearchSelection(body: { sourcePolicy?: unknown; asOf?: unkno
   return null;
 }
 
+/** Badge checks use the exact supporting Statement and its decision population.
+ * The bounded relation and the request deadline also bound Access hydration. */
+export async function protectClassifiedResults<T extends { results: Array<{ classification: {
+  meaningKey?: string; concept?: string; supportingStatements?: string[];
+  source: string } }> }>(work: SearchRouteDependencies, relation: T,
+  realm?: string) {
+  const targets = new Map<string, { support: string; concept: string;
+    context: { kind: 'global' } | { kind: 'realm'; realm: string } }>();
+  for (const match of relation.results) {
+    const classification = match.classification;
+    if (!classification.meaningKey) continue; // pre-cutover direct classification
+    if (!classification.concept || !classification.supportingStatements?.length) {
+      throw new PublicQueryUnavailable('classified search has no exact support');
+    }
+    if (classification.source === 'local' && !realm) {
+      throw new PublicQueryUnavailable('local decision has no Realm judgment population');
+    }
+    const context = classification.source === 'local' && realm
+      ? { kind: 'realm' as const, realm } : { kind: 'global' as const };
+    for (const support of classification.supportingStatements) {
+      targets.set(`${support}\0${context.kind === 'realm' ? context.realm : 'global'}\0${classification.concept}`,
+        { support, concept: classification.concept, context });
+    }
+  }
+  if (targets.size > 512) throw new PublicQueryBudgetExceeded('judgment hydration exceeds support budget');
+  if (targets.size && !work.judgments) {
+    throw new PublicQueryUnavailable('Access judgment protection owner is unavailable');
+  }
+  const checked = new Map<string, Awaited<ReturnType<typeof checkJudgmentProtection>>>();
+  const entries = [...targets];
+  for (let offset = 0; offset < entries.length; offset += 16) {
+    await Promise.all(entries.slice(offset, offset + 16).map(async ([key, target]) => {
+      try {
+        const badge = await checkJudgmentProtection(work.judgments!, target.support,
+          target.context, target.concept);
+        if (badge.statement !== target.support || badge.context.kind !== target.context.kind
+          || (badge.context.kind === 'realm' && target.context.kind === 'realm'
+            && badge.context.realm !== target.context.realm)) {
+          throw new Error('judgment protection target differs');
+        }
+        checked.set(key, badge);
+      } catch {
+        throw new PublicQueryUnavailable('Access judgment protection check is unavailable');
+      }
+    }));
+  }
+  return { ...relation, results: relation.results.map(match => {
+    const classification = match.classification;
+    if (!classification.meaningKey) return match;
+    const contextKey = classification.source === 'local' && realm ? realm : 'global';
+    return { ...match, classification: { ...classification,
+      protectionChecks: classification.supportingStatements!.map(support => {
+        const badge = checked.get(`${support}\0${contextKey}\0${classification.concept}`);
+        if (!badge) throw new PublicQueryUnavailable('judgment protection check is incomplete');
+        return badge;
+      }) } };
+  }) };
+}
+
 /** Private delivery owners. A replica without them keeps the profile closed. */
 export interface SearchRouteDependencies extends MainWorkDependencies {
   privateSearch?: PrivateSearchSocketDependencies;
@@ -49,6 +114,31 @@ export interface SearchRouteDependencies extends MainWorkDependencies {
 export function searchRoutes(fuseki: FusekiClient, work: SearchRouteDependencies) {
   const principals = new WeakMap<Request, VerifiedPrincipal>();
   const connections = new Map<string, PrivateSearchConnection>();
+  async function presentationSelection(request: Request) {
+    if (!request.headers.has('authorization')) return null;
+    const principal = await work.account.verify(request, ['work:read']);
+    if (!work.accessPolicy) throw new PublicQueryUnavailable('Access mute owner is unavailable');
+    const rows = await work.accessPolicy.interactions.listMutes(principal);
+    const mutes: ActivePresentationMute[] = rows.map(row => ({
+      targetKind: row.target_kind, target: row.target, match: row.match }));
+    return { principal, rows, mutes, generation: JSON.stringify(rows) };
+  }
+  async function present<T extends { results: Array<{ contribution: string; reason?: string }>;
+    total: number; context: 'main-version-default' | { kind: 'realm-local'; id: string };
+    sourcePosition: { dataEpoch: string; sequence: string } }>(
+    selection: Awaited<ReturnType<typeof presentationSelection>>, relation: T,
+  ): Promise<T> {
+    if (!selection) return relation;
+    const owner = work.accessPolicy;
+    if (!owner) throw new PublicQueryUnavailable('Access mute owner is unavailable');
+    const filtered = await applyWorkSearchMutes(work.environment, relation, selection.mutes,
+      (authors, realms) => owner.interactions.searchAuthorMemberships(authors, realms));
+    const after = await owner.interactions.listMutes(selection.principal);
+    if (JSON.stringify(after) !== selection.generation) {
+      throw new SearchSnapshotMoved('Access mute selection changed during public search');
+    }
+    return filtered as T;
+  }
   return new Elysia()
     .use(websocket({ sendPings: false }))
     .post('/v1/private-queries', {
@@ -101,7 +191,14 @@ export function searchRoutes(fuseki: FusekiClient, work: SearchRouteDependencies
         language: t.Union([
           t.String({ minLength: 2, maxLength: 35,
             pattern: '^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$' }), t.Null(),
-        ]) }, { additionalProperties: false }), t.Object({ profile: t.Literal('public-main-phrase-v1'),
+        ]) }, { additionalProperties: false }), t.Object({ profile: t.Literal('public-main-title-body-v1'),
+        ...unsupportedPublicSearchSelectors,
+        titleTerm: t.String({ minLength: 2, maxLength: 80 }),
+        bodyTerm: t.String({ minLength: 2, maxLength: 80 }),
+        language: t.Union([t.String({ minLength: 2, maxLength: 35,
+          pattern: '^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$' }), t.Null()]),
+        author: t.Optional(t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' })),
+      }, { additionalProperties: false }), t.Object({ profile: t.Literal('public-main-phrase-v1'),
         ...unsupportedPublicSearchSelectors,
         phrase: t.String({ minLength: 2, maxLength: 80 }),
         language: t.Union([
@@ -163,7 +260,7 @@ export function searchRoutes(fuseki: FusekiClient, work: SearchRouteDependencies
       response: { 200: publicQueryResult, 400: problemResult(400),
         404: problemResult(404), 422: problemResult(422),
         500: problemResult(500), 503: problemResult(503) },
-    }, async ({ body }) => {
+    }, async ({ body, request }) => {
       const diagnostics: SearchAttemptDiagnostic[] | undefined = process.env.REZICS_LOAD_RUN_ID ? [] : undefined;
       try {
         const unsupported = unsupportedSearchSelection(body);
@@ -171,18 +268,28 @@ export function searchRoutes(fuseki: FusekiClient, work: SearchRouteDependencies
         if (body.profile === 'public-content-phrase-v1' && !work.contentProjection) {
           return problem(503, 'content_projection_unavailable', 'Public Content projection is unavailable');
         }
-        const result = await withStableSearchSnapshot(fuseki, async () => body.profile === 'public-content-phrase-v1'
-          ? queryPublicContentPhrase(work.environment, work.contentProjection!.content,
-            work.contentProjection!.cursor, work.contentProjection!.consumer, body)
-          : body.profile === 'public-realm-classified-rated-phrase-v1'
-          ? await queryPublicRealmClassifiedRatedPhrase(work.environment, body)
-          : body.profile === 'public-realm-phrase-v1'
-          ? await queryPublicRealmPhrase(work.environment, body)
-          : body.profile === 'public-main-phrase-v1'
-            ? await queryPublicMainPhrase(work.environment, body)
-            : body.profile === 'public-realm-classified-phrase-v1'
-              ? await queryPublicRealmClassifiedPhrase(work.environment, body)
-              : await queryPublicMainClassifiedPhrase(work.environment, body), undefined, diagnostics);
+        const result = await withStableSearchSnapshot(fuseki, async () => {
+          if (body.profile === 'public-content-phrase-v1') {
+            return queryPublicContentPhrase(work.environment, work.contentProjection!.content,
+              work.contentProjection!.cursor, work.contentProjection!.consumer, body);
+          }
+          const selection = await presentationSelection(request);
+          const relation = body.profile === 'public-main-title-body-v1'
+            ? await queryPublicMainTitleBody(work.environment, body)
+            : body.profile === 'public-realm-classified-rated-phrase-v1'
+            ? await protectClassifiedResults(work,
+              await queryPublicRealmClassifiedRatedPhrase(work.environment, body), body.context.id)
+            : body.profile === 'public-realm-phrase-v1'
+            ? await queryPublicRealmPhrase(work.environment, body)
+            : body.profile === 'public-main-phrase-v1'
+              ? await queryPublicMainPhrase(work.environment, body)
+              : body.profile === 'public-realm-classified-phrase-v1'
+                ? await protectClassifiedResults(work,
+                  await queryPublicRealmClassifiedPhrase(work.environment, body), body.context.id)
+                : await protectClassifiedResults(work,
+                  await queryPublicMainClassifiedPhrase(work.environment, body));
+          return present(selection, relation);
+        }, undefined, diagnostics);
         return Response.json(result, {
           headers: { 'cache-control': 'no-store' },
         });
@@ -196,7 +303,7 @@ export function searchRoutes(fuseki: FusekiClient, work: SearchRouteDependencies
       response: { 200: publicPhrasePageResult, 400: problemResult(400),
         404: problemResult(404), 409: problemResult(409), 422: problemResult(422),
         500: problemResult(500), 503: problemResult(503) },
-    }, async ({ body }) => {
+    }, async ({ body, request }) => {
       const diagnostics: SearchAttemptDiagnostic[] | undefined = process.env.REZICS_LOAD_RUN_ID ? [] : undefined;
       try {
         const unsupported = unsupportedSearchSelection(body);
@@ -211,26 +318,34 @@ export function searchRoutes(fuseki: FusekiClient, work: SearchRouteDependencies
               work.contentProjection.consumer, body);
             return pageCompleteContentRelation(body, relation);
           }
+          const selection = await presentationSelection(request);
           if (body.profile === 'public-main-phrase-page-v1') {
-            const relation = await queryPublicMainPhrase(work.environment, body);
-            return pageCompletePublicRelation(body, relation);
+            const relation = await present(selection, await queryPublicMainPhrase(work.environment, body));
+            return pageCompletePublicRelation(body, relation, Date.now(), selection?.generation);
+          }
+          if (body.profile === 'public-main-title-body-page-v1') {
+            const relation = await present(selection, await queryPublicMainTitleBody(work.environment, body));
+            return pageCompletePublicRelation(body, relation, Date.now(), selection?.generation);
           }
           if (body.profile === 'public-realm-phrase-page-v1') {
-            const relation = await queryPublicRealmPhrase(work.environment, body);
-            return pageCompletePublicRelation(body, relation);
+            const relation = await present(selection, await queryPublicRealmPhrase(work.environment, body));
+            return pageCompletePublicRelation(body, relation, Date.now(), selection?.generation);
           }
           if (body.profile === 'public-main-classified-phrase-page-v1') {
-            const relation = await queryPublicMainClassifiedPhrase(work.environment, body);
-            return { ...pageCompletePublicRelation(body, relation),
+            const relation = await present(selection, await protectClassifiedResults(work,
+              await queryPublicMainClassifiedPhrase(work.environment, body)));
+            return { ...pageCompletePublicRelation(body, relation, Date.now(), selection?.generation),
               classificationSense: relation.classificationSense };
           }
           if (body.profile === 'public-realm-classified-phrase-page-v1') {
-            const relation = await queryPublicRealmClassifiedPhrase(work.environment, body);
-            return { ...pageCompletePublicRelation(body, relation),
+            const relation = await present(selection, await protectClassifiedResults(work,
+              await queryPublicRealmClassifiedPhrase(work.environment, body), body.context.id));
+            return { ...pageCompletePublicRelation(body, relation, Date.now(), selection?.generation),
               classificationSense: relation.classificationSense };
           }
-          const relation = await queryPublicRealmClassifiedRatedPhrase(work.environment, body);
-          return { ...pageCompletePublicRelation(body, relation),
+          const relation = await present(selection, await protectClassifiedResults(work,
+            await queryPublicRealmClassifiedRatedPhrase(work.environment, body), body.context.id));
+          return { ...pageCompletePublicRelation(body, relation, Date.now(), selection?.generation),
             classificationSense: relation.classificationSense,
             ratingCriterion: relation.ratingCriterion,
             ratingPopulation: relation.ratingPopulation };

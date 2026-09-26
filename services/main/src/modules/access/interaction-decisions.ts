@@ -106,6 +106,30 @@ export class AccessInteractions {
     });
   }
 
+  /** Bounded author facts for a caller's Realm-membership presentation mutes.
+   * Only the supplied public authors and muted Realms can be returned. */
+  async searchAuthorMemberships(authors: readonly string[], realms: readonly string[]) {
+    if (authors.length > 512 || realms.length > MAX_MUTES
+      || authors.some(author => !agentPattern.test(author))
+      || realms.some(realm => !agentPattern.test(realm))) {
+      throw new PolicyInvalid('invalid presentation membership batch');
+    }
+    if (!authors.length || !realms.length) return new Map<string, string[]>();
+    return inAccessTransaction(this.pool, 'repeatable read', async client => {
+      await requireRecoveryOpen(client, false);
+      const rows = (await client.query<{ member_subject: string; owner_subject: string }>(
+        `SELECT member_subject, owner_subject FROM access.membership
+          WHERE kind = 'realm' AND state = 'joined'
+            AND member_subject = ANY($1::text[]) AND owner_subject = ANY($2::text[])
+          ORDER BY member_subject, owner_subject LIMIT 513`, [authors, realms])).rows;
+      if (rows.length > 512) throw new PolicyUnavailable('presentation membership batch exceeded budget');
+      const found = new Map<string, string[]>();
+      for (const row of rows) found.set(row.member_subject,
+        [...(found.get(row.member_subject) ?? []), row.owner_subject]);
+      return found;
+    });
+  }
+
   /** The recipient Agent's representative changes its interaction admission rule. */
   async changeBlock(principal: VerifiedPrincipal, recipient: string, expectedAuthorityEpoch: string,
     change: BlockChange, key: ReceiptKey): Promise<{ blockId: string; generation: string;

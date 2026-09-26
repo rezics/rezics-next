@@ -17,19 +17,20 @@ export interface SearchContinuation {
 }
 
 interface BasePublicPhrasePageRequest {
-  phrase: string;
   language: string | null;
   author?: string;
   pageSize: number;
   continuation?: SearchContinuation;
 }
 export type PublicPhrasePageRequest = BasePublicPhrasePageRequest & (
-  { profile: 'public-main-phrase-page-v1' }
-  | { profile: 'public-realm-phrase-page-v1'; context: { kind: 'realm-local'; id: string } }
-  | { profile: 'public-main-classified-phrase-page-v1'; sense: string }
-  | { profile: 'public-realm-classified-phrase-page-v1';
+  { profile: 'public-main-title-body-page-v1'; titleTerm: string; bodyTerm: string }
+  | { profile: 'public-main-phrase-page-v1'; phrase: string }
+  | { profile: 'public-realm-phrase-page-v1'; phrase: string;
+    context: { kind: 'realm-local'; id: string } }
+  | { profile: 'public-main-classified-phrase-page-v1'; phrase: string; sense: string }
+  | { profile: 'public-realm-classified-phrase-page-v1'; phrase: string;
     context: { kind: 'realm-local'; id: string }; sense: string }
-  | { profile: 'public-realm-classified-rated-phrase-page-v1';
+  | { profile: 'public-realm-classified-rated-phrase-page-v1'; phrase: string;
     context: { kind: 'realm-local'; id: string }; sense: string;
     ratingContext: string; minimumMeanTimes10: number }
 );
@@ -49,7 +50,10 @@ const digest = (value: unknown): string => createHash('sha256')
   .update(JSON.stringify(value)).digest('hex');
 
 function requestDigest(input: PublicPhrasePageRequest): string {
-  return digest([input.profile, input.phrase.normalize('NFC').trim().replace(/\s+/gu, ' '),
+  return digest([input.profile,
+    'phrase' in input ? input.phrase.normalize('NFC').trim().replace(/\s+/gu, ' ') : null,
+    'titleTerm' in input ? input.titleTerm.normalize('NFC').trim().replace(/\s+/gu, ' ') : null,
+    'bodyTerm' in input ? input.bodyTerm.normalize('NFC').trim().replace(/\s+/gu, ' ') : null,
     input.language, input.author ?? null, 'context' in input ? input.context.id : null,
     'sense' in input ? input.sense : null,
     'ratingContext' in input ? input.ratingContext : null,
@@ -62,9 +66,10 @@ function requestDigest(input: PublicPhrasePageRequest): string {
  * Cost after the read is O(k + serialized row bytes) for k <= 512; the caller's
  * 1 MiB phrase response and 1,500 ms request deadline bound the input and time. */
 export function pageCompletePublicRelation<Row>(input: PublicPhrasePageRequest,
-  relation: CompletePublicRelation<Row>, now = Date.now()) {
+  relation: CompletePublicRelation<Row>, now = Date.now(), presentationGeneration?: string) {
   const main = input.profile === 'public-main-phrase-page-v1'
-    || input.profile === 'public-main-classified-phrase-page-v1';
+    || input.profile === 'public-main-classified-phrase-page-v1'
+    || input.profile === 'public-main-title-body-page-v1';
   if (relation.resultGrain !== 'mainVersion' || relation.complete !== true
     || !Number.isSafeInteger(relation.population) || relation.population < relation.total
     || relation.sourcePosition.datasetId !== 'product'
@@ -82,7 +87,8 @@ export function pageCompletePublicRelation<Row>(input: PublicPhrasePageRequest,
     throw new InvalidSearchContinuation('public page request or complete relation is invalid');
   }
   const queryDigest = requestDigest(input);
-  const resultDigest = digest(relation.results);
+  const resultDigest = digest(presentationGeneration === undefined ? relation.results
+    : [relation.results, presentationGeneration]);
   const prior = input.continuation;
   if (prior && (!/^[0-9a-f]{64}$/.test(prior.queryDigest)
     || !/^[0-9a-f]{64}$/.test(prior.resultDigest)

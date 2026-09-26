@@ -54,6 +54,24 @@ counts Main-to-Fuseki traffic and some full-inventory/delta operations. SQL/nati
 operator coverage and operation-wide enforcement remain incomplete. Extend those
 owners rather than creating a separate tracing service for this gate.
 
+### Public Work search hydration and title conjunction
+
+The public Work title/body profile has two independent Lucene probes capped at
+513 raw hits each, one joined ARQ relation capped by the same one MiB response
+limit, at most 512 accepted units, and the shared 1,500 ms, 72 Fuseki-call,
+8 MiB request ceilings. The title field lives on an already eligible public
+MatchUnit; unrelated label resources cannot grow its candidate population.
+The exact supporting-Statement hydration uses one `VALUES` graph read for at
+most 512 IDs, with a 513th row proving overflow. At most 512 Access judgment
+checks run in batches of 16 under the same request deadline. A bearer read
+does two bounded Access mute-list reads (at most 256 rows each), one graph author
+batch for at most 512 Contributions when author facts are needed, and one
+bounded Access membership batch for only the active muted Realms and returned
+authors. The final mute-list read rejects a concurrent revision change.
+These are logical limits; native Jena work, SQL plan rows and title-index update
+fanout still need measured qualification across unrelated corpus, affected units,
+author membership degree and common rejected terms.
+
 ### IAM07 media download stream
 
 `GET /v1/media/assets/{asset}/bytes` is bounded to one current avatar-slot basis,

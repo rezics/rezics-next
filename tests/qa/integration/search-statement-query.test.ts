@@ -48,6 +48,7 @@ test('SEARCH01/SEARCH04: one native graph/text read preserves scores across thre
   const definitions = works.map((work, index) => {
     const main = mains[index]!;
     const statement = id(41 + index), slot = `urn:rezics:decision-slot:statement-${index}`;
+    const additionalSupport = index === 0 ? id(43) : null;
     const decision = id(51 + index), selection = id(61 + index);
     return `GRAPH ${iri(GRAPHS.current)} {
       ${iri(work)} a schema:CreativeWork ; rv:mainVersion ${iri(main)} .
@@ -57,6 +58,10 @@ test('SEARCH01/SEARCH04: one native graph/text read preserves scores across thre
         rdf:object ${iri(concept)} ;
         rv:relationDefinition ${iri(CLASSIFICATION_PROPOSITION_PROFILE)} ;
         rv:interpretationDefinition ${iri(senseHead)} ; rv:meaningKey ${iri(keys[index]!)} .
+      ${additionalSupport ? `${iri(additionalSupport)} a rdf:Statement ; rv:statementState rv:Active ;
+        rdf:subject ${iri(main)} ; rdf:predicate <${CLASSIFIED_AS}> ;
+        rdf:object ${iri(concept)} ; rv:relationDefinition ${iri(CLASSIFICATION_PROPOSITION_PROFILE)} ;
+        rv:interpretationDefinition ${iri(senseHead)} ; rv:meaningKey ${iri(keys[index]!)} .` : ''}
       ${iri(slot)} a rv:DecisionSlot ; rv:targetKind rv:QualifiedFactTarget ;
         rv:decisionTarget ${iri(keys[index]!)} ;
         rv:acceptanceContext ${iri(GLOBAL_CLASSIFICATION_CONTEXT)} ;
@@ -65,7 +70,8 @@ test('SEARCH01/SEARCH04: one native graph/text read preserves scores across thre
     GRAPH ${iri(GRAPHS.revisions)} {
       ${iri(decision)} a rv:StatementDecision, rv:RevisionAnchor ;
         rv:component ${iri(slot)} ; rv:decisionPolicy ${iri(STATEMENT_DECISION_PROFILE)} ;
-        rv:outcome rv:Accepted ; rv:support ${iri(statement)} .
+        rv:outcome rv:Accepted ; rv:support ${iri(statement)}
+          ${additionalSupport ? `, ${iri(additionalSupport)}` : ''} .
     }
     GRAPH ${iri(PUBLIC_SEARCH_GRAPH)} {
       ${iri(units[index]!)} a rv:MatchUnit ; rv:disclosure rv:Public ;
@@ -165,7 +171,7 @@ test('SEARCH01/SEARCH04: one native graph/text read preserves scores across thre
           rv:decisionPolicy ${iri(STATEMENT_DECISION_PROFILE)} ;
           rv:support ?statement ; rv:outcome rv:Accepted . }
     }`);
-  expect(decisionBindings.results?.bindings).toHaveLength(2);
+  expect(decisionBindings.results?.bindings).toHaveLength(3);
   const ratingBindings = await native.query(`PREFIX rv: <https://rezics.com/vocab/>
     SELECT ?observation ?main ?value WHERE {
       GRAPH ${iri(GRAPHS.current)} {
@@ -250,6 +256,7 @@ test('SEARCH01/SEARCH04: one native graph/text read preserves scores across thre
       const answer = await native.query(sparql);
       return answer;
     }
+    if (sparql.includes('VALUES (?main ?key ?decision ?context)')) return native.query(sparql);
     return { results: { bindings: [{ epoch: binding('epoch'), sequence: binding('7'),
       generation: binding(generation) }] } };
   } } as FusekiClient;
@@ -264,8 +271,13 @@ test('SEARCH01/SEARCH04: one native graph/text read preserves scores across thre
   expect(new Set(result.results.map(row => row.mainVersion))).toEqual(new Set(mains));
   expect(result.results.find(row => row.mainVersion === mains[0])?.rating)
     .toMatchObject({ count: 2, sum: 16 });
+  expect(result.results.find(row => row.mainVersion === mains[0])?.classification)
+    .toMatchObject({ supportingStatementCount: 2,
+      supportingStatements: [id(41), id(43)] });
   expect(result.results.find(row => row.mainVersion === mains[1])?.rating)
     .toMatchObject({ count: 1, sum: 8 });
+  expect(result.results.find(row => row.mainVersion === mains[1])?.classification)
+    .toMatchObject({ supportingStatementCount: 1, supportingStatements: [id(42)] });
   expect(result.results.every(row => row.classification.application === null)).toBe(true);
   const rawScores = new Map(indexed.results!.bindings.map(row =>
     [row.unit!.value, Number(row.score!.value)]));

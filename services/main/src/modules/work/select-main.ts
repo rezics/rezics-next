@@ -4,6 +4,7 @@ import { assertNotInvalidProfileReceipt, validatedCommand } from '../../infrastr
 import type { RegisteredAdmission } from '../access/admission.ts';
 import { readExactContributionDraft } from '../contribution/history.ts';
 import { PUBLICATION_PROFILE } from '../contribution/publish.ts';
+import { publicTitleProjection } from '../content-publication/projection-recipes.ts';
 import { readComponentState } from './history.ts';
 import { DATASET, GRAPHS, ID, PROFILE, RV, hash, iri, lit, prepareComponent,
   prepareWorkComponent, workMetadataValidations, IdempotencyConflict, PendingActivation,
@@ -227,9 +228,10 @@ export async function selectMainDefault(env: WorkActivationEnvironment,
   if (existing) return checkedMainSelectionReceipt(existing, admission, input, digest);
   if (Date.parse(admission.expiresAt) <= Date.now()) throw new PendingActivation('selection admission expired');
   const current = await env.fuseki.query(`PREFIX rv: <${RV}> PREFIX schema: <https://schema.org/>
-    SELECT ?draft ?language ?manifest ?prior ?mainHead WHERE {
+    SELECT ?draft ?language ?manifest ?prior ?mainHead ?title WHERE {
       GRAPH ${iri(GRAPHS.current)} {
-        ${iri(input.work)} a schema:CreativeWork ; rv:mainVersion ${iri(input.context.id)} .
+        ${iri(input.work)} a schema:CreativeWork ; rv:mainVersion ${iri(input.context.id)} ;
+          <http://www.w3.org/2000/01/rdf-schema#label> ?title .
         ${iri(input.context.id)} a rv:MainVersion ; rv:work ${iri(input.work)} ;
           rv:head ?mainHead ; rv:hostingPolicy rv:MetadataOnly .
         ${iri(input.contribution)} a rv:TextContribution ; rv:work ${iri(input.work)} ;
@@ -248,7 +250,8 @@ export async function selectMainDefault(env: WorkActivationEnvironment,
     }`);
   const rows = current.results?.bindings ?? [];
   if (rows.length !== 1 || !rows[0]?.draft || !rows[0]?.language || !rows[0]?.manifest
-    || !rows[0]?.mainHead) {
+    || !rows[0]?.mainHead || !rows[0]?.title
+    || rows[0].title['xml:lang'] !== 'en') {
     throw new MainSelectionUnavailable('eligible Contribution publication is unavailable');
   }
   const row = rows[0]!;
@@ -338,7 +341,8 @@ export async function selectMainDefault(env: WorkActivationEnvironment,
           rv:contribution ${iri(input.contribution)} ; rv:revision ${iri(exact.revision)} ;
           rv:selection ${iri(selection)} ; rv:language ${lit(exact.language)} ;
           rv:field rv:Body ; rv:disclosure rv:Public ;
-          rv:searchBody ${lit(exact.body)}@${exact.language} .
+          rv:searchBody ${lit(exact.body)}@${exact.language} ;
+          rv:publicTitle ${publicTitleProjection(row.title!.value)} .
       }
       GRAPH ${iri(GRAPHS.receipts)} {
         ${iri(receipt)} a rv:OperationReceipt ; rv:operation ${iri(operation)} ;
@@ -366,7 +370,8 @@ export async function selectMainDefault(env: WorkActivationEnvironment,
       GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:dataEpoch ${lit(env.lineage.dataEpoch)} ;
         rv:routingEpoch ${lit(env.lineage.routingEpoch)} ; rv:sequence ?n . }
       GRAPH ${iri(GRAPHS.current)} {
-        ${iri(input.work)} a schema:CreativeWork ; rv:mainVersion ${iri(input.context.id)} .
+        ${iri(input.work)} a schema:CreativeWork ; rv:mainVersion ${iri(input.context.id)} ;
+          <http://www.w3.org/2000/01/rdf-schema#label> ${publicTitleProjection(row.title!.value)} .
         ${iri(input.context.id)} a rv:MainVersion ; rv:work ${iri(input.work)} ;
           rv:head ${iri(row.mainHead!.value)} ; rv:hostingPolicy rv:MetadataOnly .
         ${iri(input.contribution)} a rv:TextContribution ; rv:work ${iri(input.work)} ;

@@ -2971,7 +2971,7 @@ export async function reconcileRetainedMainSelection(
             rv:context ${iri(main)} ; rv:contribution ${iri(contribution)} ;
             rv:revision ${iri(draft)} ; rv:selection ${iri(selection)} ;
             rv:language ${lit(language)} ; rv:field rv:Body ; rv:disclosure rv:Public ;
-            rv:searchBody ${lit(exact.body)}@${language} .
+            rv:searchBody ${lit(exact.body)}@${language} ; rv:publicTitle ?title .
         }
         GRAPH ${iri(GRAPHS.receipts)} {
           ${iri(receipt.id)} a rv:OperationReceipt ; rv:operation ${iri(operation)} ;
@@ -3007,7 +3007,8 @@ export async function reconcileRetainedMainSelection(
           FILTER(?previous + 1 = ${sequence})
         }
         GRAPH ${iri(GRAPHS.current)} {
-          ${iri(work)} a schema:CreativeWork ; rv:mainVersion ${iri(main)} .
+          ${iri(work)} a schema:CreativeWork ; rv:mainVersion ${iri(main)} ;
+            <http://www.w3.org/2000/01/rdf-schema#label> ?title .
           ${iri(main)} a rv:MainVersion ; rv:work ${iri(work)} ;
             rv:head ${iri(mainPredecessor)} ; rv:hostingPolicy rv:MetadataOnly .
           ${iri(contribution)} a rv:TextContribution ; rv:work ${iri(work)} ;
@@ -3065,7 +3066,10 @@ export async function reconcileRetainedMainSelection(
         ${iri(eventId)} a rv:PublicationSelectionChangedEvent ; rv:receipt ${iri(receipt.id)} . }
       GRAPH ${iri(PUBLIC_SEARCH_GRAPH)} {
         ${iri(unit)} a rv:MatchUnit ; rv:selection ${iri(selection)} ;
-          rv:mainVersion ${iri(main)} ; rv:searchBody ${lit(exact.body)}@${language} . }
+          rv:mainVersion ${iri(main)} ; rv:searchBody ${lit(exact.body)}@${language} ;
+          rv:publicTitle ?title . }
+      GRAPH ${iri(GRAPHS.current)} {
+        ${iri(work)} <http://www.w3.org/2000/01/rdf-schema#label> ?title . }
     }`);
     const headCheck = cursor === BigInt(sequence)
       ? await env.fuseki.query(`PREFIX rv: <${RV}> ASK {

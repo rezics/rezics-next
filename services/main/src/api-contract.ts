@@ -86,6 +86,19 @@ const phraseMatch = t.Object({
 const realmPhraseMatch = t.Object({ ...phraseMatch.properties, reason: t.String() });
 const classification = t.Object({ sense: t.String(), decision: t.String(),
   application: t.Nullable(t.String()), meaningKey: t.Optional(t.String()),
+  concept: t.Optional(t.String()),
+  supportingStatements: t.Optional(t.Array(t.String())),
+  supportingStatementCount: t.Optional(t.Integer({ minimum: 1 })),
+  protectionChecks: t.Optional(t.Array(t.Object({
+    statement: t.String(),
+    context: t.Union([t.Object({ kind: t.Literal('global') }),
+      t.Object({ kind: t.Literal('realm'), realm: t.String() })]),
+    generation: t.String(), policyGeneration: t.Literal('wilson-v1'),
+    conceptHint: t.String(), conceptHintGeneration: t.String(),
+    sourceEvent: t.Nullable(t.String()), protection: t.String(), status: t.String(),
+    distribution: t.Object({ notSpoiler: t.Number(), minorSpoiler: t.Number(),
+      majorSpoiler: t.Number() }), sampleSize: t.Number(),
+  }))),
   source: t.String(), sourceContext: t.String() });
 const classifiedMainMatch = t.Object({ ...phraseMatch.properties, classification });
 const classifiedRealmMatch = t.Object({ ...realmPhraseMatch.properties, classification });
@@ -111,6 +124,9 @@ export const publicQueryResult = t.Union([
     contentPosition, indexGeneration: t.String() }, { additionalProperties: false }),
   t.Object({ ...baseQuery, context: t.Literal('main-version-default'),
     results: t.Array(phraseMatch) }, { additionalProperties: false }),
+  t.Object({ ...baseQuery, profile: t.Literal('public-main-title-body-v1'),
+    context: t.Literal('main-version-default'), results: t.Array(phraseMatch) },
+  { additionalProperties: false }),
   t.Object({ ...baseQuery, context: realmContext,
     results: t.Array(realmPhraseMatch) }, { additionalProperties: false }),
   t.Object({ ...baseQuery, profile: t.Literal('public-main-classified-phrase-v1'),
@@ -152,6 +168,13 @@ const pageRequest = {
   pageSize: t.Integer({ minimum: 1, maximum: 64 }),
   continuation: t.Optional(pageContinuation),
 };
+const titleBodyPageRequest = {
+  ...unsupportedPublicSearchSelectors,
+  titleTerm: t.String({ minLength: 2, maxLength: 80 }),
+  bodyTerm: t.String({ minLength: 2, maxLength: 80 }),
+  language: pageRequest.language, author: pageRequest.author,
+  pageSize: pageRequest.pageSize, continuation: pageRequest.continuation,
+};
 const classifiedPageRequest = {
   ...pageRequest,
   sense: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
@@ -165,6 +188,8 @@ export const publicPhrasePageRequest = t.Union([
     pageSize: t.Integer({ minimum: 1, maximum: 64 }),
     continuation: t.Optional(contentPageContinuation) }, { additionalProperties: false }),
   t.Object({ profile: t.Literal('public-main-phrase-page-v1'), ...pageRequest },
+    { additionalProperties: false }),
+  t.Object({ profile: t.Literal('public-main-title-body-page-v1'), ...titleBodyPageRequest },
     { additionalProperties: false }),
   t.Object({ profile: t.Literal('public-realm-phrase-page-v1'),
     context: realmContext, ...pageRequest }, { additionalProperties: false }),
@@ -191,6 +216,9 @@ export const publicPhrasePageResult = t.Union([
     results: t.Array(contentPhraseMatch), next: t.Nullable(contentPageContinuation) },
   { additionalProperties: false }),
   t.Object({ profile: t.Literal('public-main-phrase-page-v1'), ...pageResult,
+    context: t.Literal('main-version-default'), results: t.Array(phraseMatch) },
+  { additionalProperties: false }),
+  t.Object({ profile: t.Literal('public-main-title-body-page-v1'), ...pageResult,
     context: t.Literal('main-version-default'), results: t.Array(phraseMatch) },
   { additionalProperties: false }),
   t.Object({ profile: t.Literal('public-realm-phrase-page-v1'), ...pageResult,

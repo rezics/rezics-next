@@ -7,6 +7,7 @@ import { createMainApp } from '../../../services/main/src/app.ts';
 import { FusekiClient, type SparqlResult } from '../../../services/main/src/infrastructure/fuseki.ts';
 import { AccessAdmissionRegistry, type RegisteredAdmission }
   from '../../../services/main/src/modules/access/admission.ts';
+import { AccessPolicyOwner } from '../../../services/main/src/modules/access/policy-owner.ts';
 import { createClassificationContext, classificationContextDigest }
   from '../../../services/main/src/modules/classification/context.ts';
 import { setClassificationDecision, classificationDecisionDigest, classificationDecisionScope,
@@ -54,7 +55,7 @@ class CountingFusekiClient extends FusekiClient {
   }
 }
 
-test('SEARCH01/SEARCH02/SEARCH04/SEARCH07/SEARCH08/SEARCH16/SEARCH18: rated Realm join, bounded paging and author switch', async () => {
+test('IAM18/SEARCH01/SEARCH02/SEARCH04/SEARCH07/SEARCH08/SEARCH16/SEARCH18: rated Realm join, bounded paging, Access mute and author switch', async () => {
   if (!Bun.env.REZICS_QA_RUN_ID || !Bun.env.FUSEKI_URL
     || !Bun.env.MAIN_DATA_EPOCH || !Bun.env.MAIN_ROUTING_EPOCH
     || !Bun.env.ACCESS_DATABASE_URL) {
@@ -72,10 +73,17 @@ test('SEARCH01/SEARCH02/SEARCH04/SEARCH07/SEARCH08/SEARCH16/SEARCH18: rated Real
     objectDirectory: join(state, 'objects'),
   };
   const accessPool = new Pool({ connectionString: Bun.env.ACCESS_DATABASE_URL });
+  const viewer = { issuer: 'https://rezics.com/qa/search-viewer', subject: randomUUID() };
+  const viewerToken = 'search-viewer';
   const mainByWork = new Map<string, string>();
   const app = createMainApp(fuseki, { environment: env,
-    account: { verify: async () => { throw new Error('no authority request in search test'); } },
-    access: new AccessAdmissionRegistry(accessPool) });
+    account: { verify: async request => {
+      if (request.headers.get('authorization') !== `Bearer ${viewerToken}`) {
+        throw new Error('unknown search viewer');
+      }
+      return viewer;
+    } },
+    access: new AccessAdmissionRegistry(accessPool), accessPolicy: new AccessPolicyOwner(accessPool) });
   function admission(scope: string, action: string, requestDigest: string,
     actingSubject = actor, principalId = randomUUID()): RegisteredAdmission {
     const id = randomUUID();
@@ -120,9 +128,10 @@ test('SEARCH01/SEARCH02/SEARCH04/SEARCH07/SEARCH08/SEARCH16/SEARCH18: rated Real
     mainByWork.set(created.work, created.mainVersion);
     return created.work;
   }
-  async function query(language: string | null, author?: string) {
+  async function query(language: string | null, author?: string, token?: string) {
     const response = await app.handle(new Request('http://main.local/v1/queries', {
-      method: 'POST', headers: { 'content-type': 'application/json' },
+      method: 'POST', headers: { 'content-type': 'application/json',
+        ...(token ? { authorization: `Bearer ${token}` } : {}) },
       body: JSON.stringify({ profile: 'public-main-phrase-v1', phrase, language, author }),
     }));
     if (response.status !== 200) {
@@ -131,9 +140,10 @@ test('SEARCH01/SEARCH02/SEARCH04/SEARCH07/SEARCH08/SEARCH16/SEARCH18: rated Real
     return response.json() as Promise<{ complete: boolean; population: number; total: number;
       results: Array<{ work: string }> }>;
   }
-  async function page(continuation?: SearchContinuation) {
+  async function page(continuation?: SearchContinuation, token?: string) {
     return app.handle(new Request('http://main.local/v1/queries/page', {
-      method: 'POST', headers: { 'content-type': 'application/json' },
+      method: 'POST', headers: { 'content-type': 'application/json',
+        ...(token ? { authorization: `Bearer ${token}` } : {}) },
       body: JSON.stringify({ profile: 'public-main-phrase-page-v1', phrase,
         language: null, pageSize: 35, continuation }),
     }));
@@ -294,6 +304,47 @@ test('SEARCH01/SEARCH02/SEARCH04/SEARCH07/SEARCH08/SEARCH16/SEARCH18: rated Real
     const space = await createRealmSpace(env,
       admission('space:create:root', 'space.create', spaceCreationDigest(spaceInput)), spaceInput);
     if (space.outcome !== 'succeeded' || !space.realm) throw new Error('scale Realm failed');
+    // IAM18: the public read uses this viewer's real Access mute selection and
+    // the author's real Access Realm membership, before it emits counts or pages.
+    await accessPool.query(`INSERT INTO access.authority_subject (id, kind)
+      VALUES ($1, 'agent'), ($2, 'institution')`, [actor, space.realm]);
+    await accessPool.query(`INSERT INTO access.membership_policy
+      (kind, owner_subject, revision, terms_revision) VALUES ('realm', $1, 1, 'terms-1')`,
+    [space.realm]);
+    await accessPool.query(`INSERT INTO access.membership (id, kind, owner_subject, member_subject,
+      state, generation, policy_revision, terms_revision, consent_reference)
+      VALUES ($1, 'realm', $2, $3, 'joined', 1, 1, 'terms-1', $4)`,
+    [randomUUID(), space.realm, actor, randomUUID()]);
+    const authenticatedFirstPage = await page(undefined, viewerToken);
+    expect(authenticatedFirstPage.status).toBe(200);
+    const beforeMutePage = await authenticatedFirstPage.json() as { next: SearchContinuation | null };
+    expect(beforeMutePage.next).not.toBeNull();
+    expect(new Set((await query('en', undefined, viewerToken)).results.map(row => row.work)))
+      .toEqual(new Set([lateWork, nextWork]));
+    const muteBody = { profile: 'access-interaction-mute-v1', targetKind: 'realm',
+      target: space.realm, match: 'author-membership', muted: true, expectedRevision: null };
+    const muteResponse = await app.handle(new Request('http://main.local/v1/me/interaction-mutes', {
+      method: 'PUT', headers: { authorization: `Bearer ${viewerToken}`,
+        'content-type': 'application/json', 'idempotency-key': randomUUID() },
+      body: JSON.stringify(muteBody),
+    }));
+    expect(muteResponse.status).toBe(200);
+    const muted = await muteResponse.json() as { revision: string };
+    expect((await query('en', undefined, viewerToken)).results.map(row => row.work))
+      .toEqual([lateWork]);
+    expect(new Set((await query('en')).results.map(row => row.work)))
+      .toEqual(new Set([lateWork, nextWork]));
+    const mutedOldPage = await page(beforeMutePage.next!, viewerToken);
+    expect(mutedOldPage.status).toBe(409);
+    expect(await mutedOldPage.json()).toMatchObject({ code: 'search_restart_required' });
+    const unmuteResponse = await app.handle(new Request('http://main.local/v1/me/interaction-mutes', {
+      method: 'PUT', headers: { authorization: `Bearer ${viewerToken}`,
+        'content-type': 'application/json', 'idempotency-key': randomUUID() },
+      body: JSON.stringify({ ...muteBody, muted: false, expectedRevision: muted.revision }),
+    }));
+    expect(unmuteResponse.status).toBe(200);
+    expect(new Set((await query('en', undefined, viewerToken)).results.map(row => row.work)))
+      .toEqual(new Set([lateWork, nextWork]));
     const contextInput = { realm: space.realm, actingSubject: actor };
     const context = await createClassificationContext(env,
       admission(`classification:context:${space.realm}`, 'classification.context.configure',

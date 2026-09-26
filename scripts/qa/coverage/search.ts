@@ -4,7 +4,7 @@ export const searchCases: CaseDeclarations = {
   SEARCH02: [{
     tier: 'integration',
     file: 'tests/qa/integration/public-search-scale.test.ts',
-    name: 'SEARCH01/SEARCH02/SEARCH04/SEARCH07/SEARCH08/SEARCH16/SEARCH18: rated Realm join, bounded paging and author switch',
+    name: 'IAM18/SEARCH01/SEARCH02/SEARCH04/SEARCH07/SEARCH08/SEARCH16/SEARCH18: rated Realm join, bounded paging, Access mute and author switch',
   }, {
     tier: 'unit',
     file: 'tests/qa/unit/search-budgets.test.ts',

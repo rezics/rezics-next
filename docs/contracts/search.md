@@ -465,12 +465,36 @@ also bind the PostgreSQL Content owner position and require current eligible
 publication on every evaluation. Private search does not yet expose this
 continuation.
 
+The Work search route also applies a bearer caller's current Access mute list
+before emitting a result count or page. It reads exact Contribution authors from
+the graph and exact active author Realm memberships from Access only when a mute
+requires them. A Realm-local result carries its publishing Realm when locally
+adopted and its Realm presentation context. The ordered-result digest includes
+the caller's mute revisions, so a changed mute restarts an old page even when the
+visible slice happens to be unchanged. Anonymous public reads do not acquire a
+private presentation selection. This Work route does not implement the separate
+Content search presentation facts, which belong to the Content search owner.
+
 ## Statement aggregation
 
 The adopted [Statement model](classification.md) supplies the same semantic
 inputs to resource details, object discovery, inverse lists and search facets.
 This section is required replacement behavior; the installed Sense-based phrase
 lanes above do not yet implement general grouped statements or avatars.
+
+The cutover classified Work lanes now batch the exact active `rv:support`
+Statement IDs for each accepted qualified-fact Decision at the query's graph
+position. The response exposes those IDs and their exact count at supporting
+Statement grain; the rated lane still returns one result per effective Main
+Version and does not multiply its Lucene score or standing-rating aggregate by
+support count. At most 512 support IDs are hydrated in one graph read; overflow
+is a typed budget result. Each returned support is checked against the current
+Access judgment population of the effective decision: Realm-local decisions use
+the Realm population, and Global or inherited decisions use Global. Protection,
+aggregate generation, concept-hint generation, policy generation and source
+event remain attached to each exact support. An unavailable Access check makes
+the classified result unavailable. The broader Context-selected grouped relation
+and its count grains remain a separate requirement below.
 
 A query names the result grain, exact relation/term and interpretation definitions,
 selected Context semantic revision, canon and applicability, separate acceptance
@@ -629,6 +653,20 @@ observable values before and after a retained private draft, checks the raw
 public jena-text graph for the private term, and repeats the public query after
 a different body is published. Title search and future snippet/facet surfaces
 need their own disclosure qualification when introduced.
+
+The prepared `public-main-title-body-v1` Work profile accepts `titleTerm`,
+`bodyTerm`, optional selected-body language and exact author. It binds one
+`rv:publicTitle` and one `rv:searchBody` text hit to the same eligible selected
+Main Version MatchUnit. The score is their sum, once per field, with Main Version
+IRI as the ascending tie break. Each field has an independent 513-hit raw probe;
+an over-budget field returns a typed budget outcome even when the joined relation
+would be empty. The title is copied from the Work's current `rdfs:label` only
+onto a selected public body unit and refreshed by title edits and replay. The
+query never counts the assembler's general `rdfs:label` postings. Activation of
+this profile requires the assembler to map `rv:publicTitle` as its own `publicTitle`
+field and a new qualified reader generation; until then the title field is not
+searchable on the deployed index. The corresponding page profile uses the same
+complete-relation restart contract.
 
 ## Freshness and generation lifecycle
 

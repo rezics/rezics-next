@@ -12,10 +12,11 @@ import { CLASSIFICATION_INHERIT_POLICY, CLASSIFICATION_ISOLATE_POLICY,
   GLOBAL_CLASSIFICATION_CONTEXT } from '../classification/context.ts';
 import { CLASSIFIED_AS, STATEMENT_DECISION_PROFILE, decisionSlotIri,
   statementMeaningKey } from '../statement/schema.ts';
+import { exactDecisionSupports, readSearchDecisionSupports } from './search-supports.ts';
+import { PublicQueryBudgetExceeded, PublicQueryUnavailable } from './search-budget.ts';
 
 export class InvalidPublicQuery extends Error {}
-export class PublicQueryBudgetExceeded extends Error {}
-export class PublicQueryUnavailable extends Error {}
+export { PublicQueryBudgetExceeded, PublicQueryUnavailable } from './search-budget.ts';
 export class PublicRealmUnavailable extends Error {}
 
 export interface PublicMainPhraseQuery {
@@ -495,11 +496,23 @@ async function qualifyStatementPhrase<T extends { results: Array<{ work: string;
       meaningKey: value('key')! });
     }
   }
+  const supports = await readSearchDecisionSupports(env, base.sourcePosition,
+    [...unique.keys()].flatMap(main => {
+      const effective = decisions.get(main);
+      if (!effective) throw new PublicQueryUnavailable('Statement decision is missing');
+      return effective.state === 'accepted' ? [{ mainVersion: main,
+        meaningKey: effective.meaningKey, decision: effective.decision!,
+        sourceContext: effective.sourceContext! }] : [];
+    }));
   const results = base.results.flatMap(match => {
     const effective = decisions.get(match.mainVersion);
     if (!effective) throw new PublicQueryUnavailable('Statement decision is missing');
     return effective.state === 'accepted' ? [{ ...match, classification: {
       sense, decision: effective.decision!, application: null, meaningKey: effective.meaningKey,
+      concept: scope.concept,
+      supportingStatements: exactDecisionSupports(supports, match.mainVersion, effective.decision!),
+      supportingStatementCount: exactDecisionSupports(supports, match.mainVersion,
+        effective.decision!).length,
       source: effective.source, sourceContext: effective.sourceContext! } }] : [];
   });
   const after = await assertPublicTextReady(env.fuseki, env.lineage);

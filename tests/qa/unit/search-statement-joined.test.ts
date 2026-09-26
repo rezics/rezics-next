@@ -5,7 +5,7 @@ import type { WorkActivationEnvironment }
   from '../../../services/main/src/modules/work/activate.ts';
 import { queryPublicRealmClassifiedRatedPhrase }
   from '../../../services/main/src/modules/work/search-joined.ts';
-import { PublicQueryBudgetExceeded }
+import { PublicQueryBudgetExceeded, PublicQueryUnavailable }
   from '../../../services/main/src/modules/work/search-public.ts';
 import { COMMAND_MODULE_VERSION } from '../../../services/main/src/infrastructure/profile.ts';
 
@@ -13,7 +13,7 @@ const id = (number: number) => `https://rezics.com/id/${String(number).padStart(
 const generation = 'urn:rezics:text-index-generation:11111111-1111-4111-8111-111111111111';
 const value = (item: string) => ({ type: 'literal', value: item });
 
-function fixture(candidateCount = 1, includeMatch = true) {
+function fixture(candidateCount = 1, includeMatch = true, hiddenPin = false) {
   const calls: string[] = [];
   const fuseki = { commandHealth: async () => ({ moduleVersion: COMMAND_MODULE_VERSION,
     profiles: {}, instanceId: '11111111-1111-4111-8111-111111111111',
@@ -28,6 +28,12 @@ function fixture(candidateCount = 1, includeMatch = true) {
       epoch: value('epoch'), sequence: value('7'), generation: value(generation),
       population: value('1'), indexed: value('1'), uniqueIndexed: value('1'), valid: value('1'),
     }] } };
+    if (sparql.includes('VALUES (?main ?key ?decision ?context)')) {
+      return { results: { bindings: [{ epoch: value('epoch'), sequence: value('7'),
+        main: value(id(2)), decision: value(id(6)), support: value(id(10)),
+        ...(hiddenPin ? { pin: value(id(12)), pinContext: value(id(13)),
+          pinDisclosure: value('https://rezics.com/vocab/Private') } : {}) }] } };
+    }
     if (sparql.includes('?ratingPopulation') && sparql.includes('text:query')) {
       return { results: { bindings: [{
         epoch: value('epoch'), sequence: value('7'), indexGeneration: value(generation),
@@ -39,6 +45,7 @@ function fixture(candidateCount = 1, includeMatch = true) {
           reason: value('main-fallback'), decision: value(id(6)),
           source: value('inherited-global'), sourceContext: value(id(7)),
           key: value(`urn:rezics:meaning:${'a'.repeat(64)}`),
+          concept: value(id(11)),
           ratingCount: value('2'), ratingSum: value('16'),
           ratingTargetPopulation: value('2') } : {}),
       }] } };
@@ -59,7 +66,8 @@ test('SEARCH01/SEARCH04: Statement, text and rating use one joined relation requ
   expect(result.complete).toBe(true);
   expect(result.total).toBe(1);
   expect(result.results[0]).toMatchObject({ score: 2,
-    classification: { application: null, source: 'inherited-global' },
+    classification: { application: null, source: 'inherited-global',
+      supportingStatements: [id(10)] },
     rating: { count: 2, sum: 16, precision: { numerator: 16, denominator: 2 } } });
   const joined = calls.filter(query => query.includes('?ratingPopulation')
     && query.includes('text:query'));
@@ -74,4 +82,10 @@ test('SEARCH04/SEARCH10: raw candidate overflow remains a typed budget outcome',
   const { env, input } = fixture(513, false);
   await expect(queryPublicRealmClassifiedRatedPhrase(env, input))
     .rejects.toBeInstanceOf(PublicQueryBudgetExceeded);
+});
+
+test('SEARCH01/SEARCH10: a private supporting Context cannot qualify a public fact', async () => {
+  const { env, input } = fixture(1, true, true);
+  await expect(queryPublicRealmClassifiedRatedPhrase(env, input))
+    .rejects.toBeInstanceOf(PublicQueryUnavailable);
 });

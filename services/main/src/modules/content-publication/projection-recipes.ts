@@ -2,6 +2,11 @@ import { join, resolve } from 'node:path';
 import type { ProjectionPublication } from '../../../../content/src/core.ts';
 import { summarizeJudgments, type JudgmentCounts } from '../judgment/policy.ts';
 import type { ConceptHint } from '../judgment/schema.ts';
+import { publicTitleProjectionRecipe } from './title-projection.ts';
+
+/** Work metadata uses its own public title field on selected body MatchUnits. */
+export const titleProjectionRecipes = [publicTitleProjectionRecipe] as const;
+export const publicTitleProjection = titleProjectionRecipes[0].project;
 
 const MAX_BODY_BYTES = 65_536;
 
