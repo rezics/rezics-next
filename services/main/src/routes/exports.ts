@@ -29,6 +29,8 @@ const selection = t.Union([
     structure: groupAgent, expectedPosition: position }, { additionalProperties: false }),
   t.Object({ kind: t.Literal('semantic-revision'), reference: groupAgent,
     resource: groupAgent, expectedPosition: position }, { additionalProperties: false }),
+  t.Object({ kind: t.Literal('vndb-concept-run'), reference: groupAgent,
+    expectedPosition: position }, { additionalProperties: false }),
 ]);
 const body = t.Object({ profile: t.Literal('export-create-v1'), actingSubject: groupAgent,
   useScope: t.Union([t.Literal('full'), t.Literal('excerpt'), t.Literal('quotation'), t.Literal('evaluation')]),
@@ -76,6 +78,7 @@ export function exportRoutes(work: MainWorkDependencies) {
           || await work.access.canReadWork(principal, actor, resource),
         principalIdOf: (principal: { issuer: string; subject: string }) =>
           work.access.activePrincipalId(principal),
+        sourceRuns: work.sourceAcquisitions?.runs,
         structureObjects: work.structureObjects,
         verification: work.exportVerificationPrivate, rights: work.exportRights } };
   };

@@ -103,12 +103,14 @@ export async function readAuthorizedExport(deps: ExportDependencies, request: Re
   const first = saved.plan.members[0];
   const profile = saved.plan.targetProfile;
   const assessment = saved.plan.members[1];
-  const selected = profile === 'rezics-verification-v1' ? assessment : first;
+  const selected = profile === 'rezics-verification-v1' ? assessment
+    : profile === 'rezics-vndb-concept-source-v1' ? saved.plan.members.at(-1) : first;
   const data = selected?.data;
   const reference = profile === 'rezics-main-version-v1' ? data?.release
     : profile === 'rezics-verification-v1' ? assessment?.exactRef
       : profile === 'rezics-composition-v1' ? data?.seal
-        : profile === 'rezics-semantic-values-v1' ? data?.revision : null;
+        : profile === 'rezics-semantic-values-v1' ? data?.revision
+          : profile === 'rezics-vndb-concept-source-v1' ? data?.run : null;
   const actor = data?.exportActor;
   if (typeof reference !== 'string' || typeof actor !== 'string' || !selected) {
     throw new ExportSourceUnavailable('export source locator is unavailable');
@@ -123,6 +125,8 @@ export async function readAuthorizedExport(deps: ExportDependencies, request: Re
     selection = { kind: 'composition-seal', reference, structure: data.structure, expectedPosition };
   } else if (profile === 'rezics-semantic-values-v1' && typeof data?.resource === 'string') {
     selection = { kind: 'semantic-revision', reference, resource: data.resource, expectedPosition };
+  } else if (profile === 'rezics-vndb-concept-source-v1') {
+    selection = { kind: 'vndb-concept-run', reference, expectedPosition };
   } else throw new ExportSourceUnavailable('export source locator is unavailable');
   const current = await readExportPlan(deps.readers, principal, actor, selection, saved.plan.useScope);
   if (current.manifestDigest !== saved.manifestDigest) throw new ExportStale('export disclosure changed');

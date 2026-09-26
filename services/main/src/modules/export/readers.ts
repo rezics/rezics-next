@@ -9,8 +9,11 @@ import { GRAPHS, RV, iri, type WorkActivationEnvironment } from '../work/activat
 import { readFixedRelease } from '../work/fixed-release.ts';
 import { readAssessment, readClaimRevisions } from '../verification/graph.ts';
 import type { VerificationStore } from '../verification/store.ts';
+import type { SourceRunStore } from '../source/acquisition-run.ts';
+import { readVndbConceptRun, VndbConceptRunInvalid, VndbConceptRunUnavailable } from '../source/vndb-concept-run.ts';
 import { canonicalExport, InvalidExportPlan, planExport, type ExportLoss, type ExportPlan,
   type LicenseScopeHook, type PortableValue, type VerifiedExportMember } from './planner.ts';
+import { planVndbSourceExport } from './vndb-source.ts';
 
 export class ExportStale extends Error {}
 export class ExportSourceNotFound extends Error {}
@@ -25,13 +28,15 @@ type OwnerPosition = { dataEpoch: string; sequence: string };
 export type ExportSelection =
   | { kind: 'fixed-release' | 'assessment'; reference: string; expectedPosition: OwnerPosition }
   | { kind: 'composition-seal'; reference: string; structure: string; expectedPosition: OwnerPosition }
-  | { kind: 'semantic-revision'; reference: string; resource: string; expectedPosition: OwnerPosition };
+  | { kind: 'semantic-revision'; reference: string; resource: string; expectedPosition: OwnerPosition }
+  | { kind: 'vndb-concept-run'; reference: string; expectedPosition: OwnerPosition };
 
 export interface ExportReaderDependencies {
   env: WorkActivationEnvironment;
   canReadWork: (principal: VerifiedPrincipal, actingSubject: string, work: string) => Promise<boolean>;
   canReadSemantic?: (principal: VerifiedPrincipal, actingSubject: string, resource: string) => Promise<boolean>;
   principalIdOf?: (principal: VerifiedPrincipal) => Promise<string | null>;
+  sourceRuns?: Pick<SourceRunStore, 'read' | 'frozen'>;
   structureObjects?: ImmutableObjects;
   verification?: Pick<VerificationStore, 'readEvidenceFor'>;
   rights?: LicenseScopeHook;
@@ -63,6 +68,23 @@ function portable(value: SemanticValue | { kind: 'unavailable-reference' }): Por
 /** Exact readers decide the member payload. No caller-provided member or basis is trusted. */
 export async function readExportPlan(deps: ExportReaderDependencies, principal: VerifiedPrincipal,
   actingSubject: string, selection: ExportSelection, useScope: ExportPlan['useScope']): Promise<ExportPlan> {
+  if (selection.kind === 'vndb-concept-run') {
+    const runId = /^https:\/\/rezics\.com\/id\/([0-9a-f-]{36})$/.exec(selection.reference)?.[1];
+    const principalId = await deps.principalIdOf?.(principal);
+    if (!runId || !principalId || !deps.sourceRuns) {
+      throw new ExportSourceUnavailable('source run owner is unavailable');
+    }
+    let snapshot;
+    try { snapshot = await readVndbConceptRun(deps.sourceRuns, principalId, runId); }
+    catch (error) {
+      if (error instanceof VndbConceptRunInvalid || error instanceof VndbConceptRunUnavailable) {
+        throw new ExportSourceUnavailable('exact VNDB source-run evidence is unavailable');
+      }
+      throw error;
+    }
+    pinned(snapshot.position, selection.expectedPosition, snapshot.position.dataEpoch, 'VNDB source run');
+    return planVndbSourceExport(snapshot, actingSubject, useScope, deps.rights ?? unknownRights);
+  }
   if (selection.kind === 'fixed-release') {
     const release = await readFixedRelease(deps.env, selection.reference,
       work => deps.canReadWork(principal, actingSubject, work));
