@@ -121,6 +121,9 @@ The manager adds one entry per elapsed hour and at each phase gate, newest first
 at most five lines: newly verified cases, live workers and queue, blockers,
 critical path and forecast.
 
+- **2:31 (20:15 UTC).** 101 declared (about 32 per hour since 1:44), none recorded. New: MODEL01/03–06/08/10/14, MODEL25, FACT01/02, SUB05/06/08, GOV11–17, WORK06, OPS02/09/11/13–16, PKG06, REC03/04/06, GRAPH06, RATE06.
+  Engines: Codex GPT-6 Sol for complex work, GPT-6 Luna and Grok 4.7 for bounded tasks (maintainer direction); 22 live. Enablers: discoverable scopes/outbox handlers/projection recipes (G-087), sharded tiers (G-076), composition-root normalizer, goalctl owner rule, Docker address pools.
+  Known red: one account recovery test fixture (G-106 repairing). Forecast unchanged: about 11 hours total; 175 remain.
 - **1:44 (19:28 UTC), forecast.** 76 complete-case declarations (from 28; about 28 per hour), none recorded. Candidates added since 1:15 include IAM09/15–17/19/20/22/29/33, OPS07–09/13–16, SUB01–04/07, REC03/04/06, GRAPH06, RATE06, WORK04, SEARCH12, LIVE02, PKG05.
   Shared enablers merged: receipt-family registry, union-merged composition roots, route-declared OpenAPI security, coverage v5, relay recipe routing; G-087 (scopes, graph event handlers, projection recipes) and G-076 (tier sharding) are on the critical path.
   Forecast: 200 cases remain; at the measured rate implementation needs about 7 more hours plus about 2 hours of phase D, about 11 hours in total. **The 10-hour target is forecast to miss by 1–3 hours**; the harder remainder (external keys PKG09–PKG11, host capacity for OPS05/SEARCH18/REC02) may widen it. Scope is unchanged; the 25-hour outer bound holds.
