@@ -25,6 +25,7 @@ COPY --from=module /build/target/fuseki-command.jar /fuseki/extra/fuseki-command
 COPY infra/jena/fuseki-text.ttl /fuseki/fuseki-text.ttl
 COPY infra/jena/fuseki-text-qa.ttl /fuseki/fuseki-text-qa.ttl
 COPY --chmod=0755 infra/jena/fuseki-owner.sh /usr/local/bin/fuseki-owner
+COPY --chmod=0755 infra/jena/compact-tdb2.sh /usr/local/bin/tdb2-compact
 COPY generated/model/manifest.json /fuseki/profiles/manifest.json
 COPY generated/model/shapes/ /fuseki/profiles/shapes/
 RUN mkdir -p /fuseki/databases/rezics/tdb2 /fuseki/databases/rezics/lucene \
