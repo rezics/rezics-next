@@ -10,7 +10,7 @@
 | Authority | This active Goal authorizes local backend implementation, dependency setup, disposable QA stacks and coherent local commits on `main`. Remote pushes, production publication and paid provisioning remain outside this scope. |
 | Deployment premise | Principal services concentrated on one assessed host; the other primarily API and unrelated workloads. Account placement remains assessed. |
 | Status | The current management Goal started at 03:57:20 UTC on clean `f2c8aa1`. G-001 through G-034 are integrated and affected-verified on `main`; G-035 runs in an independent Sol/xhigh worktree. IAM01, IAM03, IAM06, IAM10, IAM23, IAM24, IAM25, IAM26, RATE01, RATE02, RATE03, RATE04, RATE05, SYS02, VIEW01, VIEW02, CTX02, CTX03, WORK03, WORK09, SEARCH03, SEARCH05, SEARCH06, SEARCH09 and SEARCH13 are declared complete-case candidates with passing selected owner checks, not recorded backend qualification. The last broad historical run `20260925t151147-02d115` passed 11 of 277 mixed cases; no `yarn qa --backend --record` result exists. See the [active management program](#active-management-program) and generated [qualification page](qualification.md). |
-| Next action | Integrate G-035's MODEL02 owner profile after its schema, real API and recovery gates. Qualify further existing Search cases without sharing the worker's QA stack, then prepare final reconstruction and recorded backend QA. |
+| Next action | Integrate G-035's MODEL02 owner profile after its schema, real API and recovery gates. Qualify queued Search and WORK02 cases on that merged source without overlapping the worker's QA stack, then prepare final reconstruction and recorded backend QA. |
 | Forecast | The 276-case retained backend scope and measured partial-slice throughput forecast a miss of the 13:57:20 UTC ten-hour target. IAM06, IAM23, IAM24, RATE01, RATE02 and RATE03 are candidates, not recorded passes. Continue the full authorized scope and report only actually qualified cases; no defensible later completion timestamp exists yet. |
 
 ### Active management program
@@ -540,8 +540,8 @@ case declarations omitted SEARCH02's real 513-hit, no-eligible-relation fault
 fixture and SEARCH04's raw-hit overflow unit. Both are now required alongside
 the rated Realm integration. The 35 affected coverage/search-budget units and
 backend static checks pass. These cases are queued for selected integration
-and fault evidence after G-035 releases the shared QA stack; neither is added
-to the 25 complete-case candidates yet.
+and fault evidence after G-035 merges and releases the shared QA stack;
+neither is added to the 25 complete-case candidates yet.
 
 **30-minute checkpoint, 2026-09-26 12:57 UTC.** The management Goal remains
 active with one scheduler. Clean `main` is at `0518777`, Docker Desktop engine
@@ -567,7 +567,7 @@ translated-Work integrations plus retained empty-graph recovery. The existing
 fault fixture includes native Contribution publication and an admitted
 MainVersion revision; the outdated pending/mock description was corrected.
 The 16 affected coverage units and backend static checks pass. The three owner
-tests await selected execution on current merged source after G-035 releases
+tests await selected execution on the future merged G-035 source after it releases
 the shared QA stack, so WORK02 does not enter the 25-case candidate set yet.
 
 **G-035 first API gate blocked by stale Fuseki shape, 2026-09-26 13:01 UTC.**
