@@ -185,7 +185,7 @@ async function compareRegistry(directory: string, cargo: string, crate: Crate,
           conflicts: outcome.conflicts, cost: outcome.cost };
       }
     }
-  } finally { server.stop(true); }
+  } finally { await server.stop(true); }
 }
 
 export async function verifyCargoLiveOracle(base: string, cargo: string, crate: Crate): Promise<void> {

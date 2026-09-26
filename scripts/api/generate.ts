@@ -229,6 +229,24 @@ export async function buildMainOpenApi(): Promise<string> {
         pattern: '^[A-Za-z0-9:_./-]{1,128}$' },
     }];
   }
+  // New route modules declare their own protected operations, so adding a route never edits this file:
+  // export const openApiOperations = { '/v1/x/{id}': { post: { bearer: true, idempotencyKey: true } } };
+  const routeDirectory = join(import.meta.dir, '../../services/main/src/routes');
+  for (const file of [...new Bun.Glob('*.ts').scanSync({ cwd: routeDirectory })].sort()) {
+    const module = await import(join(routeDirectory, file)) as { openApiOperations?: Record<string,
+      Record<string, { bearer?: boolean; idempotencyKey?: boolean }>> };
+    for (const [path, methods] of Object.entries(module.openApiOperations ?? {})) {
+      for (const [method, declared] of Object.entries(methods)) {
+        const operation = document.paths?.[path]?.[method as 'get'];
+        if (!operation) throw new Error(`routes/${file} declares a missing OpenAPI operation: ${method} ${path}`);
+        if (declared.bearer) operation.security = [{ bearerAuth: [] }];
+        if (declared.idempotencyKey) operation.parameters = [...(operation.parameters ?? []), {
+          name: 'Idempotency-Key', in: 'header', required: true,
+          schema: { type: 'string', minLength: 1, maxLength: 128, pattern: '^[A-Za-z0-9:_./-]{1,128}$' },
+        }];
+      }
+    }
+  }
   document.components = { ...document.components,
     securitySchemes: { bearerAuth: { type: 'http', scheme: 'bearer' } } };
   for (const [, methods] of paths) for (const operation of Object.values(methods)) {

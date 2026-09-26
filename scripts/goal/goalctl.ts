@@ -422,7 +422,9 @@ async function dispatch(briefPath: string, flags: Set<string>): Promise<void> {
     const limit = Number(process.env.GOAL_MAX_WORKERS ?? 25);
     if (live >= limit) throw new Error(`Concurrency limit reached: ${live}/${limit} live workers`);
     const usage = currentUsage();
-    if (['restricted', 'critical'].includes(usage.level) && !flags.has('--force-usage')) {
+    // The usage snapshot is Claude's; Codex workers run until the Codex weekly limit and back off on rate limits.
+    if ((brief.engine ?? DEFAULT_ENGINE) === 'claude' && ['restricted', 'critical'].includes(usage.level)
+      && !flags.has('--force-usage')) {
       throw new Error(`5h usage is ${usage.used}% (${usage.level}: ${usage.reason}); `
         + 'let running workers finish or pass --force-usage');
     }

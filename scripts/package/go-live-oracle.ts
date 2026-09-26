@@ -63,7 +63,7 @@ export async function verifyGoLiveOracle(base: string, tool: string): Promise<vo
       compared[scenario.id] = { same, status: outcome.status, native: view, rezics,
         roots: outcome.roots, cost: outcome.cost, unsupported: outcome.unsupportedClauses };
     }
-  } finally { server.stop(true); }
+  } finally { await server.stop(true); }
   await writeFile(resolve(base, 'live-result.json'), JSON.stringify({ compared,
     unexpectedPaths: [...unexpected].sort() }, null, 2));
   if (mismatches.length || unexpected.size) {

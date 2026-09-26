@@ -272,6 +272,18 @@ export const profileRegistry = {
       "release"
     ]
   },
+  "hub-item-v1": {
+    "sha256": "d5a9c3598792cac47e1301ef9704551df121e50988643d0c1274583436bb0da8",
+    "file": "shapes/hub-item-v1.ttl",
+    "shapes": [
+      "https://rezics.com/definition/hub-item-v1/skill-package-shape",
+      "https://rezics.com/definition/hub-item-v1/prompt-template-shape"
+    ],
+    "focusRoles": [
+      "skill-package",
+      "prompt-template"
+    ]
+  },
   "main-default-selection-v1": {
     "sha256": "92f91c7e990901a457bd688dd47f576178ffa1daa90f35a4d2d1c53f751de52a",
     "file": "shapes/main-default-selection-v1.ttl",

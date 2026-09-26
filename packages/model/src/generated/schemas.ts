@@ -226,6 +226,14 @@ export const FixedNativeTextReleaseV1ReleaseShapeSchema = Type.Object({ "@id": T
 
 export type FixedNativeTextReleaseV1ReleaseShape = Static<typeof FixedNativeTextReleaseV1ReleaseShapeSchema>;
 
+export const HubItemV1SkillPackageShapeSchema = Type.Object({ "@id": Type.String({ minLength: 1 }), "rdf:type": Type.Array(Type.Union([Type.Literal("https://schema.org/CreativeWork"), Type.Literal("https://rezics.com/vocab/SkillPackage")]), { minItems: 2, maxItems: 2 }), "rv:mainVersion": Type.Array(Type.String({}), { minItems: 1, maxItems: 1 }), "rv:modelRevision": Type.Array(Type.Literal("https://rezics.com/definition/hub-item-v1"), { maxItems: 1, minItems: 1 }), "rv:shapeRevision": Type.Array(Type.Literal("https://rezics.com/definition/hub-item-v1"), { maxItems: 1, minItems: 1 }) }, { additionalProperties: true });
+
+export type HubItemV1SkillPackageShape = Static<typeof HubItemV1SkillPackageShapeSchema>;
+
+export const HubItemV1PromptTemplateShapeSchema = Type.Object({ "@id": Type.String({ minLength: 1 }), "rdf:type": Type.Array(Type.Union([Type.Literal("https://schema.org/CreativeWork"), Type.Literal("https://rezics.com/vocab/PromptTemplate")]), { minItems: 2, maxItems: 2 }), "rv:mainVersion": Type.Array(Type.String({}), { minItems: 1, maxItems: 1 }), "rv:modelRevision": Type.Array(Type.Literal("https://rezics.com/definition/hub-item-v1"), { maxItems: 1, minItems: 1 }), "rv:shapeRevision": Type.Array(Type.Literal("https://rezics.com/definition/hub-item-v1"), { maxItems: 1, minItems: 1 }) }, { additionalProperties: true });
+
+export type HubItemV1PromptTemplateShape = Static<typeof HubItemV1PromptTemplateShapeSchema>;
+
 export const MainDefaultSelectionV1SelectionShapeSchema = Type.Object({ "@id": Type.String({ minLength: 1 }), "rdf:type": Type.Array(Type.String({}), { minItems: 1, contains: Type.Literal("https://rezics.com/vocab/PublicationSelection") }), "rv:context": Type.Array(Type.String({}), { minItems: 1, maxItems: 1 }), "rv:work": Type.Array(Type.String({}), { minItems: 1, maxItems: 1 }), "rv:mainVersion": Type.Array(Type.String({}), { minItems: 1, maxItems: 1 }), "rv:contribution": Type.Array(Type.String({}), { minItems: 1, maxItems: 1 }), "rv:publicationDecision": Type.Array(Type.String({}), { minItems: 1, maxItems: 1 }), "rv:selectedDraft": Type.Array(Type.String({}), { minItems: 1, maxItems: 1 }), "rv:selectionBasis": Type.Array(Type.String({}), { minItems: 1, contains: Type.Literal("https://rezics.com/vocab/MainMaintainer") }), "rv:selectionMode": Type.Array(Type.String({}), { minItems: 1, contains: Type.Literal("https://rezics.com/vocab/Fixed") }) }, { additionalProperties: true });
 
 export type MainDefaultSelectionV1SelectionShape = Static<typeof MainDefaultSelectionV1SelectionShapeSchema>;
@@ -711,6 +719,8 @@ export const shapeSchemas = {
   "https://rezics.com/definition/event-topic-binding-v1/binding-shape": EventTopicBindingV1BindingShapeSchema,
   "https://rezics.com/definition/event-topic-binding-v1/revision-shape": EventTopicBindingV1RevisionShapeSchema,
   "https://rezics.com/definition/fixed-native-text-release-v1/release-shape": FixedNativeTextReleaseV1ReleaseShapeSchema,
+  "https://rezics.com/definition/hub-item-v1/skill-package-shape": HubItemV1SkillPackageShapeSchema,
+  "https://rezics.com/definition/hub-item-v1/prompt-template-shape": HubItemV1PromptTemplateShapeSchema,
   "https://rezics.com/definition/main-default-selection-v1/selection-shape": MainDefaultSelectionV1SelectionShapeSchema,
   "https://rezics.com/definition/poll-allocation-v1/plan-shape": PollAllocationV1PlanShapeSchema,
   "https://rezics.com/definition/poll-allocation-v1/leaf-shape": PollAllocationV1LeafShapeSchema,

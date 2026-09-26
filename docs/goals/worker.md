@@ -52,7 +52,9 @@ Parallel workers must not collide on derived or registry files:
 - Add new Main routes in a route module the brief claims, registered by one
   import and one `.use()` line in `services/main/src/app.ts`. That composition
   root uses git's union merge driver, so it needs no claim; change nothing else
-  in it.
+  in it. Declare bearer security and the `Idempotency-Key` header for your new
+  routes by exporting `openApiOperations` from your route module; do not edit
+  `scripts/api/generate.ts`.
 
 ## Work order
 
