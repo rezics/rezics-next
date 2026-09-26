@@ -255,6 +255,29 @@ async function readReference(client: PoolClient, revisionId: string): Promise<Ex
 export class ContentCore {
   constructor(private readonly pool: Pool) {}
 
+  /** Historical active pin superseded by the retained erasure and graph receipt. */
+  async readPublicationErasureSupersession(operationId: string): Promise<{
+    revisionId: string; erasureId: string; erasureEpoch: string;
+    graphReceipt: string; graphDataEpoch: string; graphSequence: string;
+  } | null> {
+    checkId(operationId, 'publication operation id', 200);
+    const rows = (await this.pool.query<{ revision_id: string; erasure_id: string;
+      erasure_epoch: string; graph_receipt: string; graph_data_epoch: string;
+      graph_sequence: string }>(`SELECT s.revision_id, s.erasure_id,
+        s.erasure_epoch::text AS erasure_epoch, s.graph_receipt,
+        s.graph_data_epoch, s.graph_sequence::text AS graph_sequence
+      FROM content.publication_erasure_supersession s
+      JOIN content.revision_erasure e ON e.revision_id = s.revision_id
+        AND e.erasure_id = s.erasure_id AND e.erasure_epoch = s.erasure_epoch
+      JOIN content.revision r ON r.id = s.revision_id AND r.availability = 'erased'
+      WHERE s.operation_id = $1`, [operationId])).rows;
+    if (rows.length > 1) throw new ContentUnavailable('publication erasure supersession is ambiguous');
+    const row = rows[0];
+    return row ? { revisionId: row.revision_id, erasureId: row.erasure_id,
+      erasureEpoch: row.erasure_epoch, graphReceipt: row.graph_receipt,
+      graphDataEpoch: row.graph_data_epoch, graphSequence: row.graph_sequence } : null;
+  }
+
   async readDraftReceipt(operationId: string): Promise<SaveDraftResult | null> {
     checkId(operationId, 'operation id', 200);
     const result = await this.pool.query(`SELECT outcome, revision_id, data_epoch,
@@ -465,6 +488,9 @@ export class ContentCore {
       if (occupied.rowCount && occupied.rows[0].action !== 'publication.prepare') throw new ContentConflict('operation key reused');
       const old = await client.query('SELECT * FROM content.publication_preparation WHERE operation_id = $1', [operationId]);
       if (old.rowCount && old.rows[0].request_digest !== digest) throw new ContentConflict('publication operation reused');
+      // Erasure locks this exact row before inspecting pins. A new preparation
+      // cannot slip between its pin inventory and byte removal.
+      await client.query('SELECT id FROM content.revision WHERE id = $1 FOR UPDATE', [revisionId]);
       const reference = await readReference(client, revisionId);
       if (!reference || reference.byteDigest !== expectedDigest) throw new ContentUnavailable('exact revision unavailable or digest differs');
       if (old.rowCount) {

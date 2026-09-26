@@ -4,6 +4,7 @@ import { rmSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { Pool, type QueryResult } from 'pg';
 import { ContentCore } from '../../../services/content/src/core.ts';
+import { ContentProjectionCursor } from '../../../services/content/src/projection-cursor.ts';
 import { migrateContent } from '../../../services/content/src/migrate.ts';
 import { createMainApp } from '../../../services/main/src/app.ts';
 import { FusekiClient } from '../../../services/main/src/infrastructure/fuseki.ts';
@@ -14,6 +15,9 @@ import { ensureRetentionDomain, ERASURE_JOURNAL_EPOCH, retireRetentionDomain } f
 import { verifyErasure } from '../../../services/main/src/modules/erasure/reconcile.ts';
 import { CONTENT_LIVE_DOMAIN, CONTENT_LIVE_RETENTION, CONTENT_WAL_DOMAIN, completePendingContentErasures,
   erasureReceiptIri, ErasureService } from '../../../services/main/src/modules/erasure/request.ts';
+import { initializeFreshGraph } from '../../../services/main/src/modules/work/activate.ts';
+import { relayContentProjectionOnce } from
+  '../../../services/main/src/modules/content-publication/relay.ts';
 import { cloneQaAccountAccessDatabases } from '../support/databases.ts';
 import { ratingAccount } from '../support/rating-account.ts';
 
@@ -65,8 +69,10 @@ test('OPS11: Content erasure journals exact targets with receipts, denial, stale
     const contentCosts: Costs = { calls: 0, rows: 0 };
     const service = new ErasureService(counted(relayPool, relayCosts), counted(contentPool, contentCosts));
     const fuseki = new FusekiClient(Bun.env.FUSEKI_URL);
-    const main = createMainApp(fuseki, { environment: { fuseki, objectDirectory: objects,
-      lineage: { dataEpoch: Bun.env.MAIN_DATA_EPOCH, routingEpoch: Bun.env.MAIN_ROUTING_EPOCH } },
+    const environment = { fuseki, objectDirectory: objects,
+      lineage: { dataEpoch: Bun.env.MAIN_DATA_EPOCH, routingEpoch: Bun.env.MAIN_ROUTING_EPOCH } };
+    await initializeFreshGraph(fuseki, environment.lineage);
+    const main = createMainApp(fuseki, { environment,
     account: account.verifier, access: registry, erasures: service });
     const call = (method: string, path: string, token: string | null, body?: object,
       key: string | null = `erasure-${randomUUID()}`) => main.handle(new Request(`http://main.local${path}`, {
@@ -160,8 +166,56 @@ test('OPS11: Content erasure journals exact targets with receipts, denial, stale
     expect(await status(published)).toBe('available');
     expect((await content.readPublicationPreparation(publishedPreparation))?.pinActive).toBe(false);
     const released = await call('POST', '/v1/erasures', account.tokenA, request([published]));
-    expect(released.status).toBe(200);
+    expect({ status: released.status, body: await released.json() }).toMatchObject({ status: 200 });
     expect(await status(published)).toBe('erased');
+
+    // WORK10/OPS10: a terminal active publication keeps its historical proof,
+    // while this erasure durably supersedes its pin after exact graph suppression.
+    const activePublished = await save('published body to erase');
+    const activeExact = (await content.readExactBatch([activePublished],
+      async ids => new Set(ids)))[0];
+    if (activeExact?.status !== 'available') throw new Error('active source is unavailable');
+    const activePreparation = `erasure-api-active-${randomUUID()}`;
+    await content.preparePublication(activePreparation, activePublished,
+      activeExact.reference.byteDigest);
+    await content.settlePublication(`erasure-api-activate-${randomUUID()}`,
+      activePreparation, { outcome: 'active', revisionId: activePublished,
+        receipt: `urn:rezics:receipt:active:${randomUUID()}`,
+        dataEpoch: environment.lineage.dataEpoch, sequence: '1' });
+    const activeKey = `erasure-${randomUUID()}`;
+    const activeResponse = await call('POST', '/v1/erasures', account.tokenA,
+      request([activePublished]), activeKey);
+    expect(activeResponse.status).toBe(200);
+    const activeReport = await activeResponse.json() as Report;
+    expect(activeReport).toMatchObject({ suppression: 'suppressed',
+      targets: [{ owner: 'content', ref: activePublished }] });
+    expect(await status(activePublished)).toBe('erased');
+    expect((await contentPool.query(`SELECT status, pin_active FROM content.publication_preparation
+      WHERE operation_id = $1`, [activePreparation])).rows)
+      .toEqual([{ status: 'active', pin_active: true }]);
+    expect((await contentPool.query(`SELECT erasure_id, erasure_epoch::text AS epoch,
+      graph_receipt, graph_sequence::text AS graph_sequence
+      FROM content.publication_erasure_supersession WHERE operation_id = $1`,
+    [activePreparation])).rows).toEqual([{ erasure_id: activeReport.erasureId,
+      epoch: activeReport.erasureEpoch,
+      graph_receipt: `urn:rezics:receipt:erasure-graph:${sha(activeReport.erasureId)}`,
+      graph_sequence: expect.any(String) }]);
+    expect((await call('POST', '/v1/erasures', account.tokenA,
+      request([activePublished]), activeKey)).status).toBe(200);
+    const activeEvent = (await contentPool.query<{ sequence: string }>(
+      `SELECT sequence::text AS sequence FROM content.outbox
+       WHERE event_type = 'content.publication.active' AND payload->>'preparationId' = $1`,
+    [activePreparation])).rows[0];
+    if (!activeEvent) throw new Error('active publication event is missing');
+    const replayConsumer = `erasure-api-replay-${randomUUID()}`;
+    const cursor = new ContentProjectionCursor(contentPool);
+    await cursor.initialize(replayConsumer);
+    await contentPool.query(`UPDATE content.projection_checkpoint SET sequence = $2::bigint - 1
+      WHERE consumer = $1`, [replayConsumer, activeEvent.sequence]);
+    expect(await relayContentProjectionOnce(environment, content, cursor, replayConsumer))
+      .toMatchObject({ sourceSequence: activeEvent.sequence, disposition: 'superseded' });
+    await expect(content.preparePublication(`erasure-api-stale-${randomUUID()}`,
+      activePublished, activeExact.reference.byteDigest)).rejects.toThrow();
 
     // One admitted erasure: Content tombstone, journal suppression and explicit retention.
     const key = `erasure-${randomUUID()}`;
@@ -256,7 +310,7 @@ test('OPS11: Content erasure journals exact targets with receipts, denial, stale
     expect(await completed.json()).toMatchObject({ suppression: 'suppressed', replayed: true });
     expect(await status(crashed)).toBe('erased');
     // The operator reconciler completes an abandoned journaled erasure without its client.
-    expect((await completePendingContentErasures(service, registry)).completed).toBeGreaterThanOrEqual(1);
+    expect((await completePendingContentErasures(service, environment, registry)).completed).toBeGreaterThanOrEqual(1);
     expect(await status(pending)).toBe('erased');
     expect(Number((await relayPool.query<{ n: string }>(`SELECT count(*)::text AS n FROM relay.erasure
       WHERE principal_id = $1 AND stage = 'requested'`, [principalA])).rows[0]!.n)).toBe(0);

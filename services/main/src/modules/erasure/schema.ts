@@ -125,6 +125,18 @@ export interface ContentRevisionErasureRow {
   recorded_at: Date;
 }
 
+/** `content.publication_erasure_supersession`: historical active pin's exact erasure proof. */
+export interface ContentPublicationErasureSupersessionRow {
+  operation_id: string;
+  revision_id: string;
+  erasure_id: string;
+  erasure_epoch: string;
+  graph_receipt: string;
+  graph_data_epoch: string;
+  graph_sequence: string;
+  recorded_at: Date;
+}
+
 export const erasureTables = {
   'relay.erasure': {
     id: true, erasure_epoch: true, operation_id: true, request_digest: true, kind: true,
@@ -158,4 +170,8 @@ export const contentErasureTables = {
   'content.revision_erasure': {
     revision_id: true, erasure_id: true, erasure_epoch: true, recorded_at: true,
   } satisfies Record<keyof ContentRevisionErasureRow, true>,
+  'content.publication_erasure_supersession': {
+    operation_id: true, revision_id: true, erasure_id: true, erasure_epoch: true,
+    graph_receipt: true, graph_data_epoch: true, graph_sequence: true, recorded_at: true,
+  } satisfies Record<keyof ContentPublicationErasureSupersessionRow, true>,
 } as const;

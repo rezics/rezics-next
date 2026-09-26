@@ -436,7 +436,9 @@ test('Content erasure tombstone and export owner install empty and upgrade curre
     'SELECT version FROM content.schema_migration ORDER BY version')).rows.map(row => row.version);
   expect(applied).toEqual((await fresh.query<{ version: number }>(
     'SELECT version FROM content.schema_migration ORDER BY version')).rows.map(row => row.version));
-  expect(applied).toEqual(expect.arrayContaining([120, 121]));
+  expect(applied).toEqual(expect.arrayContaining([120, 121, 122]));
+  await usesIndex(content, `SELECT operation_id FROM content.publication_erasure_supersession
+    WHERE revision_id = $1`, [revisions[0]], 'publication_erasure_supersession_revision_idx');
 
   // A tombstone commits only with the revision's erased transition, then never changes.
   await rejects(content.query(`INSERT INTO content.revision_erasure (revision_id, erasure_id, erasure_epoch)

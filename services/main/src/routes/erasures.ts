@@ -6,6 +6,7 @@ import { ErasureConflict, ErasureInvalid, ErasureNotFound, ErasureStale, Erasure
   type ErasureReport } from '../modules/erasure/journal.ts';
 import { ErasureDenied, ErasureNotApplied, readRequestedErasure,
   requestContentErasure } from '../modules/erasure/request.ts';
+import { GraphErasureConflict, GraphErasureUnavailable } from '../modules/erasure/graph.ts';
 import { DESTRUCTION_STATUSES, DISPOSITION_DESTRUCTION, DISPOSITION_SUPPRESSION,
   ERASURE_KINDS, ERASURE_STAGES, RETENTION_CUSTODY, RETENTION_OWNERS, RETENTION_STORES,
   SUPPRESSION_STATUSES } from '../modules/erasure/schema.ts';
@@ -65,6 +66,12 @@ function erasureError(error: unknown): Response {
   if (error instanceof ContentErasureGraphRequired) {
     return problem(409, 'graph_suppression_unavailable', 'Published Content needs graph suppression');
   }
+  if (error instanceof GraphErasureConflict) {
+    return problem(409, 'graph_erasure_conflict', 'Exact graph erasure conflicts with existing state');
+  }
+  if (error instanceof GraphErasureUnavailable) {
+    return problem(503, 'graph_suppression_unavailable', 'Graph suppression is unavailable');
+  }
   if (error instanceof ErasureNotApplied) return problem(409, 'erasure_not_applied', 'Erasure was cancelled');
   if (error instanceof ErasureUnavailable) return problem(503, 'erasure_unavailable', 'Erasure owner is unavailable');
   return commandError(error);
@@ -82,7 +89,7 @@ export function erasureRoutes(work: MainWorkDependencies) {
         if (!key || !/^[A-Za-z0-9:_./-]{1,128}$/.test(key)) {
           return problem(400, 'invalid_idempotency_key', 'A bounded idempotency key is required');
         }
-        const { report, replayed } = await requestContentErasure(work.erasures, work.account,
+        const { report, replayed } = await requestContentErasure(work.erasures, work.environment, work.account,
           work.access, request, { actingSubject: body.actingSubject, resourceId: body.resourceId,
             revisionIds: body.revisionIds, idempotencyKey: key });
         return result(report, replayed);

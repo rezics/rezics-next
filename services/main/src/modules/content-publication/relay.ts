@@ -4,6 +4,7 @@ import { profileRegistry } from '../../../../../packages/model/src/generated/pro
 import { DATASET, GRAPHS, RV, hash, iri, lit, type WorkActivationEnvironment } from '../work/activate.ts';
 import { PUBLIC_SEARCH_GRAPH } from '../work/select-main.ts';
 import { ContentProjectionUnavailable, extractProjectionText, projectionRecipeFor } from './projection-recipes.ts';
+import { graphRevisionSuppressed } from '../erasure/graph.ts';
 export { ContentProjectionUnavailable } from './projection-recipes.ts';
 
 const PROFILE_ID = 'content-match-unit-v1';
@@ -227,6 +228,20 @@ export async function relayContentProjectionOnce(env: WorkActivationEnvironment,
     // Resolve the published revision's model from Content's settled pin first.
     // Non-text revisions need no body-byte read or text-profile check.
     const publication = await content.readProjectionPublication(event, true);
+    if (publication.status === 'active') {
+      const erased = await content.readPublicationErasureSupersession(publication.preparationId);
+      if (erased) {
+        if (erased.revisionId !== publication.reference.revisionId
+          || !await graphRevisionSuppressed(env.fuseki, env.lineage, erased.revisionId,
+            erased.erasureId, erased.erasureEpoch, { receipt: erased.graphReceipt,
+              dataEpoch: erased.graphDataEpoch, sequence: erased.graphSequence })) {
+          throw new ContentProjectionUnavailable('erased publication lacks exact graph suppression');
+        }
+        await cursor.acknowledge(consumer, checkpoint, event.position);
+        return { sourceEpoch: event.position.dataEpoch,
+          sourceSequence: event.position.sequence, disposition: 'superseded' };
+      }
+    }
     const recipe = projectionRecipeFor(publication.reference.model);
     if (recipe.kind === 'skip') {
       // Prove the terminal graph receipt before advancing past a non-text revision.

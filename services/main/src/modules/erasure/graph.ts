@@ -126,6 +126,76 @@ export async function graphErasureSuppressed(fuseki: FusekiClient, erasureId: st
     && targets.every(target => result.results?.bindings.some(row => row.target?.value === target));
 }
 
+export interface GraphSuppressionProof {
+  receipt: string;
+  dataEpoch: string;
+  sequence: string;
+}
+
+/** Rebuild checks one historical active publication against its immutable
+ * Content supersession before acknowledging the old outbox event. A verified
+ * lineage cutover retains old receipts; the current, unheld graph is the source
+ * of truth, so only receipts in the current epoch need a sequence comparison. */
+export async function graphRevisionSuppressed(fuseki: FusekiClient, lineage: GraphLineage,
+  revisionId: string, erasureId: string, epoch: string,
+  proof: GraphSuppressionProof): Promise<boolean> {
+  const target = checkedTargets([revisionId])[0]!;
+  if (proof.receipt !== graphErasureReceipt(erasureId)
+    || !UUID.test(proof.dataEpoch)
+    || !/^[1-9][0-9]*$/.test(proof.sequence)) return false;
+  const result = await fuseki.query(`PREFIX rv: <${RV}> ASK {
+    GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:dataEpoch ${lit(lineage.dataEpoch)} ;
+      rv:routingEpoch ${lit(lineage.routingEpoch)} ; rv:sequence ?currentSequence .
+      FILTER NOT EXISTS { ${iri(DATASET)} rv:restoreHold true } }
+    GRAPH ${iri(GRAPHS.revisions)} { ${iri(target)} a rv:ErasedRevision ;
+      rv:erasureEpoch ${epoch} . }
+    GRAPH ${iri(GRAPHS.receipts)} { ${iri(proof.receipt)} a rv:OperationReceipt ;
+      rv:outcome rv:Succeeded ; rv:erasureId ${lit(erasureId)} ;
+      rv:erasureEpoch ${epoch} ; rv:dataEpoch ${lit(proof.dataEpoch)} ;
+      rv:sequence ${proof.sequence} . }
+    ${proof.dataEpoch === lineage.dataEpoch ? `FILTER(?currentSequence >= ${proof.sequence})` : ''}
+    FILTER NOT EXISTS { GRAPH ${iri(PUBLIC)} { ?unit ?reference ${iri(target)}
+      FILTER(?reference IN (rv:revision, rv:contentRevision)) } }
+    FILTER NOT EXISTS { GRAPH ${iri(PRIVATE)} { ?unit ?reference ${iri(target)}
+      FILTER(?reference IN (rv:revision, rv:contentRevision)) } }
+  }`, 8192);
+  return result.boolean === true;
+}
+
+/** The receipt, current lineage, tombstones and absence of indexed references
+ * are read together before Content may supersede an active pin. */
+export async function readGraphErasureProof(fuseki: FusekiClient, lineage: GraphLineage,
+  erasureId: string, epoch: string, revisionIds: readonly string[]): Promise<GraphSuppressionProof> {
+  const targets = checkedTargets(revisionIds);
+  const receipt = graphErasureReceipt(erasureId);
+  const digest = hash(JSON.stringify({ family: 'erasure-graph-v1', erasureId, epoch, targets }));
+  const result = await fuseki.query(`PREFIX rv: <${RV}> SELECT DISTINCT ?target ?sequence WHERE {
+    VALUES ?target { ${targets.map(iri).join(' ')} }
+    GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:dataEpoch ${lit(lineage.dataEpoch)} ;
+      rv:routingEpoch ${lit(lineage.routingEpoch)} ; rv:sequence ?currentSequence .
+      FILTER NOT EXISTS { ${iri(DATASET)} rv:restoreHold true } }
+    GRAPH ${iri(GRAPHS.revisions)} { ?target a rv:ErasedRevision ; rv:erasureEpoch ${epoch} . }
+    GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} a rv:OperationReceipt ;
+      rv:requestDigest ${lit(digest)} ; rv:outcome rv:Succeeded ;
+      rv:erasureId ${lit(erasureId)} ; rv:erasureEpoch ${epoch} ;
+      rv:dataEpoch ${lit(lineage.dataEpoch)} ; rv:sequence ?sequence . }
+    FILTER(?sequence <= ?currentSequence)
+    FILTER NOT EXISTS { GRAPH ${iri(PUBLIC)} { ?unit ?reference ?target
+      FILTER(?reference IN (rv:revision, rv:contentRevision)) } }
+    FILTER NOT EXISTS { GRAPH ${iri(PRIVATE)} { ?unit ?reference ?target
+      FILTER(?reference IN (rv:revision, rv:contentRevision)) } }
+  }`, 65_536);
+  const rows = result.results?.bindings ?? [];
+  const sequence = rows[0]?.sequence?.value;
+  if (rows.length !== targets.length || !/^[1-9][0-9]*$/.test(sequence ?? '')
+    || new Set(rows.map(row => row.target?.value)).size !== targets.length
+    || rows.some(row => !targets.includes(row.target?.value ?? '')
+      || row.sequence?.value !== sequence)) {
+    throw new GraphErasureUnavailable('exact graph suppression proof is unavailable');
+  }
+  return { receipt, dataEpoch: lineage.dataEpoch, sequence: sequence! };
+}
+
 /** One bounded native command, with at most three retries for a racing projection. */
 export async function suppressGraphContentRevisions(fuseki: FusekiClient,
   lineage: GraphLineage, erasureId: string, epoch: string,
