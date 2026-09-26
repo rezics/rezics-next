@@ -84,6 +84,7 @@ import { NotificationDispatcher } from './modules/notification/dispatcher.ts';
 import { NotificationDeliveryWorker } from './modules/notification/delivery-worker.ts';
 import { HttpDeliveryProvider } from './modules/notification/http-provider.ts';
 import { RightsStore } from './modules/rights/store.ts';
+import { ThemeStore } from './modules/theme/store.ts';
 import { ACCESS_OPERATIONAL_BOUNDS_V1, activateOperationalBounds } from './operations/bounds.ts';
 import { RankingGenerations } from './modules/recommendation/ranking.ts';
 import { RankingBuildWorker } from './modules/recommendation/build-worker.ts';
@@ -253,6 +254,7 @@ const app = createMainApp(fuseki, {
       ? { providerSecrets: { [notificationProvider.name]: notificationProviderConfig.callbackSecret } } : {}),
   } } : {}),
   rights: { store: new RightsStore(contentPool, pool) },
+  themes: new ThemeStore(contentPool),
   privateSearch: { access, settlement: new PrivateSearchSettlement(pool) },
   media,
   mediaAccess: new MediaAccessBatchReader(pool),

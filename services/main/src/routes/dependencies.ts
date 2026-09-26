@@ -70,6 +70,7 @@ import type { NotificationDispatcher } from '../modules/notification/dispatcher.
 import type { NotificationRealtimeHub } from '../modules/notification/realtime.ts';
 import type { RightsStore } from '../modules/rights/store.ts';
 import type { ConnectedAppStore } from '../modules/connected-apps/store.ts';
+import type { ThemeStore } from '../modules/theme/store.ts';
 
 export interface MainWorkDependencies {
   agentProvisioning?: AgentProvisioning;
@@ -77,6 +78,7 @@ export interface MainWorkDependencies {
   notifications?: { store: NotificationStore; dispatcher?: NotificationDispatcher;
     realtime?: NotificationRealtimeHub; providerSecrets?: Readonly<Record<string, string>> };
   rights?: { store: RightsStore };
+  themes?: ThemeStore;
   environment: WorkActivationEnvironment;
   structureObjects?: ImmutableObjects;
   structureStages?: StructureStageStore;

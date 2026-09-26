@@ -120,8 +120,12 @@ function arbitraryValue(property: PropertyDefinition, prefixes: ReadonlyMap<stri
       '^[A-Za-z]{2,8}(-[A-Za-z0-9]{1,8})*$': 'en-US',
       '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$':
         '00000000-0000-4000-8000-000000000001',
+      '^[0-9a-f-]{36}$': '00000000-0000-4000-8000-000000000001',
       '^(0|[1-9][0-9]*)$': '1',
       '^https://[^\\s<>"{}|\\^`]{1,2040}$': 'https://publisher.example/translation',
+      '^https://rezics\\.com/id/[0-9a-f-]{36}$':
+        'https://rezics.com/id/00000000-0000-4000-8000-000000000001',
+      '^https://[^\\s/?#]{1,500}$': 'https://themes.example.test',
       '^[0-9a-f]{64}$': 'a'.repeat(64),
       '^OL[1-9][0-9]{0,11}W$': 'OL1W',
       '^/works/OL[1-9][0-9]{0,11}W$': '/works/OL1W',

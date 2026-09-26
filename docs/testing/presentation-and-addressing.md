@@ -13,7 +13,7 @@ checks follow the authorized component/full-application boundary.
 | VIEW06 | Ordinary UI edits advanced API configuration | Unedited semantic state preserved. |
 | VIEW07 | Stale SEO/sitemap/preview for private/erased resource | No leaked metadata or public delivery. |
 | VIEW08 | Main Version language fallback, metadata-only and RTL | Actual selection/availability, accessibility and safe empty states. |
-| VIEW09 | Changed theme dependency or expired approval | Reapproval/denial; no rollback reactivation. |
+| VIEW09 | Changed theme dependency or expired approval | Reapproval/denial; no rollback reactivation. `tests/qa/integration/theme-activation-api.test.ts` verifies expired-state reads, new approval for a changed dependency, old-key replay without head rollback, Account and Access denial, stale and concurrent writers, and Content projection recovery. |
 
 ## Resource summary API acceptance
 

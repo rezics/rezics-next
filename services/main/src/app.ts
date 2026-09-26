@@ -51,6 +51,7 @@ import { sourceRunRoutes } from './routes/source-runs.ts';
 import { sourceSupportRoutes } from './routes/source-supports.ts';
 import { spaceRoutes } from './routes/spaces.ts';
 import { workRoutes } from './routes/works.ts';
+import { themeRoutes } from './routes/themes.ts';
 
 export type { MainWorkDependencies } from './routes/dependencies.ts';
 
@@ -104,6 +105,10 @@ function domainRoutes(fuseki: FusekiClient, work: SearchRouteDependencies) {
     .use(reportRoutes(work))
     .use(rightsRoutes(work))
     .use(recommendationRoutes(work));
+    .use(recommendationRoutes(work))
+    .use(graphLayoutRoutes(work))
+    .use(themeRoutes(work))
+    .use(workRoutes(fuseki, work));
 }
 
 function extraRoutes1(fuseki: FusekiClient, work: SearchRouteDependencies) {
