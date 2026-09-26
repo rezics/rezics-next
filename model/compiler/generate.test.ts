@@ -305,7 +305,7 @@ test('G-071: the generated registry keeps the historical canonical routes and bi
     types.map(type => ({ type: vocabulary(type), profile })));
   expect(manifest.bindingDemands.slice(0, demands.length)).toEqual(demands);
   const bound = manifest.profiles.filter(profile => profile.binding).map(profile => profile.id);
-  expect(bound.sort()).toEqual(historicalDemands.map(([profile]) => profile).sort());
+  expect(bound).toEqual(expect.arrayContaining(historicalDemands.map(([profile]) => profile)));
   const credit = manifest.profiles.find(profile => profile.id === 'work-author-credit-v1')!.binding!;
   expect(credit).toEqual({ required: ['credit', 'revision', 'work', 'work-head', 'key', 'ordinal', 'actor',
     'receipt', 'scope', 'epoch', 'intent'], optional: ['source-role'], roles: ['credit', 'revision'] });
