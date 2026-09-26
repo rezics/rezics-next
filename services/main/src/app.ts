@@ -11,6 +11,7 @@ import { claimRoutes } from './routes/claims.ts';
 import { classificationRoutes } from './routes/classification.ts';
 import { commerceRoutes } from './routes/commerce.ts';
 import { compositionRoutes } from './routes/compositions.ts';
+import { progressRoutes } from './routes/progress.ts';
 import { contentRoutes } from './routes/content.ts';
 import { contextRoutes } from './routes/contexts.ts';
 import { contributionRoutes } from './routes/contributions.ts';
@@ -109,6 +110,8 @@ function extraRoutes1(fuseki: FusekiClient, work: SearchRouteDependencies) {
     .use(semanticRoutes(fuseki, work))
     .use(relationRoutes(fuseki, work))
     .use(hubRoutes(work));
+    .use(progressRoutes(fuseki, work))
+    .use(packageNixRoutes(work));
 }
 
 /** Composition root: each domain plugin under `routes/` owns its registrations. */

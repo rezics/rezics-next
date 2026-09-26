@@ -1,13 +1,17 @@
 # Structure command template
 
-The Book composition route is the first Structure command family. Copy the
-request validation and Account/Access admission in `change-admitted.ts`, the
-receipt, sequence, outbox and profile validation pattern in `change.ts`, and the
-exact manifest read in `read.ts`. Register a new profile shape and extend the
-role/target checks in `format.ts` before adding another Structure profile.
+The Book composition route is the first Structure command family. Zone,
+Collection and Recipe sessions add `modules/<owner>/structure-profile.ts` to
+the registry in `profiles.ts`, then copy `change-admitted.ts` for Account/Access
+admission, `change.ts` for receipts and guarded graph writes, `read.ts` for
+exact revision reads, `routes/compositions.ts` for HTTP validation, and
+`tests/qa/integration/structure-composition.test.ts` for real API checks.
+Add each profile shape to `model/definitions/structure-*.ts`.
+Declare optional targets and qualifier projection, hydration and profile
+validation in that owner file; the shared command and exact read consume it.
 `graph.ts` owns bounded current generation queries; `tree.ts` owns immutable
-record, order and pin pages. `objects.ts` currently uses the Main object's local
-directory under a separate `structure/` namespace.
+record, order and pin pages. Main injects the S3 immutable-object adapter with
+the separate `semantic/structure/` RustFS prefix before serving requests.
 
 Every edit carries an expected Structure head. Inserts allocate occurrence IDs
 from the admitted operation identity; moves keep the ID. A change touches at
@@ -24,11 +28,11 @@ growth test in `services/main/tests/structure-schema.test.ts` for fan-out and
 copy-on-write bounds. A new operation must also prove its target authorization,
 graph projection focus set and recovery from a lost response.
 
-The Book path currently authorizes and resolves Work targets only. Content
-resource target disclosure, context-specific variant selection, progress storage,
-fixed-release integration and whole-Structure export require their respective
-owners before BOOK01–BOOK03 and COMP01 are complete. The seal pins only publicly
-eligible Content variants and reports missing coverage; it does not infer a
-private reader's Realm. A rebalance that would touch more than 100 graph
-subjects is rejected with a typed too-large outcome until the staged generation
-path handles it.
+The Book path authorizes target resources independently and retains private
+progress by occurrence. The seal pins publicly eligible Content variants and
+an exact read returns the retained pins; it does not infer a private reader's
+Realm. Context-specific variant resolution, complete fixed-release integration,
+staged generation activation and whole-Structure export remain separate work.
+The export clause belongs to G-092's export owner. A rebalance that would
+touch more than 100 graph subjects is rejected with a typed too-large outcome
+until staged generation activation handles it.

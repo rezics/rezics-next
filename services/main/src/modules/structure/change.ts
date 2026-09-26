@@ -18,7 +18,6 @@ import { COMPOSITION_PROFILE, CompositionCorrupt, CompositionUnavailable, NATIVE
   type CompositionHeader, type Label, type PlacementState, type SegmentState, type Selection }
   from './graph.ts';
 import { structureProfileFor, type StructureProfileRegistration } from './profiles.ts';
-import { DirectoryStructureObjects } from './objects.ts';
 import { evenKeys, keyBetween, withinBudget } from './order-key.ts';
 import { StructureObjectCorrupt, StructureObjectUnavailable, StructureTree, newCost,
   type TreeCost } from './tree.ts';
@@ -39,7 +38,8 @@ export class CompositionCancelled extends Error {}
 export type Position = 'first' | 'last' | { after: string };
 export type CompositionOperation =
   | { op: 'insert'; parent: string; position: Position; role: OccurrenceRole; target?: string;
-    selection?: Selection; label?: Label; sourceKey?: string }
+    selection?: Selection; label?: Label; sourceKey?: string;
+    qualifier?: OccurrenceRecord['qualifier'] }
   | { op: 'move'; occurrence: string; parent: string; position: Position }
   | { op: 'remove'; occurrence: string };
 
@@ -72,7 +72,9 @@ type Admission = Pick<RegisteredAdmission, 'id' | 'scope' | 'action' | 'requestD
   | 'authorityEpoch' | 'expiresAt'>;
 
 export function structureObjects(env: WorkActivationEnvironment): ImmutableObjects {
-  return new DirectoryStructureObjects(env.objectDirectory);
+  const objects = (env as WorkActivationEnvironment & { structureObjects?: ImmutableObjects }).structureObjects;
+  if (!objects) throw new ObjectUnavailable('Structure immutable object store is unavailable');
+  return objects;
 }
 
 function native(value: unknown, name: string): string {
@@ -109,7 +111,9 @@ export function checkedOperations(operations: readonly CompositionOperation[],
       throw new InvalidCompositionChange('operation role is not admitted by this Structure profile');
     }
     const target = operation.target === undefined ? undefined : native(operation.target, 'target');
-    if (registration && registration.targetRoles.includes(operation.role) !== (target !== undefined)) {
+    if (registration && (registration.targetRoles.includes(operation.role) && target === undefined
+      || target !== undefined && !registration.targetRoles.includes(operation.role)
+        && !registration.optionalTargetRoles?.includes(operation.role))) {
       throw new InvalidCompositionChange('operation target cardinality differs from its Structure profile');
     }
     let selection: Selection | undefined;
@@ -139,7 +143,8 @@ export function checkedOperations(operations: readonly CompositionOperation[],
       position: checkedPosition(operation.position), role: operation.role,
       ...(target ? { target, selection } : {}),
       ...(label ? { label: { value: label.value, language: label.language } } : {}),
-      ...(operation.sourceKey ? { sourceKey: operation.sourceKey } : {}) };
+      ...(operation.sourceKey ? { sourceKey: operation.sourceKey } : {}),
+      ...(operation.qualifier ? { qualifier: operation.qualifier } : {}) };
   });
 }
 
@@ -158,6 +163,13 @@ export function compositionChangeDigest(structure: string, expectedHead: string,
 export function compositionSealDigest(structure: string, expectedHead: string): string {
   return hash(JSON.stringify({ family: 'composition-seal-v1', structure: native(structure, 'composition'),
     expectedHead: native(expectedHead, 'expectedHead') }));
+}
+
+export function compositionRestoreDigest(structure: string, expectedHead: string,
+  restoredFrom: string): string {
+  return hash(JSON.stringify({ family: 'composition-restore-v1',
+    structure: native(structure, 'composition'), expectedHead: native(expectedHead, 'expectedHead'),
+    restoredFrom: native(restoredFrom, 'restoredFrom') }));
 }
 
 /** Composition commands run under Work edit authority and its Access receipt family. */
@@ -352,10 +364,11 @@ async function validations(env: WorkActivationEnvironment, entries: readonly [st
 
 function revisionTriples(env: WorkActivationEnvironment, input: { revision: string; structure: string;
   predecessor?: string; operation: string; kind: string; generation: string; manifest: string;
-  count: number }): string {
+  count: number; restoredFrom?: string }): string {
   return `${iri(input.revision)} a rv:StructureRevision, rv:RevisionAnchor ;
     rv:component ${iri(input.structure)} ;
     ${input.predecessor ? `rv:predecessor ${iri(input.predecessor)} ;` : ''}
+    ${input.restoredFrom ? `rv:restoredFrom ${iri(input.restoredFrom)} ;` : ''}
     rv:operation ${iri(input.operation)} ; rv:structureOperation rv:${input.kind} ;
     rv:generation ${iri(input.generation)} ; rv:manifest ${iri(manifestIri(input.manifest))} ;
     rv:placementCount ${input.count} ; rv:modelRevision ${iri(COMPOSITION_PROFILE)} ;
@@ -451,6 +464,15 @@ class Working {
     }
   }
 
+  private async hydrate(state: PlacementState): Promise<void> {
+    const load = structureProfileFor(this.header.profile).hydrateQualifier;
+    if (load) {
+      const qualifier = await load(this.env, state);
+      if (qualifier) state.qualifier = qualifier;
+    }
+    this.remember(state);
+  }
+
   private rememberSegment(segment: SegmentState): void {
     if (!this.segments.has(segment.segment)) {
       this.segments.set(segment.segment, segment);
@@ -461,7 +483,7 @@ class Working {
   async get(occurrence: string): Promise<PlacementState | undefined> {
     if (!this.placements.has(occurrence)) {
       for (const state of await readPlacements(this.env, this.header.generation, { occurrences: [occurrence] })) {
-        this.remember(state);
+        await this.hydrate(state);
       }
     }
     return this.placements.get(occurrence);
@@ -496,7 +518,7 @@ class Working {
     let list = this.members.get(id);
     if (!list) {
       const loaded = await readPlacements(this.env, this.header.generation, { segment: id });
-      for (const state of loaded) this.remember(state);
+      for (const state of loaded) await this.hydrate(state);
       list = loaded.map(state => this.placements.get(state.occurrence)!)
         .filter(state => state.active && state.segment === id)
         .sort((a, b) => a.orderKey! < b.orderKey! ? -1 : 1).map(state => state.occurrence);
@@ -644,6 +666,7 @@ async function apply(w: Working, operation: CompositionOperation, index: number)
       active: true, parent: operation.parent, role: operation.role, introducedBy: w.revision,
       ...(operation.label ? { label: operation.label } : {}),
       ...(operation.target ? { target: operation.target, selection: operation.selection! } : {}),
+      ...(operation.qualifier ? { qualifier: operation.qualifier } : {}),
       ...(operation.sourceKey ? { sourceKey: operation.sourceKey } : {}) };
     w.add(state);
     if (w.header.placementCount + w.activeDelta + 1 > STRUCTURE_LIMITS.maxPlacements) {
@@ -698,7 +721,8 @@ async function checkFixedSelections(env: WorkActivationEnvironment,
   }
 }
 
-function placementTriples(state: PlacementState, generation: string): string[] {
+function placementTriples(state: PlacementState, generation: string,
+  profile?: StructureProfile): string[] {
   const subject = iri(state.placement);
   const triples = [`${subject} a ${state.active ? 'rv:OccurrencePlacement' : 'rv:RemovedPlacement'} .`];
   const add = (predicate: string, object: string) => triples.push(`${subject} rv:${predicate} ${object} .`);
@@ -720,6 +744,11 @@ function placementTriples(state: PlacementState, generation: string): string[] {
     add('pinnedRevision', iri(state.selection.revision));
   }
   if (state.sourceKey) add('sourceKey', lit(state.sourceKey));
+  const qualifier = profile && structureProfileFor(profile).projectQualifier?.(state, generation);
+  if (qualifier) {
+    add('qualifier', iri(qualifier.iri));
+    triples.push(...qualifier.triples);
+  }
   return triples;
 }
 
@@ -766,6 +795,18 @@ export async function changeComposition(env: WorkActivationEnvironment,
   const header = await readCompositionHeader(env, intent.structure);
   if (!header) throw new CompositionUnavailable('composition is unavailable');
   checkedOperations(operations, header.profile);
+  const targets = [...new Set(operations.flatMap(operation => operation.op === 'insert'
+    && operation.target ? [operation.target] : []))];
+  if (header.profile === 'book-composition' && targets.length) {
+    const found = await env.fuseki.query(`PREFIX rv: <${RV}> SELECT DISTINCT ?target WHERE {
+      VALUES ?target { ${targets.map(iri).join(' ')} }
+      GRAPH ${iri(GRAPHS.current)} { ?target rv:mainVersion ?main . }
+    }`);
+    const available = new Set((found.results?.bindings ?? []).map(row => row.target?.value));
+    if (targets.some(target => !available.has(target))) {
+      throw new CompositionUnavailable('chapter target is unavailable');
+    }
+  }
   if (intent.admission.scope !== `${structureProfileFor(header.profile).editScopePrefix}${header.work}`) {
     throw new IdempotencyConflict('composition admission targets another Work');
   }
@@ -797,8 +838,8 @@ export async function changeComposition(env: WorkActivationEnvironment,
   for (const [occurrence, state] of w.placements) {
     const before = w.original.get(occurrence);
     const old = before ? JSON.parse(before) as PlacementState : undefined;
-    const change = diff(old ? placementTriples(old, header.generation) : [],
-      placementTriples(state, header.generation));
+    const change = diff(old ? placementTriples(old, header.generation, header.profile) : [],
+      placementTriples(state, header.generation, header.profile));
     if (old && !change.removed.length && !change.added.length) continue;
     const record = placementRecord(state);
     checkOccurrenceRecord(record, header.profile);
@@ -874,6 +915,9 @@ export async function changeComposition(env: WorkActivationEnvironment,
       GRAPH ${iri(GRAPHS.current)} { ${iri(header.structure)} rv:structureHead ${iri(intent.expectedHead)} ;
         rv:selectedGeneration ${iri(header.generation)} .
         ${iri(header.generation)} rv:placementCount ${header.placementCount} . }
+      ${header.profile === 'book-composition' && targets.length
+        ? `GRAPH ${iri(GRAPHS.current)} { ${targets.map(target => `${iri(target)} rv:mainVersion ?main${targets.indexOf(target)} .`).join(' ')} }`
+        : ''}
       FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.revisions)} { ${iri(revision)} ?rp ?ro } }
       BIND(?n + 1 AS ?next) }`;
   if (Date.parse(intent.admission.expiresAt) <= Date.now()) throw new PendingActivation('composition admission expired');
@@ -891,7 +935,12 @@ export async function changeComposition(env: WorkActivationEnvironment,
     await sealRejection(env, intent.admission, 'composition.change', 'CompositionTooLarge', headGuard);
     return { terminal: await settled(env, intent.admission), committed: false, occurrences };
   }
-  const committed = await dispatch(env, intent.admission, update, await validations(env, focus));
+  const profile = structureProfileFor(header.profile);
+  const committed = await dispatch(env, intent.admission, update, [
+    ...await validations(env, focus),
+    ...(await profile.qualifierValidations?.(env,
+      [...records.keys()].map(id => w.placements.get(id)!)) ?? []),
+  ]);
   if (!committed && !await readCompositionReceipt(env, intent.admission.id)) {
     await sealRejection(env, intent.admission, 'composition.change', 'StaleHead',
       `GRAPH ${iri(GRAPHS.current)} { ${iri(intent.structure)} rv:structureHead ?head }
@@ -901,7 +950,8 @@ export async function changeComposition(env: WorkActivationEnvironment,
     ...(committed ? { cost } : {}) };
 }
 
-export interface SealCompositionIntent { admission: Admission; structure: string; expectedHead: string }
+export interface SealCompositionIntent { admission: Admission; structure: string; expectedHead: string;
+  canReadTarget: (target: string) => Promise<boolean> }
 
 /**
  * Seal a fixed manifest: every targeted use of the exact head revision pins the
@@ -938,6 +988,11 @@ export async function sealComposition(env: WorkActivationEnvironment,
     throw new StructureObjectCorrupt('composition order and record trees differ');
   }
   const targeted = order.map(entry => records.get(entry.occurrence)!).filter(record => record.target);
+  for (const target of new Set(targeted.map(record => record.target!))) {
+    if (!await intent.canReadTarget(target)) {
+      throw new CompositionUnavailable('chapter target is unavailable for sealing');
+    }
+  }
   const published = await readPublishedVariants(env, targeted
     .filter(record => record.selection?.mode === 'follow-context').map(record => record.target!));
   const pins = new Map<string, PinEntry | null>();
@@ -1002,4 +1057,197 @@ export async function sealComposition(env: WorkActivationEnvironment,
       FILTER(?head != ${iri(intent.expectedHead)})`);
   }
   return { terminal: await settled(env, intent.admission), committed };
+}
+
+export interface RestoreCompositionIntent {
+  admission: Admission;
+  structure: string;
+  expectedHead: string;
+  restoredFrom: string;
+  /** Rechecked for every active target just before the guarded activation. */
+  canReadTarget: (target: string) => Promise<boolean>;
+}
+
+/** A bounded restore selects retained bytes as a new revision; target resources are never rewound. */
+export async function restoreComposition(env: WorkActivationEnvironment, intent: RestoreCompositionIntent):
+  Promise<{ terminal: CompositionTerminal; committed: boolean; cost?: CompositionCost }> {
+  const digest = compositionRestoreDigest(intent.structure, intent.expectedHead, intent.restoredFrom);
+  checkAdmission(intent.admission, digest);
+  const prior = await existing(env, intent.admission);
+  if (prior) return { terminal: prior, committed: false };
+  const header = await readCompositionHeader(env, intent.structure);
+  if (!header) throw new CompositionUnavailable('composition is unavailable');
+  if (header.profile !== 'book-composition'
+    || intent.admission.scope !== `${structureProfileFor(header.profile).editScopePrefix}${header.work}`) {
+    throw new IdempotencyConflict('restore admission targets another Structure owner');
+  }
+  const headGuard = `GRAPH ${iri(GRAPHS.current)} {
+    ${iri(header.structure)} rv:structureHead ${iri(intent.expectedHead)} }`;
+  if (header.head !== intent.expectedHead) {
+    await sealRejection(env, intent.admission, 'composition.restore', 'StaleHead',
+      `GRAPH ${iri(GRAPHS.current)} { ${iri(header.structure)} rv:structureHead ?head }
+      FILTER(?head != ${iri(intent.expectedHead)})`);
+    return { terminal: await settled(env, intent.admission), committed: false };
+  }
+  const source = await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?manifest WHERE {
+    GRAPH ${iri(GRAPHS.revisions)} { ${iri(intent.restoredFrom)} a rv:StructureRevision ;
+      rv:component ${iri(header.structure)} ; rv:manifest ?manifest . } } LIMIT 2`);
+  const sourceRows = source.results?.bindings ?? [];
+  if (!sourceRows.length) throw new CompositionUnavailable('retained revision is unavailable');
+  const sourceManifestRef = sourceRows[0]?.manifest?.value;
+  if (sourceRows.length !== 1 || !/^urn:rezics:sha256:[0-9a-f]{64}$/.test(sourceManifestRef ?? '')) {
+    throw new CompositionCorrupt('retained revision anchor is ambiguous');
+  }
+  const objects = structureObjects(env);
+  let sourceManifest: StructureManifest;
+  try { sourceManifest = checkStructureManifest(await objects.get(sourceManifestRef!.slice(-64))); }
+  catch (error) {
+    if (error instanceof ObjectIntegrityError || error instanceof InvalidStructureObject) {
+      throw new StructureObjectCorrupt(error.message);
+    }
+    if (error instanceof ObjectUnavailable) throw new StructureObjectUnavailable(error.message);
+    throw error;
+  }
+  if (sourceManifest.structure !== header.structure || sourceManifest.structureOf !== header.mainVersion
+    || sourceManifest.profile !== header.profile
+    || sourceManifest.records.count > STRUCTURE_LIMITS.segmentMembers
+    || sourceManifest.placementCount > STRUCTURE_LIMITS.segmentMembers) {
+    throw new CompositionTooLarge('restore requires the staged generation path');
+  }
+  const cost: CompositionCost = { ...newCost(), placementsWritten: 0, segmentsWritten: 0,
+    rebalanced: 0 };
+  cost.pagesRead++;
+  const records = await recordTree(objects).range(sourceManifest.records, '', '\uffff',
+    STRUCTURE_LIMITS.segmentMembers + 1, cost);
+  const ordered = await orderTree(objects).range(sourceManifest.order, '', '\uffff',
+    STRUCTURE_LIMITS.segmentMembers + 1, cost);
+  if (records.length !== sourceManifest.records.count
+    || ordered.length !== sourceManifest.placementCount) {
+    throw new StructureObjectCorrupt('retained Structure tree count differs');
+  }
+  const byOccurrence = new Map(records.map(record => [record.occurrence, record]));
+  const orderKeys = new Set(ordered.map(orderTreeKey));
+  for (const record of records) {
+    try { checkOccurrenceRecord(record, header.profile); }
+    catch (error) {
+      if (error instanceof InvalidStructureObject) throw new StructureObjectCorrupt(error.message);
+      throw error;
+    }
+    if (record.labels.length > 1 || record.selection?.mode === 'fixed-realm'
+      || record.state === 'active'
+      && (!orderKeys.has(orderTreeKey(record as OrderEntry))
+        || record.parent !== header.structure
+          && (byOccurrence.get(record.parent)?.role !== 'group'
+            || byOccurrence.get(record.parent)?.state !== 'active'))
+      || record.target && record.state === 'active' && !await intent.canReadTarget(record.target)) {
+      throw new CompositionConflict('restored Structure has an unavailable or undisclosed dependency');
+    }
+  }
+  const active = records.filter(record => record.state === 'active');
+  if (active.length !== ordered.length || new Set(records.map(record => record.occurrence)).size !== records.length) {
+    throw new StructureObjectCorrupt('retained Structure records and order differ');
+  }
+  for (const record of active) {
+    const seen = new Set([record.occurrence]);
+    let parent = record.parent;
+    while (parent !== header.structure) {
+      if (seen.has(parent) || seen.size > STRUCTURE_LIMITS.maxDepth) {
+        throw new StructureObjectCorrupt('retained Structure parent chain cycles or exceeds depth');
+      }
+      seen.add(parent);
+      const owner = byOccurrence.get(parent);
+      if (!owner || owner.state !== 'active' || owner.role !== 'group') {
+        throw new StructureObjectCorrupt('retained Structure parent is unavailable');
+      }
+      parent = owner.parent;
+    }
+  }
+  const targets = [...new Set(active.flatMap(record => record.target ? [record.target] : []))];
+  if (targets.length) {
+    const found = await env.fuseki.query(`PREFIX rv: <${RV}> SELECT DISTINCT ?target WHERE {
+      VALUES ?target { ${targets.map(iri).join(' ')} }
+      GRAPH ${iri(GRAPHS.current)} { ?target rv:mainVersion ?main . } }`);
+    const available = new Set((found.results?.bindings ?? []).map(row => row.target?.value));
+    if (targets.some(target => !available.has(target))) {
+      throw new CompositionConflict('restored target resource is unavailable');
+    }
+  }
+  const generation = derivedId(`${intent.admission.id}\0composition\0generation`);
+  const revision = derivedId(`${intent.admission.id}\0composition\0revision`);
+  const operation = derivedId(`${intent.admission.id}\0composition\0operation`);
+  const next = await writeManifest(objects, { ...sourceManifest, generation,
+    restoredFrom: intent.restoredFrom }, cost);
+  const segments = new Map<string, SegmentState>();
+  const projection: string[] = [];
+  const focus: [string, string][] = [['structure', header.structure],
+    ['generation', generation], ['generation', header.generation], ['revision', revision]];
+  for (const record of records) {
+    const segment = record.state === 'active'
+      ? derivedId(`${generation}\0${record.parent}\0${record.segmentKey}`) : undefined;
+    if (segment) {
+      const existingSegment = segments.get(segment);
+      if (existingSegment) existingSegment.count++;
+      else segments.set(segment, { segment, parent: record.parent,
+        key: record.segmentKey!, count: 1 });
+    }
+    const state: PlacementState = { occurrence: record.occurrence,
+      placement: placementIri(generation, record.occurrence), active: record.state === 'active',
+      parent: record.parent, role: record.role, introducedBy: record.introducedBy,
+      ...(segment ? { segment, segmentKey: record.segmentKey, orderKey: record.orderKey } : {
+        removedBy: record.removedBy }),
+      ...(record.labels[0] ? { label: record.labels[0] } : {}),
+      ...(record.target ? { target: record.target, selection: record.selection as Selection } : {}),
+      ...(record.sourceKey ? { sourceKey: record.sourceKey } : {}) };
+    projection.push(...placementTriples(state, generation, header.profile));
+    focus.push([state.active ? 'placement' : 'removed-placement', state.placement]);
+    cost.placementsWritten++;
+  }
+  for (const segment of segments.values()) {
+    projection.push(...segmentTriples(segment, generation));
+    focus.push(['segment', segment.segment]);
+    cost.segmentsWritten++;
+  }
+  if (focus.length > 100) throw new CompositionTooLarge('restore requires the staged generation path');
+  const receipt = compositionReceiptIri(intent.admission.id);
+  const update = `PREFIX rv: <${RV}>
+    DELETE { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?n }
+      GRAPH ${iri(GRAPHS.current)} {
+        ${iri(header.structure)} rv:structureHead ${iri(intent.expectedHead)} ;
+          rv:selectedGeneration ${iri(header.generation)} .
+        ${iri(header.generation)} rv:generationState rv:Active . } }
+    INSERT {
+      GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?next }
+      GRAPH ${iri(GRAPHS.current)} {
+        ${iri(header.structure)} rv:structureHead ${iri(revision)} ;
+          rv:selectedGeneration ${iri(generation)} .
+        ${iri(header.generation)} rv:generationState rv:Retired .
+        ${iri(generation)} a rv:StructureGeneration ; rv:structure ${iri(header.structure)} ;
+          rv:generationState rv:Active ; rv:stagedBy ${iri(operation)} ;
+          rv:placementCount ${active.length} .
+        ${projection.join('\n')}
+      }
+      GRAPH ${iri(GRAPHS.revisions)} { ${revisionTriples(env, { revision,
+        structure: header.structure, predecessor: intent.expectedHead, restoredFrom: intent.restoredFrom,
+        operation, kind: 'StructureRestore', generation, manifest: next, count: active.length })} }
+      GRAPH ${iri(GRAPHS.receipts)} { ${receiptTriples(env, intent.admission, receipt, 'Succeeded',
+        `rv:operation ${iri(operation)} ; rv:action "composition.restore" ;
+        rv:structure ${iri(header.structure)} ; rv:structureRevision ${iri(revision)} ;
+        rv:expectedHead ${iri(intent.expectedHead)} ;`)} }
+      GRAPH ${iri(GRAPHS.outbox)} { ${outboxTriples(env, receipt)} }
+    } WHERE { ${controlGuard(env)}
+      FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} ?p ?o } }
+      ${headGuard}
+      GRAPH ${iri(GRAPHS.current)} { ${iri(header.structure)} rv:selectedGeneration ${iri(header.generation)} .
+        ${iri(header.generation)} rv:generationState rv:Active .
+        ${targets.map((target, index) => `${iri(target)} rv:mainVersion ?main${index} .`).join('\n')} }
+      FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.revisions)} { ${iri(revision)} ?rp ?ro } }
+      BIND(?n + 1 AS ?next) }`;
+  const committed = await dispatch(env, intent.admission, update, await validations(env, focus));
+  if (!committed && !await readCompositionReceipt(env, intent.admission.id)) {
+    await sealRejection(env, intent.admission, 'composition.restore', 'StaleHead',
+      `GRAPH ${iri(GRAPHS.current)} { ${iri(header.structure)} rv:structureHead ?head }
+      FILTER(?head != ${iri(intent.expectedHead)})`);
+  }
+  return { terminal: await settled(env, intent.admission), committed,
+    ...(committed ? { cost } : {}) };
 }

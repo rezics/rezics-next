@@ -8,6 +8,7 @@ import { sealMetadataWorkEditAdmission } from '../work/edit.ts';
 import { assertGraphAdmissionOpen } from '../work/restore-lineage.ts';
 import { changeComposition, compositionChangeDigest, compositionCreateDigest,
   compositionSealDigest, createComposition, readCompositionReceipt, sealComposition,
+  compositionRestoreDigest, restoreComposition,
   terminalResult, type CompositionConflict, type CompositionCost, type CompositionOperation,
   type CompositionTerminal } from './change.ts';
 import { CompositionCorrupt, CompositionUnavailable, readCompositionHeader } from './graph.ts';
@@ -15,7 +16,7 @@ import { InvalidCompositionChange } from './change.ts';
 import { StructureObjectCorrupt, StructureObjectUnavailable } from './tree.ts';
 
 type Account = Pick<AccountAssertionVerifier, 'verify'>;
-type Access = Pick<AccessAdmissionRegistry, 'register' | 'claim' | 'recordGraphOutcome'>;
+type Access = Pick<AccessAdmissionRegistry, 'register' | 'claim' | 'recordGraphOutcome' | 'canReadWork'>;
 
 export interface AdmittedComposition extends CompositionTerminal {
   replayed: boolean;
@@ -92,7 +93,14 @@ export async function changeAdmittedComposition(env: WorkActivationEnvironment, 
   access: Access, request: Request, input: { structure: string; expectedHead: string;
     operations: readonly CompositionOperation[]; actingSubject: string; idempotencyKey: string }) {
   const digest = compositionChangeDigest(input.structure, input.expectedHead, input.operations);
-  await account.verify(request, ['work:edit']);
+  const targets = [...new Set(input.operations.flatMap(operation => operation.op === 'insert'
+    && operation.target ? [operation.target] : []))];
+  const principal = await account.verify(request, targets.length ? ['work:edit', 'work:read'] : ['work:edit']);
+  for (const target of targets) {
+    if (!await access.canReadWork(principal, input.actingSubject, target)) {
+      throw new CompositionUnavailable('chapter target is unavailable');
+    }
+  }
   const work = await bookWork(env, input.structure);
   return admitted(env, account, access, request, { work, actingSubject: input.actingSubject,
     idempotencyKey: input.idempotencyKey, digest },
@@ -104,12 +112,26 @@ export async function sealAdmittedComposition(env: WorkActivationEnvironment, ac
   access: Access, request: Request, input: { structure: string; expectedHead: string;
     actingSubject: string; idempotencyKey: string }) {
   const digest = compositionSealDigest(input.structure, input.expectedHead);
-  await account.verify(request, ['work:edit']);
+  const principal = await account.verify(request, ['work:edit', 'work:read']);
   const work = await bookWork(env, input.structure);
   return admitted(env, account, access, request, { work, actingSubject: input.actingSubject,
     idempotencyKey: input.idempotencyKey, digest },
   admission => sealComposition(env, { admission, structure: input.structure,
-    expectedHead: input.expectedHead }));
+    expectedHead: input.expectedHead,
+    canReadTarget: target => access.canReadWork(principal, input.actingSubject, target) }));
+}
+
+export async function restoreAdmittedComposition(env: WorkActivationEnvironment, account: Account,
+  access: Access, request: Request, input: { structure: string; expectedHead: string;
+    restoredFrom: string; actingSubject: string; idempotencyKey: string }) {
+  const digest = compositionRestoreDigest(input.structure, input.expectedHead, input.restoredFrom);
+  const principal = await account.verify(request, ['work:edit', 'work:read']);
+  const work = await bookWork(env, input.structure);
+  return admitted(env, account, access, request, { work, actingSubject: input.actingSubject,
+    idempotencyKey: input.idempotencyKey, digest },
+  admission => restoreComposition(env, { admission, structure: input.structure,
+    expectedHead: input.expectedHead, restoredFrom: input.restoredFrom,
+    canReadTarget: target => access.canReadWork(principal, input.actingSubject, target) }));
 }
 
 export type { CompositionConflict };

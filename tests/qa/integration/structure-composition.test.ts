@@ -1,8 +1,9 @@
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
-import { readFileSync, renameSync, writeFileSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { resolve } from 'node:path';
 import { authorCreditFixture, shortId } from '../fixtures/author-credit.ts';
+import { ObjectIntegrityError, ObjectUnavailable, S3ImmutableObjects,
+  type ImmutableObjects } from '../../../services/main/src/infrastructure/immutable-objects.ts';
 import { GRAPHS, iri } from '../../../services/main/src/modules/work/activate.ts';
 import { checkStructureSealManifest } from '../../../services/main/src/modules/structure/format.ts';
 
@@ -17,6 +18,13 @@ test('COMP01/COMP02/COMP05/COMP06 BOOK01/BOOK02: admitted Book composition keeps
   if (!Bun.env.REZICS_QA_RUN_ID) throw new Error('Run through the isolated integration tier');
   const f = await authorCreditFixture(Bun.env as Record<string, string>,
     resolve('.temp', `structure-composition-${randomUUID()}`));
+  const objects = new S3ImmutableObjects({ endpoint: Bun.env.MAIN_S3_ENDPOINT!,
+    bucket: Bun.env.MAIN_S3_BUCKET!, region: Bun.env.MAIN_S3_REGION!,
+    accessKeyId: Bun.env.MAIN_S3_ACCESS_KEY!, secretAccessKey: Bun.env.MAIN_S3_SECRET_KEY!,
+    prefix: 'semantic/structure/' });
+  await objects.initialize();
+  const objectEnv = f.env as typeof f.env & { structureObjects: ImmutableObjects };
+  objectEnv.structureObjects = objects;
   try {
     const work = await f.json<{ work: string; mainVersion: string }>(await f.call('POST', '/v1/works',
       { profile: 'metadata-only-v1', title: 'Book composition',
@@ -88,15 +96,15 @@ test('COMP01/COMP02/COMP05/COMP06 BOOK01/BOOK02: admitted Book composition keeps
     const oldManifest = await f.env.fuseki.query(`PREFIX rv: <https://rezics.com/vocab/>
       SELECT ?manifest WHERE { GRAPH ${iri(GRAPHS.revisions)} {
         ${iri(changed.revision)} rv:manifest ?manifest . } }`);
-    const oldPath = join(f.env.objectDirectory, 'structure',
-      oldManifest.results!.bindings[0]!.manifest!.value.slice(-64));
-    const original = readFileSync(oldPath);
-    renameSync(oldPath, `${oldPath}.held`);
+    const oldDigest = oldManifest.results!.bindings[0]!.manifest!.value.slice(-64);
+    objectEnv.structureObjects = { put: bytes => objects.put(bytes), get: digest => digest === oldDigest
+      ? Promise.reject(new ObjectUnavailable('missing staged object')) : objects.get(digest) };
     try { expect((await f.call('GET', exactPath)).status).toBe(503); }
-    finally { renameSync(`${oldPath}.held`, oldPath); }
-    writeFileSync(oldPath, 'corrupt');
+    finally { objectEnv.structureObjects = objects; }
+    objectEnv.structureObjects = { put: bytes => objects.put(bytes), get: digest => digest === oldDigest
+      ? Promise.reject(new ObjectIntegrityError('corrupt staged object')) : objects.get(digest) };
     try { expect((await f.call('GET', exactPath)).status).toBe(503); }
-    finally { writeFileSync(oldPath, original); }
+    finally { objectEnv.structureObjects = objects; }
     const removed = await f.json<Changed>(await f.call('POST', `${path}/changes`,
       { profile: 'book-composition', expectedHead: moved.revision, actingSubject: f.actor,
         operations: [{ op: 'remove', occurrence: changed.occurrences[0] }] }), 200);
@@ -148,10 +156,15 @@ test('COMP01/COMP02/COMP05/COMP06 BOOK01/BOOK02: admitted Book composition keeps
     const sealRow = sealGraph.results?.bindings[0];
     expect(sealRow?.coverage?.value).toBe('https://rezics.com/vocab/Partial');
     expect(sealRow?.unavailable?.value).toBe('1');
-    const sealManifest = checkStructureSealManifest(readFileSync(join(f.env.objectDirectory,
-      'structure', sealRow!.manifest!.value.slice(-64))));
+    const sealManifest = checkStructureSealManifest(await objects.get(sealRow!.manifest!.value.slice(-64)));
     expect(sealManifest.structureRevision).toBe(winnerResult.revision);
     expect(sealManifest.pins.count).toBe(1);
+    const fixed = await f.json<{ structureRevision: string; pins: Array<{ occurrence: string;
+      target?: string; unavailable?: string }> }>(await f.call('GET',
+      `${path}/seals/${shortId(sealed.seal)}?actingSubject=${encodeURIComponent(f.actor)}`), 200);
+    expect(fixed.structureRevision).toBe(winnerResult.revision);
+    expect(fixed.pins).toEqual([{ occurrence: changed.occurrences[1], target: work.work,
+      unavailable: 'missing' }]);
     let denseHead = winnerResult.revision;
     let rebalanced = 0;
     for (let batch = 0; batch < 32; batch++) {
@@ -180,5 +193,15 @@ test('COMP01/COMP02/COMP05/COMP06 BOOK01/BOOK02: admitted Book composition keeps
     expect(retained).toHaveLength(514);
     expect(new Set(retained).size).toBe(retained.length);
     expect(retained).toContain(changed.occurrences[1]);
+    const restored = await f.json<Changed>(await f.call('POST', `${path}/restorations`, {
+      expectedHead: denseHead, restoredFrom: changed.revision, actingSubject: f.actor }), 200);
+    expect(restored.revision).not.toBe(changed.revision);
+    expect((await f.json<Page>(await f.call('GET', read), 200)).occurrences
+      .map(item => item.occurrence)).toEqual(changed.occurrences);
+    expect((await f.json<Page>(await f.call('GET',
+      `${path}/revisions/${shortId(denseHead)}?actingSubject=${encodeURIComponent(f.actor)}&limit=100`),
+    200)).placementCount).toBe(515);
+    expect((await f.call('POST', `${path}/restorations`, {
+      expectedHead: denseHead, restoredFrom: changed.revision, actingSubject: f.actor })).status).toBe(409);
   } finally { await f.close(); }
 }, 180_000);

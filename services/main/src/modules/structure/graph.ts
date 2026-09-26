@@ -47,6 +47,7 @@ export interface PlacementState {
   label?: Label;
   target?: string;
   selection?: Selection;
+  qualifier?: OccurrenceRecord['qualifier'];
   sourceKey?: string;
   introducedBy: string;
   removedBy?: string;
@@ -226,6 +227,7 @@ export function placementRecord(state: PlacementState): OccurrenceRecord {
     ...(state.active ? { segmentKey: state.segmentKey!, orderKey: state.orderKey! } : {}),
     role: state.role, ...(state.target ? { target: state.target } : {}),
     ...(state.selection ? { selection: state.selection } : {}),
+    ...(state.qualifier ? { qualifier: state.qualifier } : {}),
     labels: state.label ? [state.label] : [],
     ...(state.sourceKey ? { sourceKey: state.sourceKey } : {}),
     introducedBy: state.introducedBy, ...(state.removedBy ? { removedBy: state.removedBy } : {}) };

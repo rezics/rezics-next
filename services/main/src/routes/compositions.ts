@@ -1,12 +1,15 @@
 import { Elysia, t } from 'elysia';
 import type { FusekiClient } from '../infrastructure/fuseki.ts';
-import { createAdmittedComposition, changeAdmittedComposition, sealAdmittedComposition }
+import { ObjectIntegrityError, ObjectUnavailable } from '../infrastructure/immutable-objects.ts';
+import { createAdmittedComposition, changeAdmittedComposition, sealAdmittedComposition,
+  restoreAdmittedComposition }
   from '../modules/structure/change-admitted.ts';
 import { CompositionConflict, CompositionExists, CompositionTooLarge, InvalidCompositionChange,
   StaleCompositionHead } from '../modules/structure/change.ts';
 import { CompositionCorrupt, CompositionUnavailable, NATIVE_ID, readCompositionHeader }
   from '../modules/structure/graph.ts';
 import { readCompositionPage } from '../modules/structure/read.ts';
+import { readCompositionSeal } from '../modules/structure/seal-read.ts';
 import { StructureObjectCorrupt, StructureObjectUnavailable } from '../modules/structure/tree.ts';
 import { assertGraphAdmissionOpen } from '../modules/work/restore-lineage.ts';
 import { pendingOperation, problemResult } from '../api-contract.ts';
@@ -54,6 +57,19 @@ const writeResponses = { 200: writeResult, 201: writeResult, 202: pendingOperati
   404: problemResult(404), 409: problemResult(409), 500: problemResult(500),
   503: problemResult(503) };
 const readResponses = { 200: pageResult, ...authorizedReadProblems };
+export const openApiOperations = {
+  '/v1/compositions': { post: { bearer: true, idempotencyKey: true } },
+  '/v1/compositions/{id}/changes': { post: { bearer: true, idempotencyKey: true } },
+  '/v1/compositions/{id}/seals': { post: { bearer: true, idempotencyKey: true } },
+  '/v1/compositions/{id}/restorations': { post: { bearer: true, idempotencyKey: true } },
+} as const;
+const sealPageResult = t.Object({ structure: ref, seal: ref, structureRevision: ref,
+  coverage: t.Union([t.Literal('complete'), t.Literal('partial')]), unavailableCount: t.Integer(),
+  pins: t.Array(t.Object({ occurrence: ref, target: t.Optional(t.String()),
+    variant: t.Optional(t.String()), revision: t.Optional(t.String()),
+    unavailable: t.Optional(t.Union([t.Literal('erased'), t.Literal('withdrawn'),
+      t.Literal('undisclosed'), t.Literal('missing')])) })), next: t.Nullable(t.String()),
+  sourcePosition, cost: t.Object({ pagesRead: t.Integer(), pagesWritten: t.Integer() }) });
 
 function key(request: Request): string | null {
   const value = request.headers.get('idempotency-key');
@@ -68,7 +84,8 @@ function compositionError(error: unknown): Response {
   if (error instanceof CompositionConflict || error instanceof CompositionExists
     || error instanceof CompositionTooLarge) return problem(409, 'composition_conflict', error.message);
   if (error instanceof CompositionCorrupt || error instanceof StructureObjectCorrupt
-    || error instanceof StructureObjectUnavailable) return problem(503, 'composition_unavailable',
+    || error instanceof StructureObjectUnavailable || error instanceof ObjectUnavailable
+    || error instanceof ObjectIntegrityError) return problem(503, 'composition_unavailable',
     'Composition history is unavailable');
   return commandError(error);
 }
@@ -77,6 +94,10 @@ const writeBody = t.Object({ actingSubject: ref }, { additionalProperties: false
 
 /** Book Composition is the first Structure write/read template. */
 export function compositionRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
+  if (work.structureObjects) {
+    (work.environment as typeof work.environment & { structureObjects?: typeof work.structureObjects })
+      .structureObjects = work.structureObjects;
+  }
   return new Elysia()
     .post('/v1/compositions', {
       body: t.Object({ profile: t.Literal('book-composition'), work: ref,
@@ -134,6 +155,25 @@ export function compositionRoutes(fuseki: FusekiClient, work: MainWorkDependenci
         { headers: { 'cache-control': 'no-store' } });
       } catch (error) { return compositionError(error); }
     })
+    .post('/v1/compositions/:id/restorations', {
+      params: t.Object({ id: groupUuid }),
+      body: t.Object({ expectedHead: ref, restoredFrom: ref, ...writeBody.properties },
+        { additionalProperties: false }), response: writeResponses,
+    }, async ({ request, params, body }) => {
+      const idempotencyKey = key(request);
+      if (!idempotencyKey) return problem(400, 'invalid_idempotency_key', 'A valid Idempotency-Key is required');
+      try {
+        const result = await restoreAdmittedComposition(work.environment, work.account, work.access,
+          request, { structure: `https://rezics.com/id/${params.id}`,
+            expectedHead: body.expectedHead, restoredFrom: body.restoredFrom,
+            actingSubject: body.actingSubject, idempotencyKey });
+        return Response.json({ structure: result.structure, revision: result.revision,
+          expectedHead: result.expectedHead, receipt: result.receipt, replayed: result.replayed,
+          ...(result.cost ? { cost: result.cost } : {}), sourcePosition: { datasetId: 'product',
+            dataEpoch: result.dataEpoch, sequence: result.sequence } },
+        { headers: { 'cache-control': 'no-store' } });
+      } catch (error) { return compositionError(error); }
+    })
     .get('/v1/compositions/:id', {
       params: t.Object({ id: groupUuid }),
       query: t.Object({ actingSubject: ref, parent: t.Optional(ref),
@@ -176,6 +216,29 @@ export function compositionRoutes(fuseki: FusekiClient, work: MainWorkDependenci
           revision: `https://rezics.com/id/${params.revision}`,
           ...(query.parent ? { parent: query.parent } : {}), ...(query.after ? { after: query.after } : {}),
           limit: query.limit ?? 50,
+          canReadTarget: target => NATIVE_ID.test(target)
+            ? work.access.canReadWork(principal, query.actingSubject, target) : Promise.resolve(false) });
+        return Response.json(page, { headers: { 'cache-control': 'no-store' } });
+      } catch (error) { return compositionError(error); }
+    })
+    .get('/v1/compositions/:id/seals/:seal', {
+      params: t.Object({ id: groupUuid, seal: groupUuid }),
+      query: t.Object({ actingSubject: ref, after: t.Optional(t.String({ maxLength: 512 })),
+        limit: t.Optional(t.Numeric({ minimum: 1, maximum: 100 })) },
+      { additionalProperties: false }),
+      response: { 200: sealPageResult, ...authorizedReadProblems },
+    }, async ({ request, params, query }) => {
+      try {
+        const structure = `https://rezics.com/id/${params.id}`;
+        await assertGraphAdmissionOpen(fuseki, work.environment.lineage);
+        const principal = await work.account.verify(request, ['work:read']);
+        const header = await readCompositionHeader(work.environment, structure);
+        if (!header || !await work.access.canReadWork(principal, query.actingSubject, header.work)) {
+          return problem(404, 'composition_unavailable', 'Composition is unavailable');
+        }
+        const page = await readCompositionSeal(work.environment, { structure,
+          seal: `https://rezics.com/id/${params.seal}`,
+          ...(query.after ? { after: query.after } : {}), limit: query.limit ?? 50,
           canReadTarget: target => NATIVE_ID.test(target)
             ? work.access.canReadWork(principal, query.actingSubject, target) : Promise.resolve(false) });
         return Response.json(page, { headers: { 'cache-control': 'no-store' } });

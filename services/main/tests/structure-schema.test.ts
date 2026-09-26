@@ -15,8 +15,13 @@ import { InvalidZoneConfiguration, checkZoneConfiguration, type ZoneConfiguratio
   from '../src/modules/zone/config-format.ts';
 import { InexactQuantity, exactRational, scaleExact } from '../src/modules/recipe/quantity.ts';
 import { ObjectUnavailable } from '../src/infrastructure/immutable-objects.ts';
+import { StaleStructureProgress, StructureProgressConflict, StructureProgressStore }
+  from '../src/modules/progress/store.ts';
 import { checkedOperations } from '../src/modules/structure/change.ts';
+import { pinTree } from '../src/modules/structure/change.ts';
 import { discoverStructureProfiles } from '../src/modules/structure/profiles.ts';
+import { readCompositionSeal } from '../src/modules/structure/seal-read.ts';
+import type { WorkActivationEnvironment } from '../src/modules/work/activate.ts';
 import { StructureTree, newCost } from '../src/modules/structure/tree.ts';
 import { evenKeys, keyBetween } from '../src/modules/structure/order-key.ts';
 
@@ -76,13 +81,65 @@ test('COMP01: a second owner registers a Structure profile without changing the 
       componentPredicate: 'https://rezics.com/vocab/mainVersion', editScopePrefix: 'work:edit:',
       roles: ['group', 'member'], targetRoles: ['member']
     }];`);
+    const recipeDirectory = join(directory, 'recipe');
+    mkdirSync(recipeDirectory);
+    await Bun.write(join(recipeDirectory, 'structure-profile.ts'), `export const structureProfiles = [{
+      id: 'recipe-composition', graphProfile: 'https://rezics.com/vocab/RecipeComposition',
+      ownerType: 'https://schema.org/Recipe', componentType: 'https://rezics.com/vocab/MainVersion',
+      componentPredicate: 'https://rezics.com/vocab/mainVersion', editScopePrefix: 'work:edit:',
+      roles: ['group', 'ingredient', 'step'], targetRoles: [], optionalTargetRoles: ['ingredient'],
+      projectQualifier: () => null, hydrateQualifier: async () => undefined
+    }];`);
     const profiles = await discoverStructureProfiles(directory);
     expect(profiles.get('collection-membership')?.roles).toEqual(['group', 'member']);
     expect(checkedOperations([{ op: 'insert', parent: id(), position: 'last',
       role: 'member', target: id() }], profiles.get('collection-membership'))).toHaveLength(1);
     expect(() => checkedOperations([{ op: 'insert', parent: id(), position: 'last',
       role: 'member', target: id() }], 'book-composition')).toThrow('role');
+    expect(checkedOperations([{ op: 'insert', parent: id(), position: 'last',
+      role: 'ingredient', qualifier: { type: 'ingredient-line',
+        originalText: { value: 'Flour', language: 'en' }, optional: false,
+        scaling: 'linear', substituteFor: [], parseStatus: 'unparsed' } }],
+    profiles.get('recipe-composition'))).toHaveLength(1);
   } finally { rmSync(directory, { recursive: true, force: true }); }
+});
+
+test('BOOK03: an exact composition seal retains its selected Content revision', async () => {
+  const retained = new Map<string, Uint8Array>();
+  const objects = { put: async (value: Uint8Array) => {
+    const hash = createHash('sha256').update(value).digest('hex');
+    retained.set(hash, value);
+    return hash;
+  }, get: async (hash: string) => {
+    const value = retained.get(hash);
+    if (!value) throw new ObjectUnavailable('retained seal object missing');
+    return value;
+  } };
+  const structure = id(), seal = id(), structureRevision = id(), occurrence = id(), target = id();
+  const selectedRevision = `urn:rezics:content:revision:${randomUUID()}`;
+  const tree = pinTree(objects);
+  const cost = newCost();
+  const pins = await tree.apply(await tree.empty(cost), new Map([[`${occurrence}\u0001`,
+    { occurrence, target, revision: selectedRevision }]]), cost);
+  const sealDigest = await objects.put(bytes({ format: 'rezics-structure-seal-v1', structure,
+    structureRevision, structureManifest: `sha256:${digest('structure')}`, pins,
+    coverage: 'complete', unavailableCount: 0,
+    model: 'https://rezics.com/definition/structure-composition-v1' }));
+  const binding = (value: string) => ({ type: 'literal', value });
+  const env = { structureObjects: objects, fuseki: { query: async () => ({ results: { bindings: [{
+    revision: binding(structureRevision), manifest: binding(`urn:rezics:sha256:${sealDigest}`),
+    coverage: binding('https://rezics.com/vocab/Complete'), unavailable: binding('0'),
+    epoch: binding(randomUUID()), sequence: binding('3'),
+  }] } }) } } as unknown as WorkActivationEnvironment;
+  const first = await readCompositionSeal(env, { structure, seal, limit: 10,
+    canReadTarget: async () => true });
+  expect(first.pins).toEqual([{ occurrence, target, revision: selectedRevision }]);
+  const afterPublication = await readCompositionSeal(env, { structure, seal, limit: 10,
+    canReadTarget: async () => true });
+  expect(afterPublication.pins).toEqual(first.pins);
+  const hidden = await readCompositionSeal(env, { structure, seal, limit: 10,
+    canReadTarget: async () => false });
+  expect(hidden.pins).toEqual([{ occurrence, unavailable: 'undisclosed' }]);
 });
 
 let state = '';
@@ -150,7 +207,8 @@ test('COMP03 owner schema: Content migrations install 030 empty and upgrade from
   expect(installed.rows.map(row => row.version)).toEqual(versions);
   const tables = await empty.query<{ table_name: string }>(`SELECT table_name FROM information_schema.tables
     WHERE table_schema = 'structure' ORDER BY table_name`);
-  expect(tables.rows.map(row => row.table_name)).toEqual(['stage_job', 'stage_page']);
+  expect(tables.rows.map(row => row.table_name)).toEqual(
+    ['progress', 'progress_command', 'stage_job', 'stage_page']);
 
   // An owner at the head before this task: every earlier migration plus retained rows.
   const upgraded = await database('structure_upgrade');
@@ -180,6 +238,31 @@ test('COMP03 owner schema: Content migrations install 030 empty and upgrade from
       AND NOT tgisinternal ORDER BY tgname`);
   expect(triggers.rows.map(row => row.tgname)).toEqual(
     ['stage_job_monotone', 'stage_page_checkpoint', 'stage_page_pinned']);
+});
+
+test('BOOK02/COMP06: progress keys each occurrence and replays a private command after removal', async () => {
+  const pool = pools.find(candidate => candidate.options.database === 'structure_upgrade')!;
+  const store = new StructureProgressStore(pool);
+  const principal = { issuer: 'https://account.example', subject: randomUUID() };
+  const other = { ...principal, subject: randomUUID() };
+  const structure = id(), first = id(), repeated = id();
+  const command = { principal, structure, occurrence: first, completed: true,
+    position: 'paragraph:4', expectedVersion: 0, idempotencyKey: `progress:${randomUUID()}` };
+  expect(await store.read(principal, structure, first)).toMatchObject({ version: 0, completed: false });
+  expect(await store.write(command)).toMatchObject({ version: 1, completed: true, replayed: false });
+  expect(await store.write(command)).toMatchObject({ version: 1, completed: true, replayed: true });
+  expect(await store.read(principal, structure, repeated)).toMatchObject({ version: 0, completed: false });
+  expect(await store.read(other, structure, first)).toMatchObject({ version: 0, completed: false });
+  await expect(store.write({ ...command, occurrence: repeated })).rejects.toBeInstanceOf(
+    StructureProgressConflict);
+  await expect(store.write({ ...command, idempotencyKey: `progress:${randomUUID()}` }))
+    .rejects.toBeInstanceOf(StaleStructureProgress);
+  await rejects(pool.query(`DELETE FROM structure.progress_command WHERE principal_issuer = $1
+    AND principal_subject = $2 AND idempotency_key = $3`,
+  [principal.issuer, principal.subject, command.idempotencyKey]), /immutable/);
+  // No active-placement foreign key exists: removing and restoring a placement
+  // never rekeys this private state away from the stable occurrence ID.
+  expect(await store.read(principal, structure, first)).toMatchObject({ version: 1, position: 'paragraph:4' });
 });
 
 interface JobSeed { kind?: string; structure?: string; key?: string; principal?: string;

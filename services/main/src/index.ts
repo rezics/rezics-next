@@ -7,6 +7,7 @@ import { createMainApp } from './app.ts';
 import { ContentProjectionWorker } from './content-projection-worker.ts';
 import { FusekiClient } from './infrastructure/fuseki.ts';
 import { S3ImmutableObjects } from './infrastructure/immutable-objects.ts';
+import { StructureProgressStore } from './modules/progress/store.ts';
 import { AccessAdmissionRegistry } from './modules/access/admission.ts';
 import { ErasureService } from './modules/erasure/request.ts';
 import { ContentProtectionStore } from './modules/protection/content-store.ts';
@@ -128,6 +129,12 @@ const workObjects = Bun.env.MAIN_S3_ENDPOINT ? new S3ImmutableObjects({
   secretAccessKey: required('MAIN_S3_SECRET_KEY'), prefix: 'semantic/work/',
 }) : undefined;
 if (workObjects) await workObjects.initialize();
+const structureObjects = new S3ImmutableObjects({
+  endpoint: required('MAIN_S3_ENDPOINT'), bucket: required('MAIN_S3_BUCKET'),
+  region: required('MAIN_S3_REGION'), accessKeyId: required('MAIN_S3_ACCESS_KEY'),
+  secretAccessKey: required('MAIN_S3_SECRET_KEY'), prefix: 'semantic/structure/',
+});
+await structureObjects.initialize();
 const mediaObjects = (prefix: string) => new S3ImmutableObjects({
   endpoint: required('MAIN_S3_ENDPOINT'), bucket: required('MAIN_S3_BUCKET'),
   region: required('MAIN_S3_REGION'), accessKeyId: required('MAIN_S3_ACCESS_KEY'),
@@ -164,7 +171,9 @@ const app = createMainApp(fuseki, {
     ...environment,
     ...(workObjects ? { workObjects } : {}),
   },
+  structureObjects,
   account,
+  progress: new StructureProgressStore(contentPool),
   access,
   erasures: erasureRelayPool ? new ErasureService(erasureRelayPool, contentPool) : undefined,
   recommendations,

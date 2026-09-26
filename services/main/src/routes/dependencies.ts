@@ -56,9 +56,13 @@ import type { RealmReplyStore } from '../modules/realm-reply/store.ts';
 import type { OwnerOperations } from '../modules/owner/operations.ts';
 import type { RankingGenerations } from '../modules/recommendation/ranking.ts';
 import type { AccessVotes } from '../modules/vote/access.ts';
+import type { StructureProgressStore } from '../modules/progress/store.ts';
+import type { ImmutableObjects } from '../infrastructure/immutable-objects.ts';
 
 export interface MainWorkDependencies {
   environment: WorkActivationEnvironment;
+  structureObjects?: ImmutableObjects;
+  progress?: StructureProgressStore;
   account: Pick<AccountAssertionVerifier, 'verify'>;
   content?: Pick<ContentCore, 'owningResourceForRevision' | 'readExactBatch'>;
   editorialProtection?: ContentProtectionStore;

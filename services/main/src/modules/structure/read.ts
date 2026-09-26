@@ -1,5 +1,6 @@
 import { GRAPHS, RV, iri, type WorkActivationEnvironment } from '../work/activate.ts';
-import { checkStructureManifest, InvalidStructureObject, type OccurrenceRecord } from './format.ts';
+import { checkOccurrenceRecord, checkStructureManifest, InvalidStructureObject,
+  type OccurrenceRecord } from './format.ts';
 import { orderTree, recordTree, structureObjects } from './change.ts';
 import { CompositionCorrupt, CompositionUnavailable, NATIVE_ID, orderTreeKey,
   readCompositionHeader } from './graph.ts';
@@ -73,6 +74,11 @@ export async function readCompositionPage(env: WorkActivationEnvironment, input:
     const record = (await recordTree(objects).lookup(manifest.records, [input.occurrence], cost))
       .get(input.occurrence);
     if (!record) throw new CompositionUnavailable('occurrence is unavailable');
+    try { checkOccurrenceRecord(record, header.profile); }
+    catch (error) {
+      if (error instanceof InvalidStructureObject) throw new StructureObjectCorrupt(error.message);
+      throw error;
+    }
     const visible = record.target && !await input.canReadTarget(record.target)
       ? { ...record, target: undefined, selection: undefined, labels: [] } : record;
     return { structure: input.structure, work: header.work, mainVersion: header.mainVersion,
@@ -104,6 +110,11 @@ export async function readCompositionPage(env: WorkActivationEnvironment, input:
     if (!record || record.state !== 'active' || record.parent !== parent
       || record.segmentKey !== entry.segmentKey || record.orderKey !== entry.orderKey) {
       throw new StructureObjectCorrupt('composition order and occurrence records differ');
+    }
+    try { checkOccurrenceRecord(record, header.profile); }
+    catch (error) {
+      if (error instanceof InvalidStructureObject) throw new StructureObjectCorrupt(error.message);
+      throw error;
     }
     if (record.target && !await input.canReadTarget(record.target)) {
       occurrences.push({ ...record, target: undefined, selection: undefined, labels: [] });
