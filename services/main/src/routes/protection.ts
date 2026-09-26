@@ -3,14 +3,22 @@ import { problemResult } from '../api-contract.ts';
 import { authorizedReadProblems, writeProblems } from '../api-responses.ts';
 import { changeAdmittedProtection, decideAdmittedCorrection, proposeAdmittedCorrection, ProtectionDenied, ProtectionPending }
   from '../modules/protection/admitted.ts';
-import { MAX_EDITORIAL_TARGETS, ProtectionIdempotencyConflict, ProtectionInvalid, type ContentProtectionStore,
+import { MAX_EDITORIAL_TARGETS, ProtectionIdempotencyConflict, ProtectionInvalid,
   type OwnerOutcome } from '../modules/protection/content-store.ts';
 import { PROTECTION_CONFLICTS } from '../modules/protection/schema.ts';
 import type { MainWorkDependencies } from './dependencies.ts';
 import { commandError, problem } from './problems.ts';
 
 /** The Content owner store is injected by the composition root when Content protection is enabled. */
-export type ProtectionDependencies = MainWorkDependencies & { editorialProtection?: ContentProtectionStore };
+export type ProtectionDependencies = MainWorkDependencies;
+
+export const openApiOperations = {
+  '/v1/editorial-protections': { post: { bearer: true, idempotencyKey: true } },
+  '/v1/corrections': { post: { bearer: true, idempotencyKey: true }, get: { bearer: true } },
+  '/v1/corrections/{proposalRevision}': { get: { bearer: true } },
+  '/v1/corrections/{proposalRevision}/decisions': { post: { bearer: true, idempotencyKey: true } },
+  '/v1/editorial-state-queries': { post: { bearer: true } },
+} as const;
 
 const NATIVE = '^https://rezics\\.com/id/[0-9a-f-]{36}$';
 const UUID = '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$';

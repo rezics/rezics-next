@@ -1,10 +1,11 @@
 import { createHash } from 'node:crypto';
 import type { AccountAssertionVerifier } from '../account/verify-assertion.ts';
 import { AdmissionDenied, AdmissionExpired, type AccessAdmissionRegistry,
-  type RegisteredAdmission } from '../access/admission.ts';
+  type GraphTerminalProof, type RegisteredAdmission } from '../access/admission.ts';
 import { ProtectionInvalid, type ContentProtectionAction, type ContentProtectionStore, type CorrectionDecision,
   type CorrectionProposal, type OwnerOutcome, type ProtectionState, ProtectionIdempotencyConflict } from './content-store.ts';
 import type { ProtectionAction } from './schema.ts';
+import { protectionReceiptIri, receiptFamilies, type ProtectionAdmissionAction } from './receipt-family.ts';
 
 /** Account, Access and the Content owner admit each protected command. Edit, protect,
  * relax, propose and review are distinct Access actions; the client never supplies origin. */
@@ -13,7 +14,7 @@ export class ProtectionDenied extends Error {}
 export class ProtectionPending extends Error {
   constructor(readonly operationId: string) { super('Content outcome needs receipt reconciliation'); }
 }
-type Access = Pick<AccessAdmissionRegistry, 'register' | 'claim'>;
+type Access = Pick<AccessAdmissionRegistry, 'register' | 'claim' | 'recordGraphOutcome'>;
 type Account = Pick<AccountAssertionVerifier, 'verify'>;
 
 export const PROTECTION_ADMISSION = {
@@ -43,18 +44,32 @@ function target(resourceId: string, variantId: string, actingSubject: string) {
   }
 }
 
-/** Register and claim; a denied claim may still replay an already recorded owner outcome.
- * Access cannot yet seal these admissions: `recordGraphOutcome` and strong revocation
- * know only their listed receipt families, so the `content-protection-*` families and
- * `sealContentProtectionAdmission` still need registering there. */
+function terminalProof(admission: RegisteredAdmission, result: OwnerOutcome<unknown>): GraphTerminalProof {
+  if (!Object.hasOwn(receiptFamilies, admission.action)) throw new ProtectionDenied('wrong protection admission action');
+  return { outcome: result.outcome === 'succeeded' ? 'succeeded' : 'cancelled',
+    receipt: protectionReceiptIri(admission.id, admission.action as ProtectionAdmissionAction),
+    admissionId: admission.id, requestDigest: admission.requestDigest,
+    authorityEpoch: admission.authorityEpoch, scope: admission.scope,
+    dataEpoch: result.position.dataEpoch, sequence: result.position.sequence };
+}
+
+/** Register and claim; a denied claim may still replay an already recorded owner outcome. */
 async function admit(access: Access, store: ContentProtectionStore, request: Request, account: Account, input: {
-  scope: string; action: string; actingSubject: string; idempotencyKey: string; digest: string; family: string;
+  scope: string; action: ProtectionAdmissionAction; oauthScope: 'content:protect' | 'content:correct' | 'content:review';
+  actingSubject: string; idempotencyKey: string; digest: string;
 }): Promise<{ admission: RegisteredAdmission; operationId: string }> {
-  const principal = await account.verify(request, ['work:edit']);
+  const principal = await account.verify(request, [input.oauthScope]);
   const admission = await access.register({ principal, actingSubject: input.actingSubject, scope: input.scope,
     action: input.action, idempotencyKey: input.idempotencyKey, requestDigest: input.digest });
-  const operationId = `${input.family}:${admission.id}`;
-  if (admission.state !== 'sealed') {
+  const operationId = `${receiptFamilies[input.action]}:${admission.id}`;
+  if (admission.state === 'sealed') {
+    // After a Content rollback, Access can retain the terminal proof while the
+    // Content receipt is gone. Re-executing that old intent would undo the fence.
+    let receipt: Awaited<ReturnType<ContentProtectionStore['readReceipt']>>;
+    try { receipt = await store.readReceipt(operationId); }
+    catch { throw new ProtectionPending(operationId); }
+    if (!receipt) throw new ProtectionPending(operationId);
+  } else {
     try { await access.claim(admission.id, input.digest); }
     catch (error) {
       if (!(error instanceof AdmissionDenied || error instanceof AdmissionExpired)) throw error;
@@ -84,6 +99,15 @@ async function resolveOwnerResponse<T>(store: ContentProtectionStore, operationI
   }
 }
 
+async function complete<T>(store: ContentProtectionStore, access: Access, admission: RegisteredAdmission,
+  digest: string, action: ContentProtectionAction, dispatch: () => Promise<OwnerOutcome<T>>): Promise<OwnerOutcome<T>> {
+  const operationId = `${receiptFamilies[admission.action as ProtectionAdmissionAction]}:${admission.id}`;
+  const result = await resolveOwnerResponse(store, operationId, digest, action, dispatch);
+  try { await access.recordGraphOutcome(admission.id, terminalProof(admission, result)); }
+  catch { throw new ProtectionPending(operationId); }
+  return result;
+}
+
 export async function changeAdmittedProtection(store: ContentProtectionStore, account: Account, access: Access,
   request: Request, input: ProtectionCommand): Promise<OwnerOutcome<ProtectionState>> {
   target(input.resourceId, input.variantId, input.actingSubject);
@@ -91,10 +115,10 @@ export async function changeAdmittedProtection(store: ContentProtectionStore, ac
     variantId: input.variantId, actingSubject: input.actingSubject, expectedContentHead: input.expectedContentHead,
     expectedProtectionHead: input.expectedProtectionHead, expectedRuleRevision: input.expectedRuleRevision,
     reason: input.reason, evidence: input.evidence });
-  const { operationId } = await admit(access, store, request, account, { scope: `content:protect:${input.resourceId}`,
+  const { admission, operationId } = await admit(access, store, request, account, { scope: `content:protect:${input.resourceId}`,
     action: PROTECTION_ADMISSION[input.action], actingSubject: input.actingSubject, idempotencyKey: input.idempotencyKey,
-    digest, family: 'content-protection-change' });
-  return resolveOwnerResponse(store, operationId, digest, 'protection.change', () => store.changeProtection({
+    digest, oauthScope: 'content:protect' });
+  return complete(store, access, admission, digest, 'protection.change', () => store.changeProtection({
     operationId, requestDigest: digest, resourceId: input.resourceId,
     variantId: input.variantId, action: input.action, expectedContentHead: input.expectedContentHead,
     expectedProtectionHead: input.expectedProtectionHead, expectedRuleRevision: input.expectedRuleRevision,
@@ -111,8 +135,8 @@ export async function proposeAdmittedCorrection(store: ContentProtectionStore, a
     candidate: sha(candidateJson), predecessor: input.predecessor, reason: input.reason, evidence: input.evidence });
   const { admission, operationId } = await admit(access, store, request, account, {
     scope: `content:correct:${input.resourceId}`, action: PROTECTION_ADMISSION.propose, actingSubject: input.actingSubject,
-    idempotencyKey: input.idempotencyKey, digest, family: 'content-correction-propose' });
-  return resolveOwnerResponse(store, operationId, digest, 'correction.propose', () => store.proposeCorrection({
+    idempotencyKey: input.idempotencyKey, digest, oauthScope: 'content:correct' });
+  return complete(store, access, admission, digest, 'correction.propose', () => store.proposeCorrection({
     operationId, requestDigest: digest, resourceId: input.resourceId,
     variantId: input.variantId, expectedContentHead: input.expectedContentHead,
     expectedProtectionHead: input.expectedProtectionHead, expectedRuleRevision: input.expectedRuleRevision,
@@ -131,8 +155,8 @@ export async function decideAdmittedCorrection(store: ContentProtectionStore, ac
     expectedRuleRevision: input.expectedRuleRevision, reason: input.reason, evidence: input.evidence });
   const { admission, operationId } = await admit(access, store, request, account, {
     scope: `content:review:${record.proposal.resourceId}`, action: PROTECTION_ADMISSION.review,
-    actingSubject: input.actingSubject, idempotencyKey: input.idempotencyKey, digest, family: 'content-correction-decide' });
-  return resolveOwnerResponse(store, operationId, digest, 'correction.decide', () => store.decideCorrection({
+    actingSubject: input.actingSubject, idempotencyKey: input.idempotencyKey, digest, oauthScope: 'content:review' });
+  return complete(store, access, admission, digest, 'correction.decide', () => store.decideCorrection({
     operationId, requestDigest: digest, proposalRevision: input.proposalRevision,
     outcome: input.outcome, expectedCandidateDigest: input.expectedCandidateDigest,
     expectedContentHead: input.expectedContentHead, expectedProtectionHead: input.expectedProtectionHead,
@@ -142,12 +166,44 @@ export async function decideAdmittedCorrection(store: ContentProtectionStore, ac
 }
 
 /** Terminal cancellation for a fenced admission; the Content operation lock admits one winner. */
-export function sealContentProtectionAdmission(store: ContentProtectionStore, admission: RegisteredAdmission) {
-  const [family, action] = admission.action === PROTECTION_ADMISSION.propose
-    ? ['content-correction-propose', 'correction.propose'] as const
-    : admission.action === PROTECTION_ADMISSION.review ? ['content-correction-decide', 'correction.decide'] as const
-      : Object.values(PROTECTION_ADMISSION).includes(admission.action as never)
-        ? ['content-protection-change', 'protection.change'] as const : [null, null];
-  if (!family || !action) throw new ProtectionDenied('not a Content protection admission');
-  return store.cancel(action satisfies ContentProtectionAction, `${family}:${admission.id}`, admission.requestDigest);
+export async function sealContentProtectionAdmission(store: ContentProtectionStore, admission: RegisteredAdmission) {
+  if (!Object.hasOwn(receiptFamilies, admission.action)) throw new ProtectionDenied('not a Content protection admission');
+  const action = admission.action === PROTECTION_ADMISSION.propose ? 'correction.propose'
+    : admission.action === PROTECTION_ADMISSION.review ? 'correction.decide' : 'protection.change';
+  const result = await store.cancel(action satisfies ContentProtectionAction,
+    `${receiptFamilies[admission.action as ProtectionAdmissionAction]}:${admission.id}`, admission.requestDigest);
+  return terminalProof(admission, result);
+}
+
+type ClosureAccess = Pick<AccessAdmissionRegistry, 'strongCloseScope' | 'listUnsealed' | 'strongDeactivatePrincipal'
+  | 'listUnsealedPrincipal' | 'recordGraphOutcome'>;
+
+async function sealPending(access: ClosureAccess, store: ContentProtectionStore, pending: RegisteredAdmission[]) {
+  for (const admission of pending) {
+    if (!Object.hasOwn(receiptFamilies, admission.action)) continue;
+    try {
+      const proof = await sealContentProtectionAdmission(store, admission);
+      await access.recordGraphOutcome(admission.id, proof);
+    } catch { /* The Access fence remains closed until a later reconciliation pass. */ }
+  }
+}
+
+/** One bounded pass after Access closes dispatch; unknown outcomes remain pending. */
+export async function strongRevokeProtectionScope(access: ClosureAccess, store: ContentProtectionStore,
+  scope: string, expectedEpoch: string) {
+  const closed = await access.strongCloseScope(scope, expectedEpoch);
+  await sealPending(access, store, await access.listUnsealed(scope, 100));
+  const current = await access.strongCloseScope(scope, closed.authorityEpoch);
+  return { scope, authorityEpoch: current.authorityEpoch,
+    status: current.pending === 0 ? 'complete' as const : 'pending' as const, pending: current.pending };
+}
+
+/** Principal deactivation uses the same owner receipt race as scope closure. */
+export async function strongRevokeProtectionPrincipal(access: ClosureAccess, store: ContentProtectionStore,
+  principalId: string, expectedEpoch: string) {
+  const fenced = await access.strongDeactivatePrincipal(principalId, expectedEpoch);
+  await sealPending(access, store, await access.listUnsealedPrincipal(principalId, 100));
+  const current = await access.strongDeactivatePrincipal(principalId, fenced.enforcementEpoch);
+  return { principalId, enforcementEpoch: current.enforcementEpoch,
+    status: current.pending === 0 ? 'complete' as const : 'pending' as const, pending: current.pending };
 }

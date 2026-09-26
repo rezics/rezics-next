@@ -99,7 +99,7 @@ async function record(client: PoolClient, args: { operationId: string; digest: s
     reason, data_epoch, sequence) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`, [args.operationId, args.digest, args.action,
     outcome, args.variantId, args.revisionId, args.code, position.data_epoch, position.sequence]);
   await client.query(`INSERT INTO content.outbox (id, data_epoch, sequence, operation_id, event_type, recipe, revision_id, payload)
-    VALUES ($1, $2, $3, $4, $5, 'content-body-v1', $6, $7::jsonb)`, [randomUUID(), position.data_epoch, position.sequence,
+    VALUES ($1, $2, $3, $4, $5, 'editorial-protection-v1', $6, $7::jsonb)`, [randomUUID(), position.data_epoch, position.sequence,
     args.operationId, EVENTS[args.action][args.code === null ? 0 : 1], args.revisionId,
     JSON.stringify({ ...args.payload, code: args.code })]);
   return { owner: 'content', dataEpoch: position.data_epoch, sequence: position.sequence };

@@ -8,6 +8,7 @@ import { FusekiClient } from './infrastructure/fuseki.ts';
 import { S3ImmutableObjects } from './infrastructure/immutable-objects.ts';
 import { AccessAdmissionRegistry } from './modules/access/admission.ts';
 import { ErasureService } from './modules/erasure/request.ts';
+import { ContentProtectionStore } from './modules/protection/content-store.ts';
 import { PrivateSearchSettlement } from './modules/contribution/private-search-settlement.ts';
 import { ReleaseRatingInventoryStore } from './modules/access/rating-aggregate-inventory.ts';
 import { AccessActingContexts } from './modules/access/contexts.ts';
@@ -199,6 +200,7 @@ const app = createMainApp(fuseki, {
   realmRecommendations: new RealmVariantRecommendationStore(pool),
   realmReplies: new RealmReplyStore(new RealmReplyContentStore(contentPool), content, access, environment),
   content,
+  editorialProtection: new ContentProtectionStore(contentPool),
   contentAuthoring: content,
   comments,
   contentProjection: { content, cursor, consumer },

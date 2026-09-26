@@ -8,7 +8,8 @@ Content receipt, owner position and outbox are written in the same transaction.
 Migration 131 adds a proposal-scoped private-principal comparison key; public
 proposal reads omit it. `null` protection means asserted absence for this profile.
 Main resolves a lost Content acknowledgement from that operation's receipt and
-returns a pending handle if the receipt cannot yet be read.
+returns a pending handle if the receipt cannot yet be read. Terminal outcomes
+seal the matching Access admission through the owner receipt-family declaration.
 
 `content-store.ts` is the owner write/read template. Copy its operation lock,
 recorded-receipt replay, target-row lock, exact basis checks, and single-commit
@@ -16,7 +17,9 @@ receipt/outbox pattern for another Content-owned target. Copy `admitted.ts` for
 Account/Access admission and distinct actions, then `routes/protection.ts` for
 typed transport and current read disclosure. A graph-owned target instead uses
 `model/definitions/protection-revision-v1.ts` and the Work title-control command
-template; its invariants belong in the profile's SHACL.
+template; its invariants belong in the profile's SHACL. That graph binding is
+not active yet: the native `TitleControlPolicy` permits only unprotected
+`work.edit`, `work.title.apply` and `work.title.return` mutations.
 
 ## Cost contract
 
@@ -30,6 +33,11 @@ The cursor is bound to its target; over-limit requests and malformed continuatio
 are rejected. The focused store tests exercise 50/51 pagination and bounded
 target reads; integration tests exercise Account/Access admission and HTTP replay.
 
-The generic Access admission registry and strong-revocation dispatcher do not yet
-recognize these three receipt families. Until they record terminal Content proofs
-and seal them on revocation, these routes must remain unwired in production.
+Protection changes, correction proposals and decisions use the
+`editorial-protection-v1` Content outbox recipe. Their events are acknowledged
+in order by the Content projection relay and do not create graph outbox events or
+new published Content models, so this binding declares no graph event handler or
+search projection recipe. The owner's `strongRevokeProtectionScope` and
+`strongRevokeProtectionPrincipal` perform
+bounded 100-admission reconciliation passes using the Content receipt; unresolved
+work stays pending behind the Access fence.
