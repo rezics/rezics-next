@@ -14,7 +14,7 @@ type ScalarRead = { work: string; revision: string; scalarValue?: WorkScalarValu
 type ScalarWrite = { work: string; revision: string; predecessor: string;
   scalarValue?: WorkScalarValue; replayed: boolean };
 
-test('MODEL02 template: real Account/Access/Main/Jena scalar write, exact read, denial and stale guard', async () => {
+test('MODEL02: real Account/Access/Main/Jena scalar write, exact read, denial and stale guard', async () => {
   if (!Bun.env.REZICS_QA_RUN_ID) throw new Error('Run through the isolated integration tier');
   const f = await authorCreditFixture(Bun.env as Record<string, string>,
     resolve('.temp', `work-scalar-${randomUUID()}`));
