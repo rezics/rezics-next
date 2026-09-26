@@ -20,8 +20,11 @@ what a worker does between start and handoff.
 
 ## Scope rules
 
-- Change only files matched by the claimed `paths` globs. Tests, fixtures and
-  generated artifacts count as changes. `goalctl merge` rejects any other file.
+- Change files matched by the claimed `paths` globs. When a claimed case needs a
+  file outside them, run `bun scripts/goal/goalctl.ts owner <path>`: if it prints
+  `unclaimed`, make the minimal change and list the file under OWNER CHANGES
+  (the manager reviews it at merge); if another task claims it, hand off with
+  that blocker instead. Do not stop merely because a needed file is unclaimed.
 - Use only the claimed migration numbers. Register routes and coverage only in
   the shared slots the brief names.
 - Implement only the claimed cases. When other work is needed, such as another

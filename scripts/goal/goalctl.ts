@@ -697,13 +697,22 @@ async function main(argv: string[]): Promise<number> {
     case 'merge': await mergeTask(positional[0] ?? '', flags); return 0;
     case 'close': await closeTask(positional[0] ?? '', positional[1] ?? ''); return 0;
     case 'reclaim': await reclaimTask(positional[0] ?? '', positional[1] ?? ''); return 0;
+    case 'owner': {
+      // Read-only: which open task claims a repository path (workers check before editing outside their claim).
+      const path = positional[0] ?? '';
+      const holders = Object.values(readLedger().tasks).filter(task => HOLDING.includes(task.state)
+        && task.paths.some(pattern => new Bun.Glob(pattern).match(path) || pathsOverlap(pattern, path)));
+      console.log(holders.length ? `${path}: claimed by ${holders.map(task => `${task.id} (${task.state})`).join(', ')}`
+        : `${path}: unclaimed`);
+      return holders.length ? 1 : 0;
+    }
     case 'status': await status(); return 0;
     case 'usage': console.log(JSON.stringify({ ...currentUsage(), file: usagePath })); return 0;
     case 'test': return withSlot(['corepack', 'yarn', 'test', ...rest]);
     case 'slot': return withSlot(rest[0] === '--' ? rest.slice(1) : rest);
     default:
       console.error('Usage: goalctl init [--manager <name>] | dispatch <brief.md> [--dry-run] [--force-usage]'
-        + ' | wait <id> | reclaim <id> <brief> | resume <id> (-m <text> | --file <path>) [--effort e] [--engine claude|codex] [--fresh]'
+        + ' | wait <id> | owner <path> | reclaim <id> <brief> | resume <id> (-m <text> | --file <path>) [--effort e] [--engine claude|codex] [--fresh]'
         + ' | stop <id> | scope <id> | merge <id> [--allow-scope] | close <id> verified|cancelled'
         + ' | status | usage | test <yarn test args> | slot -- <command>');
       return 2;
