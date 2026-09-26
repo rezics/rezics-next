@@ -29,7 +29,7 @@ const completeCases: Record<string, readonly TestIdentity[]> = {
   }, {
     tier: 'fault/recovery',
     file: 'services/main/tests/access-pitr.integration.test.ts',
-    name: 'OPS03/IAM07/IAM06/IAM23/IAM24: archived Access WAL restores exact authority and participation (partial)',
+    name: 'OPS03/IAM07/IAM06/IAM23/IAM24/IAM26: archived Access WAL restores exact authority and participation (partial)',
   }],
   VIEW01: [{
     tier: 'integration',
@@ -100,7 +100,16 @@ const completeCases: Record<string, readonly TestIdentity[]> = {
   }, {
     tier: 'fault/recovery',
     file: 'services/main/tests/access-pitr.integration.test.ts',
-    name: 'OPS03/IAM07/IAM06/IAM23/IAM24: archived Access WAL restores exact authority and participation (partial)',
+    name: 'OPS03/IAM07/IAM06/IAM23/IAM24/IAM26: archived Access WAL restores exact authority and participation (partial)',
+  }],
+  IAM26: [{
+    tier: 'integration',
+    file: 'tests/qa/integration/access-representation-api.test.ts',
+    name: 'IAM26: exact P-to-A mandate and B-to-A grant change only B roster with private P proof',
+  }, {
+    tier: 'fault/recovery',
+    file: 'services/main/tests/access-pitr.integration.test.ts',
+    name: 'OPS03/IAM07/IAM06/IAM23/IAM24/IAM26: archived Access WAL restores exact authority and participation (partial)',
   }],
   SYS02: [{
     tier: 'fault/recovery',
