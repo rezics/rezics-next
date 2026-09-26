@@ -144,5 +144,6 @@ export interface MainWorkDependencies {
   votes?: AccessVotes;
   exports?: ExportStore;
   exportVerification?: Pick<VerificationStore, 'readEvidence'>;
+  exportVerificationPrivate?: Pick<VerificationStore, 'readEvidenceFor'>;
   exportRights?: LicenseScopeHook;
 }

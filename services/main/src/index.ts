@@ -199,6 +199,7 @@ const app = createMainApp(fuseki, {
   votes: new AccessVotes(pool),
   exports: new ExportStore(contentPool),
   exportVerification: new VerificationStore(contentPool),
+  exportVerificationPrivate: new VerificationStore(contentPool),
   actingContexts: new AccessActingContexts(pool),
   groups: new AccessGroups(pool),
   grants: new AccessGrants(pool),

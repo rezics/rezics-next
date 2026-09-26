@@ -5,10 +5,16 @@ import { randomUUID } from 'node:crypto';
 import { Pool } from 'pg';
 import { migrateContent } from '../../../services/content/src/migrate.ts';
 import { FusekiClient } from '../../../services/main/src/infrastructure/fuseki.ts';
+import { S3ImmutableObjects } from '../../../services/main/src/infrastructure/immutable-objects.ts';
 import { AccessAdmissionRegistry } from '../../../services/main/src/modules/access/admission.ts';
 import { createAdmittedTextContribution } from '../../../services/main/src/modules/contribution/create-admitted.ts';
 import { publishAdmittedTextContribution } from '../../../services/main/src/modules/contribution/publish-admitted.ts';
 import { ExportStore } from '../../../services/main/src/modules/export/store.ts';
+import { pinTree } from '../../../services/main/src/modules/structure/change.ts';
+import { STRUCTURE_PROFILE, STRUCTURE_SEAL_FORMAT } from '../../../services/main/src/modules/structure/format.ts';
+import { newCost } from '../../../services/main/src/modules/structure/tree.ts';
+import { DATASET, GRAPHS, RV, iri } from '../../../services/main/src/modules/work/activate.ts';
+import { semanticRoutes } from '../../../services/main/src/routes/semantic.ts';
 import { createAdmittedFixedRelease, readFixedRelease } from '../../../services/main/src/modules/work/fixed-release.ts';
 import { createAdmittedMetadataWork } from '../../../services/main/src/modules/work/create-admitted.ts';
 import { selectAdmittedMainDefault } from '../../../services/main/src/modules/work/select-main-admitted.ts';
@@ -20,7 +26,7 @@ import { ratingAccount } from '../support/rating-account.ts';
 const root = resolve(import.meta.dir, '../../..');
 const agent = () => `https://rezics.com/id/${randomUUID()}`;
 
-test('LIVE10: real fixed Main Version export pins its owner position, residuals and current disclosure', async () => {
+test('LIVE07/LIVE10/COMP08: owner values and fixed manifests export exact positions', async () => {
   const runId = Bun.env.REZICS_QA_RUN_ID;
   if (!runId || !Bun.env.FUSEKI_URL || !Bun.env.MAIN_DATA_EPOCH || !Bun.env.MAIN_ROUTING_EPOCH) {
     throw new Error('Use the isolated QA integration tier');
@@ -34,12 +40,18 @@ test('LIVE10: real fixed Main Version export pins its owner position, residuals 
   try {
     await migrateContent(contentPool);
     account = await ratingAccount({ ...Bun.env, ACCOUNT_DATABASE_URL: databases.urls.account } as
-      Record<string, string>, 'openid export:create export:read');
+      Record<string, string>, 'openid export:create export:read work:create work:edit work:read');
     const principalId = randomUUID();
     const actor = agent();
-    const fuseki = new FusekiClient(Bun.env.FUSEKI_URL);
+    const fuseki = new FusekiClient(Bun.env.FUSEKI_URL,
+      Bun.env.FUSEKI_MAINTENANCE_TOKEN, Bun.env.FUSEKI_COMMAND_TOKEN);
     const environment = { fuseki, lineage: { dataEpoch: Bun.env.MAIN_DATA_EPOCH,
       routingEpoch: Bun.env.MAIN_ROUTING_EPOCH }, objectDirectory: directory };
+    const structureObjects = new S3ImmutableObjects({ endpoint: Bun.env.MAIN_S3_ENDPOINT!,
+      bucket: Bun.env.MAIN_S3_BUCKET!, region: Bun.env.MAIN_S3_REGION!,
+      accessKeyId: Bun.env.MAIN_S3_ACCESS_KEY!, secretAccessKey: Bun.env.MAIN_S3_SECRET_KEY!,
+      prefix: 'semantic/structure/' });
+    await structureObjects.initialize();
     const registry = new AccessAdmissionRegistry(accessPool);
     await accessPool.query(`INSERT INTO access.principal (id, account_issuer, account_subject)
       VALUES ($1,$2,$3)`, [principalId, account.issuer, account.a.id]);
@@ -95,7 +107,7 @@ test('LIVE10: real fixed Main Version export pins its owner position, residuals 
     await accessPool.query('INSERT INTO access.scope_gate (id) VALUES ($1)', [`export:${sealed.release}`]);
     const store = new ExportStore(contentPool);
     const dependencies = { environment, account: account.verifier, access: registry,
-      exports: store } as MainWorkDependencies;
+      exports: store, structureObjects } as MainWorkDependencies;
     const app = exportRoutes(dependencies);
     const body = { profile: 'export-create-v1', actingSubject: actor, useScope: 'evaluation',
       selection: { kind: 'fixed-release', reference: sealed.release,
@@ -153,6 +165,108 @@ test('LIVE10: real fixed Main Version export pins its owner position, residuals 
     const read = await call('GET', `/v1/exports/${saved.manifestId}`);
     expect(read.status, await read.clone().text()).toBe(200);
     expect((await read.json() as { manifestDigest: string }).manifestDigest).toBe(saved.manifestDigest);
+    await grant('semantic:create:root', 'semantic.change');
+    const semantic = semanticRoutes(fuseki, dependencies);
+    const semanticValues = [
+      { kind: 'unknown' }, { kind: 'no-value' },
+      { kind: 'language-string', lexical: '语言', language: 'zh-Hans', direction: 'ltr' },
+      { kind: 'temporal', lexical: '2026-03-08T10:00+09:00', precision: 'minute',
+        calendar: 'gregorian', timeZone: 'Asia/Tokyo' },
+      { kind: 'quantity', lexical: '1.50', value: { kind: 'decimal', lexical: '1.5' },
+        unit: 'http://qudt.org/vocab/unit/KiloGM', uncertainty: { kind: 'decimal', lexical: '0.05' } },
+      { kind: 'boolean', lexical: 'false' }, { kind: 'integer', lexical: '0' },
+    ];
+    const writtenSemantic = await semantic.handle(new Request('http://main.local/v1/semantic/changes', {
+      method: 'POST', headers: { authorization: `Bearer ${account.tokenA}`,
+        'content-type': 'application/json', 'idempotency-key': `semantic-${randomUUID()}` },
+      body: JSON.stringify({ profile: 'semantic-change-v1', actingSubject: actor,
+        expectedHead: null, state: { component: 'resource', types: ['https://schema.org/Thing'],
+          properties: semanticValues.map((value, index) => ({
+            predicate: `https://example.org/vocab/value-${index}`, value })) } }),
+    }));
+    expect(writtenSemantic.status, await writtenSemantic.clone().text()).toBe(201);
+    const semanticRevision = await writtenSemantic.json() as { component: string; revision: string;
+      sourcePosition: { dataEpoch: string; sequence: string } };
+    await grant(`semantic:read:${semanticRevision.component}`, 'semantic.read');
+    await grant(`export:${semanticRevision.revision}`, 'export.create');
+    const semanticBody = { profile: 'export-create-v1', actingSubject: actor,
+      useScope: 'evaluation', selection: { kind: 'semantic-revision',
+        reference: semanticRevision.revision, resource: semanticRevision.component,
+        expectedPosition: { dataEpoch: semanticRevision.sourcePosition.dataEpoch,
+          sequence: semanticRevision.sourcePosition.sequence } } };
+    const semanticExport = await call('POST', '/v1/exports', semanticBody, 'semantic-export');
+    expect(semanticExport.status, await semanticExport.clone().text()).toBe(201);
+    const semanticManifest = await semanticExport.json() as { manifestId: string; plan: {
+      completeness: string; members: Array<{ value?: Record<string, unknown>;
+        data: { semanticValue?: Record<string, unknown> } }> } };
+    expect(semanticManifest.plan.members.slice(1).map(member => member.data.semanticValue))
+      .toEqual(semanticValues);
+    expect(semanticManifest.plan.members.slice(1).map(member => member.value?.kind))
+      .toEqual(['unknown', 'no-value', 'text', 'time', 'quantity', 'boolean', 'integer']);
+    expect(semanticManifest.plan.members[5]?.data.semanticValue).toEqual(semanticValues[4]);
+    expect(semanticManifest.plan.completeness).toBe('complete');
+    expect((await call('POST', '/v1/exports', semanticBody, 'semantic-export')).status).toBe(200);
+    expect((await call('GET', `/v1/exports/${semanticManifest.manifestId}`)).status).toBe(200);
+    expect((await call('POST', '/v1/exports', { ...semanticBody, selection: {
+      ...semanticBody.selection, expectedPosition: { ...semanticBody.selection.expectedPosition,
+        sequence: '0' } } }, 'semantic-stale')).status).toBe(409);
+    await accessPool.query(`UPDATE access.scope_gate SET open = false WHERE id = $1`,
+      [`semantic:read:${semanticRevision.component}`]);
+    expect((await call('GET', `/v1/exports/${semanticManifest.manifestId}`)).status).toBe(404);
+    const other = await createAdmittedMetadataWork(environment, setupAccount, registry, setupRequest,
+      { title: 'Second composition source', actingSubject: actor,
+        semanticTypes: ['https://schema.org/Book'], idempotencyKey: `work-${randomUUID()}` });
+    await grant(`work:read:${other.work}`, 'work.read');
+    // G-050's exact seal reader is exercised over real graph and immutable
+    // object stores. Its current Structure writer rejects schema.org/Book
+    // before command dispatch, so this fixture seeds only the sealed owner bytes.
+    const structure = agent(), seal = agent(), revision = agent();
+    const occurrences = [agent(), agent()];
+    const tree = pinTree(structureObjects);
+    const cost = newCost();
+    const pins = await tree.apply(await tree.empty(cost), new Map(occurrences.map((occurrence, index) =>
+      [`${occurrence}\u0001`, { occurrence, target: index ? other.work : work.work,
+        unavailable: 'missing' as const }])), cost);
+    const manifestDigest = await structureObjects.put(new TextEncoder().encode(JSON.stringify({
+      format: STRUCTURE_SEAL_FORMAT, structure, structureRevision: revision,
+      structureManifest: `sha256:${'0'.repeat(64)}`, pins, coverage: 'partial',
+      unavailableCount: 2, model: STRUCTURE_PROFILE,
+    })));
+    const graphPosition = (await fuseki.query(`PREFIX rv: <${RV}> SELECT ?sequence WHERE {
+      GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?sequence . }
+    }`)).results!.bindings[0]!.sequence!.value;
+    await fuseki.update(`PREFIX rv: <${RV}> INSERT DATA {
+      GRAPH ${iri(GRAPHS.current)} { ${iri(structure)} a rv:Structure ;
+        rv:structureOf ${iri(work.mainVersion)} . }
+      GRAPH ${iri(GRAPHS.revisions)} { ${iri(seal)} a rv:StructureSeal ;
+        rv:structure ${iri(structure)} ; rv:structureRevision ${iri(revision)} ;
+        rv:manifest ${iri(`urn:rezics:sha256:${manifestDigest}`)} ;
+        rv:sealCoverage rv:Partial ; rv:unavailableCount 2 ;
+        rv:dataEpoch "${environment.lineage.dataEpoch}" ; rv:sequence ${graphPosition} . }
+    }`);
+    await grant(`export:${seal}`, 'export.create');
+    const compositionBody = { profile: 'export-create-v1', actingSubject: actor,
+      useScope: 'evaluation', selection: { kind: 'composition-seal', reference: seal,
+        structure, expectedPosition: { dataEpoch: environment.lineage.dataEpoch,
+          sequence: graphPosition } } };
+    const exportedComposition = await call('POST', '/v1/exports', compositionBody, 'composition-export');
+    expect(exportedComposition.status, await exportedComposition.clone().text()).toBe(201);
+    const manifest = await exportedComposition.json() as { manifestId: string; plan: {
+      completeness: string; members: Array<{ exactRef: string; sourceGrain: string;
+        sourcePosition: string | null; data: Record<string, unknown> }>;
+      residuals: Array<{ kind: string }> } };
+    expect(manifest.plan.members.map(member => member.sourceGrain))
+      .toEqual(['structure_revision', 'occurrence', 'occurrence']);
+    expect(manifest.plan.members.slice(1).map(member => member.exactRef)).toEqual([...occurrences].sort());
+    expect(new Set(manifest.plan.members.slice(1).map(member => member.sourcePosition)).size).toBe(2);
+    expect(manifest.plan.completeness).toBe('partial');
+    expect(manifest.plan.residuals.map(item => item.kind)).toEqual(['unavailable', 'unavailable']);
+    expect(JSON.stringify(manifest)).not.toContain('"edition"');
+    expect((await call('POST', '/v1/exports', compositionBody, 'composition-export')).status).toBe(200);
+    expect((await call('GET', `/v1/exports/${manifest.manifestId}`)).status).toBe(200);
+    await accessPool.query(`UPDATE access.scope_gate SET open = false WHERE id = $1`,
+      [`work:read:${other.work}`]);
+    expect((await call('GET', `/v1/exports/${manifest.manifestId}`)).status).toBe(409);
     await accessPool.query(`UPDATE access.scope_gate SET open = false WHERE id = $1`,
       [`work:read:${work.work}`]);
     expect((await call('GET', `/v1/exports/${saved.manifestId}`)).status).toBe(404);

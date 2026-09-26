@@ -57,14 +57,14 @@ test('FACT05: exact claim and assessment export retains method output while reda
       };
       const principal = await account.verifier.verify(new Request('http://main.local',
         { headers: { authorization: `Bearer ${account.tokenA}` } }), ['export:create']);
-      await grant('verification:claim:global', 'verification.claim.create');
+      await grant('verification:claim:global', 'verification.claim-create');
       const probeInput = { referent: 'urn:fact:export-fixture',
         interpretationContext: 'urn:context:export-fixture', propositionPredicate: 'urn:predicate:export-fixture',
         value: { kind: 'literal' as const, lexical: 'A qualified statement', datatype: 'string' as const },
         valuePrecision: 'exact' as const, valueQualifiers: ['inferred' as const], validFrom: null,
         validUntil: null, editionScope: null, actingSubject: actor };
       const probe = await access.register({ principal, actingSubject: actor, scope: 'verification:claim:global',
-        action: 'verification.claim.create', idempotencyKey: `probe-${randomUUID()}`,
+        action: 'verification.claim-create', idempotencyKey: `probe-${randomUUID()}`,
         requestDigest: claimDigest(probeInput) });
       const claimReceipt = await createClaim(environment,
         await access.claim(probe.id, probe.requestDigest), probeInput);
@@ -85,10 +85,10 @@ test('FACT05: exact claim and assessment export retains method output while reda
         claim, { claimRevision,
           expectedHead: null, items: [{ stance: 'supports', contentRevision: draft.revisionId,
             selector: { kind: 'whole' }, availability: 'available' }] });
-      await grant('verification:assess:global', 'verification.claim.assess');
+      await grant('verification:assess:global', 'verification.claim-assess');
       const assessmentDigest = 'b'.repeat(64);
       const assessmentAdmission = await access.register({ principal, actingSubject: actor,
-        scope: 'verification:assess:global', action: 'verification.claim.assess',
+        scope: 'verification:assess:global', action: 'verification.claim-assess',
         idempotencyKey: `assessment-${randomUUID()}`, requestDigest: assessmentDigest });
       const assessmentReceipt = await recordAssessment(environment,
         await access.claim(assessmentAdmission.id, assessmentDigest), assessmentDigest,
@@ -103,7 +103,7 @@ test('FACT05: exact claim and assessment export retains method output while reda
       if (!assessed) throw new Error('Assessment fixture was unavailable');
       await grant(`export:${assessed.assessment}`, 'export.create');
       const app = exportRoutes({ environment, account: account.verifier, access,
-        exports: new ExportStore(contentPool), exportVerification: verification } as MainWorkDependencies);
+        exports: new ExportStore(contentPool), exportVerificationPrivate: verification } as MainWorkDependencies);
       const body = { profile: 'export-create-v1', actingSubject: actor, useScope: 'evaluation',
         selection: { kind: 'assessment', reference: assessed.assessment,
           expectedPosition: { dataEpoch: assessed.dataEpoch,
@@ -130,10 +130,35 @@ test('FACT05: exact claim and assessment export retains method output while reda
       }));
       expect(reread.status, await reread.clone().text()).toBe(200);
       expect(await reread.text()).not.toContain(privateBody);
+      const otherPrincipal = randomUUID();
+      await accessPool.query(`INSERT INTO access.principal (id, account_issuer, account_subject)
+        VALUES ($1,$2,$3)`, [otherPrincipal, account.issuer, account.b.id]);
+      await accessPool.query(`INSERT INTO access.representation
+        (id, principal_id, subject_id, action, valid_until)
+        VALUES ($1,$2,$3,'export.create',now() + interval '1 hour')`,
+      [randomUUID(), otherPrincipal, actor]);
+      const outsider = await app.handle(new Request('http://main.local/v1/exports', {
+        method: 'POST', headers: { authorization: `Bearer ${account.tokenB}`,
+          'content-type': 'application/json', 'idempotency-key': `export-outsider-${randomUUID()}` },
+        body: JSON.stringify(body),
+      }));
+      expect(outsider.status, await outsider.clone().text()).toBe(201);
+      const outsiderRaw = await outsider.text();
+      const outsiderPlan = JSON.parse(outsiderRaw) as { plan: { members: Array<{
+        data: Record<string, unknown> }>; residuals: Array<{ kind: string; path: string }> } };
+      expect(outsiderPlan.plan.members[1]?.data.evidence).toBeNull();
+      expect(outsiderPlan.plan.residuals).toContainEqual(expect.objectContaining({
+        kind: 'private_dependency', path: '/evidence',
+      }));
+      expect(outsiderRaw).not.toContain(privateBody);
+      expect(outsiderRaw).not.toContain(draft.revisionId);
+      expect((await app.handle(new Request(`http://main.local/v1/exports/${saved.manifestId}`, {
+        headers: { authorization: `Bearer ${account.tokenB}` },
+      }))).status).toBe(404);
     } finally {
       await account?.close();
       await Promise.all([accessPool.end(), contentPool.end()]);
       await databases.close();
       rmSync(directory, { recursive: true, force: true });
     }
-  });
+  }, 30_000);

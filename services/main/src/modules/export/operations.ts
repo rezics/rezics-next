@@ -5,7 +5,7 @@ import type { AccountAssertionVerifier } from '../account/verify-assertion.ts';
 import { assertGraphAdmissionOpen } from '../work/restore-lineage.ts';
 import { RevisionNotFound } from '../work/history.ts';
 import { canonicalExport, InvalidExportPlan, type ExportPlan } from './planner.ts';
-import { ExportSourceUnavailable, ExportStale, readExportPlan, type ExportReaderDependencies,
+import { ExportSourceNotFound, ExportSourceUnavailable, ExportStale, readExportPlan, type ExportReaderDependencies,
   type ExportSelection } from './readers.ts';
 import { ExportDenied, ExportStore, exportTerminal, type SealedExport } from './store.ts';
 
@@ -69,6 +69,7 @@ export async function createAdmittedExport(deps: ExportDependencies, request: Re
       input.selection, input.useScope);
   } catch (error) {
     if (error instanceof ExportStale || error instanceof ExportSourceUnavailable
+      || error instanceof ExportSourceNotFound
       || error instanceof RevisionNotFound
       || error instanceof InvalidExportPlan) {
       const terminal = await deps.store.cancel(admission);
@@ -97,22 +98,33 @@ export async function readAuthorizedExport(deps: ExportDependencies, request: Re
   const principal = await deps.account.verify(request, ['export:read']);
   const principalId = await deps.access.activePrincipalId(principal);
   if (!principalId) throw new ExportDenied('export principal is inactive');
+  await assertGraphAdmissionOpen(deps.readers.env.fuseki, deps.readers.env.lineage);
   const saved = await deps.store.read(principalId, manifestId);
   const first = saved.plan.members[0];
-  const reference = saved.plan.targetProfile === 'rezics-main-version-v1'
-    ? first?.data?.release : saved.plan.targetProfile === 'rezics-verification-v1'
-      ? saved.plan.members[1]?.exactRef : null;
-  const actor = saved.plan.targetProfile === 'rezics-main-version-v1'
-    ? first?.data?.exportActor : saved.plan.members[1]?.data?.exportActor;
-  if (typeof reference !== 'string' || typeof actor !== 'string') {
+  const profile = saved.plan.targetProfile;
+  const assessment = saved.plan.members[1];
+  const selected = profile === 'rezics-verification-v1' ? assessment : first;
+  const data = selected?.data;
+  const reference = profile === 'rezics-main-version-v1' ? data?.release
+    : profile === 'rezics-verification-v1' ? assessment?.exactRef
+      : profile === 'rezics-composition-v1' ? data?.seal
+        : profile === 'rezics-semantic-values-v1' ? data?.revision : null;
+  const actor = data?.exportActor;
+  if (typeof reference !== 'string' || typeof actor !== 'string' || !selected) {
     throw new ExportSourceUnavailable('export source locator is unavailable');
   }
-  const selected = saved.plan.targetProfile === 'rezics-main-version-v1'
-    ? first : saved.plan.members[1];
-  const current = await readExportPlan(deps.readers, principal, actor, {
-    kind: saved.plan.targetProfile === 'rezics-main-version-v1' ? 'fixed-release' : 'assessment',
-    reference, expectedPosition: { dataEpoch: selected!.ownerDataEpoch,
-      sequence: selected!.ownerSequence } }, saved.plan.useScope);
+  const expectedPosition = { dataEpoch: selected.ownerDataEpoch, sequence: selected.ownerSequence };
+  let selection: ExportSelection;
+  if (profile === 'rezics-main-version-v1') selection = { kind: 'fixed-release', reference,
+    expectedPosition };
+  else if (profile === 'rezics-verification-v1') selection = { kind: 'assessment', reference,
+    expectedPosition };
+  else if (profile === 'rezics-composition-v1' && typeof data?.structure === 'string') {
+    selection = { kind: 'composition-seal', reference, structure: data.structure, expectedPosition };
+  } else if (profile === 'rezics-semantic-values-v1' && typeof data?.resource === 'string') {
+    selection = { kind: 'semantic-revision', reference, resource: data.resource, expectedPosition };
+  } else throw new ExportSourceUnavailable('export source locator is unavailable');
+  const current = await readExportPlan(deps.readers, principal, actor, selection, saved.plan.useScope);
   if (current.manifestDigest !== saved.manifestDigest) throw new ExportStale('export disclosure changed');
   return saved;
 }
