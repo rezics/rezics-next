@@ -26,7 +26,7 @@ import { AccessAdmissionRegistry, engageAccessRecoveryFence, releaseAccessRecove
 import { AccountAssertionVerifier } from '../../../services/main/src/modules/account/verify-assertion.ts';
 import { publishAdmittedContent }
   from '../../../services/main/src/modules/content-publication/publish-admitted.ts';
-import { assertContentRecoveryCoverage }
+import { assertContentRecoveryCoverage, captureContentRecoveryCoverage }
   from '../../../services/main/src/modules/work/content-recovery-coverage.ts';
 import { initializeFreshGraph, type WorkActivationEnvironment }
   from '../../../services/main/src/modules/work/activate.ts';
@@ -232,6 +232,10 @@ test('OPS03/PKG14: signed owner cut restores Content and exact Go checksum proof
     const packageReceipt = (await packageTrust.verify(principalId,
       packageReceiptKey, packageCapture))!.verification;
     const packageVerification = packageReceipt.verification.split('/').at(-1)!;
+    const packageOnlyCoverage = await captureContentRecoveryCoverage(contentPool, []);
+    expect(packageOnlyCoverage.graphReferencesCount).toBe('0');
+    expect(packageOnlyCoverage.packageTables.go_proxy_capture.count).toBe('1');
+    expect(packageOnlyCoverage.packageTables.go_sumdb_verification.count).toBe('1');
     await grant(`content:publish:${variantId}`, 'content.publish');
     const published = await publishAdmittedContent(env, content, account, access,
       new Request(request.url, { headers: { authorization: bearer } }), {
@@ -263,6 +267,9 @@ test('OPS03/PKG14: signed owner cut restores Content and exact Go checksum proof
     expect(coverage).toMatchObject({ priorDataEpoch: lineage.dataEpoch,
       priorSequence: '2', content: { dataEpoch: saved.position.dataEpoch } });
     expect(Number(coverage.content.graphReferencesCount)).toBeGreaterThan(0);
+    expect(coverage.content.version).toBe(2);
+    expect(coverage.content.packageTables.go_proxy_capture.count).toBe('1');
+    expect(coverage.content.packageTables.go_sumdb_verification.count).toBe('1');
     const sealedCoverage = JSON.stringify(sealRecoveryPayload(
       coverage, recoveryKey, 'graph-recovery-coverage'));
     await retainRecoveryCoverageHead(relayPool, sealedCoverage, recoveryKey);
@@ -359,6 +366,17 @@ test('OPS03/PKG14: signed owner cut restores Content and exact Go checksum proof
       'Content owner or graph references differ from recovery coverage');
     await restoredContent.query('DELETE FROM content.projection_checkpoint WHERE consumer = $1',
       [extraCheckpoint]);
+    const trustedNote = (await restoredContent.query<{ signed_note: Buffer }>(
+      "SELECT signed_note FROM pkg.go_sumdb_head WHERE server = 'sum.golang.org'"))
+      .rows[0]?.signed_note;
+    if (!trustedNote) throw new Error('restored Go checksum checkpoint is absent');
+    await restoredContent.query("UPDATE pkg.go_sumdb_head SET signed_note = $1 WHERE server = 'sum.golang.org'",
+      [Buffer.from('mixed package cut')]);
+    await expect(releaseRestoredGraphHold(fuseki, restoredAccess, restoredRelay,
+      nextLineage, restoredEvidence)).rejects.toThrow(
+      'Content owner or graph references differ from recovery coverage');
+    await restoredContent.query("UPDATE pkg.go_sumdb_head SET signed_note = $1 WHERE server = 'sum.golang.org'",
+      [trustedNote]);
     await releaseRestoredGraphHold(fuseki, restoredAccess, restoredRelay,
       nextLineage, restoredEvidence);
     await releaseAccessRecoveryFence(restoredAccess, fenceGeneration);

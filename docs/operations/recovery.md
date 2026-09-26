@@ -37,13 +37,14 @@ Account/Access drills below. Its recovery set includes revision identity/digest,
 bytes/manifests, local heads, receipts/outbox, preparation pins, source lineage,
 consumer checkpoints and separately retained authority/erasure frontiers.
 
-When the graph contains Content references, the internal graph coverage capture
-requires `CONTENT_RECOVERY_DATABASE_URL` alongside the other recovery database
-URLs. Its signed envelope records the Content owner epoch/sequence, exact graph
-references and digests of retained Content rows and bytes. Supply the isolated
-restored Content pool to graph hold release; absent or different revisions,
-preparations, receipts, outbox events or bytes keep the hold. A graph with no
-Content references retains the graph-only release path. This check requires
+The internal graph coverage capture requires `CONTENT_RECOVERY_DATABASE_URL`
+alongside the other recovery database URLs, even when the graph has no Content
+references. Its version-two signed envelope records the Content owner
+epoch/sequence, exact graph references, and full row digests of `content.*` and
+the five `pkg.*` evidence tables, including retained bytes and checksum notes.
+Supply the isolated restored Content pool to graph hold release; absent or
+different Content or package rows keep the hold. Older version-one and
+graph-only envelopes require a fresh fenced capture before release. This check requires
 externally quiesced Content writers and is conservative about a different Content
 cut; separately qualify any newer unused revisions before capturing a new cut.
 
@@ -276,7 +277,7 @@ through the stopped-state backup:
 ```sh
 ACCESS_DATABASE_URL="$ACCESS_DATABASE_URL" MAIN_RELAY_DATABASE_URL="$RELAY_DATABASE_URL" bun services/main/src/relay-account-deletions.ts once
 ACCESS_RECOVERY_DATABASE_URL="$ACCESS_DATABASE_URL" bun services/main/src/access-capture-fence.ts hold
-FUSEKI_URL="$FUSEKI_URL" ACCOUNT_RECOVERY_DATABASE_URL="$ACCOUNT_DATABASE_URL" ACCESS_RECOVERY_DATABASE_URL="$ACCESS_DATABASE_URL" RELAY_RECOVERY_DATABASE_URL="$RELAY_DATABASE_URL" RELAY_CONSUMER="$RELAY_CONSUMER" bun services/main/src/graph-recovery-coverage.ts capture > "$RECOVERY_MANIFEST_DIR/graph-coverage.json"
+FUSEKI_URL="$FUSEKI_URL" ACCOUNT_RECOVERY_DATABASE_URL="$ACCOUNT_DATABASE_URL" ACCESS_RECOVERY_DATABASE_URL="$ACCESS_DATABASE_URL" RELAY_RECOVERY_DATABASE_URL="$RELAY_DATABASE_URL" CONTENT_RECOVERY_DATABASE_URL="$CONTENT_DATABASE_URL" RELAY_CONSUMER="$RELAY_CONSUMER" bun services/main/src/graph-recovery-coverage.ts capture > "$RECOVERY_MANIFEST_DIR/graph-coverage.json"
 ```
 
 After the graph and participating stores are backed up and routing can resume,

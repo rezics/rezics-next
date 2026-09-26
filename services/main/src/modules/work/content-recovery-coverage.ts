@@ -16,13 +16,15 @@ export interface GraphContentReference {
 }
 
 export interface ContentRecoveryCoverage {
-  version: 1;
+  version: 2;
   dataEpoch: string;
   sequence: string;
   graphReferencesCount: string;
   graphReferencesDigest: string;
   tables: Record<'variant' | 'revision' | 'receipt' | 'publication_preparation' | 'outbox' | 'comment' |
     'projection_checkpoint', { count: string; digest: string }>;
+  packageTables: Record<'go_resolution' | 'go_proxy_capture' | 'go_sumdb_head_history' |
+    'go_sumdb_head' | 'go_sumdb_verification', { count: string; digest: string }>;
 }
 
 const REVISION = 'urn:rezics:content:revision:';
@@ -33,6 +35,11 @@ const TABLES = [
   ['variant', 'id'], ['revision', 'id'], ['receipt', 'operation_id'],
   ['publication_preparation', 'operation_id'], ['outbox', 'id'],
   ['comment', 'id'], ['projection_checkpoint', 'consumer'],
+] as const;
+const PACKAGE_TABLES = [
+  ['go_resolution', 'id'], ['go_proxy_capture', 'id'],
+  ['go_sumdb_head_history', 'id'], ['go_sumdb_head', 'server'],
+  ['go_sumdb_verification', 'id'],
 ] as const;
 
 function digest(value: unknown): string {
@@ -90,16 +97,17 @@ export async function graphContentReferences(fuseki: FusekiClient): Promise<Grap
   }
 }
 
-async function scanTable(client: PoolClient, name: typeof TABLES[number][0], key: string) {
+async function scanTable(client: PoolClient, schema: 'content' | 'pkg',
+  name: typeof TABLES[number][0] | typeof PACKAGE_TABLES[number][0], key: string) {
   const hash = createHash('sha256');
   let count = 0;
   let after: string | null = null;
   for (;;) {
     const result: QueryResult<Record<string, unknown>> = await client.query<Record<string, unknown>>(
-      `SELECT * FROM content.${name} WHERE ($1::text IS NULL OR ${key}::text > $1)
+      `SELECT * FROM ${schema}.${name} WHERE ($1::text IS NULL OR ${key}::text > $1)
        ORDER BY ${key}::text LIMIT 128`, [after]);
     for (const row of result.rows as Record<string, unknown>[]) {
-      if (name === 'revision' && row.availability === 'available') {
+      if (schema === 'content' && name === 'revision' && row.availability === 'available') {
         const bytes = row.serialized_bytes;
         if (!Buffer.isBuffer(bytes) || digestBytes(bytes) !== row.byte_digest
           || bytes.length !== row.byte_length || !exactBodyMatches(bytes, row.body)) {
@@ -176,10 +184,15 @@ export async function captureContentRecoveryCoverage(pool: Pool,
       || !DECIMAL.test(owner.sequence)) throw new ContentRecoveryConflict('Content owner cut is unavailable');
     await assertReferences(client, references, owner.data_epoch, owner.sequence);
     const tables = {} as ContentRecoveryCoverage['tables'];
-    for (const [name, key] of TABLES) tables[name] = await scanTable(client, name, key);
+    for (const [name, key] of TABLES) tables[name] = await scanTable(client, 'content', name, key);
+    const packageTables = {} as ContentRecoveryCoverage['packageTables'];
+    for (const [name, key] of PACKAGE_TABLES) {
+      packageTables[name] = await scanTable(client, 'pkg', name, key);
+    }
     await client.query('COMMIT');
-    return { version: 1, dataEpoch: owner.data_epoch, sequence: owner.sequence,
-      graphReferencesCount: String(references.length), graphReferencesDigest: digest(references), tables };
+    return { version: 2, dataEpoch: owner.data_epoch, sequence: owner.sequence,
+      graphReferencesCount: String(references.length), graphReferencesDigest: digest(references),
+      tables, packageTables };
   } catch (error) {
     try { await client.query('ROLLBACK'); } catch { /* retain original error */ }
     throw error;
@@ -188,9 +201,10 @@ export async function captureContentRecoveryCoverage(pool: Pool,
 
 export async function assertContentRecoveryCoverage(pool: Pool, fuseki: FusekiClient,
   expected: ContentRecoveryCoverage): Promise<void> {
-  if (expected?.version !== 1 || !UUID.test(expected.dataEpoch ?? '')
+  if (expected?.version !== 2 || !UUID.test(expected.dataEpoch ?? '')
     || !DECIMAL.test(expected.sequence ?? '') || !DECIMAL.test(expected.graphReferencesCount ?? '')
-    || !SHA.test(expected.graphReferencesDigest ?? '') || !expected.tables) {
+    || !SHA.test(expected.graphReferencesDigest ?? '') || !expected.tables
+    || !expected.packageTables) {
     throw new ContentRecoveryConflict('Content recovery coverage is invalid');
   }
   const references = await graphContentReferences(fuseki);

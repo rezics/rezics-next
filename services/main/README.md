@@ -388,8 +388,10 @@ the separate relay database before printing the envelope. A second scan rejects
 owner or graph movement during capture. Use the
 [Access capture fence CLI](src/access-capture-fence.ts) to hold the source and
 retain its generation through backup before releasing it. Supply
-`ACCOUNT_RECOVERY_DATABASE_URL` during capture
-and the restored Account pool at every graph release.
+`ACCOUNT_RECOVERY_DATABASE_URL` and `CONTENT_RECOVERY_DATABASE_URL` during
+capture and both restored owner pools at every graph release. The version-two
+Content coverage binds package evidence even when the graph has no Content
+references.
 Keep the private envelope and key outside the restored stores. Release rejects
 altered or wrong-key coverage before touching Fuseki; external custody must
 retain the latest current envelope and the relay recovery head. Release also

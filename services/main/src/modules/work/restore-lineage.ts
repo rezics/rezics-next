@@ -60,8 +60,9 @@ export { accessOutboxCoverage, accessStateCoverage } from './access-recovery-cov
 /** Capture only after Account, graph and relay writers are externally quiesced. */
 export async function captureGraphRecoveryCoverage(
   fuseki: FusekiClient, accountPool: Pool, accessPool: Pool,
-  relayPool: Pool, consumer: string, contentPool?: Pool,
+  relayPool: Pool, consumer: string, contentPool: Pool,
 ): Promise<RecoveryCoverage> {
+  if (!contentPool) throw new RestoreLineageConflict('Content owner is required for recovery coverage');
   const fence = await accessPool.query<{ open: boolean }>(
     'SELECT open FROM access.recovery_fence WHERE id = true');
   if (fence.rows[0]?.open !== false) {
@@ -72,11 +73,7 @@ export async function captureGraphRecoveryCoverage(
     dataEpoch: before.dataEpoch, routingEpoch: before.routingEpoch,
   });
   const graphReferences = await graphContentReferences(fuseki);
-  if (graphReferences.length > 0 && !contentPool) {
-    throw new RestoreLineageConflict('Content owner is required for graph Content references');
-  }
-  const content = contentPool && graphReferences.length > 0
-    ? await captureContentRecoveryCoverage(contentPool, graphReferences) : undefined;
+  const content = await captureContentRecoveryCoverage(contentPool, graphReferences);
   const outbox = await accessOutboxCoverage(accessPool);
   const state = await accessStateCoverage(accessPool);
   const accountPg = await capturePgRecoveryFrontier(accountPool);
@@ -97,8 +94,7 @@ export async function captureGraphRecoveryCoverage(
   ]);
   const final = await control(fuseki);
   const graphReferencesAfter = await graphContentReferences(fuseki);
-  const contentAfter = contentPool && graphReferences.length > 0
-    ? await captureContentRecoveryCoverage(contentPool, graphReferencesAfter) : undefined;
+  const contentAfter = await captureContentRecoveryCoverage(contentPool, graphReferencesAfter);
   const fenceAfter = await accessPool.query<{ open: boolean }>(
     'SELECT open FROM access.recovery_fence WHERE id = true');
   const moved = [
@@ -126,7 +122,7 @@ export async function captureGraphRecoveryCoverage(
     accountPg, account,
     accessOutboxCount: outbox.count, accessOutboxDigest: outbox.digest,
     accessStateCount: state.count, accessStateDigest: state.digest, relay,
-    ...(content ? { content } : {}) };
+    content };
 }
 
 /** Every retained Account deletion intent needs a current two-owner proof. */
@@ -330,14 +326,10 @@ export async function releaseRestoredGraphHold(
     await relayHeadClient.query("SET LOCAL lock_timeout = '5s'");
     try { await assertCurrentRecoveryCoverageHead(relayHeadClient, coverage); }
     catch { throw new RestoreLineageConflict('signed recovery coverage is not the retained current capture'); }
-    // A legacy graph-only envelope remains valid only for a graph with no Content references.
-    if (coverage.content) {
-      if (!evidence.contentPool) throw new RestoreLineageConflict('restored Content owner is unavailable');
-      try { await assertContentRecoveryCoverage(evidence.contentPool, fuseki, coverage.content); }
-      catch { throw new RestoreLineageConflict('Content owner or graph references differ from recovery coverage'); }
-    } else if ((await graphContentReferences(fuseki)).length > 0) {
-      throw new RestoreLineageConflict('Content recovery coverage is missing');
-    }
+    if (!coverage.content) throw new RestoreLineageConflict('Content recovery coverage is missing');
+    if (!evidence.contentPool) throw new RestoreLineageConflict('restored Content owner is unavailable');
+    try { await assertContentRecoveryCoverage(evidence.contentPool, fuseki, coverage.content); }
+    catch { throw new RestoreLineageConflict('Content owner or graph references differ from recovery coverage'); }
     const marker = `urn:rezics:restore:${lineage.dataEpoch}`;
     const held = await fuseki.query(`PREFIX rv: <${RV}> ASK { GRAPH ${iri(GRAPHS.control)} {
       ${iri(DATASET)} rv:dataEpoch ${lit(lineage.dataEpoch)} ; rv:routingEpoch ${lit(lineage.routingEpoch)} ;

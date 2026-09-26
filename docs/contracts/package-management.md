@@ -167,8 +167,12 @@ separate from this explicit verification operation.
 The coordinated physical PostgreSQL restore drill retained the Go capture,
 signed checkpoint and exact verification receipt. An isolated restored Content
 owner revalidated the receipt and replayed its idempotency key with provider
-access disabled. The signed mixed-owner recovery coverage still hashes only
-`content.*`, so this drill does not detect a mismatched `pkg.*` restore frontier.
+access disabled. The version-two signed mixed-owner recovery coverage now
+hashes the five `pkg.*` tables alongside `content.*`, even without graph
+Content references. Release rejects an absent or changed package cut. This
+coverage is a stopped backup comparison; an independently held checksum
+checkpoint is still needed to detect rollback of the complete signed backup
+and its retained head.
 `POST /v1/package-resolutions/from-captures` accepts up to 128 private capture
 IDs. Its v1 body supplies a main module and direct requirements. Its v2 body
 supplies the main module's raw UTF-8 `go.mod` as canonical base64 (at most 64

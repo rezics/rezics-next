@@ -223,5 +223,13 @@ retained a Go proxy capture, signed checksum checkpoint and inclusion receipt
 through a physical PostgreSQL backup and isolated restore. The restored
 Content owner read the exact receipt offline and replayed its idempotency key
 without fetching the proxy or checksum database. This adds OPS03/PKG14
-recovery evidence. The signed Content recovery coverage does not yet include
-`pkg.*` tables, so a mixed package frontier remains unqualified.
+recovery evidence. At that batch the signed Content coverage still excluded
+`pkg.*` tables.
+
+The selected coordinated recovery and Account erasure run
+`20260926t032239-fad04d` passed with version-two signed Content coverage of
+all five package tables. It rejected a changed restored checksum checkpoint
+before releasing the graph hold; after restoring the checkpoint, release passed.
+Direct capture with zero graph Content references still covered the package
+rows, and the capture command now requires the Content owner for every cut.
+A complete-backup rollback still needs an independent checkpoint.
