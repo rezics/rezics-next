@@ -432,6 +432,26 @@ will keep G-033 local or resume it only when a pinned Sol/xhigh slot is availabl
 This changes scheduling cost policy, not the 276-case acceptance contract or the
 13:57:20 UTC forecast miss.
 
+**30-minute checkpoint, 2026-09-26 11:57 UTC, reconciled at 11:58.** The Goal
+remains active under one manager, and Docker Desktop engine 29.7.2 is reachable.
+G-030 is the sole live worker on its isolated worktree, explicitly pinned to
+GPT-6 Sol/xhigh; its IAM26 API and WAL selection passed before a final revoke
+route replay test, and its generation-pinning and cost evidence await rerun and
+handoff. G-033 is manager-owned on a separate worktree while the agent-thread
+limit prevents another controlled worker. Its bounded npm v5 policy passed ten
+selected unit tests, 187 pinned native-oracle comparisons, backend static checks,
+and real Source/npm API selection `20260926t115610-23d3ab`. The first
+coordinated-owner-cut recovery selection `20260926t115648-bef810` failed on a
+fixture count left at nine after adding the tenth receipt; that assertion has
+been corrected and the physical recovery rerun is in progress. No G-033 case is
+claimed complete before recovery and merge. The queue still retains all 276
+backend IDs, 11 affected-verified complete-case candidates, and final clean
+`yarn qa --backend --record`. The critical path remains G-030 and G-033
+integration, remaining owner gaps, then full reconstruction and recorded QA.
+The 13:57:20 UTC target is forecast to miss, with no defensible replacement
+timestamp from measured throughput. Reconcile again by 12:27 UTC or on a
+handoff, failure, or blocker.
+
 ### Backend-only ten-hour proposal
 
 The maintainer's 2026-09-26 direction is authoritative: API operations define
