@@ -35,6 +35,7 @@ import { GoMvsResolutionStore } from './modules/package/go-mvs.ts';
 import { CargoResolutionStore } from './modules/package/cargo-resolution.ts';
 import { NpmResolutionStore } from './modules/package/npm-resolution.ts';
 import { NixResolutionStore } from './modules/package/nix-resolution.ts';
+import { ModResolutionStore } from './modules/package/mod-resolution.ts';
 import { GoProxyCaptureStore } from './modules/package/go-proxy-capture.ts';
 import { GoSumdbTrustStore } from './modules/package/go-sumdb-trust.ts';
 import { OpenLibrarySourceGraph } from './modules/source/graph-projection.ts';
@@ -150,6 +151,7 @@ const app = createMainApp(fuseki, {
   packageCargoResolutions: new CargoResolutionStore(contentPool),
   packageNpmResolutions: new NpmResolutionStore(contentPool),
   packageNixResolutions: new NixResolutionStore(contentPool),
+  packageModResolutions: new ModResolutionStore(contentPool),
   packageCaptures,
   packageVerifications: new GoSumdbTrustStore(contentPool, packageCaptures),
   sourceGraph,
