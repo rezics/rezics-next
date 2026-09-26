@@ -5,6 +5,8 @@ import { join, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { Pool } from 'pg';
 import { createMainApp } from '../../../services/main/src/app.ts';
+import { ObjectUnavailable, S3ImmutableObjects, type ImmutableObjects }
+  from '../../../services/main/src/infrastructure/immutable-objects.ts';
 import { FusekiClient } from '../../../services/main/src/infrastructure/fuseki.ts';
 import { OwnerOperations } from '../../../services/main/src/modules/owner/operations.ts';
 import { graphPlacementControl, graphPlacementCoverage }
@@ -14,6 +16,12 @@ import { OwnerPartitionRoutes, StalePartitionLease }
 import { activateMetadataWork, DATASET, iri, metadataWorkRequestDigest }
   from '../../../services/main/src/modules/work/activate.ts';
 import { readExactWorkRevision } from '../../../services/main/src/modules/work/history.ts';
+import { changeComposition, compositionChangeDigest, compositionCreateDigest,
+  compositionSealDigest, createComposition, sealComposition }
+  from '../../../services/main/src/modules/structure/change.ts';
+import { readCompositionPage } from '../../../services/main/src/modules/structure/read.ts';
+import { readCompositionSeal } from '../../../services/main/src/modules/structure/seal-read.ts';
+import { checkStructureManifest } from '../../../services/main/src/modules/structure/format.ts';
 import type { MainWorkDependencies } from '../../../services/main/src/routes/dependencies.ts';
 import { readEnv, stackDirectory } from '../../../scripts/dev/config.ts';
 
@@ -36,7 +44,7 @@ function rdf(value: { type: string; value: string; datatype?: string; 'xml:lang'
     : JSON.stringify(value.value);
 }
 
-test('MODEL07/MODEL12/SYS08: verified move and retention GC preserve old exact anchor', async () => {
+test('MODEL07/MODEL12/SYS08/COMP07: verified move retains Work and Structure history', async () => {
   if (!Bun.env.REZICS_QA_RUN_ID || !Bun.env.FUSEKI_URL || !Bun.env.ACCESS_DATABASE_URL
     || !Bun.env.ACCOUNT_RELAY_DATABASE_URL || !Bun.env.MAIN_DATA_EPOCH
     || !Bun.env.MAIN_ROUTING_EPOCH) throw new Error('Run through the isolated fault/recovery tier');
@@ -65,9 +73,42 @@ test('MODEL07/MODEL12/SYS08: verified move and retention GC preserve old exact a
     const title = `Relocated exact Work ${randomUUID()}`;
     const created = await activateMetadataWork({ fuseki: source, lineage: sourceLineage,
       objectDirectory: sourceDirectory }, { title,
+      semanticTypes: ['https://schema.org/Book'],
       admission: { id: randomUUID(), scope: 'work:create:root', action: 'work.create',
-        idempotencyKey: `relocate-${randomUUID()}`, requestDigest: metadataWorkRequestDigest(title),
+        idempotencyKey: `relocate-${randomUUID()}`,
+        requestDigest: metadataWorkRequestDigest(title, ['https://schema.org/Book']),
         authorityEpoch: '0', expiresAt: new Date(Date.now() + 60_000).toISOString() } });
+    const structureObjects = new S3ImmutableObjects({ endpoint: Bun.env.MAIN_S3_ENDPOINT!,
+      bucket: Bun.env.MAIN_S3_BUCKET!, region: Bun.env.MAIN_S3_REGION!,
+      accessKeyId: Bun.env.MAIN_S3_ACCESS_KEY!, secretAccessKey: Bun.env.MAIN_S3_SECRET_KEY!,
+      prefix: 'semantic/structure/' });
+    await structureObjects.initialize();
+    const structureEnv = { fuseki: source, lineage: sourceLineage,
+      objectDirectory: sourceDirectory, structureObjects };
+    const admitted = (digest: string) => ({ id: randomUUID(), scope: `work:edit:${created.work}`,
+      action: 'work.edit', requestDigest: digest, authorityEpoch: '0',
+      expiresAt: new Date(Date.now() + 60_000).toISOString() });
+    const composition = await createComposition(structureEnv, { owner: created.work,
+      component: created.mainVersion, profile: 'book-composition',
+      admission: admitted(compositionCreateDigest(created.mainVersion)) });
+    const structure = composition.terminal.structure!;
+    const firstHead = composition.terminal.revision!;
+    const insertOperations = [{ op: 'insert' as const, parent: structure,
+      role: 'chapter' as const, target: created.work, position: 'last' as const }];
+    const changed = await changeComposition(structureEnv, { structure,
+      expectedHead: firstHead, operations: insertOperations,
+      admission: admitted(compositionChangeDigest(structure, firstHead, insertOperations)) });
+    const retainedRevision = changed.terminal.revision!;
+    const sealed = await sealComposition(structureEnv, { structure,
+      expectedHead: retainedRevision, canReadTarget: async () => true,
+      admission: admitted(compositionSealDigest(structure, retainedRevision)) });
+    const seal = sealed.terminal.seal!;
+    const oldManifestRows = await source.query(`PREFIX rv: <https://rezics.com/vocab/>
+      SELECT ?manifest WHERE { GRAPH <urn:rezics:graph:revisions> {
+        ${iri(retainedRevision)} rv:manifest ?manifest . } }`);
+    const oldManifestDigest = oldManifestRows.results!.bindings[0]!.manifest!.value.slice(-64);
+    const oldManifest = checkStructureManifest(await structureObjects.get(oldManifestDigest));
+    const retainedPageDigest = oldManifest.records.page.slice(7);
     const snapshot = await source.query('SELECT ?graph ?subject ?predicate ?object WHERE { GRAPH ?graph { ?subject ?predicate ?object } }');
     const facts = snapshot.results?.bindings;
     if (!facts?.length) throw new Error('relocation source snapshot is empty');
@@ -84,10 +125,17 @@ test('MODEL07/MODEL12/SYS08: verified move and retention GC preserve old exact a
     const routes = new OwnerPartitionRoutes(access);
     const initialRoute = await routes.initialize({ owner: 'graph', datasetId: DATASET,
       location: Bun.env.FUSEKI_URL, routingEpoch: sourceLineage.routingEpoch });
-    const operations = new OwnerOperations(relay, { fuseki: source, lineage: sourceLineage,
-      objectDirectory: sourceDirectory }, undefined, {
+    let withholdPage = false;
+    const targetStructureObjects: ImmutableObjects = {
+      put: bytes => structureObjects.put(bytes),
+      get: digest => withholdPage && digest === retainedPageDigest
+        ? Promise.reject(new ObjectUnavailable('retained Structure page was not copied'))
+        : structureObjects.get(digest),
+    };
+    const operations = new OwnerOperations(relay, structureEnv, undefined, {
       sourceLocation: Bun.env.FUSEKI_URL, targetLocation: targetApps.FUSEKI_URL!, target,
-      sourceObjects: { directory: sourceDirectory }, targetObjects: { directory: targetDirectory },
+      sourceObjects: { directory: sourceDirectory, structureObjects },
+      targetObjects: { directory: targetDirectory, structureObjects: targetStructureObjects },
       routes });
     const app = createMainApp(source, { ownerOperations: operations,
       account: { verify: async (request: Request, scopes: readonly string[]) => {
@@ -120,6 +168,12 @@ test('MODEL07/MODEL12/SYS08: verified move and retention GC preserve old exact a
     expect((await graphPlacementControl(source)).held).toBe(true);
     expect((await graphPlacementControl(target)).routingEpoch).toBe(sourceLineage.routingEpoch);
     renameSync(`${targetManifest}.held`, targetManifest);
+    withholdPage = true;
+    const missingStructure = await send({ profile: 'owner-relocation-v1', action: 'activate',
+      id: staged.id }, key);
+    expect(missingStructure.status).toBe(409);
+    expect((await routes.current('graph', DATASET)).location).toBe(Bun.env.FUSEKI_URL);
+    withholdPage = false;
     const movedResponse = await send({ profile: 'owner-relocation-v1', action: 'activate',
       id: staged.id }, key);
     const movedBody = await movedResponse.json();
@@ -167,8 +221,17 @@ test('MODEL07/MODEL12/SYS08: verified move and retention GC preserve old exact a
       .rejects.toThrow();
     expect((await readExactWorkRevision({ fuseki: target, lineage: targetLineage,
       objectDirectory: targetDirectory }, created.workRevision, async () => true)).title).toBe(title);
-    expect(await graphPlacementCoverage(target, { directory: targetDirectory }))
-      .toEqual(await graphPlacementCoverage(source, { directory: sourceDirectory }));
+    const movedStructureEnv = { fuseki: target, lineage: targetLineage,
+      objectDirectory: targetDirectory, structureObjects: targetStructureObjects };
+    expect((await readCompositionPage(movedStructureEnv, { structure, revision: retainedRevision,
+      limit: 10, canReadTarget: async () => true })).occurrences[0]?.target).toBe(created.work);
+    expect((await readCompositionSeal(movedStructureEnv, { structure, seal, limit: 10,
+      canReadTarget: async () => true })).pins[0]?.occurrence)
+      .toBe(changed.occurrences[0]);
+    expect(await graphPlacementCoverage(target, { directory: targetDirectory,
+      structureObjects: targetStructureObjects }))
+      .toEqual(await graphPlacementCoverage(source, { directory: sourceDirectory,
+        structureObjects }));
     expect((await send({ profile: 'owner-relocation-v1', action: 'activate', id: staged.id }, key)).status)
       .toBe(200);
     const evidence = await relay.query<{ source_data_epoch: string; source_sequence: string;
@@ -176,7 +239,7 @@ test('MODEL07/MODEL12/SYS08: verified move and retention GC preserve old exact a
         source_sequence::text, anchor_count::text, object_count::text
         FROM relay.owner_relocation WHERE id = $1`, [staged.id]);
     expect(evidence.rows[0]?.source_data_epoch).toBe(sourceLineage.dataEpoch);
-    expect(evidence.rows[0]?.source_sequence).toBe(created.sequence);
+    expect(evidence.rows[0]?.source_sequence).toBe(sealed.terminal.sequence);
     expect(Number(evidence.rows[0]?.anchor_count)).toBeGreaterThan(0);
     expect(Number(evidence.rows[0]?.object_count)).toBeGreaterThan(0);
     const unused = Buffer.from(`unadopted relocation candidate ${randomUUID()}`);
@@ -185,7 +248,8 @@ test('MODEL07/MODEL12/SYS08: verified move and retention GC preserve old exact a
     writeFileSync(unusedPath, unused);
     const old = new Date(Date.now() - 2 * 86_400_000);
     utimesSync(unusedPath, old, old);
-    const beforeGc = await graphPlacementCoverage(source, { directory: sourceDirectory });
+    const beforeGc = await graphPlacementCoverage(source, { directory: sourceDirectory,
+      structureObjects });
     const gcKey = `retention-${randomUUID()}`;
     const gc = () => app.handle(new Request('http://main.local/v1/owners/reconciliations', {
       method: 'POST', headers: { authorization: 'Bearer operator',
@@ -196,7 +260,8 @@ test('MODEL07/MODEL12/SYS08: verified move and retention GC preserve old exact a
     expect(await gcResponse.json()).toMatchObject({ state: 'reconciled',
       disposition: 'retired' });
     expect(existsSync(unusedPath)).toBe(false);
-    expect(await graphPlacementCoverage(source, { directory: sourceDirectory })).toEqual(beforeGc);
+    expect(await graphPlacementCoverage(source, { directory: sourceDirectory,
+      structureObjects })).toEqual(beforeGc);
     expect((await gc()).status).toBe(200);
     expect((await readExactWorkRevision({ fuseki: target, lineage: targetLineage,
       objectDirectory: targetDirectory }, created.workRevision, async () => true)).title).toBe(title);

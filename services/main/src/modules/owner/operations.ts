@@ -94,6 +94,23 @@ export class OwnerOperations {
       secretAccessKey, prefix: 'semantic/work/' });
   }
 
+  private configuredStructureObjects(): ImmutableObjects | undefined {
+    const configured = (this.environment as WorkActivationEnvironment & {
+      structureObjects?: ImmutableObjects }).structureObjects;
+    if (configured) return configured;
+    const endpoint = Bun.env.MAIN_S3_ENDPOINT;
+    if (!endpoint) return undefined;
+    const bucket = Bun.env.MAIN_S3_BUCKET;
+    const region = Bun.env.MAIN_S3_REGION;
+    const accessKeyId = Bun.env.MAIN_S3_ACCESS_KEY;
+    const secretAccessKey = Bun.env.MAIN_S3_SECRET_KEY;
+    if (!bucket || !region || !accessKeyId || !secretAccessKey) {
+      throw new OwnerOperationUnavailable('immutable Structure object credentials are unavailable');
+    }
+    return new S3ImmutableObjects({ endpoint, bucket, region, accessKeyId,
+      secretAccessKey, prefix: 'semantic/structure/' });
+  }
+
   /** Operator principal lookup while the ordinary Access recovery fence is held. */
   async activeFencedOperator(principal: VerifiedPrincipal): Promise<boolean> {
     const pool = this.restoreResources?.accessPool ?? (Bun.env.ACCESS_DATABASE_URL
@@ -118,13 +135,15 @@ export class OwnerOperations {
       throw new OwnerOperationUnavailable('restore owner credentials or recovery key are unavailable');
     }
     const workObjects = this.configuredWorkObjects();
+    const structureObjects = this.configuredStructureObjects();
     const pools = [new PgPool({ connectionString: account, max: 1 }),
       new PgPool({ connectionString: access, max: 1 }),
       new PgPool({ connectionString: content, max: 1 })];
     return { resources: { accountPool: pools[0]!, accessPool: pools[1]!,
       contentPool: pools[2]!, hmacKey,
       objectStore: { directory: this.environment.objectDirectory,
-        ...(workObjects ? { workObjects } : {}) } },
+        ...(workObjects ? { workObjects } : {}),
+        ...(structureObjects ? { structureObjects } : {}) } },
     close: async () => { await Promise.all(pools.map(pool => pool.end())); } };
   }
 
@@ -305,9 +324,11 @@ export class OwnerOperations {
 
   async reconcileRetentionGc(key: string): Promise<RetentionGcView> {
     const workObjects = this.configuredWorkObjects();
+    const structureObjects = this.configuredStructureObjects();
     try { return await collectUnreferencedObjects(this.relay, this.environment.fuseki,
       { directory: this.environment.objectDirectory,
-        ...(workObjects ? { workObjects } : {}) }, key); }
+        ...(workObjects ? { workObjects } : {}),
+        ...(structureObjects ? { structureObjects } : {}) }, key); }
     catch (error) {
       if (error instanceof RetentionGcConflict) throw new OwnerOperationBusy(error.message);
       throw error;
@@ -456,12 +477,15 @@ export class OwnerOperations {
       }
       temporaryPool = new PgPool({ connectionString: accessUrl, max: 1 });
       const workObjects = this.configuredWorkObjects();
+      const structureObjects = this.configuredStructureObjects();
       target = { sourceLocation, targetLocation,
         target: new FusekiClient(targetLocation),
         sourceObjects: { directory: this.environment.objectDirectory,
-          ...(workObjects ? { workObjects } : {}) },
+          ...(workObjects ? { workObjects } : {}),
+          ...(structureObjects ? { structureObjects } : {}) },
         targetObjects: { directory: targetDirectory,
-          ...(workObjects ? { workObjects } : {}) },
+          ...(workObjects ? { workObjects } : {}),
+          ...(structureObjects ? { structureObjects } : {}) },
         routes: new OwnerPartitionRoutes(temporaryPool) };
     }
     try {

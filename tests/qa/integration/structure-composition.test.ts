@@ -7,6 +7,8 @@ import { ObjectIntegrityError, ObjectUnavailable, S3ImmutableObjects,
   type ImmutableObjects } from '../../../services/main/src/infrastructure/immutable-objects.ts';
 import { GRAPHS, iri } from '../../../services/main/src/modules/work/activate.ts';
 import { checkStructureSealManifest } from '../../../services/main/src/modules/structure/format.ts';
+import { readCompositionSeal } from '../../../services/main/src/modules/structure/seal-read.ts';
+import { readExportPlan } from '../../../services/main/src/modules/export/readers.ts';
 import { StructureProgressStore } from '../../../services/main/src/modules/progress/store.ts';
 import { progressRoutes } from '../../../services/main/src/routes/progress.ts';
 
@@ -17,7 +19,7 @@ type Page = { revision: string; predecessor: string | null; placementCount: numb
   occurrences: Array<{ occurrence: string; state: string; parent: string; target?: string;
     orderKey: string; sourceKey?: string }>; next: string | null; cost: { pagesRead: number } };
 
-test('COMP01/COMP02/COMP05/COMP06: admitted Book composition keeps occurrence identity and exact heads', async () => {
+test('BOOK02/COMP01/COMP02/COMP05/COMP06: admitted Book composition keeps occurrence identity and exact heads', async () => {
   if (!Bun.env.REZICS_QA_RUN_ID) throw new Error('Run through the isolated integration tier');
   const f = await authorCreditFixture(Bun.env as Record<string, string>,
     resolve('.temp', `structure-composition-${randomUUID()}`));
@@ -125,6 +127,25 @@ test('COMP01/COMP02/COMP05/COMP06: admitted Book composition keeps occurrence id
     const moved = await f.json<Changed>(await f.call('POST', `${path}/changes`, move), 200);
     expect((await f.json<Page>(await f.call('GET', read), 200)).occurrences
       .map(item => item.occurrence)).toEqual([...changed.occurrences].reverse());
+    const repeatedSeal = await f.json<Created & { seal: string }>(await f.call('POST',
+      `${path}/seals`, { expectedHead: moved.revision, actingSubject: f.actor }), 200);
+    const principal = await f.account.verifier.verify(new Request('http://main.local',
+      { headers: { authorization: `Bearer ${f.account.tokenA}` } }), ['work:read']);
+    const sealedPage = await readCompositionSeal(f.env, { structure: created.structure,
+      seal: repeatedSeal.seal, limit: 100,
+      canReadTarget: target => f.access.canReadWork(principal, f.actor, target) });
+    const exported = await readExportPlan({ env: f.env, structureObjects: objects,
+      canReadWork: (identity, actor, target) => f.access.canReadWork(identity, actor, target) },
+    principal, f.actor, { kind: 'composition-seal', reference: repeatedSeal.seal,
+      structure: created.structure, expectedPosition: sealedPage.sourcePosition }, 'evaluation');
+    expect(new Set(exported.members.slice(1).map(member => member.exactRef)))
+      .toEqual(new Set(changed.occurrences));
+    expect(exported.members.slice(1).map(member => member.sourceGrain))
+      .toEqual(['occurrence', 'occurrence']);
+    expect(exported.members.slice(1).map(member => member.data?.target))
+      .toEqual([work.work, work.work]);
+    expect(new Set(exported.members.slice(1).map(member => member.sourcePosition)).size).toBe(2);
+    expect(exported.work.members).toBe(3);
     expect((await f.call('POST', `${path}/changes`, move)).status).toBe(409);
     const prior = await f.json<Page>(await f.call('GET',
       `${path}/revisions/${shortId(changed.revision)}?actingSubject=${encodeURIComponent(f.actor)}`), 200);
