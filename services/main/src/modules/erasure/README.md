@@ -27,3 +27,13 @@ state table with that current head while the Access recovery fence remains held.
 The capture and HMAC key require separate protected custody, and capture must
 follow the last admitted authority change. This offline check scans Access rows
 once; it does not turn an older backup into current authority by itself.
+
+For a journaled Content revision that already has graph data, the isolated
+`infra/jena/purge-tdb2.sh EMPTY_DEST_BASE EXACT_REVISION_IRI ERASURE_EPOCH`
+builds a new TDB2 copy from retained quads, runs the pinned compactor, and
+rebuilds an empty Lucene index. It accepts only an exact Content revision URN.
+The candidate retains an `ErasedRevision` tombstone; the native command gate
+rejects later inserts naming that IRI. Operators must inventory and keep the
+old fileset inaccessible. This command does not activate the candidate or
+complete the Content owner erasure; those steps require journal and graph
+release proof before the published revision's preparation pin can be cleared.

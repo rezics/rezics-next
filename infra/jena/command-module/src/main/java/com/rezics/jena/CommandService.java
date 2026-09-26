@@ -231,6 +231,8 @@ final class CommandService extends ActionService {
             if (existing != null) return existing.equals(digest) ? committed(dataset, receipt) : Map.of("status", "conflict");
             String preflight = CommandInvariant.preflight(dataset, receipt, plan);
             if (preflight != null) return invalid(preflight);
+            String erasure = ErasurePolicy.preflight(dataset, plan);
+            if (erasure != null) return invalid(erasure);
             String authorCredit = AuthorCreditPolicy.preflight(dataset, plan);
             if (authorCredit != null) return invalid(authorCredit);
             CommandInvariant.Control before = plan.bootstrap() ? null : CommandInvariant.readControl(dataset);
