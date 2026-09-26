@@ -2,14 +2,20 @@ import { createHash } from 'node:crypto';
 import type { SparqlResult } from '../../infrastructure/fuseki.ts';
 import { GRAPHS, ID, RV, iri, type WorkActivationEnvironment } from '../work/activate.ts';
 import type { OccurrenceRecord, OrderEntry } from './format.ts';
+import type { OccurrenceRole, StructureProfile } from './format.ts';
+import { structureProfileForGraph } from './profiles.ts';
 
 // Bounded current-graph reads for Book compositions. Every read names the
 // selected generation, so a staged or retired generation is never unioned in.
 
 export const COMPOSITION_PROFILE = 'https://rezics.com/definition/structure-composition-v1';
 export const NATIVE_ID = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
-export const ROLE_IRI = { group: `${RV}GroupRole`, chapter: `${RV}ChapterRole` } as const;
-export type BookRole = keyof typeof ROLE_IRI;
+export const ROLE_IRI: Record<OccurrenceRole, string> = {
+  group: `${RV}GroupRole`, chapter: `${RV}ChapterRole`, member: `${RV}MemberRole`,
+  mount: `${RV}MountRole`, navigation: `${RV}NavigationRole`, ingredient: `${RV}IngredientRole`,
+  step: `${RV}StepRole`, equipment: `${RV}EquipmentRole`,
+};
+export type BookRole = 'group' | 'chapter';
 
 export class CompositionUnavailable extends Error {}
 export class CompositionCorrupt extends Error {}
@@ -37,7 +43,7 @@ export interface PlacementState {
   parent: string;
   segmentKey?: string;
   orderKey?: string;
-  role: BookRole;
+  role: OccurrenceRole;
   label?: Label;
   target?: string;
   selection?: Selection;
@@ -50,6 +56,7 @@ export interface SegmentState { segment: string; parent: string; key: string; co
 
 export interface CompositionHeader {
   structure: string;
+  profile: StructureProfile;
   mainVersion: string;
   work: string;
   head: string;
@@ -65,13 +72,12 @@ export async function readCompositionHeader(env: WorkActivationEnvironment,
   structure: string): Promise<CompositionHeader | null> {
   if (!NATIVE_ID.test(structure)) return null;
   const result = await env.fuseki.query(`PREFIX rv: <${RV}>
-    SELECT ?main ?work ?head ?generation ?count ?manifest WHERE {
+    SELECT ?main ?profile ?head ?generation ?count ?manifest WHERE {
       GRAPH ${iri(GRAPHS.current)} {
-        ${iri(structure)} a rv:Structure ; rv:structureProfile rv:BookComposition ;
+        ${iri(structure)} a rv:Structure ; rv:structureProfile ?profile ;
           rv:structureOf ?main ; rv:structureHead ?head ; rv:selectedGeneration ?generation .
         ?generation rv:structure ${iri(structure)} ; rv:generationState rv:Active ;
           rv:placementCount ?count .
-        ?work rv:mainVersion ?main .
       }
       GRAPH ${iri(GRAPHS.revisions)} { ?head a rv:StructureRevision ;
         rv:component ${iri(structure)} ; rv:manifest ?manifest . }
@@ -83,7 +89,15 @@ export async function readCompositionHeader(env: WorkActivationEnvironment,
     || !/^[0-9]+$/.test(value(row, 'count') ?? '')) {
     throw new CompositionCorrupt('Composition header is ambiguous');
   }
-  return { structure, mainVersion: value(row, 'main')!, work: value(row, 'work')!,
+  const profile = structureProfileForGraph(value(row, 'profile')!);
+  const owner = await env.fuseki.query(`SELECT ?work WHERE { GRAPH ${iri(GRAPHS.current)} {
+    ?work a ${iri(profile.ownerType)} ; ${iri(profile.componentPredicate)} ${iri(value(row, 'main')!)} .
+    ${iri(value(row, 'main')!)} a ${iri(profile.componentType)} . } } LIMIT 2`);
+  const owners = owner.results?.bindings ?? [];
+  if (owners.length !== 1 || !owners[0]?.work?.value) {
+    throw new CompositionCorrupt('Structure authority resource is ambiguous');
+  }
+  return { structure, profile: profile.id, mainVersion: value(row, 'main')!, work: owners[0].work.value,
     head: value(row, 'head')!, generation: value(row, 'generation')!,
     placementCount: Number(value(row, 'count')), manifest: value(row, 'manifest')! };
 }
@@ -128,8 +142,8 @@ export async function readPlacements(env: WorkActivationEnvironment, generation:
   for (const row of rows) {
     const occurrence = value(row, 'occurrence')!;
     const active = value(row, 'type') === `${RV}OccurrencePlacement`;
-    const role = value(row, 'role') === ROLE_IRI.group ? 'group'
-      : value(row, 'role') === ROLE_IRI.chapter ? 'chapter' : null;
+    const role = (Object.entries(ROLE_IRI).find(([, uri]) => uri === value(row, 'role'))?.[0]
+      ?? null) as OccurrenceRole | null;
     const mode = value(row, 'mode');
     const target = value(row, 'target');
     const labelLanguage = row.label?.['xml:lang'];

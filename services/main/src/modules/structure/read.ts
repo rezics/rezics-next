@@ -63,7 +63,7 @@ export async function readCompositionPage(env: WorkActivationEnvironment, input:
     throw error;
   }
   if (manifest.structure !== input.structure || manifest.structureOf !== header.mainVersion
-    || manifest.profile !== 'book-composition' || manifest.placementCount !== Number(value('count'))
+    || manifest.profile !== header.profile || manifest.placementCount !== Number(value('count'))
     || !input.revision && manifest.generation !== header.generation) {
     throw new StructureObjectCorrupt('composition manifest differs from revision');
   }

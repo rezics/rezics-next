@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { execFileSync } from 'node:child_process';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { mkdirSync, readFileSync, readdirSync, rmSync } from 'node:fs';
 import { createServer } from 'node:net';
 import { join, resolve } from 'node:path';
@@ -14,7 +14,9 @@ import { stageJob, stagePage } from '../src/modules/structure/stage-schema.ts';
 import { InvalidZoneConfiguration, checkZoneConfiguration, type ZoneConfiguration }
   from '../src/modules/zone/config-format.ts';
 import { InexactQuantity, exactRational, scaleExact } from '../src/modules/recipe/quantity.ts';
-import { DirectoryStructureObjects } from '../src/modules/structure/objects.ts';
+import { ObjectUnavailable } from '../src/infrastructure/immutable-objects.ts';
+import { checkedOperations } from '../src/modules/structure/change.ts';
+import { discoverStructureProfiles } from '../src/modules/structure/profiles.ts';
 import { StructureTree, newCost } from '../src/modules/structure/tree.ts';
 import { evenKeys, keyBetween } from '../src/modules/structure/order-key.ts';
 
@@ -26,9 +28,16 @@ const digest = (seed: string) => new Bun.CryptoHasher('sha256').update(seed).dig
 const bytes = (value: unknown) => new TextEncoder().encode(JSON.stringify(value));
 
 test('COMP05: ordered immutable pages copy a bounded path and dense keys rebalance locally', async () => {
-  const directory = resolve('.temp', `structure-tree-${randomUUID()}`);
-  try {
-    const objects = new DirectoryStructureObjects(directory);
+    const retained = new Map<string, Uint8Array>();
+    const objects = { put: async (value: Uint8Array) => {
+      const digest = createHash('sha256').update(value).digest('hex');
+      retained.set(digest, value);
+      return digest;
+    }, get: async (digest: string) => {
+      const value = retained.get(digest);
+      if (!value) throw new ObjectUnavailable('test object is missing');
+      return value;
+    } };
     const parent = id();
     const tree = new StructureTree<{ occurrence: string; parent: string; segmentKey: string;
       orderKey: string }>(objects, 'order',
@@ -54,6 +63,25 @@ test('COMP05: ordered immutable pages copy a bounded path and dense keys rebalan
     expect(editCost.pagesRead).toBeLessThanOrEqual(3);
     expect((await tree.range(root, '', '\uffff', 1025, newCost())).length).toBe(1024);
     expect((await tree.range(next, '', '\uffff', 1026, newCost()))[512]?.orderKey).toBe(inserted);
+});
+
+test('COMP01: a second owner registers a Structure profile without changing the Book command', async () => {
+  const directory = resolve('.temp', `structure-profile-${randomUUID()}`);
+  const ownerDirectory = join(directory, 'collection');
+  mkdirSync(ownerDirectory, { recursive: true });
+  try {
+    await Bun.write(join(ownerDirectory, 'structure-profile.ts'), `export const structureProfiles = [{
+      id: 'collection-membership', graphProfile: 'https://rezics.com/vocab/CollectionMembership',
+      ownerType: 'https://schema.org/Collection', componentType: 'https://rezics.com/vocab/MainVersion',
+      componentPredicate: 'https://rezics.com/vocab/mainVersion', editScopePrefix: 'work:edit:',
+      roles: ['group', 'member'], targetRoles: ['member']
+    }];`);
+    const profiles = await discoverStructureProfiles(directory);
+    expect(profiles.get('collection-membership')?.roles).toEqual(['group', 'member']);
+    expect(checkedOperations([{ op: 'insert', parent: id(), position: 'last',
+      role: 'member', target: id() }], profiles.get('collection-membership'))).toHaveLength(1);
+    expect(() => checkedOperations([{ op: 'insert', parent: id(), position: 'last',
+      role: 'member', target: id() }], 'book-composition')).toThrow('role');
   } finally { rmSync(directory, { recursive: true, force: true }); }
 });
 

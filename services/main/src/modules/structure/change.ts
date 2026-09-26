@@ -10,12 +10,14 @@ import { workEditReceiptIri } from '../work/edit.ts';
 import { InvalidStructureObject, STRUCTURE_LIMITS, STRUCTURE_MANIFEST_FORMAT, STRUCTURE_PAGE_FORMAT,
   STRUCTURE_SEAL_FORMAT, checkOccurrenceRecord, checkStructureManifest, checkStructureSealManifest,
   type OccurrenceRecord,
-  type OrderEntry, type PinEntry, type StructureManifest } from './format.ts';
+  type OccurrenceRole, type OrderEntry, type PinEntry, type StructureManifest,
+  type StructureProfile } from './format.ts';
 import { COMPOSITION_PROFILE, CompositionCorrupt, CompositionUnavailable, NATIVE_ID, ROLE_IRI,
   derivedId, orderTreeKey, placementIri, placementRecord, readCompositionHeader,
-  readPlacements, readPublishedVariants, readSegments, recordTreeKey, type BookRole,
+  readPlacements, readPublishedVariants, readSegments, recordTreeKey,
   type CompositionHeader, type Label, type PlacementState, type SegmentState, type Selection }
   from './graph.ts';
+import { structureProfileFor, type StructureProfileRegistration } from './profiles.ts';
 import { DirectoryStructureObjects } from './objects.ts';
 import { evenKeys, keyBetween, withinBudget } from './order-key.ts';
 import { StructureObjectCorrupt, StructureObjectUnavailable, StructureTree, newCost,
@@ -36,7 +38,7 @@ export class CompositionCancelled extends Error {}
 
 export type Position = 'first' | 'last' | { after: string };
 export type CompositionOperation =
-  | { op: 'insert'; parent: string; position: Position; role: BookRole; target?: string;
+  | { op: 'insert'; parent: string; position: Position; role: OccurrenceRole; target?: string;
     selection?: Selection; label?: Label; sourceKey?: string }
   | { op: 'move'; occurrence: string; parent: string; position: Position }
   | { op: 'remove'; occurrence: string };
@@ -89,7 +91,9 @@ function checkedPosition(position: unknown): Position {
 }
 
 /** Canonical, bounded operation list; every change in one request has the same kind. */
-export function checkedOperations(operations: readonly CompositionOperation[]): CompositionOperation[] {
+export function checkedOperations(operations: readonly CompositionOperation[],
+  profile?: StructureProfile | StructureProfileRegistration): CompositionOperation[] {
+  const registration = typeof profile === 'string' ? structureProfileFor(profile) : profile;
   if (!operations.length || operations.length > MAX_OPERATIONS
     || new Set(operations.map(operation => operation.op)).size !== 1) {
     throw new InvalidCompositionChange('a change carries 1-16 operations of one kind');
@@ -100,12 +104,13 @@ export function checkedOperations(operations: readonly CompositionOperation[]): 
       return { op: 'move', occurrence: native(operation.occurrence, 'occurrence'),
         parent: native(operation.parent, 'parent'), position: checkedPosition(operation.position) };
     }
-    if (operation.op !== 'insert' || !(operation.role in ROLE_IRI)) {
-      throw new InvalidCompositionChange('operation is not admitted by book-composition');
+    if (operation.op !== 'insert' || !(operation.role in ROLE_IRI)
+      || registration && !registration.roles.includes(operation.role)) {
+      throw new InvalidCompositionChange('operation role is not admitted by this Structure profile');
     }
     const target = operation.target === undefined ? undefined : native(operation.target, 'target');
-    if ((operation.role === 'chapter') !== (target !== undefined)) {
-      throw new InvalidCompositionChange('a chapter has one target and a group has none');
+    if (registration && registration.targetRoles.includes(operation.role) !== (target !== undefined)) {
+      throw new InvalidCompositionChange('operation target cardinality differs from its Structure profile');
     }
     let selection: Selection | undefined;
     if (target) {
@@ -138,8 +143,9 @@ export function checkedOperations(operations: readonly CompositionOperation[]): 
   });
 }
 
-export function compositionCreateDigest(mainVersion: string): string {
-  return hash(JSON.stringify({ family: 'composition-create-v1', profile: 'book-composition',
+export function compositionCreateDigest(mainVersion: string, profile: StructureProfile = 'book-composition'): string {
+  structureProfileFor(profile);
+  return hash(JSON.stringify({ family: 'composition-create-v1', profile,
     mainVersion: native(mainVersion, 'mainVersion') }));
 }
 
@@ -317,7 +323,7 @@ async function readManifest(objects: ImmutableObjects, header: CompositionHeader
     throw error;
   }
   if (manifest.structure !== header.structure || manifest.generation !== header.generation
-    || manifest.structureOf !== header.mainVersion || manifest.profile !== 'book-composition') {
+    || manifest.structureOf !== header.mainVersion || manifest.profile !== header.profile) {
     throw new StructureObjectCorrupt('manifest does not belong to this composition head');
   }
   return manifest;
@@ -357,22 +363,24 @@ function revisionTriples(env: WorkActivationEnvironment, input: { revision: stri
     rv:dataEpoch ${lit(env.lineage.dataEpoch)} ; rv:sequence ?next .`;
 }
 
-export interface CreateCompositionIntent { admission: Admission; mainVersion: string; work: string }
+export interface CreateCompositionIntent { admission: Admission; mainVersion: string; work: string;
+  profile?: StructureProfile }
 
 /** Allocate one empty Book composition for a Main Version; at most one per Main Version. */
 export async function createComposition(env: WorkActivationEnvironment,
   intent: CreateCompositionIntent): Promise<{ terminal: CompositionTerminal; committed: boolean }> {
-  const digest = compositionCreateDigest(intent.mainVersion);
+  const profile = structureProfileFor(intent.profile ?? 'book-composition');
+  const digest = compositionCreateDigest(intent.mainVersion, profile.id);
   checkAdmission(intent.admission, digest);
-  if (intent.admission.scope !== `work:edit:${native(intent.work, 'work')}`) {
+  if (intent.admission.scope !== `${profile.editScopePrefix}${native(intent.work, 'work')}`) {
     throw new IdempotencyConflict('composition admission targets another Work');
   }
   const prior = await existing(env, intent.admission);
   if (prior) return { terminal: prior, committed: false };
-  const book = await env.fuseki.query(`PREFIX rv: <${RV}> ASK { GRAPH ${iri(GRAPHS.current)} {
-    ${iri(intent.work)} a <https://schema.org/Book> ; rv:mainVersion ${iri(intent.mainVersion)} .
-    ${iri(intent.mainVersion)} a rv:MainVersion . } }`);
-  if (book.boolean !== true) throw new CompositionUnavailable('Book Main Version is unavailable');
+  const owner = await env.fuseki.query(`ASK { GRAPH ${iri(GRAPHS.current)} {
+    ${iri(intent.work)} a ${iri(profile.ownerType)} ; ${iri(profile.componentPredicate)} ${iri(intent.mainVersion)} .
+    ${iri(intent.mainVersion)} a ${iri(profile.componentType)} . } }`);
+  if (owner.boolean !== true) throw new CompositionUnavailable('Structure owner is unavailable');
   const seed = `${intent.admission.id}\0composition`;
   const structure = derivedId(`${seed}\0structure`);
   const generation = derivedId(`${seed}\0generation`);
@@ -381,7 +389,7 @@ export async function createComposition(env: WorkActivationEnvironment,
   const objects = structureObjects(env);
   const cost = newCost();
   const manifest = await writeManifest(objects, { format: STRUCTURE_MANIFEST_FORMAT, structure,
-    structureOf: intent.mainVersion, profile: 'book-composition', generation,
+    structureOf: intent.mainVersion, profile: profile.id, generation,
     pageFormat: STRUCTURE_PAGE_FORMAT, records: await recordTree(objects).empty(cost),
     order: await orderTree(objects).empty(cost), placementCount: 0, measures: [],
     model: COMPOSITION_PROFILE, shape: COMPOSITION_PROFILE }, cost);
@@ -393,7 +401,7 @@ export async function createComposition(env: WorkActivationEnvironment,
       GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?next }
       GRAPH ${iri(GRAPHS.current)} {
         ${iri(structure)} a rv:Structure ; rv:structureOf ${iri(intent.mainVersion)} ;
-          rv:structureProfile rv:BookComposition ; rv:structureHead ${iri(revision)} ;
+          rv:structureProfile ${iri(profile.graphProfile)} ; rv:structureHead ${iri(revision)} ;
           rv:selectedGeneration ${iri(generation)} .
         ${iri(generation)} a rv:StructureGeneration ; rv:structure ${iri(structure)} ;
           rv:generationState rv:Active ; rv:stagedBy ${iri(operation)} ; rv:placementCount 0 .
@@ -407,9 +415,9 @@ export async function createComposition(env: WorkActivationEnvironment,
     }
     WHERE { ${controlGuard(env)}
       FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} ?p ?o } }
-      GRAPH ${iri(GRAPHS.current)} { ${iri(intent.work)} a <https://schema.org/Book> ;
-        rv:mainVersion ${iri(intent.mainVersion)} .
-        ${iri(intent.mainVersion)} a rv:MainVersion . }
+      GRAPH ${iri(GRAPHS.current)} { ${iri(intent.work)} a ${iri(profile.ownerType)} ;
+        ${iri(profile.componentPredicate)} ${iri(intent.mainVersion)} .
+        ${iri(intent.mainVersion)} a ${iri(profile.componentType)} . }
       FILTER NOT EXISTS { ${occupied} }
       FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} { ${iri(structure)} ?sp ?so } }
       BIND(?n + 1 AS ?next) }`;
@@ -757,7 +765,8 @@ export async function changeComposition(env: WorkActivationEnvironment,
   if (prior) return { terminal: prior, committed: false, occurrences };
   const header = await readCompositionHeader(env, intent.structure);
   if (!header) throw new CompositionUnavailable('composition is unavailable');
-  if (intent.admission.scope !== `work:edit:${header.work}`) {
+  checkedOperations(operations, header.profile);
+  if (intent.admission.scope !== `${structureProfileFor(header.profile).editScopePrefix}${header.work}`) {
     throw new IdempotencyConflict('composition admission targets another Work');
   }
   const headGuard = `GRAPH ${iri(GRAPHS.current)} { ${iri(intent.structure)} rv:structureHead ${iri(intent.expectedHead)} }`;
@@ -792,7 +801,7 @@ export async function changeComposition(env: WorkActivationEnvironment,
       placementTriples(state, header.generation));
     if (old && !change.removed.length && !change.added.length) continue;
     const record = placementRecord(state);
-    checkOccurrenceRecord(record, 'book-composition');
+    checkOccurrenceRecord(record, header.profile);
     records.set(occurrence, record);
     if (old) {
       changedExisting.push(old);
@@ -906,7 +915,7 @@ export async function sealComposition(env: WorkActivationEnvironment,
   if (prior) return { terminal: prior, committed: false };
   const header = await readCompositionHeader(env, intent.structure);
   if (!header) throw new CompositionUnavailable('composition is unavailable');
-  if (intent.admission.scope !== `work:edit:${header.work}`) {
+  if (intent.admission.scope !== `${structureProfileFor(header.profile).editScopePrefix}${header.work}`) {
     throw new IdempotencyConflict('composition admission targets another Work');
   }
   const headGuard = `GRAPH ${iri(GRAPHS.current)} { ${iri(intent.structure)} rv:structureHead ${iri(intent.expectedHead)} }`;
