@@ -1,0 +1,23 @@
+# Standard identified name records (SKOS-XL Label) and evidence annotations (Web Annotation).
+# A Label is linked by rv:nameRecord; selecting a preferred name is a separate decision.
+# Statement and ListItem records belong to their Context and Structure owner profiles.
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix skosxl: <http://www.w3.org/2008/05/skos-xl#> .
+@prefix oa: <http://www.w3.org/ns/oa#> .
+@prefix prov: <http://www.w3.org/ns/prov#> .
+@prefix rv: <https://rezics.com/vocab/> .
+
+<https://rezics.com/definition/semantic-annotation-v1/label-shape>
+    a sh:NodeShape ;
+    sh:property [ sh:path rdf:type ; sh:hasValue skosxl:Label ] ;
+    sh:property [ sh:path skosxl:literalForm ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype rdf:langString ; sh:maxLength 1000 ] ;
+    sh:property [ sh:path rv:nameRole ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
+    sh:property [ sh:path prov:wasDerivedFrom ; sh:maxCount 16 ; sh:nodeKind sh:IRI ] .
+
+<https://rezics.com/definition/semantic-annotation-v1/annotation-shape>
+    a sh:NodeShape ;
+    sh:property [ sh:path rdf:type ; sh:hasValue oa:Annotation ] ;
+    sh:property [ sh:path oa:hasTarget ; sh:minCount 1 ; sh:maxCount 16 ; sh:nodeKind sh:IRI ] ;
+    sh:property [ sh:path oa:hasBody ; sh:maxCount 16 ; sh:nodeKind sh:IRIOrLiteral ] ;
+    sh:property [ sh:path oa:motivatedBy ; sh:minCount 1 ; sh:maxCount 1 ; sh:in ( oa:assessing oa:classifying oa:commenting oa:describing oa:identifying oa:linking oa:questioning oa:tagging ) ] .

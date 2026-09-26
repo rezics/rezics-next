@@ -1,0 +1,100 @@
+{
+  "@context": {
+    "sh": {
+      "@id": "http://www.w3.org/ns/shacl#",
+      "@prefix": true
+    },
+    "rdf": {
+      "@id": "http://www.w3.org/1999/02/22-rdf-syntax-ns#",
+      "@prefix": true
+    },
+    "xsd": {
+      "@id": "http://www.w3.org/2001/XMLSchema#",
+      "@prefix": true
+    },
+    "owl": {
+      "@id": "http://www.w3.org/2002/07/owl#",
+      "@prefix": true
+    },
+    "schema": {
+      "@id": "https://schema.org/",
+      "@prefix": true
+    },
+    "time": {
+      "@id": "http://www.w3.org/2006/time#",
+      "@prefix": true
+    },
+    "rv": {
+      "@id": "https://rezics.com/vocab/",
+      "@prefix": true
+    },
+    "owl:sameAs": {
+      "@id": "http://www.w3.org/2002/07/owl#sameAs"
+    },
+    "rdf:direction": {
+      "@id": "http://www.w3.org/1999/02/22-rdf-syntax-ns#direction"
+    },
+    "rdf:language": {
+      "@id": "http://www.w3.org/1999/02/22-rdf-syntax-ns#language"
+    },
+    "rdf:type": {
+      "@id": "http://www.w3.org/1999/02/22-rdf-syntax-ns#type",
+      "@type": "@id"
+    },
+    "rdf:value": {
+      "@id": "http://www.w3.org/1999/02/22-rdf-syntax-ns#value"
+    },
+    "rv:decimalPlaces": {
+      "@id": "https://rezics.com/vocab/decimalPlaces",
+      "@type": "xsd:integer"
+    },
+    "rv:earliest": {
+      "@id": "https://rezics.com/vocab/earliest",
+      "@type": "xsd:dateTime"
+    },
+    "rv:externalKey": {
+      "@id": "https://rezics.com/vocab/externalKey"
+    },
+    "rv:externalNamespace": {
+      "@id": "https://rezics.com/vocab/externalNamespace"
+    },
+    "rv:externalProvider": {
+      "@id": "https://rezics.com/vocab/externalProvider"
+    },
+    "rv:latest": {
+      "@id": "https://rezics.com/vocab/latest",
+      "@type": "xsd:dateTime"
+    },
+    "rv:lexicalForm": {
+      "@id": "https://rezics.com/vocab/lexicalForm"
+    },
+    "rv:quantityKind": {
+      "@id": "https://rezics.com/vocab/quantityKind",
+      "@type": "@id"
+    },
+    "rv:timeZoneName": {
+      "@id": "https://rezics.com/vocab/timeZoneName"
+    },
+    "rv:uncertainty": {
+      "@id": "https://rezics.com/vocab/uncertainty"
+    },
+    "rv:utcOffset": {
+      "@id": "https://rezics.com/vocab/utcOffset"
+    },
+    "schema:unitCode": {
+      "@id": "https://schema.org/unitCode",
+      "@type": "@id"
+    },
+    "schema:value": {
+      "@id": "https://schema.org/value"
+    },
+    "time:hasTRS": {
+      "@id": "http://www.w3.org/2006/time#hasTRS",
+      "@type": "@id"
+    },
+    "time:unitType": {
+      "@id": "http://www.w3.org/2006/time#unitType",
+      "@type": "@id"
+    }
+  }
+}

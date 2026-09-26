@@ -1,0 +1,190 @@
+{
+  "@context": {
+    "sh": {
+      "@id": "http://www.w3.org/ns/shacl#",
+      "@prefix": true
+    },
+    "rdf": {
+      "@id": "http://www.w3.org/1999/02/22-rdf-syntax-ns#",
+      "@prefix": true
+    },
+    "xsd": {
+      "@id": "http://www.w3.org/2001/XMLSchema#",
+      "@prefix": true
+    },
+    "rv": {
+      "@id": "https://rezics.com/vocab/",
+      "@prefix": true
+    },
+    "rdf:type": {
+      "@id": "http://www.w3.org/1999/02/22-rdf-syntax-ns#type",
+      "@type": "@id"
+    },
+    "rv:baseRevision": {
+      "@id": "https://rezics.com/vocab/baseRevision",
+      "@type": "@id"
+    },
+    "rv:component": {
+      "@id": "https://rezics.com/vocab/component",
+      "@type": "@id"
+    },
+    "rv:dataEpoch": {
+      "@id": "https://rezics.com/vocab/dataEpoch"
+    },
+    "rv:datasetId": {
+      "@id": "https://rezics.com/vocab/datasetId",
+      "@type": "@id"
+    },
+    "rv:generation": {
+      "@id": "https://rezics.com/vocab/generation",
+      "@type": "@id"
+    },
+    "rv:generationState": {
+      "@id": "https://rezics.com/vocab/generationState",
+      "@type": "@id"
+    },
+    "rv:head": {
+      "@id": "https://rezics.com/vocab/head",
+      "@type": "@id"
+    },
+    "rv:importSource": {
+      "@id": "https://rezics.com/vocab/importSource"
+    },
+    "rv:importSourceRevision": {
+      "@id": "https://rezics.com/vocab/importSourceRevision"
+    },
+    "rv:introducedBy": {
+      "@id": "https://rezics.com/vocab/introducedBy",
+      "@type": "@id"
+    },
+    "rv:lastParent": {
+      "@id": "https://rezics.com/vocab/lastParent",
+      "@type": "@id"
+    },
+    "rv:manifest": {
+      "@id": "https://rezics.com/vocab/manifest",
+      "@type": "@id"
+    },
+    "rv:mappingPolicy": {
+      "@id": "https://rezics.com/vocab/mappingPolicy"
+    },
+    "rv:memberCount": {
+      "@id": "https://rezics.com/vocab/memberCount",
+      "@type": "xsd:integer"
+    },
+    "rv:modelRevision": {
+      "@id": "https://rezics.com/vocab/modelRevision",
+      "@type": "@id"
+    },
+    "rv:occurrence": {
+      "@id": "https://rezics.com/vocab/occurrence",
+      "@type": "@id"
+    },
+    "rv:occurrenceLabel": {
+      "@id": "https://rezics.com/vocab/occurrenceLabel"
+    },
+    "rv:occurrenceRole": {
+      "@id": "https://rezics.com/vocab/occurrenceRole",
+      "@type": "@id"
+    },
+    "rv:operation": {
+      "@id": "https://rezics.com/vocab/operation",
+      "@type": "@id"
+    },
+    "rv:orderKey": {
+      "@id": "https://rezics.com/vocab/orderKey"
+    },
+    "rv:orderSegment": {
+      "@id": "https://rezics.com/vocab/orderSegment"
+    },
+    "rv:parent": {
+      "@id": "https://rezics.com/vocab/parent",
+      "@type": "@id"
+    },
+    "rv:pinnedRevision": {
+      "@id": "https://rezics.com/vocab/pinnedRevision"
+    },
+    "rv:placementCount": {
+      "@id": "https://rezics.com/vocab/placementCount",
+      "@type": "xsd:integer"
+    },
+    "rv:predecessor": {
+      "@id": "https://rezics.com/vocab/predecessor",
+      "@type": "@id"
+    },
+    "rv:qualifier": {
+      "@id": "https://rezics.com/vocab/qualifier",
+      "@type": "@id"
+    },
+    "rv:removedBy": {
+      "@id": "https://rezics.com/vocab/removedBy",
+      "@type": "@id"
+    },
+    "rv:restoredFrom": {
+      "@id": "https://rezics.com/vocab/restoredFrom"
+    },
+    "rv:sealCoverage": {
+      "@id": "https://rezics.com/vocab/sealCoverage",
+      "@type": "@id"
+    },
+    "rv:sealedBy": {
+      "@id": "https://rezics.com/vocab/sealedBy",
+      "@type": "@id"
+    },
+    "rv:segmentKey": {
+      "@id": "https://rezics.com/vocab/segmentKey"
+    },
+    "rv:selectedGeneration": {
+      "@id": "https://rezics.com/vocab/selectedGeneration",
+      "@type": "@id"
+    },
+    "rv:selectionMode": {
+      "@id": "https://rezics.com/vocab/selectionMode"
+    },
+    "rv:selectionRealm": {
+      "@id": "https://rezics.com/vocab/selectionRealm"
+    },
+    "rv:sequence": {
+      "@id": "https://rezics.com/vocab/sequence",
+      "@type": "xsd:integer"
+    },
+    "rv:shapeRevision": {
+      "@id": "https://rezics.com/vocab/shapeRevision",
+      "@type": "@id"
+    },
+    "rv:sourceKey": {
+      "@id": "https://rezics.com/vocab/sourceKey"
+    },
+    "rv:stagedBy": {
+      "@id": "https://rezics.com/vocab/stagedBy",
+      "@type": "@id"
+    },
+    "rv:structure": {
+      "@id": "https://rezics.com/vocab/structure",
+      "@type": "@id"
+    },
+    "rv:structureOf": {
+      "@id": "https://rezics.com/vocab/structureOf",
+      "@type": "@id"
+    },
+    "rv:structureOperation": {
+      "@id": "https://rezics.com/vocab/structureOperation",
+      "@type": "@id"
+    },
+    "rv:structureProfile": {
+      "@id": "https://rezics.com/vocab/structureProfile",
+      "@type": "@id"
+    },
+    "rv:structureRevision": {
+      "@id": "https://rezics.com/vocab/structureRevision",
+      "@type": "@id"
+    },
+    "rv:target": {
+      "@id": "https://rezics.com/vocab/target"
+    },
+    "rv:unavailableCount": {
+      "@id": "https://rezics.com/vocab/unavailableCount",
+      "@type": "xsd:integer"
+    }
+  }
+}

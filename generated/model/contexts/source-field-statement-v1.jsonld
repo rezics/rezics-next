@@ -1,0 +1,98 @@
+{
+  "@context": {
+    "sh": {
+      "@id": "http://www.w3.org/ns/shacl#",
+      "@prefix": true
+    },
+    "rdf": {
+      "@id": "http://www.w3.org/1999/02/22-rdf-syntax-ns#",
+      "@prefix": true
+    },
+    "xsd": {
+      "@id": "http://www.w3.org/2001/XMLSchema#",
+      "@prefix": true
+    },
+    "rv": {
+      "@id": "https://rezics.com/vocab/",
+      "@prefix": true
+    },
+    "rdf:type": {
+      "@id": "http://www.w3.org/1999/02/22-rdf-syntax-ns#type",
+      "@type": "@id"
+    },
+    "rv:dispositionReason": {
+      "@id": "https://rezics.com/vocab/dispositionReason"
+    },
+    "rv:fieldDisposition": {
+      "@id": "https://rezics.com/vocab/fieldDisposition"
+    },
+    "rv:sourceByteDigest": {
+      "@id": "https://rezics.com/vocab/sourceByteDigest"
+    },
+    "rv:sourceCalendar": {
+      "@id": "https://rezics.com/vocab/sourceCalendar",
+      "@type": "@id"
+    },
+    "rv:sourceConversion": {
+      "@id": "https://rezics.com/vocab/sourceConversion",
+      "@type": "@id"
+    },
+    "rv:sourceDatatype": {
+      "@id": "https://rezics.com/vocab/sourceDatatype",
+      "@type": "@id"
+    },
+    "rv:sourceField": {
+      "@id": "https://rezics.com/vocab/sourceField"
+    },
+    "rv:sourceGrain": {
+      "@id": "https://rezics.com/vocab/sourceGrain"
+    },
+    "rv:sourceLanguage": {
+      "@id": "https://rezics.com/vocab/sourceLanguage"
+    },
+    "rv:sourceLexical": {
+      "@id": "https://rezics.com/vocab/sourceLexical"
+    },
+    "rv:sourceMappingRevision": {
+      "@id": "https://rezics.com/vocab/sourceMappingRevision"
+    },
+    "rv:sourceOccurrence": {
+      "@id": "https://rezics.com/vocab/sourceOccurrence",
+      "@type": "@id"
+    },
+    "rv:sourceOrdinal": {
+      "@id": "https://rezics.com/vocab/sourceOrdinal",
+      "@type": "xsd:integer"
+    },
+    "rv:sourceQualifies": {
+      "@id": "https://rezics.com/vocab/sourceQualifies",
+      "@type": "@id"
+    },
+    "rv:sourceQuantityLower": {
+      "@id": "https://rezics.com/vocab/sourceQuantityLower"
+    },
+    "rv:sourceQuantityUnit": {
+      "@id": "https://rezics.com/vocab/sourceQuantityUnit",
+      "@type": "@id"
+    },
+    "rv:sourceQuantityUpper": {
+      "@id": "https://rezics.com/vocab/sourceQuantityUpper"
+    },
+    "rv:sourceRank": {
+      "@id": "https://rezics.com/vocab/sourceRank"
+    },
+    "rv:sourceStatementRole": {
+      "@id": "https://rezics.com/vocab/sourceStatementRole"
+    },
+    "rv:sourceStatisticKind": {
+      "@id": "https://rezics.com/vocab/sourceStatisticKind"
+    },
+    "rv:sourceTimePrecision": {
+      "@id": "https://rezics.com/vocab/sourceTimePrecision",
+      "@type": "xsd:integer"
+    },
+    "rv:sourceValueKind": {
+      "@id": "https://rezics.com/vocab/sourceValueKind"
+    }
+  }
+}

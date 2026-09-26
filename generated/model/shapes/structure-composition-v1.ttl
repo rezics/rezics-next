@@ -1,0 +1,140 @@
+# A Structure owns identified occurrences; an occurrence is one use, so a target may repeat.
+# Current placements belong to one generation; the Structure selects exactly one generation.
+# Every topology change advances the Structure head; revisions pin complete immutable manifests.
+# Parent ownership, cycles, role admission and order-key uniqueness are guarded by the command.
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix rv: <https://rezics.com/vocab/> .
+
+<https://rezics.com/definition/structure-composition-v1/structure-shape>
+    a sh:NodeShape ;
+    sh:property [ sh:path rdf:type ; sh:maxCount 1 ; sh:hasValue rv:Structure ] ;
+    sh:property [ sh:path rv:structureOf ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
+    sh:property [ sh:path rv:structureProfile ; sh:minCount 1 ; sh:maxCount 1 ; sh:in ( rv:BookComposition rv:CollectionMembership rv:ZoneNavigation rv:WikiNavigation rv:RecipeComposition ) ] ;
+    sh:property [ sh:path rv:head ; sh:minCount 1 ; sh:maxCount 1 ; sh:class rv:StructureRevision ] ;
+    sh:property [ sh:path rv:selectedGeneration ; sh:minCount 1 ; sh:maxCount 1 ; sh:class rv:StructureGeneration ] .
+
+<https://rezics.com/definition/structure-composition-v1/generation-shape>
+    a sh:NodeShape ;
+    sh:property [ sh:path rdf:type ; sh:maxCount 1 ; sh:hasValue rv:StructureGeneration ] ;
+    sh:property [ sh:path rv:structure ; sh:minCount 1 ; sh:maxCount 1 ; sh:class rv:Structure ] ;
+    sh:property [ sh:path rv:generationState ; sh:minCount 1 ; sh:maxCount 1 ; sh:in ( rv:Staging rv:Active rv:Retired rv:Cancelled ) ] ;
+    sh:property [ sh:path rv:stagedBy ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
+    sh:property [ sh:path rv:baseRevision ; sh:maxCount 1 ; sh:class rv:StructureRevision ] ;
+    sh:property [ sh:path rv:placementCount ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:integer ; sh:minInclusive 0 ; sh:maxInclusive 1048576 ] .
+
+<https://rezics.com/definition/structure-composition-v1/segment-shape>
+    a sh:NodeShape ;
+    sh:property [ sh:path rdf:type ; sh:maxCount 1 ; sh:hasValue rv:OrderSegment ] ;
+    sh:property [ sh:path rv:generation ; sh:minCount 1 ; sh:maxCount 1 ; sh:class rv:StructureGeneration ] ;
+    sh:property [ sh:path rv:parent ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
+    sh:property [ sh:path rv:segmentKey ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:string ; sh:pattern "^[a-z0-9]+(-[a-z0-9]+)*$" ; sh:maxLength 32 ] ;
+    sh:property [ sh:path rv:memberCount ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:integer ; sh:minInclusive 0 ; sh:maxInclusive 512 ] .
+
+<https://rezics.com/definition/structure-composition-v1/occurrence-shape>
+    a sh:NodeShape ;
+    sh:property [ sh:path rdf:type ; sh:maxCount 1 ; sh:hasValue rv:StructureOccurrence ] ;
+    sh:property [ sh:path rv:structure ; sh:minCount 1 ; sh:maxCount 1 ; sh:class rv:Structure ] ;
+    sh:property [ sh:path rv:introducedBy ; sh:minCount 1 ; sh:maxCount 1 ; sh:class rv:StructureRevision ] .
+
+<https://rezics.com/definition/structure-composition-v1/placement-shape>
+    a sh:NodeShape ;
+    sh:property [ sh:path rdf:type ; sh:maxCount 1 ; sh:hasValue rv:OccurrencePlacement ] ;
+    sh:property [ sh:path rv:occurrence ; sh:minCount 1 ; sh:maxCount 1 ; sh:class rv:StructureOccurrence ] ;
+    sh:property [ sh:path rv:generation ; sh:minCount 1 ; sh:maxCount 1 ; sh:class rv:StructureGeneration ] ;
+    sh:property [ sh:path rv:orderSegment ; sh:minCount 1 ; sh:maxCount 1 ; sh:class rv:OrderSegment ] ;
+    sh:property [ sh:path rv:orderKey ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:string ; sh:pattern "^[a-z0-9]+(-[a-z0-9]+)*$" ; sh:maxLength 32 ] ;
+    sh:property [ sh:path rv:occurrenceRole ; sh:minCount 1 ; sh:maxCount 1 ; sh:in ( rv:GroupRole rv:ChapterRole rv:MemberRole rv:MountRole rv:NavigationRole rv:IngredientRole rv:StepRole rv:EquipmentRole ) ] ;
+    sh:property [ sh:path rv:occurrenceLabel ; sh:datatype rdf:langString ; sh:uniqueLang true ; sh:maxLength 500 ] ;
+    sh:property [ sh:path rv:qualifier ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
+    sh:property [ sh:path rv:sourceKey ; sh:maxCount 1 ; sh:datatype xsd:string ; sh:minLength 1 ; sh:maxLength 200 ] ;
+    sh:property [ sh:path rv:target ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
+    sh:property [ sh:path rv:selectionMode ; sh:maxCount 1 ; sh:in ( rv:FollowContext rv:FixedRealm rv:FixedRevision ) ] ;
+    sh:property [ sh:path rv:selectionRealm ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
+    sh:property [ sh:path rv:pinnedRevision ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
+    sh:or (
+        [ sh:property [ sh:path rv:target ; sh:maxCount 0 ] ;
+          sh:property [ sh:path rv:selectionMode ; sh:maxCount 0 ] ;
+          sh:property [ sh:path rv:selectionRealm ; sh:maxCount 0 ] ;
+          sh:property [ sh:path rv:pinnedRevision ; sh:maxCount 0 ] ]
+        [ sh:property [ sh:path rv:target ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
+          sh:property [ sh:path rv:selectionMode ; sh:hasValue rv:FollowContext ] ;
+          sh:property [ sh:path rv:selectionRealm ; sh:maxCount 0 ] ;
+          sh:property [ sh:path rv:pinnedRevision ; sh:maxCount 0 ] ]
+        [ sh:property [ sh:path rv:target ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
+          sh:property [ sh:path rv:selectionMode ; sh:hasValue rv:FixedRealm ] ;
+          sh:property [ sh:path rv:selectionRealm ; sh:minCount 1 ; sh:maxCount 1 ; sh:class rv:Realm ] ;
+          sh:property [ sh:path rv:pinnedRevision ; sh:maxCount 0 ] ]
+        [ sh:property [ sh:path rv:target ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
+          sh:property [ sh:path rv:selectionMode ; sh:hasValue rv:FixedRevision ] ;
+          sh:property [ sh:path rv:selectionRealm ; sh:maxCount 0 ] ;
+          sh:property [ sh:path rv:pinnedRevision ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ]
+    ) .
+
+<https://rezics.com/definition/structure-composition-v1/removed-placement-shape>
+    a sh:NodeShape ;
+    sh:property [ sh:path rdf:type ; sh:maxCount 1 ; sh:hasValue rv:RemovedPlacement ] ;
+    sh:property [ sh:path rv:occurrence ; sh:minCount 1 ; sh:maxCount 1 ; sh:class rv:StructureOccurrence ] ;
+    sh:property [ sh:path rv:generation ; sh:minCount 1 ; sh:maxCount 1 ; sh:class rv:StructureGeneration ] ;
+    sh:property [ sh:path rv:orderSegment ; sh:maxCount 0 ] ;
+    sh:property [ sh:path rv:orderKey ; sh:maxCount 0 ] ;
+    sh:property [ sh:path rv:occurrenceRole ; sh:minCount 1 ; sh:maxCount 1 ; sh:in ( rv:GroupRole rv:ChapterRole rv:MemberRole rv:MountRole rv:NavigationRole rv:IngredientRole rv:StepRole rv:EquipmentRole ) ] ;
+    sh:property [ sh:path rv:lastParent ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
+    sh:property [ sh:path rv:removedBy ; sh:minCount 1 ; sh:maxCount 1 ; sh:class rv:StructureRevision ] ;
+    sh:property [ sh:path rv:target ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
+    sh:property [ sh:path rv:sourceKey ; sh:maxCount 1 ; sh:datatype xsd:string ; sh:minLength 1 ; sh:maxLength 200 ] .
+
+<https://rezics.com/definition/structure-composition-v1/revision-shape>
+    a sh:NodeShape ;
+    sh:property [ sh:path rdf:type ; sh:minCount 2 ; sh:maxCount 2 ; sh:in ( rv:StructureRevision rv:RevisionAnchor ) ] ;
+    sh:property [ sh:path rv:component ; sh:minCount 1 ; sh:maxCount 1 ; sh:class rv:Structure ] ;
+    sh:property [ sh:path rv:predecessor ; sh:maxCount 1 ; sh:class rv:StructureRevision ] ;
+    sh:property [ sh:path rv:operation ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
+    sh:property [ sh:path rv:structureOperation ; sh:minCount 1 ; sh:maxCount 1 ; sh:in ( rv:StructureCreate rv:OccurrenceInsert rv:OccurrenceMove rv:OccurrenceReorder rv:OccurrenceRemove rv:OccurrenceUpdate rv:OrderRebalance rv:StructureReplace rv:StructureImport rv:StructureRefresh rv:StructureCapture rv:StructureRestore ) ] ;
+    sh:property [ sh:path rv:generation ; sh:minCount 1 ; sh:maxCount 1 ; sh:class rv:StructureGeneration ] ;
+    sh:property [ sh:path rv:manifest ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
+    sh:property [ sh:path rv:placementCount ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:integer ; sh:minInclusive 0 ; sh:maxInclusive 1048576 ] ;
+    sh:property [ sh:path rv:modelRevision ; sh:maxCount 1 ; sh:hasValue <https://rezics.com/definition/structure-composition-v1> ] ;
+    sh:property [ sh:path rv:shapeRevision ; sh:maxCount 1 ; sh:hasValue <https://rezics.com/definition/structure-composition-v1> ] ;
+    sh:property [ sh:path rv:datasetId ; sh:maxCount 1 ; sh:hasValue <urn:rezics:dataset:product> ] ;
+    sh:property [ sh:path rv:dataEpoch ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:string ; sh:pattern "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" ] ;
+    sh:property [ sh:path rv:sequence ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:integer ; sh:minInclusive 1 ] ;
+    sh:or (
+        [ sh:property [ sh:path rv:structureOperation ; sh:minCount 1 ; sh:maxCount 1 ; sh:in ( rv:StructureImport rv:StructureRefresh rv:StructureCapture ) ] ;
+          sh:property [ sh:path rv:importSource ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
+          sh:property [ sh:path rv:importSourceRevision ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
+          sh:property [ sh:path rv:mappingPolicy ; sh:minCount 1 ; sh:maxCount 1 ; sh:in ( rv:SourceKeyCorrespondence rv:ExplicitCorrespondence ) ] ;
+          sh:property [ sh:path rv:restoredFrom ; sh:maxCount 0 ] ]
+        [ sh:property [ sh:path rv:structureOperation ; sh:hasValue rv:StructureRestore ] ;
+          sh:property [ sh:path rv:restoredFrom ; sh:minCount 1 ; sh:maxCount 1 ; sh:class rv:StructureRevision ] ;
+          sh:property [ sh:path rv:importSource ; sh:maxCount 0 ] ;
+          sh:property [ sh:path rv:importSourceRevision ; sh:maxCount 0 ] ;
+          sh:property [ sh:path rv:mappingPolicy ; sh:maxCount 0 ] ]
+        [ sh:property [ sh:path rv:structureOperation ; sh:minCount 1 ; sh:maxCount 1 ; sh:in ( rv:StructureCreate rv:OccurrenceInsert rv:OccurrenceMove rv:OccurrenceReorder rv:OccurrenceRemove rv:OccurrenceUpdate rv:OrderRebalance rv:StructureReplace ) ] ;
+          sh:property [ sh:path rv:restoredFrom ; sh:maxCount 0 ] ;
+          sh:property [ sh:path rv:importSource ; sh:maxCount 0 ] ;
+          sh:property [ sh:path rv:importSourceRevision ; sh:maxCount 0 ] ;
+          sh:property [ sh:path rv:mappingPolicy ; sh:maxCount 0 ] ]
+    ) .
+
+<https://rezics.com/definition/structure-composition-v1/seal-shape>
+    a sh:NodeShape ;
+    sh:property [ sh:path rdf:type ; sh:maxCount 1 ; sh:hasValue rv:StructureSeal ] ;
+    sh:property [ sh:path rv:structure ; sh:minCount 1 ; sh:maxCount 1 ; sh:class rv:Structure ] ;
+    sh:property [ sh:path rv:structureRevision ; sh:minCount 1 ; sh:maxCount 1 ; sh:class rv:StructureRevision ] ;
+    sh:property [ sh:path rv:manifest ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
+    sh:property [ sh:path rv:sealedBy ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
+    sh:property [ sh:path rv:sealCoverage ; sh:minCount 1 ; sh:maxCount 1 ; sh:in ( rv:Complete rv:Partial ) ] ;
+    sh:property [ sh:path rv:unavailableCount ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:integer ; sh:minInclusive 0 ; sh:maxInclusive 1048576 ] ;
+    sh:property [ sh:path rv:modelRevision ; sh:maxCount 1 ; sh:hasValue <https://rezics.com/definition/structure-composition-v1> ] ;
+    sh:property [ sh:path rv:shapeRevision ; sh:maxCount 1 ; sh:hasValue <https://rezics.com/definition/structure-composition-v1> ] ;
+    sh:property [ sh:path rv:datasetId ; sh:maxCount 1 ; sh:hasValue <urn:rezics:dataset:product> ] ;
+    sh:property [ sh:path rv:dataEpoch ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:string ; sh:pattern "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" ] ;
+    sh:property [ sh:path rv:sequence ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:integer ; sh:minInclusive 1 ] ;
+    sh:or (
+        [ sh:property [ sh:path rv:sealCoverage ; sh:hasValue rv:Complete ] ;
+          sh:property [ sh:path rv:unavailableCount ; sh:hasValue 0 ] ]
+        [ sh:property [ sh:path rv:sealCoverage ; sh:hasValue rv:Partial ] ;
+          sh:property [ sh:path rv:unavailableCount ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:integer ; sh:minInclusive 1 ] ]
+    ) .

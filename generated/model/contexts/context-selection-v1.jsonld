@@ -1,0 +1,108 @@
+{
+  "@context": {
+    "sh": {
+      "@id": "http://www.w3.org/ns/shacl#",
+      "@prefix": true
+    },
+    "rdf": {
+      "@id": "http://www.w3.org/1999/02/22-rdf-syntax-ns#",
+      "@prefix": true
+    },
+    "xsd": {
+      "@id": "http://www.w3.org/2001/XMLSchema#",
+      "@prefix": true
+    },
+    "rv": {
+      "@id": "https://rezics.com/vocab/",
+      "@prefix": true
+    },
+    "rdf:type": {
+      "@id": "http://www.w3.org/1999/02/22-rdf-syntax-ns#type",
+      "@type": "@id"
+    },
+    "rv:component": {
+      "@id": "https://rezics.com/vocab/component",
+      "@type": "@id"
+    },
+    "rv:consumer": {
+      "@id": "https://rezics.com/vocab/consumer",
+      "@type": "@id"
+    },
+    "rv:context": {
+      "@id": "https://rezics.com/vocab/context"
+    },
+    "rv:dataEpoch": {
+      "@id": "https://rezics.com/vocab/dataEpoch"
+    },
+    "rv:manifest": {
+      "@id": "https://rezics.com/vocab/manifest",
+      "@type": "@id"
+    },
+    "rv:modelRevision": {
+      "@id": "https://rezics.com/vocab/modelRevision",
+      "@type": "@id"
+    },
+    "rv:operation": {
+      "@id": "https://rezics.com/vocab/operation",
+      "@type": "@id"
+    },
+    "rv:predecessor": {
+      "@id": "https://rezics.com/vocab/predecessor",
+      "@type": "@id"
+    },
+    "rv:preferenceRevision": {
+      "@id": "https://rezics.com/vocab/preferenceRevision"
+    },
+    "rv:principal": {
+      "@id": "https://rezics.com/vocab/principal"
+    },
+    "rv:scopeDomain": {
+      "@id": "https://rezics.com/vocab/scopeDomain"
+    },
+    "rv:scopeKind": {
+      "@id": "https://rezics.com/vocab/scopeKind",
+      "@type": "@id"
+    },
+    "rv:scopeObject": {
+      "@id": "https://rezics.com/vocab/scopeObject"
+    },
+    "rv:scopeProfile": {
+      "@id": "https://rezics.com/vocab/scopeProfile",
+      "@type": "@id"
+    },
+    "rv:scopeRelation": {
+      "@id": "https://rezics.com/vocab/scopeRelation"
+    },
+    "rv:selectedBy": {
+      "@id": "https://rezics.com/vocab/selectedBy",
+      "@type": "@id"
+    },
+    "rv:selectionHead": {
+      "@id": "https://rezics.com/vocab/selectionHead",
+      "@type": "@id"
+    },
+    "rv:selectionKey": {
+      "@id": "https://rezics.com/vocab/selectionKey",
+      "@type": "@id"
+    },
+    "rv:selectionRole": {
+      "@id": "https://rezics.com/vocab/selectionRole",
+      "@type": "@id"
+    },
+    "rv:selectionState": {
+      "@id": "https://rezics.com/vocab/selectionState",
+      "@type": "@id"
+    },
+    "rv:semanticRevision": {
+      "@id": "https://rezics.com/vocab/semanticRevision"
+    },
+    "rv:sequence": {
+      "@id": "https://rezics.com/vocab/sequence",
+      "@type": "xsd:integer"
+    },
+    "rv:shapeRevision": {
+      "@id": "https://rezics.com/vocab/shapeRevision",
+      "@type": "@id"
+    }
+  }
+}

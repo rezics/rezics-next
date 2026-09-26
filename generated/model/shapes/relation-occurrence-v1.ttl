@@ -1,0 +1,42 @@
+# An identified relation occurrence under an exact relation DefinitionRef, with its immutable revisions.
+# Every participation binds one role and one participant to exactly one occurrence; repeated participants
+# in another association are another occurrence. work-author-credit-v1 is the bounded append-only profile.
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix schema: <https://schema.org/> .
+@prefix rv: <https://rezics.com/vocab/> .
+
+<https://rezics.com/definition/relation-occurrence-v1/occurrence-shape>
+    a sh:NodeShape ;
+    sh:property [ sh:path rdf:type ; sh:hasValue rv:RelationOccurrence ] ;
+    sh:property [ sh:path rv:relationDefinition ; sh:minCount 1 ; sh:maxCount 1 ; sh:class rv:DefinitionRevision ] ;
+    sh:property [ sh:path rv:occurrenceHead ; sh:minCount 1 ; sh:maxCount 1 ; sh:class rv:RelationOccurrenceRevision ] ;
+    sh:property [ sh:path rv:participation ; sh:minCount 1 ; sh:maxCount 64 ; sh:nodeKind sh:IRI ] ;
+    sh:property [ sh:path rv:applicability ; sh:maxCount 8 ; sh:nodeKind sh:IRI ] ;
+    sh:property [ sh:path owl:sameAs ; sh:maxCount 0 ] .
+
+<https://rezics.com/definition/relation-occurrence-v1/participation-shape>
+    a sh:NodeShape ;
+    sh:property [ sh:path rv:occurrence ; sh:minCount 1 ; sh:maxCount 1 ; sh:class rv:RelationOccurrence ] ;
+    sh:property [ sh:path rv:role ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
+    sh:property [ sh:path rv:participant ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
+    sh:property [ sh:path schema:position ; sh:maxCount 1 ; sh:datatype xsd:integer ; sh:minInclusive 0 ; sh:maxInclusive 1023 ] .
+
+<https://rezics.com/definition/relation-occurrence-v1/revision-shape>
+    a sh:NodeShape ;
+    sh:property [ sh:path rdf:type ; sh:minCount 2 ; sh:maxCount 2 ; sh:in ( rv:RelationOccurrenceRevision rv:RevisionAnchor ) ] ;
+    sh:property [ sh:path rv:component ; sh:minCount 1 ; sh:maxCount 1 ; sh:class rv:RelationOccurrence ] ;
+    sh:property [ sh:path rv:predecessor ; sh:maxCount 1 ; sh:class rv:RelationOccurrenceRevision ] ;
+    sh:property [ sh:path rv:relationDefinition ; sh:minCount 1 ; sh:maxCount 1 ; sh:class rv:DefinitionRevision ] ;
+    sh:property [ sh:path rv:lifecycle ; sh:minCount 1 ; sh:maxCount 1 ; sh:in ( rv:Active rv:Retired ) ] ;
+    sh:property [ sh:path rv:participantCount ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:integer ; sh:minInclusive 1 ; sh:maxInclusive 64 ] ;
+    sh:property [ sh:path rv:operation ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
+    sh:property [ sh:path rv:manifest ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
+    sh:property [ sh:path rv:modelGeneration ; sh:minCount 1 ; sh:maxCount 1 ; sh:class rv:ModelGeneration ] ;
+    sh:property [ sh:path rv:modelRevision ; sh:maxCount 1 ; sh:hasValue <https://rezics.com/definition/relation-occurrence-v1> ] ;
+    sh:property [ sh:path rv:shapeRevision ; sh:maxCount 1 ; sh:hasValue <https://rezics.com/definition/relation-occurrence-v1> ] ;
+    sh:property [ sh:path rv:datasetId ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
+    sh:property [ sh:path rv:dataEpoch ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:string ] ;
+    sh:property [ sh:path rv:sequence ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:integer ; sh:minInclusive 1 ] .

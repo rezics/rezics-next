@@ -1,0 +1,54 @@
+{
+  "@context": {
+    "sh": {
+      "@id": "http://www.w3.org/ns/shacl#",
+      "@prefix": true
+    },
+    "rdf": {
+      "@id": "http://www.w3.org/1999/02/22-rdf-syntax-ns#",
+      "@prefix": true
+    },
+    "skosxl": {
+      "@id": "http://www.w3.org/2008/05/skos-xl#",
+      "@prefix": true
+    },
+    "oa": {
+      "@id": "http://www.w3.org/ns/oa#",
+      "@prefix": true
+    },
+    "prov": {
+      "@id": "http://www.w3.org/ns/prov#",
+      "@prefix": true
+    },
+    "rv": {
+      "@id": "https://rezics.com/vocab/",
+      "@prefix": true
+    },
+    "oa:hasBody": {
+      "@id": "http://www.w3.org/ns/oa#hasBody"
+    },
+    "oa:hasTarget": {
+      "@id": "http://www.w3.org/ns/oa#hasTarget",
+      "@type": "@id"
+    },
+    "oa:motivatedBy": {
+      "@id": "http://www.w3.org/ns/oa#motivatedBy",
+      "@type": "@id"
+    },
+    "prov:wasDerivedFrom": {
+      "@id": "http://www.w3.org/ns/prov#wasDerivedFrom",
+      "@type": "@id"
+    },
+    "rdf:type": {
+      "@id": "http://www.w3.org/1999/02/22-rdf-syntax-ns#type",
+      "@type": "@id"
+    },
+    "rv:nameRole": {
+      "@id": "https://rezics.com/vocab/nameRole",
+      "@type": "@id"
+    },
+    "skosxl:literalForm": {
+      "@id": "http://www.w3.org/2008/05/skos-xl#literalForm"
+    }
+  }
+}

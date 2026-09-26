@@ -1,0 +1,121 @@
+{
+  "@context": {
+    "sh": {
+      "@id": "http://www.w3.org/ns/shacl#",
+      "@prefix": true
+    },
+    "rdf": {
+      "@id": "http://www.w3.org/1999/02/22-rdf-syntax-ns#",
+      "@prefix": true
+    },
+    "xsd": {
+      "@id": "http://www.w3.org/2001/XMLSchema#",
+      "@prefix": true
+    },
+    "rv": {
+      "@id": "https://rezics.com/vocab/",
+      "@prefix": true
+    },
+    "rdf:type": {
+      "@id": "http://www.w3.org/1999/02/22-rdf-syntax-ns#type",
+      "@type": "@id"
+    },
+    "rv:amountDenominator": {
+      "@id": "https://rezics.com/vocab/amountDenominator"
+    },
+    "rv:amountLexical": {
+      "@id": "https://rezics.com/vocab/amountLexical"
+    },
+    "rv:amountNumerator": {
+      "@id": "https://rezics.com/vocab/amountNumerator"
+    },
+    "rv:amountUpperDenominator": {
+      "@id": "https://rezics.com/vocab/amountUpperDenominator"
+    },
+    "rv:amountUpperNumerator": {
+      "@id": "https://rezics.com/vocab/amountUpperNumerator"
+    },
+    "rv:basis": {
+      "@id": "https://rezics.com/vocab/basis",
+      "@type": "@id"
+    },
+    "rv:coverage": {
+      "@id": "https://rezics.com/vocab/coverage",
+      "@type": "@id"
+    },
+    "rv:evidence": {
+      "@id": "https://rezics.com/vocab/evidence",
+      "@type": "@id"
+    },
+    "rv:generation": {
+      "@id": "https://rezics.com/vocab/generation",
+      "@type": "@id"
+    },
+    "rv:instructionText": {
+      "@id": "https://rezics.com/vocab/instructionText"
+    },
+    "rv:measureKind": {
+      "@id": "https://rezics.com/vocab/measureKind",
+      "@type": "@id"
+    },
+    "rv:media": {
+      "@id": "https://rezics.com/vocab/media",
+      "@type": "@id"
+    },
+    "rv:nutrient": {
+      "@id": "https://rezics.com/vocab/nutrient"
+    },
+    "rv:optionality": {
+      "@id": "https://rezics.com/vocab/optionality",
+      "@type": "@id"
+    },
+    "rv:originalText": {
+      "@id": "https://rezics.com/vocab/originalText"
+    },
+    "rv:parseStatus": {
+      "@id": "https://rezics.com/vocab/parseStatus",
+      "@type": "@id"
+    },
+    "rv:preparation": {
+      "@id": "https://rezics.com/vocab/preparation"
+    },
+    "rv:provenance": {
+      "@id": "https://rezics.com/vocab/provenance",
+      "@type": "@id"
+    },
+    "rv:residual": {
+      "@id": "https://rezics.com/vocab/residual",
+      "@type": "@id"
+    },
+    "rv:scaling": {
+      "@id": "https://rezics.com/vocab/scaling",
+      "@type": "@id"
+    },
+    "rv:substituteFor": {
+      "@id": "https://rezics.com/vocab/substituteFor",
+      "@type": "@id"
+    },
+    "rv:unit": {
+      "@id": "https://rezics.com/vocab/unit",
+      "@type": "@id"
+    },
+    "rv:unitText": {
+      "@id": "https://rezics.com/vocab/unitText"
+    },
+    "rv:usesIngredient": {
+      "@id": "https://rezics.com/vocab/usesIngredient",
+      "@type": "@id"
+    },
+    "rv:valueDenominator": {
+      "@id": "https://rezics.com/vocab/valueDenominator",
+      "@type": "xsd:integer"
+    },
+    "rv:valueLexical": {
+      "@id": "https://rezics.com/vocab/valueLexical"
+    },
+    "rv:valueNumerator": {
+      "@id": "https://rezics.com/vocab/valueNumerator",
+      "@type": "xsd:integer"
+    }
+  }
+}

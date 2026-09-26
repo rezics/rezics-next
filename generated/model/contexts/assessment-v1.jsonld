@@ -1,0 +1,151 @@
+{
+  "@context": {
+    "sh": {
+      "@id": "http://www.w3.org/ns/shacl#",
+      "@prefix": true
+    },
+    "rdf": {
+      "@id": "http://www.w3.org/1999/02/22-rdf-syntax-ns#",
+      "@prefix": true
+    },
+    "xsd": {
+      "@id": "http://www.w3.org/2001/XMLSchema#",
+      "@prefix": true
+    },
+    "rv": {
+      "@id": "https://rezics.com/vocab/",
+      "@prefix": true
+    },
+    "rdf:type": {
+      "@id": "http://www.w3.org/1999/02/22-rdf-syntax-ns#type",
+      "@type": "@id"
+    },
+    "rv:applicableFrom": {
+      "@id": "https://rezics.com/vocab/applicableFrom",
+      "@type": "xsd:dateTime"
+    },
+    "rv:applicableUntil": {
+      "@id": "https://rezics.com/vocab/applicableUntil",
+      "@type": "xsd:dateTime"
+    },
+    "rv:assessedAt": {
+      "@id": "https://rezics.com/vocab/assessedAt",
+      "@type": "xsd:dateTime"
+    },
+    "rv:assessedSource": {
+      "@id": "https://rezics.com/vocab/assessedSource",
+      "@type": "@id"
+    },
+    "rv:assessor": {
+      "@id": "https://rezics.com/vocab/assessor",
+      "@type": "@id"
+    },
+    "rv:assessorKind": {
+      "@id": "https://rezics.com/vocab/assessorKind",
+      "@type": "@id"
+    },
+    "rv:calibration": {
+      "@id": "https://rezics.com/vocab/calibration",
+      "@type": "@id"
+    },
+    "rv:claimRevision": {
+      "@id": "https://rezics.com/vocab/claimRevision",
+      "@type": "@id"
+    },
+    "rv:component": {
+      "@id": "https://rezics.com/vocab/component",
+      "@type": "@id"
+    },
+    "rv:coverage": {
+      "@id": "https://rezics.com/vocab/coverage",
+      "@type": "@id"
+    },
+    "rv:dataEpoch": {
+      "@id": "https://rezics.com/vocab/dataEpoch"
+    },
+    "rv:dependenceStatus": {
+      "@id": "https://rezics.com/vocab/dependenceStatus",
+      "@type": "@id"
+    },
+    "rv:domainDefinition": {
+      "@id": "https://rezics.com/vocab/domainDefinition",
+      "@type": "@id"
+    },
+    "rv:evaluationContext": {
+      "@id": "https://rezics.com/vocab/evaluationContext",
+      "@type": "@id"
+    },
+    "rv:evidenceSetRevision": {
+      "@id": "https://rezics.com/vocab/evidenceSetRevision",
+      "@type": "@id"
+    },
+    "rv:independentOriginCount": {
+      "@id": "https://rezics.com/vocab/independentOriginCount"
+    },
+    "rv:inputCount": {
+      "@id": "https://rezics.com/vocab/inputCount",
+      "@type": "xsd:integer"
+    },
+    "rv:inputManifestDigest": {
+      "@id": "https://rezics.com/vocab/inputManifestDigest"
+    },
+    "rv:limitations": {
+      "@id": "https://rezics.com/vocab/limitations"
+    },
+    "rv:method": {
+      "@id": "https://rezics.com/vocab/method",
+      "@type": "@id"
+    },
+    "rv:methodRevision": {
+      "@id": "https://rezics.com/vocab/methodRevision",
+      "@type": "@id"
+    },
+    "rv:modelRevision": {
+      "@id": "https://rezics.com/vocab/modelRevision",
+      "@type": "@id"
+    },
+    "rv:policyRevision": {
+      "@id": "https://rezics.com/vocab/policyRevision",
+      "@type": "@id"
+    },
+    "rv:predecessor": {
+      "@id": "https://rezics.com/vocab/predecessor",
+      "@type": "@id"
+    },
+    "rv:rationale": {
+      "@id": "https://rezics.com/vocab/rationale"
+    },
+    "rv:reliabilityHead": {
+      "@id": "https://rezics.com/vocab/reliabilityHead",
+      "@type": "@id"
+    },
+    "rv:reliabilityResult": {
+      "@id": "https://rezics.com/vocab/reliabilityResult",
+      "@type": "@id"
+    },
+    "rv:scoreCalibration": {
+      "@id": "https://rezics.com/vocab/scoreCalibration",
+      "@type": "@id"
+    },
+    "rv:scorePerMillion": {
+      "@id": "https://rezics.com/vocab/scorePerMillion",
+      "@type": "xsd:integer"
+    },
+    "rv:sequence": {
+      "@id": "https://rezics.com/vocab/sequence",
+      "@type": "xsd:integer"
+    },
+    "rv:shapeRevision": {
+      "@id": "https://rezics.com/vocab/shapeRevision",
+      "@type": "@id"
+    },
+    "rv:sourceAssessment": {
+      "@id": "https://rezics.com/vocab/sourceAssessment",
+      "@type": "@id"
+    },
+    "rv:supportResult": {
+      "@id": "https://rezics.com/vocab/supportResult",
+      "@type": "@id"
+    }
+  }
+}

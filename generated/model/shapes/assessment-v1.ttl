@@ -1,0 +1,76 @@
+# Immutable assessment anchors: scoped source reliability and one claim assessment revision.
+# An assessment cites exact claim, evidence-set, source-assessment, method and policy revisions.
+# Activation into a quality summary is a separate Content-owned generation CAS.
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix rv: <https://rezics.com/vocab/> .
+
+<https://rezics.com/definition/assessment-v1/reliability-scope-shape>
+    a sh:NodeShape ;
+    sh:property [ sh:path rdf:type ; sh:hasValue rv:SourceReliabilityScope ] ;
+    sh:property [ sh:path rv:assessedSource ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
+    sh:property [ sh:path rv:domainDefinition ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
+    sh:property [ sh:path rv:evaluationContext ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
+    sh:property [ sh:path rv:reliabilityHead ; sh:minCount 1 ; sh:maxCount 1 ; sh:class rv:SourceReliabilityAssessment ] .
+
+<https://rezics.com/definition/assessment-v1/reliability-shape>
+    a sh:NodeShape ;
+    sh:property [ sh:path rdf:type ; sh:minCount 2 ; sh:maxCount 2 ; sh:in ( rv:SourceReliabilityAssessment rv:RevisionAnchor ) ] ;
+    sh:property [ sh:path rv:component ; sh:minCount 1 ; sh:maxCount 1 ; sh:class rv:SourceReliabilityScope ] ;
+    sh:property [ sh:path rv:predecessor ; sh:maxCount 1 ; sh:class rv:SourceReliabilityAssessment ] ;
+    sh:property [ sh:path rv:assessedSource ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
+    sh:property [ sh:path rv:domainDefinition ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
+    sh:property [ sh:path rv:evaluationContext ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
+    sh:property [ sh:path rv:applicableFrom ; sh:maxCount 1 ; sh:datatype xsd:dateTime ] ;
+    sh:property [ sh:path rv:applicableUntil ; sh:maxCount 1 ; sh:datatype xsd:dateTime ] ;
+    sh:property [ sh:path rv:reliabilityResult ; sh:minCount 1 ; sh:maxCount 1 ; sh:in ( rv:ReliableForDomain rv:MixedReliability rv:UnreliableForDomain rv:UntestedForDomain ) ] ;
+    sh:property [ sh:path rv:inputManifestDigest ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:string ; sh:pattern "^[0-9a-f]{64}$" ] ;
+    sh:property [ sh:path rv:inputCount ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:integer ; sh:minInclusive 0 ; sh:maxInclusive 32 ] ;
+    sh:property [ sh:path rv:rationale ; sh:maxCount 1 ; sh:datatype xsd:string ; sh:minLength 1 ; sh:maxLength 4000 ] ;
+    sh:property [ sh:path rv:method ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
+    sh:property [ sh:path rv:methodRevision ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
+    sh:property [ sh:path rv:calibration ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
+    sh:property [ sh:path rv:scorePerMillion ; sh:maxCount 1 ; sh:datatype xsd:integer ; sh:minInclusive 0 ; sh:maxInclusive 1000000 ] ;
+    sh:property [ sh:path rv:scoreCalibration ; sh:maxCount 1 ; sh:in ( rv:CalibratedScore rv:UncalibratedScore ) ] ;
+    sh:property [ sh:path rv:limitations ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:string ; sh:minLength 1 ; sh:maxLength 2000 ] ;
+    sh:property [ sh:path rv:assessor ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
+    sh:property [ sh:path rv:assessorKind ; sh:minCount 1 ; sh:maxCount 1 ; sh:in ( rv:HumanAssessor rv:AutomatedAssessor ) ] ;
+    sh:property [ sh:path rv:assessedAt ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:dateTime ] ;
+    sh:property [ sh:path rv:modelRevision ; sh:maxCount 1 ; sh:hasValue <https://rezics.com/definition/assessment-v1> ] ;
+    sh:property [ sh:path rv:shapeRevision ; sh:maxCount 1 ; sh:hasValue <https://rezics.com/definition/assessment-v1> ] ;
+    sh:property [ sh:path rv:dataEpoch ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:string ] ;
+    sh:property [ sh:path rv:sequence ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:integer ; sh:minInclusive 1 ] .
+
+<https://rezics.com/definition/assessment-v1/assessment-shape>
+    a sh:NodeShape ;
+    sh:property [ sh:path rdf:type ; sh:minCount 2 ; sh:maxCount 2 ; sh:in ( rv:ClaimAssessment rv:RevisionAnchor ) ] ;
+    sh:property [ sh:path rv:component ; sh:minCount 1 ; sh:maxCount 1 ; sh:class rv:Claim ] ;
+    sh:property [ sh:path rv:predecessor ; sh:maxCount 1 ; sh:class rv:ClaimAssessment ] ;
+    sh:property [ sh:path rv:claimRevision ; sh:minCount 1 ; sh:maxCount 1 ; sh:class rv:ClaimRevision ] ;
+    sh:property [ sh:path rv:evidenceSetRevision ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
+    sh:property [ sh:path rv:sourceAssessment ; sh:maxCount 32 ; sh:class rv:SourceReliabilityAssessment ] ;
+    sh:property [ sh:path rv:policyRevision ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
+    sh:property [ sh:path rv:evaluationContext ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
+    sh:property [ sh:path rv:coverage ; sh:minCount 1 ; sh:maxCount 1 ; sh:in ( rv:CompleteCoverage rv:PartialCoverage rv:IncompleteCoverage ) ] ;
+    sh:property [ sh:path rv:supportResult ; sh:minCount 1 ; sh:maxCount 1 ; sh:in ( rv:Supported rv:Contradicted rv:MaterialConflict rv:InsufficientSupport rv:Abstained ) ] ;
+    sh:property [ sh:path rv:dependenceStatus ; sh:minCount 1 ; sh:maxCount 1 ; sh:in ( rv:DependenceEstablished rv:DependenceUnknown rv:DependenceCircular rv:DependenceOverBudget ) ] ;
+    sh:property [ sh:path rv:method ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
+    sh:property [ sh:path rv:methodRevision ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
+    sh:property [ sh:path rv:calibration ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
+    sh:property [ sh:path rv:scorePerMillion ; sh:maxCount 1 ; sh:datatype xsd:integer ; sh:minInclusive 0 ; sh:maxInclusive 1000000 ] ;
+    sh:property [ sh:path rv:scoreCalibration ; sh:maxCount 1 ; sh:in ( rv:CalibratedScore rv:UncalibratedScore ) ] ;
+    sh:property [ sh:path rv:limitations ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:string ; sh:minLength 1 ; sh:maxLength 2000 ] ;
+    sh:property [ sh:path rv:assessor ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
+    sh:property [ sh:path rv:assessorKind ; sh:minCount 1 ; sh:maxCount 1 ; sh:in ( rv:HumanAssessor rv:AutomatedAssessor ) ] ;
+    sh:property [ sh:path rv:assessedAt ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:dateTime ] ;
+    sh:property [ sh:path rv:modelRevision ; sh:maxCount 1 ; sh:hasValue <https://rezics.com/definition/assessment-v1> ] ;
+    sh:property [ sh:path rv:shapeRevision ; sh:maxCount 1 ; sh:hasValue <https://rezics.com/definition/assessment-v1> ] ;
+    sh:property [ sh:path rv:dataEpoch ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:string ] ;
+    sh:property [ sh:path rv:sequence ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:integer ; sh:minInclusive 1 ] ;
+    sh:or (
+        [ sh:property [ sh:path rv:dependenceStatus ; sh:hasValue rv:DependenceEstablished ] ;
+          sh:property [ sh:path rv:independentOriginCount ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:integer ; sh:minInclusive 0 ; sh:maxInclusive 64 ] ]
+        [ sh:property [ sh:path rv:dependenceStatus ; sh:in ( rv:DependenceUnknown rv:DependenceCircular rv:DependenceOverBudget ) ] ;
+          sh:property [ sh:path rv:independentOriginCount ; sh:maxCount 0 ] ]
+    ) .

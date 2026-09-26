@@ -1,0 +1,102 @@
+{
+  "@context": {
+    "sh": {
+      "@id": "http://www.w3.org/ns/shacl#",
+      "@prefix": true
+    },
+    "rdf": {
+      "@id": "http://www.w3.org/1999/02/22-rdf-syntax-ns#",
+      "@prefix": true
+    },
+    "xsd": {
+      "@id": "http://www.w3.org/2001/XMLSchema#",
+      "@prefix": true
+    },
+    "rv": {
+      "@id": "https://rezics.com/vocab/",
+      "@prefix": true
+    },
+    "rdf:type": {
+      "@id": "http://www.w3.org/1999/02/22-rdf-syntax-ns#type",
+      "@type": "@id"
+    },
+    "rv:advancedConfig": {
+      "@id": "https://rezics.com/vocab/advancedConfig",
+      "@type": "@id"
+    },
+    "rv:component": {
+      "@id": "https://rezics.com/vocab/component",
+      "@type": "@id"
+    },
+    "rv:dataEpoch": {
+      "@id": "https://rezics.com/vocab/dataEpoch"
+    },
+    "rv:datasetId": {
+      "@id": "https://rezics.com/vocab/datasetId",
+      "@type": "@id"
+    },
+    "rv:defaultRealm": {
+      "@id": "https://rezics.com/vocab/defaultRealm",
+      "@type": "@id"
+    },
+    "rv:disclosure": {
+      "@id": "https://rezics.com/vocab/disclosure",
+      "@type": "@id"
+    },
+    "rv:head": {
+      "@id": "https://rezics.com/vocab/head",
+      "@type": "@id"
+    },
+    "rv:manifest": {
+      "@id": "https://rezics.com/vocab/manifest",
+      "@type": "@id"
+    },
+    "rv:modelRevision": {
+      "@id": "https://rezics.com/vocab/modelRevision",
+      "@type": "@id"
+    },
+    "rv:navigation": {
+      "@id": "https://rezics.com/vocab/navigation",
+      "@type": "@id"
+    },
+    "rv:operation": {
+      "@id": "https://rezics.com/vocab/operation",
+      "@type": "@id"
+    },
+    "rv:predecessor": {
+      "@id": "https://rezics.com/vocab/predecessor",
+      "@type": "@id"
+    },
+    "rv:presentation": {
+      "@id": "https://rezics.com/vocab/presentation",
+      "@type": "@id"
+    },
+    "rv:routeSegment": {
+      "@id": "https://rezics.com/vocab/routeSegment"
+    },
+    "rv:sequence": {
+      "@id": "https://rezics.com/vocab/sequence",
+      "@type": "xsd:integer"
+    },
+    "rv:shapeRevision": {
+      "@id": "https://rezics.com/vocab/shapeRevision",
+      "@type": "@id"
+    },
+    "rv:space": {
+      "@id": "https://rezics.com/vocab/space",
+      "@type": "@id"
+    },
+    "rv:zone": {
+      "@id": "https://rezics.com/vocab/zone",
+      "@type": "@id"
+    },
+    "rv:zoneOperation": {
+      "@id": "https://rezics.com/vocab/zoneOperation",
+      "@type": "@id"
+    },
+    "rv:zoneState": {
+      "@id": "https://rezics.com/vocab/zoneState",
+      "@type": "@id"
+    }
+  }
+}

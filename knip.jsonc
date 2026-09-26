@@ -28,7 +28,8 @@
     },
     // Top-level service files are process entry points and operator commands.
     "services/main": {
-      "entry": ["src/*.ts"],
+      // Phase-A typed schema declarations are entries until their phase-B template consumes them.
+      "entry": ["src/*.ts", "src/modules/*/*-schema.ts"],
       "project": ["src/**/*.ts", "tests/**/*.ts"],
       // Consumed by the root OpenAPI generator and Eden type gate.
       "ignoreDependencies": ["@elysia/eden", "@elysia/openapi", "@scalar/types"]
