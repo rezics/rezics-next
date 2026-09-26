@@ -591,6 +591,20 @@ still worker-owned, so MODEL02 remains partial and the integration queue is
 empty. A Luna split would cross the same Work manifest/API/replay files; retain
 the current Sol/xhigh worker and exclusive QA stack.
 
+**G-035 six-state/recovery pass and model evidence repair, 2026-09-26
+13:15 UTC.** Worktree real integration `20260926t130605-1fa535`, expanded
+held-graph restore `20260926t131053-03fb93`, and title-control regression
+`20260926t131159-219f46` passed on stable source. The selected native
+MODEL17/MODEL27 check `20260926t131435-72d115` failed at the recorded old
+Work profile digest after G-035 intentionally changed its shape; earlier
+profile-count assertions also need reconciliation. G-035 owns a revalidated
+native evidence refresh and exact generator count before handoff. The worker
+remains active with the shared QA stack; no committed integration result is
+waiting, MODEL02 remains partial, and the ten-hour target still forecasts a
+miss. A separate maintainer-authorized documentation task owns Resource/typed
+Statement contract rewrites; its `semantic-model.md` hunk is held for serial
+integration after G-035, while this manager keeps the plan ledger.
+
 **30-minute checkpoint, 2026-09-26 11:57 UTC, reconciled at 11:58.** The Goal
 remains active under one manager, and Docker Desktop engine 29.7.2 is reachable.
 G-030 is the sole live worker on its isolated worktree, explicitly pinned to
