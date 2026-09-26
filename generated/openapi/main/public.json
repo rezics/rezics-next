@@ -323,207 +323,361 @@
     "/v1/access/delegated-grant-changes": {
       "post": {
         "operationId": "postV1AccessDelegated-grant-changes",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 128,
+              "minLength": 1,
+              "pattern": "^[A-Za-z0-9:_./-]{1,128}$",
+              "type": "string"
+            }
+          }
+        ],
         "requestBody": {
           "content": {
             "application/json": {
               "schema": {
-                "additionalProperties": false,
-                "properties": {
-                  "action": {
-                    "const": "create",
-                    "type": "string"
-                  },
-                  "expectedAuthorityEpoch": {
-                    "pattern": "^(0|[1-9][0-9]*)$",
-                    "type": "string"
-                  },
-                  "grantId": {
-                    "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
-                    "type": "string"
-                  },
-                  "issuerSubject": {
-                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
-                    "type": "string"
-                  },
-                  "lifetime": {
-                    "enum": [
-                      "institutional",
-                      "dependent"
+                "anyOf": [
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "action": {
+                        "const": "create",
+                        "type": "string"
+                      },
+                      "expectedAuthorityEpoch": {
+                        "pattern": "^(0|[1-9][0-9]*)$",
+                        "type": "string"
+                      },
+                      "grantId": {
+                        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                        "type": "string"
+                      },
+                      "issuerSubject": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      },
+                      "lifetime": {
+                        "enum": [
+                          "institutional",
+                          "dependent"
+                        ],
+                        "type": "string"
+                      },
+                      "profile": {
+                        "const": "access-delegated-grant-change-v1",
+                        "type": "string"
+                      },
+                      "recipientSubject": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      },
+                      "redelegationDepth": {
+                        "maximum": 8,
+                        "minimum": 0,
+                        "type": "integer"
+                      },
+                      "representativePolicyId": {
+                        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                        "type": "string"
+                      },
+                      "upstreamGrantId": {
+                        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                        "type": "string"
+                      },
+                      "validUntil": {
+                        "format": "date-time",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "profile",
+                      "action",
+                      "issuerSubject",
+                      "expectedAuthorityEpoch",
+                      "grantId",
+                      "recipientSubject",
+                      "validUntil",
+                      "lifetime",
+                      "redelegationDepth"
                     ],
-                    "type": "string"
+                    "type": "object"
                   },
-                  "profile": {
-                    "const": "access-delegated-grant-change-v1",
-                    "type": "string"
-                  },
-                  "recipientSubject": {
-                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
-                    "type": "string"
-                  },
-                  "redelegationDepth": {
-                    "maximum": 8,
-                    "minimum": 0,
-                    "type": "integer"
-                  },
-                  "representativePolicyId": {
-                    "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
-                    "type": "string"
-                  },
-                  "upstreamGrantId": {
-                    "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
-                    "type": "string"
-                  },
-                  "validUntil": {
-                    "format": "date-time",
-                    "type": "string"
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "action": {
+                        "const": "revoke",
+                        "type": "string"
+                      },
+                      "expectedAuthorityEpoch": {
+                        "pattern": "^(0|[1-9][0-9]*)$",
+                        "type": "string"
+                      },
+                      "expectedObjectGeneration": {
+                        "pattern": "^(0|[1-9][0-9]*)$",
+                        "type": "string"
+                      },
+                      "grantId": {
+                        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                        "type": "string"
+                      },
+                      "issuerSubject": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      },
+                      "profile": {
+                        "const": "access-delegated-grant-change-v1",
+                        "type": "string"
+                      },
+                      "selectedAdmissionId": {
+                        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "profile",
+                      "action",
+                      "issuerSubject",
+                      "expectedAuthorityEpoch",
+                      "grantId",
+                      "expectedObjectGeneration",
+                      "selectedAdmissionId"
+                    ],
+                    "type": "object"
                   }
-                },
-                "required": [
-                  "profile",
-                  "action",
-                  "issuerSubject",
-                  "expectedAuthorityEpoch",
-                  "grantId",
-                  "recipientSubject",
-                  "validUntil",
-                  "lifetime",
-                  "redelegationDepth"
-                ],
-                "type": "object"
+                ]
               }
             },
             "application/x-www-form-urlencoded": {
               "schema": {
-                "additionalProperties": false,
-                "properties": {
-                  "action": {
-                    "const": "create",
-                    "type": "string"
-                  },
-                  "expectedAuthorityEpoch": {
-                    "pattern": "^(0|[1-9][0-9]*)$",
-                    "type": "string"
-                  },
-                  "grantId": {
-                    "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
-                    "type": "string"
-                  },
-                  "issuerSubject": {
-                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
-                    "type": "string"
-                  },
-                  "lifetime": {
-                    "enum": [
-                      "institutional",
-                      "dependent"
+                "anyOf": [
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "action": {
+                        "const": "create",
+                        "type": "string"
+                      },
+                      "expectedAuthorityEpoch": {
+                        "pattern": "^(0|[1-9][0-9]*)$",
+                        "type": "string"
+                      },
+                      "grantId": {
+                        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                        "type": "string"
+                      },
+                      "issuerSubject": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      },
+                      "lifetime": {
+                        "enum": [
+                          "institutional",
+                          "dependent"
+                        ],
+                        "type": "string"
+                      },
+                      "profile": {
+                        "const": "access-delegated-grant-change-v1",
+                        "type": "string"
+                      },
+                      "recipientSubject": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      },
+                      "redelegationDepth": {
+                        "maximum": 8,
+                        "minimum": 0,
+                        "type": "integer"
+                      },
+                      "representativePolicyId": {
+                        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                        "type": "string"
+                      },
+                      "upstreamGrantId": {
+                        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                        "type": "string"
+                      },
+                      "validUntil": {
+                        "format": "date-time",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "profile",
+                      "action",
+                      "issuerSubject",
+                      "expectedAuthorityEpoch",
+                      "grantId",
+                      "recipientSubject",
+                      "validUntil",
+                      "lifetime",
+                      "redelegationDepth"
                     ],
-                    "type": "string"
+                    "type": "object"
                   },
-                  "profile": {
-                    "const": "access-delegated-grant-change-v1",
-                    "type": "string"
-                  },
-                  "recipientSubject": {
-                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
-                    "type": "string"
-                  },
-                  "redelegationDepth": {
-                    "maximum": 8,
-                    "minimum": 0,
-                    "type": "integer"
-                  },
-                  "representativePolicyId": {
-                    "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
-                    "type": "string"
-                  },
-                  "upstreamGrantId": {
-                    "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
-                    "type": "string"
-                  },
-                  "validUntil": {
-                    "format": "date-time",
-                    "type": "string"
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "action": {
+                        "const": "revoke",
+                        "type": "string"
+                      },
+                      "expectedAuthorityEpoch": {
+                        "pattern": "^(0|[1-9][0-9]*)$",
+                        "type": "string"
+                      },
+                      "expectedObjectGeneration": {
+                        "pattern": "^(0|[1-9][0-9]*)$",
+                        "type": "string"
+                      },
+                      "grantId": {
+                        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                        "type": "string"
+                      },
+                      "issuerSubject": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      },
+                      "profile": {
+                        "const": "access-delegated-grant-change-v1",
+                        "type": "string"
+                      },
+                      "selectedAdmissionId": {
+                        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "profile",
+                      "action",
+                      "issuerSubject",
+                      "expectedAuthorityEpoch",
+                      "grantId",
+                      "expectedObjectGeneration",
+                      "selectedAdmissionId"
+                    ],
+                    "type": "object"
                   }
-                },
-                "required": [
-                  "profile",
-                  "action",
-                  "issuerSubject",
-                  "expectedAuthorityEpoch",
-                  "grantId",
-                  "recipientSubject",
-                  "validUntil",
-                  "lifetime",
-                  "redelegationDepth"
-                ],
-                "type": "object"
+                ]
               }
             },
             "multipart/form-data": {
               "schema": {
-                "additionalProperties": false,
-                "properties": {
-                  "action": {
-                    "const": "create",
-                    "type": "string"
-                  },
-                  "expectedAuthorityEpoch": {
-                    "pattern": "^(0|[1-9][0-9]*)$",
-                    "type": "string"
-                  },
-                  "grantId": {
-                    "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
-                    "type": "string"
-                  },
-                  "issuerSubject": {
-                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
-                    "type": "string"
-                  },
-                  "lifetime": {
-                    "enum": [
-                      "institutional",
-                      "dependent"
+                "anyOf": [
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "action": {
+                        "const": "create",
+                        "type": "string"
+                      },
+                      "expectedAuthorityEpoch": {
+                        "pattern": "^(0|[1-9][0-9]*)$",
+                        "type": "string"
+                      },
+                      "grantId": {
+                        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                        "type": "string"
+                      },
+                      "issuerSubject": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      },
+                      "lifetime": {
+                        "enum": [
+                          "institutional",
+                          "dependent"
+                        ],
+                        "type": "string"
+                      },
+                      "profile": {
+                        "const": "access-delegated-grant-change-v1",
+                        "type": "string"
+                      },
+                      "recipientSubject": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      },
+                      "redelegationDepth": {
+                        "maximum": 8,
+                        "minimum": 0,
+                        "type": "integer"
+                      },
+                      "representativePolicyId": {
+                        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                        "type": "string"
+                      },
+                      "upstreamGrantId": {
+                        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                        "type": "string"
+                      },
+                      "validUntil": {
+                        "format": "date-time",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "profile",
+                      "action",
+                      "issuerSubject",
+                      "expectedAuthorityEpoch",
+                      "grantId",
+                      "recipientSubject",
+                      "validUntil",
+                      "lifetime",
+                      "redelegationDepth"
                     ],
-                    "type": "string"
+                    "type": "object"
                   },
-                  "profile": {
-                    "const": "access-delegated-grant-change-v1",
-                    "type": "string"
-                  },
-                  "recipientSubject": {
-                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
-                    "type": "string"
-                  },
-                  "redelegationDepth": {
-                    "maximum": 8,
-                    "minimum": 0,
-                    "type": "integer"
-                  },
-                  "representativePolicyId": {
-                    "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
-                    "type": "string"
-                  },
-                  "upstreamGrantId": {
-                    "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
-                    "type": "string"
-                  },
-                  "validUntil": {
-                    "format": "date-time",
-                    "type": "string"
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "action": {
+                        "const": "revoke",
+                        "type": "string"
+                      },
+                      "expectedAuthorityEpoch": {
+                        "pattern": "^(0|[1-9][0-9]*)$",
+                        "type": "string"
+                      },
+                      "expectedObjectGeneration": {
+                        "pattern": "^(0|[1-9][0-9]*)$",
+                        "type": "string"
+                      },
+                      "grantId": {
+                        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                        "type": "string"
+                      },
+                      "issuerSubject": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      },
+                      "profile": {
+                        "const": "access-delegated-grant-change-v1",
+                        "type": "string"
+                      },
+                      "selectedAdmissionId": {
+                        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "profile",
+                      "action",
+                      "issuerSubject",
+                      "expectedAuthorityEpoch",
+                      "grantId",
+                      "expectedObjectGeneration",
+                      "selectedAdmissionId"
+                    ],
+                    "type": "object"
                   }
-                },
-                "required": [
-                  "profile",
-                  "action",
-                  "issuerSubject",
-                  "expectedAuthorityEpoch",
-                  "grantId",
-                  "recipientSubject",
-                  "validUntil",
-                  "lifetime",
-                  "redelegationDepth"
-                ],
-                "type": "object"
+                ]
               }
             }
           },
@@ -733,7 +887,12 @@
             },
             "description": "Response for status 503"
           }
-        }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
       }
     },
     "/v1/access/eligible-org-member-set-grant-changes": {
@@ -65150,6 +65309,232 @@
             "description": "Response for status 503"
           }
         }
+      }
+    },
+    "/v1/me/authority-admissions/{admissionId}/consumption": {
+      "get": {
+        "operationId": "getV1MeAuthority-admissionsByAdmissionIdConsumption",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "admissionId",
+            "required": true,
+            "schema": {
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "properties": {
+                    "replayed": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 200"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 400,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 400"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 401,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 401"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 403,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 403"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 404,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 404"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 500,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 500"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 503,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 503"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
       }
     },
     "/v1/me/automation-enrollments": {
