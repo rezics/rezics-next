@@ -578,7 +578,7 @@
     },
     {
       "id": "structure-composition-v1",
-      "sha256": "f286256855cb50df469fe0d949d13815e35b036b69fdf3140fc4b4d17974d430",
+      "sha256": "6f1a63fec2415bc3d3662b012447382493958e39d6a312af77e6e76fe1ea2b90",
       "file": "shapes/structure-composition-v1.ttl"
     },
     {
@@ -2333,7 +2333,7 @@
     "shapes/space-realm-v1.ttl": "bae6d586c9dee595adee14a30d05afe20188c73bcf1c33906c823f87ec08b86f",
     "shapes/statement-decision-v1.ttl": "f5d5c72e0473c6abd0816c0cddceb6c70c8075a47a4d2eeb81b28f9e598b2490",
     "shapes/statement-v1.ttl": "da4cf542d30ca2d0af244fa86efd53e4a8780a7b8feae260abc05168c358aa2a",
-    "shapes/structure-composition-v1.ttl": "f286256855cb50df469fe0d949d13815e35b036b69fdf3140fc4b4d17974d430",
+    "shapes/structure-composition-v1.ttl": "6f1a63fec2415bc3d3662b012447382493958e39d6a312af77e6e76fe1ea2b90",
     "shapes/text-contribution-v1.ttl": "4a42b1851eaa3cace3e06c5a142329e7c3c380e756123c3b131dc2584c9d2d8b",
     "shapes/text-publication-v1.ttl": "831355eccb08af104d4dfc8d972cb4b8e4e4c39b40a3d83aab6a13f67af0dd37",
     "shapes/translation-link-v1.ttl": "4342e9d51554c176bda308d999f7620eb6b8b0096a1dab54e85a3265085a3f0e",
@@ -2347,9 +2347,9 @@
     "shapes/work-metadata-v1.ttl": "ac918cf0458150520bf03f9683e6a363ad702376ebc50eaa729f98d84b3b8760",
     "shapes/work-title-control-v1.ttl": "100dddad43cac4fd47c3090e987ef9dc9aa272d189fc4240cc08302340c5d42d",
     "shapes/zone-capability-v1.ttl": "b0374ad8d4506ef6a3337f784e77d97470a3df881f211c74a3281d2430365015",
-    "packages/model/src/generated/arbitraries.ts": "30d65d79bf871a05ab3eee185d8f37f6f3cf1a892c052771a964735a8380c8b7",
-    "packages/model/src/generated/profiles.ts": "6da1acd316679b492ca06279686c8e27f40e567d99474f70e18167a44e97d264",
-    "packages/model/src/generated/schemas.ts": "dd8077ed5266fd5d0e9ae7761e19d8235d22b1ada259cf2bc018761abc618e3d",
+    "packages/model/src/generated/arbitraries.ts": "26fa42cd26d26e2a7ae6873a152196c8f08c9f4c8fb6def179f50f1b14d36f24",
+    "packages/model/src/generated/profiles.ts": "53ae2c6c924cea59271da14e34ad04814204b4e05d25726fa68e088560fca923",
+    "packages/model/src/generated/schemas.ts": "10c580ad64b5ac7de2f12dc49d83a9c7c59bf3da04c3c5d08ac46c37fe941f24",
     "packages/model/src/generated/vocabulary.ts": "be3cf63808c90d1192fe285eaac0e84033582ebf36bf34f7b45905caeb3ffbd1"
   }
 }

@@ -40060,6 +40060,10 @@
               "application/json": {
                 "schema": {
                   "properties": {
+                    "component": {
+                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                      "type": "string"
+                    },
                     "cost": {
                       "properties": {
                         "pagesRead": {
@@ -40101,6 +40105,10 @@
                         "type": "string"
                       },
                       "type": "array"
+                    },
+                    "owner": {
+                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                      "type": "string"
                     },
                     "receipt": {
                       "type": "string"
@@ -40158,6 +40166,10 @@
               "application/json": {
                 "schema": {
                   "properties": {
+                    "component": {
+                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                      "type": "string"
+                    },
                     "cost": {
                       "properties": {
                         "pagesRead": {
@@ -40199,6 +40211,10 @@
                         "type": "string"
                       },
                       "type": "array"
+                    },
+                    "owner": {
+                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                      "type": "string"
                     },
                     "receipt": {
                       "type": "string"
@@ -40589,6 +40605,10 @@
               "application/json": {
                 "schema": {
                   "properties": {
+                    "component": {
+                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                      "type": "string"
+                    },
                     "cost": {
                       "properties": {
                         "pagesRead": {
@@ -40726,6 +40746,10 @@
                       },
                       "type": "array"
                     },
+                    "owner": {
+                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                      "type": "string"
+                    },
                     "placementCount": {
                       "type": "integer"
                     },
@@ -40773,6 +40797,8 @@
                   },
                   "required": [
                     "structure",
+                    "owner",
+                    "component",
                     "work",
                     "mainVersion",
                     "revision",
@@ -41116,7 +41142,7 @@
                               "type": "string"
                             },
                             "target": {
-                              "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                              "format": "uri",
                               "type": "string"
                             }
                           },
@@ -41326,7 +41352,7 @@
                               "type": "string"
                             },
                             "target": {
-                              "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                              "format": "uri",
                               "type": "string"
                             }
                           },
@@ -41536,7 +41562,7 @@
                               "type": "string"
                             },
                             "target": {
-                              "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                              "format": "uri",
                               "type": "string"
                             }
                           },
@@ -41644,6 +41670,10 @@
               "application/json": {
                 "schema": {
                   "properties": {
+                    "component": {
+                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                      "type": "string"
+                    },
                     "cost": {
                       "properties": {
                         "pagesRead": {
@@ -41685,6 +41715,10 @@
                         "type": "string"
                       },
                       "type": "array"
+                    },
+                    "owner": {
+                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                      "type": "string"
                     },
                     "receipt": {
                       "type": "string"
@@ -41742,6 +41776,10 @@
               "application/json": {
                 "schema": {
                   "properties": {
+                    "component": {
+                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                      "type": "string"
+                    },
                     "cost": {
                       "properties": {
                         "pagesRead": {
@@ -41783,6 +41821,10 @@
                         "type": "string"
                       },
                       "type": "array"
+                    },
+                    "owner": {
+                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                      "type": "string"
                     },
                     "receipt": {
                       "type": "string"
@@ -42155,6 +42197,10 @@
               "application/json": {
                 "schema": {
                   "properties": {
+                    "component": {
+                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                      "type": "string"
+                    },
                     "cost": {
                       "properties": {
                         "pagesRead": {
@@ -42292,6 +42338,10 @@
                       },
                       "type": "array"
                     },
+                    "owner": {
+                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                      "type": "string"
+                    },
                     "placementCount": {
                       "type": "integer"
                     },
@@ -42339,6 +42389,8 @@
                   },
                   "required": [
                     "structure",
+                    "owner",
+                    "component",
                     "work",
                     "mainVersion",
                     "revision",
@@ -43379,6 +43431,10 @@
               "application/json": {
                 "schema": {
                   "properties": {
+                    "component": {
+                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                      "type": "string"
+                    },
                     "cost": {
                       "properties": {
                         "pagesRead": {
@@ -43420,6 +43476,10 @@
                         "type": "string"
                       },
                       "type": "array"
+                    },
+                    "owner": {
+                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                      "type": "string"
                     },
                     "receipt": {
                       "type": "string"
@@ -43477,6 +43537,10 @@
               "application/json": {
                 "schema": {
                   "properties": {
+                    "component": {
+                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                      "type": "string"
+                    },
                     "cost": {
                       "properties": {
                         "pagesRead": {
@@ -43518,6 +43582,10 @@
                         "type": "string"
                       },
                       "type": "array"
+                    },
+                    "owner": {
+                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                      "type": "string"
                     },
                     "receipt": {
                       "type": "string"
@@ -43917,6 +43985,10 @@
               "application/json": {
                 "schema": {
                   "properties": {
+                    "component": {
+                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                      "type": "string"
+                    },
                     "cost": {
                       "properties": {
                         "pagesRead": {
@@ -44054,6 +44126,10 @@
                       },
                       "type": "array"
                     },
+                    "owner": {
+                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                      "type": "string"
+                    },
                     "placementCount": {
                       "type": "integer"
                     },
@@ -44101,6 +44177,8 @@
                   },
                   "required": [
                     "structure",
+                    "owner",
+                    "component",
                     "work",
                     "mainVersion",
                     "revision",
@@ -44402,6 +44480,10 @@
               "application/json": {
                 "schema": {
                   "properties": {
+                    "component": {
+                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                      "type": "string"
+                    },
                     "cost": {
                       "properties": {
                         "pagesRead": {
@@ -44443,6 +44525,10 @@
                         "type": "string"
                       },
                       "type": "array"
+                    },
+                    "owner": {
+                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                      "type": "string"
                     },
                     "receipt": {
                       "type": "string"
@@ -44500,6 +44586,10 @@
               "application/json": {
                 "schema": {
                   "properties": {
+                    "component": {
+                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                      "type": "string"
+                    },
                     "cost": {
                       "properties": {
                         "pagesRead": {
@@ -44541,6 +44631,10 @@
                         "type": "string"
                       },
                       "type": "array"
+                    },
+                    "owner": {
+                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                      "type": "string"
                     },
                     "receipt": {
                       "type": "string"
