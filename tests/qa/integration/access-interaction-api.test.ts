@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { expect, test } from 'bun:test';
+import { createPresentationMuteFilter } from '../../../services/main/src/modules/presentation/realm-mutes.ts';
 import { governedWiki, memberOf, policyHarness, realm, rule } from './access-policy-harness.ts';
 
 test('IAM18 partial: mute, interaction block and resource exclusion keep separate owners and effects', async () => {
@@ -24,7 +25,8 @@ test('IAM18 partial: mute, interaction block and resource exclusion keep separat
       h.call('POST', '/v1/access/interaction-decisions', h.readerToken, {
         profile: 'access-interaction-decision-v1', recipientSubject: recipient, interaction,
         actingSubject: actor }))).result;
-    const mutes = async () => (await h.ok<{ mutes: { target: string; revision: string }[] }>(
+    const mutes = async () => (await h.ok<{ mutes: { targetKind: 'realm' | 'agent'; target: string;
+      match: 'publishing-realm' | 'author-membership' | 'publication-context' | 'author'; revision: string }[] }>(
       h.call('GET', '/v1/me/interaction-mutes', h.readerToken))).mutes;
     const effects = async () => [await interact(a), await interact(a, 'mention'), await interact(b),
       (await wiki.decide(a)).result, (await mutes()).map(mute => mute.target)];
@@ -37,6 +39,19 @@ test('IAM18 partial: mute, interaction block and resource exclusion keep separat
       h.call('PUT', '/v1/me/interaction-mutes', h.readerToken, mute, muteKey));
     expect(await h.ok(h.call('PUT', '/v1/me/interaction-mutes', h.readerToken, mute, muteKey)))
       .toMatchObject({ revision: muted.revision, replayed: true });
+    const presentation = createPresentationMuteFilter(await mutes());
+    const presentationItems = [
+      { id: 'published-in-muted-realm', author: b, publishingRealm: x,
+        authorMembershipRealms: [], publicationContext: null },
+      { id: 'author-member-of-muted-realm', author: a, publishingRealm: null,
+        authorMembershipRealms: [x], publicationContext: null },
+      { id: 'context-is-muted-realm', author: b, publishingRealm: null,
+        authorMembershipRealms: [], publicationContext: x },
+      { id: 'unrelated', author: b, publishingRealm: null,
+        authorMembershipRealms: [], publicationContext: null },
+    ];
+    expect(presentation.visible(presentationItems).map(item => item.id))
+      .toEqual(['author-member-of-muted-realm', 'context-is-muted-realm', 'unrelated']);
     expect((await h.call('PUT', '/v1/me/interaction-mutes', h.readerToken, mute)).body.code).toBe('policy_stale');
     expect((await h.call('PUT', '/v1/me/interaction-mutes', h.readerToken,
       { ...mute, match: 'author' })).status).toBe(400);

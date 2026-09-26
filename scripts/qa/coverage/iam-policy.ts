@@ -1,7 +1,7 @@
 import type { CaseDeclarations } from './declaration.ts';
 
-/** Access policy decision, revocation and proof-handle cases (G-046). IAM18 still
- * lacks a presentation consumer and remains partial. */
+/** Access policy decision, revocation and proof-handle cases (G-046). IAM18 has
+ * a reusable mute filter, but lacks feed/search integration and remains partial. */
 const policyApi = 'tests/qa/integration/access-policy-api.test.ts';
 const revocationApi = 'tests/qa/integration/access-revocation-api.test.ts';
 const exclusion = 'IAM15/IAM16/IAM19: wiki policy revisions exclude Realm sets by basis, follow reorder and keep references purpose-bound';
