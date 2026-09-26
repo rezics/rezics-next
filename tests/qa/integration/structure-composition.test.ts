@@ -1,18 +1,21 @@
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { resolve } from 'node:path';
+import { Elysia } from 'elysia';
 import { authorCreditFixture, shortId } from '../fixtures/author-credit.ts';
 import { ObjectIntegrityError, ObjectUnavailable, S3ImmutableObjects,
   type ImmutableObjects } from '../../../services/main/src/infrastructure/immutable-objects.ts';
 import { GRAPHS, iri } from '../../../services/main/src/modules/work/activate.ts';
 import { checkStructureSealManifest } from '../../../services/main/src/modules/structure/format.ts';
+import { StructureProgressStore } from '../../../services/main/src/modules/progress/store.ts';
+import { progressRoutes } from '../../../services/main/src/routes/progress.ts';
 
 type Created = { structure: string; revision: string; receipt: string; replayed: boolean };
 type Changed = Created & { occurrences: string[]; cost: { pagesRead: number;
   pagesWritten: number; placementsWritten: number; segmentsWritten: number; rebalanced: number } };
 type Page = { revision: string; predecessor: string | null; placementCount: number;
   occurrences: Array<{ occurrence: string; state: string; parent: string; target?: string;
-    orderKey: string }>; next: string | null; cost: { pagesRead: number } };
+    orderKey: string; sourceKey?: string }>; next: string | null; cost: { pagesRead: number } };
 
 test('COMP01/COMP02/COMP05/COMP06 BOOK01/BOOK02: admitted Book composition keeps occurrence identity and exact heads', async () => {
   if (!Bun.env.REZICS_QA_RUN_ID) throw new Error('Run through the isolated integration tier');
@@ -25,6 +28,15 @@ test('COMP01/COMP02/COMP05/COMP06 BOOK01/BOOK02: admitted Book composition keeps
   await objects.initialize();
   const objectEnv = f.env as typeof f.env & { structureObjects: ImmutableObjects };
   objectEnv.structureObjects = objects;
+  const progressApp = new Elysia().use(progressRoutes(f.env.fuseki, {
+    environment: f.env, account: f.account.verifier, access: f.access,
+    structureObjects: objects, progress: new StructureProgressStore(f.pool),
+  }));
+  const progressCall = (method: string, path: string, body?: object, key = randomUUID(),
+    token = f.account.tokenA) => progressApp.handle(new Request(`http://main.local${path}`,
+      { method, headers: { authorization: `Bearer ${token}`, 'idempotency-key': key,
+        ...(body ? { 'content-type': 'application/json' } : {}) },
+      ...(body ? { body: JSON.stringify(body) } : {}) }));
   try {
     const work = await f.json<{ work: string; mainVersion: string }>(await f.call('POST', '/v1/works',
       { profile: 'metadata-only-v1', title: 'Book composition',
@@ -55,8 +67,10 @@ test('COMP01/COMP02/COMP05/COMP06 BOOK01/BOOK02: admitted Book composition keeps
     const changeKey = `composition-${randomUUID()}`;
     const insert = { profile: 'book-composition', expectedHead: created.revision,
       actingSubject: f.actor, operations: [
-        { op: 'insert', parent: created.structure, position: 'last', role: 'chapter', target: work.work },
-        { op: 'insert', parent: created.structure, position: 'last', role: 'chapter', target: work.work },
+        { op: 'insert', parent: created.structure, position: 'last', role: 'chapter', target: work.work,
+          sourceKey: 'source:/chapters/one' },
+        { op: 'insert', parent: created.structure, position: 'last', role: 'chapter', target: work.work,
+          sourceKey: 'source:/chapters/two' },
       ] };
     const changeResponse = await f.call('POST', `${path}/changes`, insert, changeKey);
     if (changeResponse.status !== 200) throw new Error(`composition change: ${changeResponse.status} ${await changeResponse.text()}`);
@@ -74,6 +88,29 @@ test('COMP01/COMP02/COMP05/COMP06 BOOK01/BOOK02: admitted Book composition keeps
     const current = await f.json<Page>(await f.call('GET', read), 200);
     expect(current.occurrences.map(item => item.occurrence)).toEqual(changed.occurrences);
     expect(current.occurrences.map(item => item.target)).toEqual([work.work, work.work]);
+    expect(current.occurrences.map(item => item.sourceKey)).toEqual([
+      'source:/chapters/one', 'source:/chapters/two']);
+    const progressPaths = changed.occurrences.map(occurrence =>
+      `${path}/occurrences/${shortId(occurrence)}/progress`);
+    const progressBody = (position: string) => ({ actingSubject: f.actor,
+      expectedVersion: 0, completed: false, position });
+    const firstProgressKey = `progress-${randomUUID()}`;
+    const firstProgress = await f.json<{ position: string; version: number; replayed: boolean }>(
+      await progressCall('PUT', progressPaths[0]!, progressBody('page:7'), firstProgressKey), 200);
+    expect(firstProgress).toMatchObject({ position: 'page:7', version: 1, replayed: false });
+    expect(await f.json(await progressCall('PUT', progressPaths[0]!,
+      progressBody('page:7'), firstProgressKey), 200)).toMatchObject({ replayed: true,
+      position: 'page:7', version: 1 });
+    expect(await f.json(await progressCall('PUT', progressPaths[1]!,
+      progressBody('page:19')), 200)).toMatchObject({ position: 'page:19', version: 1 });
+    expect((await progressCall('PUT', progressPaths[0]!, progressBody('page:8'))).status).toBe(409);
+    const progressQuery = `?actingSubject=${encodeURIComponent(f.actor)}`;
+    expect(await f.json(await progressCall('GET', progressPaths[0]! + progressQuery), 200))
+      .toMatchObject({ position: 'page:7', version: 1 });
+    expect(await f.json(await progressCall('GET', progressPaths[1]! + progressQuery), 200))
+      .toMatchObject({ position: 'page:19', version: 1 });
+    expect((await progressCall('GET', progressPaths[0]! + progressQuery, undefined,
+      randomUUID(), f.account.tokenB)).status).toBe(404);
     const firstPage = await f.json<Page>(await f.call('GET', `${read}&limit=1`), 200);
     expect(firstPage.occurrences).toHaveLength(1);
     expect(firstPage.next).not.toBeNull();
@@ -114,12 +151,14 @@ test('COMP01/COMP02/COMP05/COMP06 BOOK01/BOOK02: admitted Book composition keeps
     const occurrencePath = `${path}/occurrences/${shortId(changed.occurrences[0]!)}?actingSubject=${encodeURIComponent(f.actor)}`;
     const tombstone = await f.json<Page>(await f.call('GET', occurrencePath), 200);
     expect(tombstone.occurrences[0]).toMatchObject({ occurrence: changed.occurrences[0],
-      state: 'removed', parent: created.structure });
+      state: 'removed', parent: created.structure, sourceKey: 'source:/chapters/one' });
     expect(tombstone.occurrences[0]).not.toHaveProperty('orderKey');
     const former = await f.json<Page>(await f.call('GET',
       `${occurrencePath}&revision=${encodeURIComponent(changed.revision)}`), 200);
     expect(former.occurrences[0]).toMatchObject({ occurrence: changed.occurrences[0],
-      state: 'active', target: work.work });
+      state: 'active', target: work.work, sourceKey: 'source:/chapters/one' });
+    expect(await f.json(await progressCall('GET', progressPaths[0]! + progressQuery), 200))
+      .toMatchObject({ position: 'page:7', version: 1 });
     const groups = await f.json<Changed>(await f.call('POST', `${path}/changes`,
       { profile: 'book-composition', expectedHead: removed.revision, actingSubject: f.actor,
         operations: [
