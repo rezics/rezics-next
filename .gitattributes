@@ -1,0 +1,2 @@
+# Parallel Goal branches append route plugins to the composition root; keep both sides.
+services/main/src/app.ts merge=union

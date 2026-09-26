@@ -546,9 +546,8 @@ shared by several plugins in `routes/shared.ts`, owner error mapping (`problem`,
 intends a contract change, `yarn gen:check` must leave
 `generated/openapi/main/public.json` unchanged.
 
-Complete-case QA declarations live in `scripts/qa/coverage/<prefix>.ts`, one file
-per acceptance ID prefix, such as `iam.ts` for `IAM` IDs and `work.ts` for `WORK`
-IDs. Register a new prefix file in the merge list of
-[`scripts/qa/coverage.ts`](../../scripts/qa/coverage.ts), which rejects an ID
-declared in two files. The root `.gitignore` `coverage/` pattern also matches that
-directory, so a new file there needs `git add -f` until the pattern is narrowed.
+Complete-case QA declarations live in `scripts/qa/coverage/*.ts`. The original
+files hold one acceptance ID prefix each, such as `iam.ts` and `work.ts`; a new
+bundle adds its own file exporting a `*Cases` record, which
+[`scripts/qa/coverage.ts`](../../scripts/qa/coverage.ts) discovers. The merge
+rejects an ID declared in two files.

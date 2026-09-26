@@ -19,6 +19,7 @@ dist/
 .vinext/
 storybook-static/
 coverage/
+!/scripts/qa/coverage/
 .coverage
 .coverage.*
 

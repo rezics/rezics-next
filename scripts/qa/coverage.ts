@@ -1,18 +1,23 @@
 import { isQaE2ePath, titleIds, type Case } from './acceptance.ts';
 import type { CaseDeclarations, TestIdentity } from './coverage/declaration.ts';
-import { modelCases } from './coverage/model.ts';
-import { iamCases } from './coverage/iam.ts';
-import { viewCases } from './coverage/view.ts';
-import { sysCases } from './coverage/sys.ts';
-import { workCases } from './coverage/work.ts';
-import { rateCases } from './coverage/rate.ts';
-import { searchCases } from './coverage/search.ts';
+import { join } from 'node:path';
 
-/** Declare only cases whose full scenario is exercised by the named tests. Each
- * acceptance ID prefix owns one declaration file under `coverage/`. */
-const completeCases: Record<string, readonly TestIdentity[]> = mergeCaseDeclarations([
-  modelCases, iamCases, viewCases, sysCases, workCases, rateCases, searchCases,
-]);
+/** Declare only cases whose full scenario is exercised by the named tests. Every
+ * `coverage/*.ts` file except `declaration.ts` is discovered, and each of its exported
+ * `*Cases` records is merged, so parallel work adds its own file instead of editing one. */
+const completeCases: Record<string, readonly TestIdentity[]> = mergeCaseDeclarations(await (async () => {
+  const directory = join(import.meta.dir, 'coverage');
+  const files = [...new Bun.Glob('*.ts').scanSync({ cwd: directory })]
+    .filter(file => file !== 'declaration.ts').sort();
+  const groups: CaseDeclarations[] = [];
+  for (const file of files) {
+    const module = await import(join(directory, file)) as Record<string, unknown>;
+    for (const [name, value] of Object.entries(module)) {
+      if (name.endsWith('Cases') && value && typeof value === 'object') groups.push(value as CaseDeclarations);
+    }
+  }
+  return groups;
+})());
 
 function mergeCaseDeclarations(groups: readonly CaseDeclarations[]): Record<string, readonly TestIdentity[]> {
   const merged: Record<string, readonly TestIdentity[]> = {};
