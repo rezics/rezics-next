@@ -37,6 +37,31 @@ Keep checksum provenance and actual build list distinct from every hash in go.su
 Module graph pruning/lazy loading follows the selected toolchain/profile. Do not
 replace MVS with highest-available-version selection.
 
+The `go-mvs-from-main-local-captures-v3` API profile admits only main-module
+`replace` directives whose source is a bounded `./` relative directory. The
+caller supplies each source identity and canonical base64 `go.mod` bytes with a
+matching SHA-256. The private immutable `go-mvs-local-unpruned-v4` snapshot
+retains the exact UTF-8 text, digest, main directives and remote capture
+identities. The API never reads a caller-named server path. A local replacement
+keeps the original module path and selected version in the build list, while
+`selectedLocalSources` records the relative identity, declared module and raw
+digest; it has no invented remote version or checksum. A `replace` does not add
+a module unless a requirement reaches it. Exact-version rules override path-wide
+rules. The profile accepts Go 1.16 unpruned manifests and single or grouped
+local replacements; other main directives and newer pruning semantics return
+`unsupported-semantics`. Missing caller-supplied source bytes return
+`incomplete-source-data` with `missingLocalSources`. Invalid base64, digest,
+absolute/parent paths and duplicate rules are rejected. The bounded resolver
+returns `budget-exhausted` without a build list when traversal limits are hit.
+
+The local-source cost is O(C + L + V + E) for C supplied captures, L supplied
+local `go.mod` bytes, V visited module versions and E requirements. One bounded
+owner query reads at most 128 private captures; the resolve write and replay
+use a bounded insert plus keyed read. At most 32 local sources and 32 rules are
+accepted, each manifest at most 65,536 bytes; traversal stops after 128 visited
+versions or 512 requirements. Local resolution performs no host file or provider
+network reads. These are per-request work limits, not module ecosystem limits.
+
 ## Nix
 
 Preserve original versus locked flake inputs, follows references and exact source

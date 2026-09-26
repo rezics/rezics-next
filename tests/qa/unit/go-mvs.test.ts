@@ -1,5 +1,6 @@
+import { createHash } from 'node:crypto';
 import { expect, test } from 'bun:test';
-import { GoResolutionInvalid, solveGoMvsSnapshot,
+import { GoResolutionInvalid, parseGoLocalMainManifest, solveGoMvsSnapshot,
   type GoMvsSnapshotRequest } from '../../../services/main/src/modules/package/go-mvs.ts';
 
 const requirement = (path: string, version: string) => ({ path, version });
@@ -10,6 +11,61 @@ const input = (overrides: Partial<GoMvsSnapshotRequest> = {}): GoMvsSnapshotRequ
   profile: 'go-mvs-stable-unpruned-v1', mainModule: 'example.com/main',
   goDirective: '1.16', coverage: { complete: true, unsupportedClauses: [] },
   roots: [], releases: [], ...overrides,
+});
+
+const localMain = 'module example.com/main\n\ngo 1.16\n\nrequire example.com/c v1.4.0\nreplace example.com/c => ./local/c\n';
+const localMod = 'module example.com/fork/c\n\ngo 1.16\n\nrequire example.com/d v1.0.0\n';
+const sha = (text: string) => createHash('sha256').update(text).digest('hex');
+const localInput = (overrides: Partial<GoMvsSnapshotRequest> = {}): GoMvsSnapshotRequest => ({
+  profile: 'go-mvs-local-unpruned-v4', mainModule: 'example.com/main',
+  goDirective: '1.16', coverage: { complete: true, unsupportedClauses: [] },
+  roots: [requirement('example.com/c', 'v1.4.0')],
+  releases: [release('example.com/d', 'v1.0.0')],
+  mainManifest: { text: localMain, rawSha256: sha(localMain) },
+  localReplacements: [{ original: { path: 'example.com/c' },
+    sourceIdentity: './local/c' }],
+  localSources: [{ identity: './local/c', text: localMod, rawSha256: sha(localMod) }],
+  captureEvidence: [{ captureId: '00000000-0000-0000-0000-000000000001',
+    path: 'example.com/d', version: 'v1.0.0', listSha256: 'a'.repeat(64),
+    infoSha256: 'b'.repeat(64), modSha256: 'c'.repeat(64) }],
+  ...overrides,
+});
+
+test('PKG05/PKG12: exact local go.mod selects its requirements and retains source meaning', () => {
+  expect(solveGoMvsSnapshot(localInput())).toMatchObject({ status: 'solved',
+    buildList: [requirement('example.com/c', 'v1.4.0'),
+      requirement('example.com/d', 'v1.0.0')],
+    selectedLocalSources: [{ original: requirement('example.com/c', 'v1.4.0'),
+      sourceIdentity: './local/c', declaredModule: 'example.com/fork/c',
+      rawSha256: sha(localMod) }], missingLocalSources: [] });
+  expect(solveGoMvsSnapshot(localInput({ localSources: [] }))).toMatchObject({
+    status: 'incomplete-source-data', buildList: [], missingLocalSources: ['./local/c'] });
+  expect(solveGoMvsSnapshot(localInput({ releases: [], captureEvidence: [] })))
+    .toMatchObject({ status: 'incomplete-source-data',
+      missing: [requirement('example.com/d', 'v1.0.0')] });
+});
+
+test('PKG05: local replacement rejects path authority, changed bytes and duplicate rules', () => {
+  expect(parseGoLocalMainManifest(localMain.replace(
+    'replace example.com/c => ./local/c',
+    'replace (\n example.com/c => ./local/c\n)')).replacements)
+    .toEqual([{ original: { path: 'example.com/c' },
+      sourceIdentity: './local/c' }]);
+  expect(() => parseGoLocalMainManifest(localMain.replace('./local/c', '/tmp/host')))
+    .toThrow(GoResolutionInvalid);
+  expect(() => parseGoLocalMainManifest(localMain.replace('./local/c', '../outside')))
+    .toThrow(GoResolutionInvalid);
+  expect(() => solveGoMvsSnapshot(localInput({ localSources: [{ identity: './local/c',
+    text: localMod, rawSha256: '0'.repeat(64) }] }))).toThrow(GoResolutionInvalid);
+  expect(() => solveGoMvsSnapshot(localInput({ localSources: [
+    localInput().localSources![0]!, localInput().localSources![0]!] })))
+    .toThrow(GoResolutionInvalid);
+  expect(() => parseGoLocalMainManifest(`${localMain}replace example.com/c => ./other\n`))
+    .toThrow(GoResolutionInvalid);
+  expect(solveGoMvsSnapshot(localInput({ localSources: [{ identity: './local/c',
+    text: localMod.replace('go 1.16', 'go 1.17'),
+    rawSha256: sha(localMod.replace('go 1.16', 'go 1.17')) }] })))
+    .toMatchObject({ status: 'unsupported-semantics', buildList: [] });
 });
 
 test('PKG05: Go unpruned MVS selects highest requirement, not latest available release', () => {

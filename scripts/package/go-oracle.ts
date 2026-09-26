@@ -122,6 +122,50 @@ const retractedFixture: GoMvsSnapshotRequest = {
       { lower: 'v1.2.0', upper: 'v1.2.0', rationale: 'bad release' }] } : item),
   mainDirectives: { exclusions: [], replacements: [] },
 };
+const localMain = `module example.com/main\n\ngo 1.16\n\nrequire (\n example.com/a v1.0.0\n example.com/b v1.0.0\n)\nreplace example.com/c => ./local/wild\nreplace example.com/c v1.4.0 => ./local/exact\n`;
+const localWild = 'module example.com/c\n\ngo 1.16\n\nrequire example.com/d v1.0.0\n';
+const localExact = 'module example.com/fork/c\n\ngo 1.16\n\nrequire example.com/e v1.0.0\n';
+const localFixture: GoMvsSnapshotRequest = {
+  profile: 'go-mvs-local-unpruned-v4', mainModule: 'example.com/main',
+  goDirective: '1.16', coverage: { complete: true, unsupportedClauses: [] },
+  roots: [{ path: 'example.com/a', version: 'v1.0.0' },
+    { path: 'example.com/b', version: 'v1.0.0' }],
+  releases: [
+    { path: 'example.com/a', version: 'v1.0.0', requirements: [
+      { path: 'example.com/c', version: 'v1.3.0' }] },
+    { path: 'example.com/b', version: 'v1.0.0', requirements: [
+      { path: 'example.com/c', version: 'v1.4.0' }] },
+    { path: 'example.com/d', version: 'v1.0.0', requirements: [] },
+    { path: 'example.com/e', version: 'v1.0.0', requirements: [] },
+  ],
+  mainManifest: { text: localMain,
+    rawSha256: createHash('sha256').update(localMain).digest('hex') },
+  localReplacements: [
+    { original: { path: 'example.com/c' }, sourceIdentity: './local/wild' },
+    { original: { path: 'example.com/c', version: 'v1.4.0' },
+      sourceIdentity: './local/exact' },
+  ],
+  localSources: [
+    { identity: './local/wild', text: localWild,
+      rawSha256: createHash('sha256').update(localWild).digest('hex') },
+    { identity: './local/exact', text: localExact,
+      rawSha256: createHash('sha256').update(localExact).digest('hex') },
+  ],
+  captureEvidence: [
+    { captureId: '00000000-0000-0000-0000-000000000001', path: 'example.com/a',
+      version: 'v1.0.0', listSha256: 'a'.repeat(64), infoSha256: 'b'.repeat(64),
+      modSha256: 'c'.repeat(64) },
+    { captureId: '00000000-0000-0000-0000-000000000002', path: 'example.com/b',
+      version: 'v1.0.0', listSha256: 'a'.repeat(64), infoSha256: 'b'.repeat(64),
+      modSha256: 'c'.repeat(64) },
+    { captureId: '00000000-0000-0000-0000-000000000003', path: 'example.com/d',
+      version: 'v1.0.0', listSha256: 'a'.repeat(64), infoSha256: 'b'.repeat(64),
+      modSha256: 'c'.repeat(64) },
+    { captureId: '00000000-0000-0000-0000-000000000004', path: 'example.com/e',
+      version: 'v1.0.0', listSha256: 'a'.repeat(64), infoSha256: 'b'.repeat(64),
+      modSha256: 'c'.repeat(64) },
+  ],
+};
 
 async function checked(command: string[], cwd = process.cwd(), env = process.env): Promise<string> {
   const proc = Bun.spawn(command, { cwd, env, stdout: 'pipe', stderr: 'pipe' });
@@ -170,8 +214,13 @@ async function runScenario(name: string, request: GoMvsSnapshotRequest) {
   const proxy = resolve(fixtureDir, 'proxy');
   const project = resolve(fixtureDir, 'main');
   await mkdir(project, { recursive: true });
-  await writeFile(resolve(project, 'go.mod'), goMod(request.mainModule, request.roots,
-    request.mainDirectives));
+  await writeFile(resolve(project, 'go.mod'), request.mainManifest?.text
+    ?? goMod(request.mainModule, request.roots, request.mainDirectives));
+  for (const local of request.localSources ?? []) {
+    const directory = resolve(project, local.identity);
+    await mkdir(directory, { recursive: true });
+    await writeFile(resolve(directory, 'go.mod'), local.text);
+  }
   const versions = new Map<string, string[]>();
   for (const release of request.releases) {
     const directory = resolve(proxy, release.path, '@v');
@@ -214,12 +263,21 @@ async function runScenario(name: string, request: GoMvsSnapshotRequest) {
   const stdout = await checked([tool, 'list', '-mod=mod', '-m', 'all'], project, env);
   const nativeSources: Array<{ original: { path: string; version: string };
     source: { path: string; version: string } }> = [];
+  const nativeLocalSources: Array<{ original: { path: string; version: string };
+    sourceIdentity: string; declaredModule: string; rawSha256: string }> = [];
   const native = stdout.split('\n').slice(1).map(line => {
     const [path, version, arrow, sourcePath, sourceVersion] = line.split(' ');
     if (!path || !version) throw new Error(`Unexpected Go module line: ${line}`);
     if (arrow === '=>' && sourcePath && sourceVersion) {
       nativeSources.push({ original: { path, version },
         source: { path: sourcePath, version: sourceVersion } });
+    } else if (arrow === '=>' && sourcePath && !sourceVersion) {
+      const source = request.localSources?.find(item => item.identity === sourcePath);
+      if (!source) throw new Error(`Native Go selected unknown local source: ${line}`);
+      const parsed = parseGoModRequirements(source.text);
+      nativeLocalSources.push({ original: { path, version },
+        sourceIdentity: sourcePath, declaredModule: parsed.declaredModule!,
+        rawSha256: source.rawSha256 });
     } else if (arrow) throw new Error(`Unexpected Go replacement line: ${line}`);
     return { path, version };
   }).sort((a, b) => a.path.localeCompare(b.path));
@@ -229,6 +287,10 @@ async function runScenario(name: string, request: GoMvsSnapshotRequest) {
   if (JSON.stringify(nativeSources) !== JSON.stringify(outcome.selectedSources ?? [])) {
     throw new Error(`Native Go replacement diverged: ${JSON.stringify({
       nativeSources, rezics: outcome.selectedSources })}`);
+  }
+  if (JSON.stringify(nativeLocalSources) !== JSON.stringify(outcome.selectedLocalSources ?? [])) {
+    throw new Error(`Native Go local replacement diverged: ${JSON.stringify({
+      nativeLocalSources, rezics: outcome.selectedLocalSources })}`);
   }
   let nativeRetraction: string[] = [];
   if (name === 'retracted') {
@@ -242,7 +304,7 @@ async function runScenario(name: string, request: GoMvsSnapshotRequest) {
     }
   }
   return { name, goDirective: request.goDirective, native,
-    rezics: outcome.buildList, nativeSources, nativeRetraction,
+    rezics: outcome.buildList, nativeSources, nativeLocalSources, nativeRetraction,
     loadedManifestCount: outcome.loadedManifestCount };
 }
 
@@ -257,7 +319,8 @@ async function main(): Promise<void> {
       await runScenario('superseded-replacement', supersededReplacementFixture),
       await runScenario('pseudo-timestamps', pseudoFixture),
       await runScenario('pseudo-pretag', preTagFixture),
-      await runScenario('retracted', retractedFixture)] };
+      await runScenario('retracted', retractedFixture),
+      await runScenario('local-replacement', localFixture)] };
   await writeFile(resolve(base, 'result.json'), `${JSON.stringify(report, null, 2)}\n`);
   process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
 }

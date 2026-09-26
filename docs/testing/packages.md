@@ -32,6 +32,20 @@ Controlled installation/plan tests need not compile every upstream project.
 Do not claim runtime/build success from a resolver-only pass. Preserve rejected
 states, dependency explanations, installation inventory and exact run profiles.
 
+G-005's local-replacement slice passed `yarn package:go-oracle` on pinned
+Go 1.27.1 with `go 1.16` files and a generated local module directory. Its
+version-specific local rule overrode a path-wide rule, and native/REZICS build
+lists and selected local source identities matched. The pinned tool did not
+assign the local bytes a remote version or checksum. Selected unit cases cover
+source requirements, missing local bytes, missing remote captures, changed
+digest, duplicate/conflicting rules, absolute/parent path refusal and newer
+`go` directive refusal. Real isolated Main/Access/PostgreSQL integration
+`20260926t044718-5a4de1` covered private scoped resolution/read, exact local
+bytes and digest, idempotent replay, changed-key conflict, missing source,
+digest/path/rule refusals and inactive-principal denial. This is partial
+PKG05/PKG12 evidence. Go 1.17+ pruning, live provider sets, checksum provenance
+for remote captures and package lock/installations remain separate work.
+
 Selected unit cases in [`go-mvs.test.ts`](../../tests/qa/unit/go-mvs.test.ts)
 and real PostgreSQL/Main API integration `20260925t221834-907295` passed the
 first `go-mvs-stable-unpruned-v1` profile. The unit graph selected the highest

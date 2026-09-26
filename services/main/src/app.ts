@@ -338,6 +338,23 @@ const goMvsV3Request = t.Object({ profile: t.Literal('go-mvs-captured-unpruned-v
     infoSha256: t.String(), modSha256: t.String(),
   }, { additionalProperties: false }), { maxItems: 128 }),
 }, { additionalProperties: false });
+const goLocalSource = t.Object({ identity: t.String({ minLength: 3, maxLength: 200 }),
+  text: t.String({ maxLength: 65_536 }),
+  rawSha256: t.String({ pattern: '^[0-9a-f]{64}$' }) },
+{ additionalProperties: false });
+const goLocalReplacement = t.Object({ original: t.Object({
+  path: goModuleRequirement.properties.path,
+  version: t.Optional(goModuleRequirement.properties.version) },
+{ additionalProperties: false }), sourceIdentity: t.String({ minLength: 3, maxLength: 200 }) },
+{ additionalProperties: false });
+const goMvsV4Request = t.Object({ profile: t.Literal('go-mvs-local-unpruned-v4'),
+  ...goMvsCommon, releases: goMvsV1Request.properties.releases,
+  mainManifest: t.Object({ text: t.String({ maxLength: 65_536 }),
+    rawSha256: t.String({ pattern: '^[0-9a-f]{64}$' }) }, { additionalProperties: false }),
+  captureEvidence: goMvsV3Request.properties.captureEvidence,
+  localReplacements: t.Array(goLocalReplacement, { maxItems: 32 }),
+  localSources: t.Array(goLocalSource, { maxItems: 32 }),
+}, { additionalProperties: false });
 const goMvsCapturedV1Request = t.Object({ profile: t.Literal('go-mvs-from-captures-v1'),
   mainModule: goMvsCommon.mainModule,
   roots: goMvsCommon.roots,
@@ -348,8 +365,17 @@ const goMvsCapturedV2Request = t.Object({
   mainManifestBase64: t.String({ maxLength: 87_384 }),
   captures: t.Array(groupUuid, { maxItems: 128 }),
 }, { additionalProperties: false });
+const goMvsCapturedV3Request = t.Object({
+  profile: t.Literal('go-mvs-from-main-local-captures-v3'),
+  mainManifestBase64: t.String({ maxLength: 87_384 }),
+  captures: t.Array(groupUuid, { maxItems: 128 }),
+  localSources: t.Array(t.Object({ identity: t.String({ minLength: 3, maxLength: 200 }),
+    goModBase64: t.String({ maxLength: 87_384 }),
+    rawSha256: t.String({ pattern: '^[0-9a-f]{64}$' }) },
+  { additionalProperties: false }), { maxItems: 32 }),
+}, { additionalProperties: false });
 const goMvsCapturedRequest = t.Union([goMvsCapturedV1Request,
-  goMvsCapturedV2Request]);
+  goMvsCapturedV2Request, goMvsCapturedV3Request]);
 const goMvsOutcome = t.Object({ status: t.Union([t.Literal('solved'),
   t.Literal('incomplete-source-data'), t.Literal('unsupported-semantics'),
   t.Literal('budget-exhausted')]),
@@ -358,14 +384,19 @@ const goMvsOutcome = t.Object({ status: t.Union([t.Literal('solved'),
   requirementCount: t.Number(),
   selectedSources: t.Optional(t.Array(t.Object({ original: goModuleRequirement,
     source: goModuleRequirement }))),
+  selectedLocalSources: t.Optional(t.Array(t.Object({ original: goModuleRequirement,
+    sourceIdentity: t.String(), declaredModule: t.String(), rawSha256: t.String() }))),
+  missingLocalSources: t.Optional(t.Array(t.String())),
   retractedSelected: t.Optional(t.Array(t.Object({ selected: goModuleRequirement,
     announcedBy: goModuleRequirement, rationale: t.String() }))) });
 const goMvsResolution = t.Object({
   profile: t.Union([t.Literal('go-mvs-stable-unpruned-resolution-v1'),
     t.Literal('go-mvs-stable-unpruned-main-directives-resolution-v2'),
-    t.Literal('go-mvs-captured-unpruned-resolution-v3')]),
+    t.Literal('go-mvs-captured-unpruned-resolution-v3'),
+    t.Literal('go-mvs-local-unpruned-resolution-v4')]),
   resolution: t.String(), requestDigest: t.String(),
-  request: t.Union([goMvsV1Request, goMvsV2Request, goMvsV3Request]),
+  request: t.Union([goMvsV1Request, goMvsV2Request, goMvsV3Request,
+    goMvsV4Request]),
   outcome: goMvsOutcome, createdAt: t.String() });
 const goMvsResolutionWrite = t.Object({ resolution: goMvsResolution,
   replayed: t.Boolean() });
@@ -820,8 +851,12 @@ function commandError(error: unknown): Response {
       'Source child correspondence evidence is unavailable');
   }
   if (error instanceof GoResolutionInvalid) {
-    return problem(422, 'go_resolution_unsupported',
-      'Go module snapshot is outside the selected resolution profile');
+    const codes = { invalid: 'go_resolution_unsupported',
+      malformed: 'go_resolution_malformed',
+      'changed-digest': 'go_local_digest_mismatch',
+      duplicate: 'go_resolution_duplicate',
+      'unsafe-source': 'go_local_source_unsafe' } as const;
+    return problem(422, codes[error.kind], error.message);
   }
   if (error instanceof GoResolutionConflict) {
     return problem(409, 'go_resolution_conflict', 'Go resolution key binds another snapshot');

@@ -258,12 +258,81 @@ test('PKG05/PKG20/IAM10: Go proxy capture is bounded, private, immutable and rep
     expect(await incompatibleMain.json()).toMatchObject({ resolution: { outcome: {
       status: 'unsupported-semantics', buildList: [],
       unsupportedClauses: [expect.stringContaining('go directive 1.17')] } } });
+    const localMain = 'module example.com/main\n\ngo 1.16\n\nrequire example.com/a v1.0.0\nreplace example.com/b v1.0.0 => ./local/b\n';
+    const localMod = 'module example.com/fork/b\n\ngo 1.16\n';
+    const localBody = { profile: 'go-mvs-from-main-local-captures-v3',
+      mainManifestBase64: Buffer.from(localMain).toString('base64'),
+      captures: [sourceIds[0]], localSources: [{ identity: './local/b',
+        goModBase64: Buffer.from(localMod).toString('base64'),
+        rawSha256: createHash('sha256').update(localMod).digest('hex') }] };
+    const localKey = `go-local-${randomUUID()}`;
+    expect((await resolve('owner-read', localKey, localBody)).status).toBe(401);
+    expect((await resolve('other-resolve', `go-local-${randomUUID()}`,
+      localBody)).status).toBe(404);
+    const localCreated = await resolve('owner-resolve', localKey, localBody);
+    expect(localCreated.status).toBe(201);
+    const localSaved = await localCreated.json() as { resolution: {
+      resolution: string; request: { localSources: unknown[]; mainManifest: unknown };
+      outcome: { selectedLocalSources: unknown[] } }; replayed: boolean };
+    expect(localSaved.resolution).toMatchObject({
+      profile: 'go-mvs-local-unpruned-resolution-v4',
+      request: { profile: 'go-mvs-local-unpruned-v4', mainManifest: {
+        text: localMain, rawSha256: createHash('sha256').update(localMain).digest('hex') },
+        localSources: [{ identity: './local/b', text: localMod,
+          rawSha256: createHash('sha256').update(localMod).digest('hex') }] },
+      outcome: { status: 'solved', buildList: [
+        { path: 'example.com/a', version: 'v1.0.0' },
+        { path: 'example.com/b', version: 'v1.0.0' }],
+        selectedLocalSources: [{ original: { path: 'example.com/b', version: 'v1.0.0' },
+          sourceIdentity: './local/b', declaredModule: 'example.com/fork/b',
+          rawSha256: createHash('sha256').update(localMod).digest('hex') }] } });
+    const localId = localSaved.resolution.resolution.split('/').at(-1)!;
+    expect(await (await app.handle(new Request(
+      `http://main.local/v1/package-resolutions/${localId}`,
+      { headers: { authorization: 'Bearer owner-read' } }))).json())
+      .toEqual(localSaved.resolution);
+    expect((await app.handle(new Request(
+      `http://main.local/v1/package-resolutions/${localId}`,
+      { headers: { authorization: 'Bearer other-read' } }))).status).toBe(404);
+    expect(await (await resolve('owner-resolve', localKey, localBody)).json())
+      .toEqual({ ...localSaved, replayed: true });
+    expect((await resolve('owner-resolve', localKey, { ...localBody,
+      localSources: [] })).status).toBe(409);
+    const localMissing = await resolve('owner-resolve', `go-local-${randomUUID()}`,
+      { ...localBody, localSources: [] });
+    expect(await localMissing.json()).toMatchObject({ resolution: { outcome: {
+      status: 'incomplete-source-data', missingLocalSources: ['./local/b'] } } });
+    expect(await (await resolve('owner-resolve', `go-local-${randomUUID()}`,
+      { ...localBody, localSources: [{ ...localBody.localSources[0],
+        rawSha256: '0'.repeat(64) }] })).json()).toMatchObject({ status: 422,
+      code: 'go_local_digest_mismatch' });
+    expect(await (await resolve('owner-resolve', `go-local-${randomUUID()}`,
+      { ...localBody, mainManifestBase64: Buffer.from(
+        localMain.replace('./local/b', '/tmp/host')).toString('base64') })).json())
+      .toMatchObject({ status: 422, code: 'go_local_source_unsafe' });
+    expect(await (await resolve('owner-resolve', `go-local-${randomUUID()}`,
+      { ...localBody, mainManifestBase64: Buffer.from(
+        `${localMain}replace example.com/b v1.0.0 => ./other\n`).toString('base64') })).json())
+      .toMatchObject({ status: 422, code: 'go_resolution_duplicate' });
+    expect(await (await resolve('owner-resolve', `go-local-${randomUUID()}`,
+      { ...localBody, localSources: [{ ...localBody.localSources[0],
+        goModBase64: '***' }] })).json()).toMatchObject({ status: 422,
+      code: 'go_resolution_malformed' });
+    const localUnsupportedText = localMod.replace('go 1.16', 'go 1.17');
+    expect(await (await resolve('owner-resolve', `go-local-${randomUUID()}`,
+      { ...localBody, localSources: [{ ...localBody.localSources[0],
+        goModBase64: Buffer.from(localUnsupportedText).toString('base64'),
+        rawSha256: createHash('sha256').update(localUnsupportedText).digest('hex') }] }))
+      .json()).toMatchObject({ resolution: { outcome: {
+        status: 'unsupported-semantics', buildList: [] } } });
     await accessPool.query('UPDATE access.principal SET active = false WHERE id = $1', [ownerId]);
     expect((await read('owner-read', id)).status).toBe(403);
     expect((await write('owner-capture', `go-proxy-${randomUUID()}`, body)).status)
       .toBe(403);
     expect((await resolve('owner-resolve', `go-derived-${randomUUID()}`,
       derivedBody)).status).toBe(403);
+    expect((await resolve('owner-resolve', `go-local-${randomUUID()}`,
+      localBody)).status).toBe(403);
   } finally {
     await Promise.all([contentPool.end(), accessPool.end()]);
   }

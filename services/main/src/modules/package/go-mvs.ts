@@ -3,7 +3,12 @@ import type { Pool } from 'pg';
 import type { GoProxyCaptureStore } from './go-proxy-capture.ts';
 import { parseGoModRequirements } from './go-mod-parser.ts';
 
-export class GoResolutionInvalid extends Error {}
+export class GoResolutionInvalid extends Error {
+  constructor(message: string, readonly kind: 'invalid' | 'malformed'
+    | 'changed-digest' | 'duplicate' | 'unsafe-source' = 'invalid') {
+    super(message);
+  }
+}
 export class GoResolutionConflict extends Error {}
 export class GoResolutionUnavailable extends Error {}
 
@@ -21,9 +26,18 @@ export interface GoModuleReplacementDirective {
   original: { path: string; version?: string };
   source: GoModuleRequirement;
 }
+export interface GoLocalReplacementDirective {
+  original: { path: string; version?: string };
+  sourceIdentity: string;
+}
+export interface GoLocalModuleSource {
+  identity: string;
+  text: string;
+  rawSha256: string;
+}
 export interface GoMvsSnapshotRequest {
   profile: 'go-mvs-stable-unpruned-v1' | 'go-mvs-stable-unpruned-main-directives-v2'
-    | 'go-mvs-captured-unpruned-v3';
+    | 'go-mvs-captured-unpruned-v3' | 'go-mvs-local-unpruned-v4';
   mainModule: string;
   goDirective: '1.16';
   coverage: { complete: boolean; unsupportedClauses: string[] };
@@ -35,13 +49,17 @@ export interface GoMvsSnapshotRequest {
     listSha256?: string; infoSha256: string; modSha256: string;
     selection?: 'exact-pseudo-version' }>;
   mainManifest?: { text: string; rawSha256: string };
+  localReplacements?: GoLocalReplacementDirective[];
+  localSources?: GoLocalModuleSource[];
 }
 export interface GoCapturedResolutionRequest {
-  profile: 'go-mvs-from-captures-v1' | 'go-mvs-from-main-captures-v2';
+  profile: 'go-mvs-from-captures-v1' | 'go-mvs-from-main-captures-v2'
+    | 'go-mvs-from-main-local-captures-v3';
   mainModule?: string;
   roots?: GoModuleRequirement[];
   mainManifestBase64?: string;
   captures: string[];
+  localSources?: Array<{ identity: string; goModBase64: string; rawSha256: string }>;
 }
 
 export interface GoMvsOutcome {
@@ -53,6 +71,9 @@ export interface GoMvsOutcome {
   loadedManifestCount: number;
   requirementCount: number;
   selectedSources?: GoModuleReplacement[];
+  selectedLocalSources?: Array<{ original: GoModuleRequirement;
+    sourceIdentity: string; declaredModule: string; rawSha256: string }>;
+  missingLocalSources?: string[];
   retractedSelected?: Array<{ selected: GoModuleRequirement;
     announcedBy: GoModuleRequirement; rationale: string }>;
 }
@@ -60,7 +81,8 @@ export interface GoMvsOutcome {
 export interface GoMvsResolution {
   profile: 'go-mvs-stable-unpruned-resolution-v1'
     | 'go-mvs-stable-unpruned-main-directives-resolution-v2'
-    | 'go-mvs-captured-unpruned-resolution-v3';
+    | 'go-mvs-captured-unpruned-resolution-v3'
+    | 'go-mvs-local-unpruned-resolution-v4';
   resolution: string;
   requestDigest: string;
   request: GoMvsSnapshotRequest;
@@ -83,6 +105,84 @@ const PSEUDO_VERSION = /^v[0-9]+\.(?:0\.0-|[0-9]+\.[0-9]+-(?:[^+]*\.)?0\.)[0-9]{
 const MAX_VERSION_LENGTH = 96;
 const MAX_LOADED = 128;
 const MAX_REQUIREMENTS = 512;
+const LOCAL_IDENTITY = /^\.\/[A-Za-z0-9_-][A-Za-z0-9._-]*(?:\/[A-Za-z0-9_-][A-Za-z0-9._-]*)*$/;
+
+function validLocalIdentity(identity: string): boolean {
+  return typeof identity === 'string' && identity.length <= 200
+    && LOCAL_IDENTITY.test(identity) && !identity.split('/').some(part => part === '..');
+}
+
+function decodeManifest(encoded: string, expectedSha256?: string):
+  { text: string; rawSha256: string } {
+  if (typeof encoded !== 'string' || encoded.length > 87_384
+    || !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(encoded)) {
+    throw new GoResolutionInvalid('invalid canonical Go manifest base64', 'malformed');
+  }
+  const bytes = Buffer.from(encoded, 'base64');
+  if (bytes.length > 65_536 || bytes.toString('base64') !== encoded) {
+    throw new GoResolutionInvalid('Go manifest exceeds profile', 'malformed');
+  }
+  let text: string;
+  try { text = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(bytes); }
+  catch { throw new GoResolutionInvalid('Go manifest is not UTF-8', 'malformed'); }
+  if (!Buffer.from(text, 'utf8').equals(bytes)) {
+    throw new GoResolutionInvalid('Go manifest bytes are not preserved by UTF-8', 'malformed');
+  }
+  const rawSha256 = createHash('sha256').update(bytes).digest('hex');
+  if (expectedSha256 !== undefined && rawSha256 !== expectedSha256) {
+    throw new GoResolutionInvalid('Go local manifest digest differs from supplied bytes',
+      'changed-digest');
+  }
+  return { text, rawSha256 };
+}
+
+/** Only main-module, relative local replacements are admitted by the v4 profile. */
+export function parseGoLocalMainManifest(text: string): {
+  parsed: ReturnType<typeof parseGoModRequirements>;
+  replacements: GoLocalReplacementDirective[];
+  unsupportedClauses: string[];
+} {
+  const replacements: GoLocalReplacementDirective[] = [];
+  const unsupportedClauses: string[] = [];
+  const plain: string[] = [];
+  let group = false;
+  const seen = new Set<string>();
+  for (const raw of text.split('\n')) {
+    const line = raw.replace(/\s+\/\/.*$/, '').trim();
+    if (line === 'replace (') { if (group) unsupportedClauses.push('nested replace group'); group = true; continue; }
+    if (group && line === ')') { group = false; continue; }
+    const clause = group ? line : line.startsWith('replace ') ? line.slice(8) : null;
+    if (clause === null) { plain.push(raw); continue; }
+    if (!clause || clause.startsWith('//')) continue;
+    const parts = clause.split(/\s+/);
+    const arrow = parts.indexOf('=>');
+    if ((arrow !== 1 && arrow !== 2) || parts.length !== arrow + 2) {
+      unsupportedClauses.push(`replace ${clause}`.slice(0, 200)); continue;
+    }
+    const original = { path: parts[0]!, ...(arrow === 2 ? { version: parts[1]! } : {}) };
+    const sourceIdentity = parts[arrow + 1]!;
+    if (!PATH.test(original.path) || original.path.length > 200) {
+      unsupportedClauses.push(`replace ${clause}`.slice(0, 200)); continue;
+    }
+    if (original.version !== undefined) {
+      try { validateGoModuleRequirement(original as GoModuleRequirement); }
+      catch { unsupportedClauses.push(`replace ${clause}`.slice(0, 200)); continue; }
+    }
+    if (!validLocalIdentity(sourceIdentity)) {
+      throw new GoResolutionInvalid('Go local source identity must be a bounded ./ relative directory',
+        'unsafe-source');
+    }
+    const key = `${original.path}\0${original.version ?? ''}`;
+    if (seen.has(key)) throw new GoResolutionInvalid('duplicate Go local replacement',
+      'duplicate');
+    seen.add(key);
+    replacements.push({ original, sourceIdentity });
+  }
+  if (group) unsupportedClauses.push('unclosed replace group');
+  if (replacements.length > 32) throw new GoResolutionInvalid('Go local replacement budget exceeded');
+  const parsed = parseGoModRequirements(plain.join('\n'));
+  return { parsed, replacements, unsupportedClauses };
+}
 
 function stable(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map(stable).join(',')}]`;
@@ -161,7 +261,8 @@ export function validateGoModuleRequirement(requirement: GoModuleRequirement): v
 function validateRequest(input: GoMvsSnapshotRequest): void {
   const v2 = input.profile === 'go-mvs-stable-unpruned-main-directives-v2';
   const v3 = input.profile === 'go-mvs-captured-unpruned-v3';
-  if ((input.profile !== 'go-mvs-stable-unpruned-v1' && !v2 && !v3)
+  const v4 = input.profile === 'go-mvs-local-unpruned-v4';
+  if ((input.profile !== 'go-mvs-stable-unpruned-v1' && !v2 && !v3 && !v4)
     || input.goDirective !== '1.16'
     || !PATH.test(input.mainModule) || input.mainModule.length > 200
     || typeof input.coverage?.complete !== 'boolean'
@@ -177,10 +278,14 @@ function validateRequest(input: GoMvsSnapshotRequest): void {
       || !Array.isArray(input.mainDirectives.replacements)
       || input.mainDirectives.replacements.length > 32))
     || (!v2 && input.mainDirectives !== undefined)
-    || (v3 && (!Array.isArray(input.captureEvidence)
+    || ((v3 || v4) && (!Array.isArray(input.captureEvidence)
       || input.captureEvidence.length !== input.releases.length))
-    || (!v3 && (input.captureEvidence !== undefined
-      || input.mainManifest !== undefined))) {
+    || (!v3 && !v4 && (input.captureEvidence !== undefined
+      || input.mainManifest !== undefined))
+    || (v4 && (!input.mainManifest || !Array.isArray(input.localReplacements)
+      || input.localReplacements.length > 32 || !Array.isArray(input.localSources)
+      || input.localSources.length > 32))
+    || (!v4 && (input.localReplacements !== undefined || input.localSources !== undefined))) {
     throw new GoResolutionInvalid('invalid bounded Go module snapshot');
   }
   const seen = new Set<string>();
@@ -216,7 +321,7 @@ function validateRequest(input: GoMvsSnapshotRequest): void {
     }
     for (const requirement of release.requirements) validateGoModuleRequirement(requirement);
   }
-  if (v3 && input.captureEvidence) {
+  if ((v3 || v4) && input.captureEvidence) {
     const evidence = new Map<string, typeof input.captureEvidence[number]>();
     for (const item of input.captureEvidence) {
       const requirement = { path: item.path, version: item.version };
@@ -238,14 +343,15 @@ function validateRequest(input: GoMvsSnapshotRequest): void {
       throw new GoResolutionInvalid('Go capture evidence does not cover releases');
     }
   }
-  if (v3 && input.mainManifest !== undefined) {
+  if ((v3 || v4) && input.mainManifest !== undefined) {
     const source = input.mainManifest;
     if (!source || typeof source.text !== 'string'
       || Buffer.byteLength(source.text) > 65_536
       || source.rawSha256 !== createHash('sha256').update(source.text).digest('hex')) {
       throw new GoResolutionInvalid('invalid retained Go main manifest');
     }
-    const parsed = parseGoModRequirements(source.text, input.mainModule);
+    const local = v4 ? parseGoLocalMainManifest(source.text) : null;
+    const parsed = local?.parsed ?? parseGoModRequirements(source.text, input.mainModule);
     if (parsed.declaredModule !== input.mainModule
       || (parsed.status === 'parsed'
         ? stable(parsed.requirements) !== stable(input.roots)
@@ -253,6 +359,28 @@ function validateRequest(input: GoMvsSnapshotRequest): void {
       || (!parsed.compatibleWithUnprunedGo116
         && input.coverage.unsupportedClauses.length === 0)) {
       throw new GoResolutionInvalid('Go main manifest differs from resolved roots');
+    }
+    if (local && stable(local.replacements) !== stable(input.localReplacements)) {
+      throw new GoResolutionInvalid('Go local directives differ from retained main manifest');
+    }
+  }
+  if (v4 && input.localSources) {
+    const identities = new Set<string>();
+    for (const source of input.localSources) {
+      if (!source || !validLocalIdentity(source.identity)) {
+        throw new GoResolutionInvalid('invalid Go local source identity', 'unsafe-source');
+      }
+      if (identities.has(source.identity)) {
+        throw new GoResolutionInvalid('duplicate Go local source identity', 'duplicate');
+      }
+      if (typeof source.text !== 'string' || Buffer.byteLength(source.text) > 65_536) {
+        throw new GoResolutionInvalid('invalid Go local source manifest', 'malformed');
+      }
+      if (source.rawSha256 !== createHash('sha256').update(source.text).digest('hex')) {
+        throw new GoResolutionInvalid('Go local source digest differs from supplied bytes',
+          'changed-digest');
+      }
+      identities.add(source.identity);
     }
   }
   if (v2 && input.mainDirectives) {
@@ -289,11 +417,20 @@ function validateRequest(input: GoMvsSnapshotRequest): void {
 export function solveGoMvsSnapshot(input: GoMvsSnapshotRequest): GoMvsOutcome {
   validateRequest(input);
   const v2 = input.profile === 'go-mvs-stable-unpruned-main-directives-v2';
+  const v4 = input.profile === 'go-mvs-local-unpruned-v4';
   const replacements = new Map((input.mainDirectives?.replacements ?? []).map(item =>
     [`${item.original.path}\0${item.original.version ?? ''}`, item.source]));
+  const localReplacements = new Map((input.localReplacements ?? []).map(item =>
+    [`${item.original.path}\0${item.original.version ?? ''}`, item.sourceIdentity]));
+  const localSources = new Map((input.localSources ?? []).map(item => [item.identity, item]));
+  const localParsed = new Map((input.localSources ?? []).map(item =>
+    [item.identity, parseGoModRequirements(item.text)]));
   const exclusions = new Set((input.mainDirectives?.exclusions ?? []).map(item =>
     `${item.path}\0${item.version}`));
   const selectedSources = new Map<string, GoModuleReplacement>();
+  const selectedLocalSources = new Map<string, NonNullable<GoMvsOutcome[
+    'selectedLocalSources']>[number]>();
+  const missingLocalSources = new Set<string>();
   const hasRetractions = v2 && input.releases.some(item => item.retractions !== undefined);
   const latest = new Map<string, GoModuleManifest>();
   if (hasRetractions) {
@@ -305,12 +442,21 @@ export function solveGoMvsSnapshot(input: GoMvsSnapshotRequest): GoMvsOutcome {
       }
     }
   }
-  const extra = v2 ? { selectedSources: [] as GoModuleReplacement[] } : {};
+  const extra = v2 ? { selectedSources: [] as GoModuleReplacement[] }
+    : v4 ? { selectedLocalSources: [] as NonNullable<GoMvsOutcome['selectedLocalSources']>,
+      missingLocalSources: [] as string[] } : {};
   const advisory = hasRetractions ? { retractedSelected: [] as NonNullable<
     GoMvsOutcome['retractedSelected']> } : {};
-  if (input.coverage.unsupportedClauses.length) {
+  const localUnsupported = v4 ? input.localSources!.flatMap(source => {
+    const parsed = localParsed.get(source.identity)!;
+    return parsed.compatibleWithUnprunedGo116 ? []
+      : [`${source.identity}: ${parsed.status === 'parsed'
+        ? `go directive ${parsed.goDirective ?? 'absent'}` : 'unsupported go.mod syntax'}`];
+  }) : [];
+  const unsupportedClauses = [...input.coverage.unsupportedClauses, ...localUnsupported];
+  if (unsupportedClauses.length) {
     return { status: 'unsupported-semantics', buildList: [], missing: [],
-      unsupportedClauses: input.coverage.unsupportedClauses,
+      unsupportedClauses: unsupportedClauses.slice(0, 16),
       loadedManifestCount: 0, requirementCount: 0, ...extra, ...advisory };
   }
   const manifest = new Map(input.releases.map(release =>
@@ -338,6 +484,19 @@ export function solveGoMvsSnapshot(input: GoMvsSnapshotRequest): GoMvsOutcome {
     if (visited.size > MAX_LOADED) return { status: 'budget-exhausted', buildList: [],
       missing: [], unsupportedClauses: [], loadedManifestCount: loaded,
       requirementCount: count, ...extra, ...advisory };
+    const localIdentity = localReplacements.get(key)
+      ?? localReplacements.get(`${requirement.path}\0`);
+    if (localIdentity) {
+      const local = localSources.get(localIdentity);
+      if (!local) { missingLocalSources.add(localIdentity); continue; }
+      const parsed = localParsed.get(localIdentity)!;
+      selectedLocalSources.set(key, { original: requirement,
+        sourceIdentity: localIdentity, declaredModule: parsed.declaredModule!,
+        rawSha256: local.rawSha256 });
+      loaded++;
+      queue.push(...parsed.requirements);
+      continue;
+    }
     const source = replacements.get(key)
       ?? replacements.get(`${requirement.path}\0`) ?? requirement;
     const release = manifest.get(`${source.path}\0${source.version}`);
@@ -358,8 +517,9 @@ export function solveGoMvsSnapshot(input: GoMvsSnapshotRequest): GoMvsOutcome {
     a.path.localeCompare(b.path) || compareVersion(a.version, b.version));
   const common = { buildList: [] as GoModuleRequirement[], missing: sortedMissing,
     unsupportedClauses: input.coverage.unsupportedClauses,
-    loadedManifestCount: loaded, requirementCount: count, ...extra, ...advisory };
-  if (!input.coverage.complete || sortedMissing.length) {
+    loadedManifestCount: loaded, requirementCount: count, ...extra, ...advisory,
+    ...(v4 ? { missingLocalSources: [...missingLocalSources].sort() } : {}) };
+  if (!input.coverage.complete || sortedMissing.length || missingLocalSources.size) {
     return { ...common, status: 'incomplete-source-data' };
   }
   const buildList = [...maxima]
@@ -367,8 +527,18 @@ export function solveGoMvsSnapshot(input: GoMvsSnapshotRequest): GoMvsOutcome {
     .map(([path, version]) => ({ path, version }));
   const buildKeys = new Set(buildList.map(item => `${item.path}\0${item.version}`));
   const sourceOwner = new Map<string, string>();
+  const localOwner = new Map<string, string>();
   for (const selected of buildList) {
     const original = `${selected.path}\0${selected.version}`;
+    const local = selectedLocalSources.get(original);
+    if (local) {
+      const previous = localOwner.get(local.sourceIdentity);
+      if (previous && previous !== selected.path) {
+        throw new GoResolutionInvalid('Go local source is selected for multiple module paths',
+          'duplicate');
+      }
+      localOwner.set(local.sourceIdentity, selected.path);
+    }
     const replacement = selectedSources.get(original);
     if (!replacement) continue;
     const source = `${replacement.source.path}\0${replacement.source.version}`;
@@ -378,6 +548,10 @@ export function solveGoMvsSnapshot(input: GoMvsSnapshotRequest): GoMvsOutcome {
     sourceOwner.set(source, original);
   }
   return { ...common, status: 'solved', buildList,
+    ...(v4 ? { selectedLocalSources: buildList.flatMap(item => {
+      const source = selectedLocalSources.get(`${item.path}\0${item.version}`);
+      return source ? [source] : [];
+    }) } : {}),
     ...(v2 ? { selectedSources: buildList.flatMap(item => {
       const source = selectedSources.get(`${item.path}\0${item.version}`);
       return source ? [source] : [];
@@ -408,7 +582,9 @@ export class GoMvsResolutionStore {
       ? 'go-mvs-stable-unpruned-resolution-v1'
       : row.request.profile === 'go-mvs-stable-unpruned-main-directives-v2'
         ? 'go-mvs-stable-unpruned-main-directives-resolution-v2'
-        : 'go-mvs-captured-unpruned-resolution-v3',
+        : row.request.profile === 'go-mvs-local-unpruned-v4'
+          ? 'go-mvs-local-unpruned-resolution-v4'
+          : 'go-mvs-captured-unpruned-resolution-v3',
       resolution: `https://rezics.com/id/${row.id}`,
       requestDigest: row.request_digest, request: row.request,
       outcome: row.outcome, createdAt: row.created_at.toISOString() };
@@ -461,31 +637,29 @@ export class GoMvsResolutionStore {
       }
       mainModule = input.mainModule;
       roots = input.roots;
-    } else if (input.profile === 'go-mvs-from-main-captures-v2') {
+    } else if (input.profile === 'go-mvs-from-main-captures-v2'
+      || input.profile === 'go-mvs-from-main-local-captures-v3') {
       const encoded = input.mainManifestBase64;
-      if (typeof encoded !== 'string' || encoded.length > 87_384
-        || !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(encoded)
-        || input.mainModule !== undefined || input.roots !== undefined) {
+      if (input.mainModule !== undefined || input.roots !== undefined) {
         throw new GoResolutionInvalid('invalid Go main manifest input');
       }
-      const bytes = Buffer.from(encoded, 'base64');
-      if (bytes.length > 65_536 || bytes.toString('base64') !== encoded) {
-        throw new GoResolutionInvalid('Go main manifest exceeds profile');
-      }
-      let text: string;
-      try { text = new TextDecoder('utf-8', { fatal: true }).decode(bytes); }
-      catch { throw new GoResolutionInvalid('Go main manifest is not UTF-8'); }
-      const parsed = parseGoModRequirements(text);
+      mainManifest = decodeManifest(encoded!);
+      const local = input.profile === 'go-mvs-from-main-local-captures-v3'
+        ? parseGoLocalMainManifest(mainManifest.text) : null;
+      const parsed = local?.parsed ?? parseGoModRequirements(mainManifest.text);
       if (!parsed.declaredModule) {
         throw new GoResolutionInvalid('Go main manifest has no module identity');
       }
       mainModule = parsed.declaredModule;
       roots = parsed.requirements;
-      mainManifest = { text, rawSha256: createHash('sha256').update(bytes).digest('hex') };
       if (parsed.status !== 'parsed') {
         unsupportedClauses.push(`main go.mod: ${parsed.unsupportedClauses.join('; ')}`.slice(0, 200));
       } else if (!parsed.compatibleWithUnprunedGo116) {
         unsupportedClauses.push(`main go.mod: go directive ${parsed.goDirective ?? 'absent'}`);
+      }
+      if (local?.unsupportedClauses.length) {
+        unsupportedClauses.push(...local.unsupportedClauses.map(clause =>
+          `main go.mod: ${clause}`.slice(0, 200)));
       }
     } else throw new GoResolutionInvalid('invalid captured Go resolution profile');
     const captured = await this.captures.readMany(principalId, input.captures);
@@ -509,10 +683,29 @@ export class GoMvsResolutionStore {
           : { selection: 'exact-pseudo-version' as const }),
         infoSha256: item.info.rawSha256, modSha256: item.manifest.rawSha256 });
     }
+    const v4 = input.profile === 'go-mvs-from-main-local-captures-v3';
+    let localSources: GoLocalModuleSource[] | undefined;
+    let localReplacements: GoLocalReplacementDirective[] | undefined;
+    if (v4) {
+      if (!Array.isArray(input.localSources) || input.localSources.length > 32) {
+        throw new GoResolutionInvalid('invalid Go local source inventory');
+      }
+      localSources = input.localSources.map(source => {
+        if (!source || !validLocalIdentity(source.identity)) {
+          throw new GoResolutionInvalid('invalid Go local source identity', 'unsafe-source');
+        }
+        return { identity: source.identity,
+          ...decodeManifest(source.goModBase64, source.rawSha256) };
+      });
+      localReplacements = parseGoLocalMainManifest(mainManifest!.text).replacements;
+    } else if (input.localSources !== undefined) {
+      throw new GoResolutionInvalid('local sources require the v3 caller profile');
+    }
     const request: GoMvsSnapshotRequest = {
-      profile: 'go-mvs-captured-unpruned-v3', mainModule,
+      profile: v4 ? 'go-mvs-local-unpruned-v4' : 'go-mvs-captured-unpruned-v3', mainModule,
       goDirective: '1.16', coverage: { complete: true, unsupportedClauses },
       roots, releases, captureEvidence, ...(mainManifest ? { mainManifest } : {}),
+      ...(v4 ? { localSources, localReplacements } : {}),
     };
     return this.resolve(principalId, key, request);
   }
