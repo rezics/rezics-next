@@ -58,6 +58,8 @@ export interface PlacementState {
   sourceKey?: string;
   introducedBy: string;
   removedBy?: string;
+  /** A locally removed placement retains its prestate canonical RDF type. */
+  tombstone?: boolean;
 }
 
 export interface SegmentState { segment: string; parent: string; key: string; count: number }
@@ -167,7 +169,9 @@ export async function readPlacements(env: WorkActivationEnvironment, generation:
   const byOccurrence = new Map<string, PlacementState>();
   for (const row of rows) {
     const occurrence = value(row, 'occurrence')!;
-    const active = value(row, 'type') === `${RV}OccurrencePlacement`;
+    const tombstone = value(row, 'type') === `${RV}OccurrencePlacement`
+      && Boolean(value(row, 'removedBy'));
+    const active = value(row, 'type') === `${RV}OccurrencePlacement` && !tombstone;
     const role = (Object.entries(ROLE_IRI).find(([, uri]) => uri === value(row, 'role'))?.[0]
       ?? null) as OccurrenceRole | null;
     const mode = value(row, 'mode');
@@ -176,8 +180,10 @@ export async function readPlacements(env: WorkActivationEnvironment, generation:
     const state: PlacementState = { occurrence, placement: value(row, 'placement')!, active,
       parent: active ? value(row, 'parent') ?? '' : value(row, 'lastParent') ?? '',
       role: role ?? 'group', introducedBy: value(row, 'introducedBy')!,
-      ...(active ? { segment: value(row, 'segment'), segmentKey: value(row, 'segmentKey'),
-        orderKey: value(row, 'orderKey') } : { removedBy: value(row, 'removedBy') }),
+      ...(tombstone ? { tombstone: true } : {}),
+      ...(active || tombstone ? { segment: value(row, 'segment'), segmentKey: value(row, 'segmentKey'),
+        orderKey: value(row, 'orderKey') } : {}),
+      ...(!active ? { removedBy: value(row, 'removedBy') } : {}),
       ...(row.label ? { label: { value: row.label.value, language: labelLanguage ?? '' } } : {}),
       ...(target ? { target } : {}),
       ...(mode === `${RV}FollowContext` ? { selection: { mode: 'follow-context' } }
@@ -187,7 +193,8 @@ export async function readPlacements(env: WorkActivationEnvironment, generation:
     const catalogTarget = target !== undefined && catalogTargetTypes.includes(target);
     const needsSelection = target !== undefined && !catalogTarget
       && selectionRequiredRoles.includes(state.role);
-    if (!role || !state.parent || (active && (!state.segment || !state.orderKey || !state.segmentKey))
+    if (!role || !state.parent || ((active || tombstone)
+      && (!state.segment || !state.orderKey || !state.segmentKey))
       || (!active && !state.removedBy) || Boolean(state.selection) !== needsSelection
       || (row.label && !labelLanguage)) {
       throw new CompositionCorrupt('Composition placement is incomplete');

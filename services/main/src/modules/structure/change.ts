@@ -837,8 +837,8 @@ async function apply(w: Working, operation: CompositionOperation, index: number)
     }
     await unplace(w, state);
     state.active = false;
+    state.tombstone = true;
     state.removedBy = w.revision;
-    delete state.segment; delete state.segmentKey; delete state.orderKey;
     w.activeDelta--;
     return;
   }
@@ -878,15 +878,17 @@ async function checkFixedSelections(env: WorkActivationEnvironment,
 function placementTriples(state: PlacementState, generation: string,
   profile?: StructureProfile): string[] {
   const subject = iri(state.placement);
-  const triples = [`${subject} a ${state.active ? 'rv:OccurrencePlacement' : 'rv:RemovedPlacement'} .`];
+  const triples = [`${subject} a ${state.active || state.tombstone
+    ? 'rv:OccurrencePlacement' : 'rv:RemovedPlacement'} .`];
   const add = (predicate: string, object: string) => triples.push(`${subject} rv:${predicate} ${object} .`);
   add('occurrence', iri(state.occurrence));
   add('generation', iri(generation));
   add('occurrenceRole', `<${ROLE_IRI[state.role]}>`);
-  if (state.active) {
+  if (state.active || state.tombstone) {
     add('orderSegment', iri(state.segment!));
     add('orderKey', lit(state.orderKey!));
-  } else {
+  }
+  if (!state.active) {
     add('lastParent', iri(state.parent));
     add('removedBy', iri(state.removedBy!));
   }
@@ -1084,7 +1086,7 @@ export async function changeComposition(env: WorkActivationEnvironment,
     ['generation', header.generation], ['revision', revision]];
   for (const occurrence of records.keys()) {
     const state = w.placements.get(occurrence)!;
-    focus.push([state.active ? 'placement' : 'removed-placement', state.placement]);
+    focus.push([state.active || state.tombstone ? 'placement' : 'removed-placement', state.placement]);
     if (w.original.get(occurrence) === null) focus.push(['occurrence', occurrence]);
   }
   for (const [id, segment] of w.segments) {

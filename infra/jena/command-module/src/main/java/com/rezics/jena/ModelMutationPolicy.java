@@ -65,6 +65,11 @@ final class ModelMutationPolicy {
         Set<String> dependentRevisions = new HashSet<>();
         int[] inboundQuads = { 0 };
         for (var entry : before.current().entrySet()) {
+            // Structure head and generation-count edits preserve both resource types.
+            // Their inbound occurrence/revision links constrain the referenced class,
+            // not these mutable scalar fields; validating each sibling would turn a
+            // bounded edit into a whole-Structure dependency scan.
+            if (stableStructureType(data, entry.getKey(), entry.getValue())) continue;
             String overflow = dependents(profiles, data, entry.getKey(), plan,
                 dependentCurrent, dependentRevisions, inboundQuads, typeChanged(data, entry.getKey(), entry.getValue()));
             if (overflow != null) return CommandService.invalid(overflow);
@@ -134,6 +139,12 @@ final class ModelMutationPolicy {
 
     private static boolean typeChanged(DatasetGraph data, String name, Subject before) {
         return !before.types().equals(values(data, before.graph(), NodeFactory.createURI(name), RDF.type.asNode()));
+    }
+
+    private static boolean stableStructureType(DatasetGraph data, String name, Subject before) {
+        if (before.selection() == null || typeChanged(data, name, before)) return false;
+        String type = before.selection().type();
+        return type.equals(RV + "Structure") || type.equals(RV + "StructureGeneration");
     }
 
     private static String dependents(ProfileRegistry profiles, DatasetGraph data, String child,
