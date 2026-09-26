@@ -13,8 +13,10 @@ import { RATING_ACCOUNT_POPULATION, RATING_LATEST_MEAN_POLICY,
   RATING_STANDING_CADENCE } from '../rating/context.ts';
 import { STANDING_RATING_OBSERVATION_PROFILE } from '../rating/observation.ts';
 import { InvalidPublicQuery, PublicQueryBudgetExceeded, PublicQueryUnavailable,
-  PublicRealmUnavailable, queryPublicRealmClassifiedPhrase } from './search-public.ts';
+  PublicRealmUnavailable } from './search-public.ts';
 import { statementCutoverActive } from '../statement/migrate-v1.ts';
+import { CLASSIFIED_AS, STATEMENT_DECISION_PROFILE }
+  from '../statement/schema.ts';
 
 const nativeId = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
 const MAX_SLOTS = 100;
@@ -46,15 +48,15 @@ export async function queryPublicRealmClassifiedRatedPhrase(env: WorkActivationE
   const realm = input.context.id;
   const lucene = `"${phrase.replace(/[\\"]/g, '\\$&')}"`;
   await assertGraphAdmissionOpen(env.fuseki, env.lineage);
-  if (await statementCutoverActive(env)) return queryStatementJoined(env, input);
+  const cutover = await statementCutoverActive(env);
   const index = await assertPublicTextReady(env.fuseki, env.lineage);
   const result = await env.fuseki.query(`PREFIX rv: <${RV}>
     PREFIX schema: <https://schema.org/>
     PREFIX text: <http://jena.apache.org/text#>
-    SELECT ?epoch ?sequence ?indexGeneration ?candidateCount ?ratingPopulation ?ratingRows
+    SELECT DISTINCT ?epoch ?sequence ?indexGeneration ?candidateCount ?ratingPopulation ?ratingRows
       ?ratingUniqueSlots ?ratingValidRows ?unit ?score ?work ?main
       ?contribution ?revision ?selection ?language ?reason ?decision ?application
-      ?source ?sourceContext ?ratingCount ?ratingSum ?ratingTargetPopulation WHERE {
+      ?source ?sourceContext ?ratingCount ?ratingSum ?ratingTargetPopulation ?key WHERE {
       GRAPH ${iri(GRAPHS.control)} {
         ${iri(DATASET)} rv:dataEpoch ?epoch ; rv:sequence ?sequence ;
           rv:textIndexGeneration ?indexGeneration . }
@@ -63,6 +65,13 @@ export async function queryPublicRealmClassifiedRatedPhrase(env: WorkActivationE
         ${iri(DATASET)} rv:restoreHold true } }
       GRAPH ${iri(PUBLIC_SEARCH_GRAPH)} {
         ${iri(PUBLIC_SEARCH_ANCHOR)} a rv:SearchGraphAnchor . }
+      ${cutover ? `GRAPH ${iri(GRAPHS.receipts)} { ?cutover a rv:OperationReceipt ;
+        rv:commandFamily "statement-cutover-v1" ; rv:outcome rv:Succeeded ;
+        rv:decisionModel <https://rezics.com/vocab/StatementDecisions> . }`
+    : `FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.receipts)} {
+        ?cutover a rv:OperationReceipt ; rv:commandFamily "statement-cutover-v1" ;
+          rv:outcome rv:Succeeded ;
+          rv:decisionModel <https://rezics.com/vocab/StatementDecisions> . } }`}
       GRAPH ${iri(GRAPHS.current)} {
         ?space a rv:Space ; rv:realmCapability ${iri(realm)} ; rv:disclosure rv:Public .
         ${iri(realm)} a rv:Realm ; rv:space ?space ; rv:realmState rv:Active ;
@@ -158,6 +167,50 @@ export async function queryPublicRealmClassifiedRatedPhrase(env: WorkActivationE
         BIND(IF(BOUND(?localSelection), "realm-adoption", "main-fallback") AS ?reason)
         FILTER(?selection = ?effectiveSelection && ?unitContext = ?effectiveContext)
         ${input.language ? `FILTER(?language = ${lit(input.language)})` : ''}
+        ${cutover ? `GRAPH ${iri(GRAPHS.current)} {
+          ${iri(realm)} rv:classificationContext ?classificationContext .
+          ${iri(input.sense)} rv:expression ?expression .
+          ?expression a rv:ClassificationExpression ; rv:expressionState rv:Active ;
+            rv:assertedConcept ?concept .
+          ?support a <http://www.w3.org/1999/02/22-rdf-syntax-ns#Statement> ;
+            rv:statementState rv:Active ;
+            <http://www.w3.org/1999/02/22-rdf-syntax-ns#subject> ?main ;
+            <http://www.w3.org/1999/02/22-rdf-syntax-ns#predicate> <${CLASSIFIED_AS}> ;
+            <http://www.w3.org/1999/02/22-rdf-syntax-ns#object> ?concept ;
+            rv:relationDefinition ${iri(CLASSIFICATION_PROPOSITION_PROFILE)} ;
+            rv:interpretationDefinition ?senseRevision ; rv:meaningKey ?key .
+          FILTER NOT EXISTS { ?support rv:applicability ?applicability }
+          FILTER NOT EXISTS { ?support rv:interpretationDefinition ?differentDefinition
+            FILTER(?differentDefinition != ?senseRevision) }
+        }
+        GRAPH ${iri(GRAPHS.current)} {
+          ?decisionSlot a rv:DecisionSlot ; rv:targetKind rv:QualifiedFactTarget ;
+            rv:decisionTarget ?key ; rv:acceptanceContext ?sourceContext ;
+            rv:decisionHead ?decision .
+          ?decisionSupport a <http://www.w3.org/1999/02/22-rdf-syntax-ns#Statement> ;
+            rv:statementState rv:Active ; rv:meaningKey ?key ;
+            <http://www.w3.org/1999/02/22-rdf-syntax-ns#subject> ?main .
+        }
+        GRAPH ${iri(GRAPHS.revisions)} {
+          ?decision a rv:StatementDecision, rv:RevisionAnchor ;
+            rv:component ?decisionSlot ; rv:decisionPolicy ${iri(STATEMENT_DECISION_PROFILE)} ;
+            rv:outcome rv:Accepted ; rv:support ?decisionSupport . }
+        FILTER(?sourceContext = ?classificationContext
+          || ?sourceContext = ${iri(GLOBAL_CLASSIFICATION_CONTEXT)})
+        FILTER(?sourceContext = ?classificationContext || NOT EXISTS {
+          GRAPH ${iri(GRAPHS.current)} {
+            ?shadowSlot a rv:DecisionSlot ; rv:targetKind rv:QualifiedFactTarget ;
+              rv:decisionTarget ?key ; rv:acceptanceContext ?classificationContext . }
+          FILTER NOT EXISTS {
+            GRAPH ${iri(GRAPHS.current)} { ?shadowSlot rv:decisionHead ?shadowDecision . }
+            GRAPH ${iri(GRAPHS.revisions)} {
+              ?shadowDecision a rv:StatementDecision, rv:RevisionAnchor ;
+                rv:component ?shadowSlot ;
+                rv:decisionPolicy ${iri(STATEMENT_DECISION_PROFILE)} ;
+                rv:outcome rv:Withdrawn . }
+          } })
+        BIND(IF(?sourceContext = ${iri(GLOBAL_CLASSIFICATION_CONTEXT)},
+          "inherited-global", "local") AS ?source)` : `
         OPTIONAL {
           GRAPH ${iri(GRAPHS.current)} {
             ?globalApplication a rv:ClassificationApplication ;
@@ -194,7 +247,7 @@ export async function queryPublicRealmClassifiedRatedPhrase(env: WorkActivationE
         BIND(IF(BOUND(?localDecision), "local", "inherited-global") AS ?source)
         BIND(IF(BOUND(?localDecision), ?classificationContext,
           ${iri(GLOBAL_CLASSIFICATION_CONTEXT)}) AS ?sourceContext)
-        FILTER(?outcome = rv:Accepted)
+        FILTER(?outcome = rv:Accepted)`}
         { SELECT ?main (COUNT(?observation) AS ?ratingTargetPopulation)
             (SUM(IF(?availability = rv:Available, 1, 0)) AS ?ratingCount)
             (SUM(IF(?availability = rv:Available, ?value, 0)) AS ?ratingSum)
@@ -254,7 +307,8 @@ export async function queryPublicRealmClassifiedRatedPhrase(env: WorkActivationE
   const matches = rows.filter(row => row.unit).map(row => {
     if (!row.unit || !row.score || !row.work || !row.main || !row.contribution
       || !row.revision || !row.selection || !row.language || !row.reason
-      || !row.decision || !row.application || !row.source || !row.sourceContext
+      || !row.decision || (!cutover && !row.application) || !row.source || !row.sourceContext
+      || (cutover && !row.key)
       || !row.ratingCount || !row.ratingSum || !row.ratingTargetPopulation) {
       throw new PublicQueryUnavailable('joined public query result is incomplete');
     }
@@ -275,12 +329,14 @@ export async function queryPublicRealmClassifiedRatedPhrase(env: WorkActivationE
       revision: row.revision.value, selection: row.selection.value,
       language: row.language.value, reason: row.reason.value, score,
       classification: { sense: input.sense, decision: row.decision.value,
-        application: row.application.value, source: row.source.value,
-        sourceContext: row.sourceContext.value },
+        application: cutover ? null : row.application!.value, source: row.source.value,
+        sourceContext: row.sourceContext.value,
+        ...(cutover ? { meaningKey: row.key!.value } : {}) },
       rating: { context: input.ratingContext, count, sum, mean: sum / count,
         precision: { kind: 'exact-rational' as const, numerator: sum, denominator: count } } };
   });
   if (new Set(matches.map(match => match.matchUnit)).size !== matches.length
+    || new Set(matches.map(match => match.mainVersion)).size !== matches.length
     || (matches.length === 0 && rows.length !== 1)) {
     throw new PublicQueryUnavailable('joined public query has ambiguous results');
   }
@@ -297,92 +353,4 @@ export async function queryPublicRealmClassifiedRatedPhrase(env: WorkActivationE
     total: matches.length, results: matches,
     sourcePosition: { datasetId: 'product' as const,
       dataEpoch: first.epoch.value, sequence: first.sequence.value } };
-}
-
-/** Bounded post-cutover join over the Statement phrase relation and current standing heads. */
-async function queryStatementJoined(env: WorkActivationEnvironment,
-  input: PublicRealmClassifiedRatedPhraseQuery) {
-  const base = await queryPublicRealmClassifiedPhrase(env, input);
-  const realm = input.context.id;
-  const rows = (await env.fuseki.query(`PREFIX rv: <${RV}>
-    SELECT ?epoch ?sequence ?observation ?main ?head ?availability ?value WHERE {
-      GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:dataEpoch ?epoch ; rv:sequence ?sequence . }
-      FILTER(?epoch = ${lit(base.sourcePosition.dataEpoch)}
-        && ?sequence = ${base.sourcePosition.sequence})
-      GRAPH ${iri(GRAPHS.receipts)} { ?cutover a rv:OperationReceipt ;
-        rv:commandFamily "statement-cutover-v1" ; rv:outcome rv:Succeeded ;
-        rv:decisionModel <https://rezics.com/vocab/StatementDecisions> . }
-      GRAPH ${iri(GRAPHS.current)} { ${iri(realm)} a rv:Realm ; rv:realmState rv:Active ;
-        rv:ratingContext ${iri(input.ratingContext)} .
-        ${iri(input.ratingContext)} a rv:RatingContext ; rv:contextState rv:Active ;
-          rv:realm ${iri(realm)} ; rv:targetGrain rv:MainVersion ;
-          rv:ratingScaleMin 1 ; rv:ratingScaleMax 10 ;
-          rv:ratingCadence ${iri(RATING_STANDING_CADENCE)} ;
-          rv:ratingPopulationPolicy ${iri(RATING_ACCOUNT_POPULATION)} ;
-          rv:ratingAggregationPolicy ${iri(RATING_LATEST_MEAN_POLICY)} ; rv:head ?contextHead . }
-      GRAPH ${iri(GRAPHS.revisions)} { ?contextHead a rv:RevisionAnchor ;
-        rv:component ${iri(input.ratingContext)} . }
-      OPTIONAL { GRAPH ${iri(GRAPHS.current)} { ?observation a rv:RatingObservation ;
-        rv:ratingContext ${iri(input.ratingContext)} .
-        OPTIONAL { ?observation rv:targetMainVersion ?main ; rv:observationHead ?head . } }
-        OPTIONAL { FILTER(BOUND(?head)) GRAPH ${iri(GRAPHS.revisions)} {
-          ?head a rv:RatingObservationRevision, rv:RevisionAnchor ;
-            rv:component ?observation ; rv:observation ?observation ;
-            rv:modelRevision ${iri(STANDING_RATING_OBSERVATION_PROFILE)} ;
-            rv:ratingAvailability ?availability . OPTIONAL { ?head rv:ratingValue ?value } } }
-      }
-    } LIMIT ${MAX_SLOTS + 1}`, MAX_SEARCH_RESPONSE_BYTES)).results?.bindings ?? [];
-  if (!rows.length || rows[0]?.epoch?.value !== base.sourcePosition.dataEpoch
-    || rows[0]?.sequence?.value !== base.sourcePosition.sequence
-    || rows.some(row => row.epoch?.value !== base.sourcePosition.dataEpoch
-      || row.sequence?.value !== base.sourcePosition.sequence)) {
-    throw new PublicQueryUnavailable('joined Statement rating snapshot is unavailable');
-  }
-  const observations = rows.filter(row => row.observation);
-  if (observations.length > MAX_SLOTS) {
-    throw new PublicQueryBudgetExceeded('joined Statement rating population exceeds admitted bound');
-  }
-  const seen = new Set<string>();
-  const ratings = new Map<string, { count: number; sum: number }>();
-  for (const row of observations) {
-    const observation = row.observation!.value;
-    const main = row.main?.value;
-    const availability = row.availability?.value;
-    const value = row.value?.value;
-    if (seen.has(observation) || !main || !row.head
-      || ![`${RV}Available`, `${RV}Withdrawn`].includes(availability ?? '')
-      || (availability === `${RV}Available`
-        ? !/^(10|[1-9])$/.test(value ?? '') : value !== undefined)) {
-      throw new PublicQueryUnavailable('joined Statement rating head is incomplete or ambiguous');
-    }
-    seen.add(observation);
-    if (availability === `${RV}Available`) {
-      const rating = ratings.get(main) ?? { count: 0, sum: 0 };
-      rating.count++;
-      rating.sum += Number(value);
-      ratings.set(main, rating);
-    }
-  }
-  const results = base.results.flatMap(match => {
-    const rating = ratings.get(match.mainVersion);
-    if (!rating || 10 * rating.sum < input.minimumMeanTimes10 * rating.count) return [];
-    return [{ ...match, rating: { context: input.ratingContext,
-      count: rating.count, sum: rating.sum, mean: rating.sum / rating.count,
-      precision: { kind: 'exact-rational' as const, numerator: rating.sum,
-        denominator: rating.count } } }];
-  });
-  const after = await assertPublicTextReady(env.fuseki, env.lineage);
-  if (after.dataEpoch !== base.sourcePosition.dataEpoch
-    || after.sequence !== base.sourcePosition.sequence
-    || after.generation !== base.indexGeneration) {
-    throw new PublicQueryUnavailable('joined Statement rating snapshot moved');
-  }
-  return { profile: 'public-realm-classified-rated-phrase-v1' as const,
-    contractVersion: '1' as const, resultGrain: 'mainVersion' as const,
-    context: input.context, classificationSense: input.sense,
-    ratingCriterion: { context: input.ratingContext,
-      minimumMeanTimes10: input.minimumMeanTimes10, policy: 'latest-per-rater-mean' as const },
-    complete: true as const, population: base.population, ratingPopulation: observations.length,
-    indexGeneration: base.indexGeneration, total: results.length, results,
-    sourcePosition: base.sourcePosition };
 }

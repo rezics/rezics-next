@@ -177,10 +177,11 @@ stalled Content projection fail with their existing typed outcomes. Complete
 read attempts share one 1,500 ms wall deadline and 72-call/8 MiB Fuseki budget,
 with 75 ms then 250 ms waits and 75 ms for later proven movements. When native health still reports an active public
 index writer, a retry waits in 75 ms health polls within the same deadline and
-call budget. A Main, Realm or joined phrase uses at most seven Fuseki requests
-at a cold graph position and six at a
-qualified position on the QA service: admission, two JVM health reads, control,
-optional index audit, phrase relation and a final JVM health read. The
+call budget. A Main or Realm phrase uses at most seven Fuseki requests at a cold
+graph position and six at a qualified position on the QA service: admission,
+two JVM health reads, control, optional index audit, phrase relation and a final
+JVM health read. The joined rated phrase adds one cutover receipt
+read, so its ceilings are eight cold or seven qualified requests. The
 command-only delta path adds one bounded native proof call at first qualification
 and after a write; it remains within the 72-call whole-request ceiling.
 Classified phrases add one
@@ -261,6 +262,20 @@ Main Version remains a separate result. A repeated outer MatchUnit binding is
 ambiguous and returns unavailable instead of silently choosing a score. The
 fixed 513-hit probe and 100-slot audit run before result deduplication, so
 over-budget populations cannot appear as complete results.
+
+After the Statement cutover receipt, this rated Realm lane keeps its text,
+effective-publication, active qualified Statement, effective decision and current
+standing-rating bindings in that one ARQ request. It does not call the separate
+classified-phrase read. A Realm DecisionSlot shadows Global acceptance for the
+same meaning key, including when the Realm outcome is rejected; a withdrawn
+Realm decision allows Global inheritance again. The selected
+Sense revision and active Statement support must still agree; changing that
+definition or withdrawing the support removes the result on the next request.
+The response keeps the text operator's score for each selected MatchUnit, and
+reports exact integer rating sum and count after the rating subquery groups by
+Main Version. The public page profile reruns this bounded relation on each
+request and restarts when its ordered result or source position changes. It
+retains no TDB2 reader across requests.
 
 ## PostgreSQL body projection
 

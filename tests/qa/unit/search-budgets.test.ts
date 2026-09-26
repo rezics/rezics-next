@@ -83,9 +83,10 @@ function fake() {
       return { results: { bindings: [{ epoch: binding('epoch'), sequence: binding(sequence),
         main: binding(main), globalApplication: binding(work) }] } };
     }
-    if (sparql.includes('?context WHERE')) {
+    if (sparql.includes('?senseRevision ?concept ?cutover WHERE')) {
       return { results: { bindings: [{ epoch: binding('epoch'), sequence: binding(sequence),
-        context: binding('urn:rezics:classification-context:global') }] } };
+        context: binding('urn:rezics:classification-context:global'),
+        senseRevision: binding(main), concept: binding(work), cutover: binding('false') }] } };
     }
     if (sparql.includes('?candidateCount')) {
       return { results: { bindings: [{ epoch: binding('epoch'), sequence: binding(sequence),
@@ -347,7 +348,7 @@ test('SEARCH04/SEARCH10: the rated Realm join rejects an over-budget raw hit set
     { context: { kind: 'realm-local', id: work }, phrase: 'late match', language: 'en',
       sense, ratingContext: main, minimumMeanTimes10: 80 }))
     .rejects.toBeInstanceOf(PublicQueryBudgetExceeded);
-  expect(source.counts()).toMatchObject({ inventories: 1, healthCalls: 3, queryCalls: 4 });
+  expect(source.counts()).toMatchObject({ inventories: 1, healthCalls: 3, queryCalls: 5 });
 });
 
 test('SEARCH10: batched classification fails closed on a present application without a decision', async () => {
