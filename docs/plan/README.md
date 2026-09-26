@@ -485,6 +485,24 @@ raise the affected-verified candidate set to 22. They still await full recorded
 backend QA; no search-capacity or broader SEARCH case is inferred from this run.
 The shared QA stack was released for G-034's real API template.
 
+**30-minute checkpoint, 2026-09-26 12:27 UTC.** The Goal is active with one
+manager; Docker Desktop engine 29.7.2 is reachable and `main` is clean. G-030
+and G-033 have no waiting integration work. G-034 is the sole active worker in
+its isolated Access worktree, explicitly pinned to Sol/xhigh. Its first real
+Account/Access/Main IAM25 write/read template passed selected integration
+`20260926t122649-b70b9c`; final negative cases and Access WAL restore remain
+worker-owned, so IAM25 stays partial. The worker released the shared QA stack.
+The manager's existing-owner selections raise affected-verified complete-case
+candidates to 22, while all 276 retained backend IDs still require one clean
+`yarn qa --backend --record`; the other 254 have no complete-case candidate.
+The integration queue is empty, but unimplemented operation and schema owners
+create high backlog pressure. A second worker is deferred until a bounded
+repetitive slice has a verified schema/API template and measured merged rework
+cost. The critical path is G-034 integration, remaining M01–M10 owner gaps,
+then clean reconstruction and recorded QA. The 13:57:20 UTC target is forecast
+to miss, with no defensible later completion timestamp. Reconcile again by
+12:57 UTC or on a handoff, blocker or failure.
+
 **30-minute checkpoint, 2026-09-26 11:57 UTC, reconciled at 11:58.** The Goal
 remains active under one manager, and Docker Desktop engine 29.7.2 is reachable.
 G-030 is the sole live worker on its isolated worktree, explicitly pinned to
