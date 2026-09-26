@@ -9,7 +9,7 @@
 | Agent strategy | The current management Goal dispatches at most two justified independent tasks from fresh briefs under the [delegation policy](execution-workflow.md#delegation-and-worker-lifecycle). Cross-owner, authority, transaction and recovery work uses pinned Sol/xhigh. Bounded repetitive work may use pinned Luna/max only after owner schema and a real write/read API template pass. GPT-6 Astra is prohibited. Disjoint paths may share `main`; overlapping writes use worktrees. Shared routes, migrations, commits and QA have one coordinator. Workers finish after handoff. Compare merged passing operations and rework cost under [efficiency measurement](execution-workflow.md#efficiency-measurement) before changing concurrency. |
 | Authority | This active Goal authorizes local backend implementation, dependency setup, disposable QA stacks and coherent local commits on `main`. Remote pushes, production publication and paid provisioning remain outside this scope. |
 | Deployment premise | Principal services concentrated on one assessed host; the other primarily API and unrelated workloads. Account placement remains assessed. |
-| Status | The current management Goal started at 03:57:20 UTC on clean `f2c8aa1`. G-001 through G-033 are integrated and affected-verified on `main`; G-034 runs in an isolated Access worktree. IAM01, IAM03, IAM06, IAM10, IAM23, IAM24, IAM26, RATE01, RATE02, RATE03, RATE04, RATE05, SYS02, VIEW01, VIEW02, CTX02, CTX03, WORK03, SEARCH05, SEARCH06, SEARCH09 and SEARCH13 are declared complete-case candidates with passing selected owner checks, not recorded backend qualification. The last broad historical run `20260925t151147-02d115` passed 11 of 277 mixed cases; no `yarn qa --backend --record` result exists. See the [active management program](#active-management-program) and generated [qualification page](qualification.md). |
+| Status | The current management Goal started at 03:57:20 UTC on clean `f2c8aa1`. G-001 through G-033 are integrated and affected-verified on `main`; G-034 runs in an isolated Access worktree. IAM01, IAM03, IAM06, IAM10, IAM23, IAM24, IAM26, RATE01, RATE02, RATE03, RATE04, RATE05, SYS02, VIEW01, VIEW02, CTX02, CTX03, WORK03, WORK09, SEARCH05, SEARCH06, SEARCH09 and SEARCH13 are declared complete-case candidates with passing selected owner checks, not recorded backend qualification. The last broad historical run `20260925t151147-02d115` passed 11 of 277 mixed cases; no `yarn qa --backend --record` result exists. See the [active management program](#active-management-program) and generated [qualification page](qualification.md). |
 | Next action | Dispatch G-034 for IAM25's separate eligible-member-set selector in a new independent worktree under Sol/xhigh because it changes authority and transactions. Qualify additional independent backend owner gaps while preparing final reconstruction and recorded backend QA. |
 | Forecast | The 276-case retained backend scope and measured partial-slice throughput forecast a miss of the 13:57:20 UTC ten-hour target. IAM06, IAM23, IAM24, RATE01, RATE02 and RATE03 are candidates, not recorded passes. Continue the full authorized scope and report only actually qualified cases; no defensible later completion timestamp exists yet. |
 
@@ -502,6 +502,11 @@ cost. The critical path is G-034 integration, remaining M01–M10 owner gaps,
 then clean reconstruction and recorded QA. The 13:57:20 UTC target is forecast
 to miss, with no defensible later completion timestamp. Reconcile again by
 12:57 UTC or on a handoff, blocker or failure.
+
+**WORK09 owner selection, 2026-09-26 12:28 UTC.** The merged native Content
+publication API `20260926t122802-263b0c` passed on stable source. WORK09
+raises the affected-verified complete-case candidate set to 23; WORK10 and
+SEARCH03/19 remain partial. The shared QA stack was returned to G-034's worker.
 
 **30-minute checkpoint, 2026-09-26 11:57 UTC, reconciled at 11:58.** The Goal
 remains active under one manager, and Docker Desktop engine 29.7.2 is reachable.
