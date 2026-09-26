@@ -319,3 +319,21 @@ test('QA08: qualification page is generated only from a clean complete case run'
   expect(() => renderQualification({ ...report, ids: { SYS02: { ...report.ids.SYS02!,
     status: 'partial-pass' } } })).toThrow();
 });
+
+test('QA08: COMP04, BOOK01, BOOK03 and BOOK08 close on the admitted structure journeys', () => {
+  const coverage = declaredCaseCoverage(cases, 'backend');
+  const ids = ['COMP04', 'BOOK01', 'BOOK03', 'BOOK08'] as const;
+  for (const id of ids) {
+    const identities = coverage.get(id)!;
+    expect(identities).toHaveLength(1);
+    const [tier, file, ...title] = identities[0]!.split(':');
+    const name = title.join(':');
+    expect(readFileSync(resolve(import.meta.dir, '../../..', file!), 'utf8')).toContain(`test('${name}'`);
+    const result = { tier, file, name, failed: false, skipped: false } as TestResult;
+    expect(acceptanceStatuses(cases, [result], false, coverage)[id].status).toBe('partial-pass');
+    expect(acceptanceStatuses(cases, [result], true, coverage)[id].status).toBe('passed');
+    expect(acceptanceStatuses(cases, [{ ...result, skipped: true }], true, coverage)[id].status)
+      .toBe('uncovered');
+  }
+  for (const id of ['COMP02', 'COMP05', 'COMP06'] as const) expect(coverage.has(id)).toBe(false);
+});
