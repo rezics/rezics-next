@@ -8,19 +8,25 @@ const admissionProfile = 'access-compound-admission-v1';
 const grantProfile = 'access-delegated-grant-change-v1';
 const until = () => new Date(Date.now() + 60 * 60_000).toISOString();
 
-test('IAM27: selected P-to-A-to-B-to-C path consumes a real C grant revocation', async () => {
+test('IAM27/IAM28: two complete P-to-A-to-B-to-C proofs consume one real grant revocation', async () => {
   const h = await startAuthorityHarness('selected-grant-api');
   try {
     const user = await h.user('path-operator');
     const [a, b, c, recipient] = await Promise.all([
       h.agent(), h.agent(), h.agent(), h.agent()]);
     const assign = 'access.grant.assign.work.create';
+    const delegatedRevoke = 'access.grant.delegated-revoke.work.create';
     const origin = await h.mandate(user.principalId, a, assign, { maxPathEdges: 2 });
+    const revokeOrigin = await h.mandate(user.principalId, a, delegatedRevoke,
+      { maxPathEdges: 2 });
     await h.mandate(user.principalId, b, 'access.representation.manage');
     await h.mandate(user.principalId, c, 'access.representation.manage');
     await h.grant(b, b, `access.representation.assign.${assign}`);
     await h.grant(c, c, `access.representation.assign.${assign}`);
+    await h.grant(b, b, `access.representation.assign.${delegatedRevoke}`);
+    await h.grant(c, c, `access.representation.assign.${delegatedRevoke}`);
     const ceiling = await h.grant(c, c, assign);
+    const revokeCeiling = await h.grant(c, c, delegatedRevoke);
     const grantId = await h.grant(c, recipient, 'work.create');
     const edgeId = randomUUID();
     expect((await h.call('POST', '/v1/access/representation-edge-changes', user.token,
@@ -32,15 +38,36 @@ test('IAM27: selected P-to-A-to-B-to-C path consumes a real C grant revocation',
       { profile, action: 'create', edgeId: secondEdgeId, representativeSubject: b,
         representedSubject: c, edgeAction: assign, maxPathEdges: 2, validUntil: until(),
         expectedTopologyEpoch: await h.epoch('access:representation-topology') })).status).toBe(200);
+    const revokeEdgeId = randomUUID();
+    expect((await h.call('POST', '/v1/access/representation-edge-changes', user.token,
+      { profile, action: 'create', edgeId: revokeEdgeId, representativeSubject: a,
+        representedSubject: b, edgeAction: delegatedRevoke, maxPathEdges: 2,
+        validUntil: until(), expectedTopologyEpoch: await h.epoch('access:representation-topology') })).status).toBe(200);
+    const secondRevokeEdgeId = randomUUID();
+    expect((await h.call('POST', '/v1/access/representation-edge-changes', user.token,
+      { profile, action: 'create', edgeId: secondRevokeEdgeId, representativeSubject: b,
+        representedSubject: c, edgeAction: delegatedRevoke, maxPathEdges: 2,
+        validUntil: until(), expectedTopologyEpoch: await h.epoch('access:representation-topology') })).status).toBe(200);
     const direct = await h.call('POST', '/v1/access/grant-changes', user.token,
       { profile: 'work-create-agent-grant-change-v1', action: 'revoke', issuerSubject: c,
         expectedAuthorityEpoch: await h.epoch(), grantId, expectedObjectGeneration: '0' });
     expect(direct.status).toBe(403);
+    const incompleteId = randomUUID();
+    expect((await h.call('POST', '/v1/me/authority-admissions', user.token,
+      { profile: admissionProfile, admissionId: incompleteId, actingSubject: c,
+        command: `grant.revoke.${grantId}`, obligations: [{ obligation: assign,
+          representationId: origin, edgeIds: [edgeId, secondEdgeId], grantId: ceiling }] })).status).toBe(200);
+    expect((await h.call('POST', '/v1/access/delegated-grant-changes', user.token,
+      { profile: grantProfile, action: 'revoke', issuerSubject: c,
+        expectedAuthorityEpoch: await h.epoch(), grantId,
+        expectedObjectGeneration: '0', selectedAdmissionId: incompleteId })).status).toBe(403);
     const admissionId = randomUUID();
     const admitted = await h.call('POST', '/v1/me/authority-admissions', user.token,
       { profile: admissionProfile, admissionId, actingSubject: c,
         command: `grant.revoke.${grantId}`, obligations: [{ obligation: assign,
-          representationId: origin, edgeIds: [edgeId, secondEdgeId], grantId: ceiling }] });
+          representationId: origin, edgeIds: [edgeId, secondEdgeId], grantId: ceiling },
+        { obligation: delegatedRevoke, representationId: revokeOrigin,
+          edgeIds: [revokeEdgeId, secondRevokeEdgeId], grantId: revokeCeiling }] });
     expect(admitted.status).toBe(200);
     const revoke = { profile: grantProfile, action: 'revoke', issuerSubject: c,
       expectedAuthorityEpoch: await h.epoch(), grantId, expectedObjectGeneration: '0',
@@ -69,7 +96,9 @@ test('IAM27: selected P-to-A-to-B-to-C path consumes a real C grant revocation',
     expect((await h.call('POST', '/v1/me/authority-admissions', user.token,
       { profile: admissionProfile, admissionId: staleAdmissionId, actingSubject: c,
         command: `grant.revoke.${staleGrantId}`, obligations: [{ obligation: assign,
-          representationId: origin, edgeIds: [edgeId, secondEdgeId], grantId: ceiling }] })).status).toBe(200);
+          representationId: origin, edgeIds: [edgeId, secondEdgeId], grantId: ceiling },
+        { obligation: delegatedRevoke, representationId: revokeOrigin,
+          edgeIds: [revokeEdgeId, secondRevokeEdgeId], grantId: revokeCeiling }] })).status).toBe(200);
     const staleRevoke = { ...revoke, grantId: staleGrantId,
       selectedAdmissionId: staleAdmissionId, expectedAuthorityEpoch: await h.epoch() };
     await h.accessPool.query('UPDATE access.recovery_fence SET open = false WHERE id = true');
@@ -77,7 +106,7 @@ test('IAM27: selected P-to-A-to-B-to-C path consumes a real C grant revocation',
       staleRevoke)).status).toBe(503);
     await h.accessPool.query('UPDATE access.recovery_fence SET open = true WHERE id = true');
     expect((await h.call('POST', '/v1/access/representation-edge-changes', user.token,
-      { profile, action: 'revoke', edgeId, representedSubject: b,
+      { profile, action: 'revoke', edgeId: revokeEdgeId, representedSubject: b,
         expectedObjectGeneration: '0',
         expectedTopologyEpoch: await h.epoch('access:representation-topology') })).status).toBe(200);
     expect((await h.call('POST', '/v1/access/delegated-grant-changes', user.token,
@@ -86,6 +115,13 @@ test('IAM27: selected P-to-A-to-B-to-C path consumes a real C grant revocation',
       FROM access.permission_grant WHERE id = $1`, [staleGrantId])).rows[0]?.active).toBe(true);
     expect((await h.accessPool.query(`SELECT 1 FROM access.grant_change_receipt
       WHERE selected_admission_id = $1`, [staleAdmissionId])).rowCount).toBe(0);
+    const survivingId = randomUUID();
+    expect((await h.call('POST', '/v1/me/authority-admissions', user.token,
+      { profile: admissionProfile, admissionId: survivingId, actingSubject: c,
+        command: `grant.revoke.${staleGrantId}`, obligations: [{ obligation: assign,
+          representationId: origin, edgeIds: [edgeId, secondEdgeId], grantId: ceiling }] })).status).toBe(200);
+    expect((await h.call('POST', `/v1/me/authority-admissions/${survivingId}/checks`,
+      user.token)).status).toBe(200);
 
     // Physical exact-key probe at two unrelated receipt volumes. The selected
     // admission index must visit one row regardless of background receipts.
@@ -113,6 +149,39 @@ test('IAM27: selected P-to-A-to-B-to-C path consumes a real C grant revocation',
     expect(large.blocks).toBeLessThanOrEqual(12);
     expect(large.index).toBe('grant_change_selected_admission_once');
     expect(large.node).toMatch(/Index (Only )?Scan/);
+    // The second required proof adds one selected row, while unrelated saved
+    // admissions cannot turn the command check into a corpus scan.
+    const obligationProbe = async (from: number, to: number) => {
+      const inserted = await h.accessPool.query<{ id: string }>(`INSERT INTO access.admission (id, principal_id,
+        acting_subject, scope_id, action, authority_path, idempotency_key,
+        request_digest, authority_epoch, expires_at, state)
+        SELECT gen_random_uuid(), principal_id, acting_subject, scope_id,
+          action, authority_path, 'proof-background-' || g, request_digest,
+          authority_epoch, expires_at, state
+        FROM access.admission CROSS JOIN generate_series($2::integer,$3::integer) g
+        WHERE id = $1 RETURNING id`, [admissionId, from, to]);
+      await h.accessPool.query(`INSERT INTO access.admission_obligation
+        (admission_id, obligation, principal_id, acting_subject, scope_id,
+          path_id, source_kind, grant_id, grant_generation)
+        SELECT a.id, o.obligation, o.principal_id, o.acting_subject, o.scope_id,
+          o.path_id, o.source_kind, o.grant_id, o.grant_generation
+        FROM access.admission a CROSS JOIN access.admission_obligation o
+        WHERE a.id = ANY($2::uuid[]) AND o.admission_id = $1`,
+      [admissionId, inserted.rows.map(row => row.id)]);
+      await h.accessPool.query('ANALYZE access.admission_obligation');
+      const explained = await h.accessPool.query<{ 'QUERY PLAN': Array<{ Plan: {
+        'Actual Rows': number; 'Shared Hit Blocks': number;
+        'Shared Read Blocks': number; 'Index Name'?: string } }> }>(`EXPLAIN
+        (ANALYZE, BUFFERS, FORMAT JSON) SELECT obligation
+        FROM access.admission_obligation WHERE admission_id = $1
+        ORDER BY obligation LIMIT 9`, [admissionId]);
+      const plan = explained.rows[0]!['QUERY PLAN'][0]!.Plan;
+      expect(plan['Actual Rows']).toBe(2);
+      expect(plan['Shared Hit Blocks'] + plan['Shared Read Blocks']).toBeLessThanOrEqual(12);
+      return JSON.stringify(plan);
+    };
+    await obligationProbe(1, 64);
+    expect(await obligationProbe(65, 2_048)).toContain('admission_obligation_pkey');
     const restored = await h.snapshotAccess();
     try {
       const owner = new AccessGrants(restored);

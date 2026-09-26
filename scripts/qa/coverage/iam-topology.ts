@@ -35,13 +35,21 @@ export const iamTopologyCases: CaseDeclarations = {
   ],
   IAM27: [
     { tier: integration, file: api,
-      name: 'IAM27: selected P-to-A-to-B-to-C path consumes a real C grant revocation' },
+      name: 'IAM27/IAM28: two complete P-to-A-to-B-to-C proofs consume one real grant revocation' },
     { tier: integration, file: api,
       name: 'IAM27/IAM28/IAM31: admitted path is exact, acyclic and loses revoked edges' },
     { tier: integration, file: schema,
       name: 'IAM27/IAM31: representation edges stay acyclic under concurrent writers and paths stay bounded' },
     { tier: integration, file: schema,
       name: 'IAM27/IAM31: topology and fan-out guards report bounded unavailability' },
+  ],
+  IAM28: [
+    { tier: integration, file: api,
+      name: 'IAM27/IAM28: two complete P-to-A-to-B-to-C proofs consume one real grant revocation' },
+    { tier: integration, file: api,
+      name: 'IAM27/IAM28/IAM31: admitted path is exact, acyclic and loses revoked edges' },
+    { tier: integration, file: schema,
+      name: 'IAM28: a compound admission holds one complete proof per obligation and rejects pooling' },
   ],
   IAM30: [
     { tier: integration, file: api,

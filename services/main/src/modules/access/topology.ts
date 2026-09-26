@@ -283,7 +283,9 @@ export class AccessTopology {
   }
 
   /** Selected proofs are rechecked in the caller's owner transaction, including
-   * the command that consumes them. No result from a prior HTTP check is trusted. */
+   * the command that consumes them. No result from a prior HTTP check is trusted.
+   * Cost: one admission and receipt lookup, at most eight obligation rows and
+   * eight saved edge steps per row; unrelated receipts/paths are never walked. */
   private async inspectAdmission(client: PoolClient, principalId: string,
     admissionId: string): Promise<{ actingSubject: string; command: string;
       authorityEpoch: string; obligations: string[] }> {
@@ -353,8 +355,9 @@ export class AccessTopology {
     });
   }
 
-  /** One saved complete grant assignment path authorizes the matching grant
-   * revocation in the same transaction; the grant receipt binds this ID once. */
+  /** Delegated revocation needs independent assignment and delegated-revocation
+   * authority for the same acting Agent. Each obligation has its own complete
+   * selected path and grant, rechecked in the grant owner's transaction. */
   async consumeGrantRevokeAdmission(client: PoolClient, principalId: string,
     admissionId: string, issuerSubject: string, grantId: string,
     authorityEpoch: string): Promise<void> {
@@ -364,8 +367,9 @@ export class AccessTopology {
     if (selected.actingSubject !== issuerSubject
       || selected.command !== `grant.revoke.${grantId}`
       || selected.authorityEpoch !== authorityEpoch
-      || selected.obligations.length !== 1
-      || selected.obligations[0] !== 'access.grant.assign.work.create') {
+      || selected.obligations.length !== 2
+      || selected.obligations[0] !== 'access.grant.assign.work.create'
+      || selected.obligations[1] !== 'access.grant.delegated-revoke.work.create') {
       throw new ControlDenied('selected admission does not authorize this grant revocation');
     }
   }
