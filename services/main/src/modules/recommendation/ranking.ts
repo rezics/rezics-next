@@ -50,12 +50,15 @@ export interface RankingOptions {
   canReadWork: (principal: VerifiedPrincipal, actingSubject: string, work: string) => Promise<boolean>;
   /** Current Context definition and selection proof supplied by the Context owner. */
   verifySemantic?: (viewer: RankingViewer, basis: RankingBasis) => Promise<boolean>;
+  zeroSnapshot?: () => Promise<string>;
+  /** Ordered Work heads within the pinned graph checkpoint; absent in legacy synthetic fixtures. */
+  zeroCandidates?: (after: string | null, snapshotTarget: string, limit: number) => Promise<string[]>;
   leaseMs?: number;
   signalBatches?: number;
 }
 
 interface SlotSignal { slot: string; candidate: string; weight: bigint; sequence: string; event: string;
-  observation: string }
+  admission: string; requestDigest: string; authorityEpoch: string; contributor?: string }
 interface Totals { score: bigint; signals: bigint }
 
 function validBasis(basis: RankingBasis): void {
@@ -103,6 +106,13 @@ export class RankingGenerations {
     } catch { throw new RecommendationUnavailable('relay retention is unavailable'); }
   }
 
+  private async erasureHead(): Promise<string> {
+    try {
+      return (await this.options.relay.query<{ head: string }>(`SELECT coalesce(max(erasure_epoch), 0)::text AS head
+        FROM relay.erasure`)).rows[0]!.head;
+    } catch { throw new RecommendationUnavailable('erasure journal is unavailable'); }
+  }
+
   private async describe(client: PoolClient, generation: string): Promise<GenerationView> {
     const row = (await client.query<{ state: string; population: RankingPopulation['kind']; lease_epoch: string;
       data_epoch: string; checkpoint: string; complete: boolean; failure_reason: string | null;
@@ -137,6 +147,12 @@ export class RankingGenerations {
       throw new RecommendationDenied('partition count is not admitted');
     }
     const snapshotTarget = await this.relayHead();
+    const erasureEpoch = await this.erasureHead();
+    let zeroSnapshot: string | null = null;
+    if (this.options.zeroSnapshot) {
+      try { zeroSnapshot = await this.options.zeroSnapshot(); }
+      catch { throw new RecommendationUnavailable('zero-score source snapshot is unavailable'); }
+    }
     return inAccess(this.options.access, async client => {
       await requireRecoveryOpen(client);
       const principalId = await authorizeManager(client, context);
@@ -145,7 +161,8 @@ export class RankingGenerations {
       const owner = basis.population.kind === 'personal' ? principalId : null;
       const scope = scopeKey(basis, owner, this.options.dataEpoch);
       const manifest = { basis, owner, partitionCount,
-        source: { source: 'main-graph', relay: RELAY_SOURCE, dataEpoch: this.options.dataEpoch, snapshotTarget } };
+        source: { source: 'main-graph', relay: RELAY_SOURCE, dataEpoch: this.options.dataEpoch,
+          snapshotTarget, erasureEpoch, zeroSnapshot } };
       const generation = randomUUID();
       await client.query(`INSERT INTO access.derived_generation
         (id, family, scope_key, input_digest, input_manifest, lease_expires_at)
@@ -267,10 +284,15 @@ export class RankingGenerations {
       if (event.envelope.type !== OBSERVATION_CHANGED) continue;
       const receipt = event.envelope.data?.receipt ?? {};
       if (receipt.action !== 'rating.observation.set' || receipt.outcome !== 'succeeded') continue;
-      const { work, realm, ratingSlot, ratingObservation, ratingAvailability, ratingValue } = receipt as Record<string, unknown>;
+      const { work, realm, ratingSlot, ratingObservation, ratingAvailability, ratingValue,
+        admissionId, requestDigest, authorityEpoch } = receipt as Record<string, unknown>;
       const valid = typeof work === 'string' && nativeIri.test(work) && typeof realm === 'string'
         && nativeIri.test(realm) && typeof ratingSlot === 'string' && slotPattern.test(ratingSlot)
         && typeof ratingObservation === 'string' && nativeIri.test(ratingObservation)
+        && typeof admissionId === 'string'
+        && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(admissionId)
+        && typeof requestDigest === 'string' && /^[0-9a-f]{64}$/.test(requestDigest)
+        && typeof authorityEpoch === 'string' && /^\d+$/.test(authorityEpoch)
         && ((ratingAvailability === 'available' && Number.isInteger(ratingValue)
           && (ratingValue as number) >= 1 && (ratingValue as number) <= 10)
           || (ratingAvailability === 'withdrawn' && ratingValue === undefined));
@@ -281,22 +303,50 @@ export class RankingGenerations {
       }
       if (basis.population === 'realm' && realm !== basis.realm) continue;
       signals.push({ slot: ratingSlot as string, candidate: work as string, sequence: event.sequence,
-        event: event.event_id, observation: ratingObservation as string,
+        event: event.event_id, admission: admissionId as string, requestDigest: requestDigest as string,
+        authorityEpoch: authorityEpoch as string,
         weight: ratingAvailability === 'available' ? BigInt(ratingValue as number) : 0n });
     }
     const last = batches.at(-1)?.sequence ?? basis.checkpoint;
     return inAccess(this.options.access, async client => {
       await requireRecoveryOpen(client);
       await fenceLease(client, generation, leaseEpoch, this.leaseMs);
-      let admitted = signals;
-      if (basis.population === 'personal' && signals.length) {
-        // The private slot owner stays in Access inventory; relay events carry no principal.
-        const owned = new Set((await client.query<{ observation: string }>(`SELECT observation
-          FROM access.rating_aggregate_head WHERE principal_id = $1 AND observation = ANY($2::text[])`,
-        [basis.principal_id, [...new Set(signals.map(signal => signal.observation))]])).rows
-          .map(row => row.observation));
-        admitted = signals.filter(signal => owned.has(signal.observation));
+      const admissions = signals.length ? (await client.query<{ id: string; principal_id: string;
+        account_issuer: string; account_subject: string; request_digest: string; authority_epoch: string;
+        graph_data_epoch: string; graph_sequence: string }>(`SELECT a.id::text, a.principal_id::text,
+          p.account_issuer, p.account_subject, a.request_digest, a.authority_epoch::text,
+          a.graph_data_epoch, a.graph_sequence FROM access.admission a
+          JOIN access.principal p ON p.id = a.principal_id
+          WHERE a.id = ANY($1::uuid[]) AND a.action = 'rating.observation.set'
+            AND a.state = 'sealed' AND a.graph_outcome = 'succeeded'`,
+        [[...new Set(signals.map(signal => signal.admission))]])).rows : [];
+      const byAdmission = new Map(admissions.map(row => [row.id, row]));
+      for (const signal of signals) {
+        const owner = byAdmission.get(signal.admission);
+        if (!owner || owner.request_digest !== signal.requestDigest
+          || owner.authority_epoch !== signal.authorityEpoch
+          || owner.graph_data_epoch !== basis.data_epoch || owner.graph_sequence !== signal.sequence) {
+          throw new RecommendationUnavailable('rating contributor admission is unavailable');
+        }
+        signal.contributor = owner.principal_id;
       }
+      let erasedContributors = new Set<string>();
+      if (admissions.length) {
+        try {
+          erasedContributors = new Set((await this.options.relay.query<{ account_issuer: string;
+            account_subject: string }>(`SELECT e.account_issuer, e.account_subject FROM relay.erasure e
+              JOIN unnest($1::text[], $2::text[]) subject(issuer, account_subject)
+                ON e.account_issuer = subject.issuer AND e.account_subject = subject.account_subject
+              WHERE e.kind = 'account' AND e.stage <> 'blocked'`,
+          [admissions.map(row => row.account_issuer), admissions.map(row => row.account_subject)]))
+            .rows.map(row => `${row.account_issuer}\0${row.account_subject}`));
+        } catch { throw new RecommendationUnavailable('erasure journal is unavailable'); }
+      }
+      const admitted = signals.filter(signal => {
+        const owner = byAdmission.get(signal.admission)!;
+        return (basis.population !== 'personal' || owner.principal_id === basis.principal_id)
+          && !erasedContributors.has(`${owner.account_issuer}\0${owner.account_subject}`);
+      });
       const latest = new Map<string, SlotSignal>();
       for (const signal of admitted) latest.set(signal.slot, signal);
       if (latest.size) await this.apply(client, generation, basis.partition_count, [...latest.values()]);
@@ -330,13 +380,14 @@ export class RankingGenerations {
       bump(slot.candidate, slot.weight, slot.weight > 0n ? 1n : 0n);
     }
     await client.query(`INSERT INTO access.ranking_signal_slot
-      (generation_id, slot, candidate, weight, source_sequence, source_event)
-      SELECT $1, * FROM unnest($2::text[], $3::text[], $4::numeric[], $5::numeric[], $6::text[])
+      (generation_id, slot, candidate, weight, source_sequence, source_event, contributor_principal_id)
+      SELECT $1, * FROM unnest($2::text[], $3::text[], $4::numeric[], $5::numeric[], $6::text[], $7::uuid[])
       ON CONFLICT (generation_id, slot) DO UPDATE SET candidate = EXCLUDED.candidate,
         weight = EXCLUDED.weight, source_sequence = EXCLUDED.source_sequence,
-        source_event = EXCLUDED.source_event`,
+        source_event = EXCLUDED.source_event, contributor_principal_id = EXCLUDED.contributor_principal_id`,
     [generation, slots.map(slot => slot.slot), slots.map(slot => slot.candidate),
-      slots.map(slot => slot.weight.toString()), slots.map(slot => slot.sequence), slots.map(slot => slot.event)]);
+      slots.map(slot => slot.weight.toString()), slots.map(slot => slot.sequence), slots.map(slot => slot.event),
+      slots.map(slot => slot.contributor)]);
     const candidates = [...delta.keys()];
     const current = new Map((await client.query<{ candidate: string; score: string; signal_count: string }>(
       `SELECT candidate, score::text, signal_count::text FROM access.ranking_score
@@ -524,7 +575,7 @@ export class RankingGenerations {
         generation = head.active_generation;
       }
       // Order on the numeric column; the text form only carries it exactly to the cursor.
-      const rows = (await client.query<{ candidate: string; score: string }>(token
+      const rows = token?.after.score === '0' ? [] : (await client.query<{ candidate: string; score: string }>(token
         ? `SELECT candidate, score::text AS score FROM (
              (SELECT candidate, score FROM access.ranking_score
               WHERE generation_id = $1 AND score = $2::numeric AND candidate > $3
@@ -539,16 +590,40 @@ export class RankingGenerations {
            ORDER BY first.score DESC, first.candidate`,
       token ? [generation, token.after.score, token.after.candidate, scanLimit + 1]
         : [generation, scanLimit + 1])).rows;
-      return { generation, rows };
+      const source = (await client.query<{ target: string; erasure_epoch: string;
+        zero_snapshot: string | null }>(`SELECT
+        input_manifest->'source'->>'snapshotTarget' AS target,
+        input_manifest->'source'->>'erasureEpoch' AS erasure_epoch,
+        input_manifest->'source'->>'zeroSnapshot' AS zero_snapshot
+        FROM access.derived_generation WHERE id = $1`, [generation])).rows[0];
+      return { generation, rows, zeroSnapshot: source?.zero_snapshot ?? null,
+        erasureEpoch: source?.erasure_epoch ?? '0' };
     });
-    // Numeric text sorted by SQL; keep that order exactly.
-    const scanned = window.rows.slice(0, scanLimit);
+    await this.assertContributorsCurrent(window.generation, window.erasureEpoch);
+    // A zero tail starts only after the positive window is exhausted. The graph
+    // window is bounded by the same candidate budget and retains IRI ordering.
+    let rows = window.rows;
+    if (this.options.zeroCandidates && window.zeroSnapshot !== null && rows.length <= scanLimit) {
+      const after = token?.after.score === '0' ? token.after.candidate : null;
+      let zero: string[];
+      try {
+        zero = await this.options.zeroCandidates(after, window.zeroSnapshot, scanLimit - rows.length + 1);
+      } catch { throw new RecommendationUnavailable('zero-score candidate source is unavailable'); }
+      rows = [...rows, ...zero.map(candidate => ({ candidate, score: '0' }))];
+    }
+    const scanned = rows.slice(0, scanLimit);
+    const scoredZero = scanned.filter(row => row.score === '0').map(row => row.candidate);
+    const scored = scoredZero.length ? new Set((await inAccess(this.options.access, async client =>
+      (await client.query<{ candidate: string }>(`SELECT candidate FROM access.ranking_score
+        WHERE generation_id = $1 AND candidate = ANY($2::text[])`, [window.generation, scoredZero])).rows))
+      .map(row => row.candidate)) : new Set<string>();
     const erased = await this.erased(scanned.map(row => row.candidate));
     const items: { candidate: string }[] = [];
     let examined: { candidate: string; score: string } | undefined;
     for (const row of scanned) {
       if (items.length === pageSize) break;
       examined = row;
+      if (row.score === '0' && scored.has(row.candidate)) continue;
       if (erased.has(row.candidate)) continue;
       let visible: boolean;
       try {
@@ -556,11 +631,39 @@ export class RankingGenerations {
       } catch { throw new RecommendationUnavailable('candidate disclosure is unavailable'); }
       if (visible) items.push({ candidate: row.candidate });
     }
-    const more = examined !== undefined && (examined !== scanned.at(-1) || window.rows.length > scanLimit);
+    const more = examined !== undefined && (examined !== scanned.at(-1) || rows.length > scanLimit);
     return { generation: window.generation, items, continuation: more && examined ? this.seal({ v: 1,
       generation: window.generation, viewer: viewerDigest, basis: basisDigest,
       after: { score: examined.score, candidate: examined.candidate },
       expiresAt: Date.now() + CURSOR_TTL_MS } satisfies CursorToken) : null };
+  }
+
+  /** A new Account erasure makes a generation with that contributor unavailable immediately. */
+  private async assertContributorsCurrent(generation: string, since: string): Promise<void> {
+    let erased: { account_issuer: string; account_subject: string }[];
+    try {
+      erased = (await this.options.relay.query<{ account_issuer: string; account_subject: string }>(
+        `SELECT account_issuer, account_subject FROM relay.erasure
+         WHERE kind = 'account' AND stage <> 'blocked' AND erasure_epoch > $1::bigint
+         ORDER BY erasure_epoch LIMIT 65`, [since])).rows;
+    } catch { throw new RecommendationUnavailable('erasure journal is unavailable'); }
+    if (!erased.length) return;
+    if (erased.length > 64) throw new RecommendationRestart('ranking contributor fence needs a rebuild');
+    const affected = await inAccess(this.options.access, async client => {
+      const legacy = await client.query(`SELECT 1 FROM access.ranking_signal_slot
+        WHERE generation_id = $1 AND contributor_principal_id IS NULL LIMIT 1`, [generation]);
+      if (legacy.rowCount) return true;
+      const principalIds = (await client.query<{ id: string }>(`SELECT p.id::text FROM access.principal p
+        JOIN unnest($1::text[], $2::text[]) e(issuer, subject)
+          ON p.account_issuer = e.issuer AND p.account_subject = e.subject`,
+      [erased.map(row => row.account_issuer), erased.map(row => row.account_subject)])).rows
+        .map(row => row.id);
+      if (!principalIds.length) return false;
+      return !!(await client.query(`SELECT 1 FROM access.ranking_signal_slot
+        WHERE generation_id = $1 AND contributor_principal_id = ANY($2::uuid[]) LIMIT 1`,
+      [generation, principalIds])).rowCount;
+    });
+    if (affected) throw new RecommendationRestart('ranking contributor fence needs a rebuild');
   }
 
   /** Erasure journal recheck at delivery: any unblocked resource erasure withholds the candidate. */

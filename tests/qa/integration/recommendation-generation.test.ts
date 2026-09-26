@@ -35,6 +35,7 @@ let viewer: Awaited<ReturnType<typeof grantAgent>>;
 let otherViewer: Awaited<ReturnType<typeof grantAgent>>;
 let outsiderToken = '';
 let outsider: Awaited<ReturnType<typeof grantAgent>>;
+let rater: Awaited<ReturnType<typeof grantAgent>>;
 
 beforeAll(async () => {
   const runId = requireQa();
@@ -44,13 +45,15 @@ beforeAll(async () => {
   registry = new AccessAdmissionRegistry(access);
   fuseki = new FusekiClient(Bun.env.FUSEKI_URL!);
   account = await startAccount('rating:configure rating:read');
-  const [manager, reader, secondReader, stranger] = await Promise.all(
-    ['manager', 'reader', 'second-reader', 'stranger'].map(name => account.signUp(name)));
+  const [manager, reader, secondReader, stranger, ratingUser] = await Promise.all(
+    ['manager', 'reader', 'second-reader', 'stranger', 'rater'].map(name => account.signUp(name)));
   operator = await grantAgent(access, account.issuer, manager!, MANAGE_SCOPE, MANAGE_ACTION);
   viewer = await grantAgent(access, account.issuer, reader!, 'work:read:none', 'work.read');
   otherViewer = await grantAgent(access, account.issuer, secondReader!, 'work:read:none', 'work.read');
   // Represents an Agent but holds no management grant.
   outsider = await grantAgent(access, account.issuer, stranger!, 'recommendation:other', MANAGE_ACTION);
+  rater = await grantAgent(access, account.issuer, ratingUser!, 'rating:observe:fixture',
+    'rating.observation.set');
   [operatorToken, operatorReadToken, viewerToken, otherViewerToken, outsiderToken] = await Promise.all([
     account.tokenFor(manager!, 'openid rating:configure'),
     account.tokenFor(manager!, 'openid rating:read'),
@@ -68,7 +71,7 @@ afterAll(async () => {
 
 /** One Main app over one relay epoch. The worker drives the same store directly. */
 function scenario(options: { leaseMs?: number; signalBatches?: number;
-  verifySemantic?: () => Promise<boolean> } = {}) {
+  verifySemantic?: () => Promise<boolean>; zeroCandidates?: string[] } = {}) {
   const dataEpoch = randomUUID();
   const meter = meteredPool(access);
   const relayMeter = meteredPool(relay);
@@ -76,6 +79,9 @@ function scenario(options: { leaseMs?: number; signalBatches?: number;
   const store = new RankingGenerations({ access: meter.pool, relay: relayMeter.pool, dataEpoch,
     cursorKey: randomBytes(32), leaseMs: options.leaseMs, signalBatches: options.signalBatches,
     verifySemantic: options.verifySemantic,
+    ...(options.zeroCandidates ? { zeroSnapshot: async () => '1',
+      zeroCandidates: async (after: string | null, _snapshot: string, limit: number) =>
+        options.zeroCandidates!.filter(candidate => !after || candidate > after).slice(0, limit) } : {}),
     canReadWork: (principal, subject, work) => { workChecks++; return registry.canReadWork(principal, subject, work); } });
   const dependencies: MainWorkDependencies & RecommendationDependencies = {
     environment: { fuseki, lineage: { dataEpoch: Bun.env.MAIN_DATA_EPOCH!, routingEpoch: Bun.env.MAIN_ROUTING_EPOCH! },
@@ -91,7 +97,9 @@ function scenario(options: { leaseMs?: number; signalBatches?: number;
     return { status: response.status, body: await response.json() as Record<string, unknown> & {
       generation?: string; items?: { candidate: string }[]; continuation?: string | null; code?: string } };
   };
-  const retain = async (signals: RatingSignal[]) => { sequence++; await retainBatch(relay, dataEpoch, sequence, signals); };
+  const retain = async (signals: RatingSignal[]) => { sequence++;
+    await retainBatch(relay, dataEpoch, sequence, signals,
+      { access, principalId: rater.principalId, actingSubject: rater.agent }); };
   const build = async (basis: RankingBasis, key = `build-${randomUUID()}`, token = operatorToken, agent = operator.agent) =>
     call('/v1/recommendations/generation-builds', token,
       { profile: 'ranking-generation-build-v1', actingSubject: agent, basis, partitionCount: 4 }, key);
@@ -150,6 +158,18 @@ test('REC01: a semantic basis is denied when its current Context proof is unavai
     [s.dataEpoch])).rowCount).toBe(0);
 }, 120_000);
 
+test('REC01: positive scores precede eligible zero-score Works across one cursor', async () => {
+  const [rated, zeroA, zeroB] = [1, 2, 3].map(number =>
+    `https://rezics.com/id/00000000-0000-4000-8000-${String(number).padStart(12, '0')}`);
+  const s = scenario({ zeroCandidates: [rated!, zeroA!, zeroB!] });
+  await readable(viewer.agent, [rated!, zeroA!, zeroB!]);
+  await s.retain([{ work: rated!, realm: nativeId(), slot: slotOf(randomUUID()),
+    observation: nativeId(), value: 5 }]);
+  const basis = basisFor({ kind: 'public' });
+  expect((await s.activate(await s.ready(basis), null)).status).toBe(200);
+  expect(await s.all(basis, 1)).toEqual([rated, zeroA, zeroB]);
+}, 120_000);
+
 test('REC02: production runner advances a registered generation in bounded ticks', async () => {
   const s = scenario({ signalBatches: 1 });
   const work = nativeId();
@@ -187,6 +207,36 @@ test('REC05: an account erasure withholds its viewer without disclosing a target
   expect(JSON.stringify(denied.body)).not.toContain(work);
   expect((await s.query(basis, 1, otherViewerToken, otherViewer.agent)).body.items)
     .toEqual([{ candidate: work }]);
+}, 120_000);
+
+test('REC05: erased rating contributor invalidates the old generation and rebuild omits the signal', async () => {
+  const s = scenario();
+  const erasedUser = await account.signUp('erased-contributor');
+  const contributor = await grantAgent(access, account.issuer, erasedUser,
+    'rating:observe:fixture', 'rating.observation.set');
+  const affected = nativeId();
+  const unaffected = nativeId();
+  await readable(viewer.agent, [affected, unaffected]);
+  await s.retain([
+    { work: affected, realm: nativeId(), slot: slotOf(randomUUID()), observation: nativeId(),
+      value: 10, contributorPrincipalId: contributor.principalId },
+    { work: unaffected, realm: nativeId(), slot: slotOf(randomUUID()), observation: nativeId(), value: 4 },
+  ]);
+  const basis = basisFor({ kind: 'public' });
+  const old = await s.ready(basis);
+  expect((await s.activate(old, null)).status).toBe(200);
+  expect(await s.all(basis)).toEqual([affected, unaffected]);
+  await relay.query(`INSERT INTO relay.account_subject_deletion (issuer, account_subject)
+    VALUES ($1, $2)`, [account.issuer, erasedUser.id]);
+  const withheld = await s.query(basis, 2);
+  expect(withheld).toMatchObject({ status: 409, body: { code: 'recommendation_restart' } });
+  expect(JSON.stringify(withheld.body)).not.toContain(affected);
+  const rebuilt = await s.ready(basis);
+  expect((await s.activate(rebuilt, '1')).status).toBe(200);
+  expect(await s.all(basis)).toEqual([unaffected]);
+  const contributors = (await access.query<{ id: string }>(`SELECT DISTINCT contributor_principal_id::text AS id
+    FROM access.ranking_signal_slot WHERE generation_id = $1`, [rebuilt])).rows;
+  expect(contributors.map(row => row.id)).toEqual([rater.principalId]);
 }, 120_000);
 
 /** Grant the viewer Agent a current read on each candidate Work. */
@@ -237,14 +287,15 @@ test('REC01: a ranking counts only admitted signals of its declared population a
     { work: w1!, realm: realmA!, ...slot(), value: 9 },
     { work: w2!, realm: realmA!, ...corrected, value: 10 },
     { work: w3!, realm: realmB!, ...slot(), value: 10 },
-    { work: w4!, realm: realmB!, ...mine, value: 2 },
+    { work: w4!, realm: realmB!, ...mine, value: 2, contributorPrincipalId: operator.principalId },
     // Not admitted: a cancelled command and a different event kind.
     { work: w3!, realm: realmA!, ...slot(), value: 10, outcome: 'cancelled' },
   ]);
   await s.retain([]);
   // A later correction of the same slot replaces its weight; it never adds a second vote.
   await s.retain([{ work: w2!, realm: realmA!, ...corrected, value: 3 }]);
-  await retainBatch(relay, randomUUID(), 1, [{ work: w3!, realm: realmA!, ...slot(), value: 10 }]);
+  await retainBatch(relay, randomUUID(), 1, [{ work: w3!, realm: realmA!, ...slot(), value: 10 }],
+    { access, principalId: rater.principalId, actingSubject: rater.agent });
   await s.retain([{ work: w1!, realm: realmA!, ...slot(), value: 1 }].map(signal => signal));
   await relay.query(`UPDATE relay.delivered_event SET envelope = jsonb_set(envelope, '{type}',
     '"com.rezics.rating.observation-stale.v1"') WHERE data_epoch = $1 AND sequence = 4`, [s.dataEpoch]);
@@ -591,7 +642,7 @@ test('REC05/REC06: page cost uses the same statements for 10 and 400 ranked cand
     costs.push({ access: s.meter.count(), relay: s.relayMeter.count(), visibility: s.checks() - before });
   }
   expect(costs[0]).toEqual(costs[1]);
-  expect(costs[0]!.relay).toBe(2);
+  expect(costs[0]!.relay).toBe(3);
   expect(costs[0]!.visibility).toBe(5);
   await access.query('ANALYZE access.ranking_score');
   const plan = (await access.query<{ 'QUERY PLAN': string }>(`EXPLAIN SELECT candidate, score FROM access.ranking_score

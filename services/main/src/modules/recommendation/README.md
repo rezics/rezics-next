@@ -25,6 +25,15 @@ DESC, candidate)` index, checks each scanned candidate's current visibility,
 and returns no count or suppression reason. The integration fixture measures
 statement and disclosure-check counts at 10 and 400 candidates.
 
+Each rating receipt resolves its sealed Access admission in one bulk lookup per
+batch. The slot row retains the contributor principal; an Account erasure is
+checked against that indexed attribution at delivery, and an affected generation
+restarts until rebuilt. A rebuild excludes already erased contributors. The
+eligible zero-score tail reads current Work heads through `zero-candidates.ts`
+under a graph sequence pinned at build registration, ordered by Work IRI. It
+shares the same page scan budget and disclosure/erasure checks as positive scores.
+The active generation remains required; no active head returns unavailable.
+
 `build-worker.ts` is the production runner: one tick claims or renews one
 generation and folds at most 16 relay batches of at most 100 events. Its lease,
 checkpoint and score delta commit through `ranking.ts`, so another Main resumes
@@ -33,6 +42,7 @@ the Context reader and checks the current personal Access or Realm graph
 selection at build, activation and delivery. A personal selection revision is
 an Access UUID; a Realm selection revision is a graph IRI (Access migration
 114). A page adds one indexed Account erasure-journal probe, one bounded
-resource-erasure probe and at most 40 Work disclosure probes. The load tier
+contributor-erasure window probe, one bounded resource-erasure probe and at most
+40 Work disclosure probes. The load tier
 folds 20,000 observations across 1,000 candidate identifiers with 10,000 on
 one target, then checks statement bounds and the score-order index.

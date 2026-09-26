@@ -46,6 +46,7 @@ export interface RankingSignalSlotRow {
   weight: string;
   source_sequence: string;
   source_event: string;
+  contributor_principal_id: string | null;
 }
 
 export const rankingTables = [
@@ -57,5 +58,6 @@ export const rankingTables = [
   declareTable<RankingScoreRow>()('access', 'ranking_score',
     ['generation_id', 'partition', 'candidate', 'score', 'signal_count']),
   declareTable<RankingSignalSlotRow>()('access', 'ranking_signal_slot',
-    ['generation_id', 'slot', 'candidate', 'weight', 'source_sequence', 'source_event']),
+    ['generation_id', 'slot', 'candidate', 'weight', 'source_sequence', 'source_event',
+      'contributor_principal_id']),
 ] as const;

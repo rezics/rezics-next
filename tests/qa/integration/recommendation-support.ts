@@ -150,11 +150,13 @@ export async function grantAgent(access: Pool, issuer: string, user: AccountUser
 export interface RatingSignal {
   work: string; realm: string; slot: string; observation: string; value: number | null;
   action?: string; outcome?: 'succeeded' | 'cancelled';
+  contributorPrincipalId?: string;
 }
 
 /** Bulk-retain one relay batch of rating observation envelopes, as the relay handoff writes them. */
 export async function retainBatch(relay: Pool, dataEpoch: string, sequence: number,
-  signals: RatingSignal[], type = 'com.rezics.rating.observation-changed.v1'): Promise<void> {
+  signals: RatingSignal[], attribution: { access: Pool; principalId: string; actingSubject: string },
+  type = 'com.rezics.rating.observation-changed.v1'): Promise<void> {
   const batchId = `urn:rezics:batch:${randomUUID()}`;
   await relay.query(`INSERT INTO relay.delivered_batch (data_epoch, sequence, batch_id, routing_epoch, event_count)
     VALUES ($1, $2, $3, 'routing-g058', $4)`, [dataEpoch, sequence, batchId, signals.length]);
@@ -169,6 +171,19 @@ export async function retainBatch(relay: Pool, dataEpoch: string, sequence: numb
         ratingSlot: signal.slot, ratingObservation: signal.observation,
         ratingAvailability: signal.value === null ? 'withdrawn' : 'available',
         ...(signal.value === null ? {} : { ratingValue: signal.value }) } } }));
+  await attribution.access.query(`INSERT INTO access.scope_gate (id)
+    VALUES ('rating:observe:fixture') ON CONFLICT DO NOTHING`);
+  await attribution.access.query(`INSERT INTO access.admission
+    (id, principal_id, acting_subject, scope_id, action, idempotency_key, request_digest,
+      authority_epoch, expires_at, state, graph_receipt, graph_outcome, graph_data_epoch,
+      graph_sequence, sealed_at)
+    SELECT (item->>'admissionId')::uuid, (item->>'principalId')::uuid, $2,
+      'rating:observe:fixture', 'rating.observation.set', item->>'admissionId', repeat('0', 64),
+      1, now() + interval '1 hour', 'sealed', item->>'receipt', 'succeeded', $3, $4::text, now()
+    FROM jsonb_array_elements($1::jsonb) item`, [JSON.stringify(envelopes.map((envelope, index) => ({
+      admissionId: envelope.data.receipt.admissionId,
+      principalId: signals[index]!.contributorPrincipalId ?? attribution.principalId,
+      receipt: envelope.data.receipt.id }))), attribution.actingSubject, dataEpoch, String(sequence)]);
   await relay.query(`INSERT INTO relay.delivered_event (source, event_id, data_epoch, sequence, envelope)
     SELECT 'https://rezics.com/services/main', e->>'id', $1, $2, e
     FROM jsonb_array_elements($3::jsonb) e`, [dataEpoch, sequence, JSON.stringify(envelopes)]);

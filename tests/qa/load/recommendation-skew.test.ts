@@ -40,7 +40,8 @@ test('REC02: hot target and sparse ranking keep bounded batch and page costs', a
           realm, slot: slotOf(`rec-load-${index}`),
           observation: `https://rezics.com/id/${randomUUID()}`, value: 10 };
       });
-      await retainBatch(relay, dataEpoch, batch + 1, signals);
+      await retainBatch(relay, dataEpoch, batch + 1, signals,
+        { access, principalId, actingSubject: actor });
     }
     const rankings = new RankingGenerations({ access: meter.pool, relay, dataEpoch,
       cursorKey: randomBytes(32), canReadWork: async () => true });

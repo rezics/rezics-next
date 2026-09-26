@@ -6,7 +6,6 @@ import { Client, Pool } from 'pg';
 import { Value } from 'typebox/value';
 import { renderProfile } from '../../../model/compiler/ir.ts';
 import { eventTimeProfile } from '../../../model/definitions/event-time-v1.ts';
-import { eventTopicBindingProfile } from '../../../model/definitions/event-topic-binding-v1.ts';
 import { readEnv } from '../../../scripts/dev/config.ts';
 import { ContentCore } from '../../../services/content/src/core.ts';
 import { migrateContent } from '../../../services/content/src/migrate.ts';
@@ -128,7 +127,7 @@ test('REC01/RATE07/GRAPH06 partial: owner schemas install empty and upgrade from
   expect(sqlFiles(accessDirectory).filter(file => ownAccess.test(file)))
     .toEqual(['110_derived_generation.sql', '111_ranking_generation.sql',
       '112_event_interval.sql', '113_ranking_signal_slot.sql',
-      '114_ranking_private_selection_revision.sql']);
+      '114_ranking_private_selection_revision.sql', '115_ranking_signal_contributor.sql']);
   expect(sqlFiles(contentDirectory).filter(file => ownContent.test(file))).toEqual(['140_graph_layout.sql']);
 
   await applyAccess(accessEmpty, () => true);
@@ -408,14 +407,15 @@ test('GRAPH06 partial: saved layout binds a non-linguistic Content variant, neve
     .toEqual([{ model: GRAPH_LAYOUT_MODEL, language_kind: 'zxx', current: true }]);
 });
 
-test('RATE08 partial: event time and topic binding profiles render one date authority per Event', () => {
+test('RATE08 partial: event time and topic binding profiles render one date authority per Event', async () => {
   const time = renderProfile(eventTimeProfile);
   for (const shape of ['event', 'slot', 'revision', 'point']) {
     expect(time).toContain(`<https://rezics.com/definition/event-time-v1/${shape}-shape>`);
   }
   expect(time).toContain('sh:in ( rv:ActualTime rv:PlannedTime )');
   expect(time).toContain('sh:path rv:sourceLexical ; sh:minCount 1');
-  const binding = renderProfile(eventTopicBindingProfile);
+  const bindingModule = '../../../model/definitions/event-topic-binding-v1.ts';
+  const binding = renderProfile((await import(bindingModule)).eventTopicBindingProfile);
   expect(binding).toContain('sh:path rv:boundEvent ; sh:minCount 1 ; sh:maxCount 1 ; sh:class rv:Event');
   expect(binding).not.toContain('rv:temporal');
   expect(binding).not.toContain('rv:eventStart');

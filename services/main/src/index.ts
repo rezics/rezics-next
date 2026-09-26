@@ -93,6 +93,7 @@ import { ACCESS_OPERATIONAL_BOUNDS_V1, activateOperationalBounds } from './opera
 import { RankingGenerations } from './modules/recommendation/ranking.ts';
 import { RankingBuildWorker } from './modules/recommendation/build-worker.ts';
 import { verifyRankingSemanticBasis } from './modules/recommendation/semantic-basis.ts';
+import { graphZeroCandidates, graphZeroSnapshot } from './modules/recommendation/zero-candidates.ts';
 import { EventTemporalQueries } from './modules/event/queries.ts';
 import { PrivateContextSelections } from './modules/context/private-selection.ts';
 
@@ -204,6 +205,8 @@ const recommendations = recommendationRelayPool ? new RankingGenerations({ acces
   cursorKey: createHash('sha256').update('rezics-ranking-cursor-v1\0')
     .update(required('ACCOUNT_MAIN_CLIENT_SECRET')).digest(),
   canReadWork: (principal, actingSubject, work) => access.canReadWork(principal, actingSubject, work),
+  zeroSnapshot: () => graphZeroSnapshot(environment),
+  zeroCandidates: graphZeroCandidates(environment),
   verifySemantic: (viewer, basis) => verifyRankingSemanticBasis(environment, pool, rankingContextSelections,
     viewer, basis) }) : undefined;
 const recommendationWorker = recommendations ? new RankingBuildWorker(pool, recommendations) : undefined;
