@@ -157,12 +157,20 @@ recovery hold rejects the operation.
 The `access-private-membership-api` fixture covers an Account-verified recipient
 without a public Agent, manager/recipient scope separation, private self-read,
 consent replay/revocation, separate Org/Realm policy and ban state, leave/rejoin
-episodes, direct principal-grant dependency, deactivation and Account deletion
-fences. This bounded profile does not qualify general group/role recipient
-semantics or wider Realm publication; IAM06 remains partial until those paths
-and broader capacity profiles are qualified. The Access PITR fixture includes
-private consent, consumed episode, dependent grant and row digest in its
-isolated WAL restore.
+episodes, direct principal-grant, bounded private group and private role
+dependencies, deactivation and Account deletion fences. The private group/role
+cases prove exact membership generation, saved proof invalidation, atomic
+dependent deactivation on leave, independent authority preservation, and denial
+of old-row revival after rejoin. The 257-row dependent authority bound returns
+unavailable without a partial leave. The Access PITR fixture restores private
+consent, consumed episode, direct/group/role dependencies and row digest. With
+the independent Org/Realm fixture, these four registered real-owner cases form
+an IAM06 complete-case candidate. Merged selected API evidence
+`20260926t093654-8c1871`, private API evidence
+`20260926t093821-c7cb5b` and Access WAL evidence
+`20260926t093115-947f02` passed; only a clean recorded full backend run can
+qualify IAM06. General group/role recipient semantics outside this bounded
+profile, wider Realm publication and host capacity remain retained separately.
 
 Record inputs, operation receipts, exact profiles/builds and failures. A mock-only
 pass cannot qualify storage, cross-service behavior or capacity.

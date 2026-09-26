@@ -4,6 +4,23 @@ type TestIdentity = Pick<TestResult, 'tier' | 'file' | 'name'>;
 
 /** Declare only cases whose full scenario is exercised by the named tests. */
 const completeCases: Record<string, readonly TestIdentity[]> = {
+  IAM06: [{
+    tier: 'integration',
+    file: 'tests/qa/integration/access-membership-api.test.ts',
+    name: 'IAM06: Org/Realm leave and rejoin fence dependent grants but retain bans',
+  }, {
+    tier: 'integration',
+    file: 'tests/qa/integration/access-private-membership-api.test.ts',
+    name: 'IAM06/IAM10/IAM33/IAM34: private membership binds exact direct, group and role authority',
+  }, {
+    tier: 'integration',
+    file: 'tests/qa/integration/access-org-realm-api.test.ts',
+    name: 'IAM23/IAM24/IAM06: independent Org/Realm participation requires two exact authorities',
+  }, {
+    tier: 'fault/recovery',
+    file: 'services/main/tests/access-pitr.integration.test.ts',
+    name: 'OPS03/IAM07/IAM06/IAM23/IAM24: archived Access WAL restores exact authority and participation (partial)',
+  }],
   VIEW01: [{
     tier: 'integration',
     file: 'tests/qa/integration/work-address-api.test.ts',
