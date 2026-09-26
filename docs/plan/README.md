@@ -109,6 +109,7 @@ log is kept in [its history](../goals/history/codex-program-2026-09-26.md).
 | [G-103](../goals/tasks/G-103.md) / SYS01 | Codex GPT-6 Sol xhigh: Agent provisioning saga across Account, Access and Main (SYS01). | Dispatched 21:20 UTC. |
 | [G-104](../goals/tasks/G-104.md) / IAM37 | GPT-6 Luna high: Catalog resource descriptions with Content-owner edit policy (IAM37). | Dispatched 21:20 UTC. |
 | [G-105](../goals/tasks/G-105.md) / HUB05/HUB06 | GPT-6 Luna xhigh: Connected-app tool schema drift and controlled MCP invocation (HUB05, HUB06). | Queued behind G-056 (connected-apps claim). |
+| [G-106](../goals/tasks/G-106.md) | GPT-6 Luna xhigh: wave-5 repairs (bounds seed, WORK02 coverage unit, readiness pin, two recovery tests). | Dispatched 21:25 UTC. Wave 5 on `013eabce`: sharded integration took 171 s; other failures belong to running G-049 (Context) and G-085 (OPS01/02/04). |
 | Authority and model backlog | IAM07–IAM37 and MODEL05–MODEL27 gaps, sequenced behind required Access and semantic owner decisions. | Planned at the [operation map](backend-operations.md); create bounded briefs when interfaces stabilize. |
 | Content, Space and community backlog | CTX, WORK, RATE, GRAPH, VIEW, BOOK, RECIPE, SUB and other M01–M10 gaps. | Planned at the operation map; retain all backend assertions. |
 | Search, sources and packages backlog | SEARCH, LIVE, PKG and HUB gaps after B75, with source/owner integration and recovery. | Planned at the operation map; selected B14–B74 evidence remains partial where named. |
