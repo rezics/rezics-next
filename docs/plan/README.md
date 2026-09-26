@@ -11,7 +11,7 @@
 | Deployment premise | Principal services concentrated on one assessed host; the other primarily API and unrelated workloads. Account placement remains assessed. |
 | Status | The Claude program started with `goalctl init` at 17:43:55 UTC on 2026-09-26 (manager `goal-manager`). Phase 0 is running: five closure-map scouts (G-039–G-043), the `app.ts`/coverage split (G-038), the IAM02 follow-up (G-044) and the bulk fixture builder (G-045). G-001–G-037 remain integrated from the paused Codex program; 28 complete-case declarations exist, none recorded. No `yarn qa --backend --record` result exists. See the [active management program](#active-management-program) and generated [qualification page](qualification.md). |
 | Next action | Turn the scouts' closure maps into backlog rows and phase-A owner-schema briefs; merge G-038 before any brief that adds Main routes or coverage declarations; add IAM02's declaration after G-044 merges. |
-| Forecast | At 3:17 elapsed: 138 of 276 declared (about 48 per hour since 2:31), none recorded; about 8.5–9 hours total if the rate holds, within the 10-hour target but not yet assured; 25-hour outer bound unchanged. PKG09–PKG11 need maintainer-supplied provider keys. |
+| Forecast | At 4:05 elapsed: 173 of 276 declared (about 44 per hour since 3:17), none recorded; about 8.5–9 hours total if the rate holds, within the 10-hour target but not yet assured; 25-hour outer bound unchanged. PKG09–PKG11 need maintainer-supplied provider keys. |
 
 ### Active management program
 
@@ -142,6 +142,9 @@ The manager adds one entry per elapsed hour and at each phase gate, newest first
 at most five lines: newly verified cases, live workers and queue, blockers,
 critical path and forecast.
 
+- **4:05 (21:49 UTC).** 173 of 276 declared (35 since 3:17, about 44 per hour), none recorded. New since 3:17 include SYS03/05/08/10/11/14, OPS03, MODEL07/12/19/20/22, GOV24, LIVE13–16, HUB03, PKG18, IAM37, BOOK09, FACT06.
+  Wave 6 (at `3e0f09ff`) was red: the regenerated Fuseki image stamp was left out of the G-091 artifact commit, so QA ran Main against the previous command image; a SEARCH11/SEARCH12 unit fake pinned an old command-module version. Both fixed on `main`; wave 6b re-runs the tiers. Merges now go through one gate that commits the Compose stamp with the other generated artifacts. G-124 wrote into the main checkout once; reverted and replayed in its worktree.
+  Waiting on owners: G-049 (CTX04–10, SEARCH01/03/04/11, FACT04, GOV09/10, VIEW08), G-059 (SYS07, VIEW07), G-107 (Structure bundle BOOK02/06/07, COMP01/07/08, GOV01, Recipe), G-093 (WORK08, LIVE10), G-125 (SYS06). Forecast: about 8.5–9 hours total; PKG09–PKG11 still need provider keys.
 - **3:17 (21:01 UTC).** 138 of 276 declared (about 48 per hour since 2:31), none recorded. New since 2:31 include IAM07/08(Access)/28, MODEL01/09/11/14/26, SYS01/04/09/12, OPS01/04/12, PKG07/08/12/14–17/20, FACT03, GOV03, GOV11–GOV22, HUB01/02/04, COMP04/06, BOOK01/03/08.
   Engines: Sol for complex work with automatic retry on transient capacity errors; Luna and Grok for bounded and bookkeeping tasks. Shared fixture fx-medium-84dcce429ee5 is being rebuilt on current migrations.
   External prerequisite: CurseForge, Nexus and Steam API keys (`REZICS_CURSEFORGE_API_KEY`, `REZICS_NEXUS_API_KEY`, `REZICS_STEAM_WEB_API_KEY`) for PKG09–PKG11; requested from the maintainer.
