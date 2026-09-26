@@ -73,7 +73,6 @@ import { relayContentProjectionOnce } from './modules/content-publication/relay.
 import { RelayHandoffPositions } from './modules/outbox/relay-position.ts';
 import { OwnerOperations } from './modules/owner/operations.ts';
 import { governanceServices } from './modules/governance/composition.ts';
-import { NotificationStore } from './modules/notification/store.ts';
 import { currentContentSubjectReader } from './modules/notification/subjects.ts';
 import { NotificationRealtimeHub } from './modules/notification/realtime.ts';
 import { NotificationDispatcher } from './modules/notification/dispatcher.ts';
