@@ -23,6 +23,9 @@ the web client is pending.
 For sustained implementation, use the root [goal specification](../GOAL.md) and
 [task reading routes](plan/README.md#task-reading-routes). The maintainer activates
 the Codex Goal explicitly; the plan retains execution status and qualification.
+The [goal orchestration proposal](goals/README.md) researches task decomposition,
+manager scheduling and isolated worker threads; it has not replaced that active
+execution authority.
 
 1. [Product scope and capabilities](product/capabilities.md).
 2. [Architecture overview](architecture/overview.md) and [service boundaries](architecture/services.md).
