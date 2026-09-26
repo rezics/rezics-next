@@ -325,6 +325,18 @@ reconciles ambiguous effects before acknowledging its stronger guarantee. Expiry
 an asynchronous invalidation message or a PostgreSQL transaction alone does not
 establish that protocol across processes/stores.
 
+For native Contribution private phrase search, Access admits the exact read
+before matching and commits a send marker under the final authority check.
+Main rechecks the Jena position after that arm. A moved position settles as
+`withheld` before any frame is offered. A valid peer receipt settles as
+`delivered`. Once a frame is offered without a receipt, socket closure or the
+receipt deadline settles it as `unconfirmed` possible delivery; it cannot be
+called non-delivery because kernel-buffered bytes may still reach the peer.
+The 30-second Access send window lets another replica settle an abandoned arm
+as `unconfirmed`. Strong closure and recovery reopening wait for terminal
+settlement, and retain the possible-delivery outcome for audit. This protocol
+does not establish browser display or downstream proxy delivery.
+
 ## Implementation sequence and release evidence
 
 1. Establish private subject registration, typed authority references, PostgreSQL

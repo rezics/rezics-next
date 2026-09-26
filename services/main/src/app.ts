@@ -10,7 +10,6 @@ import { classificationRoutes } from './routes/classification.ts';
 import { commerceRoutes } from './routes/commerce.ts';
 import { contentRoutes } from './routes/content.ts';
 import { contributionRoutes } from './routes/contributions.ts';
-import type { MainWorkDependencies } from './routes/dependencies.ts';
 import { healthRoutes } from './routes/health.ts';
 import { operationsRoutes } from './routes/operations.ts';
 import { packageRoutes } from './routes/packages.ts';
@@ -20,6 +19,7 @@ import { ratingRoutes } from './routes/ratings.ts';
 import { resourceRoutes } from './routes/resources.ts';
 import { globalRatingRoutes } from './routes/rating-global.ts';
 import { searchRoutes } from './routes/search.ts';
+import { searchRoutes, type SearchRouteDependencies } from './routes/search.ts';
 import { sourceRoutes } from './routes/sources.ts';
 import { sourceRunRoutes } from './routes/source-runs.ts';
 import { sourceSupportRoutes } from './routes/source-supports.ts';
@@ -29,7 +29,7 @@ import { workRoutes } from './routes/works.ts';
 export type { MainWorkDependencies } from './routes/dependencies.ts';
 
 /** Composition root: each domain plugin under `routes/` owns its registrations. */
-export function createMainApp(fuseki: FusekiClient, work?: MainWorkDependencies) {
+export function createMainApp(fuseki: FusekiClient, work?: SearchRouteDependencies) {
   // Registered first so it also handles every plugin route mounted below.
   const app = new Elysia()
     .error(({ error }) => {

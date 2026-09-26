@@ -9,8 +9,10 @@ calls Fuseki through HTTP; one Fuseki JVM owns the dataset and index. Lucene is 
 JVM, not a separately deployed search service. [Storage binding](../storage/jena.md)
 owns the topology and write protocol.
 
-The adopted startup pair is PostgreSQL + Jena. PostgreSQL owns bodies and their
-revisions; Jena holds the searchable representation and relationships locally.
+The adopted startup pair is PostgreSQL + Jena. PostgreSQL owns Content bodies
+and their revisions; Jena holds the searchable representation and relationships
+locally. The native Contribution draft lane still reads its immutable body from
+Jena until a Content-owned private read and projection bridge exists.
 OpenSearch and PostgreSQL text extensions are not startup dependencies. The
 installed bounded lanes below describe existing evidence, not launch capacity.
 
@@ -20,10 +22,10 @@ a criterion, and whose readable text matches the query. The final result limit
 applies after that relation, authorization and deduplication. Main owns the typed
 context, publication and score-aggregation rules; Jena does not infer them.
 
-The first delivery profile indexes currently public, eligible MatchUnits and
-admits bounded graph/text templates. Private content remains available through
-admitted resource reads; private full-text is explicitly unsupported until its
-pre-match enforcement and statistical isolation are qualified. This is a launch
+The public first-delivery profiles index currently public, eligible MatchUnits
+and admit bounded graph/text templates. One separately admitted private
+Contribution body phrase profile is available over a receipt-fenced WebSocket.
+Other private fields and resources remain unsupported. This is a launch
 profile, not a change to the complete query contract. Unsupported shapes return
 capability errors, never a successful empty answer or a silently weakened filter.
 The public phrase and page profiles accept two refusal-only selectors so clients
@@ -37,8 +39,8 @@ or historical search; malformed selectors and unknown request fields remain
 The first bounded private-lane implementation brief and its falsification gates
 are in [private search admission](../research/private-search-admission.md).
 
-The candidate `private-contribution-phrase-v1` adapter resolves one current
-native Contribution and its immutable body, then matches one
+The `private-contribution-phrase-v1` adapter resolves one current native
+Contribution and its immutable body, then matches one
 private body MatchUnit by concrete subject, named graph and predicate. The
 assembler maps `rv:privateSearchBody` to a distinct `privateBody` Lucene field;
 public `rv:searchBody` statistics and scored public results remain isolated.
@@ -46,45 +48,65 @@ The response gives a complete zero-or-one result, deterministic unit identity,
 head revision and source/index positions; it exposes no score, snippet or facet.
 An absent graph unit or Lucene posting makes the adapter unavailable, not a
 complete empty relation. A changed head, sequence, generation, JVM or
-private-write epoch also makes it unavailable. The HTTP profile is currently
-fail-closed with `503 private_search_unavailable` and runs no private query or
-Access admission. The installed Elysia `afterResponse` hook can run before the
-network has drained the response body; releasing a delivering Access lease
-there would let strong closure acknowledge while bytes could still leave the
-server. A proven delivery-completion/cancellation mechanism is required before
-the HTTP route can invoke the candidate adapter and release a lease. Recovery
-holds continue to prevent Access delivery and reopening waits for in-progress
-deliveries.
+private-write epoch also makes it unavailable. `POST /v1/private-queries`
+returns `426 private_search_socket_required` when the delivery owners are
+configured; it never returns private results over HTTP. Without those owners,
+both the POST and socket upgrade return `503 private_search_unavailable`.
+Elysia's `afterResponse` can run before HTTP bytes drain, so it cannot settle
+a delivering Access lease.
 
-The bounded [WebSocket probe](../research/private-search-admission.md#websocket-delivery-fence-probe-2026-09-25)
-observed a complete 1 MiB frame before a matching nonce pong on a direct
-Bun/Elysia loopback connection. A subsequent internal receipt candidate arms
-a durable Access send marker before offering one result frame whose final
-field contains a fresh 256-bit challenge. Only the exact client receipt can
-finish that row as `delivered`; abort is allowed only before the send marker.
-An uncertain send remains `delivering` after disconnect, timeout, expiry or
-process death, so strong closure and recovery reopening stay pending. The
-operator command `yarn access:pending-search` exposes unresolved row identities
-and send markers. These tests do not certify browser display or a terminating
-proxy's downstream delivery, and the candidate does not activate the route.
+The client opens `WebSocket /v1/private-queries` with an Account bearer
+assertion carrying `work:read`, then sends one JSON
+`private-contribution-query-v1` message naming the profile, Contribution,
+acting subject and phrase. Main verifies Account before upgrade and admits the
+exact Contribution read in Access before graph or Lucene work. It returns at
+most one `private-contribution-result-v1` frame with the complete result,
+lease ID and fresh 256-bit receipt challenge. The client sends a
+`private-contribution-receipt-v1` message with that lease ID and exact
+challenge. Only this receipt can settle `delivered`; wrong, early and late
+receipts cannot. A denied read returns the same problem whether hidden text
+matches or not. The receipt proves the peer received the frame, not that a UI
+displayed it or that a terminating proxy delivered it downstream.
 
-The internal admitted-read path now registers the exact Contribution read with
-Access before any graph or Lucene call. After matching, it begins delivery,
-rechecks the native draft head, graph sequence, index generation, JVM instance
-and private write epoch, then asks Access to arm the send under a final authority
-check. A changed pre-send position aborts the unarmed lease and offers no frame.
-The bounded path permits at most 10 Fuseki calls for matching and two for that
-final recheck, each in a separate 1,500 ms read budget. It has no qualified
-whole-request Account/Access deadline. A graph edit between the final Jena
-check and the Access arm or frame still needs cross-owner serialization; the
-HTTP profile remains unavailable.
+After matching, Main begins Access delivery and arms a durable send marker under
+the current authority check. It then rechecks the native draft head, graph
+sequence, index generation, JVM instance and private write epoch immediately
+before offering the frame. If the native position moved, the frame is withheld
+and Access records terminal `withheld`. A strong closure on another replica after
+the arm sees a pending delivery until its terminal outcome. If the frame was
+offered without an exact receipt, the session stops further socket handoff and
+records terminal `unconfirmed`: the bytes may already have reached the peer or
+its kernel buffer. An offered frame never becomes an abort or a claimed
+non-delivery. A peer can therefore still read buffered bytes after a half-close
+or termination. Access retains `unconfirmed` as a possible delivery, and a
+later receipt cannot relabel it.
 
-This is an unqualified candidate for SEARCH11/SEARCH12 until the built Jena
-query plan, two-replica closure race, response-send lifecycle, and changed-head
-race have live evidence. PostgreSQL Content drafts and broader multi-field or
-multi-Contribution queries remain unsupported. The current 1,500 ms and 10
-Fuseki-call adapter limits do not yet bound the upstream Account/Access time;
-whole-request owner-call budgets remain an acceptance gap.
+The Access send window starts at the arm. A live session offers within five
+seconds and waits at most ten seconds for a receipt; the 30-second Access
+window leaves a pause margin. If its replica disappears, another replica's
+bounded sweep records an armed row as `unconfirmed` only after that window.
+An expired unarmed delivery can be aborted because it never offered a frame.
+The window bounds how long a lost replica can block strong closure and recovery
+reopening, while preserving the possible-delivery record. The operator command
+`yarn access:pending-search` exposes rows awaiting terminal settlement.
+
+The operation cost contract is one exact native Contribution and at most one
+result: at most ten Fuseki calls and 1 MiB of response bytes for matching, then
+two Fuseki calls for the final position check, each phase with a 1,500 ms
+budget; one result frame is at most 1 MiB. Before admission each query sweeps
+at most eight abandoned Access rows through partial indexes. PostgreSQL work is
+indexed by exact scope, lease ID and send time, independent of unrelated
+Contributions and hidden matching units. The concrete-subject Jena text plan and
+small growing-decoy fixture check the latter bound. Native engine work and
+whole-request Account/Access latency have no complete measured bound yet.
+
+SEARCH12 has real socket, two-replica closure, changed-head, lost-replica and
+upgrade evidence for this native Contribution profile. SEARCH11 remains partial:
+the Content-owned private body search projection and Access bridge do not yet
+exist, nor do searchable hidden Context definitions, statements, names or
+avatars with their owner-specific disclosure rules. Their leakage clauses cannot
+be certified by the Contribution body fixture. Multi-field and
+multi-Contribution private queries remain unsupported.
 
 The installed Main default and Realm-effective phrase lanes project exact public
 selected-body MatchUnits in the same guarded transaction as their respective
@@ -559,9 +581,11 @@ For the initial profile, the Lucene corpus contains only eligible public units;
 protected triples use nonindexed predicates/storage projections. Narrowing a public
 scope first fences Main query admission and old handles, then removes affected
 indexed values and verifies the new reader generation before reopening affected
-search. Do not allow stale text through snippets or counts during cleanup. A future
-private index requires an admitted graph/subject-bound execution path and a corpus
-statistics policy; filtering privileged results only after matching is insufficient.
+search. Do not allow stale text through snippets or counts during cleanup. The
+native Contribution private-body lane binds one admitted graph, field and concrete
+subject before matching, keeping its Lucene field separate from public results.
+Broader private indexing still requires an admitted plan and corpus statistics
+policy; filtering privileged results only after matching is insufficient.
 
 The current Content phrase lane indexes public eligible body revisions only. A
 Content draft remains in PostgreSQL and its text never becomes a public MatchUnit

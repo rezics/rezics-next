@@ -760,6 +760,14 @@ test('SEARCH12: migration 160 keeps historical outcomes and in-flight arms acros
     const token = 'ab'.repeat(32);
     await registry.armContributionSearchSend(inflight.id, token);
     await apply(file => file >= '160' && file < '170');
+    const sweepIndexes = await upgrade.query<{ indexname: string; indexdef: string }>(
+      `SELECT indexname, indexdef FROM pg_indexes WHERE schemaname = 'access'
+       AND indexname IN ('search_read_armed_window', 'search_read_unarmed_expiry')
+       ORDER BY indexname`);
+    expect(sweepIndexes.rows.map(row => row.indexname)).toEqual([
+      'search_read_armed_window', 'search_read_unarmed_expiry']);
+    expect(sweepIndexes.rows[0]?.indexdef).toContain('send_started_at IS NOT NULL');
+    expect(sweepIndexes.rows[1]?.indexdef).toContain('send_started_at IS NULL');
     const rows = await upgrade.query<{ id: string; state: string; send_started_at: Date | null;
       settled_by: string | null }>(`SELECT id, state, send_started_at, settled_by
       FROM access.search_read_lease WHERE id = ANY($1::uuid[])`, [[historical.id, inflight.id]]);

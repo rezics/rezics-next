@@ -6,6 +6,7 @@ import { ContentProjectionWorker } from './content-projection-worker.ts';
 import { FusekiClient } from './infrastructure/fuseki.ts';
 import { S3ImmutableObjects } from './infrastructure/immutable-objects.ts';
 import { AccessAdmissionRegistry } from './modules/access/admission.ts';
+import { PrivateSearchSettlement } from './modules/contribution/private-search-settlement.ts';
 import { AccessActingContexts } from './modules/access/contexts.ts';
 import { AccessGroups } from './modules/access/groups.ts';
 import { AccessGrants } from './modules/access/grants.ts';
@@ -110,6 +111,7 @@ const app = createMainApp(fuseki, {
   },
   account,
   access,
+  privateSearch: { access, settlement: new PrivateSearchSettlement(pool) },
   actingContexts: new AccessActingContexts(pool),
   groups: new AccessGroups(pool),
   grants: new AccessGrants(pool),

@@ -85,27 +85,29 @@ deletes that graph's last indexed literal, confirms the graph still exists and
 checks the text wrapper without an RDF property join. Its executed integration
 case is the complete `SEARCH13` oracle in the QA coverage declaration.
 
-The candidate SEARCH11/12 unit tests cover exact private subject binding,
+The SEARCH11/12 unit and native tests cover exact private subject binding,
 private field isolation, missing projection/posting, Access-before-match
-ordering, a changed native head or private write epoch at pre-send recheck,
-receipt/abort distinction and fail-closed HTTP delivery. The cmd0.5.15 native
-journey and its remaining falsification gates are described below. Source-only
-tests do not qualify this lane.
+ordering, a changed native head or private write epoch after the durable arm,
+receipt/abort/withheld/unconfirmed distinctions and the socket delivery path.
+The HTTP route names the socket with 426 when its delivery owners are present;
+without them it remains fail-closed at 503. Source-only tests do not qualify
+this lane.
 
 The authored `private-search-native` fixture uses an isolated persistent QA
 project with the product command-only Fuseki assembler and a disposable
 PostgreSQL Access owner, so its recovery hold cannot affect parallel QA cases.
-It exercises the private posting audit, a selected public
-body beside a hidden draft, exact Contribution object/graph/index projection,
-Access-before-match denial, two Access registry instances, pre-send head change,
-expiry, recovery hold, principal/scope closure, final send-arm rejection,
-and pre-arm abort versus a post-arm disconnect that stays unresolved through
-closure.
-It checks the HTTP route stays closed and passed merged QA
-`20260925t085124-7fa328`;
-the Content-owned private body path, concrete-subject Jena query plan,
-cross-owner final check/arm race, and real socket cancellation remain separate
-SEARCH11/12 qualification gaps. Neither ID is declared complete by this fixture.
+It exercises the private posting audit, a selected public body beside a hidden
+draft, exact Contribution object/graph/index projection, Access-before-match
+denial, two Access registry instances, after-arm head change, expiry, recovery
+hold, principal/scope closure and final send-arm rejection. The socket fixture
+exercises receipt, half-closed peer, deadline termination, cross-replica strong
+closure, lost-replica sweep and recovery reopening. A growing hidden-match
+corpus checks that the query binds one concrete subject before Lucene matching.
+The 30-second sweep records possible delivery as `unconfirmed`; it never claims
+an offered frame was recalled or not delivered. These are SEARCH12's native
+profile assertions. SEARCH11 remains partial because the Content-owned private
+body path and searchable Context, statement, name and avatar owners are absent;
+this fixture cannot qualify their disclosure clauses.
 
 The isolated `SEARCH02/SEARCH10` candidate-overflow fixture inserts 512 native
 text postings with no eligible Main relation and requires a complete empty result.
