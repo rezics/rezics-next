@@ -19,3 +19,10 @@ Public Realm Context selections use `rv:contextSelectionHead` with an exact
 expected-head graph guard. The existing Fuseki `rv:selectionHead` validator is
 specific to publication receipts and scopes; Context selections must not use
 that predicate until the validator admits their owner family.
+
+`POST /v1/contexts/{id}/state-transitions` uses the same semantic-head CAS and
+`context.state` receipt family. It copies the bounded sealed semantic manifest
+into a new exact revision while changing only the Context's active/retired state.
+Existing Statements and selections stay pinned; new selection of a retired
+Context and new explicit Statement adoption are denied. The transition reads one
+head and one manifest and never scans consumers.

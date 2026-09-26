@@ -34,6 +34,8 @@ export const CONTEXT_COST = {
   contextRead: { graphQueries: 2 },
   /** Speaker selection, Global head and one pinned-chain read; plus one Access proof per Private Context. */
   interpretation: { graphQueries: 3, accessQueriesPerPrivateContext: 1 },
+  /** One exact head read, one sealed manifest read and one guarded graph command. */
+  stateTransition: { graphQueries: 3, manifestReads: 1, consumerScans: 0 },
   statementRead: { graphQueries: 2 },
   /** Lineage, scope and one read of the local and Global slots. */
   statementResolution: { graphQueries: 3 },
@@ -52,7 +54,8 @@ export const CONTEXT_AUTHORITY = {
 /** Outbox event types the relay must register before the first Context command. */
 export const CONTEXT_EVENT_TYPES = [
   'ContextCreatedEvent', 'ContextSemanticRevisedEvent', 'ContextPreferenceRevisedEvent',
-  'ContextStateChangedEvent', 'ContextCreateStaleEvent', 'ContextCreateCancelledEvent',
+  'ContextStateChangedEvent', 'ContextStateStaleEvent', 'ContextStateCancelledEvent',
+  'ContextCreateStaleEvent', 'ContextCreateCancelledEvent',
   'ContextChangeStaleEvent', 'ContextChangeCancelledEvent',
   'ContextSelectionChangedEvent', 'ContextSelectionStaleEvent', 'ContextSelectionCancelledEvent',
 ] as const;

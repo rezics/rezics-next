@@ -99,6 +99,14 @@ export async function recordStatement(env: WorkActivationEnvironment, admission:
   if (interpretation.state === 'unavailable') throw new ContextCommandUnavailable('interpretation is unavailable');
   // The route previews first; a slot that became unresolved meanwhile seals as unavailable.
   if (interpretation.state !== 'resolved') throw new ContextCommandUnavailable(`interpretation is ${interpretation.state}`);
+  // A new explicit use is an adoption. Retired Contexts remain readable for earlier
+  // Statements and existing pinned selections, but cannot be newly adopted.
+  const explicitGuard = input.interpretation.kind === 'explicit'
+    ? `GRAPH ${iri(GRAPHS.current)} { ${iri(input.interpretation.context)} a rv:SemanticContext ;
+        rv:contextState rv:Active . }` : '';
+  if (explicitGuard && (await env.fuseki.query(`PREFIX rv: <${RV}> ASK { ${explicitGuard} }`)).boolean !== true) {
+    throw new ContextCommandUnavailable('explicit Context is retired or unavailable');
+  }
   if (input.expectedInterpretation && (input.expectedInterpretation.semanticRevision
     !== interpretation.semanticRevision || input.expectedInterpretation.definition !== interpretation.definition)) {
     return checkedCommandReceipt((await sealCommandTerminal(env, admission, family, 'stale-head'))!,
@@ -146,7 +154,7 @@ export async function recordStatement(env: WorkActivationEnvironment, admission:
         rv:manifest ${iri(`urn:rezics:sha256:${manifest}`)} ;
         rv:dataEpoch ${lit(env.lineage.dataEpoch)} ; rv:sequence ?next . }`,
     where: `GRAPH ${iri(GRAPHS.current)} { ${iri(input.subject)} a ?subjectType . }
-      ${realmGuard} ${pinGuard} ${selectionGuard}
+      ${realmGuard} ${pinGuard} ${selectionGuard} ${explicitGuard}
       FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} { ${iri(statement)} ?p ?o } }` });
   if (committed) return checkedCommandReceipt(committed, admission, request.digest);
   if (selectionGuard) {

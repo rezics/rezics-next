@@ -6,7 +6,7 @@ import type { VerifiedPrincipal } from '../modules/access/admission.ts';
 import { ContextCommandUnavailable, InvalidContextCommand, PendingContextCommand, StaleContextCommand,
   runAdmittedCommand, type ContextCommandReceipt } from '../modules/context/command.ts';
 import { createContext, createContextRequest, reviseContext, reviseContextRequest, selectRealmContext,
-  selectRealmContextRequest, CONTEXT_FAMILIES } from '../modules/context/graph.ts';
+  selectRealmContextRequest, setContextState, setContextStateRequest, CONTEXT_FAMILIES } from '../modules/context/graph.ts';
 import { resolveInterpretation, type Interpretation,
   type InterpretationSpeaker } from '../modules/context/interpretation.ts';
 import { PrivateContextSelections, PrivateSelectionConflict, PrivateSelectionDenied, PrivateSelectionInvalid,
@@ -28,6 +28,7 @@ import { commandError, problem } from './problems.ts';
 export const openApiOperations = {
   '/v1/contexts': { post: { bearer: true, idempotencyKey: true } },
   '/v1/contexts/{id}/semantic-revisions': { post: { bearer: true, idempotencyKey: true } },
+  '/v1/contexts/{id}/state-transitions': { post: { bearer: true, idempotencyKey: true } },
   '/v1/contexts/{id}': { get: {} },
   '/v1/realms/{realm}/context-selections': { post: { bearer: true, idempotencyKey: true } },
   '/v1/me/context-selections': { put: { bearer: true, idempotencyKey: true }, get: { bearer: true } },
@@ -250,6 +251,28 @@ export function contextRoutes(fuseki: FusekiClient, work: MainWorkDependencies) 
           actingSubject: body.actingSubject, digest: plan.digest, input, idempotencyKey: key,
           execute: admission => reviseContext(env, admission, input) });
         return written(receipt, { profile: 'context-v1', context: receipt.component, semanticRevision: receipt.revision });
+      } catch (error) { return contextError(error); }
+    })
+    .post('/v1/contexts/:id/state-transitions', {
+      params: t.Object({ id: t.String({ pattern: '^[0-9a-f-]{36}$' }) }),
+      body: t.Object({ profile: t.Literal('context-v1'), expectedSemanticHead: native,
+        state: t.Union([t.Literal('active'), t.Literal('retired')]), actingSubject: native },
+      { additionalProperties: false }),
+      response: { 200: contextWriteResponse, 201: contextWriteResponse, ...graphWriteResponses },
+    }, async ({ request, params, body }) => {
+      const key = idempotencyKey(request);
+      if (key instanceof Response) return key;
+      try {
+        const input = { context: `https://rezics.com/id/${params.id}`,
+          expectedSemanticHead: body.expectedSemanticHead, state: body.state,
+          actingSubject: body.actingSubject };
+        const plan = setContextStateRequest(input);
+        const receipt = await runAdmittedCommand(env, work.account, work.access, request, {
+          family: CONTEXT_FAMILIES.state, oauthScope: 'context:write', scope: plan.scope,
+          action: plan.action, actingSubject: body.actingSubject, digest: plan.digest,
+          input, idempotencyKey: key, execute: admission => setContextState(env, admission, input) });
+        return written(receipt, { profile: 'context-v1', context: receipt.component,
+          semanticRevision: receipt.revision });
       } catch (error) { return contextError(error); }
     })
     .get('/v1/contexts/:id', {

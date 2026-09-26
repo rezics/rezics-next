@@ -51,6 +51,8 @@ const EVENT_TYPES: Record<string, { committed: string; stale: string; cancelled:
     cancelled: 'ContextCreateCancelledEvent' },
   'context-revise-v1': { committed: 'ContextSemanticRevisedEvent', stale: 'ContextChangeStaleEvent',
     cancelled: 'ContextChangeCancelledEvent' },
+  'context-state-v1': { committed: 'ContextStateChangedEvent', stale: 'ContextStateStaleEvent',
+    cancelled: 'ContextStateCancelledEvent' },
   'context-realm-selection-v1': { committed: 'ContextSelectionChangedEvent',
     stale: 'ContextSelectionStaleEvent', cancelled: 'ContextSelectionCancelledEvent' },
   'statement-record-v1': { committed: 'StatementRecordedEvent', stale: 'StatementChangeStaleEvent',

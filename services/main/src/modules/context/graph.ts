@@ -4,9 +4,11 @@ import { GRAPHS, ID, RV, hash, iri, lit, prepareComponent,
   type WorkActivationEnvironment } from '../work/activate.ts';
 import { ContextCommandUnavailable, InvalidContextCommand, checkedCommandReceipt, commitCommand,
   readCommandReceipt, sealCommandTerminal, term, type ContextCommandReceipt } from './command.ts';
+import { readContextRevision } from './read.ts';
 import { CONTEXT_AUTHORITY, CONTEXT_PROFILE, CONTEXT_SELECTION_PROFILE, CONTEXT_SELECTION_SCOPE_PROFILE,
   GLOBAL_SEMANTIC_CONTEXT, canonicalContextEntries, checkContextSelectionScope, contextEntryIri,
-  contextSelectionKey, nextInheritanceDepth, type ContextDisclosure, type ContextEntryRecord,
+  contextSelectionKey, nextInheritanceDepth, InvalidContextSchemaInput,
+  type ContextDisclosure, type ContextEntryRecord,
   type ContextSelectionScope } from './schema.ts';
 
 const nativeId = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
@@ -15,7 +17,8 @@ const SCOPE_TERMS = { default: 'DefaultScope', domain: 'DomainScope', object: 'O
 const ENTRY_TERMS = { defined: 'Defined', unresolved: 'Unresolved', disabled: 'Disabled' } as const;
 
 export const CONTEXT_FAMILIES = {
-  create: 'context-create-v1', revise: 'context-revise-v1', realmSelect: 'context-realm-selection-v1',
+  create: 'context-create-v1', revise: 'context-revise-v1', state: 'context-state-v1',
+  realmSelect: 'context-realm-selection-v1',
 } as const;
 
 export interface CreateContextInput {
@@ -30,6 +33,12 @@ export interface ReviseContextInput {
   expectedSemanticHead: string;
   base: string | null;
   entries: ContextEntryRecord[];
+  actingSubject: string;
+}
+export interface SetContextStateInput {
+  context: string;
+  expectedSemanticHead: string;
+  state: 'active' | 'retired';
   actingSubject: string;
 }
 export interface SelectRealmContextInput {
@@ -71,6 +80,17 @@ export function reviseContextRequest(input: ReviseContextInput) {
     input.actingSubject])) };
 }
 
+export function setContextStateRequest(input: SetContextStateInput) {
+  checkActor(input.actingSubject);
+  if (!nativeId.test(input.context) || !nativeId.test(input.expectedSemanticHead)
+    || !['active', 'retired'].includes(input.state)) {
+    throw new InvalidContextCommand('invalid Context state transition');
+  }
+  return { action: 'context.state', scope: `context:change:${input.context}`,
+    digest: hash(JSON.stringify([CONTEXT_FAMILIES.state, input.context,
+      input.expectedSemanticHead, input.state, input.actingSubject])) };
+}
+
 export function selectRealmContextRequest(input: SelectRealmContextInput) {
   checkActor(input.actingSubject);
   checkContextSelectionScope(input.scope);
@@ -109,7 +129,12 @@ async function baseDepth(env: WorkActivationEnvironment, base: string | null,
     || (disclosure === 'public' && row.disclosure?.value !== `${RV}Public`)) {
     throw new ContextCommandUnavailable('Context base revision is unavailable');
   }
-  const depth = nextInheritanceDepth(Number(row.depth.value));
+  let depth: number;
+  try { depth = nextInheritanceDepth(Number(row.depth.value)); }
+  catch (error) {
+    if (error instanceof InvalidContextSchemaInput) throw new ContextCommandUnavailable(error.message);
+    throw error;
+  }
   return { depth, guard: `GRAPH ${iri(GRAPHS.revisions)} { ${iri(base)} a rv:ContextSemanticRevision ;
       rv:component ${iri(row.context.value)} ; rv:inheritanceDepth ${depth - 1} . }
     GRAPH ${iri(GRAPHS.current)} { ${iri(row.context.value)} a rv:SemanticContext ; rv:contextState rv:Active ;
@@ -207,6 +232,45 @@ export async function reviseContext(env: WorkActivationEnvironment, admission: R
   const sealed = await sealCommandTerminal(env, admission, CONTEXT_FAMILIES.revise, 'stale-head', stale);
   if (sealed) return checkedCommandReceipt(sealed, admission, request.digest);
   throw new ContextCommandUnavailable('Context changed during revision');
+}
+
+/** Retire or restore a Context without rewriting its pinned consumers or changing its definitions. */
+export async function setContextState(env: WorkActivationEnvironment, admission: RegisteredAdmission,
+  input: SetContextStateInput): Promise<ContextCommandReceipt> {
+  const request = setContextStateRequest(input);
+  const family = CONTEXT_FAMILIES.state;
+  const existing = await readCommandReceipt(env, admission.id, family);
+  if (existing) return checkedCommandReceipt(existing, admission, request.digest);
+  const current = await readContextRevision(env, input.context, null, async () => true);
+  const stale = `GRAPH ${iri(GRAPHS.current)} { ${iri(input.context)} a rv:SemanticContext ;
+    rv:semanticHead ?other . FILTER(?other != ${iri(input.expectedSemanticHead)}) }`;
+  if (current.semanticHead !== input.expectedSemanticHead) {
+    return checkedCommandReceipt((await sealCommandTerminal(env, admission, family,
+      'stale-head', stale))!, admission, request.digest);
+  }
+  if (current.state === input.state) throw new InvalidContextCommand('Context state is unchanged');
+  const revision = ID + Bun.randomUUIDv7();
+  const operation = ID + Bun.randomUUIDv7();
+  const plan = await semanticRevisionPlan(env, input.context, revision, input.expectedSemanticHead,
+    current.base, current.inheritanceDepth, canonicalContextEntries(current.entries), input.actingSubject, operation);
+  const from = current.state === 'active' ? 'Active' : 'Retired';
+  const to = input.state === 'active' ? 'Active' : 'Retired';
+  const committed = await commitCommand(env, admission, { family, digest: request.digest,
+    validations: plan.validations, operation, component: input.context, revision,
+    expectedHead: input.expectedSemanticHead,
+    remove: `GRAPH ${iri(GRAPHS.current)} { ${iri(input.context)} rv:semanticHead ${iri(input.expectedSemanticHead)} ;
+      rv:contextState rv:${from} }`,
+    insert: `GRAPH ${iri(GRAPHS.current)} { ${iri(input.context)} rv:semanticHead ${iri(revision)} ;
+      rv:contextState rv:${to} } ${plan.insert}`,
+    where: `GRAPH ${iri(GRAPHS.current)} { ${iri(input.context)} a rv:SemanticContext ;
+      rv:semanticHead ${iri(input.expectedSemanticHead)} ; rv:contextState rv:${from} . }
+      GRAPH ${iri(GRAPHS.revisions)} { ${iri(input.expectedSemanticHead)} a rv:ContextSemanticRevision ;
+        rv:component ${iri(input.context)} . }
+      FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.revisions)} { ${iri(revision)} ?p ?o } }` });
+  if (committed) return checkedCommandReceipt(committed, admission, request.digest);
+  const sealed = await sealCommandTerminal(env, admission, family, 'stale-head', stale);
+  if (sealed) return checkedCommandReceipt(sealed, admission, request.digest);
+  throw new ContextCommandUnavailable('Context state changed during transition');
 }
 
 const realmGuard = (realm: string) => `?space a rv:Space ; rv:realmCapability ${iri(realm)} ; rv:disclosure rv:Public .
