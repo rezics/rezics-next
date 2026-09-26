@@ -63,8 +63,24 @@ export function stampFusekiImage(root: string, check: boolean): void {
   if (index < 0) throw new Error('Cannot locate the Fuseki image line in Compose');
   const current = lines[index]!.replace(/^    image:\s*/, '').trim();
   const expected = fusekiImageTag(root);
+  stampReleaseManifest(root, expected, check);
   if (current === expected) return;
   if (check) throw new Error(`Generated artifact differs: ${composeFile} Fuseki image ${current}, expected ${expected}; run yarn gen`);
   lines[index] = `    image: ${expected}`;
   writeFileSync(path, lines.join('\n'));
+}
+
+export const releaseManifestFile = 'scripts/dev/release-manifest.ts';
+
+/** The checked-in release pins the same derived Fuseki tag and command-module version as Compose. */
+function stampReleaseManifest(root: string, image: string, check: boolean): void {
+  const path = join(root, releaseManifestFile);
+  const text = readFileSync(path, 'utf8');
+  const module = /-cmd(\d+\.\d+\.\d+)-/.exec(image)?.[1];
+  if (!module) throw new Error(`Cannot read the command-module version from ${image}`);
+  const next = text.replace(/^(    fuseki: )'[^']*',$/m, `$1'${image}',`)
+    .replace(/^(  fusekiModule: )'[^']*',$/m, `$1'${module}',`);
+  if (next === text) return;
+  if (check) throw new Error(`Generated artifact differs: ${releaseManifestFile} Fuseki pin; run yarn gen`);
+  writeFileSync(path, next);
 }
