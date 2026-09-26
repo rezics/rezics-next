@@ -3728,6 +3728,1095 @@
         ]
       }
     },
+    "/v1/access/managed-organization-grants": {
+      "post": {
+        "operationId": "postV1AccessManaged-organization-grants",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 128,
+              "minLength": 1,
+              "pattern": "^[A-Za-z0-9:_./-]{1,128}$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "actions": {
+                        "items": {
+                          "const": "access.org.roster.policy",
+                          "type": "string"
+                        },
+                        "maxItems": 1,
+                        "minItems": 1,
+                        "type": "array"
+                      },
+                      "delegationCeiling": {
+                        "const": 0,
+                        "type": "number"
+                      },
+                      "expectedAuthorityEpoch": {
+                        "maxLength": 19,
+                        "pattern": "^(0|[1-9][0-9]{0,18})$",
+                        "type": "string"
+                      },
+                      "operation": {
+                        "const": "issue",
+                        "type": "string"
+                      },
+                      "organizationSubject": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                        "type": "string"
+                      },
+                      "profile": {
+                        "const": "access-managed-organization-grant-v1",
+                        "type": "string"
+                      },
+                      "recipient": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "id": {
+                            "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                            "type": "string"
+                          },
+                          "kind": {
+                            "enum": [
+                              "realm",
+                              "parent"
+                            ],
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "id"
+                        ],
+                        "type": "object"
+                      },
+                      "validFrom": {
+                        "format": "date-time",
+                        "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\.[0-9]{3}Z$",
+                        "type": "string"
+                      },
+                      "validUntil": {
+                        "format": "date-time",
+                        "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\.[0-9]{3}Z$",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "profile",
+                      "operation",
+                      "organizationSubject",
+                      "recipient",
+                      "actions",
+                      "delegationCeiling",
+                      "validFrom",
+                      "validUntil",
+                      "expectedAuthorityEpoch"
+                    ],
+                    "type": "object"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "expectedAuthorityEpoch": {
+                        "maxLength": 19,
+                        "pattern": "^(0|[1-9][0-9]{0,18})$",
+                        "type": "string"
+                      },
+                      "expectedGeneration": {
+                        "maxLength": 19,
+                        "pattern": "^(0|[1-9][0-9]{0,18})$",
+                        "type": "string"
+                      },
+                      "grantId": {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      "operation": {
+                        "const": "revoke",
+                        "type": "string"
+                      },
+                      "organizationSubject": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                        "type": "string"
+                      },
+                      "profile": {
+                        "const": "access-managed-organization-grant-v1",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "profile",
+                      "operation",
+                      "organizationSubject",
+                      "grantId",
+                      "expectedAuthorityEpoch",
+                      "expectedGeneration"
+                    ],
+                    "type": "object"
+                  }
+                ]
+              }
+            },
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "actions": {
+                        "items": {
+                          "const": "access.org.roster.policy",
+                          "type": "string"
+                        },
+                        "maxItems": 1,
+                        "minItems": 1,
+                        "type": "array"
+                      },
+                      "delegationCeiling": {
+                        "const": 0,
+                        "type": "number"
+                      },
+                      "expectedAuthorityEpoch": {
+                        "maxLength": 19,
+                        "pattern": "^(0|[1-9][0-9]{0,18})$",
+                        "type": "string"
+                      },
+                      "operation": {
+                        "const": "issue",
+                        "type": "string"
+                      },
+                      "organizationSubject": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                        "type": "string"
+                      },
+                      "profile": {
+                        "const": "access-managed-organization-grant-v1",
+                        "type": "string"
+                      },
+                      "recipient": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "id": {
+                            "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                            "type": "string"
+                          },
+                          "kind": {
+                            "enum": [
+                              "realm",
+                              "parent"
+                            ],
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "id"
+                        ],
+                        "type": "object"
+                      },
+                      "validFrom": {
+                        "format": "date-time",
+                        "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\.[0-9]{3}Z$",
+                        "type": "string"
+                      },
+                      "validUntil": {
+                        "format": "date-time",
+                        "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\.[0-9]{3}Z$",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "profile",
+                      "operation",
+                      "organizationSubject",
+                      "recipient",
+                      "actions",
+                      "delegationCeiling",
+                      "validFrom",
+                      "validUntil",
+                      "expectedAuthorityEpoch"
+                    ],
+                    "type": "object"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "expectedAuthorityEpoch": {
+                        "maxLength": 19,
+                        "pattern": "^(0|[1-9][0-9]{0,18})$",
+                        "type": "string"
+                      },
+                      "expectedGeneration": {
+                        "maxLength": 19,
+                        "pattern": "^(0|[1-9][0-9]{0,18})$",
+                        "type": "string"
+                      },
+                      "grantId": {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      "operation": {
+                        "const": "revoke",
+                        "type": "string"
+                      },
+                      "organizationSubject": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                        "type": "string"
+                      },
+                      "profile": {
+                        "const": "access-managed-organization-grant-v1",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "profile",
+                      "operation",
+                      "organizationSubject",
+                      "grantId",
+                      "expectedAuthorityEpoch",
+                      "expectedGeneration"
+                    ],
+                    "type": "object"
+                  }
+                ]
+              }
+            },
+            "multipart/form-data": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "actions": {
+                        "items": {
+                          "const": "access.org.roster.policy",
+                          "type": "string"
+                        },
+                        "maxItems": 1,
+                        "minItems": 1,
+                        "type": "array"
+                      },
+                      "delegationCeiling": {
+                        "const": 0,
+                        "type": "number"
+                      },
+                      "expectedAuthorityEpoch": {
+                        "maxLength": 19,
+                        "pattern": "^(0|[1-9][0-9]{0,18})$",
+                        "type": "string"
+                      },
+                      "operation": {
+                        "const": "issue",
+                        "type": "string"
+                      },
+                      "organizationSubject": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                        "type": "string"
+                      },
+                      "profile": {
+                        "const": "access-managed-organization-grant-v1",
+                        "type": "string"
+                      },
+                      "recipient": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "id": {
+                            "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                            "type": "string"
+                          },
+                          "kind": {
+                            "enum": [
+                              "realm",
+                              "parent"
+                            ],
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "id"
+                        ],
+                        "type": "object"
+                      },
+                      "validFrom": {
+                        "format": "date-time",
+                        "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\.[0-9]{3}Z$",
+                        "type": "string"
+                      },
+                      "validUntil": {
+                        "format": "date-time",
+                        "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\.[0-9]{3}Z$",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "profile",
+                      "operation",
+                      "organizationSubject",
+                      "recipient",
+                      "actions",
+                      "delegationCeiling",
+                      "validFrom",
+                      "validUntil",
+                      "expectedAuthorityEpoch"
+                    ],
+                    "type": "object"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "expectedAuthorityEpoch": {
+                        "maxLength": 19,
+                        "pattern": "^(0|[1-9][0-9]{0,18})$",
+                        "type": "string"
+                      },
+                      "expectedGeneration": {
+                        "maxLength": 19,
+                        "pattern": "^(0|[1-9][0-9]{0,18})$",
+                        "type": "string"
+                      },
+                      "grantId": {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      "operation": {
+                        "const": "revoke",
+                        "type": "string"
+                      },
+                      "organizationSubject": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                        "type": "string"
+                      },
+                      "profile": {
+                        "const": "access-managed-organization-grant-v1",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "profile",
+                      "operation",
+                      "organizationSubject",
+                      "grantId",
+                      "expectedAuthorityEpoch",
+                      "expectedGeneration"
+                    ],
+                    "type": "object"
+                  }
+                ]
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "actions": {
+                      "items": {
+                        "const": "access.org.roster.policy",
+                        "type": "string"
+                      },
+                      "maxItems": 1,
+                      "minItems": 1,
+                      "type": "array"
+                    },
+                    "active": {
+                      "type": "boolean"
+                    },
+                    "authorityEpoch": {
+                      "maxLength": 19,
+                      "pattern": "^(0|[1-9][0-9]{0,18})$",
+                      "type": "string"
+                    },
+                    "delegationCeiling": {
+                      "const": 0,
+                      "type": "number"
+                    },
+                    "generation": {
+                      "maxLength": 19,
+                      "pattern": "^(0|[1-9][0-9]{0,18})$",
+                      "type": "string"
+                    },
+                    "grantId": {
+                      "format": "uuid",
+                      "type": "string"
+                    },
+                    "operation": {
+                      "enum": [
+                        "issue",
+                        "revoke"
+                      ],
+                      "type": "string"
+                    },
+                    "organizationSubject": {
+                      "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                      "type": "string"
+                    },
+                    "profile": {
+                      "const": "access-managed-organization-grant-v1",
+                      "type": "string"
+                    },
+                    "recipient": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "id": {
+                          "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                          "type": "string"
+                        },
+                        "kind": {
+                          "enum": [
+                            "realm",
+                            "parent"
+                          ],
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "kind",
+                        "id"
+                      ],
+                      "type": "object"
+                    },
+                    "recipientSubject": {
+                      "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                      "type": "string"
+                    },
+                    "replayed": {
+                      "type": "boolean"
+                    },
+                    "resource": {
+                      "properties": {
+                        "kind": {
+                          "const": "org-roster",
+                          "type": "string"
+                        },
+                        "organizationSubject": {
+                          "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "kind",
+                        "organizationSubject"
+                      ],
+                      "type": "object"
+                    },
+                    "validFrom": {
+                      "format": "date-time",
+                      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\.[0-9]{3}Z$",
+                      "type": "string"
+                    },
+                    "validUntil": {
+                      "format": "date-time",
+                      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\.[0-9]{3}Z$",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "profile",
+                    "organizationSubject",
+                    "recipient",
+                    "actions",
+                    "delegationCeiling",
+                    "validFrom",
+                    "validUntil",
+                    "grantId",
+                    "recipientSubject",
+                    "resource",
+                    "generation",
+                    "active",
+                    "operation",
+                    "authorityEpoch",
+                    "replayed"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 200"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 400,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 400"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 401,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 401"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 403,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 403"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 409,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 409"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 500,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 500"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 503,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 503"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/v1/access/managed-organization-grants/{grantId}": {
+      "get": {
+        "operationId": "getV1AccessManaged-organization-grantsByGrantId",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "grantId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "side",
+            "required": true,
+            "schema": {
+              "enum": [
+                "organization",
+                "recipient"
+              ],
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "actions": {
+                      "items": {
+                        "const": "access.org.roster.policy",
+                        "type": "string"
+                      },
+                      "maxItems": 1,
+                      "minItems": 1,
+                      "type": "array"
+                    },
+                    "active": {
+                      "type": "boolean"
+                    },
+                    "admissionsOpen": {
+                      "type": "boolean"
+                    },
+                    "authorityEpoch": {
+                      "maxLength": 19,
+                      "pattern": "^(0|[1-9][0-9]{0,18})$",
+                      "type": "string"
+                    },
+                    "delegationCeiling": {
+                      "const": 0,
+                      "type": "number"
+                    },
+                    "generation": {
+                      "maxLength": 19,
+                      "pattern": "^(0|[1-9][0-9]{0,18})$",
+                      "type": "string"
+                    },
+                    "grantId": {
+                      "format": "uuid",
+                      "type": "string"
+                    },
+                    "organizationSubject": {
+                      "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                      "type": "string"
+                    },
+                    "policyRevision": {
+                      "maxLength": 19,
+                      "pattern": "^(0|[1-9][0-9]{0,18})$",
+                      "type": "string"
+                    },
+                    "profile": {
+                      "const": "access-managed-organization-grant-v1",
+                      "type": "string"
+                    },
+                    "recipient": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "id": {
+                          "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                          "type": "string"
+                        },
+                        "kind": {
+                          "enum": [
+                            "realm",
+                            "parent"
+                          ],
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "kind",
+                        "id"
+                      ],
+                      "type": "object"
+                    },
+                    "recipientSubject": {
+                      "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                      "type": "string"
+                    },
+                    "representation": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "properties": {
+                        "generation": {
+                          "maxLength": 19,
+                          "pattern": "^(0|[1-9][0-9]{0,18})$",
+                          "type": "string"
+                        },
+                        "id": {
+                          "format": "uuid",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "generation"
+                      ],
+                      "type": [
+                        "object",
+                        "null"
+                      ]
+                    },
+                    "resource": {
+                      "properties": {
+                        "kind": {
+                          "const": "org-roster",
+                          "type": "string"
+                        },
+                        "organizationSubject": {
+                          "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "kind",
+                        "organizationSubject"
+                      ],
+                      "type": "object"
+                    },
+                    "validFrom": {
+                      "format": "date-time",
+                      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\.[0-9]{3}Z$",
+                      "type": "string"
+                    },
+                    "validUntil": {
+                      "format": "date-time",
+                      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\.[0-9]{3}Z$",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "profile",
+                    "organizationSubject",
+                    "recipient",
+                    "actions",
+                    "delegationCeiling",
+                    "validFrom",
+                    "validUntil",
+                    "grantId",
+                    "recipientSubject",
+                    "resource",
+                    "generation",
+                    "active",
+                    "authorityEpoch",
+                    "policyRevision",
+                    "admissionsOpen",
+                    "representation"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 200"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 400,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 400"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 401,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 401"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 403,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 403"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 409,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 409"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 500,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 500"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 503,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 503"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
     "/v1/access/membership-changes": {
       "post": {
         "operationId": "postV1AccessMembership-changes",
@@ -5627,6 +6716,748 @@
                     "policyRevision",
                     "termsRevision",
                     "expiresAt",
+                    "replayed"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 200"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 400,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 400"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 401,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 401"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 403,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 403"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 409,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 409"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 500,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 500"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 503,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 503"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/v1/access/organization-management": {
+      "get": {
+        "operationId": "getV1AccessOrganization-management",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "organizationSubject",
+            "required": true,
+            "schema": {
+              "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "admissionsOpen": {
+                      "type": "boolean"
+                    },
+                    "authorityEpoch": {
+                      "maxLength": 19,
+                      "pattern": "^(0|[1-9][0-9]{0,18})$",
+                      "type": "string"
+                    },
+                    "organizationSubject": {
+                      "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                      "type": "string"
+                    },
+                    "policyRevision": {
+                      "maxLength": 19,
+                      "pattern": "^(0|[1-9][0-9]{0,18})$",
+                      "type": "string"
+                    },
+                    "profile": {
+                      "const": "access-organization-management-v1",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "profile",
+                    "organizationSubject",
+                    "authorityEpoch",
+                    "policyRevision",
+                    "admissionsOpen"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 200"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 400,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 400"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 401,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 401"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 403,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 403"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 409,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 409"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 500,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 500"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 503,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 503"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/v1/access/organization-roster-policy": {
+      "post": {
+        "operationId": "postV1AccessOrganization-roster-policy",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 128,
+              "minLength": 1,
+              "pattern": "^[A-Za-z0-9:_./-]{1,128}$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "admissionsOpen": {
+                    "type": "boolean"
+                  },
+                  "expectedGrantGeneration": {
+                    "maxLength": 19,
+                    "pattern": "^(0|[1-9][0-9]{0,18})$",
+                    "type": "string"
+                  },
+                  "expectedPolicyRevision": {
+                    "maxLength": 19,
+                    "pattern": "^(0|[1-9][0-9]{0,18})$",
+                    "type": "string"
+                  },
+                  "expectedRepresentationGeneration": {
+                    "maxLength": 19,
+                    "pattern": "^(0|[1-9][0-9]{0,18})$",
+                    "type": "string"
+                  },
+                  "grantId": {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  "organizationSubject": {
+                    "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                    "type": "string"
+                  },
+                  "profile": {
+                    "const": "access-organization-roster-policy-v1",
+                    "type": "string"
+                  },
+                  "recipient": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "id": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                        "type": "string"
+                      },
+                      "kind": {
+                        "enum": [
+                          "realm",
+                          "parent"
+                        ],
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "id"
+                    ],
+                    "type": "object"
+                  },
+                  "representationId": {
+                    "format": "uuid",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "profile",
+                  "organizationSubject",
+                  "recipient",
+                  "grantId",
+                  "expectedGrantGeneration",
+                  "representationId",
+                  "expectedRepresentationGeneration",
+                  "expectedPolicyRevision",
+                  "admissionsOpen"
+                ],
+                "type": "object"
+              }
+            },
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "admissionsOpen": {
+                    "type": "boolean"
+                  },
+                  "expectedGrantGeneration": {
+                    "maxLength": 19,
+                    "pattern": "^(0|[1-9][0-9]{0,18})$",
+                    "type": "string"
+                  },
+                  "expectedPolicyRevision": {
+                    "maxLength": 19,
+                    "pattern": "^(0|[1-9][0-9]{0,18})$",
+                    "type": "string"
+                  },
+                  "expectedRepresentationGeneration": {
+                    "maxLength": 19,
+                    "pattern": "^(0|[1-9][0-9]{0,18})$",
+                    "type": "string"
+                  },
+                  "grantId": {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  "organizationSubject": {
+                    "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                    "type": "string"
+                  },
+                  "profile": {
+                    "const": "access-organization-roster-policy-v1",
+                    "type": "string"
+                  },
+                  "recipient": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "id": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                        "type": "string"
+                      },
+                      "kind": {
+                        "enum": [
+                          "realm",
+                          "parent"
+                        ],
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "id"
+                    ],
+                    "type": "object"
+                  },
+                  "representationId": {
+                    "format": "uuid",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "profile",
+                  "organizationSubject",
+                  "recipient",
+                  "grantId",
+                  "expectedGrantGeneration",
+                  "representationId",
+                  "expectedRepresentationGeneration",
+                  "expectedPolicyRevision",
+                  "admissionsOpen"
+                ],
+                "type": "object"
+              }
+            },
+            "multipart/form-data": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "admissionsOpen": {
+                    "type": "boolean"
+                  },
+                  "expectedGrantGeneration": {
+                    "maxLength": 19,
+                    "pattern": "^(0|[1-9][0-9]{0,18})$",
+                    "type": "string"
+                  },
+                  "expectedPolicyRevision": {
+                    "maxLength": 19,
+                    "pattern": "^(0|[1-9][0-9]{0,18})$",
+                    "type": "string"
+                  },
+                  "expectedRepresentationGeneration": {
+                    "maxLength": 19,
+                    "pattern": "^(0|[1-9][0-9]{0,18})$",
+                    "type": "string"
+                  },
+                  "grantId": {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  "organizationSubject": {
+                    "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                    "type": "string"
+                  },
+                  "profile": {
+                    "const": "access-organization-roster-policy-v1",
+                    "type": "string"
+                  },
+                  "recipient": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "id": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                        "type": "string"
+                      },
+                      "kind": {
+                        "enum": [
+                          "realm",
+                          "parent"
+                        ],
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "id"
+                    ],
+                    "type": "object"
+                  },
+                  "representationId": {
+                    "format": "uuid",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "profile",
+                  "organizationSubject",
+                  "recipient",
+                  "grantId",
+                  "expectedGrantGeneration",
+                  "representationId",
+                  "expectedRepresentationGeneration",
+                  "expectedPolicyRevision",
+                  "admissionsOpen"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "admissionsOpen": {
+                      "type": "boolean"
+                    },
+                    "authorityEpoch": {
+                      "maxLength": 19,
+                      "pattern": "^(0|[1-9][0-9]{0,18})$",
+                      "type": "string"
+                    },
+                    "grantGeneration": {
+                      "maxLength": 19,
+                      "pattern": "^(0|[1-9][0-9]{0,18})$",
+                      "type": "string"
+                    },
+                    "grantId": {
+                      "format": "uuid",
+                      "type": "string"
+                    },
+                    "organizationSubject": {
+                      "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                      "type": "string"
+                    },
+                    "policyRevision": {
+                      "maxLength": 19,
+                      "pattern": "^(0|[1-9][0-9]{0,18})$",
+                      "type": "string"
+                    },
+                    "profile": {
+                      "const": "access-organization-roster-policy-v1",
+                      "type": "string"
+                    },
+                    "replayed": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "profile",
+                    "organizationSubject",
+                    "authorityEpoch",
+                    "policyRevision",
+                    "admissionsOpen",
+                    "grantId",
+                    "grantGeneration",
                     "replayed"
                   ],
                   "type": "object"

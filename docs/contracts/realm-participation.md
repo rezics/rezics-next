@@ -120,6 +120,105 @@ ownership or erase independent publications.
 Apply [identity/access](identity-and-access.md) for all representation and
 grantability checks, including transitions between independent and managed modes.
 
+### Explicit managed organization profile
+
+The first managed operation is `access.org.roster.policy`: set whether **one
+organization's operational roster** accepts new joins. It changes the existing
+Access `membership_policy` for `kind: org`, advancing its revision atomically;
+the Agent and private-principal membership APIs consume that policy. It cannot
+change terms, add members, appoint representatives, grant permissions, publish,
+vote, recover control or affect a Realm's own roster. There is no wildcard or
+implicit administrator bundle.
+
+Access owns an immutable `managed_org_grant` payload with organization, one
+recipient (`realm` or explicitly admitted `parent` organization), resolved
+recipient authority subject, exact organization roster resource, the single
+named action, validity interval, and redelegation ceiling **zero**. Its lifecycle
+starts active at generation 1 and can only advance to revoked generation 2.
+Typed foreign keys retain the recipient's admitted Realm or parent record,
+preventing deletion/recreation from resetting a saved admission generation.
+An immutable event and principal/key/intent receipt accompany each change.
+`org_roster_policy_history` retains the exact grant generation and recipient
+representation proof for each protected policy effect. All are private Access
+state and participate in recovery coverage; public catalog links are never read.
+
+The issuer must currently represent the admitted organization for
+`access.org.managed.grant`, with an independent direct grant of that action.
+Issuance additionally requires its independent
+`access.org.managed.assign.roster-policy` grant. These installation-provisioned
+mandates/ceilings are separate from participation and ordinary roster management;
+this API cannot mint them. Wire instants use canonical UTC with three fractional
+digits (`YYYY-MM-DDTHH:mm:ss.sssZ`). Validity is at most 30 days and cannot outlive the
+selected issuer mandate, management grant or assignment ceiling. The recipient
+Realm must have a registered manager; a parent must be an active admitted
+organization. A grant cannot target its own issuer organization.
+
+Each **new effect** requires the exact original issuer principal enforcement
+epoch, subject/admission generations, representation and management/assignment
+grant IDs and generations to remain current. Narrowing either saved grant's
+lifetime below the managed grant's complete interval denies use, even while both
+are unexpired. Recipient subject/admission generations must also match. A Realm
+policy revision is the recipient admission generation in this first profile;
+changing it conservatively requires a new management grant. The caller names its
+current recipient representation ID/generation for `access.org.roster.policy`;
+it cannot substitute membership, a different Realm, a replacement issuer mandate
+or an unrelated direct right. Revocation uses a **current** organization issuance
+mandate, so loss of the original issuer path does not prevent a newly authorized
+organization representative from revoking. No dependent row expansion is needed:
+use rechecks a fixed set of exact dependencies. Leave/rejoin, suspension, moves
+and descriptive edits neither create, widen nor revive a revoked/stale grant.
+Participation itself is not a grant dependency and does not revoke an otherwise
+valid explicit management grant.
+
+All routes require a verified Account `access:manage` bearer:
+
+| API | Contract |
+| --- | --- |
+| `GET /v1/access/organization-management` | Under the organization's issuance mandate, read one exact organization, current authority epoch and roster policy revision/open state. |
+| `POST /v1/access/managed-organization-grants` | Issue or revoke one grant with expected authority epoch; revoke also names its exact generation. Issue names recipient, action, validity and ceiling zero. |
+| `GET /v1/access/managed-organization-grants/{grantId}` | Read one grant as organization issuer or recipient representative; return no principal IDs/private proofs. Recipient reads include its current representation ID/generation for use. |
+| `POST /v1/access/organization-roster-policy` | Name the exact grant, recipient context, organization, grant generation, representation ID/generation and roster policy revision, then set `admissionsOpen`. |
+
+Write keys bind canonical intent across these managed operations. An exact retry
+returns its immutable prior result after current caller authority checks, even
+after grant revocation or a later policy revision; it makes no new effect and
+does not claim that old state is current. Changed intent gives
+`409 managed_org_key_conflict`; stale epoch/grant/policy/representation generations
+give `409 managed_org_stale`; missing, expired or revoked authority gives
+`403 managed_org_denied`. Recovery holds and bounded database contention give
+`503 managed_org_unavailable`. Account session deactivation rejects the next API
+call before Access executes; Access principal deactivation also invalidates saved
+issuer proof. Identity projection/recovery keeps Account and Access separate.
+
+This chooses an explicit grant plus one policy operation over reusing the
+participation tuple or a general organization-administrator role. The latter
+alternatives blur use and assignment and silently enlarge the first consumer.
+The independent assignment ceiling follows the escalation distinction in
+[Kubernetes RBAC](https://kubernetes.io/docs/reference/access-authn-authz/rbac/#privilege-escalation-prevention-and-bootstrapping)
+(reviewed 2026-09-26); exact dependent lifetime, one action and zero redelegation
+are REZICS choices. [PostgreSQL 18 row locks](https://www.postgresql.org/docs/18/explicit-locking.html#LOCKING-ROWS)
+inform the transaction ordering, not proof of this authority composition.
+
+All operations lock the recovery fence, scope gate, selected authority rows,
+grant and policy. Writes serialize under the existing exclusive scope gate;
+reads use the shared gate. Locks last through commit, with two-second lock and
+five-second statement timeouts. Each request uses a fixed number of primary-key,
+unique or expiry-ordered indexed probes, constant selected rows and bounded
+payloads; there is no roster, grant-list or recursive authority expansion.
+Expected probe work is `O(log h)` in retained history `h`. Issue writes one grant,
+event, receipt and epoch; revoke updates one grant and writes one event, receipt
+and epoch; the protected operation updates one policy and writes one history,
+receipt and epoch. Retry/read change no business rows. These are logical owner
+row counts; index maintenance and PostgreSQL row-lock/WAL bytes are not measured
+by that assertion. SQL-call, selected-row, lock-wait, logical-write-count and
+unrelated-history counterexamples belong to affected tests; cold-cache I/O,
+physical write amplification, scope-gate throughput and deployment capacity
+remain unqualified.
+
+This is partial IAM24/IAM23/IAM06. Founding grants, general administrative
+actions, control/recovery, voting, publication moderation, paid benefits, moves,
+complete Realm quota/review and wider delegation remain retained work.
+
 ## Resource and action budgets
 
 Count publication slots, review work and other units according to explicit policy.

@@ -22,6 +22,12 @@ import { AccessMembershipConsents } from './modules/access/membership-consents.t
 import { AccessOrgRealmParticipation } from './modules/access/org-realm-participation.ts';
 import { OrgRealmConflict, OrgRealmDenied, OrgRealmStale,
   OrgRealmUnavailable } from './modules/access/org-realm-authority.ts';
+import { AccessManagedOrganizations } from './modules/access/managed-organizations.ts';
+import { ManagedOrgConflict, ManagedOrgDenied, ManagedOrgStale,
+  ManagedOrgUnavailable } from './modules/access/managed-org-authority.ts';
+import { managedOrgUuid, managedOrgQuery, managedOrgStateResult, managedOrgChangeBody,
+  managedOrgChangeResult, managedOrgReadQuery, managedOrgReadResult, orgRosterPolicyBody,
+  orgRosterPolicyResult } from './modules/access/managed-org-schemas.ts';
 import { AccessPrivateMemberships } from './modules/access/private-memberships.ts';
 import { AccessPrivateRecipients, PrivateRecipientConflict, PrivateRecipientDenied,
   PrivateRecipientStale, PrivateRecipientUnavailable } from './modules/access/private-recipients.ts';
@@ -198,6 +204,7 @@ export interface MainWorkDependencies {
   memberships?: AccessMemberships;
   membershipConsents?: AccessMembershipConsents;
   orgRealmParticipation?: AccessOrgRealmParticipation;
+  managedOrganizations?: AccessManagedOrganizations;
   privateMemberships?: AccessPrivateMemberships;
   privateRecipients?: AccessPrivateRecipients;
   representations?: AccessRepresentations;
@@ -1281,6 +1288,10 @@ function commandError(error: unknown): Response {
   if (error instanceof OrgRealmConflict) return problem(409, 'org_realm_key_conflict', 'Participation key binds another intent');
   if (error instanceof OrgRealmStale) return problem(409, 'org_realm_stale', 'Participation or policy basis changed');
   if (error instanceof OrgRealmUnavailable) return problem(503, 'org_realm_unavailable', 'Participation owner is unavailable');
+  if (error instanceof ManagedOrgDenied) return problem(403, 'managed_org_denied', 'Organization management is not admitted');
+  if (error instanceof ManagedOrgConflict) return problem(409, 'managed_org_key_conflict', 'Management key binds another intent');
+  if (error instanceof ManagedOrgStale) return problem(409, 'managed_org_stale', 'Management authority or policy changed');
+  if (error instanceof ManagedOrgUnavailable) return problem(503, 'managed_org_unavailable', 'Organization management is unavailable');
   if (error instanceof MembershipDenied) return problem(403, 'membership_denied', 'Membership change is not admitted');
   if (error instanceof MembershipConflict) return problem(409, 'membership_key_conflict', 'Membership key binds another intent');
   if (error instanceof MembershipStale) return problem(409, 'membership_stale', 'Membership or policy generation changed');
@@ -2421,6 +2432,60 @@ export function createMainApp(fuseki: FusekiClient, work?: MainWorkDependencies)
         return Response.json({ profile: 'work-create-agent-grant-change-v1',
           action: body.action, authorityEpoch },
         { headers: { 'cache-control': 'no-store' } });
+      } catch (error) { return commandError(error); }
+    })
+    .get('/v1/access/organization-management', {
+      query: managedOrgQuery,
+      response: { 200: managedOrgStateResult, ...writeProblems },
+    }, async ({ request, query }) => {
+      try {
+        const principal = await work.account.verify(request, ['access:manage']);
+        if (!work.managedOrganizations) throw new ManagedOrgUnavailable('owner missing');
+        const result = await work.managedOrganizations.readOrganization(principal, query.organizationSubject);
+        return Response.json({ profile: 'access-organization-management-v1', ...result },
+          { headers: { 'cache-control': 'no-store' } });
+      } catch (error) { return commandError(error); }
+    })
+    .get('/v1/access/managed-organization-grants/:grantId', {
+      params: t.Object({ grantId: managedOrgUuid }), query: managedOrgReadQuery,
+      response: { 200: managedOrgReadResult, ...writeProblems },
+    }, async ({ request, params, query }) => {
+      try {
+        const principal = await work.account.verify(request, ['access:manage']);
+        if (!work.managedOrganizations) throw new ManagedOrgUnavailable('owner missing');
+        const result = await work.managedOrganizations.readGrant(principal, params.grantId, query.side);
+        return Response.json({ profile: 'access-managed-organization-grant-v1', ...result },
+          { headers: { 'cache-control': 'no-store' } });
+      } catch (error) { return commandError(error); }
+    })
+    .post('/v1/access/managed-organization-grants', {
+      body: managedOrgChangeBody, response: { 200: managedOrgChangeResult, ...writeProblems },
+    }, async ({ request, body }) => {
+      try {
+        const principal = await work.account.verify(request, ['access:manage']);
+        if (!work.managedOrganizations) throw new ManagedOrgUnavailable('owner missing');
+        const key = request.headers.get('idempotency-key');
+        if (!key || key.length > 128 || key.includes('\0')) {
+          return problem(400, 'invalid_idempotency_key', 'A bounded idempotency key is required');
+        }
+        const result = await work.managedOrganizations.change(principal, body, key);
+        return Response.json({ profile: 'access-managed-organization-grant-v1', ...result },
+          { headers: { 'cache-control': 'no-store' } });
+      } catch (error) { return commandError(error); }
+    })
+    .post('/v1/access/organization-roster-policy', {
+      body: orgRosterPolicyBody, response: { 200: orgRosterPolicyResult, ...writeProblems },
+    }, async ({ request, body }) => {
+      try {
+        const principal = await work.account.verify(request, ['access:manage']);
+        if (!work.managedOrganizations) throw new ManagedOrgUnavailable('owner missing');
+        const key = request.headers.get('idempotency-key');
+        if (!key || key.length > 128 || key.includes('\0')) {
+          return problem(400, 'invalid_idempotency_key', 'A bounded idempotency key is required');
+        }
+        const result = await work.managedOrganizations.setRosterPolicy(principal, body, key);
+        return Response.json({ profile: 'access-organization-roster-policy-v1', ...result },
+          { headers: { 'cache-control': 'no-store' } });
       } catch (error) { return commandError(error); }
     })
     .post('/v1/access/org-realm-proposals', {

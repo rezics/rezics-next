@@ -219,6 +219,18 @@ only to registered permission families and stops at an independent authority roo
 Realm-local and explicitly managed organization powers follow
 [Realm participation](realm-participation.md).
 
+The first [explicit managed profile](realm-participation.md#explicit-managed-organization-profile)
+grants only `access.org.roster.policy` on the issuer organization's roster to one
+admitted Realm or parent. Issuance uses the separate organization mandate
+`access.org.managed.grant` plus `access.org.managed.assign.roster-policy` ceiling;
+use requires the recipient's current representation and the original exact issuer
+proof. Its delegation ceiling is zero. It does not appoint representatives or
+make a general administrator. This dependent lifetime is deliberately narrower
+than the institutional `work.create` grant below; replacing the original mandate
+requires a new managed grant. Participation and public description are not
+authority inputs. Owner admission and the initial issuer mandate remain
+installation inputs, not public founding/control APIs.
+
 A grant to an organization subject is exercised through its representatives. A
 grant to its eligible member set authorizes the qualifying members under that
 selector's declared subject model; it does not make them representatives. A Team

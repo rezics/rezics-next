@@ -10,6 +10,9 @@ import { AccessAdmissionRegistry, AdmissionDenied } from '../src/modules/access/
 import { AccessOrgRealmParticipation } from '../src/modules/access/org-realm-participation.ts';
 import { OrgRealmDenied } from '../src/modules/access/org-realm-authority.ts';
 import { seedOrgRealm } from '../../../tests/qa/support/org-realm.ts';
+import { seedManagedOrganization } from '../../../tests/qa/support/managed-organization.ts';
+import { AccessManagedOrganizations, type ManagedOrgChange } from '../src/modules/access/managed-organizations.ts';
+import { MANAGED_ORG_ACTION, ManagedOrgDenied, ManagedOrgStale } from '../src/modules/access/managed-org-authority.ts';
 import { accessOutboxCoverage, accessStateCoverage } from '../src/modules/work/restore-lineage.ts';
 import { assertPgRecoveryFrontier, PgRecoveryFrontierConflict,
   type PgRecoveryFrontier } from '../src/modules/work/pg-recovery-frontier.ts';
@@ -127,6 +130,23 @@ test('OPS03/IAM07/IAM06/IAM23/IAM24: archived Access WAL restores exact authorit
       reasonReference: 'pitr-suspension' };
     const suspended = await orgRealm.change(orgFixture.realmPrincipal, orgSuspend, 'pitr-org-suspend');
     expect(suspended).toMatchObject({ state: 'suspended', generation: '2', banned: true });
+    // Explicit management is not created or removed by structural participation.
+    // Grant, protected effect and revoke all occur after the saved base backup.
+    const managedFixture = await seedManagedOrganization(primary, orgFixture);
+    const managedOwner = new AccessManagedOrganizations(primary);
+    const managedIssue: ManagedOrgChange = { operation: 'issue', organizationSubject: orgFixture.org,
+      expectedAuthorityEpoch: '2', recipient: { kind: 'realm', id: orgFixture.realm },
+      actions: [MANAGED_ORG_ACTION.roster], delegationCeiling: 0,
+      validFrom: new Date(Date.now() - 1000).toISOString(), validUntil: new Date(Date.now() + 1200_000).toISOString() };
+    const managedGrant = await managedOwner.change(orgFixture.orgPrincipal, managedIssue, 'pitr-managed-issue');
+    const managedPolicy = { organizationSubject: orgFixture.org, recipient: { kind: 'realm' as const, id: orgFixture.realm },
+      grantId: managedGrant.grantId, expectedGrantGeneration: '1',
+      representationId: managedFixture.recipientRepresentation, expectedRepresentationGeneration: '0',
+      expectedPolicyRevision: '1', admissionsOpen: false };
+    const managedEffect = await managedOwner.setRosterPolicy(orgFixture.realmPrincipal, managedPolicy, 'pitr-managed-policy');
+    const managedRevoke: ManagedOrgChange = { operation: 'revoke', organizationSubject: orgFixture.org,
+      expectedAuthorityEpoch: '4', grantId: managedGrant.grantId, expectedGeneration: '1' };
+    const managedRevoked = await managedOwner.change(orgFixture.orgPrincipal, managedRevoke, 'pitr-managed-revoke');
     // Consent and one-use evidence must survive the isolated Access restore.
     const consentId = Bun.randomUUIDv7();
     const membershipId = Bun.randomUUIDv7();
@@ -220,8 +240,8 @@ test('OPS03/IAM07/IAM06/IAM23/IAM24: archived Access WAL restores exact authorit
         assigned_by_principal)
       VALUES ($1,$2,1,$3,$4,$5,1,now() + interval '1 hour',$4)`,
     [privateRoleBindingId, roleFamilyId, actingSubject, principalId, privateMembershipId]);
-    const closure = await registry.strongCloseScope('work:create:root', '2');
-    expect(closure.authorityEpoch).toBe('3');
+    const closure = await registry.strongCloseScope('work:create:root', '5');
+    expect(closure.authorityEpoch).toBe('6');
     expect(closure.pending).toBe(1);
     const principalFence = await registry.strongDeactivatePrincipal(principalId, '0');
     expect(principalFence.enforcementEpoch).toBe('1');
@@ -297,7 +317,7 @@ test('OPS03/IAM07/IAM06/IAM23/IAM24: archived Access WAL restores exact authorit
     restored = await startRecovery(restoredData, walArchive, 'restored');
     const gate = await restored.query<{ authority_epoch: string; open: boolean; dispatch_open: boolean }>(
       "SELECT authority_epoch, open, dispatch_open FROM access.scope_gate WHERE id = 'work:create:root'");
-    expect(gate.rows[0]).toEqual({ authority_epoch: '3', open: false, dispatch_open: false });
+    expect(gate.rows[0]).toEqual({ authority_epoch: '6', open: false, dispatch_open: false });
     expect((await restored.query<{ active: boolean }>(
       'SELECT active FROM access.principal WHERE id = $1', [principalId])).rows[0]?.active).toBe(false);
     expect((await restored.query<{ generation: string }>(`
@@ -319,6 +339,20 @@ test('OPS03/IAM07/IAM06/IAM23/IAM24: archived Access WAL restores exact authorit
       private_membership_generation: '1', role_revision: '1' });
     expect(await accessOutboxCoverage(restored)).toEqual(sourceOutbox);
     expect(await accessStateCoverage(restored)).toEqual(sourceState);
+    expect((await restored.query(`SELECT active, generation FROM access.managed_org_grant WHERE id = $1`,
+      [managedGrant.grantId])).rows[0]).toEqual({ active: false, generation: '2' });
+    expect((await restored.query(`SELECT generation, operation FROM access.managed_org_grant_event
+      WHERE grant_id = $1 ORDER BY generation`, [managedGrant.grantId])).rows)
+      .toEqual([{ generation: '1', operation: 'issue' }, { generation: '2', operation: 'revoke' }]);
+    expect((await restored.query(`SELECT open, revision FROM access.membership_policy
+      WHERE kind = 'org' AND owner_subject = $1`, [orgFixture.org])).rows[0])
+      .toEqual({ open: false, revision: '2' });
+    expect((await restored.query(`SELECT grant_id, grant_generation, admissions_open FROM access.org_roster_policy_history
+      WHERE organization_subject = $1 AND policy_revision = 2`, [orgFixture.org])).rows[0])
+      .toEqual({ grant_id: managedGrant.grantId, grant_generation: '1', admissions_open: false });
+    await expect(restored.query('DELETE FROM access.org_roster_policy_history')).rejects.toThrow();
+    await expect(restored.query('DELETE FROM access.managed_org_grant_event')).rejects.toThrow();
+    await expect(restored.query('DELETE FROM access.managed_org_receipt')).rejects.toThrow();
     expect((await restored.query(`SELECT generation, state FROM access.org_realm_participation
       WHERE id = $1`, [joined.participationId])).rows[0]).toEqual({ generation: '2', state: 'suspended' });
     expect((await restored.query(`SELECT generation, active FROM access.org_realm_ban
@@ -353,8 +387,22 @@ test('OPS03/IAM07/IAM06/IAM23/IAM24: archived Access WAL restores exact authorit
     const restoredOrgRealm = new AccessOrgRealmParticipation(restored);
     await expect(restoredOrgRealm.change(orgFixture.orgPrincipal, orgJoin, 'pitr-org-join'))
       .rejects.toBeInstanceOf(OrgRealmDenied);
+    const restoredManaged = new AccessManagedOrganizations(restored);
+    await expect(restoredManaged.setRosterPolicy(orgFixture.realmPrincipal, managedPolicy, 'pitr-managed-policy'))
+      .rejects.toBeInstanceOf(ManagedOrgDenied);
     // Reopening is local to this isolated copy, after exact source coverage verification.
     await restored.query("UPDATE access.scope_gate SET open = true, dispatch_open = true WHERE id = 'work:create:root'");
+    expect(await restoredManaged.change(orgFixture.orgPrincipal, managedIssue, 'pitr-managed-issue'))
+      .toEqual({ ...managedGrant, replayed: true });
+    expect(await restoredManaged.change(orgFixture.orgPrincipal, managedRevoke, 'pitr-managed-revoke'))
+      .toEqual({ ...managedRevoked, replayed: true });
+    expect(await restoredManaged.setRosterPolicy(orgFixture.realmPrincipal, managedPolicy, 'pitr-managed-policy'))
+      .toEqual({ ...managedEffect, replayed: true });
+    await expect(restoredManaged.setRosterPolicy(orgFixture.realmPrincipal, managedPolicy, 'pitr-new-policy'))
+      .rejects.toBeInstanceOf(ManagedOrgStale);
+    await expect(restoredManaged.setRosterPolicy(orgFixture.realmPrincipal,
+      { ...managedPolicy, expectedGrantGeneration: '2', expectedPolicyRevision: '2' }, 'pitr-revoked-policy'))
+      .rejects.toBeInstanceOf(ManagedOrgDenied);
     expect(await restoredOrgRealm.change(orgFixture.orgPrincipal, orgJoin, 'pitr-org-join'))
       .toEqual({ ...joined, replayed: true });
     expect(await restoredOrgRealm.change(orgFixture.realmPrincipal, orgSuspend, 'pitr-org-suspend'))

@@ -61,6 +61,24 @@ the base backup. These cases do not qualify managed mode, Realm publication
 moderation, moves, quota/review, paid benefits or deployment capacity; IAM06,
 IAM23 and IAM24 remain partial.
 
+The `access-managed-organization-api` fixture adds partial IAM24/IAM23/IAM06
+through real Account OAuth, Main HTTP handlers and isolated Access PostgreSQL.
+It checks the separate issuer mandate/assignment ceiling, exact recipient and
+organization resource, named action, zero redelegation, original authority
+generations, narrowed validity, expired recipient representation, current Account
+session, exact retries, changed keys, concurrent issue/revoke and lock/recovery
+fences. A managed policy change actually closes/reopens organization roster joins
+through the existing consent and membership APIs. Participation in two Realms,
+roster membership and descriptive RDF cannot create that right. Leave/rejoin
+cannot revive a revoked grant. Parent-recipient use is separate from Realm use.
+SQL calls, selected rows and four logical row writes stay constant with
+unrelated grant growth; the exact grant lookup checks its primary-key plan.
+The isolated Access PITR case issues, uses and revokes the grant after its base
+backup, then checks WAL-restored payload, events, policy history and exact receipt
+replay while denying a new effect. These tests do not qualify founding grants,
+general control/recovery, voting, publication moderation, paid benefits, moves,
+complete quota/review or host capacity; the retained IAM IDs remain partial.
+
 The IAM06 first-profile `access-membership-api` fixture uses Account OAuth,
 Main HTTP handlers and Access PostgreSQL. It covers separate Org/Realm policies,
 recipient and manager OAuth scope separation, recipient-issued consent and
