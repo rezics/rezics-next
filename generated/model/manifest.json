@@ -1,5 +1,5 @@
 {
-  "commandModule": "0.5.31",
+  "commandModule": "0.5.32",
   "profiles": [
     {
       "id": "agent-provision-v1",
