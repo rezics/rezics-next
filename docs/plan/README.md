@@ -6,12 +6,43 @@
 | --- | --- |
 | Scope | The active Codex [Goal](../../GOAL.md) implements retained M01–M10 backend/API only under the maintainer's 2026-09-26 direction. UI consumes the APIs; frontend, Storybook and browser acceptance are excluded. |
 | Program | Retain TypeScript/Bun, Better Auth, PostgreSQL and Jena. Follow the [ten-hour proposal](#backend-only-ten-hour-proposal), API contracts, reusable backups with a 600-second routine preparation ceiling, and affected checks under the [batch cadence](execution-workflow.md#batch-cadence). |
-| Agent strategy | Default to local execution; use fresh briefs and at most two workers for justified independent deliverables under the [delegation policy](execution-workflow.md#delegation-and-worker-lifecycle). Workers finish after handoff. Compare accepted results against total main-task and worker usage under [efficiency measurement](execution-workflow.md#efficiency-measurement); no automatic per-batch fan-out or model-driven job monitoring. |
+| Agent strategy | The current management Goal dispatches up to two justified, independent worktree tasks from fresh briefs under the [delegation policy](execution-workflow.md#delegation-and-worker-lifecycle). Workers finish after handoff. Compare accepted results against total manager and worker usage under [efficiency measurement](execution-workflow.md#efficiency-measurement); expand only after measured integrated throughput supports it. |
 | Authority | This active Goal authorizes local backend implementation, dependency setup, disposable QA stacks and coherent local commits on `main`. Remote pushes, production publication and paid provisioning remain outside this scope. |
 | Deployment premise | Principal services concentrated on one assessed host; the other primarily API and unrelated workloads. Account placement remains assessed. |
 | Status | B14's first fixed native text release seal and exact-read APIs passed the affected real API journey `20260925t165922-31315b`, backend model tier `20260925t165108-1bd395`, and selected graph-loss recovery `20260925t170009-d283fb`; it is committed at `b6bb597`. B15's first Content typed-query and migration-runner slice passed real owner integration `20260925t170904-8a5086`. B16's current-image small fixture restored in 10.361 seconds; a separate ten-fresh-Work/restart probe and a read-only source probe passed. B17 maps all 276 retained IDs to owner operations. B18's public same-scope group API passed `20260925t174136-90d043`; B19's independent populated-reparent approval passed `20260925t175421-c312b7`; B20's institutional Agent grant API passed `20260925t180337-25c0aa`; B21's recipient-requested representation API passed `20260925t181322-6dc851`; B22's pinned role revision and binding API passed `20260925t182755-e1c783`; B23's registered rating-withdrawal owner test passed `20260925t183302-fd4807`; B24's Realm-local classification resolution passed `20260925t183629-db4f16`; B25's Work address claim and relay integration passed `20260925t190251-2f11d0` and native model tier `20260925t190442-72cd3e`; B26's same-Work uniqueness/call-counter proof passed `20260925t191155-13a371`; B27's address rename/reverse/exact integration passed `20260925t192406-292569` and its model tier passed `20260925t192334-24062c`; B28's direct merge/retire integration passed `20260925t193537-c024de` and model tier `20260925t193558-6ff268`; B30's classification read fault fixture passed `20260925t194147-c1de17`. Selected passes remain partial until one complete QA run qualifies their declared cases. The prior full `yarn qa` `20260925t151147-02d115` remains the last broad result: 11 passed IDs, 35 partial and 231 uncovered. The separate practical 10,000-Work profile `load-20260925t160348-90e989` passed its selected host objective, not the product scope. The [qualification page](qualification.md) remains the final generated evidence owner. |
 | Next action | Continue the remaining owner schemas and boundary cases. Wildcard/local replacements, native child adoption and withdrawal, complete field-control, current live-provider version sets and the remaining M01–M10 owner schemas and boundary cases remain open. Independent cross-restore checksum trust and an indexed route structure beyond 32 valid hops are separate work. Final reconstruction and recorded backend QA remain the final gate. |
 | Forecast | At activation, 276 backend IDs are retained and the prior full run passed only 11; B14's selected checks still count WORK05 as partial. The ten-hour 100% target is forecast to miss based on this measured backlog. Continue authorized backend implementation and report the actual qualified scope without counting partial IDs as complete. |
+
+### Active management program
+
+The sole scheduling and integration owner is task
+`01a0dbdb-af13-7a71-b5a1-936826c4d64a`, activated 2026-09-26 03:57:20 UTC
+on clean `main` at `f2c8aa1`. The previous implementation task
+`01a0d1d3-22b4-7ba0-8e69-37de6d474faa` was stopped and its workers
+interrupted; its predecessor was paused. Do not dispatch from either. The
+[management handover](../goals/README.md#management-handover) and task files
+describe the scheduling protocol; this plan is the status and assignment ledger.
+The ten-hour target ends 2026-09-26 13:57:20 UTC. Initial evidence still
+forecasts a miss: the last broad run passed 11 historical IDs, while all 276
+retained backend IDs require fresh complete qualification. This historical run
+does not supply a current backend completion percentage.
+
+| Slice | Assignment and dependency | Current state and next evidence |
+| --- | --- | --- |
+| [G-001](../goals/tasks/G-001.md) / B75 | Exact Go pseudo-version checksum provenance; package owner and oracle. Independent of Access lifecycle. | Ready on `f2c8aa1`; dispatch in an isolated worktree, then merge and run affected backend checks. Partial PKG05/PKG14/PKG20 until full cases qualify. |
+| [G-002](../goals/tasks/G-002.md) / IAM06 | Org/Realm membership leave/rejoin and dependent authority; Access owner and API. Independent of package checksum. | Ready on `f2c8aa1`; dispatch in an isolated worktree, then merge and run affected backend checks. IAM06 needs the full real owner-boundary proof. |
+| Authority and model backlog | IAM07–IAM37 and MODEL05–MODEL27 gaps, sequenced behind required Access and semantic owner decisions. | Planned at the [operation map](backend-operations.md); create bounded briefs when interfaces stabilize. |
+| Content, Space and community backlog | CTX, WORK, RATE, GRAPH, VIEW, BOOK, RECIPE, SUB and other M01–M10 gaps. | Planned at the operation map; retain all backend assertions. |
+| Search, sources and packages backlog | SEARCH, LIVE, PKG and HUB gaps after B75, with source/owner integration and recovery. | Planned at the operation map; selected B14–B74 evidence remains partial where named. |
+| Operations and final acceptance | Fresh construction, 600-second routine restore, bounded cost and host evidence, G1–G4/G6, then one clean `yarn qa --backend --record`. | Pending; reserve final window and never count an unrun or partial case as passed. |
+
+The manager handles completed or blocked handoffs when observed and runs a
+30-minute same-task reconciliation. Each checkpoint updates newly verified
+behavior, blockers and owners, integration queue, critical path and forecast
+here. Task files carry the brief; local thread/worktree mappings and leases live
+under `.temp/goal-orchestration/`. No task is dispatched twice while an earlier
+attempt may still write. Start with two workers and one active integration batch;
+expand only after a complete measured batch shows useful throughput.
 
 ### Backend-only ten-hour proposal
 

@@ -1,11 +1,37 @@
-# Goal orchestration proposal
+# Backend Goal orchestration
 
-Status: researched proposal, 2026-09-26. This document does not activate a new
-Goal, pause the existing implementation thread, or launch workers. The root
-[GOAL](../../GOAL.md) remains the completion contract, and the
-[execution plan](../plan/README.md) remains the current status authority until an
-explicit handover. The retained scope is all 276 backend acceptance cases across
-M01–M10; frontend implementation and browser acceptance remain excluded.
+Status: activated 2026-09-26 03:57:20 UTC. The root [GOAL](../../GOAL.md) remains
+the completion contract, and the [execution plan](../plan/README.md) is the sole
+assignment and status authority. The retained scope is all 276 backend acceptance
+cases across M01–M10; frontend implementation and browser acceptance are excluded.
+
+## Management handover
+
+The previous implementation task `01a0d1d3-22b4-7ba0-8e69-37de6d474faa`
+was explicitly stopped with its workers interrupted. Its earlier predecessor
+`01a0cf63-114d-7fb2-810e-0330a58b6675` was paused. Neither is a current
+scheduler. At handover, `main` was clean at `f2c8aa1`; the last broad recorded
+result was 11 passed, 35 partial and 231 uncovered among the historical 277
+cases. The backend inventory retains 276 cases, with `VIEW04` excluded as
+rendered-only. The current manager is Codex task
+`01a0dbdb-af13-7a71-b5a1-936826c4d64a`, with a ten-hour target ending
+2026-09-26 13:57:20 UTC. The historical broad result is not a fresh backend
+percentage or acceptance run.
+
+The manager owns dispatch and integration into `main`. The first ready briefs are
+[G-001](tasks/G-001.md) and [G-002](tasks/G-002.md), each on an independent
+worktree from the handover commit. Their paths and tests are disjoint. The
+[retained operation map](../plan/backend-operations.md) assigns every backend
+case to an owner API; uncertain later tasks remain coarse in the plan until
+their dependencies and interfaces stabilize. The manager starts with two workers,
+handles completion/blocker events immediately while active, and has a same-task
+30-minute reconciliation schedule. The schedule requires the local app and
+computer to remain running. Task handoffs are not verified completion: merged
+source and recorded test evidence decide status.
+
+The research and scheduling rationale below remains the basis for this active
+program. Proposed scaling steps are not automatic authorization to exceed the
+current two-worker limit.
 
 ## Decision proposed
 
@@ -237,14 +263,11 @@ force; routine data preparation has a 600-second budget. Final acceptance retain
 all required real boundaries, recovery, fresh construction and load evidence.
 Filling coverage declarations without those assertions is not completion.
 
-## Adoption criteria
+## Initial adoption checks
 
-Activate this design only through a concrete handover that names the manager,
-records the old Goal's checkpoint and reconciles the existing execution policy.
-The first implementation should demonstrate one task from ready through merged
-verification, a blocked-task reassignment, and recovery without duplicate writers.
-Scale only after those mechanisms and useful delivery throughput are observed.
-
-This proposal creates the requested goal-document location and an executable
-management design. It does not claim that a scheduler is installed, that the old
-Goal is paused, or that the ten-hour target has already become achievable.
+The handover above names the manager and checkpoint; the execution plan names
+the active scope and assignments. The first implementation must demonstrate one
+task from ready through merged verification, a blocked-task reassignment, and
+recovery without duplicate writers. Scale only after those mechanisms and useful
+delivery throughput are observed. The ten-hour target is not yet a measured
+completion forecast.

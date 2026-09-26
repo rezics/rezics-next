@@ -2,17 +2,16 @@
 
 ## Program authority
 
-The maintainer authorizes autonomous architecture research, complete documentation
-reconciliation and coherent local commits for the active documentation task.
-The [plan](README.md#active-execution) names its scope. Designing implementation
-protocols does not activate runtime implementation, deployment or unrelated work.
-Later implementation scopes explicitly select their owners and required consumers.
+The maintainer activated the backend-only Goal and authorized autonomous local
+implementation, qualification and coherent local commits. The
+[plan](README.md#active-execution) names its current scope, status and sole
+scheduling authority; the [Goal program](../goals/README.md#management-handover)
+records the handover and bounded worker briefs.
 
 The root [goal specification](../../GOAL.md) supplies the retained implementation
-outcome and completion criteria. Its presence does not activate execution. When
-the user asks to establish that Goal, update the plan's active scope to match the
-request. The 2026-09-26 scope is backend/API only; frontend and rendered QA are
-excluded, and UI consumes independently callable APIs.
+outcome and completion criteria. The 2026-09-26 activated scope is backend/API
+only; frontend and rendered QA are excluded, and UI consumes independently
+callable APIs.
 Keep scope, current slice, remaining work, blockers and evidence in the plan;
 the goal file remains the completion contract, not a second status ledger.
 
