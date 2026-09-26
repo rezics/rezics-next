@@ -160745,6 +160745,19 @@
     "/v1/recommendations/generation-activations": {
       "post": {
         "operationId": "postV1RecommendationsGeneration-activations",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 128,
+              "minLength": 1,
+              "pattern": "^[A-Za-z0-9:_./-]{1,128}$",
+              "type": "string"
+            }
+          }
+        ],
         "requestBody": {
           "content": {
             "application/json": {
@@ -161116,12 +161129,30 @@
             },
             "description": "Response for status 503"
           }
-        }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
       }
     },
     "/v1/recommendations/generation-builds": {
       "post": {
         "operationId": "postV1RecommendationsGeneration-builds",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 128,
+              "minLength": 1,
+              "pattern": "^[A-Za-z0-9:_./-]{1,128}$",
+              "type": "string"
+            }
+          }
+        ],
         "requestBody": {
           "content": {
             "application/json": {
@@ -161214,8 +161245,16 @@
                             ]
                           },
                           "selectionRevision": {
-                            "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
-                            "type": "string"
+                            "anyOf": [
+                              {
+                                "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                "type": "string"
+                              },
+                              {
+                                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                "type": "string"
+                              }
+                            ]
                           }
                         },
                         "required": [
@@ -161347,8 +161386,16 @@
                             ]
                           },
                           "selectionRevision": {
-                            "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
-                            "type": "string"
+                            "anyOf": [
+                              {
+                                "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                "type": "string"
+                              },
+                              {
+                                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                "type": "string"
+                              }
+                            ]
                           }
                         },
                         "required": [
@@ -161480,8 +161527,16 @@
                             ]
                           },
                           "selectionRevision": {
-                            "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
-                            "type": "string"
+                            "anyOf": [
+                              {
+                                "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                "type": "string"
+                              },
+                              {
+                                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                "type": "string"
+                              }
+                            ]
                           }
                         },
                         "required": [
@@ -161807,7 +161862,12 @@
             },
             "description": "Response for status 503"
           }
-        }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
       }
     },
     "/v1/recommendations/generations/{generation}": {
@@ -162114,7 +162174,12 @@
             },
             "description": "Response for status 503"
           }
-        }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
       }
     },
     "/v1/recommendations/pages": {
@@ -162212,8 +162277,16 @@
                             ]
                           },
                           "selectionRevision": {
-                            "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
-                            "type": "string"
+                            "anyOf": [
+                              {
+                                "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                "type": "string"
+                              },
+                              {
+                                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                "type": "string"
+                              }
+                            ]
                           }
                         },
                         "required": [
@@ -162351,8 +162424,16 @@
                             ]
                           },
                           "selectionRevision": {
-                            "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
-                            "type": "string"
+                            "anyOf": [
+                              {
+                                "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                "type": "string"
+                              },
+                              {
+                                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                "type": "string"
+                              }
+                            ]
                           }
                         },
                         "required": [
@@ -162490,8 +162571,16 @@
                             ]
                           },
                           "selectionRevision": {
-                            "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
-                            "type": "string"
+                            "anyOf": [
+                              {
+                                "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                "type": "string"
+                              },
+                              {
+                                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                "type": "string"
+                              }
+                            ]
                           }
                         },
                         "required": [
@@ -162821,7 +162910,12 @@
             },
             "description": "Response for status 503"
           }
-        }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
       }
     },
     "/v1/recommendations/queries": {
@@ -162919,8 +163013,16 @@
                             ]
                           },
                           "selectionRevision": {
-                            "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
-                            "type": "string"
+                            "anyOf": [
+                              {
+                                "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                "type": "string"
+                              },
+                              {
+                                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                "type": "string"
+                              }
+                            ]
                           }
                         },
                         "required": [
@@ -163052,8 +163154,16 @@
                             ]
                           },
                           "selectionRevision": {
-                            "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
-                            "type": "string"
+                            "anyOf": [
+                              {
+                                "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                "type": "string"
+                              },
+                              {
+                                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                "type": "string"
+                              }
+                            ]
                           }
                         },
                         "required": [
@@ -163185,8 +163295,16 @@
                             ]
                           },
                           "selectionRevision": {
-                            "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
-                            "type": "string"
+                            "anyOf": [
+                              {
+                                "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                "type": "string"
+                              },
+                              {
+                                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                "type": "string"
+                              }
+                            ]
                           }
                         },
                         "required": [
@@ -163510,7 +163628,12 @@
             },
             "description": "Response for status 503"
           }
-        }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
       }
     },
     "/v1/reports": {

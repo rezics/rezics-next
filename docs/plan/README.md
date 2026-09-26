@@ -104,6 +104,7 @@ log is kept in [its history](../goals/history/codex-program-2026-09-26.md).
 | [G-098](../goals/tasks/G-098.md) / PKG20 | GPT-6 Luna high: Go live refresh through source acquisition runs (PKG20). | Dispatched 20:55 UTC. |
 | [G-099](../goals/tasks/G-099.md) / MODEL09 | GPT-6 Luna high: Source-observation reification in the semantic model (MODEL09). | Dispatched 20:55 UTC. |
 | [G-100](../goals/tasks/G-100.md) | Grok 4.7 medium: Reconcile the backend operation map with the generated Main OpenAPI. | Dispatched 20:55 UTC. |
+| [G-101](../goals/tasks/G-101.md) | GPT-6 Luna high: repair the bulk fixture builder for owner-seeded rows and publish a reusable medium backup. | Dispatched 21:15 UTC. |
 | Authority and model backlog | IAM07–IAM37 and MODEL05–MODEL27 gaps, sequenced behind required Access and semantic owner decisions. | Planned at the [operation map](backend-operations.md); create bounded briefs when interfaces stabilize. |
 | Content, Space and community backlog | CTX, WORK, RATE, GRAPH, VIEW, BOOK, RECIPE, SUB and other M01–M10 gaps. | Planned at the operation map; retain all backend assertions. |
 | Search, sources and packages backlog | SEARCH, LIVE, PKG and HUB gaps after B75, with source/owner integration and recovery. | Planned at the operation map; selected B14–B74 evidence remains partial where named. |
