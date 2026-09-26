@@ -51,12 +51,14 @@ async function governanceStack(name: string) {
   const rules = new GovernanceRules(pool);
   const ownerHeads = ownerTargetHeads({ graph: env, content: contentPool });
   let afterHeadRead: (() => Promise<void>) | null = null;
+  let targetHeadReads = 0;
   const store = new GovernanceStore(pool, ownerEvidenceCapture({
     content: { core: content, canRead: async (_principal, _actor, ids) => new Set(ids.filter(id => !unreadable.has(id))) },
     graph: { env, canReadWork: (principal, actor, work) => registry.canReadWork(principal, actor, work) },
     media: { pool: contentPool, canReadWork: (principal, actor, work) =>
       registry.canReadWork(principal, actor, work) },
   }), { current: async target => {
+    targetHeadReads++;
     const head = await ownerHeads.current(target);
     const race = afterHeadRead;
     afterHeadRead = null;
@@ -122,6 +124,7 @@ async function governanceStack(name: string) {
   };
   return { pool, contentPool, account, env, registry, store, rules, unreadable, grant, call,
     handle: (request: Request) => app.handle(request), author, work, body,
+    targetHeadReadCount: () => targetHeadReads,
     raceHeadOnce: (work: () => Promise<void>) => { afterHeadRead = work; },
     close, edit: (expectedHead: string, title: string) => editAdmittedMetadataWork(env, account.verifier, registry,
       new Request('https://main.rezics.test/v1/works', { headers: { authorization: `Bearer ${account.tokenA}` } }),
@@ -353,14 +356,25 @@ test('GOV02/GOV03: stale target or rule never applies; reversals have one effect
       .toBe('stale_governance_basis');
     expect((await s.pool.query('SELECT count(*)::int AS n FROM access.moderation_decision WHERE case_id IS NOT NULL'))
       .rows[0].n).toBe(0);
-    // A graph edit lands after the owner pre-read but before the Access decision commit.
+    // A graph edit lands after the first owner read but before the Access decision commit.
     let racedHead: string | null = null;
     s.raceHeadOnce(async () => { racedHead = (await s.edit(edited.revision,
       'Title changed during decision commit')).revision; });
-    // Re-reviewed against the observed head, the decision restricts only the exact reported revision.
-    const restricted = await decide(reReviewed);
-    expect(restricted.status, JSON.stringify(restricted.body)).toBe(201);
+    const readsBeforeRace = s.targetHeadReadCount();
+    const raced = await decide(reReviewed);
+    expect(raced.body.code).toBe('stale_governance_basis');
+    expect(s.targetHeadReadCount() - readsBeforeRace).toBe(2);
     expect(racedHead).not.toBeNull();
+    expect((await s.pool.query('SELECT count(*)::int AS n FROM access.moderation_decision WHERE case_id = $1',
+      [reports[0].caseId])).rows[0].n).toBe(0);
+    expect((await s.store.readEnforcement({ owner: 'graph', resource: s.work.work, component: 'title' }))
+      .filter(fence => fence.context === realms[0])).toEqual([]);
+    // A fresh review against the new head can still act on the exact reported revision.
+    const freshReview = { ...reReviewed, targets: [{ ...reReviewed.targets[0]!, expectedHead: racedHead }] };
+    const readsBeforeFreshReview = s.targetHeadReadCount();
+    const restricted = await decide(freshReview);
+    expect(restricted.status, JSON.stringify(restricted.body)).toBe(201);
+    expect(s.targetHeadReadCount() - readsBeforeFreshReview).toBe(2);
     const summary = (context: string) => s.call('GET',
       `/v1/resources/${s.work.work.split('/').at(-1)}?actingSubject=${encodeURIComponent(s.author)}`
       + `&context=${encodeURIComponent(context)}`, s.account.tokenA);
@@ -444,7 +458,7 @@ test('GOV02/GOV03: stale target or rule never applies; reversals have one effect
   } finally { await s.close(); }
 }, 180_000);
 
-test('GOV02: a Content head racing the decision cannot redirect an exact disclosure fence', async () => {
+test('GOV02: a Content head changing after preflight makes the decision stale', async () => {
   const s = await governanceStack('gov02-content');
   try {
     const scope = `governance:platform:${randomUUID()}`;
@@ -474,17 +488,29 @@ test('GOV02: a Content head racing the decision cannot redirect an exact disclos
     expect(published.status).toBe(201);
     let successor: string | null = null;
     s.raceHeadOnce(async () => { successor = (await draft(original, 'Edited current body')).revisionId!; });
-    const decision = await s.call('POST', '/v1/moderation/decisions', s.account.tokenB,
-      { profile: 'moderation-decision-v1', caseId: report.body.caseId, expectedGeneration: '0',
+    const readsBeforeRace = s.targetHeadReadCount();
+    const decisionInput = { profile: 'moderation-decision-v1', caseId: report.body.caseId, expectedGeneration: '0',
         actingSubject: moderator, outcome: 'restrict', targets: [{ owner: 'content', resource: s.work.work,
           component: 'body', locator: null, scopeKind: 'exact_revision', revision: original,
           expectedHead: original, effect: 'disclosure' }],
         rule: { ref: published.body.ref, revision: published.body.revision,
           digest: published.body.digest }, evidenceDigest: report.body.evidenceDigest,
         reversesDecisionId: null, answersStepId: null, rationale: 'Exact body only',
-        disclosure: 'parties', idempotencyKey: randomUUID() });
-    expect(decision.status, JSON.stringify(decision.body)).toBe(201);
+        disclosure: 'parties', idempotencyKey: randomUUID() };
+    const decision = await s.call('POST', '/v1/moderation/decisions', s.account.tokenB, decisionInput);
+    expect(decision.status, JSON.stringify(decision.body)).toBe(409);
+    expect(decision.body.code).toBe('stale_governance_basis');
+    expect(s.targetHeadReadCount() - readsBeforeRace).toBe(2);
     expect(successor).not.toBeNull();
+    expect((await s.pool.query('SELECT count(*)::int AS n FROM access.moderation_decision WHERE case_id = $1',
+      [report.body.caseId])).rows[0].n).toBe(0);
+    const currentBasis = { ...decisionInput, idempotencyKey: randomUUID(), targets: [{
+      ...decisionInput.targets[0]!, expectedHead: successor,
+    }] };
+    const readsBeforeFreshReview = s.targetHeadReadCount();
+    const applied = await s.call('POST', '/v1/moderation/decisions', s.account.tokenB, currentBasis);
+    expect(applied.status, JSON.stringify(applied.body)).toBe(201);
+    expect(s.targetHeadReadCount() - readsBeforeFreshReview).toBe(2);
     const read = (revision: string) => s.call('GET',
       `/v1/content-revisions/${revision}?actingSubject=${encodeURIComponent(s.author)}`,
       s.account.tokenA);

@@ -29,7 +29,7 @@ declarations.
 | --- | --- |
 | `submitReport` | At most 16 owner evidence reads and inserts; one indexed open-case lookup. |
 | `readReport` | One report key and at most 16 evidence rows; one indexed authority check for a reviewer. |
-| `decide` | Two indexed Access authority checks, at most 64 target-head reads and one fence update per target; one outbox fact per decision. |
+| `decide` | Two indexed Access authority checks, at most 64 preflight and 64 in-transaction target-head reads, and one fence update per target; one outbox fact per decision. |
 | `recordStep` | One case and grant check, one receipt key, one append. |
 | `readEnforcement` | Indexed target lookup limited to 50 rows. |
 | `restrictedTitles` | One recovery-fence check and one indexed Access lookup for at most 64 Work/head pairs; it returns no title without a graph head. |
@@ -40,13 +40,16 @@ declarations.
 | `rules.read` / `rules.current` | One indexed authority or head lookup. |
 
 The integration test checks case and enforcement index buffers with 100,
-1,000 and 10,000 unrelated cases. Cross-owner target/rule head checks are
-preconditions to Access commit. The resource summary and exact Content revision
-APIs check the committed Access fence against the graph head or exact Content
-revision before disclosure. The decision outbox fact advances the fence before
-search, cache, notification and media propagation; those consumers still need
-owner-specific adapters. The Structure owner must accept real create commands
-before available Structure evidence can be qualified through a report API test.
-Source evidence currently retains the exact observation byte digest with its
-reported component. A future source component reader must prove extracted
-component bytes and propagated copy identities before GOV24 is complete.
+1,000 and 10,000 unrelated cases. Target heads are read once during review
+preflight and re-read under the Access case/rule locks immediately before writes;
+a target changed between those reads yields stale with no decision or fence.
+Cross-owner checks remain bounded to at most 64 targets per decision. The
+resource summary and exact Content revision APIs check the committed Access
+fence against the graph head or exact Content revision before disclosure. The
+decision outbox fact advances the fence before search, cache, notification and
+media propagation; those consumers still need owner-specific adapters. The
+Structure owner must accept real create commands before available Structure
+evidence can be qualified through a report API test. Source evidence currently
+retains the exact observation byte digest with its reported component. A future
+source component reader must prove extracted component bytes and propagated
+copy identities before GOV24 is complete.

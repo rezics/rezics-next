@@ -436,6 +436,16 @@ export class GovernanceStore {
           throw new GovernanceStale('reversal does not match the original targets');
         }
       }
+      // The first owner read is review preflight. Re-read each bounded target
+      // after the Access case/rule locks are held so a target that changed
+      // between preflight and this transaction cannot receive a stale fence.
+      // Target writers remain authoritative for their own state; this check
+      // rejects a basis that changed before the decision writes begin.
+      for (const target of input.targets) {
+        if (await this.heads.current(target) !== target.expectedHead) {
+          throw new GovernanceStale('target changed since review');
+        }
+      }
       const decisionId = randomUUID();
       const sequence = (BigInt(caseRow.generation) + 1n).toString();
       await client.query(`INSERT INTO access.moderation_decision (id, kind, outcome, context, case_id, case_sequence,
