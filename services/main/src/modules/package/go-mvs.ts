@@ -15,6 +15,8 @@ export class GoResolutionUnavailable extends Error {}
 export interface GoModuleRequirement { path: string; version: string }
 export interface GoModuleManifest extends GoModuleRequirement {
   requirements: GoModuleRequirement[];
+  goDirective?: string | null;
+  unsupportedClauses?: string[];
   declaredModule?: string;
   retractions?: Array<{ lower: string; upper: string; rationale: string }>;
 }
@@ -37,9 +39,10 @@ export interface GoLocalModuleSource {
 }
 export interface GoMvsSnapshotRequest {
   profile: 'go-mvs-stable-unpruned-v1' | 'go-mvs-stable-unpruned-main-directives-v2'
-    | 'go-mvs-captured-unpruned-v3' | 'go-mvs-local-unpruned-v4';
+    | 'go-mvs-captured-unpruned-v3' | 'go-mvs-local-unpruned-v4'
+    | 'go-mvs-captured-pruned-v5';
   mainModule: string;
-  goDirective: '1.16';
+  goDirective: string;
   coverage: { complete: boolean; unsupportedClauses: string[] };
   roots: GoModuleRequirement[];
   releases: GoModuleManifest[];
@@ -54,7 +57,7 @@ export interface GoMvsSnapshotRequest {
 }
 export interface GoCapturedResolutionRequest {
   profile: 'go-mvs-from-captures-v1' | 'go-mvs-from-main-captures-v2'
-    | 'go-mvs-from-main-local-captures-v3';
+    | 'go-mvs-from-main-local-captures-v3' | 'go-mvs-from-main-pruned-captures-v4';
   mainModule?: string;
   roots?: GoModuleRequirement[];
   mainManifestBase64?: string;
@@ -82,7 +85,8 @@ export interface GoMvsResolution {
   profile: 'go-mvs-stable-unpruned-resolution-v1'
     | 'go-mvs-stable-unpruned-main-directives-resolution-v2'
     | 'go-mvs-captured-unpruned-resolution-v3'
-    | 'go-mvs-local-unpruned-resolution-v4';
+    | 'go-mvs-local-unpruned-resolution-v4'
+    | 'go-mvs-captured-pruned-resolution-v5';
   resolution: string;
   requestDigest: string;
   request: GoMvsSnapshotRequest;
@@ -106,6 +110,14 @@ const MAX_VERSION_LENGTH = 96;
 const MAX_LOADED = 128;
 const MAX_REQUIREMENTS = 512;
 const LOCAL_IDENTITY = /^\.\/[A-Za-z0-9_-][A-Za-z0-9._-]*(?:\/[A-Za-z0-9_-][A-Za-z0-9._-]*)*$/;
+
+function supportedGoDirective(value: string | null | undefined,
+  main: boolean): boolean {
+  if (typeof value !== 'string' || !/^1\.(?:[0-9]+)(?:\.[0-9]+)?$/.test(value)) return false;
+  const [major, minor, patch = 0] = value.split('.').map(Number);
+  return major === 1 && minor! >= (main ? 17 : 16)
+    && (minor! < 27 || (minor === 27 && patch <= 1));
+}
 
 function validLocalIdentity(identity: string): boolean {
   return typeof identity === 'string' && identity.length <= 200
@@ -262,8 +274,13 @@ function validateRequest(input: GoMvsSnapshotRequest): void {
   const v2 = input.profile === 'go-mvs-stable-unpruned-main-directives-v2';
   const v3 = input.profile === 'go-mvs-captured-unpruned-v3';
   const v4 = input.profile === 'go-mvs-local-unpruned-v4';
-  if ((input.profile !== 'go-mvs-stable-unpruned-v1' && !v2 && !v3 && !v4)
-    || input.goDirective !== '1.16'
+  const v5 = input.profile === 'go-mvs-captured-pruned-v5';
+  if ((input.profile !== 'go-mvs-stable-unpruned-v1' && !v2 && !v3 && !v4 && !v5)
+    || (v5 ? (typeof input.goDirective !== 'string'
+      || input.goDirective.length > 32
+      || (!supportedGoDirective(input.goDirective, true)
+        && input.coverage?.unsupportedClauses?.length === 0))
+      : input.goDirective !== '1.16')
     || !PATH.test(input.mainModule) || input.mainModule.length > 200
     || typeof input.coverage?.complete !== 'boolean'
     || !Array.isArray(input.coverage.unsupportedClauses)
@@ -278,10 +295,11 @@ function validateRequest(input: GoMvsSnapshotRequest): void {
       || !Array.isArray(input.mainDirectives.replacements)
       || input.mainDirectives.replacements.length > 32))
     || (!v2 && input.mainDirectives !== undefined)
-    || ((v3 || v4) && (!Array.isArray(input.captureEvidence)
+    || ((v3 || v4 || v5) && (!Array.isArray(input.captureEvidence)
       || input.captureEvidence.length !== input.releases.length))
-    || (!v3 && !v4 && (input.captureEvidence !== undefined
+    || (!v3 && !v4 && !v5 && (input.captureEvidence !== undefined
       || input.mainManifest !== undefined))
+    || (v5 && !input.mainManifest)
     || (v4 && (!input.mainManifest || !Array.isArray(input.localReplacements)
       || input.localReplacements.length > 32 || !Array.isArray(input.localSources)
       || input.localSources.length > 32))
@@ -298,6 +316,18 @@ function validateRequest(input: GoMvsSnapshotRequest): void {
     const key = `${release.path}\0${release.version}`;
     if (seen.has(key)) throw new GoResolutionInvalid('duplicate Go release manifest');
     seen.add(key);
+    if (v5) {
+      if (release.goDirective === undefined
+        || !Array.isArray(release.unsupportedClauses)
+        || release.unsupportedClauses.length > 16
+        || release.unsupportedClauses.some(clause => typeof clause !== 'string'
+          || !clause || clause.length > 200)) {
+        throw new GoResolutionInvalid('invalid captured Go pruning metadata');
+      }
+    } else if (release.goDirective !== undefined
+      || release.unsupportedClauses !== undefined) {
+      throw new GoResolutionInvalid('Go pruning metadata requires the v5 profile');
+    }
     if (release.declaredModule !== undefined
       && (!v2 || typeof release.declaredModule !== 'string'
         || !PATH.test(release.declaredModule)
@@ -321,7 +351,7 @@ function validateRequest(input: GoMvsSnapshotRequest): void {
     }
     for (const requirement of release.requirements) validateGoModuleRequirement(requirement);
   }
-  if ((v3 || v4) && input.captureEvidence) {
+  if ((v3 || v4 || v5) && input.captureEvidence) {
     const evidence = new Map<string, typeof input.captureEvidence[number]>();
     for (const item of input.captureEvidence) {
       const requirement = { path: item.path, version: item.version };
@@ -343,7 +373,7 @@ function validateRequest(input: GoMvsSnapshotRequest): void {
       throw new GoResolutionInvalid('Go capture evidence does not cover releases');
     }
   }
-  if ((v3 || v4) && input.mainManifest !== undefined) {
+  if ((v3 || v4 || v5) && input.mainManifest !== undefined) {
     const source = input.mainManifest;
     if (!source || typeof source.text !== 'string'
       || Buffer.byteLength(source.text) > 65_536
@@ -356,7 +386,8 @@ function validateRequest(input: GoMvsSnapshotRequest): void {
       || (parsed.status === 'parsed'
         ? stable(parsed.requirements) !== stable(input.roots)
         : input.roots.length !== 0)
-      || (!parsed.compatibleWithUnprunedGo116
+      || (!(v5 ? supportedGoDirective(parsed.goDirective, true)
+        : parsed.compatibleWithUnprunedGo116)
         && input.coverage.unsupportedClauses.length === 0)) {
       throw new GoResolutionInvalid('Go main manifest differs from resolved roots');
     }
@@ -416,6 +447,7 @@ function validateRequest(input: GoMvsSnapshotRequest): void {
 /** Go 1.16 unpruned MVS: visit every required version, select the maximum per path. */
 export function solveGoMvsSnapshot(input: GoMvsSnapshotRequest): GoMvsOutcome {
   validateRequest(input);
+  if (input.profile === 'go-mvs-captured-pruned-v5') return solvePrunedSnapshot(input);
   const v2 = input.profile === 'go-mvs-stable-unpruned-main-directives-v2';
   const v4 = input.profile === 'go-mvs-local-unpruned-v4';
   const replacements = new Map((input.mainDirectives?.replacements ?? []).map(item =>
@@ -568,6 +600,73 @@ export function solveGoMvsSnapshot(input: GoMvsSnapshotRequest): GoMvsOutcome {
     }) } : {}) };
 }
 
+/** Go 1.17+ graph: expand explicit roots, then only branches reached through Go <=1.16. */
+function solvePrunedSnapshot(input: GoMvsSnapshotRequest): GoMvsOutcome {
+  if (input.coverage.unsupportedClauses.length) return {
+    status: 'unsupported-semantics', buildList: [], missing: [],
+    unsupportedClauses: input.coverage.unsupportedClauses,
+    loadedManifestCount: 0, requirementCount: 0 };
+  const manifests = new Map(input.releases.map(release =>
+    [`${release.path}\0${release.version}`, release]));
+  const queue = input.roots.map(requirement => ({ requirement, expand: true,
+    legacyBranch: false }));
+  const expanded = new Set<string>();
+  const expandedLegacy = new Set<string>();
+  const maxima = new Map<string, string>();
+  const missing = new Map<string, GoModuleRequirement>();
+  let loaded = 0;
+  let count = 0;
+  for (let offset = 0; offset < queue.length; offset++) {
+    count++;
+    if (count > MAX_REQUIREMENTS) return { status: 'budget-exhausted', buildList: [],
+      missing: [], unsupportedClauses: [], loadedManifestCount: loaded,
+      requirementCount: count };
+    const { requirement, expand, legacyBranch } = queue[offset]!;
+    const key = `${requirement.path}\0${requirement.version}`;
+    const current = maxima.get(requirement.path);
+    if (!current || compareVersion(requirement.version, current) > 0) {
+      maxima.set(requirement.path, requirement.version);
+    }
+    if (!expand || (expanded.has(key) && (!legacyBranch || expandedLegacy.has(key)))) {
+      continue;
+    }
+    const firstLoad = !expanded.has(key);
+    expanded.add(key);
+    if (legacyBranch) expandedLegacy.add(key);
+    if (expanded.size > MAX_LOADED) return { status: 'budget-exhausted', buildList: [],
+      missing: [], unsupportedClauses: [], loadedManifestCount: loaded,
+      requirementCount: count };
+    const release = manifests.get(key);
+    if (!release) { missing.set(key, requirement); continue; }
+    if (release.unsupportedClauses!.length
+      || !supportedGoDirective(release.goDirective, false)) {
+      return { status: 'unsupported-semantics', buildList: [], missing: [],
+        unsupportedClauses: (release.unsupportedClauses!.length
+          ? release.unsupportedClauses!.map(clause =>
+            `${release.path}@${release.version}: ${clause}`.slice(0, 200))
+          : [`${release.path}@${release.version}: go directive ${release.goDirective ?? 'absent'}`])
+          .slice(0, 16), loadedManifestCount: loaded, requirementCount: count };
+    }
+    if (firstLoad) loaded++;
+    const followTransitive = legacyBranch || release.goDirective === '1.16'
+      || release.goDirective?.startsWith('1.16.') === true;
+    for (const dependency of release.requirements) {
+      queue.push({ requirement: dependency, expand: followTransitive,
+        legacyBranch: followTransitive });
+    }
+  }
+  const sortedMissing = [...missing.values()].sort((a, b) =>
+    a.path.localeCompare(b.path) || compareVersion(a.version, b.version));
+  if (!input.coverage.complete || sortedMissing.length) return {
+    status: 'incomplete-source-data', buildList: [], missing: sortedMissing,
+    unsupportedClauses: [], loadedManifestCount: loaded, requirementCount: count };
+  return { status: 'solved', buildList: [...maxima]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([path, version]) => ({ path, version })),
+  missing: [], unsupportedClauses: [], loadedManifestCount: loaded,
+  requirementCount: count };
+}
+
 export class GoMvsResolutionStore {
   constructor(private readonly pool: Pool,
     private readonly captures?: GoProxyCaptureStore) {}
@@ -582,6 +681,8 @@ export class GoMvsResolutionStore {
       ? 'go-mvs-stable-unpruned-resolution-v1'
       : row.request.profile === 'go-mvs-stable-unpruned-main-directives-v2'
         ? 'go-mvs-stable-unpruned-main-directives-resolution-v2'
+        : row.request.profile === 'go-mvs-captured-pruned-v5'
+          ? 'go-mvs-captured-pruned-resolution-v5'
         : row.request.profile === 'go-mvs-local-unpruned-v4'
           ? 'go-mvs-local-unpruned-resolution-v4'
           : 'go-mvs-captured-unpruned-resolution-v3',
@@ -638,7 +739,8 @@ export class GoMvsResolutionStore {
       mainModule = input.mainModule;
       roots = input.roots;
     } else if (input.profile === 'go-mvs-from-main-captures-v2'
-      || input.profile === 'go-mvs-from-main-local-captures-v3') {
+      || input.profile === 'go-mvs-from-main-local-captures-v3'
+      || input.profile === 'go-mvs-from-main-pruned-captures-v4') {
       const encoded = input.mainManifestBase64;
       if (input.mainModule !== undefined || input.roots !== undefined) {
         throw new GoResolutionInvalid('invalid Go main manifest input');
@@ -654,8 +756,11 @@ export class GoMvsResolutionStore {
       roots = parsed.requirements;
       if (parsed.status !== 'parsed') {
         unsupportedClauses.push(`main go.mod: ${parsed.unsupportedClauses.join('; ')}`.slice(0, 200));
-      } else if (!parsed.compatibleWithUnprunedGo116) {
-        unsupportedClauses.push(`main go.mod: go directive ${parsed.goDirective ?? 'absent'}`);
+      } else if (!(input.profile === 'go-mvs-from-main-pruned-captures-v4'
+        ? supportedGoDirective(parsed.goDirective, true)
+        : parsed.compatibleWithUnprunedGo116)) {
+        unsupportedClauses.push(`main go.mod: go directive ${parsed.goDirective ?? 'absent'}`
+          .slice(0, 200));
       }
       if (local?.unsupportedClauses.length) {
         unsupportedClauses.push(...local.unsupportedClauses.map(clause =>
@@ -665,17 +770,23 @@ export class GoMvsResolutionStore {
     const captured = await this.captures.readMany(principalId, input.captures);
     const releases: GoModuleManifest[] = [];
     const captureEvidence: NonNullable<GoMvsSnapshotRequest['captureEvidence']> = [];
+    const pruned = input.profile === 'go-mvs-from-main-pruned-captures-v4';
     for (let index = 0; index < captured.length; index++) {
       const item = captured[index]!;
       const parsed = item.manifest.parsed;
-      if (parsed.status !== 'parsed' || !parsed.compatibleWithUnprunedGo116) {
+      if (!pruned && (parsed.status !== 'parsed' || !parsed.compatibleWithUnprunedGo116)) {
         if (unsupportedClauses.length < 16) {
           unsupportedClauses.push(`${item.path}@${item.version}: ${parsed.status === 'parsed'
             ? `go directive ${parsed.goDirective ?? 'absent'}` : 'unsupported go.mod syntax'}`);
         }
       }
       releases.push({ path: item.path, version: item.version,
-        requirements: parsed.requirements });
+        requirements: parsed.requirements,
+        ...(pruned ? { goDirective: (parsed.goDirective?.length ?? 0) <= 32
+          ? parsed.goDirective : null,
+        unsupportedClauses: (parsed.goDirective && parsed.goDirective.length > 32
+          ? [...parsed.unsupportedClauses, 'go directive exceeds profile']
+          : parsed.unsupportedClauses).slice(0, 16) } : {}) });
       captureEvidence.push({ captureId: input.captures[index]!, path: item.path,
         version: item.version,
         ...(item.versionList
@@ -702,8 +813,11 @@ export class GoMvsResolutionStore {
       throw new GoResolutionInvalid('local sources require the v3 caller profile');
     }
     const request: GoMvsSnapshotRequest = {
-      profile: v4 ? 'go-mvs-local-unpruned-v4' : 'go-mvs-captured-unpruned-v3', mainModule,
-      goDirective: '1.16', coverage: { complete: true, unsupportedClauses },
+      profile: pruned ? 'go-mvs-captured-pruned-v5'
+        : v4 ? 'go-mvs-local-unpruned-v4' : 'go-mvs-captured-unpruned-v3', mainModule,
+      goDirective: pruned ? (parseGoModRequirements(mainManifest!.text).goDirective ?? 'absent')
+        .slice(0, 32)
+        : '1.16', coverage: { complete: true, unsupportedClauses },
       roots, releases, captureEvidence, ...(mainManifest ? { mainManifest } : {}),
       ...(v4 ? { localSources, localReplacements } : {}),
     };

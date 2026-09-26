@@ -258,6 +258,53 @@ test('PKG05/PKG20/IAM10: Go proxy capture is bounded, private, immutable and rep
     expect(await incompatibleMain.json()).toMatchObject({ resolution: { outcome: {
       status: 'unsupported-semantics', buildList: [],
       unsupportedClauses: [expect.stringContaining('go directive 1.17')] } } });
+    const prunedMain = `module example.com/main\n\ngo 1.17\n\nrequire (\n example.com/a v1.0.0\n golang.org/x/sync v0.1.0 // indirect\n)\n`;
+    const prunedBody = { profile: 'go-mvs-from-main-pruned-captures-v4',
+      mainManifestBase64: Buffer.from(prunedMain).toString('base64'),
+      captures: [sourceIds[0]!, sourceIds[1]!, id] };
+    const prunedKey = `go-pruned-${randomUUID()}`;
+    expect((await resolve('owner-read', prunedKey, prunedBody)).status).toBe(401);
+    expect((await resolve('other-resolve', `go-pruned-${randomUUID()}`,
+      prunedBody)).status).toBe(404);
+    const prunedCreated = await resolve('owner-resolve', prunedKey, prunedBody);
+    expect(prunedCreated.status).toBe(201);
+    const prunedSaved = await prunedCreated.json() as { resolution: {
+      resolution: string; request: { mainManifest: { text: string; rawSha256: string };
+        captureEvidence: Array<{ captureId: string }> };
+      outcome: { status: string; buildList: unknown[] } }; replayed: boolean };
+    expect(prunedSaved.resolution).toMatchObject({
+      profile: 'go-mvs-captured-pruned-resolution-v5',
+      request: { profile: 'go-mvs-captured-pruned-v5', mainManifest: {
+        text: prunedMain, rawSha256: createHash('sha256').update(prunedMain).digest('hex') },
+        captureEvidence: [{ captureId: sourceIds[0] }, { captureId: sourceIds[1] },
+          { captureId: id }] },
+      outcome: { status: 'solved', buildList: [
+        { path: 'example.com/a', version: 'v1.0.0' },
+        { path: 'example.com/b', version: 'v1.0.0' },
+        { path: 'golang.org/x/sync', version: 'v0.1.0' }] } });
+    const prunedId = prunedSaved.resolution.resolution.split('/').at(-1)!;
+    expect(await (await app.handle(new Request(
+      `http://main.local/v1/package-resolutions/${prunedId}`,
+      { headers: { authorization: 'Bearer owner-read' } }))).json())
+      .toEqual(prunedSaved.resolution);
+    expect((await app.handle(new Request(
+      `http://main.local/v1/package-resolutions/${prunedId}`,
+      { headers: { authorization: 'Bearer other-read' } }))).status).toBe(404);
+    expect(await (await resolve('owner-resolve', prunedKey, prunedBody)).json())
+      .toEqual({ ...prunedSaved, replayed: true });
+    expect((await resolve('owner-resolve', prunedKey, {
+      ...prunedBody, captures: [id] })).status).toBe(409);
+    const prunedMissing = await resolve('owner-resolve', `go-pruned-${randomUUID()}`,
+      { ...prunedBody, captures: [sourceIds[0], id] });
+    expect(await prunedMissing.json()).toMatchObject({ resolution: { outcome: {
+      status: 'incomplete-source-data', buildList: [],
+      missing: [{ path: 'example.com/b', version: 'v1.0.0' }] } } });
+    const prunedOldMain = await resolve('owner-resolve', `go-pruned-${randomUUID()}`,
+      { ...prunedBody, mainManifestBase64: Buffer.from(prunedMain.replace('go 1.17',
+        'go 1.16')).toString('base64') });
+    expect(await prunedOldMain.json()).toMatchObject({ resolution: { outcome: {
+      status: 'unsupported-semantics', buildList: [],
+      unsupportedClauses: [expect.stringContaining('go directive 1.16')] } } });
     const localMain = 'module example.com/main\n\ngo 1.16\n\nrequire example.com/a v1.0.0\nreplace example.com/b v1.0.0 => ./local/b\n';
     const localMod = 'module example.com/fork/b\n\ngo 1.16\n';
     const localBody = { profile: 'go-mvs-from-main-local-captures-v3',

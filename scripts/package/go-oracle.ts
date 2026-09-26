@@ -166,6 +166,47 @@ const localFixture: GoMvsSnapshotRequest = {
       modSha256: 'c'.repeat(64) },
   ],
 };
+const prunedMain = `module example.com/main\n\ngo 1.17\n\nrequire (\n example.com/a v1.0.0\n example.com/b v1.0.0 // indirect\n)\n`;
+const prunedReleases: GoMvsSnapshotRequest['releases'] = [
+  { path: 'example.com/a', version: 'v1.0.0', goDirective: '1.17',
+    unsupportedClauses: [], requirements: [{ path: 'example.com/c', version: 'v1.0.0' }] },
+  { path: 'example.com/b', version: 'v1.0.0', goDirective: '1.16',
+    unsupportedClauses: [], requirements: [{ path: 'example.com/c', version: 'v1.1.0' }] },
+  { path: 'example.com/c', version: 'v1.1.0', goDirective: '1.17',
+    unsupportedClauses: [], requirements: [{ path: 'example.com/d', version: 'v1.0.0' }] },
+  { path: 'example.com/d', version: 'v1.0.0', goDirective: '1.17',
+    unsupportedClauses: [], requirements: [] },
+];
+const prunedFixture: GoMvsSnapshotRequest = {
+  profile: 'go-mvs-captured-pruned-v5', mainModule: 'example.com/main',
+  goDirective: '1.17', coverage: { complete: true, unsupportedClauses: [] },
+  roots: [{ path: 'example.com/a', version: 'v1.0.0' },
+    { path: 'example.com/b', version: 'v1.0.0' }],
+  releases: prunedReleases,
+  mainManifest: { text: prunedMain,
+    rawSha256: createHash('sha256').update(prunedMain).digest('hex') },
+  captureEvidence: prunedReleases.map((item, index) => ({
+    captureId: `00000000-0000-0000-0000-${String(index + 1).padStart(12, '0')}`,
+    path: item.path, version: item.version,
+    listSha256: 'a'.repeat(64), infoSha256: 'b'.repeat(64), modSha256: 'c'.repeat(64),
+  })),
+};
+const lazyFixture: GoMvsSnapshotRequest = {
+  ...prunedFixture,
+  releases: prunedReleases.slice(0, 3).map(item => item.path === 'example.com/b'
+    ? { ...item, goDirective: '1.17' } : item),
+  captureEvidence: prunedFixture.captureEvidence!.slice(0, 3),
+};
+const reorderedMain = prunedMain.replace(
+  ' example.com/a v1.0.0\n example.com/b v1.0.0 // indirect',
+  ' example.com/c v1.1.0\n example.com/b v1.0.0 // indirect');
+const legacyRevisitFixture: GoMvsSnapshotRequest = {
+  ...prunedFixture,
+  roots: [{ path: 'example.com/c', version: 'v1.1.0' },
+    { path: 'example.com/b', version: 'v1.0.0' }],
+  mainManifest: { text: reorderedMain,
+    rawSha256: createHash('sha256').update(reorderedMain).digest('hex') },
+};
 
 async function checked(command: string[], cwd = process.cwd(), env = process.env): Promise<string> {
   const proc = Bun.spawn(command, { cwd, env, stdout: 'pipe', stderr: 'pipe' });
@@ -197,8 +238,9 @@ async function ensureTool(): Promise<void> {
 
 function goMod(path: string, requirements: Array<{ path: string; version: string }>,
   directives?: GoMvsSnapshotRequest['mainDirectives'],
-  retractions?: Array<{ lower: string; upper: string; rationale: string }>): string {
-  return `module ${path}\n\ngo 1.16\n${requirements.length ?
+  retractions?: Array<{ lower: string; upper: string; rationale: string }>,
+  goDirective = '1.16'): string {
+  return `module ${path}\n\ngo ${goDirective}\n${requirements.length ?
     `\nrequire (\n${requirements.map(item => `\t${item.path} ${item.version}`).join('\n')}\n)\n`
     : ''}${(directives?.exclusions ?? []).map(item =>
     `exclude ${item.path} ${item.version}\n`).join('')}${(directives?.replacements ?? []).map(item =>
@@ -225,9 +267,11 @@ async function runScenario(name: string, request: GoMvsSnapshotRequest) {
   for (const release of request.releases) {
     const directory = resolve(proxy, release.path, '@v');
     await mkdir(directory, { recursive: true });
-    await writeFile(resolve(directory, `${release.version}.mod`),
-      goMod(release.declaredModule ?? release.path, release.requirements,
-        undefined, release.retractions));
+    if (!(name === 'pruned-lazy-missing-mod' && release.path === 'example.com/c')) {
+      await writeFile(resolve(directory, `${release.version}.mod`),
+        goMod(release.declaredModule ?? release.path, release.requirements,
+          undefined, release.retractions, release.goDirective ?? '1.16'));
+    }
     await writeFile(resolve(directory, `${release.version}.info`),
       `${JSON.stringify({ Version: release.version, Time: (() => {
         const stamp = /(?:^|[.-])(20[0-9]{12})-[A-Za-z0-9]+$/.exec(release.version)?.[1];
@@ -320,7 +364,10 @@ async function main(): Promise<void> {
       await runScenario('pseudo-timestamps', pseudoFixture),
       await runScenario('pseudo-pretag', preTagFixture),
       await runScenario('retracted', retractedFixture),
-      await runScenario('local-replacement', localFixture)] };
+      await runScenario('local-replacement', localFixture),
+      await runScenario('pruned-legacy-branch', prunedFixture),
+      await runScenario('pruned-lazy-missing-mod', lazyFixture),
+      await runScenario('pruned-legacy-revisit', legacyRevisitFixture)] };
   await writeFile(resolve(base, 'result.json'), `${JSON.stringify(report, null, 2)}\n`);
   process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
 }

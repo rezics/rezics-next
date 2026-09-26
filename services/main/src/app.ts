@@ -376,8 +376,29 @@ const goMvsCapturedV3Request = t.Object({
     rawSha256: t.String({ pattern: '^[0-9a-f]{64}$' }) },
   { additionalProperties: false }), { maxItems: 32 }),
 }, { additionalProperties: false });
+const goMvsCapturedV4Request = t.Object({
+  profile: t.Literal('go-mvs-from-main-pruned-captures-v4'),
+  mainManifestBase64: t.String({ maxLength: 87_384 }),
+  captures: t.Array(groupUuid, { maxItems: 128 }),
+}, { additionalProperties: false });
 const goMvsCapturedRequest = t.Union([goMvsCapturedV1Request,
-  goMvsCapturedV2Request, goMvsCapturedV3Request]);
+  goMvsCapturedV2Request, goMvsCapturedV3Request, goMvsCapturedV4Request]);
+const goMvsV5Request = t.Object({ profile: t.Literal('go-mvs-captured-pruned-v5'),
+  mainModule: goMvsCommon.mainModule,
+  goDirective: t.String({ minLength: 4, maxLength: 32 }),
+  coverage: goMvsCommon.coverage, roots: goMvsCommon.roots,
+  releases: t.Array(t.Object({ path: goModuleRequirement.properties.path,
+    version: goModuleRequirement.properties.version,
+    requirements: t.Array(goModuleRequirement, { maxItems: 64 }),
+    goDirective: t.Union([t.String({ maxLength: 32 }), t.Null()]),
+    unsupportedClauses: t.Array(t.String({ minLength: 1, maxLength: 200 }),
+      { maxItems: 16 }),
+  }, { additionalProperties: false }), { maxItems: 256 }),
+  mainManifest: t.Object({ text: t.String({ maxLength: 65_536 }),
+    rawSha256: t.String({ pattern: '^[0-9a-f]{64}$' }) },
+  { additionalProperties: false }),
+  captureEvidence: goMvsV3Request.properties.captureEvidence,
+}, { additionalProperties: false });
 const goMvsOutcome = t.Object({ status: t.Union([t.Literal('solved'),
   t.Literal('incomplete-source-data'), t.Literal('unsupported-semantics'),
   t.Literal('budget-exhausted')]),
@@ -395,10 +416,11 @@ const goMvsResolution = t.Object({
   profile: t.Union([t.Literal('go-mvs-stable-unpruned-resolution-v1'),
     t.Literal('go-mvs-stable-unpruned-main-directives-resolution-v2'),
     t.Literal('go-mvs-captured-unpruned-resolution-v3'),
-    t.Literal('go-mvs-local-unpruned-resolution-v4')]),
+    t.Literal('go-mvs-local-unpruned-resolution-v4'),
+    t.Literal('go-mvs-captured-pruned-resolution-v5')]),
   resolution: t.String(), requestDigest: t.String(),
   request: t.Union([goMvsV1Request, goMvsV2Request, goMvsV3Request,
-    goMvsV4Request]),
+    goMvsV4Request, goMvsV5Request]),
   outcome: goMvsOutcome, createdAt: t.String() });
 const goMvsResolutionWrite = t.Object({ resolution: goMvsResolution,
   replayed: t.Boolean() });

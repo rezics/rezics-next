@@ -296,3 +296,105 @@ test('PKG05: path-wide Go replacement loads both visited versions and exact rule
     .toMatchObject({ status: 'incomplete-source-data', missing: [
       requirement('example.com/c', 'v1.5.0') ] });
 });
+
+const prunedMain = `module example.com/main\n\ngo 1.17\n\nrequire (\n example.com/a v1.0.0\n example.com/b v1.0.0 // indirect\n)\n`;
+const prunedInput = (overrides: Partial<GoMvsSnapshotRequest> = {}): GoMvsSnapshotRequest => ({
+  profile: 'go-mvs-captured-pruned-v5', mainModule: 'example.com/main',
+  goDirective: '1.17', coverage: { complete: true, unsupportedClauses: [] },
+  roots: [requirement('example.com/a', 'v1.0.0'),
+    requirement('example.com/b', 'v1.0.0')],
+  releases: [
+    { ...release('example.com/a', 'v1.0.0', [requirement('example.com/c', 'v1.0.0')]),
+      goDirective: '1.17', unsupportedClauses: [] },
+    { ...release('example.com/b', 'v1.0.0', [requirement('example.com/c', 'v1.1.0')]),
+      goDirective: '1.16', unsupportedClauses: [] },
+    { ...release('example.com/c', 'v1.1.0', [requirement('example.com/d', 'v1.0.0')]),
+      goDirective: '1.17', unsupportedClauses: [] },
+    { ...release('example.com/d', 'v1.0.0'),
+      goDirective: '1.17', unsupportedClauses: [] },
+  ],
+  mainManifest: { text: prunedMain, rawSha256: sha(prunedMain) },
+  captureEvidence: ['a', 'b', 'c', 'd'].map((path, index) => ({
+    captureId: `00000000-0000-0000-0000-${String(index + 1).padStart(12, '0')}`,
+    path: `example.com/${path}`, version: path === 'c' ? 'v1.1.0' : 'v1.0.0',
+    listSha256: 'a'.repeat(64), infoSha256: 'b'.repeat(64), modSha256: 'c'.repeat(64),
+  })), ...overrides,
+});
+
+test('PKG05/PKG12: Go 1.17 roots and legacy branch select the native pruned graph', () => {
+  const outcome = solveGoMvsSnapshot(prunedInput());
+  expect(outcome).toMatchObject({ status: 'solved', buildList: [
+    requirement('example.com/a', 'v1.0.0'),
+    requirement('example.com/b', 'v1.0.0'),
+    requirement('example.com/c', 'v1.1.0'),
+    requirement('example.com/d', 'v1.0.0'),
+  ], loadedManifestCount: 4 });
+  const pruned = prunedInput({ releases: prunedInput().releases.map(item =>
+    item.path === 'example.com/b' ? { ...item, goDirective: '1.17' } : item) });
+  expect(solveGoMvsSnapshot(pruned)).toMatchObject({ status: 'solved', buildList: [
+    requirement('example.com/a', 'v1.0.0'),
+    requirement('example.com/b', 'v1.0.0'),
+    requirement('example.com/c', 'v1.1.0'),
+  ], loadedManifestCount: 2 });
+  expect(solveGoMvsSnapshot({ ...pruned, releases: pruned.releases.slice(0, 2),
+    captureEvidence: pruned.captureEvidence!.slice(0, 2) })).toMatchObject({
+      status: 'solved', loadedManifestCount: 2 });
+  expect(solveGoMvsSnapshot({ ...pruned, releases: pruned.releases.map(item =>
+    item.path === 'example.com/c' ? { ...item, goDirective: null,
+      unsupportedClauses: ['unrecognized future directive'] } : item) }))
+    .toMatchObject({ status: 'solved', loadedManifestCount: 2 });
+  const reorderedMain = prunedMain.replace(
+    ' example.com/a v1.0.0\n example.com/b v1.0.0 // indirect',
+    ' example.com/c v1.1.0\n example.com/b v1.0.0 // indirect');
+  const reordered = prunedInput({ roots: [requirement('example.com/c', 'v1.1.0'),
+    requirement('example.com/b', 'v1.0.0')],
+    mainManifest: { text: reorderedMain, rawSha256: sha(reorderedMain) } });
+  expect(solveGoMvsSnapshot(reordered)).toMatchObject({ status: 'solved',
+    buildList: [requirement('example.com/b', 'v1.0.0'),
+      requirement('example.com/c', 'v1.1.0'),
+      requirement('example.com/d', 'v1.0.0')], loadedManifestCount: 3 });
+});
+
+test('PKG05/PKG13: pruned profile refuses missing and incompatible loaded evidence', () => {
+  const request = prunedInput();
+  expect(solveGoMvsSnapshot({ ...request, releases: request.releases.slice(0, 2),
+    captureEvidence: request.captureEvidence!.slice(0, 2) })).toMatchObject({
+      status: 'incomplete-source-data', buildList: [],
+      missing: [requirement('example.com/c', 'v1.1.0')] });
+  expect(solveGoMvsSnapshot({ ...request, releases: request.releases.map(item =>
+    item.path === 'example.com/c' ? { ...item, goDirective: null } : item) }))
+    .toMatchObject({ status: 'unsupported-semantics', buildList: [],
+      unsupportedClauses: [expect.stringContaining('go directive absent')] });
+  expect(solveGoMvsSnapshot({ ...request, coverage: { complete: false,
+    unsupportedClauses: [] } })).toMatchObject({ status: 'incomplete-source-data',
+      buildList: [] });
+  expect(solveGoMvsSnapshot({ ...request, coverage: { complete: true,
+    unsupportedClauses: ['main go.mod: replace'] } })).toMatchObject({
+      status: 'unsupported-semantics', buildList: [] });
+  expect(() => solveGoMvsSnapshot({ ...request, goDirective: '1.16' }))
+    .toThrow(GoResolutionInvalid);
+  const newerMain = prunedMain.replace('go 1.17', 'go 1.18');
+  expect(solveGoMvsSnapshot(prunedInput({ goDirective: '1.18',
+    mainManifest: { text: newerMain, rawSha256: sha(newerMain) } })).status).toBe('solved');
+  expect(solveGoMvsSnapshot({ ...request, releases: request.releases.map(item =>
+    item.path === 'example.com/b' ? { ...item, goDirective: '1.28' } : item) }))
+    .toMatchObject({ status: 'unsupported-semantics', buildList: [] });
+});
+
+test('PKG05/PKG13: pruned requirement traversal stops at the declared budget', () => {
+  const roots = Array.from({ length: 9 }, (_, index) =>
+    requirement(`example.com/root${index}`, 'v1.0.0'));
+  const text = `module example.com/main\n\ngo 1.17\n\nrequire (\n${roots.map(item =>
+    ` ${item.path} ${item.version}`).join('\n')}\n)\n`;
+  const releases = roots.map((root, index) => ({ ...root, goDirective: '1.17',
+    unsupportedClauses: [], requirements: Array.from({ length: 64 }, (_, child) =>
+      requirement(`example.com/dependency${index}x${child}`, 'v1.0.0')) }));
+  const captureEvidence = roots.map((root, index) => ({
+    captureId: `00000000-0000-0000-0000-${String(index + 1).padStart(12, '0')}`,
+    ...root, listSha256: 'a'.repeat(64), infoSha256: 'b'.repeat(64),
+    modSha256: 'c'.repeat(64) }));
+  expect(solveGoMvsSnapshot(prunedInput({ roots, releases,
+    captureEvidence, mainManifest: { text, rawSha256: sha(text) } })))
+    .toMatchObject({ status: 'budget-exhausted', buildList: [],
+      loadedManifestCount: 9, requirementCount: 513 });
+});

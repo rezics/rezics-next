@@ -62,6 +62,37 @@ accepted, each manifest at most 65,536 bytes; traversal stops after 128 visited
 versions or 512 requirements. Local resolution performs no host file or provider
 network reads. These are per-request work limits, not module ecosystem limits.
 
+The `go-mvs-from-main-pruned-captures-v4` API profile derives a Go 1.17–1.27.1
+build list from an exact retained main `go.mod` and private remote capture IDs.
+Its immutable `go-mvs-captured-pruned-v5` snapshot binds the main bytes and
+SHA-256, parsed roots, each supplied capture ID and its list/info/manifest
+digests, and each remote module's parsed `go` directive and requirements.
+Every main `require`, including `// indirect`, is an explicit root. The resolver
+reads each root's immediate requirements; it follows full transitive
+requirements from a Go 1.16 module reached as an explicit root or through
+another Go 1.16 branch. Requirements reached only from Go 1.17+ branches stay
+selected without loading their manifests. Thus a selected module may lack a
+retained `go.mod` while the build list remains defined; this is a graph result,
+not an installation or source-integrity claim. A missing manifest needed for
+expansion returns `incomplete-source-data`. Unsupported syntax or a missing,
+older, or future `go` directive on a loaded manifest returns
+`unsupported-semantics`; unsupported metadata on an unexpanded module cannot
+alter this graph. Main `replace`/`exclude` and workspace directives remain
+outside this profile. The Go 1.16 profiles remain selectable and unpruned.
+
+The pruning cost is O(C + V + E) for C at most 128 supplied private captures,
+V at most 128 expanded module versions, and E at most 512 queued requirements.
+The owner reads captures in one bounded private query and uses the established
+immutable write/replay path. It performs no provider or host filesystem read
+during resolution. The separate local-file proxy oracle compares the build
+list with pinned Go 1.27.1 and withholds a pruned transitive `.mod` file to
+check lazy loading. This profile implements only the bounded captured graph;
+live version sets, complete directive combinations, checksum verification of
+these captures, locks and installation require their own qualification.
+
+This pruning rule follows the [Go module reference](https://go.dev/ref/mod#graph-pruning)
+and [Go 1.17 release notes](https://go.dev/doc/go1.17#go-command).
+
 ## Nix
 
 Preserve original versus locked flake inputs, follows references and exact source
