@@ -64,6 +64,22 @@ per scope or principal, and strong revocation rejects drain lists above 256.
 terminal outcomes, and the pending/revocation indexes; the operation's SQL and
 application bounds are recorded in `services/main/src/modules/access/download-cost-contract.md`.
 
+### SYS06 revocation fences
+
+Each source-acquisition request performs one indexed active-principal lookup
+before the bounded run and one after it, independent of capture count; an exact
+replay makes no provider call. A protected source-run read performs one active
+principal lookup before returning its bounded result. The export read and
+package-install activation each make one initial lookup and one final fence
+lookup. `tests/qa/fault-recovery/sys-revocation.test.ts` instruments the real
+Access registry around the QA database and asserts those fixed lookup counts,
+while barriers revoke the principal during provider I/O, export source
+revalidation and an installation hook. It also checks that export bytes are
+withheld, a staged package remains unmounted, and authorized recovery reuses the
+same acquisition receipt or installation generation. This bounds added Access
+checks independently of provider or package input size; it is not a latency or
+database-plan measurement.
+
 ## Small multi-scale experiments
 
 1. Derive the bound and its assumptions before choosing fixtures or thresholds.

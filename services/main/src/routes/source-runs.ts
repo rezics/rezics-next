@@ -114,12 +114,14 @@ export function sourceRunRoutes(work: MainWorkDependencies) {
         if (!services) return unavailable();
         const key = request.headers.get('idempotency-key');
         if (!key) return problem(400, 'invalid_idempotency_key', 'Idempotency-Key is required');
-        const principalId = await principal(request, 'source:acquire');
+        const caller = await work.account.verify(request, ['source:acquire']);
+        const principalId = await work.access.activePrincipalId(caller);
         if (!principalId) return inactive();
         const result = body.profile === OPEN_LIBRARY_WORKS_RUN
           ? await services.runs.runOpenLibraryWorks(principalId, key, body)
           : await runGoProxyLive(services.runs, principalId, key, body,
             goProxyResponseLoader(GO_PROXY_ORIGIN, services.runs.fetcher, GO_PROXY_CAPTURE_BYTES));
+        if (await work.access.activePrincipalId(caller) !== principalId) return inactive();
         return Response.json(result, { status: result.replayed ? 200 : 201, headers: noStore });
       } catch (error) { return runError(error); }
     })
