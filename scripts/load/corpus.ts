@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { Pool } from 'pg';
-import { AccessAdmissionRegistry, type ClaimedAdmission, type VerifiedPrincipal }
+import { AccessAdmissionRegistry, type ClaimedAdmission, type GraphTerminalProof,
+  type VerifiedPrincipal }
   from '../../services/main/src/modules/access/admission.ts';
 import { activateMetadataWork, ID, metadataWorkRequestDigest,
   type WorkActivationEnvironment } from '../../services/main/src/modules/work/activate.ts';
@@ -56,6 +57,15 @@ interface Terminal {
   outcome?: 'succeeded' | 'cancelled'; receipt: string; dataEpoch: string; sequence: string;
 }
 
+/** Preserve owner-specific receipt identity while binding the Access seal to its claim. */
+export function accessTerminalProof<T extends Terminal>(result: T,
+  claimed: Pick<ClaimedAdmission, 'id' | 'requestDigest' | 'authorityEpoch' | 'scope'>):
+  GraphTerminalProof & Omit<T, 'outcome' | 'admissionId' | 'requestDigest' | 'authorityEpoch' | 'scope'> {
+  return { ...result, outcome: 'succeeded', admissionId: claimed.id,
+    requestDigest: claimed.requestDigest, authorityEpoch: claimed.authorityEpoch,
+    scope: claimed.scope };
+}
+
 /** Grants and claims every seed command against the real Access ledger. */
 export class LoadAuthority {
   readonly actor = ID + randomUUID();
@@ -99,9 +109,7 @@ export class LoadAuthority {
     const claimed = await this.access.claim(registered.id, digest);
     const result = await execute(claimed);
     if (result.outcome && result.outcome !== 'succeeded') throw new Error(`${action} returned ${result.outcome}`);
-    await this.access.recordGraphOutcome(claimed.id, { outcome: 'succeeded', receipt: result.receipt,
-      admissionId: claimed.id, requestDigest: digest, authorityEpoch: claimed.authorityEpoch,
-      scope, dataEpoch: result.dataEpoch, sequence: result.sequence });
+    await this.access.recordGraphOutcome(claimed.id, accessTerminalProof(result, claimed));
     return result;
   }
 }

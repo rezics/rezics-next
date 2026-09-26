@@ -97,6 +97,7 @@ export function startFusekiMeter(upstream: string) {
   const searchProof: SearchProofCounts = { fullInventories: 0, deltaRequests: 0,
     deltaAvailable: 0, deltaUnavailable: 0 };
   let capture: { path: string; sparql: string }[] | undefined;
+  let beforeNextPhrase: (() => Promise<void>) | undefined;
   const server = Bun.serve({ hostname: '127.0.0.1', port: 0, async fetch(request) {
     const incoming = new URL(request.url);
     const destination = new URL(incoming.pathname + incoming.search, target.origin);
@@ -107,6 +108,12 @@ export function startFusekiMeter(upstream: string) {
         searchProof.fullInventories++;
       }
       if (capture) capture.push({ path: incoming.pathname, sparql });
+      if (beforeNextPhrase && sparql.includes('text:query') && sparql.includes('?rawUnit')
+        && sparql.includes('?candidateCount')) {
+        const run = beforeNextPhrase;
+        beforeNextPhrase = undefined;
+        await run();
+      }
     }
     const deltaRequest = incoming.pathname.endsWith('/command')
       && incoming.searchParams.has('deltaSince');
@@ -142,5 +149,9 @@ export function startFusekiMeter(upstream: string) {
     searchProofSnapshot: (): SearchProofCounts => ({ ...searchProof }),
     beginCapture: () => { capture = []; },
     endCapture: () => { const result = capture ?? []; capture = undefined; return result; },
+    beforeNextPhrase: (run: () => Promise<void>) => {
+      if (beforeNextPhrase) throw new Error('A phrase race is already armed');
+      beforeNextPhrase = run;
+    },
     stop: () => server.stop(true) };
 }

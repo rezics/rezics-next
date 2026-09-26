@@ -6,6 +6,8 @@ import { Pool } from 'pg';
 import { ContentCore } from '../../services/content/src/core.ts';
 import { ContentProjectionCursor } from '../../services/content/src/projection-cursor.ts';
 import { FusekiClient } from '../../services/main/src/infrastructure/fuseki.ts';
+import { MAX_SEARCH_FUSEKI_BYTES, MAX_SEARCH_FUSEKI_CALLS,
+  MAX_SEARCH_RESPONSE_BYTES } from '../../services/main/src/modules/work/search-readiness.ts';
 import { DATASET, GRAPHS, RV, type WorkActivationEnvironment }
   from '../../services/main/src/modules/work/activate.ts';
 import { editMetadataWork, metadataWorkEditDigest }
@@ -52,6 +54,12 @@ if (!Number.isInteger(count) || count < 10 || count > 10_000
 const baseline: LoadBaseline | undefined = baselineFile
   ? validateLoadBaseline(JSON.parse(readFileSync(baselineFile, 'utf8')),
     process.env.REZICS_LOAD_SOURCE_RUN_ID!, count - cohort) : undefined;
+const backgroundWorks = process.env.REZICS_LOAD_SOURCE_FIXTURE
+  ? Number(process.env.REZICS_LOAD_BACKGROUND_WORKS ?? NaN) : baseline?.works ?? 0;
+if (!Number.isSafeInteger(backgroundWorks) || backgroundWorks < 0) {
+  throw new Error('fixture/load background Work count is invalid');
+}
+const corpusWorkCount = process.env.REZICS_LOAD_SOURCE_FIXTURE ? backgroundWorks + count : count;
 const fusekiImage = fusekiImageFromCompose(readFileSync(join(root, 'infra/dev/compose.yaml'), 'utf8'));
 
 const needed = (name: string) => {
@@ -59,6 +67,7 @@ const needed = (name: string) => {
   if (!value) throw new Error(`${name} is required`);
   return value;
 };
+const stackRunId = () => process.env.REZICS_LOAD_STACK_RUN_ID ?? needed('REZICS_LOAD_RUN_ID');
 const upstream = needed('FUSEKI_URL');
 const meter = startFusekiMeter(upstream);
 const env: WorkActivationEnvironment = { fuseki: new FusekiClient(upstream),
@@ -71,8 +80,13 @@ let poolsOpen = true;
 const relayEnvironment = { ...process.env, MAIN_RELAY_DATABASE_URL: needed('ACCOUNT_RELAY_DATABASE_URL'),
   MAIN_RELAY_CONSUMER: 'practical-load', MAIN_RELAY_INTERVAL_MS: '100' };
 const mainUrl = `http://127.0.0.1:${needed('MAIN_PORT')}`;
-const evidence: Record<string, unknown> = { acceptanceIds: ['OPS05', 'SEARCH18', 'SEARCH19'],
+const evidence: Record<string, unknown> = { acceptanceIds: ['OPS05', 'SEARCH18'],
   works: count, durationSeconds, seedWorkers,
+  ...(process.env.REZICS_LOAD_SOURCE_FIXTURE ? { sourceFixture: process.env.REZICS_LOAD_SOURCE_FIXTURE,
+    backgroundWorks } : {}),
+  searchLimits: { fusekiCalls: MAX_SEARCH_FUSEKI_CALLS, fusekiResponseBytes: MAX_SEARCH_FUSEKI_BYTES,
+    perResponseBytes: MAX_SEARCH_RESPONSE_BYTES, totalRemoteAttempts: 90,
+    requestDeadlineMs: 1500, phraseCandidates: 512, publicUnits: 20_000 },
   images: { k6: 'grafana/k6:2.3.0', fuseki: fusekiImage.image }, clients: 10,
   offeredMix: { publicReads: 0.8, admittedWrites: 0.2, hotWorkCohort: 0.1,
     hotReadShare: 0.5, hotRequestShare: 0.5 },
@@ -127,6 +141,7 @@ async function query(item: LoadCase, corpus: PracticalCorpus) {
     headers: { 'content-type': 'application/json' }, body: request,
     signal: AbortSignal.timeout(10_000) });
   const bytes = await response.arrayBuffer();
+  const remote = delta(meter.snapshot(), before);
   const snapshot = JSON.parse(new TextDecoder().decode(bytes)) as Record<string, any>;
   const expectedPopulation = item.lane === 'content' ? corpus.contentUnits
     : corpus.mainUnits + corpus.contentUnits;
@@ -140,11 +155,67 @@ async function query(item: LoadCase, corpus: PracticalCorpus) {
     || item.expectedReason && snapshot.results?.[0]?.reason !== item.expectedReason) {
     throw new Error(`${item.name} returned an incomplete or incorrect ${response.status} snapshot: ${JSON.stringify(snapshot).slice(0, 500)}`);
   }
+  if (remote.calls > MAX_SEARCH_FUSEKI_CALLS || remote.receivedBytes > MAX_SEARCH_FUSEKI_BYTES
+    || bytes.byteLength > MAX_SEARCH_RESPONSE_BYTES) {
+    throw new Error(`${item.name} exceeded its declared SEARCH18 call or byte ceiling: ${JSON.stringify(remote)}`);
+  }
   return { status: response.status, latencyMs: performance.now() - started,
     requestBytes: Buffer.byteLength(request), responseBytes: bytes.byteLength,
-    remote: delta(meter.snapshot(), before), total: snapshot.total,
+    remote, total: snapshot.total,
     population: snapshot.population, indexGeneration: snapshot.indexGeneration,
-    sourcePosition: snapshot.sourcePosition ?? snapshot.contentPosition };
+    sourcePosition: snapshot.sourcePosition ?? snapshot.contentPosition,
+    resultContribution: snapshot.results?.[0]?.contribution };
+}
+
+async function queryPage(corpus: PracticalCorpus, continuation?: Record<string, unknown>) {
+  const request = JSON.stringify({ profile: 'public-main-phrase-page-v1', phrase: 'public load',
+    language: null, pageSize: 1, ...(continuation ? { continuation } : {}) });
+  const before = meter.snapshot();
+  const started = performance.now();
+  const response = await fetch(`${mainUrl}/v1/queries/page`, { method: 'POST',
+    headers: { 'content-type': 'application/json' }, body: request,
+    signal: AbortSignal.timeout(10_000) });
+  const bytes = await response.arrayBuffer();
+  const remote = delta(meter.snapshot(), before);
+  const result = JSON.parse(new TextDecoder().decode(bytes)) as Record<string, any>;
+  if (remote.calls > MAX_SEARCH_FUSEKI_CALLS || remote.receivedBytes > MAX_SEARCH_FUSEKI_BYTES
+    || bytes.byteLength > MAX_SEARCH_RESPONSE_BYTES) {
+    throw new Error(`SEARCH18 page exceeded its declared call or byte ceiling: ${JSON.stringify(remote)}`);
+  }
+  return { status: response.status, latencyMs: performance.now() - started,
+    requestBytes: Buffer.byteLength(request), responseBytes: bytes.byteLength,
+    remote, result, population: corpus.mainUnits + corpus.contentUnits };
+}
+
+async function searchPayloadBoundaries(corpus: PracticalCorpus) {
+  const request = (phrase: string) => JSON.stringify({ profile: 'public-main-phrase-v1', phrase,
+    language: null });
+  const probe = async (phrase: string) => {
+    const body = request(phrase);
+    const before = meter.snapshot();
+    const response = await fetch(`${mainUrl}/v1/queries`, { method: 'POST',
+      headers: { 'content-type': 'application/json' }, body,
+      signal: AbortSignal.timeout(10_000) });
+    const bytes = await response.arrayBuffer();
+    const remote = delta(meter.snapshot(), before);
+    if (remote.calls > MAX_SEARCH_FUSEKI_CALLS || remote.receivedBytes > MAX_SEARCH_FUSEKI_BYTES
+      || bytes.byteLength > MAX_SEARCH_RESPONSE_BYTES) {
+      throw new Error(`SEARCH18 payload probe exceeded a declared call or byte ceiling: ${JSON.stringify(remote)}`);
+    }
+    return { status: response.status, requestBytes: Buffer.byteLength(body),
+      responseBytes: bytes.byteLength, remote,
+      body: JSON.parse(new TextDecoder().decode(bytes)) as Record<string, any> };
+  };
+  const accepted = await probe('x'.repeat(80));
+  const rejected = await probe('x'.repeat(81));
+  if (accepted.status !== 200 || accepted.body.complete !== true || accepted.body.total !== 0
+    || accepted.body.population !== corpus.mainUnits + corpus.contentUnits
+    || rejected.status !== 400 || rejected.remote.calls !== 0) {
+    throw new Error(`SEARCH18 phrase length boundary differs: ${JSON.stringify({
+      accepted: { status: accepted.status, total: accepted.body.total },
+      rejected: { status: rejected.status, calls: rejected.remote.calls } })}`);
+  }
+  return { maxAcceptedCharacters: accepted, firstRejectedCharacters: rejected };
 }
 
 async function queryCases(corpus: PracticalCorpus) {
@@ -274,7 +345,7 @@ async function graphSize() {
 }
 
 function containerId(service: 'fuseki' | 'postgres'): string {
-  const project = `rezics-qa-${needed('REZICS_LOAD_RUN_ID')}`;
+  const project = `rezics-qa-${stackRunId()}`;
   const id = spawnSync('docker', ['ps', '--filter', `label=com.docker.compose.project=${project}`,
     '--filter', `label=com.docker.compose.service=${service}`, '--format', '{{.ID}}'],
   { cwd: root, env: loadDockerEnvironment(), encoding: 'utf8', timeout: 5000 });
@@ -325,15 +396,16 @@ function queryPlan(lane: string, captured: { sparql: string }[]) {
 
 function stackCommand(action: 'stack:down' | 'stack:up', name: string) {
   const result = spawnSync('corepack', ['yarn', action, '--profile', 'qa',
-    '--run-id', needed('REZICS_LOAD_RUN_ID'), '--persistent'],
+    '--run-id', stackRunId(), '--persistent'],
   { cwd: root, env: process.env, encoding: 'utf8', timeout: 180_000 });
   writeFileSync(join(artifacts, `${name}.log`), result.stdout + result.stderr);
   if (result.status !== 0) throw new Error(`${action} failed during storage cold restart: ${result.stderr}`);
 }
 
-async function writeSelection(corpus: PracticalCorpus, authority: LoadAuthority,
-  index: number, iteration: number) {
-  const item = corpus.works[index]!;
+interface PreparedSelection { contribution: string; publicationDecision: string }
+
+async function prepareSelection(authority: LoadAuthority, item: PracticalCorpus['works'][number],
+  iteration: number): Promise<PreparedSelection> {
   const draftInput = { ...replacementContribution(item, iteration), actingSubject: authority.actor };
   const draft = await authority.run(`contribution:create:${item.work}`, 'contribution.create',
     textContributionDigest(draftInput), admission => activateTextContribution(env, admission, draftInput));
@@ -345,16 +417,28 @@ async function writeSelection(corpus: PracticalCorpus, authority: LoadAuthority,
     'contribution.publish', textPublicationDigest(publishInput),
     admission => publishTextContribution(env, admission, publishInput));
   if (!published.publicationDecision) throw new Error('mixed Contribution publication missing');
+  return { contribution: draft.contribution, publicationDecision: published.publicationDecision };
+}
+
+async function selectPreparedContribution(corpus: PracticalCorpus, authority: LoadAuthority,
+  index: number, prepared: PreparedSelection) {
+  const item = corpus.works[index]!;
   const selectionInput = { context: { kind: 'main-version-default' as const, id: item.main },
-    work: item.work, contribution: draft.contribution,
-    publicationDecision: published.publicationDecision, expectedSelectionHead: item.selection,
+    work: item.work, contribution: prepared.contribution,
+    publicationDecision: prepared.publicationDecision, expectedSelectionHead: item.selection,
     selectionBasis: 'main-maintainer' as const, actingSubject: authority.actor };
   const selected = await authority.run(`publication:select:${item.main}`, 'publication.select',
     mainSelectionDigest(selectionInput), admission => selectMainDefault(env, admission, selectionInput));
   if (!selected.selection) throw new Error('mixed Main selection missing');
   item.selection = selected.selection;
   item.selectionReceipt = selected.receipt;
-  return { selection: selected.selection, contribution: draft.contribution };
+  return { selection: selected.selection, contribution: prepared.contribution };
+}
+
+async function writeSelection(corpus: PracticalCorpus, authority: LoadAuthority,
+  index: number, iteration: number) {
+  const prepared = await prepareSelection(authority, corpus.works[index]!, iteration);
+  return selectPreparedContribution(corpus, authority, index, prepared);
 }
 
 async function mixedWriters(corpus: PracticalCorpus, authority: LoadAuthority, until: number) {
@@ -483,7 +567,12 @@ async function runK6(corpus: PracticalCorpus, authority: LoadAuthority) {
     serverErrorRate: m.practical_server_errors?.value,
     httpSentBytes: m.data_sent?.count, httpReceivedBytes: m.data_received?.count,
     writer };
-  const full = count === 10_000 && durationSeconds === 180;
+  const hostThresholds = (count === 10_000 && durationSeconds === 180)
+    || (process.env.REZICS_LOAD_SOURCE_FIXTURE !== undefined && durationSeconds === 180);
+  evidence.hostThresholds = { enabled: hostThresholds,
+    readP95Ms: 1500, laneReadP95Ms: 1500, writeP95Ms: 2500,
+    minimumCompleted: 300, failedHttpRate: 0, checkRate: 1,
+    serverErrorRate: 0, relayBacklogMustNotGrow: true };
   const recordedLatency = [metrics.readP95Ms, metrics.readP99Ms,
     ...[writer.latencyMs.edit, writer.latencyMs.selection, writer.latencyMs.rating]
       .flatMap(value => [value.p95, value.p99])]
@@ -494,9 +583,9 @@ async function runK6(corpus: PracticalCorpus, authority: LoadAuthority) {
     || metrics.serverErrorRate !== 0 || !completed || metrics.readShare === null
     || metrics.readShare < 0.7 || metrics.readShare > 0.9
     || metrics.hotReadShare === null || metrics.hotReadShare < 0.45 || metrics.hotReadShare > 0.55
-    || full && (metrics.hotRequestShare === null
+    || hostThresholds && (metrics.hotRequestShare === null
       || metrics.hotRequestShare < 0.45 || metrics.hotRequestShare > 0.55)
-    || full && (!recordedLatency || !writer.counts.edit || !writer.counts.selection
+    || hostThresholds && (!recordedLatency || !writer.counts.edit || !writer.counts.selection
       || !writer.counts.rating || trend.growingAtEnd || completed < 300
       || (metrics.readP95Ms ?? Infinity) > 1500
       || !laneReadP95Within(metrics.laneLatency, 1500)
@@ -541,7 +630,7 @@ try {
   evidence.seed = { works: corpus.works.length, mainUnits: corpus.mainUnits,
     contentUnits: corpus.contentUnits, realm: corpus.realm, ratingContext: corpus.ratingContext,
     graphSequence: (await graphSequence()).toString(), freshWorks: cohort,
-    backgroundWorks: baseline?.works ?? 0 };
+    backgroundWorks };
   if (prepare) {
     await waitContent(corpus);
     evidence.relayAfterSeed = await waitRelay();
@@ -605,6 +694,29 @@ try {
   evidence.cold = cold;
   evidence.warm = warm;
   evidence.queryPlans = plans;
+  evidence.searchPayloadBoundaries = await searchPayloadBoundaries(corpus);
+  const firstPage = await queryPage(corpus);
+  if (firstPage.status !== 200 || firstPage.result.relationComplete !== true
+    || firstPage.result.population !== corpus.mainUnits + corpus.contentUnits
+    || firstPage.result.total < 2 || firstPage.result.results?.length !== 1
+    || !firstPage.result.next) {
+    throw new Error(`SEARCH18 page one did not create a bounded continuation: ${JSON.stringify({
+      status: firstPage.status, total: firstPage.result.total, next: firstPage.result.next })}`);
+  }
+  const secondPage = await queryPage(corpus, firstPage.result.next);
+  if (secondPage.status !== 200 || secondPage.result.relationComplete !== true
+    || secondPage.result.results?.length !== 1
+    || secondPage.result.results[0]?.work === firstPage.result.results[0]?.work) {
+    throw new Error(`SEARCH18 continuation repeated or omitted its first result: ${JSON.stringify({
+      status: secondPage.status, first: firstPage.result.results?.[0]?.work,
+      second: secondPage.result.results?.[0]?.work })}`);
+  }
+  evidence.searchPages = { first: { ...firstPage, result: {
+    total: firstPage.result.total, nextOffset: firstPage.result.next.nextOffset,
+    firstWork: firstPage.result.results?.[0]?.work } },
+  second: { ...secondPage, result: { total: secondPage.result.total,
+    nextOffset: secondPage.result.next?.nextOffset,
+    secondWork: secondPage.result.results?.[0]?.work } } };
   // A full inventory qualified the running Main reader above. One actual
   // selection replacement at corpus scale must now use the native bounded
   // journal and return the newly selected Contribution without another scan.
@@ -625,6 +737,43 @@ try {
     || changedProof.deltaAvailable < 1) {
     throw new Error(`selection change did not use bounded native search delta: ${JSON.stringify(changedProof)}`);
   }
+  const stalePage = await queryPage(corpus, firstPage.result.next);
+  const restartProblem = JSON.stringify(stalePage.result).includes('search_restart_required');
+  evidence.searchContinuationAfterSelection = { status: stalePage.status,
+    requestBytes: stalePage.requestBytes, responseBytes: stalePage.responseBytes,
+    remote: stalePage.remote, restartProblem };
+  if (stalePage.status !== 409 || !restartProblem) {
+    throw new Error(`SEARCH18 stale continuation was not explicitly rejected: ${JSON.stringify({
+      status: stalePage.status, result: stalePage.result })}`);
+  }
+  const retryIndex = changedIndex;
+  const retryWork = corpus.works[retryIndex]!;
+  const stableBeforeMovement = await query({ name: 'retry-stable-baseline', lane: 'main',
+    phrase: retryWork.token, language: retryWork.language, expectedWork: retryWork.work }, corpus);
+  const preparedMovement = await prepareSelection(authority, retryWork, 900_001);
+  let movement: Awaited<ReturnType<typeof writeSelection>> | undefined;
+  meter.beforeNextPhrase(async () => {
+    movement = await selectPreparedContribution(corpus, authority, retryIndex, preparedMovement);
+  });
+  const movedDuringPhrase = await query({ name: 'retry-moved-during-phrase', lane: 'main',
+    phrase: retryWork.token, language: retryWork.language, expectedWork: retryWork.work }, corpus);
+  if (!movement || movedDuringPhrase.resultContribution !== movement.contribution
+    || movedDuringPhrase.remote.calls <= stableBeforeMovement.remote.calls
+    || movedDuringPhrase.latencyMs > 1500) {
+    throw new Error(`SEARCH18 movement retry did not show a stable new result and extra bounded read: ${JSON.stringify({
+      movement, baselineCalls: stableBeforeMovement.remote.calls,
+      movedCalls: movedDuringPhrase.remote.calls,
+      movedLatencyMs: movedDuringPhrase.latencyMs,
+      resultContribution: movedDuringPhrase.resultContribution })}`);
+  }
+  evidence.searchMovementRetry = { changedWork: retryWork.work,
+    stableBaseline: stableBeforeMovement, movedDuringPhrase,
+    movement: { selection: movement.selection, contribution: movement.contribution },
+    additionalFusekiCallsOverStableBaseline:
+      movedDuringPhrase.remote.calls - stableBeforeMovement.remote.calls,
+    bounds: { calls: MAX_SEARCH_FUSEKI_CALLS, responseBytes: MAX_SEARCH_FUSEKI_BYTES,
+      perResponseBytes: MAX_SEARCH_RESPONSE_BYTES, deadlineMs: 1500 },
+    interpretation: 'Measured extra Main-to-Fuseki calls after a deterministic public selection/index movement; the server retries only a proven moved snapshot.' };
   const beforeMix = meter.snapshot();
   evidence.relayBeforeMix = await relayLag();
   let loadFailure: unknown;
@@ -639,9 +788,12 @@ try {
   await stop(main);
   await stop(relay);
   await Promise.all([contentPool.end(), accessPool.end(), relayPool.end()]);
+  const recoveryStarted = Date.now();
   poolsOpen = false;
   stackCommand('stack:down', 'storage-cold-down');
   stackCommand('stack:up', 'storage-cold-up');
+  const storageRecoveryMs = Date.now() - recoveryStarted;
+  evidence.storageRecoveryMs = storageRecoveryMs;
   contentPool = new Pool({ connectionString: needed('CONTENT_DATABASE_URL') });
   accessPool = new Pool({ connectionString: needed('ACCESS_DATABASE_URL') });
   relayPool = new Pool({ connectionString: needed('ACCOUNT_RELAY_DATABASE_URL') });
@@ -686,10 +838,13 @@ try {
     || Number(admissions.rows[0].sealed) < cohort * 4)
     throw new Error('Access load admissions did not all seal');
   evidence.updateAmplification = {
-    graphCommandsPerWork: Number(await graphSequence()) / count,
-    currentTriplesPerWork: (evidence.graphTriples as Record<string, number>)[GRAPHS.current]! / count,
-    revisionTriplesPerWork: (evidence.graphTriples as Record<string, number>)[GRAPHS.revisions]! / count,
-    publicSearchTriplesPerWork: (evidence.graphTriples as Record<string, number>)[PUBLIC_SEARCH_GRAPH]! / count,
+    graphCommandsPerFreshWork: Number(await graphSequence()) / count,
+    currentTriplesPerCorpusWork: (evidence.graphTriples as Record<string, number>)[GRAPHS.current]!
+      / corpusWorkCount,
+    revisionTriplesPerCorpusWork: (evidence.graphTriples as Record<string, number>)[GRAPHS.revisions]!
+      / corpusWorkCount,
+    publicSearchTriplesPerCorpusWork: (evidence.graphTriples as Record<string, number>)[PUBLIC_SEARCH_GRAPH]!
+      / corpusWorkCount,
   };
   evidence.mainHighWaterKiB = highWaterKiB;
   if (count === 10_000 && durationSeconds === 180 && highWaterKiB <= 0)

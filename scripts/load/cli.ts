@@ -36,17 +36,26 @@ function sourceIdentity(cwd: string) {
 }
 const args = process.argv.slice(2);
 let works = 10_000, duration = 180, seedWorkers = 1, keep = false, prepare = false;
+let worksSpecified = false, durationSpecified = false;
 let allowCompatibleSource = false;
-let from: string | undefined, cohort: number | undefined;
+let searchProbe = false;
+let from: string | undefined, cohort: number | undefined, fixtureRunId: string | undefined;
 for (let i = 0; i < args.length; i++) {
   if (args[i] === '--prepare') prepare = true;
+  else if (args[i] === '--search-probe') searchProbe = true;
   else if (args[i] === '--allow-compatible-source') allowCompatibleSource = true;
-  else if (args[i] === '--works' && /^\d+$/.test(args[i + 1] ?? '')) works = Number(args[++i]);
-  else if (args[i] === '--duration' && /^\d+$/.test(args[i + 1] ?? '')) duration = Number(args[++i]);
+  else if (args[i] === '--works' && /^\d+$/.test(args[i + 1] ?? '')) {
+    works = Number(args[++i]); worksSpecified = true;
+  }
+  else if (args[i] === '--duration' && /^\d+$/.test(args[i + 1] ?? '')) {
+    duration = Number(args[++i]); durationSpecified = true;
+  }
   else if (args[i] === '--seed-workers' && /^\d+$/.test(args[i + 1] ?? ''))
     seedWorkers = Number(args[++i]);
   else if (args[i] === '--keep') keep = true;
   else if (args[i] === '--from' && /^load-[a-z0-9-]{1,30}$/.test(args[i + 1] ?? '')) from = args[++i];
+  else if (args[i] === '--fixture-run-id' && /^fixture-[a-z0-9-]{1,30}$/.test(args[i + 1] ?? ''))
+    fixtureRunId = args[++i];
   else if (args[i] === '--cohort' && /^\d+$/.test(args[i + 1] ?? '')) cohort = Number(args[++i]);
   else throw new Error(`Invalid load option: ${args[i]}`);
 }
@@ -57,20 +66,29 @@ if (!Number.isInteger(works) || works < 10 || works > 10_000
 if (prepare && (works > 9_990 || from || cohort || keep)
   || !prepare && (Boolean(from) !== Boolean(cohort))
   || allowCompatibleSource && (!from || prepare)
-  || cohort !== undefined && (cohort < 10 || cohort >= works)) {
+  || cohort !== undefined && (cohort < 10 || cohort >= works)
+  || searchProbe && !fixtureRunId
+  || fixtureRunId && (prepare || from || cohort || keep
+    || searchProbe && (worksSpecified || durationSpecified)
+    || !searchProbe && (!worksSpecified || !durationSpecified))) {
   throw new Error('prepare requires 10–9990 background Works; clone load requires --from and 10+ fresh Works');
 }
 const runId = `load-${newRunId()}`;
+const stackRunId = fixtureRunId ?? runId;
 const artifacts = join(root, '.artifacts', 'load', runId);
-const stack = join(root, '.temp', 'stack', `rezics-qa-${runId}`);
+const stack = join(root, '.temp', 'stack', `rezics-qa-${stackRunId}`);
 mkdirSync(artifacts, { recursive: true });
 const sourceBefore = sourceIdentity(root);
 const evidence: Record<string, unknown> = {
-  runId, mode: prepare ? 'prepare' : from ? 'clone-profile' : 'online-profile',
-  source: sourceBefore, works, durationSeconds: duration, seedWorkers,
+  runId, mode: prepare ? 'prepare' : from ? 'clone-profile'
+    : fixtureRunId ? searchProbe ? 'fixture-search-probe' : 'fixture-profile' : 'online-profile',
+  source: sourceBefore, ...(searchProbe ? { traceOnly: true }
+    : { works, durationSeconds: duration, seedWorkers }),
   ...(from ? { baselineSource: from, freshCohort: cohort } : {}),
+  ...(fixtureRunId ? { fixtureRunId } : {}),
   compatibility: loadCompatibility(root),
-  qualification: works === 10_000 && duration === 180 ? 'practical-profile' : 'diagnostic-only',
+  qualification: !searchProbe && works === 10_000 && duration === 180
+    ? 'practical-profile' : 'diagnostic-only',
   startedAt: new Date().toISOString(),
 };
 const record = (name: string, value: ReturnType<typeof command>) => {
@@ -84,7 +102,18 @@ try {
   if (existsSync(join(root, '.temp', 'qa-full.lock')))
     throw new Error('A full yarn qa run is active; reserve the host for this load profile');
   let baselineFile: string | undefined;
-  if (from && cohort) {
+  if (fixtureRunId) {
+    const restored = JSON.parse(readFileSync(join(root, '.artifacts', 'fixture-restore',
+      fixtureRunId, 'run.json'), 'utf8')) as Record<string, any>;
+    if (restored.target !== fixtureRunId || restored.failure || !restored.completedAt
+      || !Number.isSafeInteger(restored.works) || restored.works < 1) {
+      throw new Error(`Fixture restore record is not successful for ${fixtureRunId}`);
+    }
+    evidence.fixture = { id: restored.fixture, works: restored.works,
+      restoredElapsedMs: restored.elapsedMs, engineChanged: restored.compatibility?.engineChanged };
+    record('fixture-stack-status', command(root, 'corepack', ['yarn', 'stack:status', '--profile', 'qa',
+      '--run-id', fixtureRunId, '--persistent'], 10_000));
+  } else if (from && cohort) {
     const sourceArtifacts = join(root, '.artifacts', 'load', from);
     const sourceRun = JSON.parse(readFileSync(join(sourceArtifacts, 'run.json'), 'utf8')) as Record<string, any>;
     baselineFile = join(sourceArtifacts, 'baseline.json');
@@ -102,7 +131,7 @@ try {
     record('stack-up', command(root, 'corepack',
       ['yarn', 'stack:up', '--profile', 'qa', '--run-id', runId, '--persistent'], 180_000));
   }
-  started = true;
+  started = !fixtureRunId;
   const image = fusekiImageFromCompose(readFileSync(join(root, 'infra/dev/compose.yaml'), 'utf8')).image;
   const inspected = command(root, 'docker', ['image', 'inspect', image, '--format', '{{.Id}}'],
     10_000, loadDockerEnvironment());
@@ -111,7 +140,7 @@ try {
   }
   const docker = loadDockerEnvironment();
   const container = command(root, 'docker', ['ps', '-q',
-    '--filter', `label=com.docker.compose.project=rezics-qa-${runId}`,
+    '--filter', `label=com.docker.compose.project=rezics-qa-${stackRunId}`,
     '--filter', 'label=com.docker.compose.service=fuseki'], 10_000, docker);
   const runningImage = container.ok && container.output.trim()
     ? command(root, 'docker', ['inspect', container.output.trim(), '--format', '{{.Image}}'], 10_000, docker)
@@ -126,11 +155,18 @@ try {
   const composeFile = join(stack, 'load-compose.json');
   writeFileSync(appsFile, JSON.stringify(apps), { mode: 0o600 });
   writeFileSync(composeFile, JSON.stringify(compose), { mode: 0o600 });
-  if (!from) record('bootstrap', command(root, 'bun',
+  if (searchProbe) record('search-probe', command(root, 'bun',
+    ['scripts/load/search-probe.ts', artifacts, fixtureRunId!], 180_000,
+    { ...process.env, ...apps, REZICS_LOAD_RUN_ID: runId,
+      REZICS_LOAD_STACK_RUN_ID: fixtureRunId! }));
+  else if (!from && !fixtureRunId) record('bootstrap', command(root, 'bun',
     ['scripts/qa/bootstrap.ts', appsFile, composeFile], 180_000));
-  record('profile', command(root, 'bun', ['scripts/load/practical.ts', String(works),
+  if (!searchProbe) record('profile', command(root, 'bun', ['scripts/load/practical.ts', String(works),
     String(duration), artifacts, String(seedWorkers)], PRACTICAL_PROFILE_TIMEOUT_MS, { ...process.env, ...apps,
-    REZICS_LOAD_RUN_ID: runId, REZICS_LOAD_ARTIFACT_DIR: artifacts,
+    REZICS_LOAD_RUN_ID: runId, REZICS_LOAD_STACK_RUN_ID: stackRunId,
+    REZICS_LOAD_ARTIFACT_DIR: artifacts,
+    ...(fixtureRunId ? { REZICS_LOAD_SOURCE_FIXTURE: String((evidence.fixture as { id: string }).id),
+      REZICS_LOAD_BACKGROUND_WORKS: String((evidence.fixture as { works: number }).works) } : {}),
     ...(prepare ? { REZICS_LOAD_PREPARE: '1' } : {}),
     ...(from && cohort ? { REZICS_LOAD_BASELINE_FILE: baselineFile!,
       REZICS_LOAD_SOURCE_RUN_ID: from, REZICS_LOAD_COHORT: String(cohort) } : {}) }));

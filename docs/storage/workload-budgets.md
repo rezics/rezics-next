@@ -253,15 +253,84 @@ Content reads. Its retained evidence is under
 writers, relay lag, memory, or cold storage recovery, and does not qualify OPS05
 or SEARCH18's 10,000-Work host objective.
 
-The requested medium-fixture restore for G-115 could not proceed: the retained
-backup predates the now-inserted migrations
-`services/content/migrations/031_structure_progress.sql`,
-`services/main/migrations/access/058_selected_grant_revocation.sql` and
-`services/main/migrations/access/065_governance_rule.sql`, which are now ahead
-of applied migrations.
-The restore command correctly rejects that stale backup. Rebuilding it was not
-assigned to this worker; the host-capacity qualification remains open.
-The current `yarn load --from` path accepts only a stopped `load:prepare`
-baseline, not a fixture backup, and the 100,000-Work medium corpus exceeds the
-public search profile's 20,000-unit admission bound. It can exercise explicit
-over-cap behavior, but cannot substitute for the admitted 10,000-Work profile.
+The 2026-09-27 G-115 restore of the rebuilt current medium fixture
+`fx-medium-532e16fa7af3` as `fixture-g115` passed in 160.048 s (600 s preparation
+ceiling). It applied only
+`services/main/migrations/relay/014_current_authority_coverage.sql`; the Fuseki
+engine image changed while Jena stayed compatible. A second clean copy,
+`fixture-g115-run2`, restored in 311.572 s, including 288.560 s copying the
+RustFS volume. Both are below the fixed restore bound.
+
+The fixture has 100,000 metadata-only Works. That is useful host background but
+does not provide the 10,000 published public MatchUnits required to qualify the
+named searchable host profile. `yarn load --fixture-run-id` now attaches the
+load runner to a restored persistent fixture and limits fresh command seeding
+to its explicit `--works` count; fixture-backed runs remain diagnostic unless
+their searchable population reaches the named objective.
+
+The attached 100-fresh-Work, 180-second attempt
+`load-20260926t215428-2c179c` ended after 93.404 s with `The operation timed
+out.` before seed completion, phrase/cursor traces, k6 mixed traffic, relay lag
+sampling, container-memory capture or cold storage restart. The retained early
+Main-process high-water mark was 131,900 KiB; the Main-to-Fuseki meter saw 9
+calls, 6,464 request bytes, 32,520 response bytes and zero errors. The Main
+relay process logged a timeout. Fuseki's log includes a relay batch query that
+completed in 55.020 s, above the Fuseki client's existing 10 s upstream read
+timeout. Thus OPS05 did not pass: no mixed-workload latency, lag, memory-cgroup
+or recovery result was collected. The relevant relay query is in
+`services/main/src/modules/outbox/relay.ts`, outside this worker's claimed
+paths; changing its plan or timeout would need its own bounded-work review, not
+a larger budget.
+
+An initial attached attempt (`load-20260926t214645-3945ce`) stopped before
+seeding because the load harness omitted owner-specific receipt fields when
+sealing an Access rating-context command. `scripts/load/corpus.ts` now preserves
+the returned owner identity while binding the seal to the claimed admission;
+the focused test passes. The subsequent relay timeout still blocks the full
+profile, so OPS05 and SEARCH18 remain partial. In particular, this run supplies
+no evidence for SEARCH18's cold/stale/retry/cursor traces, growth to 10,000
+searchable units, or its end-to-end total remote-attempt accounting. The
+declared search limits remain unchanged: 72 Fuseki calls, 8 MiB aggregate
+Fuseki response bytes, 1 MiB per response, 512 phrase candidates, 20,000 public
+units and a 1,500 ms wall deadline (90 total attempts including owner/cursor
+reads). No budget was raised to pass.
+
+A separate fixture-backed Search trace (`load-20260926t220953-5e102f`) ran
+without the relay on the partially seeded `fixture-g115-run2` copy, before
+cold-restarting its storage services. It measured 11 public MatchUnits, so it
+is a trace check, not a growth qualification. With Fuseki already running, the
+cold Main-process phrase read returned 11/11 complete results in 783.0 ms using
+8 Fuseki calls and 38,792 response bytes; its warm read took 91.5 ms, 6 calls
+and 37,513 bytes. Chinese and Japanese probes each returned one exact result in
+67.1 ms and 56.2 ms (6 calls each). A rejected Realm phrase returned complete
+zero in 71.7 ms (6 calls). An 80-character phrase was accepted in 56.0 ms (6
+calls); 81 characters returned HTTP 400 without a Fuseki call. Cursor pages 1
+and 2 returned different Works in 110.6 ms and 63.0 ms (6 calls and 1,246
+response bytes each). After a real selection replacement, the old continuation
+returned HTTP 409 `search_restart_required` in 181.5 ms (6 calls). A concurrent
+selection movement during a Main phrase request returned the new selected
+Contribution in 1,100.8 ms, with 14 calls, 83,364 Fuseki response bytes and
+5,529 API response bytes; that was 8 more calls than the stable six-call
+baseline. Each completed measured request stayed within 72 calls, 8 MiB Fuseki
+response bytes, 1 MiB API response bytes and the 1,500 ms deadline. The probe's
+aggregate 79 metered calls span multiple separate requests and are not a
+per-request budget comparison.
+
+A follow-up (`load-20260926t221214-9e4337`) cold-restarted the persistent
+storage services in 50.353 s, then ran the same trace. Its cold Main phrase
+read returned 11/11 complete results in 706.3 ms using 8 calls and 38,774
+response bytes. Cursor pages, language probes, rejected phrase and payload
+limits also completed. However, its deterministic selection-movement retry
+returned HTTP 503 `search_index_unavailable` at 1,504.8 ms. Main's retained
+attempt diagnostic shows the first read detected `SearchSnapshotMoved` after
+1,455 ms and the 45 ms writer wait exhausted the unchanged 1,500 ms request
+deadline. That request used 6 Fuseki calls and received 37,506 bytes before
+the timeout. The earlier warm-engine retry returned the new selection in
+1,100.8 ms (14 calls), so the current evidence distinguishes a warm pass from
+a cold-storage retry miss. The cold trace did not reach its final stale-token
+check; the preceding warm trace did return HTTP 409
+`search_restart_required`. Search's retry remains within its hard wall bound
+but fails the required complete-result/error objective under this forced cold
+movement. No budget was raised. Neither probe measures cross-owner calls in
+the deliberately concurrent write setup, candidate degree, or growth scales up
+to 10,000/20,000 units; SEARCH18 remains partial.
