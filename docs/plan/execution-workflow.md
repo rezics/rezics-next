@@ -91,7 +91,8 @@ or pinned is not dispatched. Continue an existing worker only when its verified
 configuration fits the task. Do not silently change the parent or global
 settings. Reassess concurrency using merged passing operations and rework cost,
 not model price alone. [Official GPT-6 Sol documentation](https://developers.openai.com/api/docs/models/gpt-6-sol)
-confirms that `xhigh` is supported.
+confirms `xhigh`; [official GPT-6 Luna documentation](https://developers.openai.com/api/docs/models/gpt-6-luna)
+confirms `max`.
 
 A worker returns a compact handoff: result/commit, affected paths and IDs,
 diagnostics actually run, unresolved blockers and the next required action. It
@@ -160,7 +161,8 @@ to final acceptance. Runtime work proceeds in batches:
    recovery, corpus or capacity tiers. If static QA already includes
    `yarn check:backend`, do not repeat it. Keep the tested source stable.
    Failures form one repair queue, addressed together before dependent work.
-   At most one genuinely independent next slice may continue in other worktrees;
+   At most one genuinely independent next slice may continue under a disjoint
+   path claim or in another worktree;
    it must not depend on unqualified changes in this batch.
 
 Keep one active integration batch. When its QA fails, repair and close that queue
@@ -240,9 +242,10 @@ small tests does not qualify deployment of the current 500 million entities.
 ## Progress commits and completion
 
 The maintainer selects implementation in the existing checkout on `main` and
-authorizes autonomous local commits. When delegated, code writers use local
-branches in worktrees under `.temp/worktrees/`; the coordinator merges them into `main` and
-removes the worktrees after the merge. Do not push or switch the main checkout's
+authorizes autonomous local commits. Delegated writers with fully disjoint
+paths may share `main` under coordinator-owned commits; overlapping writes use
+local branches in `.temp/worktrees/` that the coordinator merges serially into
+`main` and removes after the merge. Do not push or switch the main checkout's
 branch.
 
 Commit coherent merged batches. The central run's static result supplies

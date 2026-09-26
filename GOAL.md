@@ -125,7 +125,9 @@ Optimize for verified working capability delivered per unit of time and context:
   independent, bounded work whose expected time or quality benefit exceeds its
   context, coordination and integration cost. Start with at most two active
   workers under the workflow's [delegation policy](docs/plan/execution-workflow.md#delegation-and-worker-lifecycle);
-  do not fill available slots automatically. Use fresh, self-contained briefs.
+  do not fill available slots automatically. Reassess that limit only from
+  merged passing operations and observed rework cost. Use fresh,
+  self-contained briefs.
   Workers return their deliverable and finish; they do not remain alive to poll
   jobs or await hypothetical follow-up work. The main task owns integration and
   centralized QA; harness parallelism does not require additional model agents.
