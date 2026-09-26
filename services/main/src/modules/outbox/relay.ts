@@ -1007,10 +1007,13 @@ export async function readMainOutboxEnvelope(fuseki: FusekiClient, batch: MainOu
         operation: value('operation'), sourceAddress, sourceRevision,
         normalizedSlug, ...(redirectWork ? { redirectWork } : {}) } } };
   }
-  if (!kind || !receiptId || !admissionId || !requestDigest || !authorityEpoch || !scope
-    || !/^[0-9a-f]{64}$/.test(requestDigest) || !/^[0-9]+$/.test(authorityEpoch)
-    || !/^[A-Za-z0-9:_./-]{1,128}$/.test(scope)
-    || !/^[0-9a-f-]{36}$/.test(admissionId)
+  const ownerHandler = kind ? handlerFor(kind) : undefined;
+  const systemEvent = ownerHandler?.authority === 'system';
+  if (!kind || !receiptId || !requestDigest || !/^[0-9a-f]{64}$/.test(requestDigest)
+    || (systemEvent
+      ? admissionId !== undefined || authorityEpoch !== undefined || scope !== undefined
+      : !admissionId || !authorityEpoch || !scope || !/^[0-9]+$/.test(authorityEpoch)
+        || !/^[A-Za-z0-9:_./-]{1,128}$/.test(scope) || !/^[0-9a-f-]{36}$/.test(admissionId))
     || value('epoch') !== batch.dataEpoch
     || value('sequence') !== batch.sequence
     || ![`${RV}Succeeded`, `${RV}Cancelled`].includes(outcome ?? '')) {
@@ -1114,7 +1117,7 @@ export async function readMainOutboxEnvelope(fuseki: FusekiClient, batch: MainOu
   // Legacy kinds always use their unchanged validation below. New owner kinds
   // are selected by exact RDF class, then their own reader proves domain facts.
   if (!type) {
-    const handler = handlerFor(kind);
+    const handler = ownerHandler;
     if (handler) {
       if (action !== handler.action) throw new OutboxIncomplete('owner event action differs from handler');
       const envelope = await handler.read({ fuseki, batch, eventId, value, ordinal });
@@ -1131,11 +1134,16 @@ export async function readMainOutboxEnvelope(fuseki: FusekiClient, batch: MainOu
         || envelope.data.receipt.admissionId !== admissionId
         || envelope.data.receipt.requestDigest !== requestDigest
         || envelope.data.receipt.authorityEpoch !== authorityEpoch
-        || envelope.data.receipt.scope !== scope) {
+        || envelope.data.receipt.scope !== scope
+        || (systemEvent ? !envelope.data.receipt.systemProof
+          : envelope.data.receipt.systemProof !== undefined)) {
         throw new OutboxIncomplete('owner event envelope differs from terminal receipt');
       }
       return envelope;
     }
+  }
+  if (!admissionId || !authorityEpoch || !scope) {
+    throw new OutboxIncomplete('legacy event has no Access admission');
   }
   if (!['work.create', 'work.edit', 'contribution.create', 'contribution.edit', 'contribution.publish', 'publication.select', 'space.create', 'publication.adopt', 'publication.reject', 'publication.reject.organization', 'classification.context.configure', 'classification.proposition.define', 'classification.decision.set', 'rating.context.create', 'rating.context.policy.set', 'rating.observation.set'].includes(action ?? '')) {
     throw new OutboxIncomplete('event action is not registered');
