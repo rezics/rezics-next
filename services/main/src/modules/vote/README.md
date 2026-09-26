@@ -31,5 +31,12 @@ check remains an integration-wave task.
 
 `tests/qa/integration/poll-template.test.ts` exercises the real Access and Jena
 write/read path, lost-seal recovery, allocation/opening races, ballot replacement,
-independent approvals and internal resolution aggregation. Until G-087 exposes
-governance OAuth scopes, the routes use `access:manage` and `access:represent`.
+independent approvals and internal resolution aggregation. Account requires the
+separate `vote:manage`, `vote:cast` and `vote:read` scopes.
+
+`outbox-event.ts` registers exact vote event classes for the relay. Success
+handlers make one bounded graph read to match the event, receipt, operation and
+revision class; cancellation handlers verify the deterministic event identity
+and terminal reason without reading domain state. Each event carries component
+references and the admitted operation proof, without ballot choices or private
+principal IDs.

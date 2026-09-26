@@ -153,7 +153,7 @@ export function pollRoutes(work: MainWorkDependencies) {
     .get('/v1/polls/:poll', { params: t.Object({ poll: uuid }),
       response: { 200: pollResult, ...authorizedReadProblems } }, async ({ request, params }) => {
       try {
-        await work.account.verify(request, ['access:manage']);
+        await work.account.verify(request, ['vote:read']);
         return Response.json({ profile: 'poll-snapshot-v1',
           ...await readPoll(work.environment, pollIri(params.poll)) }, { headers: noStore });
       } catch (error) { return voteError(error); }
@@ -161,7 +161,7 @@ export function pollRoutes(work: MainWorkDependencies) {
     .get('/v1/polls/:poll/tallies', { params: t.Object({ poll: uuid }),
       response: { 200: tallyResult, ...authorizedReadProblems } }, async ({ request, params }) => {
       try {
-        await work.account.verify(request, ['access:manage']);
+        await work.account.verify(request, ['vote:read']);
         return Response.json({ profile: 'poll-tally-v1',
           ...await readTally(work.environment, pollIri(params.poll)) }, { headers: noStore });
       } catch (error) { return voteError(error); }
@@ -209,7 +209,7 @@ export function pollRoutes(work: MainWorkDependencies) {
     .get('/v1/polls/:poll/resolutions', { params: t.Object({ poll: uuid }),
       response: { 200: resolutionResult, ...authorizedReadProblems } }, async ({ request, params }) => {
       try {
-        await work.account.verify(request, ['access:manage']);
+        await work.account.verify(request, ['vote:read']);
         const result = await readResolution(work.environment, pollIri(params.poll));
         return result ? Response.json({ profile: 'poll-resolution-v1', ...result }, { headers: noStore })
           : problem(404, 'resolution_unavailable', 'Poll resolution is unavailable');
@@ -257,7 +257,7 @@ export function pollRoutes(work: MainWorkDependencies) {
         response: { 200: holderCharterResult, ...authorizedReadProblems } },
       async ({ request, params }) => {
         try {
-          await work.account.verify(request, ['access:manage']);
+          await work.account.verify(request, ['vote:read']);
           const charter = await readHolderCharter(work.environment, pollIri(params.poll),
             pollIri(params.entitlement));
           return charter ? Response.json({ profile: 'holder-charter-v1', ...charter }, { headers: noStore })
@@ -287,7 +287,7 @@ export function pollRoutes(work: MainWorkDependencies) {
         if (!charter || charter.revision !== body.holderCharterRevision) {
           throw new VoteStale('holder charter changed');
         }
-        const principal = await work.account.verify(request, ['access:manage']);
+        const principal = await work.account.verify(request, ['vote:manage']);
         const change = { holder: body.holder, body: view.body,
           representationId: body.representationId, expectedRevision: body.expectedRevision,
           holderCharterRevision: charter.revision, holderCharterDigest: charter.digest,
@@ -318,7 +318,7 @@ export function pollRoutes(work: MainWorkDependencies) {
     .get('/v1/polls/:poll/ballots/:seat', { params: t.Object({ poll: uuid, seat: uuid }),
       response: { 200: ballotResult, ...authorizedReadProblems } }, async ({ request, params }) => {
       try {
-        await work.account.verify(request, ['access:manage']);
+        await work.account.verify(request, ['vote:read']);
         const ballot = await readBallot(work.environment, pollIri(params.poll), pollIri(params.seat));
         return ballot ? Response.json({ profile: 'ballot-v1', ...ballot }, { headers: noStore })
           : problem(404, 'ballot_unavailable', 'Ballot is unavailable');

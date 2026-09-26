@@ -3,7 +3,7 @@ import type { CaseDeclarations } from './declaration.ts';
 const template = {
   tier: 'integration',
   file: 'tests/qa/integration/poll-template.test.ts',
-  name: 'GOV11/GOV12/GOV13/GOV14/GOV15/GOV16/GOV17/GOV22: admitted poll, allocation, mandate and ballot template',
+  name: 'GOV11/GOV12/GOV13/GOV14/GOV15/GOV16/GOV17/GOV18/GOV21/GOV22: admitted poll, allocation, mandate and ballot template',
 } as const;
 
 export const govVoteCases: CaseDeclarations = {

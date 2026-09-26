@@ -4,13 +4,14 @@ import { Pool } from 'pg';
 import { createMainApp } from '../../../services/main/src/app.ts';
 import { FusekiClient } from '../../../services/main/src/infrastructure/fuseki.ts';
 import { AccessAdmissionRegistry } from '../../../services/main/src/modules/access/admission.ts';
+import { readMainOutboxEnvelope } from '../../../services/main/src/modules/outbox/relay.ts';
 import { AccessVotes, voteReceiptIri } from '../../../services/main/src/modules/vote/access.ts';
 import { pollScopeId } from '../../../services/main/src/modules/vote/schema.ts';
 import { ID } from '../../../services/main/src/modules/work/activate.ts';
 
 const native = () => ID + randomUUID();
 
-test('GOV11/GOV12/GOV13/GOV14/GOV15/GOV16/GOV17/GOV22: admitted poll, allocation, mandate and ballot template', async () => {
+test('GOV11/GOV12/GOV13/GOV14/GOV15/GOV16/GOV17/GOV18/GOV21/GOV22: admitted poll, allocation, mandate and ballot template', async () => {
   if (!Bun.env.REZICS_QA_RUN_ID || !Bun.env.FUSEKI_URL || !Bun.env.MAIN_DATA_EPOCH
     || !Bun.env.MAIN_ROUTING_EPOCH || !Bun.env.ACCESS_DATABASE_URL) {
     throw new Error('Run through the isolated QA integration tier');
@@ -58,6 +59,18 @@ test('GOV11/GOV12/GOV13/GOV14/GOV15/GOV16/GOV17/GOV22: admitted poll, allocation
           ...(payload ? { 'content-type': 'application/json' } : {}),
           ...(key ? { 'idempotency-key': key } : {}) },
         ...(payload ? { body: JSON.stringify(payload) } : {}) }));
+    const eventFor = async (receipt: string) => {
+      const rows = await fuseki.query(`PREFIX rv: <https://rezics.com/vocab/>
+        SELECT ?batch ?event ?sequence WHERE {
+          GRAPH <urn:rezics:graph:outbox> { ?batch rv:event ?event . ?event rv:receipt <${receipt}> }
+          GRAPH <urn:rezics:graph:receipts> { <${receipt}> rv:sequence ?sequence }
+        }`);
+      const row = rows.results?.bindings[0];
+      expect(rows.results?.bindings).toHaveLength(1);
+      return readMainOutboxEnvelope(fuseki, { batchId: row!.batch!.value,
+        eventIds: [row!.event!.value], dataEpoch: Bun.env.MAIN_DATA_EPOCH!,
+        routingEpoch: Bun.env.MAIN_ROUTING_EPOCH!, sequence: row!.sequence!.value }, row!.event!.value);
+    };
     const input = { profile: 'poll-prepare-v1', poll, body, actingSubject: administrator,
       representationId, grantId,
       charter: { ruleRevision: native(), unitScale: 1, countingUnit: 'weight',
@@ -85,6 +98,7 @@ test('GOV11/GOV12/GOV13/GOV14/GOV15/GOV16/GOV17/GOV22: admitted poll, allocation
       WHERE principal_id = $1 AND action = 'governance.poll.administer' AND idempotency_key = 'vote-template'`,
     [principalId])).rows[0]!;
     expect(committed.receipt).toBe(voteReceiptIri(admitted.id, 'poll.prepare'));
+    expect((await eventFor(committed.receipt)).type).toBe('com.rezics.vote.poll-prepared.v1');
     expect((await pool.query(`SELECT 1 FROM access.admission WHERE id = $1
       AND state = 'sealed'`, [admitted.id])).rowCount).toBe(1);
     const conflict = await request('POST', '/v1/polls', 'administrator',
@@ -92,6 +106,11 @@ test('GOV11/GOV12/GOV13/GOV14/GOV15/GOV16/GOV17/GOV22: admitted poll, allocation
     expect(conflict.status).toBe(409);
     const secondKey = await request('POST', '/v1/polls', 'administrator', input, 'vote-another-key');
     expect(secondKey.status).toBe(409);
+    const cancelledId = (await pool.query<{ id: string }>(`SELECT id FROM access.admission
+      WHERE principal_id = $1 AND action = 'governance.poll.administer'
+        AND idempotency_key = 'vote-another-key'`, [principalId])).rows[0]!.id;
+    expect((await eventFor(voteReceiptIri(cancelledId, 'poll.prepare'))).type)
+      .toBe('com.rezics.vote.poll-cancelled.v1');
     const path = `/v1/polls/${poll.slice(ID.length)}`;
     const tally = await request('GET', `${path}/tallies`, 'administrator');
     expect(tally.status).toBe(404);
@@ -144,9 +163,12 @@ test('GOV11/GOV12/GOV13/GOV14/GOV15/GOV16/GOV17/GOV22: admitted poll, allocation
     const castBody = { profile: 'ballot-v1', seat: root, holder, representationId: mandateOne,
       expectedHead: null, availability: 'cast', shares: [{ option: 'yes', units: 100 }],
       internalPoll: null, approvals: [] };
+    loseSeal = true;
     const cast = await request('POST', `${path}/ballots`, 'representative-one', castBody, 'cast-one');
-    expect(cast.status).toBe(201);
-    const castReceipt = await cast.json() as { revision: string };
+    expect(cast.status).toBe(202);
+    const castRetry = await request('POST', `${path}/ballots`, 'representative-one', castBody, 'cast-one');
+    expect(castRetry.status).toBe(200);
+    const castReceipt = await castRetry.json() as { revision: string };
     const ballot = await request('GET', `${path}/ballots/${root!.slice(ID.length)}`, 'administrator');
     expect(ballot.status).toBe(200);
     expect(await ballot.json()).toMatchObject({ revision: castReceipt.revision,
@@ -201,9 +223,12 @@ test('GOV11/GOV12/GOV13/GOV14/GOV15/GOV16/GOV17/GOV22: admitted poll, allocation
       representationId: seatManager, leaves: [{ holder: child, seatClass: 'organization', units: 40 },
         { holder: child, seatClass: 'organization', units: 40 }],
     };
+    loseSeal = true;
     const allocation = await request('POST', `${splitPath}/allocations`, 'representative-one',
       allocationBody, 'split-allocation');
-    expect(allocation.status).toBe(201);
+    expect(allocation.status).toBe(202);
+    expect((await request('POST', `${splitPath}/allocations`, 'representative-one',
+      allocationBody, 'split-allocation')).status).toBe(200);
     const duplicate = await request('POST', `${splitPath}/allocations`, 'representative-one', {
       profile: 'poll-allocation-v1', rootEntitlement: splitRoot, holder,
       representationId: seatManager, leaves: [{ holder: child, seatClass: 'organization', units: 40 }],
@@ -362,6 +387,53 @@ test('GOV11/GOV12/GOV13/GOV14/GOV15/GOV16/GOV17/GOV22: admitted poll, allocation
     }, 'stale-approvals')).status).toBe(409);
     expect(await (await request('GET', `${approvalPath}/tallies`, 'administrator')).json())
       .toMatchObject({ castSeats: 1, castUnits: 100 });
+    expect((await request('POST', `${approvalPath}/closures`, 'administrator', {
+      profile: 'poll-closure-v1', actingSubject: administrator,
+      representationId, grantId: approvalGrant }, 'approval-close')).status).toBe(201);
+    expect((await request('POST', `${approvalPath}/resolutions`, 'administrator', {
+      profile: 'poll-resolution-v1', actingSubject: administrator,
+      representationId, grantId: approvalGrant }, 'approval-finalize')).status).toBe(201);
+    const approvalResolution = await fuseki.query(`PREFIX rv: <https://rezics.com/vocab/>
+      SELECT ?seats WHERE { GRAPH <urn:rezics:graph:current> {
+        <${approvalPoll}> rv:pollResolution ?resolution }
+        GRAPH <urn:rezics:graph:revisions> { ?resolution rv:countedSeats ?seats } }`);
+    expect(approvalResolution.results?.bindings[0]?.seats?.value).toBe('1');
+
+    const abstainPoll = native(), abstainScope = pollScopeId(abstainPoll), abstainGrant = randomUUID();
+    await pool.query('INSERT INTO access.scope_gate (id) VALUES ($1)', [abstainScope]);
+    await pool.query(`INSERT INTO access.permission_grant
+      (id, issuer_subject, recipient_subject, scope_id, action, valid_until)
+      VALUES ($1,$2,$3,$4,'governance.poll.administer',now() + interval '1 hour')`,
+    [abstainGrant, body, administrator, abstainScope]);
+    const abstainPath = `/v1/polls/${abstainPoll.slice(ID.length)}`;
+    expect((await request('POST', '/v1/polls', 'administrator', {
+      ...input, poll: abstainPoll, grantId: abstainGrant,
+      charter: { ...input.charter, abstention: 'excluded', quorumThreshold: 1 },
+      options: [...input.options, { key: 'abstain', role: 'abstain', label: 'Abstain' }],
+      entitlements: [{ holder, seatClass: 'organization', units: 40 },
+        { holder: child, seatClass: 'organization', units: 60 }],
+    }, 'abstain-prepare')).status).toBe(201);
+    const abstainRoots = await fuseki.query(`PREFIX rv: <https://rezics.com/vocab/>
+      SELECT ?seat WHERE { GRAPH <urn:rezics:graph:revisions> {
+        ?seat a rv:SourceEntitlement ; rv:poll <${abstainPoll}> ; rv:holder <${holder}> } }`);
+    const abstainSeat = abstainRoots.results?.bindings[0]?.seat?.value!;
+    expect((await request('POST', `${abstainPath}/openings`, 'administrator', {
+      profile: 'poll-opening-v1', actingSubject: administrator,
+      representationId, grantId: abstainGrant }, 'abstain-open')).status).toBe(201);
+    expect((await request('POST', `${abstainPath}/ballots`, 'representative-two', {
+      ...castBody, seat: abstainSeat, representationId: mandateTwo,
+      shares: [{ option: 'abstain', units: 40 }] }, 'abstain-cast')).status).toBe(201);
+    expect(await (await request('GET', `${abstainPath}/tallies`, 'administrator')).json())
+      .toMatchObject({ seatCount: 2, countedUnits: 100, castSeats: 1,
+        castUnits: 40, abstainUnits: 40, uncastUnits: 60 });
+    expect((await request('POST', `${abstainPath}/closures`, 'administrator', {
+      profile: 'poll-closure-v1', actingSubject: administrator,
+      representationId, grantId: abstainGrant }, 'abstain-close')).status).toBe(201);
+    expect((await request('POST', `${abstainPath}/resolutions`, 'administrator', {
+      profile: 'poll-resolution-v1', actingSubject: administrator,
+      representationId, grantId: abstainGrant }, 'abstain-finalize')).status).toBe(201);
+    expect(await (await request('GET', `${abstainPath}/resolutions`, 'administrator')).json())
+      .toMatchObject({ outcome: 'no-quorum', winningOption: null });
 
     const internalPoll = native(), internalScope = pollScopeId(internalPoll),
       internalGrant = randomUUID(), another = native();
@@ -522,5 +594,17 @@ test('GOV11/GOV12/GOV13/GOV14/GOV15/GOV16/GOV17/GOV22: admitted poll, allocation
     }
     expect(await (await request('GET', `${corporatePath}/tallies`, 'administrator')).json())
       .toMatchObject({ seatCount: 2, castSeats: 2, castUnits: 2 });
+
+    // Removing an operator cannot erase the frozen seat or authorize another mutation.
+    const frozenHead = (await (await request('GET', `${path}/ballots/${root!.slice(ID.length)}`,
+      'administrator')).json() as { revision: string }).revision;
+    await pool.query('UPDATE access.representation SET active = false WHERE id = $1', [mandateOne]);
+    expect((await request('POST', `${path}/ballots`, 'representative-one', {
+      ...castBody, expectedHead: frozenHead }, 'departed-operator')).status).toBe(403);
+    expect((await request('POST', `${path}/ballots`, 'representative-two', {
+      ...castBody, representationId: mandateTwo, expectedHead: frozenHead },
+    'replacement-operator')).status).toBe(201);
+    expect(await (await request('GET', `${path}/tallies`, 'administrator')).json())
+      .toMatchObject({ seatCount: 1, countedUnits: 100, castSeats: 1, castUnits: 100 });
   } finally { await pool.end(); }
 }, 120_000);

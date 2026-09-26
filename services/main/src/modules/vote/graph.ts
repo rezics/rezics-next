@@ -115,6 +115,14 @@ export async function sealVoteTerminal(env: WorkActivationEnvironment, admission
   const suffix = hash(`${receipt}\0${reason ?? 'cancel'}`);
   const batch = `urn:rezics:outbox:${suffix}`;
   const event = `urn:rezics:event:${suffix}`;
+  const cancelKinds: Record<string, string> = {
+    'governance.poll.administer': 'VotePollCancelledEvent',
+    'governance.seat.manage': 'VoteSeatCancelledEvent',
+    'governance.ballot.operate': 'VoteBallotCancelledEvent',
+    'governance.ballot.invalidate': 'VoteInvalidationCancelledEvent',
+  };
+  const cancelKind = cancelKinds[admission.action];
+  if (!cancelKind) throw new VoteConflict('vote cancellation action is unavailable');
   try {
     await env.fuseki.commandWithReceipt({ receipt, digest: admission.requestDigest, validations: [],
       deadlineMs: 10_000, update: `PREFIX rv: <${RV}>
@@ -127,7 +135,7 @@ export async function sealVoteTerminal(env: WorkActivationEnvironment, admission
           ${receiptFields(env, admission)} . }
         GRAPH ${iri(GRAPHS.outbox)} { ${iri(batch)} a rv:OutboxBatch ; rv:dataEpoch ${lit(env.lineage.dataEpoch)} ;
           rv:sequence ?next ; rv:eventCount 1 ; rv:event ${iri(event)} .
-          ${iri(event)} a rv:VoteCommandCancelledEvent ; rv:ordinal 0 ; rv:action ${lit(admission.action)} ;
+          ${iri(event)} a rv:${cancelKind} ; rv:ordinal 0 ; rv:action ${lit(admission.action)} ;
             rv:receipt ${iri(receipt)} . }
       }
       WHERE { ${control(env)}

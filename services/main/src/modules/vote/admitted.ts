@@ -26,8 +26,7 @@ export interface VoteDependencies {
   votes: AccessVotes;
 }
 
-/** Interim Account scopes until governance scopes are registered (see README). */
-export const VOTE_SCOPES = { cast: ['access:represent'], manage: ['access:manage'] } as const;
+export const VOTE_SCOPES = { cast: ['vote:cast'], manage: ['vote:manage'], read: ['vote:read'] } as const;
 
 export interface AdmittedVote { admission: VoteAdmission; receipt: VoteReceipt; principal: VerifiedPrincipal }
 
