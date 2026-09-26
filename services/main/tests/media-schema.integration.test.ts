@@ -175,11 +175,10 @@ test('BOOK09/VIEW07/VIEW08: media owner schema installs empty and upgrades from 
       expectedHead: null, model: 'content-shape-v1', sourceRevision: null, provenance: {},
       serializedJson: JSON.stringify({ body: 'retained before media' }) });
     expect(saved.outcome).toBe('succeeded');
-    const before = await upgraded.query<{ definition: string }>(`SELECT pg_get_constraintdef(oid) AS definition
-      FROM pg_constraint WHERE conrelid = 'content.receipt'::regclass AND conname = 'receipt_action_check'`);
-    const priorActions = [...before.rows[0]!.definition.matchAll(/'([a-z.]+)'::text/g)].map(match => match[1]!);
+    const before = await upgraded.query<{ action: string }>('SELECT action FROM content.receipt_action ORDER BY action');
+    const priorActions = before.rows.map(row => row.action);
     expect(priorActions).toContain('draft.save');
-    await rejects(receipt(upgraded, 'media.upload.reserve'), /receipt_action_check/);
+    await rejects(receipt(upgraded, 'media.upload.reserve'), /receipt_action_registered/);
 
     await migrateContent(upgraded);
     await migrateContent(upgraded);
@@ -187,7 +186,7 @@ test('BOOK09/VIEW07/VIEW08: media owner schema installs empty and upgrades from 
     expect(versions.rows.map(row => row.version)).toEqual(files.map(file => file.version));
     for (const action of priorActions) await receipt(upgraded, action);
     await receipt(upgraded, 'media.selection.change');
-    await rejects(receipt(upgraded, 'media.unknown'), /receipt_action_check/);
+    await rejects(receipt(upgraded, 'media.unknown'), /receipt_action_registered/);
     const exact = await content.readExactBatch([saved.revisionId!], async ids => new Set(ids));
     expect(exact[0]?.status).toBe('available');
   } finally { await upgraded.end(); }

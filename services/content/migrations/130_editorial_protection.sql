@@ -4,20 +4,10 @@
 -- The draft profile has no source-control dimension: no source writer advances a
 -- draft head, and content.revision.source_revision stays provenance only.
 
--- Reuse the Content receipt. Parallel owner ranges extend this same check, so
--- keep every action an earlier migration admitted instead of restating the list.
-DO $$
-DECLARE definition text; admitted text;
-BEGIN
-  SELECT pg_get_constraintdef(oid) INTO definition FROM pg_constraint
-    WHERE conrelid = 'content.receipt'::regclass AND conname = 'receipt_action_check';
-  IF definition IS NULL THEN RAISE EXCEPTION 'Content receipt action check is missing'; END IF;
-  SELECT string_agg(quote_literal(action), ', ' ORDER BY action) INTO admitted FROM (
-    SELECT (regexp_matches(definition, '''([^'']+)''', 'g'))[1] AS action
-    UNION SELECT unnest(ARRAY['protection.change', 'correction.propose', 'correction.decide'])) actions;
-  ALTER TABLE content.receipt DROP CONSTRAINT receipt_action_check;
-  EXECUTE format('ALTER TABLE content.receipt ADD CONSTRAINT receipt_action_check CHECK (action IN (%s))', admitted);
-END $$;
+-- Reuse the Content receipt; register its actions in the migration-022 registry.
+INSERT INTO content.receipt_action (action) VALUES
+  ('protection.change'), ('correction.propose'), ('correction.decide')
+  ON CONFLICT DO NOTHING;
 
 -- At most 32 distinct exact evidence references, never a truncated list.
 CREATE FUNCTION content.exact_references(refs jsonb) RETURNS boolean LANGUAGE sql IMMUTABLE AS $$

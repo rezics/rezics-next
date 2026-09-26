@@ -58,9 +58,8 @@ const files = () => readdirSync(migrations).filter(name => /^\d{3}_[a-z0-9_]+\.s
 const variantIdentity = (): VariantIdentity => ({ id: `urn:rezics:variant:${randomUUID()}`,
   resourceId: `https://rezics.com/id/${randomUUID()}`, language: { kind: 'tag', tag: 'en', originalTag: 'en' },
   direction: 'ltr' });
-const actions = async (pool: Pool) => (await pool.query<{ definition: string }>(`SELECT pg_get_constraintdef(oid) AS definition
-  FROM pg_constraint WHERE conrelid = 'content.receipt'::regclass AND conname = 'receipt_action_check'`)).rows[0]!
-  .definition.match(/'[^']+'/g)!.map(item => item.slice(1, -1)).sort();
+const actions = async (pool: Pool) => (await pool.query<{ action: string }>(
+  'SELECT action FROM content.receipt_action ORDER BY action')).rows.map(row => row.action).sort();
 
 /** The pre-protection Content head, then the protection migration through the ordinary runner. */
 async function upgradedOwner(name: string) {

@@ -5,19 +5,11 @@
 -- and selection state; bytes live in object storage under per-asset namespaces.
 CREATE SCHEMA IF NOT EXISTS media;
 
--- Widen the shared receipt action check without re-listing it, so actions added
--- by other owner migration ranges survive regardless of their apply order.
-DO $$
-DECLARE current text;
-BEGIN
-  SELECT pg_get_constraintdef(oid) INTO STRICT current FROM pg_constraint
-  WHERE conrelid = 'content.receipt'::regclass AND conname = 'receipt_action_check';
-  ALTER TABLE content.receipt DROP CONSTRAINT receipt_action_check;
-  EXECUTE format('ALTER TABLE content.receipt ADD CONSTRAINT receipt_action_check CHECK (%s OR %s)',
-    substr(current, 7), $check$(action = ANY (ARRAY['media.upload.reserve', 'media.upload.settle',
-      'media.transform.request', 'media.transform.settle', 'media.asset.state',
-      'media.use.create', 'media.selection.change']))$check$);
-END $$;
+-- Register media receipt actions (migration 022 owns the action registry).
+INSERT INTO content.receipt_action (action) VALUES
+  ('media.upload.reserve'), ('media.upload.settle'), ('media.transform.request'),
+  ('media.transform.settle'), ('media.asset.state'), ('media.use.create'), ('media.selection.change')
+  ON CONFLICT DO NOTHING;
 
 CREATE TABLE media.asset (
   id uuid PRIMARY KEY,
