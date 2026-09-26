@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { analyzeClaimSupport, LINEAGE_BUDGET, type AnalysisInput,
+import { analyzeClaimSupport, currentVerificationHead, LINEAGE_BUDGET, type AnalysisInput,
   type EvidenceItem, type LineageLink } from '../../services/main/src/modules/verification/analysis.ts';
 
 const claim = { referent: 'https://rezics.com/id/referent',
@@ -17,7 +17,7 @@ const link = (source: string, relation: string, targetObservation: string | null
 const input = (items: EvidenceItem[], links: LineageLink[] = [],
   extra: Partial<AnalysisInput> = {}): AnalysisInput => ({
   claim, evaluationContext: claim.context, items, links, truncated: false,
-  recordOf: new Map(), referencedClaims: new Map(), reliability: [], ...extra,
+  recordOf: new Map(), observedAt: new Map(), referencedClaims: new Map(), reliability: [], ...extra,
 });
 
 test('FACT01/FACT02: copied sites and AI re-ingestion keep one established origin', () => {
@@ -48,14 +48,22 @@ test('FACT01: unknown or circular dependence and over-budget closure never count
 
 test('FACT03: scoped reliability, later edition, withdrawn support and counterevidence stay distinct', () => {
   const reliable = { assessment: 'rating-1', source: 'record-1', domain: claim.predicate,
-    context: claim.context, result: 'ReliableForDomain' };
+    context: claim.context, result: 'ReliableForDomain', applicableFrom: null, applicableUntil: null };
   const base = input([item('first')], [link('first', 'publishes-origin', null, 'origin-1')],
-    { recordOf: new Map([['first', 'record-1']]), reliability: [reliable] });
+    { recordOf: new Map([['first', 'record-1']]),
+      observedAt: new Map([['first', '2026-09-27T00:00:00.000Z']]), reliability: [reliable] });
   expect(analyzeClaimSupport(base).support).toBe('supported');
   expect(analyzeClaimSupport({ ...base, reliability: [{ ...reliable, domain: 'https://schema.org/plot' }] }).support)
     .toBe('insufficient');
   expect(analyzeClaimSupport({ ...base, items: [item('first', 'supports', 'withdrawn')] }).support)
     .toBe('insufficient');
+  expect(analyzeClaimSupport({ ...base, reliability: [{ ...reliable,
+    applicableFrom: '2026-09-28T00:00:00.000Z' }] }).support).toBe('insufficient');
+  expect(analyzeClaimSupport({ ...base, reliability: [{ ...reliable,
+    applicableUntil: '2026-09-27T00:00:00.000Z' }] }).support).toBe('insufficient');
+  expect(analyzeClaimSupport({ ...base, reliability: [{ ...reliable,
+    applicableFrom: '2026-09-27T08:00:00+08:00', applicableUntil: '2026-09-28T00:00:00Z' }] }).support)
+    .toBe('supported');
   expect(analyzeClaimSupport({ ...base, items: [item('first'), item('other', 'contradicts')] }).support)
     .toBe('material-conflict');
   const later = { ...claim, editionScope: 'urn:rezics:edition:two',
@@ -66,4 +74,16 @@ test('FACT03: scoped reliability, later edition, withdrawn support and counterev
     referencedClaims: new Map([['revision-2', later]]) });
   expect(scoped.support).toBe('supported');
   expect(scoped.reasons).toContain('scope-differs');
+});
+
+test('FACT04: an older policy revision or acceptance head never reads as current', () => {
+  const heads = new Map([['urn:rezics:decision-slot:one', 'https://rezics.com/id/new-decision']]);
+  expect(currentVerificationHead('policy', 'https://rezics.com/definition/verification-summary-policy-v1',
+    'https://rezics.com/definition/verification-summary-policy-v1', heads,
+    'https://rezics.com/definition/verification-summary-policy-v2'))
+    .toBe('https://rezics.com/definition/verification-summary-policy-v2');
+  expect(currentVerificationHead('acceptance', 'urn:rezics:decision-slot:one',
+    'https://rezics.com/id/old-decision', heads,
+    'https://rezics.com/definition/verification-summary-policy-v1'))
+    .toBe('https://rezics.com/id/new-decision');
 });

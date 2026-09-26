@@ -7,12 +7,16 @@ reconciliation), `store.ts` (Content transaction, local receipt and CAS), and
 stale-head and exact-read pattern for another verification operation. Register a
 new graph action in `receipt-family.ts` and its exact outbox kind in
 `outbox-event.ts`; declare bearer and idempotency headers in the route module.
+`correction-delivery.ts` pages immutable correction notices into G-051's Access
+notification owner. A lost Access acknowledgement replays by source event and
+recipient before the Content cursor advances. Delivery rereads the exact notice
+and the recipient's current subscription, exposing only support/dispute fields.
 
 ## Cost contract
 
 - Claim create and source reliability write use one bounded graph command and
   receipt read. Assessment admits at most 32 evidence items, 32 source
-  assessments, 40 lineage observations and 80 summary dependencies; over-budget
+  assessments, 40 lineage observations and 128 summary dependencies; over-budget
   lineage abstains, and larger manifests are rejected before activation.
 - Evidence and challenge writes are one Content transaction with a bounded
   manifest and local receipt. A summary read checks each of its admitted heads
@@ -22,6 +26,10 @@ new graph action in `receipt-family.ts` and its exact outbox kind in
   cursor together. The schema test checks the index plan; the claim API test
   checks analysis work and paged invalidation. Capacity still requires the
   planned load tier.
+- Correction delivery pages at most 128 recipients per notice and calls one
+  bounded G-051 enqueue per page. The cursor moves after Access commits;
+  delivery-time disclosure rejects unsubscribed recipients. The integration
+  test checks a lost acknowledgement and one resulting recipient item.
 
 The owner reuses Access admission and grants, graph receipts/outbox/epochs,
 Content source observations, and existing publication selection authority.

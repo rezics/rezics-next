@@ -1,5 +1,5 @@
 // Typed declarations for the Content-DB `verification` schema (migrations
-// 090-093). SQL migrations remain the DDL owner; the schema test compares these
+// 090-096). SQL migrations remain the DDL owner; the schema test compares these
 // column lists and enumerations with the installed catalog so they cannot drift.
 // Claims, claim revisions and assessment anchors are Jena-owned (claim-v1,
 // assessment-v1); rows here reference them by exact IRI only.
@@ -9,12 +9,13 @@ export const verificationLimits = {
   evidenceItems: 32,
   derivationInputs: 32,
   sourceAssessments: 32,
-  summaryDependencies: 80,
+  summaryDependencies: 128,
   reasonCodes: 16,
 } as const;
 
 const receiptActions = ['origin.record', 'derivation.record', 'lineage.record',
-  'lineage.retract', 'evidence.record', 'challenge.submit', 'challenge.resolve'] as const;
+  'lineage.retract', 'evidence.record', 'challenge.submit', 'challenge.resolve',
+  'source-disposition.record', 'correction-subscription.set'] as const;
 const originKinds = ['publication', 'dataset', 'statement', 'native'] as const;
 const derivationKinds = ['ai-extraction', 'ai-generation', 'tool-extraction',
   'human-transcription', 'syndication-import'] as const;
@@ -78,6 +79,21 @@ interface EvidenceItemRow {
 interface EvidenceHeadRow {
   claim: string; head: string; head_purpose: 'claim-head'; updated_at: Date;
 }
+interface ObservationDispositionRow {
+  id: string; observation_id: string; predecessor: string | null;
+  state: 'available' | 'inaccessible' | 'withdrawn'; reason: string;
+  operation_id: string; principal_id: string; created_at: Date;
+}
+interface ObservationDispositionHeadRow { observation_id: string; head: string }
+interface CorrectionSubscriptionRevisionRow {
+  id: string; claim: string; context: string; principal_id: string; predecessor: string | null;
+  state: 'subscribed' | 'unsubscribed'; operation_id: string; created_at: Date;
+}
+interface CorrectionSubscriptionHeadRow { claim: string; context: string; principal_id: string; head: string }
+interface CorrectionDeliveryCursorRow {
+  generation_id: string; cursor_principal: string | null; complete: boolean;
+  lease_owner: string | null; lease_until: Date | null; updated_at: Date;
+}
 interface ChallengeRow {
   id: string; claim: string; claim_revision: string; adopted_revision: string | null; context: string;
   reason: string; counterevidence: string | null; counterevidence_purpose: 'challenge';
@@ -133,6 +149,10 @@ export interface VerificationRows {
   receipt: ReceiptRow; origin: OriginRow; derivation: DerivationRow; derivation_input: DerivationInputRow;
   lineage_edge: LineageEdgeRow; lineage_retraction: LineageRetractionRow;
   evidence_set_revision: EvidenceSetRevisionRow; evidence_item: EvidenceItemRow; evidence_head: EvidenceHeadRow;
+  observation_disposition: ObservationDispositionRow; observation_disposition_head: ObservationDispositionHeadRow;
+  correction_subscription_revision: CorrectionSubscriptionRevisionRow;
+  correction_subscription_head: CorrectionSubscriptionHeadRow;
+  correction_delivery_cursor: CorrectionDeliveryCursorRow;
   challenge: ChallengeRow; challenge_resolution: ChallengeResolutionRow; challenge_pending: ChallengePendingRow;
   challenge_head: ChallengeHeadRow; summary_generation: SummaryGenerationRow;
   summary_dependency: SummaryDependencyRow; summary_head: SummaryHeadRow; active_dependency: ActiveDependencyRow;
@@ -160,6 +180,15 @@ export const verificationColumns = {
   evidence_item: ['revision_id', 'ordinal', 'stance', 'observation_id', 'content_revision_id',
     'graph_reference', 'selector', 'availability'] satisfies (keyof EvidenceItemRow)[],
   evidence_head: ['claim', 'head', 'head_purpose', 'updated_at'] satisfies (keyof EvidenceHeadRow)[],
+  observation_disposition: ['id', 'observation_id', 'predecessor', 'state', 'reason',
+    'operation_id', 'principal_id', 'created_at'] satisfies (keyof ObservationDispositionRow)[],
+  observation_disposition_head: ['observation_id', 'head'] satisfies (keyof ObservationDispositionHeadRow)[],
+  correction_subscription_revision: ['id', 'claim', 'context', 'principal_id', 'predecessor',
+    'state', 'operation_id', 'created_at'] satisfies (keyof CorrectionSubscriptionRevisionRow)[],
+  correction_subscription_head: ['claim', 'context', 'principal_id', 'head'] satisfies
+    (keyof CorrectionSubscriptionHeadRow)[],
+  correction_delivery_cursor: ['generation_id', 'cursor_principal', 'complete', 'lease_owner',
+    'lease_until', 'updated_at'] satisfies (keyof CorrectionDeliveryCursorRow)[],
   challenge: ['id', 'claim', 'claim_revision', 'adopted_revision', 'context', 'reason', 'counterevidence',
     'counterevidence_purpose', 'acting_subject', 'operation_id', 'principal_id',
     'created_at'] satisfies (keyof ChallengeRow)[],
@@ -197,6 +226,8 @@ export const verificationEnumerations = [
   ['evidence_set_revision', 'purpose', evidencePurposes],
   ['evidence_item', 'stance', evidenceStances],
   ['evidence_item', 'availability', evidenceAvailability],
+  ['observation_disposition', 'state', ['available', 'inaccessible', 'withdrawn']],
+  ['correction_subscription_revision', 'state', ['subscribed', 'unsubscribed']],
   ['challenge_resolution', 'outcome', challengeOutcomes],
   ['summary_generation', 'support', summarySupport],
   ['summary_generation', 'review', summaryReview],

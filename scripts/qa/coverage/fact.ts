@@ -14,4 +14,8 @@ export const factCases: CaseDeclarations = {
     tier: 'unit', file: 'model/tests/claim-analysis.test.ts',
     name: 'FACT01/FACT02: copied sites and AI re-ingestion keep one established origin',
   }],
+  FACT03: [ownerJourney, {
+    tier: 'unit', file: 'model/tests/claim-analysis.test.ts',
+    name: 'FACT03: scoped reliability, later edition, withdrawn support and counterevidence stay distinct',
+  }],
 };

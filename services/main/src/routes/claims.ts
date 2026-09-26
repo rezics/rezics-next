@@ -22,8 +22,10 @@ export const openApiOperations = {
   '/v1/claims/{claim}/challenges': { post: { bearer: true, idempotencyKey: true }, get: { bearer: true } },
   '/v1/claims/{claim}/challenges/{challenge}/withdrawal': { post: { bearer: true, idempotencyKey: true } },
   '/v1/claims/{claim}/corrections': { get: { bearer: true } },
+  '/v1/claims/{claim}/correction-subscriptions': { post: { bearer: true, idempotencyKey: true } },
   '/v1/verification/origins': { post: { bearer: true, idempotencyKey: true } },
   '/v1/sources/observations/{observation}/lineage': { post: { bearer: true, idempotencyKey: true } },
+  '/v1/sources/observations/{observation}/disposition': { post: { bearer: true, idempotencyKey: true } },
   '/v1/verification/lineage/{edge}/retraction': { post: { bearer: true, idempotencyKey: true } },
   '/v1/sources/observations/{observation}/derivation': { post: { bearer: true, idempotencyKey: true } },
 } as const;
@@ -228,6 +230,20 @@ export function claimRoutes(work: MainWorkDependencies) {
         return ok({ corrections: await deps().store.corrections(nativeId(params.claim), query.context) });
       } catch (error) { return claimError(error); }
     })
+    .post('/v1/claims/:claim/correction-subscriptions', {
+      params: t.Object({ claim: uuid }),
+      body: t.Object({ profile: t.Literal('verification-correction-subscription-v1'),
+        context: reference, expectedHead: t.Nullable(uuid),
+        state: t.Union([t.Literal('subscribed'), t.Literal('unsubscribed')]) },
+      { additionalProperties: false }), response: written,
+    }, ({ request, params, body }) => keyed(request, async key => {
+      const reader = await principal(request, 'claim:read');
+      const claim = nativeId(params.claim);
+      if (!(await readClaimQuality(deps(), claim, body.context))?.quality) {
+        return problem(404, 'claim_unavailable', 'Claim is unavailable');
+      }
+      return respond(await deps().store.setCorrectionSubscription(reader, key, claim, body));
+    }))
     .post('/v1/verification/origins', {
       body: t.Object({ profile: t.Literal('verification-origin-v1'),
         kind: t.Union([t.Literal('publication'), t.Literal('dataset'), t.Literal('statement'), t.Literal('native')]),
@@ -246,6 +262,16 @@ export function claimRoutes(work: MainWorkDependencies) {
     }, ({ request, params, body }) => keyed(request, async key => respond(await deps().store.recordLineage(
       await principal(request, 'claim:lineage'), key, params.observation,
       { relation: body.relation, target: body.target, basis: body.basis, method: body.method }))))
+    .post('/v1/sources/observations/:observation/disposition', {
+      params: t.Object({ observation: uuid }),
+      body: t.Object({ profile: t.Literal('verification-observation-disposition-v1'),
+        expectedHead: t.Nullable(uuid),
+        state: t.Union([t.Literal('available'), t.Literal('inaccessible'), t.Literal('withdrawn')]),
+        reason: note }, { additionalProperties: false }),
+      response: written,
+    }, ({ request, params, body }) => keyed(request, async key => respond(
+      await deps().store.recordObservationDisposition(await principal(request, 'claim:lineage'),
+        key, params.observation, body))))
     .post('/v1/verification/lineage/:edge/retraction', {
       params: t.Object({ edge: uuid }),
       body: t.Object({ profile: t.Literal('verification-lineage-retraction-v1'), reason: note },

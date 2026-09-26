@@ -9,6 +9,17 @@ export const SUMMARY_POLICY = 'https://rezics.com/definition/verification-summar
 /** Distinct lineage observations one analysis may visit; more is reported as over-budget. */
 export const LINEAGE_BUDGET = 40;
 
+/** Recheck graph owner heads and the deployed deterministic policy revision. */
+export function currentVerificationHead(kind: string, reference: string,
+  pinnedLocalHead: string | null, graphHeads: ReadonlyMap<string, string | null>,
+  policyRevision: string): string | null {
+  if (kind === 'policy') return policyRevision;
+  if (kind === 'claim' || kind === 'source-assessment' || kind === 'acceptance') {
+    return graphHeads.get(reference) ?? null;
+  }
+  return pinnedLocalHead;
+}
+
 export type Stance = 'supports' | 'contradicts' | 'uncertain';
 export type Availability = 'available' | 'inaccessible' | 'withdrawn' | 'erased';
 export type Dependence = 'established' | 'unknown' | 'circular' | 'over-budget';
@@ -33,6 +44,7 @@ export interface ClaimScope {
 
 export interface ReliabilityInput {
   assessment: string; source: string; domain: string; context: string; result: string;
+  applicableFrom: string | null; applicableUntil: string | null;
 }
 
 export interface AnalysisInput {
@@ -44,6 +56,8 @@ export interface AnalysisInput {
   truncated: boolean;
   /** Source record (as `https://rezics.com/id/<uuid>`) of each evidence observation. */
   recordOf: ReadonlyMap<string, string>;
+  /** Source-observation acquisition instants used for reliability applicability. */
+  observedAt: ReadonlyMap<string, string>;
   /** Claim revisions referenced by graph evidence items, when they are claim revisions. */
   referencedClaims: ReadonlyMap<string, ClaimScope>;
   reliability: readonly ReliabilityInput[];
@@ -118,8 +132,18 @@ export function analyzeClaimSupport(input: AnalysisInput): AnalysisResult {
   const reasons = new Set<string>();
   const outgoing = new Map<string, LineageLink[]>();
   for (const link of input.links) outgoing.set(link.source, [...outgoing.get(link.source) ?? [], link]);
+  const appliesTo = (rating: ReliabilityInput, observation: string) => {
+    const observed = input.observedAt.get(observation);
+    if (observed === undefined) return false;
+    const instant = Date.parse(observed);
+    return Number.isFinite(instant)
+      && (rating.applicableFrom === null || instant >= Date.parse(rating.applicableFrom))
+      && (rating.applicableUntil === null || instant < Date.parse(rating.applicableUntil));
+  };
   const applicable = input.reliability.filter(item => item.domain === input.claim.predicate
-    && item.context === input.evaluationContext);
+    && item.context === input.evaluationContext
+    && input.items.some(evidence => evidence.observation && input.recordOf.get(evidence.observation) === item.source
+      && appliesTo(item, evidence.observation)));
   if (applicable.length < input.reliability.length) reasons.add('source-assessment-not-applicable');
 
   const counted = input.items.filter(item => {
@@ -177,7 +201,8 @@ export function analyzeClaimSupport(input: AnalysisInput): AnalysisResult {
     reasons.add('independent-origins');
   } else if (supporting.some(item => item.observation && applicable.some(reliability =>
     reliability.result === 'ReliableForDomain'
-    && reliability.source === input.recordOf.get(item.observation!)))) {
+    && reliability.source === input.recordOf.get(item.observation!)
+    && appliesTo(reliability, item.observation!)))) {
     support = 'supported';
     reasons.add('reliable-primary');
   } else {

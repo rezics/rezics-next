@@ -39,6 +39,10 @@ import { ReaderVariantPreferenceStore } from './modules/work/native-variants.ts'
 import { RealmVariantRecommendationStore } from './modules/work/realm-variant-recommendation.ts';
 import { RealmReplyContentStore } from './modules/realm-reply/content-store.ts';
 import { RealmReplyStore } from './modules/realm-reply/store.ts';
+import { VerificationStore } from './modules/verification/store.ts';
+import { VerificationCorrectionPublisher, VerificationCorrectionWorker }
+  from './modules/verification/correction-delivery.ts';
+import { NotificationStore } from './modules/notification/store.ts';
 import { SourceIntakeStore } from './modules/source/intake.ts';
 import { sourceAcquisitionServices } from './modules/source/acquisition.ts';
 import { OpenLibraryConversionStore } from './modules/source/open-library-conversion.ts';
@@ -175,6 +179,8 @@ if (relayPool) await notificationStore.reconcileRetainedErasures(relayPool);
 const sourceAdoptions = new SourceNativeWorkAdoptionStore(contentPool, sourceProposals,
   environment, account, access);
 const sourceCorrespondences = new SourceChildCorrespondenceStore(contentPool, sourceConversions);
+const correctionWorker = new VerificationCorrectionWorker(new VerificationCorrectionPublisher(
+  new VerificationStore(contentPool), new NotificationStore(pool)));
 const app = createMainApp(fuseki, {
   agentProvisioning: new AgentProvisioning(pool,
     { ...environment, ...(workObjects ? { workObjects } : {}) }),
@@ -258,12 +264,14 @@ const worker = new ContentProjectionWorker(
 app.listen({ hostname: '127.0.0.1', port });
 worker.start();
 recommendationWorker?.start();
+correctionWorker.start();
 
 let stopping = false;
 async function stop(): Promise<void> {
   if (stopping) return;
   stopping = true;
   await app.stop();
+  await correctionWorker.stop();
   try {
   try { await worker.stop(); }
   finally { await Promise.all([pool.end(), contentPool.end(), relayPool?.end()]); }

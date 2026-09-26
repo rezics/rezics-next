@@ -9,10 +9,10 @@ import { AdmissionDenied, AdmissionExpired, type AccessAdmissionRegistry,
 import { CancelledActivation, IdempotencyConflict, PendingActivation, hash,
   type WorkActivationEnvironment } from '../work/activate.ts';
 import { assertGraphAdmissionOpen } from '../work/restore-lineage.ts';
-import { analyzeClaimSupport, HUMAN_REVIEW_METHOD, SUMMARY_POLICY, SUPPORT_METHOD,
+import { analyzeClaimSupport, currentVerificationHead, HUMAN_REVIEW_METHOD, SUMMARY_POLICY, SUPPORT_METHOD,
   type AnalysisResult, type ClaimScope, type Support } from './analysis.ts';
 import { ADMISSIONS, claimDigest, createClaim, graphHeads, InvalidVerificationInput, native,
-  readAssessment, readClaimHead, readClaimRevisions, readReliability, readReceipt, recordAssessment,
+  readAcceptance, readAssessment, readClaimHead, readClaimRevisions, readReliability, readReceipt, recordAssessment,
   recordReliability, reliabilityDigest, sealVerificationAdmission,
   VerificationGraphStale, type ClaimRecord, type CreateClaimInput, type Family, type GraphReceipt,
   type ReliabilityInput } from './graph.ts';
@@ -165,6 +165,7 @@ interface Basis {
   record: ClaimRecord; analysis: AnalysisResult; support: Support;
   snapshot: Awaited<ReturnType<VerificationStore['analysisSnapshot']>>;
   reliability: Awaited<ReturnType<typeof readReliability>>;
+  acceptance: Awaited<ReturnType<typeof readAcceptance>>;
 }
 
 /** Load exact inputs and apply the deterministic method; every basis head must be current. */
@@ -177,11 +178,14 @@ async function assessmentBasis(deps: VerificationDependencies, claim: string, in
   if (!evidence) throw new VerificationMissing('evidence revision is unavailable');
   const snapshot = await deps.store.analysisSnapshot(claim, evidence);
   const reliability = await readReliability(deps.env, input.sourceAssessments);
+  const acceptance = input.adoptedRevision ? await readAcceptance(deps.env, input.adoptedRevision, claim) : null;
+  if (input.adoptedRevision && !acceptance) throw new VerificationMissing('acceptance decision is unavailable');
   if (reliability.size !== input.sourceAssessments.length) {
     throw new VerificationMissing('source assessment is unavailable');
   }
   if (requireCurrent && (record.head !== input.claimRevision || snapshot.evidenceHead !== input.evidenceSetRevision
-    || [...reliability.values()].some(item => !item.current))) {
+    || [...reliability.values()].some(item => !item.current)
+    || (acceptance && acceptance.head !== input.adoptedRevision))) {
     throw new VerificationStale('assessment basis is no longer current');
   }
   const graphItems = snapshot.revision.items.flatMap(item => item.graphReference ? [item.graphReference] : []);
@@ -194,11 +198,13 @@ async function assessmentBasis(deps: VerificationDependencies, claim: string, in
       availability: item.currentAvailability as 'available', observation: item.observation ?? null,
       contentRevision: item.contentRevision ?? null, graphReference: item.graphReference ?? null })),
     links: snapshot.links, truncated: snapshot.truncated, recordOf: snapshot.recordOf,
+    observedAt: snapshot.observedAt,
     referencedClaims: new Map([...referenced].map(([key, value]) => [key, scope(value)])),
     reliability: [...reliability.values()].map(item => ({ assessment: item.assessment, source: item.source,
-      domain: item.domain, context: item.context, result: item.result })) });
+      domain: item.domain, context: item.context, result: item.result,
+      applicableFrom: item.applicableFrom, applicableUntil: item.applicableUntil })) });
   const support: Support = input.method === 'human-review' ? input.judgment! : analysis.support;
-  return { record, analysis, support, snapshot, reliability };
+  return { record, analysis, support, snapshot, reliability, acceptance };
 }
 
 function dependencies(claim: string, input: AssessClaimInput, basis: Basis,
@@ -208,10 +214,14 @@ function dependencies(claim: string, input: AssessClaimInput, basis: Basis,
     { owner: 'content', kind: 'evidence-set', reference: claim, expectedHead: input.evidenceSetRevision },
     { owner: 'content', kind: 'challenge', reference: claim, expectedHead: challengeHead },
     { owner: 'graph', kind: 'policy', reference: SUMMARY_POLICY, expectedHead: SUMMARY_POLICY },
+    ...(basis.acceptance ? [{ owner: 'graph' as const, kind: 'acceptance',
+      reference: basis.acceptance.slot, expectedHead: input.adoptedRevision }] : []),
     ...[...basis.reliability.values()].sort((a, b) => a.scope.localeCompare(b.scope)).map(item => ({
       owner: 'graph' as const, kind: 'source-assessment', reference: item.scope, expectedHead: item.assessment })),
     ...basis.snapshot.visited.map(observation => ({ owner: 'content' as const, kind: 'source-observation',
       reference: observation, expectedHead: basis.snapshot.lineageHeads.get(observation) ?? null })),
+    ...basis.snapshot.visited.map(observation => ({ owner: 'content' as const, kind: 'source-disposition',
+      reference: observation, expectedHead: basis.snapshot.dispositionHeads.get(observation) ?? null })),
   ];
 }
 
@@ -295,8 +305,9 @@ export async function readClaimQuality(deps: Pick<VerificationDependencies, 'env
   let quality = null;
   if (summary) {
     const graph = await graphHeads(deps.env, summary.dependencies.filter(item => item.owner === 'graph'));
-    const dependencies = summary.dependencies.map(item => ({ ...item, currentHead: item.owner === 'graph'
-      && item.kind !== 'policy' ? graph.heads.get(item.reference) ?? null : item.currentHead }));
+    const dependencies = summary.dependencies.map(item => ({ ...item,
+      currentHead: currentVerificationHead(item.kind, item.reference, item.currentHead,
+        graph.heads, SUMMARY_POLICY) }));
     const stale = dependencies.filter(item => item.currentHead !== item.expectedHead);
     quality = { generation: summary.generation, number: summary.number, assessment: summary.assessment,
       adoptedRevision: summary.adoptedRevision, policyRevision: summary.policyRevision,

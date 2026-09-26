@@ -155,7 +155,8 @@ test('FACT01-FACT04 owner schema: Content verification migrations install empty 
     .map(name => ({ name, version: Number(name.slice(0, 3)) }));
   const ours = local.filter(item => item.version >= FIRST_VERIFICATION && item.version < 100);
   expect(ours.map(item => item.name)).toEqual(['090_verification_lineage.sql', '091_verification_evidence.sql',
-    '092_verification_challenge.sql', '093_verification_summary.sql', '094_verification_freshness.sql']);
+    '092_verification_challenge.sql', '093_verification_summary.sql', '094_verification_freshness.sql',
+    '095_verification_source_disposition.sql', '096_verification_correction_delivery.sql']);
   try {
     // Empty install through the owner runner, twice (the second run is a no-op).
     await admin.query('CREATE DATABASE fresh');

@@ -444,7 +444,7 @@ export async function recordReliability(env: WorkActivationEnvironment, admissio
 
 export interface ReliabilityRecord {
   assessment: string; scope: string; source: string; domain: string; context: string;
-  result: string; current: boolean;
+  result: string; current: boolean; applicableFrom: string | null; applicableUntil: string | null;
 }
 
 export async function readReliability(env: WorkActivationEnvironment,
@@ -452,17 +452,20 @@ export async function readReliability(env: WorkActivationEnvironment,
   const found = new Map<string, ReliabilityRecord>();
   if (!assessments.length) return found;
   const response = await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?assessment ?scope ?source ?domain
-    ?context ?result ?head WHERE {
+    ?context ?result ?from ?until ?head WHERE {
     VALUES ?assessment { ${assessments.map(iri).join(' ')} }
     GRAPH ${iri(GRAPHS.revisions)} { ?assessment a rv:SourceReliabilityAssessment ; rv:component ?scope ;
       rv:assessedSource ?source ; rv:domainDefinition ?domain ; rv:evaluationContext ?context ;
-      rv:reliabilityResult ?result }
+      rv:reliabilityResult ?result .
+      OPTIONAL { ?assessment rv:applicableFrom ?from }
+      OPTIONAL { ?assessment rv:applicableUntil ?until } }
     GRAPH ${iri(GRAPHS.current)} { ?scope rv:reliabilityHead ?head }
   }`);
   for (const row of response.results?.bindings ?? []) {
     found.set(row.assessment!.value, { assessment: row.assessment!.value, scope: row.scope!.value,
       source: row.source!.value, domain: row.domain!.value, context: row.context!.value,
-      result: local(row.result!.value), current: row.head!.value === row.assessment!.value });
+      result: local(row.result!.value), current: row.head!.value === row.assessment!.value,
+      applicableFrom: row.from?.value ?? null, applicableUntil: row.until?.value ?? null });
   }
   return found;
 }
@@ -557,12 +560,28 @@ export async function readAssessment(env: WorkActivationEnvironment, assessment:
     assessedAt: row.assessedAt!.value, dataEpoch: row.epoch!.value, sequence: row.sequence!.value };
 }
 
+/** Bind an adopted result to the existing Statement decision slot and its live head. */
+export async function readAcceptance(env: WorkActivationEnvironment, decision: string, claim: string): Promise<{
+  slot: string; head: string } | null> {
+  const response = await env.fuseki.query(`PREFIX rv: <${RV}>
+    PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> SELECT ?slot ?head WHERE {
+    GRAPH ${iri(GRAPHS.revisions)} { ${iri(decision)} a rv:StatementDecision ;
+      rv:component ?slot ; rv:outcome rv:Accepted }
+    GRAPH ${iri(GRAPHS.current)} { ?slot rv:decisionHead ?head ; rv:decisionTarget ?statement .
+      ?statement a rdf:Statement ; rdf:subject ${iri(claim)} }
+  }`);
+  const rows = response.results?.bindings ?? [];
+  if (rows.length !== 1) return null;
+  return { slot: rows[0]!.slot!.value, head: rows[0]!.head!.value };
+}
+
 /** Current graph heads for pinned graph dependencies plus the observed dataset position. */
 export async function graphHeads(env: WorkActivationEnvironment, dependencies: readonly {
   kind: string; reference: string }[]): Promise<{ heads: Map<string, string | null>;
     position: { datasetId: 'product'; dataEpoch: string; sequence: string } }> {
-  const predicate = (kind: string) => kind === 'claim' ? 'rv:claimHead' : 'rv:reliabilityHead';
-  const values = dependencies.filter(item => item.kind === 'claim' || item.kind === 'source-assessment')
+  const predicate = (kind: string) => kind === 'claim' ? 'rv:claimHead'
+    : kind === 'acceptance' ? 'rv:decisionHead' : 'rv:reliabilityHead';
+  const values = dependencies.filter(item => ['claim', 'source-assessment', 'acceptance'].includes(item.kind))
     .map(item => `(${iri(item.reference)} ${predicate(item.kind)})`);
   const response = await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?reference ?head ?epoch ?sequence WHERE {
     GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:dataEpoch ?epoch ; rv:sequence ?sequence }
@@ -572,7 +591,9 @@ export async function graphHeads(env: WorkActivationEnvironment, dependencies: r
   const rows = response.results?.bindings ?? [];
   if (!rows.length) throw new PendingActivation('graph position is unavailable');
   const heads = new Map<string, string | null>();
-  for (const item of dependencies) if (item.kind === 'claim' || item.kind === 'source-assessment') heads.set(item.reference, null);
+  for (const item of dependencies) if (['claim', 'source-assessment', 'acceptance'].includes(item.kind)) {
+    heads.set(item.reference, null);
+  }
   for (const row of rows) if (row.reference && row.head) heads.set(row.reference.value, row.head.value);
   return { heads, position: { datasetId: 'product', dataEpoch: rows[0]!.epoch!.value,
     sequence: rows[0]!.sequence!.value } };

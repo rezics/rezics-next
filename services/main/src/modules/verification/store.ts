@@ -45,6 +45,8 @@ export interface Dependency {
 export interface AnalysisSnapshot {
   revision: EvidenceRevision; evidenceHead: string | null; links: LineageLink[]; truncated: boolean;
   visited: string[]; lineageHeads: Map<string, string | null>; recordOf: Map<string, string>;
+  observedAt: Map<string, string>;
+  dispositionHeads: Map<string, string | null>;
   challenge: { revision: string | null; open: number; resolved: number };
 }
 
@@ -166,6 +168,46 @@ export class VerificationStore {
   }
 
   // --------------------------------------------------------------- lineage
+
+  /** The observation author can change current availability without rewriting evidence history. */
+  async recordObservationDisposition(principal: string, key: string, observation: string,
+    input: { expectedHead: string | null; state: 'available' | 'inaccessible' | 'withdrawn'; reason: string }) {
+    if (!UUID.test(observation) || (input.expectedHead !== null && !UUID.test(input.expectedHead))
+      || !input.reason.trim() || input.reason.length > 2000) {
+      throw new VerificationInvalid('source disposition intent is invalid');
+    }
+    const digest = digestOf({ family: 'observation-disposition-v1', observation, ...input });
+    try { return await this.keyed(principal, 'source-disposition.record', key, digest,
+      async (client, id) => {
+        const row = (await client.query(`SELECT id, observation_id, predecessor, state, reason, created_at
+          FROM verification.observation_disposition WHERE id = $1`, [id])).rows[0];
+        return { disposition: nativeId(row.id), observation: row.observation_id as string,
+          predecessor: row.predecessor ? nativeId(row.predecessor) : null, state: row.state as string,
+          reason: row.reason as string, createdAt: iso(row.created_at) };
+      }, async (client, receipt) => {
+        await ownObservations(client, principal, [observation]);
+        const head = (await client.query<{ head: string }>(`SELECT head
+          FROM verification.observation_disposition_head WHERE observation_id = $1 FOR UPDATE`,
+        [observation])).rows[0]?.head ?? null;
+        if (head !== input.expectedHead) throw new VerificationStale('source disposition head changed');
+        const id = crypto.randomUUID();
+        await client.query(`INSERT INTO verification.observation_disposition
+          (id, observation_id, predecessor, state, reason, operation_id, principal_id)
+          VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+        [id, observation, head, input.state, input.reason, await receipt(id), principal]);
+        if (head) await client.query(`UPDATE verification.observation_disposition_head SET head = $1
+          WHERE observation_id = $2 AND head = $3`, [id, observation, head]);
+        else await client.query(`INSERT INTO verification.observation_disposition_head
+          (observation_id, head) VALUES ($1, $2)`, [observation, id]);
+        return id;
+      });
+    } catch (error) {
+      if (pg(error).constraint === 'observation_disposition_head_pkey') {
+        throw new VerificationStale('source disposition head changed concurrently');
+      }
+      throw error;
+    }
+  }
 
   async recordOrigin(principal: string, key: string, input: { kind: string; locator: string }) {
     const digest = digestOf({ family: 'origin-v1', ...input });
@@ -328,8 +370,11 @@ export class VerificationStore {
   private async readEvidenceWith(client: PoolClient, id: string): Promise<EvidenceRevision> {
     const row = (await client.query('SELECT * FROM verification.evidence_set_revision WHERE id = $1', [id])).rows[0];
     if (!row) throw new VerificationMissing('evidence revision is unavailable');
-    const items = (await client.query(`SELECT i.*, c.availability AS content_availability
+    const items = (await client.query(`SELECT i.*, c.availability AS content_availability,
+      d.state AS observation_availability
       FROM verification.evidence_item i LEFT JOIN content.revision c ON c.id = i.content_revision_id
+      LEFT JOIN verification.observation_disposition_head h ON h.observation_id = i.observation_id
+      LEFT JOIN verification.observation_disposition d ON d.id = h.head
       WHERE i.revision_id = $1 ORDER BY i.ordinal`, [id])).rows;
     return { revision: nativeId(row.id), claim: row.claim, claimRevision: row.claim_revision, purpose: row.purpose,
       predecessor: row.predecessor ? nativeId(row.predecessor) : null, itemCount: row.item_count,
@@ -341,7 +386,8 @@ export class VerificationStore {
         ...(item.graph_reference ? { graphReference: item.graph_reference } : {}),
         // Recorded availability is historical; an erased Content body is reported as erased now.
         currentAvailability: item.content_availability && item.content_availability !== 'available'
-          ? item.content_availability : item.availability })) };
+          ? item.content_availability : item.observation_availability && item.observation_availability !== 'available'
+            ? item.observation_availability : item.availability })) };
   }
 
   async readEvidence(id: string): Promise<EvidenceRevision | null> {
@@ -402,20 +448,28 @@ export class VerificationStore {
         source: row.source, relation: row.relation, targetObservation: row.target_observation_id,
         targetOrigin: row.target_origin_id, targetReference: row.target_reference })) : [];
       const heads = new Map<string, string | null>(visited.map(id => [id, null]));
+      const dispositionHeads = new Map<string, string | null>(visited.map(id => [id, null]));
       for (const row of visited.length ? (await client.query<{ observation_id: string; revision: string }>(
         `SELECT observation_id, revision::text FROM verification.lineage_head WHERE observation_id = ANY($1::uuid[])`,
         [visited])).rows : []) heads.set(row.observation_id, row.revision);
+      for (const row of visited.length ? (await client.query<{ observation_id: string; head: string }>(
+        `SELECT observation_id, head FROM verification.observation_disposition_head
+          WHERE observation_id = ANY($1::uuid[])`, [visited])).rows : []) {
+        dispositionHeads.set(row.observation_id, nativeId(row.head));
+      }
       const recordOf = new Map<string, string>();
-      for (const row of roots.length ? (await client.query<{ id: string; record_id: string }>(
-        'SELECT id, record_id FROM source.observation WHERE id = ANY($1::uuid[])', [roots])).rows : []) {
+      const observedAt = new Map<string, string>();
+      for (const row of roots.length ? (await client.query<{ id: string; record_id: string; submitted_at: Date }>(
+        'SELECT id, record_id, submitted_at FROM source.observation WHERE id = ANY($1::uuid[])', [roots])).rows : []) {
         recordOf.set(row.id, nativeId(row.record_id));
+        observedAt.set(row.id, iso(row.submitted_at));
       }
       const challenge = (await client.query<{ revision: string; open_count: number; resolved: number }>(`
         SELECT h.revision::text, h.open_count, (SELECT count(*)::int FROM verification.challenge c
           JOIN verification.challenge_resolution r ON r.challenge_id = c.id WHERE c.claim = h.claim) AS resolved
         FROM verification.challenge_head h WHERE h.claim = $1`, [claim])).rows[0];
       return { revision: manifest, evidenceHead: head ? nativeId(head) : null, links, truncated, visited,
-        lineageHeads: heads, recordOf,
+        lineageHeads: heads, dispositionHeads, recordOf, observedAt,
         challenge: { revision: challenge?.revision ?? null, open: challenge?.open_count ?? 0,
           resolved: challenge?.resolved ?? 0 } };
     }, true);
@@ -607,6 +661,11 @@ export class VerificationStore {
         `SELECT revision::text FROM verification.lineage_head WHERE observation_id = $1${share}`,
         [dependency.reference])).rows[0]?.revision ?? null;
     }
+    if (dependency.kind === 'source-disposition') {
+      const row = (await client.query<{ head: string }>(`SELECT head FROM verification.observation_disposition_head
+        WHERE observation_id = $1${share}`, [dependency.reference])).rows[0];
+      return row ? nativeId(row.head) : null;
+    }
     throw new VerificationInvalid(`unknown Content dependency ${dependency.kind}`);
   }
 
@@ -648,6 +707,110 @@ export class VerificationStore {
       assessment: row.assessment as string | null, previousSupport: row.previous_support as string,
       support: row.support as string, previousDispute: row.previous_dispute as string, dispute: row.dispute as string,
       createdAt: iso(row.created_at) }));
+  }
+
+  /** A claim reader opts into correction delivery for one exact claim/context. */
+  async setCorrectionSubscription(principal: string, key: string, claim: string,
+    input: { context: string; expectedHead: string | null; state: 'subscribed' | 'unsubscribed' }) {
+    if (!UUID.test(principal) || !uuidOf(claim)
+      || (input.expectedHead !== null && !UUID.test(input.expectedHead))) {
+      throw new VerificationInvalid('correction subscription intent is invalid');
+    }
+    const digest = digestOf({ family: 'correction-subscription-v1', claim, ...input });
+    try {
+      return await this.keyed(principal, 'correction-subscription.set', key, digest,
+        async (client, id) => {
+          const row = (await client.query(`SELECT * FROM verification.correction_subscription_revision
+            WHERE id = $1`, [id])).rows[0];
+          return { subscription: nativeId(row.id), claim: row.claim as string, context: row.context as string,
+            state: row.state as string, predecessor: row.predecessor ? nativeId(row.predecessor) : null,
+            createdAt: iso(row.created_at) };
+        }, async (client, receipt) => {
+          const head = (await client.query<{ head: string }>(`SELECT head
+            FROM verification.correction_subscription_head WHERE claim = $1 AND context = $2
+              AND principal_id = $3 FOR UPDATE`, [claim, input.context, principal])).rows[0]?.head ?? null;
+          if (head !== input.expectedHead) throw new VerificationStale('correction subscription head changed');
+          const id = crypto.randomUUID();
+          await client.query(`INSERT INTO verification.correction_subscription_revision
+            (id, claim, context, principal_id, predecessor, state, operation_id)
+            VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+          [id, claim, input.context, principal, head, input.state, await receipt(id)]);
+          if (head) await client.query(`UPDATE verification.correction_subscription_head SET head = $1
+            WHERE claim = $2 AND context = $3 AND principal_id = $4 AND head = $5`,
+          [id, claim, input.context, principal, head]);
+          else await client.query(`INSERT INTO verification.correction_subscription_head
+            (claim, context, principal_id, head) VALUES ($1, $2, $3, $4)`,
+          [claim, input.context, principal, id]);
+          return id;
+        });
+    } catch (error) {
+      if (pg(error).constraint === 'correction_subscription_head_pkey') {
+        throw new VerificationStale('correction subscription head changed concurrently');
+      }
+      throw error;
+    }
+  }
+
+  /** One bounded page of current, opted-in recipients for a durable correction. */
+  async leaseCorrectionPage(owner: string, pageSize = 128): Promise<{
+    generation: string; claim: string; context: string; cursor: string | null;
+    recipients: string[]; next: string | null; complete: boolean } | null> {
+    if (!owner || owner.length > 100 || !Number.isInteger(pageSize) || pageSize < 1 || pageSize > 256) {
+      throw new VerificationInvalid('correction delivery page is invalid');
+    }
+    return this.tx(async client => {
+      const notice = (await client.query<{ generation_id: string; target: string; context: string;
+        created_at: Date; cursor_principal: string | null }>(`SELECT c.generation_id, n.target, n.context,
+          n.created_at, c.cursor_principal FROM verification.correction_delivery_cursor c
+          JOIN verification.correction_notice n ON n.generation_id = c.generation_id
+          WHERE NOT c.complete AND (c.lease_until IS NULL OR c.lease_until < clock_timestamp()
+            OR c.lease_owner = $1)
+          ORDER BY n.created_at, c.generation_id LIMIT 1 FOR UPDATE OF c SKIP LOCKED`,
+      [owner])).rows[0];
+      if (!notice) return null;
+      await client.query(`UPDATE verification.correction_delivery_cursor
+        SET lease_owner = $2, lease_until = clock_timestamp() + interval '1 minute', updated_at = clock_timestamp()
+        WHERE generation_id = $1`, [notice.generation_id, owner]);
+      const rows = (await client.query<{ principal_id: string }>(`SELECT h.principal_id
+        FROM verification.correction_subscription_head h
+        JOIN verification.correction_subscription_revision r ON r.id = h.head
+        WHERE h.claim = $1 AND h.context = $2 AND r.state = 'subscribed'
+          AND r.created_at <= $3 AND ($4::uuid IS NULL OR h.principal_id > $4)
+        ORDER BY h.principal_id LIMIT $5`,
+      [notice.target, notice.context, notice.created_at, notice.cursor_principal, pageSize + 1])).rows;
+      const recipients = rows.slice(0, pageSize).map(row => row.principal_id);
+      return { generation: notice.generation_id, claim: notice.target, context: notice.context,
+        cursor: notice.cursor_principal, recipients,
+        next: recipients.at(-1) ?? notice.cursor_principal, complete: rows.length <= pageSize };
+    });
+  }
+
+  async acknowledgeCorrectionPage(owner: string, generation: string, cursor: string | null,
+    next: string | null, complete: boolean): Promise<void> {
+    const result = await this.pool.query(`UPDATE verification.correction_delivery_cursor
+      SET cursor_principal = $4, complete = $5, lease_owner = NULL, lease_until = NULL,
+        updated_at = clock_timestamp()
+      WHERE generation_id = $1 AND lease_owner = $2 AND cursor_principal IS NOT DISTINCT FROM $3
+        AND lease_until > clock_timestamp() AND NOT complete`,
+    [generation, owner, cursor, next, complete]);
+    if (result.rowCount !== 1) throw new VerificationStale('correction delivery lease changed');
+  }
+
+  /** Delivery-time disclosure of only the pinned public correction dimensions. */
+  async correctionForRecipient(principal: string, generation: string): Promise<{
+    status: 'available'; claim: string; generation: string; support: string; dispute: string }
+    | { status: 'undisclosed' | 'unavailable' }> {
+    if (!UUID.test(principal) || !UUID.test(generation)) return { status: 'unavailable' };
+    const notice = (await this.pool.query<{ target: string; context: string; support: string; dispute: string }>(
+      'SELECT target, context, support, dispute FROM verification.correction_notice WHERE generation_id = $1',
+      [generation])).rows[0];
+    if (!notice) return { status: 'unavailable' };
+    const allowed = (await this.pool.query(`SELECT 1 FROM verification.correction_subscription_head h
+      JOIN verification.correction_subscription_revision r ON r.id = h.head
+      WHERE h.claim = $1 AND h.context = $2 AND h.principal_id = $3 AND r.state = 'subscribed'`,
+    [notice.target, notice.context, principal])).rowCount === 1;
+    return allowed ? { status: 'available', claim: notice.target, generation: nativeId(generation),
+      support: notice.support, dispute: notice.dispute } : { status: 'undisclosed' };
   }
 
   async reassessmentDemand(target: string, context: string): Promise<string | null> {
