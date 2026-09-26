@@ -29,6 +29,8 @@ import { AccessEligibleOrgMemberSet } from './modules/access/eligible-org-member
 import { AccessRoles } from './modules/access/roles.ts';
 import { AccessPolicyOwner } from './modules/access/policy-owner.ts';
 import { MediaAccessBatchReader } from './modules/media/access-batch.ts';
+import { ExportStore } from './modules/export/store.ts';
+import { VerificationStore } from './modules/verification/store.ts';
 import { MediaStore } from './modules/media/store.ts';
 import { AccessVotes } from './modules/vote/access.ts';
 import { ReaderVariantPreferenceStore } from './modules/work/native-variants.ts';
@@ -182,6 +184,8 @@ const app = createMainApp(fuseki, {
   mediaAccess: new MediaAccessBatchReader(pool),
   releaseRatingInventory: new ReleaseRatingInventoryStore(pool),
   votes: new AccessVotes(pool),
+  exports: new ExportStore(contentPool),
+  exportVerification: new VerificationStore(contentPool),
   actingContexts: new AccessActingContexts(pool),
   groups: new AccessGroups(pool),
   grants: new AccessGrants(pool),

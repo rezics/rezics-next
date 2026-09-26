@@ -58,6 +58,9 @@ import type { RankingGenerations } from '../modules/recommendation/ranking.ts';
 import type { AccessVotes } from '../modules/vote/access.ts';
 import type { StructureProgressStore } from '../modules/progress/store.ts';
 import type { ImmutableObjects } from '../infrastructure/immutable-objects.ts';
+import type { ExportStore } from '../modules/export/store.ts';
+import type { LicenseScopeHook } from '../modules/export/planner.ts';
+import type { VerificationStore } from '../modules/verification/store.ts';
 
 export interface MainWorkDependencies {
   environment: WorkActivationEnvironment;
@@ -129,4 +132,7 @@ export interface MainWorkDependencies {
   ownerOperations?: OwnerOperations;
   recommendations?: RankingGenerations;
   votes?: AccessVotes;
+  exports?: ExportStore;
+  exportVerification?: Pick<VerificationStore, 'readEvidence'>;
+  exportRights?: LicenseScopeHook;
 }

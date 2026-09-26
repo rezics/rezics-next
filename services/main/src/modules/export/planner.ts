@@ -29,6 +29,8 @@ export interface VerifiedExportMember {
   mapping: ExportMemberRow['mapping'];
   /** The exact owner read's bounded exchange value, if this member is a value. */
   value?: PortableValue;
+  /** Bounded owner-verified facts and qualifications for this exact revision. */
+  data?: Record<string, unknown>;
 }
 
 export interface ExportLoss {

@@ -25,6 +25,10 @@ export interface ExportManifestRow {
   member_count: number;
   residual_count: number;
   manifest_digest: string | null;
+  /** Content receipt position of a newly sealed export; legacy staged rows have nulls. */
+  data_epoch: string | null;
+  sequence: string | null;
+  payload: Record<string, unknown> | null;
   rejection_reason: string | null;
   created_at: Date;
   sealed_at: Date | null;
@@ -102,7 +106,7 @@ export const exportTables = {
     admission_id: true, authority_epoch: true, target_profile: true, use_scope: true,
     state: true, completeness: true, license_scope: true, license_expression: true,
     member_count: true, residual_count: true, manifest_digest: true, rejection_reason: true,
-    created_at: true, sealed_at: true,
+    data_epoch: true, sequence: true, payload: true, created_at: true, sealed_at: true,
   } satisfies Record<keyof ExportManifestRow, true>,
   'export.member': {
     manifest_id: true, ordinal: true, source_owner: true, source_namespace: true,
