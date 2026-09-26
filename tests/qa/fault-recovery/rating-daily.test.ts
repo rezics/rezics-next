@@ -66,7 +66,7 @@ test('RATE02/RATE03/OPS03: daily server periods and private slots survive real A
     const liveFuseki = new FusekiClient(apps.FUSEKI_URL!, apps.FUSEKI_MAINTENANCE_TOKEN!, apps.FUSEKI_COMMAND_TOKEN!);
     const restoredFuseki = new FusekiClient(restoredApps.FUSEKI_URL!,
       restoredApps.FUSEKI_MAINTENANCE_TOKEN!, restoredApps.FUSEKI_COMMAND_TOKEN!);
-    expect((await liveFuseki.commandHealth()).moduleVersion).toBe('0.5.23');
+    expect((await liveFuseki.commandHealth()).moduleVersion).toBe('0.5.24');
     const lineage = { dataEpoch: apps.MAIN_DATA_EPOCH!, routingEpoch: '1' };
     const env: WorkActivationEnvironment = { fuseki: liveFuseki, lineage,
       objectDirectory: join(directory, 'objects') };

@@ -21,7 +21,8 @@ async function freePort(): Promise<number> {
 }
 
 /** Real Better Auth owner and OAuth clients on the fixture's isolated database. */
-export async function ratingAccount(apps: Record<string, string>) {
+export async function ratingAccount(apps: Record<string, string>,
+  scopes = 'openid work:create space:create rating:configure rating:submit rating:read') {
   const pool = new Pool({ connectionString: apps.ACCOUNT_DATABASE_URL });
   const port = await freePort();
   const base = `http://127.0.0.1:${port}`;
@@ -55,9 +56,9 @@ export async function ratingAccount(apps: Record<string, string>) {
     const oauthClient = await auth.api.adminCreateOAuthClient({ headers, body: {
       client_name: 'Rating native client', application_type: 'native',
       redirect_uris: [redirectUri], token_endpoint_auth_method: 'none',
-      grant_types: ['authorization_code'], scope: 'openid work:create space:create rating:configure rating:submit rating:read',
+      grant_types: ['authorization_code'], scope: scopes,
       skip_consent: true, require_pkce: true } });
-    async function tokenFor(user: { email: string; password: string }, scope = 'openid work:create space:create rating:configure rating:submit rating:read') {
+    async function tokenFor(user: { email: string; password: string }, scope = scopes) {
       const signIn = await fetch(`${base}/api/auth/sign-in/email`, { method: 'POST',
         headers: { 'content-type': 'application/json', origin: base },
         body: JSON.stringify({ email: user.email, password: user.password }) });
@@ -82,7 +83,7 @@ export async function ratingAccount(apps: Record<string, string>) {
     }
 
     const a = await signUp('a'), b = await signUp('b');
-    return { issuer: `${base}/api/auth`, a, b,
+    return { issuer: `${base}/api/auth`, a, b, tokenFor,
       tokenA: await tokenFor(a), tokenB: await tokenFor(b), noScope: await tokenFor(a, 'openid'),
       verifier: new AccountAssertionVerifier({ issuer: `${base}/api/auth`,
         audience: apps.ACCOUNT_MAIN_RESOURCE!, jwksUrl: `${base}/api/auth/jwks`,

@@ -15,6 +15,19 @@ denial, and an authorized title edit that retained the types. Graph-loss recover
 not qualify arbitrary Resource types or the general semantic-change operation;
 neither ID has a complete-case declaration.
 
+The [author-credit integration](../../tests/qa/integration/source-author-credit.test.ts)
+passed selected run `20260926t074730-1831a8`: two repeated external author keys
+produce two native credit/revision identities; source reorder/support and a native
+Work title edit preserve the original exact credit. Native validation rejects
+missing shapes/bindings, an Agent edge, mismatched keys, an out-of-range position
+and attempts to overwrite either native subject. The command regression selection
+passed model run `20260926t074739-acebf1`. Isolated held-graph recovery passed
+`20260926t074730-20dab9`, requiring retained Source intent/conversion, sealed Access
+admission and exact relay event before rebuilding the original revision. This is
+partial MODEL05/MODEL06 evidence for one append-only relation and its pinned exact
+history; semantic-definition retirement, editable credit history, arbitrary
+participants and the general relation-change operation remain unqualified.
+
 | ID | Scenario | Required result |
 | --- | --- | --- |
 | MODEL01 | Create multiple semantic types on one Resource | Stable identity; capability admission remains independent. |

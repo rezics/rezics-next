@@ -286,6 +286,18 @@ export const profileRegistry = {
       "revision"
     ]
   },
+  "work-author-credit-v1": {
+    "sha256": "369b1c406b627053c612fff0c97fe18353e633df2b8128746cb4463273369281",
+    "file": "shapes/work-author-credit-v1.ttl",
+    "shapes": [
+      "https://rezics.com/definition/work-author-credit-v1/credit-shape",
+      "https://rezics.com/definition/work-author-credit-v1/revision-shape"
+    ],
+    "focusRoles": [
+      "credit",
+      "revision"
+    ]
+  },
   "work-derivation-v1": {
     "sha256": "b86e60ef69cf6a20088119dbb582154c7f27cbf30f1a8334869603e49b0dea1b",
     "file": "shapes/work-derivation-v1.ttl",

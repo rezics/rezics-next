@@ -486,6 +486,71 @@ rights restrictions, source retention limits or erasure fences.
 
 ## Child correspondence and structure
 
+### Bounded native author-credit adoption
+
+The `work-author-credit-v1` relation is an independently identified, immutable
+Work credit occurrence, with one exact native revision. Its target is the Work;
+its participant is an explicit `open-library/author` external reference, never
+an inferred native Agent. It retains native position and the `author` role;
+the source author key, nullable source role key, observation-qualified occurrence,
+source ordinal, conversion, proposal and correspondence decision remain separate.
+Two repetitions of one provider key can therefore be two credits. The first
+profile is deliberately append-only: correction, retirement and native credit
+revision editing require a later operation. Ordinary native Work title edits
+preserve these independently owned credits.
+
+`POST /v1/works/{work}/source-author-credits` accepts one explicit occurrence,
+exact proposal/conversion, expected Work head, acting Agent and idempotency key.
+The initial adoption must use the current proposal of that Work's existing
+private source binding. It requires `source:adopt`, `work:edit`, an active owning
+principal and a current represented Work edit grant. The request confirms the
+exact reference/role and metadata-only use. The initial graph command checks the
+Work head and explicit absence of a protection head in its transaction. It
+creates one native occurrence/revision, receipt and outbox event without changing
+the Work metadata head. Control is human-confirmed, never automatic source control;
+rights remain undetermined. Existing protection is unsupported and fails closed.
+
+The same command can add support to an explicitly selected existing credit using
+an exact base support. Within a SourceRecord it requires a later verified complete
+conversion and either an unambiguous same-key correspondence or the retained
+explicit decision for repeated keys. Across records it requires the Work's
+separately authorized second source binding. Changed keys/roles, reused occurrences,
+stale proposal/conversion pairs and ambiguous pairings conflict. Support addition
+does not rewrite native position or identity. Its Work-head guarantee is a verified
+preflight, as for v2 title support; only creation performs a graph CAS guard.
+
+Private support reads reverify source bytes, proposal, correspondence, native
+revision and original graph receipt. Exact authorized retries return the same
+immutable result. Withdrawal changes one completed support only; it neither
+removes the native occurrence nor changes another support or a native Work edit.
+Missing/unmapped source children never imply deletion. New bindings cannot be
+made from withdrawn support. The owner reserves an immutable intent before graph
+dispatch and writes its certificate after the graph receipt; interrupted requests
+resume the same intent/admission. Recovery uses the retained event, original Access
+admission and immutable source intent under the graph/Access recovery hold, and
+fails closed when any required owner evidence is missing or disagrees.
+
+This profile uses a native qualified relation instead of `schema:author` pointing
+to a fabricated Person, and avoids copying an entire RDF list on each change.
+[Schema.org Role](https://schema.org/Role) supports qualified relationship nodes;
+[PROV-O qualification](https://www.w3.org/TR/prov-o/#qualified-terms-section)
+separates relation details from their participants. These are semantic inputs,
+not proofs of this implementation's authority or recovery. Open Library's
+[Work type](https://openlibrary.org/type/work) keeps authors on the Work grain.
+Reviewed 2026-09-26. The append-only, external-reference choice is REZICS's bounded
+implementation decision; Agent resolution, split/merge, all child families,
+general protection/control transitions and complete LIVE04/MODEL coverage remain
+retained work.
+
+Each selected operation uses indexed identity/unique-key lookups and at most two
+bounded source captures (64 KiB each; 128 authors), one base support and one native
+revision. Creation writes one intent, certificate, two native subjects and a fixed
+receipt/outbox envelope. Support/withdrawal write no native graph. No list/history
+enumeration or provider request is needed; database lookup cost is O(log N), local
+comparison is O(B + A), and selected rows, graph calls and bytes are bounded
+independently of history length. The bounded fixture tests these dimensions;
+deployment capacity and Jena's global envelope checks are separately retained.
+
 Repeated tracks, chapters, ingredients, names and credit participants retain
 occurrence identity. Use observation-qualified keys when provider child keys are
 unstable. Reordering, split/merge or reused keys can yield conflict rather than

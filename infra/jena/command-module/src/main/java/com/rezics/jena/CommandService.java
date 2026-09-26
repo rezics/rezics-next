@@ -86,7 +86,7 @@ final class CommandService extends ActionService {
             return;
         }
         long privateEpoch = privateSearchWriteEpoch.get();
-        respond(action, 200, Map.of("moduleVersion", "0.5.23",
+        respond(action, 200, Map.of("moduleVersion", "0.5.24",
             "instanceId", instanceId, "publicSearchWriteEpoch", Long.toString(epoch),
             "publicSearchWriteActive", (epoch & 1L) != 0L,
             "privateSearchWriteEpoch", Long.toString(privateEpoch),
@@ -156,9 +156,10 @@ final class CommandService extends ActionService {
                 && shape.equals("https://rezics.com/definition/work-derivation-v1/derivation-shape");
             boolean fixedReleaseShape = profileId.equals("fixed-native-text-release-v1")
                 && shape.equals("https://rezics.com/definition/fixed-native-text-release-v1/release-shape");
+            boolean authorCreditShape = profileId.equals("work-author-credit-v1");
             if (graphs.stream().anyMatch(graph -> !graph.equals(CommandPolicy.CURRENT)
                 && !graph.equals(CommandPolicy.REVISIONS)
-                && !((translationLinkShape || workDerivationShape || fixedReleaseShape) && (graph.equals(CommandPolicy.RECEIPTS)
+                && !((translationLinkShape || workDerivationShape || fixedReleaseShape || authorCreditShape) && (graph.equals(CommandPolicy.RECEIPTS)
                     || graph.equals(CommandPolicy.CONTROL)))
                 && !(graph.equals(CommandPolicy.SOURCE)
                     && profileId.equals("source-open-library-work-v1"))
@@ -175,6 +176,9 @@ final class CommandService extends ActionService {
             if (fixedReleaseShape && !Set.copyOf(graphs).equals(Set.of(CommandPolicy.CURRENT,
                 CommandPolicy.REVISIONS, CommandPolicy.RECEIPTS, CommandPolicy.CONTROL)))
                 throw new IllegalArgumentException("fixed release validation graphs differ");
+            if (authorCreditShape && !Set.copyOf(graphs).equals(Set.of(CommandPolicy.CURRENT,
+                CommandPolicy.REVISIONS, CommandPolicy.RECEIPTS, CommandPolicy.CONTROL)))
+                throw new IllegalArgumentException("author credit validation graphs differ");
             result.add(new Validation(profileId, profile, shape, iris(entry.get("focus")), graphs, binding(entry.get("binding"))));
         }
         return result;
@@ -218,6 +222,8 @@ final class CommandService extends ActionService {
             if (existing != null) return existing.equals(digest) ? committed(dataset, receipt) : Map.of("status", "conflict");
             String preflight = CommandInvariant.preflight(dataset, receipt, plan);
             if (preflight != null) return invalid(preflight);
+            String authorCredit = AuthorCreditPolicy.preflight(dataset, plan);
+            if (authorCredit != null) return invalid(authorCredit);
             CommandInvariant.Control before = plan.bootstrap() ? null : CommandInvariant.readControl(dataset);
             HeadCasPolicy.Snapshot heads = HeadCasPolicy.capture(dataset, plan, receipt);
             RebuildPolicy.Snapshot rebuild = RebuildPolicy.capture(dataset, plan, receipt);
@@ -355,7 +361,7 @@ final class CommandService extends ActionService {
             for (String type : List.of("PublicationDecision", "ContentPublicationDecision",
                 "ContentSearchEligibilityDecision", "ContentProjection", "PublicationSelection",
                 "RealmPublicationRejection", "ClassificationDecision", "RatingObservationRevision",
-                "TranslationLink", "WorkDerivation")) {
+                "TranslationLink", "WorkDerivation", "AuthorCreditRevision")) {
                 if (dataset.contains(revisionGraph, node,
                     org.apache.jena.vocabulary.RDF.type.asNode(), NodeFactory.createURI(RV + type))
                     && !revisionFocus.contains(subject)) return invalid("revision graph focus omitted: " + subject);
@@ -589,6 +595,9 @@ final class CommandService extends ActionService {
         Node graph = revision ? revisionGraph : NodeFactory.createURI(CommandPolicy.CURRENT);
         Node node = NodeFactory.createURI(subject);
         Node type = org.apache.jena.vocabulary.RDF.type.asNode();
+        if (dataset.contains(graph, node, type, NodeFactory.createURI(RV + "AuthorCredit"))
+            || dataset.contains(graph, node, type, NodeFactory.createURI(RV + "AuthorCreditRevision")))
+            return "work-author-credit-v1";
         if (dataset.contains(graph, node, type, NodeFactory.createURI(RV + "ClassificationApplication"))
             || dataset.contains(graph, node, type, NodeFactory.createURI(RV + "ClassificationDecision")))
             return "classification-direct-decision-v1";
@@ -631,7 +640,11 @@ final class CommandService extends ActionService {
         if (!revision && types.isEmpty()) return invalid("current graph subject has no type: " + subject);
         Canonical canonical = null;
         String basis = "https://rezics.com/definition/";
-        if (types.contains("https://schema.org/CreativeWork"))
+        if (types.contains(RV + "AuthorCredit"))
+            canonical = new Canonical("work-author-credit-v1", "credit-shape");
+        else if (types.contains(RV + "AuthorCreditRevision"))
+            canonical = new Canonical("work-author-credit-v1", "revision-shape");
+        else if (types.contains("https://schema.org/CreativeWork"))
             canonical = new Canonical("work-metadata-v1", "work-shape");
         else if (types.contains(RV + "MainVersion"))
             canonical = new Canonical("work-metadata-v1", "main-version-shape");

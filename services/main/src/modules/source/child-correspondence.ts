@@ -31,7 +31,7 @@ function children(projection: OpenLibraryWorkProjection, field: ChildField): Chi
   return projection.subjects?.map(sourceKey => ({ sourceKey, roleKey: null })) ?? null;
 }
 
-function occurrence(observation: string, field: ChildField, ordinal: number): string {
+export function sourceChildOccurrence(observation: string, field: ChildField, ordinal: number): string {
   const digest = createHash('sha256').update(JSON.stringify({ observation, field, ordinal }))
     .digest('hex');
   return `urn:rezics:source-occurrence:${digest}`;
@@ -66,10 +66,10 @@ function assessedField(field: ChildField, baseObservation: string,
         : ambiguous ? 'ambiguous'
         : otherOrdinal === undefined ? (side === 'base' ? 'removed' : 'added')
         : child.roleKey === otherList[otherOrdinal]!.roleKey ? 'matched' : 'changed';
-      return { occurrence: occurrence(ownObservation, field, ordinal), ordinal,
+      return { occurrence: sourceChildOccurrence(ownObservation, field, ordinal), ordinal,
         sourceKey: child.sourceKey, roleKey: child.roleKey, status,
         correspondence: status === 'matched' || status === 'changed'
-          ? occurrence(otherObservation, field, otherOrdinal!) : null };
+          ? sourceChildOccurrence(otherObservation, field, otherOrdinal!) : null };
     });
   return { field, coverage,
     base: mapSide(baseList, baseObservation, candidateObservation, baseCounts,

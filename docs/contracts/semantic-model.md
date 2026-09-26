@@ -87,6 +87,17 @@ assertions for contested/source-qualified facts, and identified relation instanc
 for repeated or role-qualified associations. Same-shaped values are not assumed
 semantically equal. A relation join must bind participants to the same occurrence.
 
+The bounded `work-author-credit-v1` implementation identifies each Work credit
+and its immutable revision separately. It uses `schema:roleName` and
+`schema:position`, with an explicit external participant reference; repeated Open
+Library author keys do not collapse into one occurrence or create native Agents.
+The revision retains its profile, original Work revision, confirmer and graph
+position. Its exact read is
+`GET /v1/works/{id}/author-credits/{credit}/revisions/{revision}` under Work read
+authority. Source support and correspondence remain separately owned private
+evidence. See the [adoption contract](source-lifecycle.md#bounded-native-author-credit-adoption)
+for append-only scope, authority, rights and recovery boundaries.
+
 ## Validation and query admission
 
 Validate syntax at ingress, meaning and state in the domain command, and required

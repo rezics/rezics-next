@@ -111,6 +111,11 @@
       "file": "shapes/work-address-lifecycle-v1.ttl"
     },
     {
+      "id": "work-author-credit-v1",
+      "sha256": "369b1c406b627053c612fff0c97fe18353e633df2b8128746cb4463273369281",
+      "file": "shapes/work-author-credit-v1.ttl"
+    },
+    {
       "id": "work-derivation-v1",
       "sha256": "b86e60ef69cf6a20088119dbb582154c7f27cbf30f1a8334869603e49b0dea1b",
       "file": "shapes/work-derivation-v1.ttl"
@@ -144,6 +149,7 @@
     "contexts/work-address-claim-v1.jsonld": "f09bb6241d8dd662c0638bf210591d42227ea4a993e17de4909ce07fee90e86b",
     "contexts/work-address-disposition-v1.jsonld": "011cb46e50349b1491678cdea889a92a73e3daa9b5874324663eaba634d1057e",
     "contexts/work-address-lifecycle-v1.jsonld": "1be71fd90a5259c2203ad22b86c9920466e51fbcd338ce27af1884bbb37d9dc5",
+    "contexts/work-author-credit-v1.jsonld": "84ef3a88ba73622354e03a513db785bf4c78a520fa71e6d61f1e88a441a3891d",
     "contexts/work-derivation-v1.jsonld": "1361b50b75a374f9d6cd7e290a8ae5c4f440476ce19bbc79222935c4b2b1be30",
     "contexts/work-metadata-v1.jsonld": "449072df9ee9b28f95b5a9800bbcfa90c643c70f4d88fbc14d549115b058759c",
     "shapes/classification-context-v1.ttl": "41aa65a8f1f780d5902b858a8e9238d7e932afc88add4b23d731c51cfcd0bd20",
@@ -168,11 +174,12 @@
     "shapes/work-address-claim-v1.ttl": "0447720e2e33c0f1a71259488f1710c0c837039a1a4f1931c8c1bed92f2848df",
     "shapes/work-address-disposition-v1.ttl": "30c4d9f8e3926e197186dbd3e0a9b6392db661fcd590251d3cee660880ab071c",
     "shapes/work-address-lifecycle-v1.ttl": "54a6ba17ab7e5e9a70f7e1a4c6cc8e854692b1946f5a24247db3f47ef070634f",
+    "shapes/work-author-credit-v1.ttl": "369b1c406b627053c612fff0c97fe18353e633df2b8128746cb4463273369281",
     "shapes/work-derivation-v1.ttl": "b86e60ef69cf6a20088119dbb582154c7f27cbf30f1a8334869603e49b0dea1b",
     "shapes/work-metadata-v1.ttl": "f0c4443ef63c3ff56a52217533c2c642c5076f923cbaf6db33bf49dc78ef3907",
-    "packages/model/src/generated/arbitraries.ts": "333d1a978a08936fad425a811839c26f9b1f004f23c3bb36532b512a35bca648",
-    "packages/model/src/generated/profiles.ts": "333c9bd415c8c5b983839c2264fcdcbcf36597edf04cddfa960772c358cced23",
-    "packages/model/src/generated/schemas.ts": "56533b4880c955f97d83d44b45c36c61c65dcdd3306138cee1fc6366fe8ee6ac",
-    "packages/model/src/generated/vocabulary.ts": "ff1892ae666be304d8790bb74fcce69834fd8a7d78f6ab5e467b1783c350df8c"
+    "packages/model/src/generated/arbitraries.ts": "5d210a0c1abafdb0cdd8d9484b72907b1a5ba8238b908e848442d733cdcaeebf",
+    "packages/model/src/generated/profiles.ts": "c6e6bd2d7e1f1905e8f0ee89663780537ffdc3a44cbe0354152aa7da341d0202",
+    "packages/model/src/generated/schemas.ts": "a634a80047a3c3279206e479079d981ba4d1f3c52071ca5a8a637324fc58f546",
+    "packages/model/src/generated/vocabulary.ts": "b127518eaa1c4a2e027a181255e5d234a4212f7150e4eabfaadf85d32db18888"
   }
 }

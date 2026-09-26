@@ -25,7 +25,7 @@ final class BindingPolicy {
         "classification-proposition-v1", "realm-standing-rating-context-v1",
         "realm-standing-rating-observation-v1", "realm-daily-rating-context-v1",
         "realm-daily-rating-observation-v1", "translation-link-v1", "work-derivation-v1",
-        "fixed-native-text-release-v1");
+        "fixed-native-text-release-v1", "work-author-credit-v1");
 
     static boolean applies(String profile) { return BOUND.contains(profile); }
 
@@ -78,6 +78,7 @@ final class BindingPolicy {
             case "translation-link-v1" -> translationLink();
             case "work-derivation-v1" -> workDerivation();
             case "fixed-native-text-release-v1" -> fixedRelease();
+            case "work-author-credit-v1" -> authorCredit();
             default -> throw new IllegalArgumentException("unknown binding profile");
         }
     }
@@ -327,6 +328,47 @@ final class BindingPolicy {
             absent("link", RV + "authorizationScope");
             absent("link", RV + "authorizationEpoch");
         }
+    }
+
+    private void authorCredit() {
+        keys("credit revision work work-head key ordinal actor receipt scope epoch intent", "source-role");
+        roles("credit revision");
+        if (!("work:edit:" + arg("work")).equals(arg("scope"))
+            || !arg("key").matches("/authors/OL[1-9][0-9]{0,11}A")
+            || !arg("ordinal").matches("[0-9]{1,3}"))
+            throw new IllegalArgumentException("invalid author credit binding");
+        for (String role : List.of("credit", "revision")) {
+            exact(role, RV + "work", iri(arg("work")));
+            exact(role, RV + "externalKey", text(arg("key")));
+            exact(role, "https://schema.org/position", NodeFactory.createLiteralByValue(
+                Integer.parseInt(arg("ordinal")), org.apache.jena.datatypes.xsd.XSDDatatype.XSDinteger));
+            if (arg("source-role") == null) absent(role, RV + "sourceRoleKey");
+            else exact(role, RV + "sourceRoleKey", text(arg("source-role")));
+        }
+        exact("credit", RV + "creditRevision", iri(role("revision")));
+        exact("revision", RV + "component", iri(role("credit")));
+        exact("revision", RV + "workRevision", iri(arg("work-head")));
+        exact("revision", RV + "confirmedBy", iri(arg("actor")));
+        at(arg("work-head"), RV + "component", iri(arg("work")));
+        at(arg("receipt"), RV + "authorCredit", iri(role("credit")));
+        at(arg("receipt"), RV + "creditRevision", iri(role("revision")));
+        at(arg("receipt"), RV + "work", iri(arg("work")));
+        at(arg("receipt"), RV + "workRevision", iri(arg("work-head")));
+        at(arg("receipt"), RV + "expectedHead", iri(arg("work-head")));
+        at(arg("receipt"), RV + "sourceIntent", iri(arg("intent")));
+        at(arg("receipt"), RV + "admittedScope", text(arg("scope")));
+        at(arg("receipt"), RV + "authorityEpoch", text(arg("epoch")));
+        at(arg("receipt"), RV + "outcome", iri(RV + "Succeeded"));
+        at(arg("receipt"), RV + "dataEpoch", one(role("revision"), RV + "dataEpoch"));
+        at(arg("receipt"), RV + "sequence", one(role("revision"), RV + "sequence"));
+    }
+
+    private Node one(String subject, String predicate) {
+        var values = data.find(iri(subject), iri(predicate), Node.ANY);
+        if (!values.hasNext()) throw new IllegalArgumentException("missing author credit position");
+        Node value = values.next().getObject();
+        if (values.hasNext()) throw new IllegalArgumentException("ambiguous author credit position");
+        return value;
     }
 
     private void workDerivation() {

@@ -123,6 +123,7 @@ function arbitraryValue(property: PropertyDefinition, prefixes: ReadonlyMap<stri
       '^[0-9a-f]{64}$': 'a'.repeat(64),
       '^OL[1-9][0-9]{0,11}W$': 'OL1W',
       '^/works/OL[1-9][0-9]{0,11}W$': '/works/OL1W',
+      '^/authors/OL[1-9][0-9]{0,11}A$': '/authors/OL1A',
       '^[a-z0-9]+(-[a-z0-9]+)*$': 'sample-work',
       '^urn:rezics:operation:[0-9a-f]{64}$': `urn:rezics:operation:${'a'.repeat(64)}`,
       '^urn:rezics:content:revision:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$':

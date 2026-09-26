@@ -31,6 +31,7 @@ const commands = [
   '/v1/addresses/claims', '/v1/addresses/renames', '/v1/addresses/dispositions',
 ] as const;
 const privateReads = [
+  '/v1/works/{id}/author-credits/{credit}/revisions/{revision}',
   '/v1/me/acting-contexts',
   '/v1/me/main-versions/{mainVersion}/selection',
   '/v1/me/realms/{realm}/main-versions/{mainVersion}/selection',
@@ -56,6 +57,7 @@ const privateChecks = ['/v1/me/acting-context-checks',
 const privateWrites = ['/v1/me/main-versions/{mainVersion}/variant-preference',
   '/v1/realms/{realm}/main-versions/{mainVersion}/variant-recommendation'] as const;
 const sourceReads = [
+  '/v1/sources/author-credit-supports/{support}',
   '/v1/sources/observations/{observation}',
   '/v1/sources/conversions/{conversion}',
   '/v1/sources/conversions/{base}/drift/{candidate}',
@@ -71,6 +73,8 @@ const sourceReads = [
   '/v1/works/{id}/source-title-applications/{candidateProposal}',
 ] as const;
 const sourceWrites = [
+  '/v1/works/{id}/source-author-credits',
+  '/v1/sources/author-credit-supports/{support}/withdrawals',
   '/v1/sources/intakes',
   '/v1/sources/acquisitions/open-library/works',
   '/v1/sources/observations/{observation}/conversions/open-library-work',
@@ -167,6 +171,7 @@ export async function buildMainOpenApi(): Promise<string> {
     }
   }
   for (const path of [...packageWrites, '/v2/works/{id}/source-supports',
+    '/v1/works/{id}/source-author-credits', '/v1/sources/author-credit-supports/{support}/withdrawals',
     '/v2/works/{id}/source-supports/{binding}/withdrawal']) {
     const operation = document.paths?.[path]?.post;
     if (!operation) throw new Error(`Main package write is missing from OpenAPI: ${path}`);

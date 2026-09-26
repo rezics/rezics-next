@@ -66241,6 +66241,1347 @@
         ]
       }
     },
+    "/v1/sources/author-credit-supports/{support}": {
+      "get": {
+        "operationId": "getV1SourcesAuthor-credit-supportsBySupport",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "support",
+            "required": true,
+            "schema": {
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "baseSupport": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "pattern": "^https://rezics.com/id/[0-9a-f-]{36}$",
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "conversion": {
+                      "pattern": "^https://rezics.com/id/[0-9a-f-]{36}$",
+                      "type": "string"
+                    },
+                    "correspondence": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "pattern": "^https://rezics.com/id/[0-9a-f-]{36}$",
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "correspondenceKind": {
+                      "enum": [
+                        "initial",
+                        "unique-key",
+                        "explicit",
+                        "separate-source"
+                      ],
+                      "type": "string"
+                    },
+                    "createdAt": {
+                      "type": "string"
+                    },
+                    "credit": {
+                      "properties": {
+                        "actingSubject": {
+                          "pattern": "^https://rezics.com/id/[0-9a-f-]{36}$",
+                          "type": "string"
+                        },
+                        "control": {
+                          "const": "human-confirmed",
+                          "type": "string"
+                        },
+                        "credit": {
+                          "pattern": "^https://rezics.com/id/[0-9a-f-]{36}$",
+                          "type": "string"
+                        },
+                        "dataEpoch": {
+                          "type": "string"
+                        },
+                        "expectedHead": {
+                          "pattern": "^https://rezics.com/id/[0-9a-f-]{36}$",
+                          "type": "string"
+                        },
+                        "namespace": {
+                          "const": "author",
+                          "type": "string"
+                        },
+                        "nativeOrdinal": {
+                          "type": "integer"
+                        },
+                        "participantKind": {
+                          "const": "external-reference",
+                          "type": "string"
+                        },
+                        "profile": {
+                          "const": "work-author-credit-v1",
+                          "type": "string"
+                        },
+                        "provider": {
+                          "const": "open-library",
+                          "type": "string"
+                        },
+                        "revision": {
+                          "pattern": "^https://rezics.com/id/[0-9a-f-]{36}$",
+                          "type": "string"
+                        },
+                        "rightsStatus": {
+                          "const": "undetermined",
+                          "type": "string"
+                        },
+                        "role": {
+                          "const": "author",
+                          "type": "string"
+                        },
+                        "sequence": {
+                          "type": "string"
+                        },
+                        "sourceKey": {
+                          "type": "string"
+                        },
+                        "sourceRoleKey": {
+                          "~elyTyp": 7,
+                          "nullable": true,
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "work": {
+                          "pattern": "^https://rezics.com/id/[0-9a-f-]{36}$",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "profile",
+                        "work",
+                        "credit",
+                        "revision",
+                        "expectedHead",
+                        "actingSubject",
+                        "sourceKey",
+                        "sourceRoleKey",
+                        "nativeOrdinal",
+                        "role",
+                        "participantKind",
+                        "provider",
+                        "namespace",
+                        "control",
+                        "rightsStatus",
+                        "dataEpoch",
+                        "sequence"
+                      ],
+                      "type": "object"
+                    },
+                    "headGuarantee": {
+                      "enum": [
+                        "transaction-guarded",
+                        "verified-before-commit"
+                      ],
+                      "type": "string"
+                    },
+                    "nativeReceipt": {
+                      "type": "string"
+                    },
+                    "observation": {
+                      "pattern": "^https://rezics.com/id/[0-9a-f-]{36}$",
+                      "type": "string"
+                    },
+                    "profile": {
+                      "const": "source-author-credit-support-v1",
+                      "type": "string"
+                    },
+                    "proposal": {
+                      "pattern": "^https://rezics.com/id/[0-9a-f-]{36}$",
+                      "type": "string"
+                    },
+                    "record": {
+                      "pattern": "^https://rezics.com/id/[0-9a-f-]{36}$",
+                      "type": "string"
+                    },
+                    "rightsEvidence": {
+                      "properties": {
+                        "basis": {
+                          "type": "string"
+                        },
+                        "note": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "basis",
+                        "note"
+                      ],
+                      "type": "object"
+                    },
+                    "rightsStatus": {
+                      "const": "undetermined",
+                      "type": "string"
+                    },
+                    "sourceGraphReceipt": {
+                      "type": "string"
+                    },
+                    "sourceKey": {
+                      "type": "string"
+                    },
+                    "sourceOccurrence": {
+                      "type": "string"
+                    },
+                    "sourceOrdinal": {
+                      "type": "integer"
+                    },
+                    "sourceRoleKey": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "state": {
+                      "enum": [
+                        "recorded",
+                        "withdrawn"
+                      ],
+                      "type": "string"
+                    },
+                    "support": {
+                      "pattern": "^https://rezics.com/id/[0-9a-f-]{36}$",
+                      "type": "string"
+                    },
+                    "withdrawal": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "properties": {
+                        "createdAt": {
+                          "type": "string"
+                        },
+                        "reason": {
+                          "type": "string"
+                        },
+                        "withdrawal": {
+                          "pattern": "^https://rezics.com/id/[0-9a-f-]{36}$",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "withdrawal",
+                        "reason",
+                        "createdAt"
+                      ],
+                      "type": [
+                        "object",
+                        "null"
+                      ]
+                    },
+                    "work": {
+                      "pattern": "^https://rezics.com/id/[0-9a-f-]{36}$",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "profile",
+                    "state",
+                    "support",
+                    "work",
+                    "credit",
+                    "proposal",
+                    "conversion",
+                    "record",
+                    "observation",
+                    "sourceOccurrence",
+                    "sourceOrdinal",
+                    "sourceKey",
+                    "sourceRoleKey",
+                    "correspondence",
+                    "baseSupport",
+                    "correspondenceKind",
+                    "sourceGraphReceipt",
+                    "nativeReceipt",
+                    "headGuarantee",
+                    "rightsEvidence",
+                    "rightsStatus",
+                    "createdAt",
+                    "withdrawal"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 200"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 400,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 400"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 401,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 401"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 403,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 403"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 404,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 404"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 500,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 500"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 503,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 503"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/v1/sources/author-credit-supports/{support}/withdrawals": {
+      "post": {
+        "operationId": "postV1SourcesAuthor-credit-supportsBySupportWithdrawals",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "support",
+            "required": true,
+            "schema": {
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 128,
+              "minLength": 1,
+              "pattern": "^[A-Za-z0-9:_./-]{1,128}$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "reason": {
+                    "maxLength": 500,
+                    "minLength": 1,
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "reason"
+                ],
+                "type": "object"
+              }
+            },
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "reason": {
+                    "maxLength": 500,
+                    "minLength": 1,
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "reason"
+                ],
+                "type": "object"
+              }
+            },
+            "multipart/form-data": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "reason": {
+                    "maxLength": 500,
+                    "minLength": 1,
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "reason"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "replayed": {
+                      "type": "boolean"
+                    },
+                    "support": {
+                      "properties": {
+                        "baseSupport": {
+                          "~elyTyp": 7,
+                          "nullable": true,
+                          "pattern": "^https://rezics.com/id/[0-9a-f-]{36}$",
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "conversion": {
+                          "pattern": "^https://rezics.com/id/[0-9a-f-]{36}$",
+                          "type": "string"
+                        },
+                        "correspondence": {
+                          "~elyTyp": 7,
+                          "nullable": true,
+                          "pattern": "^https://rezics.com/id/[0-9a-f-]{36}$",
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "correspondenceKind": {
+                          "enum": [
+                            "initial",
+                            "unique-key",
+                            "explicit",
+                            "separate-source"
+                          ],
+                          "type": "string"
+                        },
+                        "createdAt": {
+                          "type": "string"
+                        },
+                        "credit": {
+                          "properties": {
+                            "actingSubject": {
+                              "pattern": "^https://rezics.com/id/[0-9a-f-]{36}$",
+                              "type": "string"
+                            },
+                            "control": {
+                              "const": "human-confirmed",
+                              "type": "string"
+                            },
+                            "credit": {
+                              "pattern": "^https://rezics.com/id/[0-9a-f-]{36}$",
+                              "type": "string"
+                            },
+                            "dataEpoch": {
+                              "type": "string"
+                            },
+                            "expectedHead": {
+                              "pattern": "^https://rezics.com/id/[0-9a-f-]{36}$",
+                              "type": "string"
+                            },
+                            "namespace": {
+                              "const": "author",
+                              "type": "string"
+                            },
+                            "nativeOrdinal": {
+                              "type": "integer"
+                            },
+                            "participantKind": {
+                              "const": "external-reference",
+                              "type": "string"
+                            },
+                            "profile": {
+                              "const": "work-author-credit-v1",
+                              "type": "string"
+                            },
+                            "provider": {
+                              "const": "open-library",
+                              "type": "string"
+                            },
+                            "revision": {
+                              "pattern": "^https://rezics.com/id/[0-9a-f-]{36}$",
+                              "type": "string"
+                            },
+                            "rightsStatus": {
+                              "const": "undetermined",
+                              "type": "string"
+                            },
+                            "role": {
+                              "const": "author",
+                              "type": "string"
+                            },
+                            "sequence": {
+                              "type": "string"
+                            },
+                            "sourceKey": {
+                              "type": "string"
+                            },
+                            "sourceRoleKey": {
+                              "~elyTyp": 7,
+                              "nullable": true,
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            },
+                            "work": {
+                              "pattern": "^https://rezics.com/id/[0-9a-f-]{36}$",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "profile",
+                            "work",
+                            "credit",
+                            "revision",
+                            "expectedHead",
+                            "actingSubject",
+                            "sourceKey",
+                            "sourceRoleKey",
+                            "nativeOrdinal",
+                            "role",
+                            "participantKind",
+                            "provider",
+                            "namespace",
+                            "control",
+                            "rightsStatus",
+                            "dataEpoch",
+                            "sequence"
+                          ],
+                          "type": "object"
+                        },
+                        "headGuarantee": {
+                          "enum": [
+                            "transaction-guarded",
+                            "verified-before-commit"
+                          ],
+                          "type": "string"
+                        },
+                        "nativeReceipt": {
+                          "type": "string"
+                        },
+                        "observation": {
+                          "pattern": "^https://rezics.com/id/[0-9a-f-]{36}$",
+                          "type": "string"
+                        },
+                        "profile": {
+                          "const": "source-author-credit-support-v1",
+                          "type": "string"
+                        },
+                        "proposal": {
+                          "pattern": "^https://rezics.com/id/[0-9a-f-]{36}$",
+                          "type": "string"
+                        },
+                        "record": {
+                          "pattern": "^https://rezics.com/id/[0-9a-f-]{36}$",
+                          "type": "string"
+                        },
+                        "rightsEvidence": {
+                          "properties": {
+                            "basis": {
+                              "type": "string"
+                            },
+                            "note": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "basis",
+                            "note"
+                          ],
+                          "type": "object"
+                        },
+                        "rightsStatus": {
+                          "const": "undetermined",
+                          "type": "string"
+                        },
+                        "sourceGraphReceipt": {
+                          "type": "string"
+                        },
+                        "sourceKey": {
+                          "type": "string"
+                        },
+                        "sourceOccurrence": {
+                          "type": "string"
+                        },
+                        "sourceOrdinal": {
+                          "type": "integer"
+                        },
+                        "sourceRoleKey": {
+                          "~elyTyp": 7,
+                          "nullable": true,
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "state": {
+                          "enum": [
+                            "recorded",
+                            "withdrawn"
+                          ],
+                          "type": "string"
+                        },
+                        "support": {
+                          "pattern": "^https://rezics.com/id/[0-9a-f-]{36}$",
+                          "type": "string"
+                        },
+                        "withdrawal": {
+                          "~elyTyp": 7,
+                          "nullable": true,
+                          "properties": {
+                            "createdAt": {
+                              "type": "string"
+                            },
+                            "reason": {
+                              "type": "string"
+                            },
+                            "withdrawal": {
+                              "pattern": "^https://rezics.com/id/[0-9a-f-]{36}$",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "withdrawal",
+                            "reason",
+                            "createdAt"
+                          ],
+                          "type": [
+                            "object",
+                            "null"
+                          ]
+                        },
+                        "work": {
+                          "pattern": "^https://rezics.com/id/[0-9a-f-]{36}$",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "profile",
+                        "state",
+                        "support",
+                        "work",
+                        "credit",
+                        "proposal",
+                        "conversion",
+                        "record",
+                        "observation",
+                        "sourceOccurrence",
+                        "sourceOrdinal",
+                        "sourceKey",
+                        "sourceRoleKey",
+                        "correspondence",
+                        "baseSupport",
+                        "correspondenceKind",
+                        "sourceGraphReceipt",
+                        "nativeReceipt",
+                        "headGuarantee",
+                        "rightsEvidence",
+                        "rightsStatus",
+                        "createdAt",
+                        "withdrawal"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "support",
+                    "replayed"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 200"
+          },
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "replayed": {
+                      "type": "boolean"
+                    },
+                    "support": {
+                      "properties": {
+                        "baseSupport": {
+                          "~elyTyp": 7,
+                          "nullable": true,
+                          "pattern": "^https://rezics.com/id/[0-9a-f-]{36}$",
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "conversion": {
+                          "pattern": "^https://rezics.com/id/[0-9a-f-]{36}$",
+                          "type": "string"
+                        },
+                        "correspondence": {
+                          "~elyTyp": 7,
+                          "nullable": true,
+                          "pattern": "^https://rezics.com/id/[0-9a-f-]{36}$",
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "correspondenceKind": {
+                          "enum": [
+                            "initial",
+                            "unique-key",
+                            "explicit",
+                            "separate-source"
+                          ],
+                          "type": "string"
+                        },
+                        "createdAt": {
+                          "type": "string"
+                        },
+                        "credit": {
+                          "properties": {
+                            "actingSubject": {
+                              "pattern": "^https://rezics.com/id/[0-9a-f-]{36}$",
+                              "type": "string"
+                            },
+                            "control": {
+                              "const": "human-confirmed",
+                              "type": "string"
+                            },
+                            "credit": {
+                              "pattern": "^https://rezics.com/id/[0-9a-f-]{36}$",
+                              "type": "string"
+                            },
+                            "dataEpoch": {
+                              "type": "string"
+                            },
+                            "expectedHead": {
+                              "pattern": "^https://rezics.com/id/[0-9a-f-]{36}$",
+                              "type": "string"
+                            },
+                            "namespace": {
+                              "const": "author",
+                              "type": "string"
+                            },
+                            "nativeOrdinal": {
+                              "type": "integer"
+                            },
+                            "participantKind": {
+                              "const": "external-reference",
+                              "type": "string"
+                            },
+                            "profile": {
+                              "const": "work-author-credit-v1",
+                              "type": "string"
+                            },
+                            "provider": {
+                              "const": "open-library",
+                              "type": "string"
+                            },
+                            "revision": {
+                              "pattern": "^https://rezics.com/id/[0-9a-f-]{36}$",
+                              "type": "string"
+                            },
+                            "rightsStatus": {
+                              "const": "undetermined",
+                              "type": "string"
+                            },
+                            "role": {
+                              "const": "author",
+                              "type": "string"
+                            },
+                            "sequence": {
+                              "type": "string"
+                            },
+                            "sourceKey": {
+                              "type": "string"
+                            },
+                            "sourceRoleKey": {
+                              "~elyTyp": 7,
+                              "nullable": true,
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            },
+                            "work": {
+                              "pattern": "^https://rezics.com/id/[0-9a-f-]{36}$",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "profile",
+                            "work",
+                            "credit",
+                            "revision",
+                            "expectedHead",
+                            "actingSubject",
+                            "sourceKey",
+                            "sourceRoleKey",
+                            "nativeOrdinal",
+                            "role",
+                            "participantKind",
+                            "provider",
+                            "namespace",
+                            "control",
+                            "rightsStatus",
+                            "dataEpoch",
+                            "sequence"
+                          ],
+                          "type": "object"
+                        },
+                        "headGuarantee": {
+                          "enum": [
+                            "transaction-guarded",
+                            "verified-before-commit"
+                          ],
+                          "type": "string"
+                        },
+                        "nativeReceipt": {
+                          "type": "string"
+                        },
+                        "observation": {
+                          "pattern": "^https://rezics.com/id/[0-9a-f-]{36}$",
+                          "type": "string"
+                        },
+                        "profile": {
+                          "const": "source-author-credit-support-v1",
+                          "type": "string"
+                        },
+                        "proposal": {
+                          "pattern": "^https://rezics.com/id/[0-9a-f-]{36}$",
+                          "type": "string"
+                        },
+                        "record": {
+                          "pattern": "^https://rezics.com/id/[0-9a-f-]{36}$",
+                          "type": "string"
+                        },
+                        "rightsEvidence": {
+                          "properties": {
+                            "basis": {
+                              "type": "string"
+                            },
+                            "note": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "basis",
+                            "note"
+                          ],
+                          "type": "object"
+                        },
+                        "rightsStatus": {
+                          "const": "undetermined",
+                          "type": "string"
+                        },
+                        "sourceGraphReceipt": {
+                          "type": "string"
+                        },
+                        "sourceKey": {
+                          "type": "string"
+                        },
+                        "sourceOccurrence": {
+                          "type": "string"
+                        },
+                        "sourceOrdinal": {
+                          "type": "integer"
+                        },
+                        "sourceRoleKey": {
+                          "~elyTyp": 7,
+                          "nullable": true,
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "state": {
+                          "enum": [
+                            "recorded",
+                            "withdrawn"
+                          ],
+                          "type": "string"
+                        },
+                        "support": {
+                          "pattern": "^https://rezics.com/id/[0-9a-f-]{36}$",
+                          "type": "string"
+                        },
+                        "withdrawal": {
+                          "~elyTyp": 7,
+                          "nullable": true,
+                          "properties": {
+                            "createdAt": {
+                              "type": "string"
+                            },
+                            "reason": {
+                              "type": "string"
+                            },
+                            "withdrawal": {
+                              "pattern": "^https://rezics.com/id/[0-9a-f-]{36}$",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "withdrawal",
+                            "reason",
+                            "createdAt"
+                          ],
+                          "type": [
+                            "object",
+                            "null"
+                          ]
+                        },
+                        "work": {
+                          "pattern": "^https://rezics.com/id/[0-9a-f-]{36}$",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "profile",
+                        "state",
+                        "support",
+                        "work",
+                        "credit",
+                        "proposal",
+                        "conversion",
+                        "record",
+                        "observation",
+                        "sourceOccurrence",
+                        "sourceOrdinal",
+                        "sourceKey",
+                        "sourceRoleKey",
+                        "correspondence",
+                        "baseSupport",
+                        "correspondenceKind",
+                        "sourceGraphReceipt",
+                        "nativeReceipt",
+                        "headGuarantee",
+                        "rightsEvidence",
+                        "rightsStatus",
+                        "createdAt",
+                        "withdrawal"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "support",
+                    "replayed"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 201"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 400,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 400"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 401,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 401"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 403,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 403"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 404,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 404"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 409,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 409"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 500,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 500"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 503,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 503"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
     "/v1/sources/conversions/{base}/child-correspondences/{candidate}": {
       "get": {
         "operationId": "getV1SourcesConversionsByBaseChild-correspondencesByCandidate",
@@ -75939,6 +77280,1484 @@
             "description": "Response for status 503"
           }
         }
+      }
+    },
+    "/v1/works/{id}/author-credits/{credit}/revisions/{revision}": {
+      "get": {
+        "operationId": "getV1WorksByIdAuthor-creditsByCreditRevisionsByRevision",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "credit",
+            "required": true,
+            "schema": {
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "revision",
+            "required": true,
+            "schema": {
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "actingSubject",
+            "required": true,
+            "schema": {
+              "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "actingSubject": {
+                      "pattern": "^https://rezics.com/id/[0-9a-f-]{36}$",
+                      "type": "string"
+                    },
+                    "control": {
+                      "const": "human-confirmed",
+                      "type": "string"
+                    },
+                    "credit": {
+                      "pattern": "^https://rezics.com/id/[0-9a-f-]{36}$",
+                      "type": "string"
+                    },
+                    "dataEpoch": {
+                      "type": "string"
+                    },
+                    "expectedHead": {
+                      "pattern": "^https://rezics.com/id/[0-9a-f-]{36}$",
+                      "type": "string"
+                    },
+                    "namespace": {
+                      "const": "author",
+                      "type": "string"
+                    },
+                    "nativeOrdinal": {
+                      "type": "integer"
+                    },
+                    "participantKind": {
+                      "const": "external-reference",
+                      "type": "string"
+                    },
+                    "profile": {
+                      "const": "work-author-credit-v1",
+                      "type": "string"
+                    },
+                    "provider": {
+                      "const": "open-library",
+                      "type": "string"
+                    },
+                    "revision": {
+                      "pattern": "^https://rezics.com/id/[0-9a-f-]{36}$",
+                      "type": "string"
+                    },
+                    "rightsStatus": {
+                      "const": "undetermined",
+                      "type": "string"
+                    },
+                    "role": {
+                      "const": "author",
+                      "type": "string"
+                    },
+                    "sequence": {
+                      "type": "string"
+                    },
+                    "sourceKey": {
+                      "type": "string"
+                    },
+                    "sourceRoleKey": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "work": {
+                      "pattern": "^https://rezics.com/id/[0-9a-f-]{36}$",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "profile",
+                    "work",
+                    "credit",
+                    "revision",
+                    "expectedHead",
+                    "actingSubject",
+                    "sourceKey",
+                    "sourceRoleKey",
+                    "nativeOrdinal",
+                    "role",
+                    "participantKind",
+                    "provider",
+                    "namespace",
+                    "control",
+                    "rightsStatus",
+                    "dataEpoch",
+                    "sequence"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 200"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 400,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 400"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 401,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 401"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 403,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 403"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 404,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 404"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 500,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 500"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 503,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 503"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/v1/works/{id}/source-author-credits": {
+      "post": {
+        "operationId": "postV1WorksByIdSource-author-credits",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 128,
+              "minLength": 1,
+              "pattern": "^[A-Za-z0-9:_./-]{1,128}$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "actingSubject": {
+                    "pattern": "^https://rezics.com/id/[0-9a-f-]{36}$",
+                    "type": "string"
+                  },
+                  "baseSupport": {
+                    "~elyTyp": 7,
+                    "nullable": true,
+                    "pattern": "^https://rezics.com/id/[0-9a-f-]{36}$",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "confirmedRoleKey": {
+                    "~elyTyp": 7,
+                    "maxLength": 200,
+                    "minLength": 1,
+                    "nullable": true,
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "confirmedSourceKey": {
+                    "maxLength": 200,
+                    "type": "string"
+                  },
+                  "confirmedUse": {
+                    "const": "factual-reference-only",
+                    "type": "string"
+                  },
+                  "conversion": {
+                    "pattern": "^https://rezics.com/id/[0-9a-f-]{36}$",
+                    "type": "string"
+                  },
+                  "correspondence": {
+                    "~elyTyp": 7,
+                    "nullable": true,
+                    "pattern": "^https://rezics.com/id/[0-9a-f-]{36}$",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "expectedHead": {
+                    "pattern": "^https://rezics.com/id/[0-9a-f-]{36}$",
+                    "type": "string"
+                  },
+                  "nativeOrdinal": {
+                    "maximum": 127,
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "occurrence": {
+                    "pattern": "^urn:rezics:source-occurrence:[0-9a-f]{64}$",
+                    "type": "string"
+                  },
+                  "profile": {
+                    "const": "source-author-credit-adoption-v1",
+                    "type": "string"
+                  },
+                  "proposal": {
+                    "pattern": "^https://rezics.com/id/[0-9a-f-]{36}$",
+                    "type": "string"
+                  },
+                  "sourceOrdinal": {
+                    "maximum": 127,
+                    "minimum": 0,
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "profile",
+                  "proposal",
+                  "conversion",
+                  "expectedHead",
+                  "actingSubject",
+                  "occurrence",
+                  "sourceOrdinal",
+                  "nativeOrdinal",
+                  "confirmedSourceKey",
+                  "confirmedRoleKey",
+                  "baseSupport",
+                  "correspondence",
+                  "confirmedUse"
+                ],
+                "type": "object"
+              }
+            },
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "actingSubject": {
+                    "pattern": "^https://rezics.com/id/[0-9a-f-]{36}$",
+                    "type": "string"
+                  },
+                  "baseSupport": {
+                    "~elyTyp": 7,
+                    "nullable": true,
+                    "pattern": "^https://rezics.com/id/[0-9a-f-]{36}$",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "confirmedRoleKey": {
+                    "~elyTyp": 7,
+                    "maxLength": 200,
+                    "minLength": 1,
+                    "nullable": true,
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "confirmedSourceKey": {
+                    "maxLength": 200,
+                    "type": "string"
+                  },
+                  "confirmedUse": {
+                    "const": "factual-reference-only",
+                    "type": "string"
+                  },
+                  "conversion": {
+                    "pattern": "^https://rezics.com/id/[0-9a-f-]{36}$",
+                    "type": "string"
+                  },
+                  "correspondence": {
+                    "~elyTyp": 7,
+                    "nullable": true,
+                    "pattern": "^https://rezics.com/id/[0-9a-f-]{36}$",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "expectedHead": {
+                    "pattern": "^https://rezics.com/id/[0-9a-f-]{36}$",
+                    "type": "string"
+                  },
+                  "nativeOrdinal": {
+                    "maximum": 127,
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "occurrence": {
+                    "pattern": "^urn:rezics:source-occurrence:[0-9a-f]{64}$",
+                    "type": "string"
+                  },
+                  "profile": {
+                    "const": "source-author-credit-adoption-v1",
+                    "type": "string"
+                  },
+                  "proposal": {
+                    "pattern": "^https://rezics.com/id/[0-9a-f-]{36}$",
+                    "type": "string"
+                  },
+                  "sourceOrdinal": {
+                    "maximum": 127,
+                    "minimum": 0,
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "profile",
+                  "proposal",
+                  "conversion",
+                  "expectedHead",
+                  "actingSubject",
+                  "occurrence",
+                  "sourceOrdinal",
+                  "nativeOrdinal",
+                  "confirmedSourceKey",
+                  "confirmedRoleKey",
+                  "baseSupport",
+                  "correspondence",
+                  "confirmedUse"
+                ],
+                "type": "object"
+              }
+            },
+            "multipart/form-data": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "actingSubject": {
+                    "pattern": "^https://rezics.com/id/[0-9a-f-]{36}$",
+                    "type": "string"
+                  },
+                  "baseSupport": {
+                    "~elyTyp": 7,
+                    "nullable": true,
+                    "pattern": "^https://rezics.com/id/[0-9a-f-]{36}$",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "confirmedRoleKey": {
+                    "~elyTyp": 7,
+                    "maxLength": 200,
+                    "minLength": 1,
+                    "nullable": true,
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "confirmedSourceKey": {
+                    "maxLength": 200,
+                    "type": "string"
+                  },
+                  "confirmedUse": {
+                    "const": "factual-reference-only",
+                    "type": "string"
+                  },
+                  "conversion": {
+                    "pattern": "^https://rezics.com/id/[0-9a-f-]{36}$",
+                    "type": "string"
+                  },
+                  "correspondence": {
+                    "~elyTyp": 7,
+                    "nullable": true,
+                    "pattern": "^https://rezics.com/id/[0-9a-f-]{36}$",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "expectedHead": {
+                    "pattern": "^https://rezics.com/id/[0-9a-f-]{36}$",
+                    "type": "string"
+                  },
+                  "nativeOrdinal": {
+                    "maximum": 127,
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "occurrence": {
+                    "pattern": "^urn:rezics:source-occurrence:[0-9a-f]{64}$",
+                    "type": "string"
+                  },
+                  "profile": {
+                    "const": "source-author-credit-adoption-v1",
+                    "type": "string"
+                  },
+                  "proposal": {
+                    "pattern": "^https://rezics.com/id/[0-9a-f-]{36}$",
+                    "type": "string"
+                  },
+                  "sourceOrdinal": {
+                    "maximum": 127,
+                    "minimum": 0,
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "profile",
+                  "proposal",
+                  "conversion",
+                  "expectedHead",
+                  "actingSubject",
+                  "occurrence",
+                  "sourceOrdinal",
+                  "nativeOrdinal",
+                  "confirmedSourceKey",
+                  "confirmedRoleKey",
+                  "baseSupport",
+                  "correspondence",
+                  "confirmedUse"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "replayed": {
+                      "type": "boolean"
+                    },
+                    "support": {
+                      "properties": {
+                        "baseSupport": {
+                          "~elyTyp": 7,
+                          "nullable": true,
+                          "pattern": "^https://rezics.com/id/[0-9a-f-]{36}$",
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "conversion": {
+                          "pattern": "^https://rezics.com/id/[0-9a-f-]{36}$",
+                          "type": "string"
+                        },
+                        "correspondence": {
+                          "~elyTyp": 7,
+                          "nullable": true,
+                          "pattern": "^https://rezics.com/id/[0-9a-f-]{36}$",
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "correspondenceKind": {
+                          "enum": [
+                            "initial",
+                            "unique-key",
+                            "explicit",
+                            "separate-source"
+                          ],
+                          "type": "string"
+                        },
+                        "createdAt": {
+                          "type": "string"
+                        },
+                        "credit": {
+                          "properties": {
+                            "actingSubject": {
+                              "pattern": "^https://rezics.com/id/[0-9a-f-]{36}$",
+                              "type": "string"
+                            },
+                            "control": {
+                              "const": "human-confirmed",
+                              "type": "string"
+                            },
+                            "credit": {
+                              "pattern": "^https://rezics.com/id/[0-9a-f-]{36}$",
+                              "type": "string"
+                            },
+                            "dataEpoch": {
+                              "type": "string"
+                            },
+                            "expectedHead": {
+                              "pattern": "^https://rezics.com/id/[0-9a-f-]{36}$",
+                              "type": "string"
+                            },
+                            "namespace": {
+                              "const": "author",
+                              "type": "string"
+                            },
+                            "nativeOrdinal": {
+                              "type": "integer"
+                            },
+                            "participantKind": {
+                              "const": "external-reference",
+                              "type": "string"
+                            },
+                            "profile": {
+                              "const": "work-author-credit-v1",
+                              "type": "string"
+                            },
+                            "provider": {
+                              "const": "open-library",
+                              "type": "string"
+                            },
+                            "revision": {
+                              "pattern": "^https://rezics.com/id/[0-9a-f-]{36}$",
+                              "type": "string"
+                            },
+                            "rightsStatus": {
+                              "const": "undetermined",
+                              "type": "string"
+                            },
+                            "role": {
+                              "const": "author",
+                              "type": "string"
+                            },
+                            "sequence": {
+                              "type": "string"
+                            },
+                            "sourceKey": {
+                              "type": "string"
+                            },
+                            "sourceRoleKey": {
+                              "~elyTyp": 7,
+                              "nullable": true,
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            },
+                            "work": {
+                              "pattern": "^https://rezics.com/id/[0-9a-f-]{36}$",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "profile",
+                            "work",
+                            "credit",
+                            "revision",
+                            "expectedHead",
+                            "actingSubject",
+                            "sourceKey",
+                            "sourceRoleKey",
+                            "nativeOrdinal",
+                            "role",
+                            "participantKind",
+                            "provider",
+                            "namespace",
+                            "control",
+                            "rightsStatus",
+                            "dataEpoch",
+                            "sequence"
+                          ],
+                          "type": "object"
+                        },
+                        "headGuarantee": {
+                          "enum": [
+                            "transaction-guarded",
+                            "verified-before-commit"
+                          ],
+                          "type": "string"
+                        },
+                        "nativeReceipt": {
+                          "type": "string"
+                        },
+                        "observation": {
+                          "pattern": "^https://rezics.com/id/[0-9a-f-]{36}$",
+                          "type": "string"
+                        },
+                        "profile": {
+                          "const": "source-author-credit-support-v1",
+                          "type": "string"
+                        },
+                        "proposal": {
+                          "pattern": "^https://rezics.com/id/[0-9a-f-]{36}$",
+                          "type": "string"
+                        },
+                        "record": {
+                          "pattern": "^https://rezics.com/id/[0-9a-f-]{36}$",
+                          "type": "string"
+                        },
+                        "rightsEvidence": {
+                          "properties": {
+                            "basis": {
+                              "type": "string"
+                            },
+                            "note": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "basis",
+                            "note"
+                          ],
+                          "type": "object"
+                        },
+                        "rightsStatus": {
+                          "const": "undetermined",
+                          "type": "string"
+                        },
+                        "sourceGraphReceipt": {
+                          "type": "string"
+                        },
+                        "sourceKey": {
+                          "type": "string"
+                        },
+                        "sourceOccurrence": {
+                          "type": "string"
+                        },
+                        "sourceOrdinal": {
+                          "type": "integer"
+                        },
+                        "sourceRoleKey": {
+                          "~elyTyp": 7,
+                          "nullable": true,
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "state": {
+                          "enum": [
+                            "recorded",
+                            "withdrawn"
+                          ],
+                          "type": "string"
+                        },
+                        "support": {
+                          "pattern": "^https://rezics.com/id/[0-9a-f-]{36}$",
+                          "type": "string"
+                        },
+                        "withdrawal": {
+                          "~elyTyp": 7,
+                          "nullable": true,
+                          "properties": {
+                            "createdAt": {
+                              "type": "string"
+                            },
+                            "reason": {
+                              "type": "string"
+                            },
+                            "withdrawal": {
+                              "pattern": "^https://rezics.com/id/[0-9a-f-]{36}$",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "withdrawal",
+                            "reason",
+                            "createdAt"
+                          ],
+                          "type": [
+                            "object",
+                            "null"
+                          ]
+                        },
+                        "work": {
+                          "pattern": "^https://rezics.com/id/[0-9a-f-]{36}$",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "profile",
+                        "state",
+                        "support",
+                        "work",
+                        "credit",
+                        "proposal",
+                        "conversion",
+                        "record",
+                        "observation",
+                        "sourceOccurrence",
+                        "sourceOrdinal",
+                        "sourceKey",
+                        "sourceRoleKey",
+                        "correspondence",
+                        "baseSupport",
+                        "correspondenceKind",
+                        "sourceGraphReceipt",
+                        "nativeReceipt",
+                        "headGuarantee",
+                        "rightsEvidence",
+                        "rightsStatus",
+                        "createdAt",
+                        "withdrawal"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "support",
+                    "replayed"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 200"
+          },
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "replayed": {
+                      "type": "boolean"
+                    },
+                    "support": {
+                      "properties": {
+                        "baseSupport": {
+                          "~elyTyp": 7,
+                          "nullable": true,
+                          "pattern": "^https://rezics.com/id/[0-9a-f-]{36}$",
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "conversion": {
+                          "pattern": "^https://rezics.com/id/[0-9a-f-]{36}$",
+                          "type": "string"
+                        },
+                        "correspondence": {
+                          "~elyTyp": 7,
+                          "nullable": true,
+                          "pattern": "^https://rezics.com/id/[0-9a-f-]{36}$",
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "correspondenceKind": {
+                          "enum": [
+                            "initial",
+                            "unique-key",
+                            "explicit",
+                            "separate-source"
+                          ],
+                          "type": "string"
+                        },
+                        "createdAt": {
+                          "type": "string"
+                        },
+                        "credit": {
+                          "properties": {
+                            "actingSubject": {
+                              "pattern": "^https://rezics.com/id/[0-9a-f-]{36}$",
+                              "type": "string"
+                            },
+                            "control": {
+                              "const": "human-confirmed",
+                              "type": "string"
+                            },
+                            "credit": {
+                              "pattern": "^https://rezics.com/id/[0-9a-f-]{36}$",
+                              "type": "string"
+                            },
+                            "dataEpoch": {
+                              "type": "string"
+                            },
+                            "expectedHead": {
+                              "pattern": "^https://rezics.com/id/[0-9a-f-]{36}$",
+                              "type": "string"
+                            },
+                            "namespace": {
+                              "const": "author",
+                              "type": "string"
+                            },
+                            "nativeOrdinal": {
+                              "type": "integer"
+                            },
+                            "participantKind": {
+                              "const": "external-reference",
+                              "type": "string"
+                            },
+                            "profile": {
+                              "const": "work-author-credit-v1",
+                              "type": "string"
+                            },
+                            "provider": {
+                              "const": "open-library",
+                              "type": "string"
+                            },
+                            "revision": {
+                              "pattern": "^https://rezics.com/id/[0-9a-f-]{36}$",
+                              "type": "string"
+                            },
+                            "rightsStatus": {
+                              "const": "undetermined",
+                              "type": "string"
+                            },
+                            "role": {
+                              "const": "author",
+                              "type": "string"
+                            },
+                            "sequence": {
+                              "type": "string"
+                            },
+                            "sourceKey": {
+                              "type": "string"
+                            },
+                            "sourceRoleKey": {
+                              "~elyTyp": 7,
+                              "nullable": true,
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            },
+                            "work": {
+                              "pattern": "^https://rezics.com/id/[0-9a-f-]{36}$",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "profile",
+                            "work",
+                            "credit",
+                            "revision",
+                            "expectedHead",
+                            "actingSubject",
+                            "sourceKey",
+                            "sourceRoleKey",
+                            "nativeOrdinal",
+                            "role",
+                            "participantKind",
+                            "provider",
+                            "namespace",
+                            "control",
+                            "rightsStatus",
+                            "dataEpoch",
+                            "sequence"
+                          ],
+                          "type": "object"
+                        },
+                        "headGuarantee": {
+                          "enum": [
+                            "transaction-guarded",
+                            "verified-before-commit"
+                          ],
+                          "type": "string"
+                        },
+                        "nativeReceipt": {
+                          "type": "string"
+                        },
+                        "observation": {
+                          "pattern": "^https://rezics.com/id/[0-9a-f-]{36}$",
+                          "type": "string"
+                        },
+                        "profile": {
+                          "const": "source-author-credit-support-v1",
+                          "type": "string"
+                        },
+                        "proposal": {
+                          "pattern": "^https://rezics.com/id/[0-9a-f-]{36}$",
+                          "type": "string"
+                        },
+                        "record": {
+                          "pattern": "^https://rezics.com/id/[0-9a-f-]{36}$",
+                          "type": "string"
+                        },
+                        "rightsEvidence": {
+                          "properties": {
+                            "basis": {
+                              "type": "string"
+                            },
+                            "note": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "basis",
+                            "note"
+                          ],
+                          "type": "object"
+                        },
+                        "rightsStatus": {
+                          "const": "undetermined",
+                          "type": "string"
+                        },
+                        "sourceGraphReceipt": {
+                          "type": "string"
+                        },
+                        "sourceKey": {
+                          "type": "string"
+                        },
+                        "sourceOccurrence": {
+                          "type": "string"
+                        },
+                        "sourceOrdinal": {
+                          "type": "integer"
+                        },
+                        "sourceRoleKey": {
+                          "~elyTyp": 7,
+                          "nullable": true,
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "state": {
+                          "enum": [
+                            "recorded",
+                            "withdrawn"
+                          ],
+                          "type": "string"
+                        },
+                        "support": {
+                          "pattern": "^https://rezics.com/id/[0-9a-f-]{36}$",
+                          "type": "string"
+                        },
+                        "withdrawal": {
+                          "~elyTyp": 7,
+                          "nullable": true,
+                          "properties": {
+                            "createdAt": {
+                              "type": "string"
+                            },
+                            "reason": {
+                              "type": "string"
+                            },
+                            "withdrawal": {
+                              "pattern": "^https://rezics.com/id/[0-9a-f-]{36}$",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "withdrawal",
+                            "reason",
+                            "createdAt"
+                          ],
+                          "type": [
+                            "object",
+                            "null"
+                          ]
+                        },
+                        "work": {
+                          "pattern": "^https://rezics.com/id/[0-9a-f-]{36}$",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "profile",
+                        "state",
+                        "support",
+                        "work",
+                        "credit",
+                        "proposal",
+                        "conversion",
+                        "record",
+                        "observation",
+                        "sourceOccurrence",
+                        "sourceOrdinal",
+                        "sourceKey",
+                        "sourceRoleKey",
+                        "correspondence",
+                        "baseSupport",
+                        "correspondenceKind",
+                        "sourceGraphReceipt",
+                        "nativeReceipt",
+                        "headGuarantee",
+                        "rightsEvidence",
+                        "rightsStatus",
+                        "createdAt",
+                        "withdrawal"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "support",
+                    "replayed"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 201"
+          },
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "operationId": {
+                      "type": "string"
+                    },
+                    "phase": {
+                      "type": "string"
+                    },
+                    "result": {
+                      "type": "null"
+                    },
+                    "retry": {
+                      "properties": {
+                        "afterMs": {
+                          "type": "number"
+                        },
+                        "allowed": {
+                          "const": true,
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "allowed",
+                        "afterMs"
+                      ],
+                      "type": "object"
+                    },
+                    "status": {
+                      "const": "reconciling",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "operationId",
+                    "status",
+                    "phase",
+                    "result",
+                    "retry"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 202"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 400,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 400"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 401,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 401"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 403,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 403"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 404,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 404"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 409,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 409"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 500,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 500"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 503,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 503"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
       }
     },
     "/v1/works/{id}/source-refresh-assessments/{candidateProposal}": {

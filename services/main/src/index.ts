@@ -31,6 +31,7 @@ import { OpenLibrarySourceGraph } from './modules/source/graph-projection.ts';
 import { SourceNativeWorkProposalStore } from './modules/source/native-work-proposal.ts';
 import { SourceNativeWorkAdoptionStore } from './modules/source/native-work-adoption.ts';
 import { SourceNativeWorkAttachmentStore } from './modules/source/native-work-attachment.ts';
+import { SourceAuthorCreditStore } from './modules/source/author-credit.ts';
 import { AccountAssertionVerifier } from './modules/account/verify-assertion.ts';
 import { relayContentProjectionOnce } from './modules/content-publication/relay.ts';
 
@@ -79,6 +80,7 @@ const account = new AccountAssertionVerifier({
 const access = new AccessAdmissionRegistry(pool);
 const sourceAdoptions = new SourceNativeWorkAdoptionStore(contentPool, sourceProposals,
   environment, account, access);
+const sourceCorrespondences = new SourceChildCorrespondenceStore(contentPool, sourceConversions);
 const app = createMainApp(fuseki, {
   environment: {
     ...environment,
@@ -99,7 +101,9 @@ const app = createMainApp(fuseki, {
   roles: new AccessRoles(pool),
   sourceIntake,
   sourceConversions,
-  sourceCorrespondences: new SourceChildCorrespondenceStore(contentPool, sourceConversions),
+  sourceCorrespondences,
+  sourceAuthorCredits: new SourceAuthorCreditStore(contentPool, sourceProposals, sourceConversions,
+    sourceCorrespondences, environment, account, access),
   packageResolutions: new GoMvsResolutionStore(contentPool, packageCaptures),
   packageCargoResolutions: new CargoResolutionStore(contentPool),
   packageCaptures,

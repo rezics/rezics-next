@@ -1,0 +1,102 @@
+{
+  "@context": {
+    "sh": {
+      "@id": "http://www.w3.org/ns/shacl#",
+      "@prefix": true
+    },
+    "rdf": {
+      "@id": "http://www.w3.org/1999/02/22-rdf-syntax-ns#",
+      "@prefix": true
+    },
+    "xsd": {
+      "@id": "http://www.w3.org/2001/XMLSchema#",
+      "@prefix": true
+    },
+    "schema": {
+      "@id": "https://schema.org/",
+      "@prefix": true
+    },
+    "rv": {
+      "@id": "https://rezics.com/vocab/",
+      "@prefix": true
+    },
+    "rdf:type": {
+      "@id": "http://www.w3.org/1999/02/22-rdf-syntax-ns#type",
+      "@type": "@id"
+    },
+    "rv:agent": {
+      "@id": "https://rezics.com/vocab/agent"
+    },
+    "rv:component": {
+      "@id": "https://rezics.com/vocab/component",
+      "@type": "@id"
+    },
+    "rv:confirmedBy": {
+      "@id": "https://rezics.com/vocab/confirmedBy",
+      "@type": "@id"
+    },
+    "rv:creditRevision": {
+      "@id": "https://rezics.com/vocab/creditRevision",
+      "@type": "@id"
+    },
+    "rv:dataEpoch": {
+      "@id": "https://rezics.com/vocab/dataEpoch"
+    },
+    "rv:editControl": {
+      "@id": "https://rezics.com/vocab/editControl",
+      "@type": "@id"
+    },
+    "rv:externalKey": {
+      "@id": "https://rezics.com/vocab/externalKey"
+    },
+    "rv:externalNamespace": {
+      "@id": "https://rezics.com/vocab/externalNamespace",
+      "@type": "@id"
+    },
+    "rv:externalProvider": {
+      "@id": "https://rezics.com/vocab/externalProvider",
+      "@type": "@id"
+    },
+    "rv:modelRevision": {
+      "@id": "https://rezics.com/vocab/modelRevision",
+      "@type": "@id"
+    },
+    "rv:predecessor": {
+      "@id": "https://rezics.com/vocab/predecessor"
+    },
+    "rv:rightsStatus": {
+      "@id": "https://rezics.com/vocab/rightsStatus",
+      "@type": "@id"
+    },
+    "rv:sequence": {
+      "@id": "https://rezics.com/vocab/sequence",
+      "@type": "xsd:integer"
+    },
+    "rv:shapeRevision": {
+      "@id": "https://rezics.com/vocab/shapeRevision",
+      "@type": "@id"
+    },
+    "rv:sourceRoleKey": {
+      "@id": "https://rezics.com/vocab/sourceRoleKey"
+    },
+    "rv:work": {
+      "@id": "https://rezics.com/vocab/work",
+      "@type": "@id"
+    },
+    "rv:workRevision": {
+      "@id": "https://rezics.com/vocab/workRevision",
+      "@type": "@id"
+    },
+    "schema:author": {
+      "@id": "https://schema.org/author"
+    },
+    "schema:position": {
+      "@id": "https://schema.org/position",
+      "@type": "xsd:integer"
+    },
+    "schema:roleName": {
+      "@id": "https://schema.org/roleName",
+      "@type": "@id"
+    }
+  }
+}

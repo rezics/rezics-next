@@ -165,6 +165,30 @@ received 404, and deactivation denied both operations. This is partial IAM10
 and LIVE04 evidence; the correspondence remains source-only and does not qualify
 native child identity or a provider-wide change run.
 
+The bounded [native author-credit fixture](../../tests/qa/integration/source-author-credit.test.ts)
+passed selected integration `20260926t074730-1831a8` through real
+Account/Access/Main/Content/Jena owners with isolated provider transport. It adopts
+two repeated author occurrences independently, adds explicit and unambiguous
+reorder support without rewriting native position, and rejects ambiguity, reuse,
+wrong principal, missing edit authority, stale proposal/head, unrelated record,
+changed role and missing/unmapped lists. A lost graph acknowledgement and missing
+Source completion certificate recover by exact authorized retry. A native Work
+title edit and another source support survive withdrawal. At 8/64/512 background
+intents the selected lookup returns one row within 32 buffer accesses; reads use
+at most 16 graph calls and 64 KiB, and creation at most 24 calls and 64 KiB plus one
+command under 24 KiB, two native focuses and one intent/certificate pair.
+
+The [held-graph recovery fixture](../../tests/qa/fault-recovery/source-author-credit.test.ts)
+passed `20260926t074730-20dab9`. It restores a fresh isolated graph from retained
+Source/Access/relay owners, rejects missing or mismatched Source evidence, and
+preserves the withdrawn support and exact native event/revision. Preparation took
+less than the 600-second limit. It uses a monotonic decimal routing lineage as
+required by the existing restore protocol; ordinary stack defaults use opaque
+UUID routing epochs. This does not qualify coordinated Source/Access physical
+PITR, general protection/control, editable native credit history, Agent resolution,
+other child families or a live provider version-set run. LIVE04 and the associated
+model IDs remain partial.
+
 Selected real integration `20260925t210746-1c1306` exercises the private
 source-graph case through Main, the PostgreSQL source owner and cmd0.5.22 Jena.
 It verifies that a complete conversion projects three source-qualified nodes

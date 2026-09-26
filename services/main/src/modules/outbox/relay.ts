@@ -162,7 +162,7 @@ export interface MainCloudEvent {
   specversion: '1.0';
   id: string;
   source: typeof SOURCE;
-  type: 'com.rezics.work.created.v1' | 'com.rezics.work.edited.v1'
+  type: 'com.rezics.work.created.v1' | 'com.rezics.work.edited.v1' | 'com.rezics.work.author-credit-adopted.v1'
     | 'com.rezics.work.edit-rejected.v1' | 'com.rezics.work.admission-cancelled.v1'
     | 'com.rezics.contribution.draft-created.v1'
     | 'com.rezics.contribution.draft-edited.v1'
@@ -206,6 +206,7 @@ export interface MainCloudEvent {
       operation?: string; work?: string; mainVersion?: string; workRevision?: string;
       mainRevision?: string; expectedHead?: string; reason?: 'stale-head';
       workManifest?: string; mainManifest?: string;
+      authorCredit?: string; creditRevision?: string; sourceIntent?: string;
       contribution?: string; draftRevision?: string; draftManifest?: string;
       publicationDecision?: string; publicationManifest?: string; selectedDraft?: string;
       selection?: string; selectionManifest?: string; matchUnit?: string;
@@ -673,7 +674,7 @@ export async function readMainOutboxEnvelope(fuseki: FusekiClient, batch: MainOu
     ?sourceAddress ?sourceRevision ?newAddress ?newRevision ?oldSlug
     ?eventRedirectWork ?redirectWork ?eventSourceConversion
     ?sourceRecord ?sourceObservation ?sourceConversion ?sourceByteDigest
-    ?sourceMappingRevision WHERE {
+    ?sourceMappingRevision ?authorCredit ?creditRevision ?sourceIntent WHERE {
     GRAPH ${iri(GRAPHS.outbox)} {
       ${iri(eventId)} a ?kind ; rv:ordinal ?ordinal ; rv:action ?action ; rv:receipt ?receipt .
       OPTIONAL { ${iri(eventId)} rv:operation ?eventOperation }
@@ -707,6 +708,9 @@ export async function readMainOutboxEnvelope(fuseki: FusekiClient, batch: MainOu
       OPTIONAL { ?receipt rv:work ?work }
       OPTIONAL { ?receipt rv:mainVersion ?main }
       OPTIONAL { ?receipt rv:workRevision ?workRevision }
+      OPTIONAL { ?receipt rv:authorCredit ?authorCredit }
+      OPTIONAL { ?receipt rv:creditRevision ?creditRevision }
+      OPTIONAL { ?receipt rv:sourceIntent ?sourceIntent }
       OPTIONAL { ?receipt rv:mainRevision ?mainRevision }
       OPTIONAL { ?receipt rv:expectedHead ?expectedHead }
       OPTIONAL { ?receipt rv:reason ?reason }
@@ -791,6 +795,29 @@ export async function readMainOutboxEnvelope(fuseki: FusekiClient, batch: MainOu
     throw new OutboxIncomplete('event ordinal exceeds batch member count');
   }
   const ordinal = Number(ordinalValue);
+  if (kind === `${RV}AuthorCreditAdoptedEvent`) {
+    const credit = value('authorCredit'), revision = value('creditRevision'), intent = value('sourceIntent');
+    const work = value('work'), head = value('expectedHead');
+    if (action !== 'work.edit' || outcome !== `${RV}Succeeded` || !receiptId || !requestDigest
+      || !admissionId || !authorityEpoch || !scope || !credit || !revision || !intent || !work || !head
+      || scope !== `work:edit:${work}` || value('workRevision') !== head || value('eventWork') !== work
+      || value('epoch') !== batch.dataEpoch || value('sequence') !== batch.sequence
+      || !/^[0-9a-f]{64}$/.test(requestDigest) || !/^[0-9]+$/.test(authorityEpoch)
+      || !/^[0-9a-f-]{36}$/.test(admissionId)) throw new OutboxIncomplete('author credit event differs from receipt');
+    for (const subject of [receiptId, credit, revision, intent, work, head]) iri(subject);
+    const graph = await fuseki.query(`PREFIX rv: <${RV}> ASK {
+      GRAPH ${iri(GRAPHS.current)} { ${iri(credit)} a rv:AuthorCredit ; rv:work ${iri(work)} ; rv:creditRevision ${iri(revision)} . }
+      GRAPH ${iri(GRAPHS.revisions)} { ${iri(revision)} a rv:AuthorCreditRevision ; rv:component ${iri(credit)} ;
+        rv:work ${iri(work)} ; rv:workRevision ${iri(head)} ; rv:dataEpoch ${lit(batch.dataEpoch)} ; rv:sequence ${batch.sequence} . }
+    }`);
+    if (!graph.boolean) throw new OutboxIncomplete('native author credit event effect is missing');
+    return { specversion: '1.0', id: eventId, source: SOURCE, type: 'com.rezics.work.author-credit-adopted.v1',
+      datacontenttype: 'application/json', data: { batchId: batch.batchId,
+        sourcePosition: { datasetId: 'product', dataEpoch: batch.dataEpoch, sequence: batch.sequence },
+        routingEpoch: batch.routingEpoch, ordinal, receipt: { id: receiptId, action: 'work.edit', outcome: 'succeeded',
+          admissionId, requestDigest, authorityEpoch, scope, work, workRevision: head, expectedHead: head,
+          authorCredit: credit, creditRevision: revision, sourceIntent: intent } } };
+  }
   if (kind === `${RV}SourceProjectedEvent`) {
     const record = value('sourceRecord');
     const observation = value('sourceObservation');

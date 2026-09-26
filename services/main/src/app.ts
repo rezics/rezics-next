@@ -63,6 +63,11 @@ import { SourceNativeWorkAdoptionStore, SourceAdoptionInvalid,
   SourceAdoptionConflict, SourceAdoptionUnavailable, SourceSupportConflict }
   from './modules/source/native-work-adoption.ts';
 import type { SourceNativeWorkAttachmentStore } from './modules/source/native-work-attachment.ts';
+import type { SourceAuthorCreditStore } from './modules/source/author-credit.ts';
+import { authorCreditBody, authorCreditSupportResult, authorCreditWriteResult,
+  nativeAuthorCreditResult } from './modules/source/author-credit-schema.ts';
+import { AuthorCreditInvalid, AuthorCreditConflict, AuthorCreditUnavailable,
+  readAuthorCredit } from './modules/work/author-credit.ts';
 import { claimAdmittedWorkAddress } from './modules/address/claim-admitted.ts';
 import { AddressClaimConflict, AddressClaimUnavailable, InvalidAddressClaim,
 } from './modules/address/claim.ts';
@@ -220,6 +225,7 @@ export interface MainWorkDependencies {
   sourceProposals?: SourceNativeWorkProposalStore;
   sourceAdoptions?: SourceNativeWorkAdoptionStore;
   sourceAttachments?: SourceNativeWorkAttachmentStore;
+  sourceAuthorCredits?: SourceAuthorCreditStore;
   openLibraryFetch?: typeof fetch;
   readerPreferences?: ReaderVariantPreferenceStore;
   realmRecommendations?: RealmVariantRecommendationStore;
@@ -1253,6 +1259,9 @@ function commandError(error: unknown): Response {
   if (error instanceof SourceAdoptionInvalid) {
     return problem(400, 'invalid_source_adoption', 'Source adoption request is invalid');
   }
+  if (error instanceof AuthorCreditInvalid) return problem(400, 'invalid_author_credit', 'Author credit request is invalid');
+  if (error instanceof AuthorCreditConflict) return problem(409, 'author_credit_conflict', 'Author credit intent or evidence conflicts');
+  if (error instanceof AuthorCreditUnavailable) return problem(503, 'author_credit_unavailable', 'Author credit evidence is unavailable');
   if (error instanceof SourceSupportConflict) {
     return problem(409, error.code, 'Source support disposition conflicts');
   }
@@ -2022,6 +2031,71 @@ export function createMainApp(fuseki: FusekiClient, work?: MainWorkDependencies)
         const result = await work.sourceAdoptions.read(principalId, params.proposal);
         if (!result) return problem(404, 'source_adoption_unavailable',
           'Source adoption is unavailable');
+        return Response.json(result, { headers: { 'cache-control': 'no-store' } });
+      } catch (error) { return commandError(error); }
+    })
+    .post('/v1/works/:id/source-author-credits', {
+      params: t.Object({ id: groupUuid }), body: authorCreditBody,
+      response: { 200: authorCreditWriteResult, 201: authorCreditWriteResult,
+        202: pendingOperation, ...writeProblems, 404: problemResult(404) },
+    }, async ({ request, params, body }) => {
+      try {
+        if (!work.sourceAuthorCredits) return problem(503, 'author_credit_unavailable', 'Source credit owner is unavailable');
+        const key = request.headers.get('idempotency-key');
+        if (!key) return problem(400, 'invalid_idempotency_key', 'Idempotency-Key is required');
+        const principal = await work.account.verify(request, ['source:adopt', 'work:edit']);
+        const principalId = await work.access.activePrincipalId(principal);
+        if (!principalId) return problem(403, 'authority_denied', 'Source principal is inactive');
+        const result = await work.sourceAuthorCredits.adopt(principal, principalId, request,
+          `https://rezics.com/id/${params.id}`, key, body);
+        if (!result) return problem(404, 'source_proposal_unavailable', 'Source proposal is unavailable');
+        return Response.json(result, { status: result.replayed ? 200 : 201, headers: { 'cache-control': 'no-store' } });
+      } catch (error) { return commandError(error); }
+    })
+    .get('/v1/sources/author-credit-supports/:support', {
+      params: t.Object({ support: groupUuid }), response: { 200: authorCreditSupportResult, ...authorizedReadProblems },
+    }, async ({ request, params }) => {
+      try {
+        if (!work.sourceAuthorCredits) return problem(503, 'author_credit_unavailable', 'Source credit owner is unavailable');
+        const principal = await work.account.verify(request, ['source:read']);
+        const principalId = await work.access.activePrincipalId(principal);
+        if (!principalId) return problem(403, 'authority_denied', 'Source principal is inactive');
+        const result = await work.sourceAuthorCredits.read(principalId, params.support);
+        if (!result) return problem(404, 'author_credit_unavailable', 'Source credit support is unavailable');
+        return Response.json(result, { headers: { 'cache-control': 'no-store' } });
+      } catch (error) { return commandError(error); }
+    })
+    .post('/v1/sources/author-credit-supports/:support/withdrawals', {
+      params: t.Object({ support: groupUuid }), body: t.Object({ reason: t.String({ minLength: 1, maxLength: 500 }) },
+        { additionalProperties: false }),
+      response: { 200: authorCreditWriteResult, 201: authorCreditWriteResult, ...writeProblems, 404: problemResult(404) },
+    }, async ({ request, params, body }) => {
+      try {
+        if (!work.sourceAuthorCredits) return problem(503, 'author_credit_unavailable', 'Source credit owner is unavailable');
+        const key = request.headers.get('idempotency-key');
+        if (!key) return problem(400, 'invalid_idempotency_key', 'Idempotency-Key is required');
+        const principal = await work.account.verify(request, ['source:adopt']);
+        const principalId = await work.access.activePrincipalId(principal);
+        if (!principalId) return problem(403, 'authority_denied', 'Source principal is inactive');
+        const result = await work.sourceAuthorCredits.withdraw(principalId, params.support, key, body.reason);
+        if (!result) return problem(404, 'author_credit_unavailable', 'Source credit support is unavailable');
+        return Response.json(result, { status: result.replayed ? 200 : 201, headers: { 'cache-control': 'no-store' } });
+      } catch (error) { return commandError(error); }
+    })
+    .get('/v1/works/:id/author-credits/:credit/revisions/:revision', {
+      params: t.Object({ id: groupUuid, credit: groupUuid, revision: groupUuid }),
+      query: t.Object({ actingSubject: groupAgent }),
+      response: { 200: nativeAuthorCreditResult, ...authorizedReadProblems },
+    }, async ({ request, params, query }) => {
+      try {
+        const principal = await work.account.verify(request, ['work:read']);
+        const resource = `https://rezics.com/id/${params.id}`;
+        if (!await work.access.canReadWork(principal, query.actingSubject, resource)) {
+          return problem(404, 'author_credit_unavailable', 'Native credit is unavailable');
+        }
+        const result = await readAuthorCredit(work.environment, `https://rezics.com/id/${params.credit}`,
+          `https://rezics.com/id/${params.revision}`);
+        if (!result || result.work !== resource) return problem(404, 'author_credit_unavailable', 'Native credit is unavailable');
         return Response.json(result, { headers: { 'cache-control': 'no-store' } });
       } catch (error) { return commandError(error); }
     })
