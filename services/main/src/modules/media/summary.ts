@@ -86,7 +86,8 @@ async function graphRows(env: WorkActivationEnvironment, resources: readonly str
           UNION { ?r a rv:Space . BIND("space" AS ?type) }
           UNION { ?r a skos:Concept ; rv:conceptState rv:Active . BIND("concept" AS ?type) }
         }
-        OPTIONAL { GRAPH ${iri(GRAPHS.current)} { ?work rdfs:label ?label } }
+        OPTIONAL { FILTER(?type = "work" || ?type = "main-version")
+          GRAPH ${iri(GRAPHS.current)} { ?work rdfs:label ?label } }
         OPTIONAL { FILTER(?type = "space") GRAPH ${iri(GRAPHS.current)} { ?r rdfs:label ?label } }
         OPTIONAL { FILTER(?type = "concept") GRAPH ${iri(GRAPHS.current)} { ?r skos:prefLabel ?label } }
         BIND(IF(?type = "concept", true, IF(?type = "space",
@@ -178,4 +179,3 @@ export async function readContentAvailability(env: WorkActivationEnvironment, ma
     selected: { contribution: chosen.contribution, language: chosen.language,
       direction: direction(chosen.language), mainDefault: chosen === main, basis } };
 }
-

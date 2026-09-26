@@ -116,6 +116,19 @@ test('VIEW08 template: an avatar image travels reservation, RustFS activation an
   expect(image.headers.get('etag')).toBe(`"${sha(bytes)}"`);
   expect(sha(new Uint8Array(await image.arrayBuffer()))).toBe(sha(bytes));
 
+  // Concurrent replacements of one selection head settle with one winner and one durable stale outcome.
+  const competing = await Promise.all([
+    owner.send('PUT', `/v1/resources/${target}/avatar`, { ...selection,
+      expectedSelection: head.selection, crop: 'xywh=percent:0,0,75,75' }),
+    owner.send('PUT', `/v1/resources/${target}/avatar`, { ...selection,
+      expectedSelection: head.selection, crop: 'xywh=percent:0,0,50,50' }),
+  ]);
+  expect(competing.map(response => response.status).sort()).toEqual([201, 409]);
+  const winner = await competing.find(response => response.status === 201)!.json() as { selection: string };
+  expect((await (await call('GET', `/v1/resources/${target}`)).json()).avatar.selection)
+    .toBe(winner.selection);
+  expect((await call('GET', body.avatar.url)).status).toBe(404);
+
   // Asset disclosure CAS: a stale expected state is refused; the accepted change hides the image.
   const stateKey = `state-${randomUUID()}`;
   const stateBody = { profile: 'media-asset-state-v1', expectedState: randomUUID(), disclosure: 'private',

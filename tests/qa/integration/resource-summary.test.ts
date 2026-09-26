@@ -2,6 +2,8 @@ import { afterAll, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { createClassificationProposition, classificationPropositionDigest }
   from '../../../services/main/src/modules/classification/proposition.ts';
+import { createClassificationContext, classificationContextDigest }
+  from '../../../services/main/src/modules/classification/context.ts';
 import { createRealmSpace, spaceCreationDigest } from '../../../services/main/src/modules/space/create.ts';
 import { png, startMediaStack, type MediaStack } from './media-support.ts';
 
@@ -172,6 +174,9 @@ test('VIEW08: batched summaries hydrate names and avatars with fixed owner round
   const spaceInput = { name: `Summary Realm ${randomUUID()}`, actingSubject: owner.actor };
   const space = await createRealmSpace(env, admission(owner.actor, 'space:create:root', 'space.create',
     spaceCreationDigest(spaceInput)), spaceInput);
+  const contextInput = { realm: space.realm!, actingSubject: owner.actor };
+  await createClassificationContext(env, admission(owner.actor, `classification:context:${space.realm}`,
+    'classification.context.configure', classificationContextDigest(contextInput)), contextInput);
   const conceptInput = { label: `Summary concept ${randomUUID().slice(0, 8)}`, actingSubject: owner.actor };
   const concept = await createClassificationProposition(env, admission(owner.actor, 'classification:define:global',
     'classification.proposition.define', classificationPropositionDigest(conceptInput)), conceptInput);
@@ -238,7 +243,7 @@ test('VIEW08: batched summaries hydrate names and avatars with fixed owner round
   }
   await contentPool.query(`INSERT INTO media.selection_slot (target, context, role, policy)
     SELECT 'https://rezics.com/id/' || gen_random_uuid(), 'urn:rezics:media:context:default', 'avatar',
-      'avatar-selection-v1' FROM generate_series(1, 5000)`);
+      'avatar-selection-v1' FROM generate_series(1, 50000)`);
   await contentPool.query('ANALYZE media.selection_slot');
   expect((await batch(filler, {}, owner)).cost).toEqual({ graphQueries: 1, mediaQueries: 1, accessChecks: 0 });
   const plan = await contentPool.query<{ 'QUERY PLAN': unknown }>(`EXPLAIN (FORMAT JSON)
