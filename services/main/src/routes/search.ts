@@ -1,5 +1,9 @@
 import { Elysia, t } from 'elysia';
+import { websocket } from 'elysia/websocket';
 import type { FusekiClient } from '../infrastructure/fuseki.ts';
+import type { VerifiedPrincipal } from '../modules/access/admission.ts';
+import { PrivateSearchConnection, privateSearchProblem, type PrivateSearchSocketDependencies }
+  from '../modules/contribution/private-search-socket.ts';
 import { queryPublicMainClassifiedPhrase, queryPublicMainPhrase, queryPublicRealmClassifiedPhrase,
   queryPublicRealmPhrase } from '../modules/work/search-public.ts';
 import { InvalidSearchContinuation, pageCompletePublicRelation, SearchContinuationRestart }
@@ -37,17 +41,59 @@ function unsupportedSearchSelection(body: { sourcePolicy?: unknown; asOf?: unkno
   return null;
 }
 
-export function searchRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
+/** Private delivery owners. A replica without them keeps the profile closed. */
+export interface SearchRouteDependencies extends MainWorkDependencies {
+  privateSearch?: PrivateSearchSocketDependencies;
+}
+
+export function searchRoutes(fuseki: FusekiClient, work: SearchRouteDependencies) {
+  const principals = new WeakMap<Request, VerifiedPrincipal>();
+  const connections = new Map<string, PrivateSearchConnection>();
   return new Elysia()
+    .use(websocket({ sendPings: false }))
     .post('/v1/private-queries', {
       body: t.Object({ profile: t.Literal('private-contribution-phrase-v1'),
         contribution: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
         actingSubject: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
         phrase: t.String({ minLength: 2, maxLength: 80 }),
       }, { additionalProperties: false }),
-      response: { 400: problemResult(400), 503: problemResult(503) },
-    }, () => problem(503, 'private_search_unavailable',
-      'Private phrase delivery is unavailable'))
+      response: { 400: problemResult(400), 426: problemResult(426), 503: problemResult(503) },
+    }, () => work.privateSearch
+      // An HTTP response has no per-response receipt or cancellation in this
+      // runtime; results travel only over the receipt-fenced socket below.
+      ? problem(426, 'private_search_socket_required',
+        'Private phrase results require the WebSocket operation', { upgrade: 'websocket' })
+      : problem(503, 'private_search_unavailable', 'Private phrase delivery is unavailable'))
+    // OpenAPI cannot describe this message protocol; the POST entry names it.
+    .ws('/v1/private-queries', {
+      detail: { hide: true },
+      maxPayloadLength: 4_096,
+      idleTimeout: 30,
+      async beforeHandle({ request }) {
+        if (!work.privateSearch) {
+          return problem(503, 'private_search_unavailable', 'Private phrase delivery is unavailable');
+        }
+        try { principals.set(request, await work.account.verify(request, ['work:read'])); }
+        catch (error) {
+          const failure = privateSearchProblem(error);
+          return problem(failure.status, failure.code, failure.title,
+            failure.status === 401 ? { 'www-authenticate': 'Bearer' } : undefined);
+        }
+      },
+      open(ws) {
+        const principal = principals.get(ws.request);
+        if (!work.privateSearch || !principal) return ws.close(4503, 'private_search_unavailable');
+        connections.set(ws.id, new PrivateSearchConnection(work.environment, work.privateSearch,
+          principal, { send: frame => ws.send(frame), close: (code, reason) => ws.close(code, reason),
+            terminate: () => ws.terminate() }));
+      },
+      async message(ws, body) { await connections.get(ws.id)?.message(body); },
+      async close(ws) {
+        const connection = connections.get(ws.id);
+        connections.delete(ws.id);
+        await connection?.closed();
+      },
+    })
     .post('/v1/queries', {
       body: t.Union([t.Object({ profile: t.Literal('public-content-phrase-v1'),
         ...unsupportedPublicSearchSelectors,

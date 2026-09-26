@@ -1,80 +1,14 @@
 import { expect, test } from 'bun:test';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
-import { join, resolve } from 'node:path';
-import { FusekiClient, type SparqlResult } from '../src/infrastructure/fuseki.ts';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { createMainApp, type MainWorkDependencies } from '../src/app.ts';
 import { AdmissionDenied, type AccessAdmissionRegistry } from '../src/modules/access/admission.ts';
-import { CONTRIBUTION_PROFILE } from '../src/modules/contribution/draft.ts';
 import { privateDraftTriples, privateDraftUnit } from '../src/modules/contribution/private-projection.ts';
 import { InvalidPrivateQuery, PrivateSearchUnavailable, prepareAdmittedPrivateContributionPhrase,
   queryPrivateContributionPhrase }
   from '../src/modules/contribution/search-private.ts';
-import { prepareComponent, type WorkActivationEnvironment } from '../src/modules/work/activate.ts';
-
-const root = resolve(import.meta.dir, '../../..');
-const contribution = 'https://rezics.com/id/00000000-0000-4000-8000-000000000011';
-const revision = 'https://rezics.com/id/00000000-0000-4000-8000-000000000012';
-const work = 'https://rezics.com/id/00000000-0000-4000-8000-000000000013';
-const author = 'https://rezics.com/id/00000000-0000-4000-8000-000000000014';
-const body = 'Hidden nebula phrase';
-const epoch = '00000000-0000-4000-8000-000000000015';
-const generation = 'urn:rezics:text-index-generation:00000000-0000-4000-8000-000000000016';
-const uri = (value: string) => ({ type: 'uri', value });
-const literal = (value: string, language?: string) => ({ type: 'literal', value,
-  ...(language ? { 'xml:lang': language } : {}) });
-const bindings = (row?: Record<string, ReturnType<typeof literal> | ReturnType<typeof uri>>) =>
-  ({ results: { bindings: row ? [row] : [] } });
-
-class PrivateFixture extends FusekiClient {
-  queries: string[] = [];
-  hits = true;
-  indexed = true;
-  projected = true;
-  moved = false;
-  commandOnly = true;
-  privateEpoch = '0';
-  reads = 0;
-  constructor(readonly manifest: string) { super('http://localhost:1/rezics'); }
-  override async commandHealth() { return { moduleVersion: '0.5.29',
-    instanceId: '11111111-1111-4111-8111-111111111111',
-    publicSearchWriteEpoch: '0', publicSearchWriteActive: false,
-    privateSearchWriteEpoch: this.privateEpoch, privateSearchWriteActive: false,
-    publicSearchDeltaAvailable: this.commandOnly, profiles: {} }; }
-  override async query(sparql: string): Promise<SparqlResult> {
-    this.queries.push(sparql);
-    if (sparql.includes('SELECT ?head ?sequence ?generation')) {
-      this.reads++;
-      return bindings({ head: uri(this.moved && this.reads >= 2 ? author : revision),
-        sequence: literal('7'), generation: uri(generation) });
-    }
-    if (sparql.includes('SELECT ?component ?manifest')) return bindings({
-      component: uri(contribution), manifest: uri(`urn:rezics:sha256:${this.manifest}`),
-      model: uri(CONTRIBUTION_PROFILE), shape: uri(CONTRIBUTION_PROFILE),
-      dataset: uri('urn:rezics:dataset:product'), epoch: literal(epoch), sequence: literal('6'),
-    });
-    if (sparql.includes('ASK')) return { boolean: true };
-    if (sparql.includes('SELECT ?body')) return bindings(this.projected
-      ? { body: literal(body, 'en') } : undefined);
-    if (sparql.includes('privateBody:*')) return bindings(this.indexed
-      ? { literal: literal(body, 'en'), graph: uri('urn:rezics:search:private'),
-        predicate: uri('https://rezics.com/vocab/privateSearchBody') } : undefined);
-    if (sparql.includes('text:query')) return bindings(this.hits
-      ? { literal: literal(body, 'en'), graph: uri('urn:rezics:search:private'),
-        predicate: uri('https://rezics.com/vocab/privateSearchBody') } : undefined);
-    throw new Error(`unexpected query: ${sparql}`);
-  }
-}
-
-function fixture() {
-  mkdirSync(join(root, '.temp'), { recursive: true });
-  const directory = mkdtempSync(join(root, '.temp', 'private-search-'));
-  const manifest = prepareComponent(directory, contribution,
-    { work, author, language: 'en', body, publication: 'draft' }, CONTRIBUTION_PROFILE);
-  const fuseki = new PrivateFixture(manifest);
-  const env: WorkActivationEnvironment = { fuseki, objectDirectory: directory,
-    lineage: { dataEpoch: epoch, routingEpoch: '1' } };
-  return { env, fuseki, cleanup: () => rmSync(directory, { force: true, recursive: true }) };
-}
+import { author, body, contribution, fixture, revision, root, settlement, work }
+  from './search-private-fixture.ts';
 
 test('SEARCH11 projection has a distinct private field, unit and no public body predicate', () => {
   const triples = privateDraftTriples(contribution, revision, work, 'en', body);
@@ -141,15 +75,15 @@ test('SEARCH11 private match cannot start before exact Access admission', async 
     throw new AdmissionDenied('no private grant');
   } } as unknown as AccessAdmissionRegistry;
   try {
-    await expect(prepareAdmittedPrivateContributionPhrase(run.env, denied, principal, author,
-      { contribution, phrase: 'nebula' })).rejects.toBeInstanceOf(AdmissionDenied);
-    await expect(prepareAdmittedPrivateContributionPhrase(run.env, denied, principal, author,
-      { contribution, phrase: 'x' })).rejects.toBeInstanceOf(InvalidPrivateQuery);
+    await expect(prepareAdmittedPrivateContributionPhrase(run.env, denied, settlement([]), principal,
+      author, { contribution, phrase: 'nebula' })).rejects.toBeInstanceOf(AdmissionDenied);
+    await expect(prepareAdmittedPrivateContributionPhrase(run.env, denied, settlement([]), principal,
+      author, { contribution, phrase: 'x' })).rejects.toBeInstanceOf(InvalidPrivateQuery);
     expect(run.fuseki.queries).toEqual([]);
   } finally { run.cleanup(); }
 });
 
-test('SEARCH12 moved native head before send aborts an unarmed read without offering a frame', async () => {
+test('SEARCH12 moved native head after the durable arm withholds the frame and settles the row', async () => {
   const run = fixture();
   const operations: string[] = [];
   const leaseId = '00000000-0000-4000-8000-000000000018';
@@ -160,7 +94,7 @@ test('SEARCH12 moved native head before send aborts an unarmed read without offe
     finishContributionSearchRead: async (_id: string, outcome: string) => { operations.push(outcome); },
   } as unknown as AccessAdmissionRegistry;
   try {
-    const session = await prepareAdmittedPrivateContributionPhrase(run.env, access,
+    const session = await prepareAdmittedPrivateContributionPhrase(run.env, access, settlement(operations),
       { issuer: 'https://account.test', subject: 'reader' }, author,
       { contribution, phrase: 'nebula' });
     expect(operations).toEqual(['admit']);
@@ -170,12 +104,12 @@ test('SEARCH12 moved native head before send aborts an unarmed read without offe
     await expect(session.send(() => { offered = true; return 1; }))
       .rejects.toBeInstanceOf(PrivateSearchUnavailable);
     expect(offered).toBe(false);
-    expect(operations).toEqual(['admit', 'begin', 'aborted']);
+    expect(operations).toEqual(['admit', 'begin', 'arm', 'withheld']);
     expect(run.fuseki.reads).toBe(3);
   } finally { run.cleanup(); }
 });
 
-test('SEARCH12 changed private index epoch before send cannot return a stale match', async () => {
+test('SEARCH12 changed private index epoch after the arm cannot return a stale match', async () => {
   const run = fixture();
   const operations: string[] = [];
   const leaseId = '00000000-0000-4000-8000-00000000001a';
@@ -186,7 +120,7 @@ test('SEARCH12 changed private index epoch before send cannot return a stale mat
     finishContributionSearchRead: async (_id: string, outcome: string) => { operations.push(outcome); },
   } as unknown as AccessAdmissionRegistry;
   try {
-    const session = await prepareAdmittedPrivateContributionPhrase(run.env, access,
+    const session = await prepareAdmittedPrivateContributionPhrase(run.env, access, settlement(operations),
       { issuer: 'https://account.test', subject: 'reader' }, author,
       { contribution, phrase: 'nebula' });
     run.fuseki.privateEpoch = '2';
@@ -194,7 +128,7 @@ test('SEARCH12 changed private index epoch before send cannot return a stale mat
     await expect(session.send(() => { offered = true; return 1; }))
       .rejects.toBeInstanceOf(PrivateSearchUnavailable);
     expect(offered).toBe(false);
-    expect(operations).toEqual(['admit', 'begin', 'aborted']);
+    expect(operations).toEqual(['admit', 'begin', 'arm', 'withheld']);
   } finally { run.cleanup(); }
 });
 
@@ -214,7 +148,7 @@ test('SEARCH11/SEARCH12 admitted private phrase reaches one receipt-fenced frame
     },
   } as unknown as AccessAdmissionRegistry;
   try {
-    const session = await prepareAdmittedPrivateContributionPhrase(run.env, access,
+    const session = await prepareAdmittedPrivateContributionPhrase(run.env, access, settlement(operations),
       { issuer: 'https://account.test', subject: 'reader' }, author,
       { contribution, phrase: 'nebula' });
     let frame = '';
@@ -238,7 +172,7 @@ test('SEARCH11/SEARCH12 admitted private phrase reaches one receipt-fenced frame
   } finally { run.cleanup(); }
 });
 
-test('SEARCH12 HTTP route fails closed until socket delivery completion is proven', async () => {
+test('SEARCH12 a replica without private delivery owners keeps the profile closed at 503', async () => {
   const run = fixture();
   const operations: string[] = [];
   const id = '00000000-0000-4000-8000-000000000017';

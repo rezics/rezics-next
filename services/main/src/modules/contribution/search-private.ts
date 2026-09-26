@@ -6,6 +6,7 @@ import { DATASET, GRAPHS, RV, iri, lit, type WorkActivationEnvironment }
 import { readExactContributionDraft } from './history.ts';
 import { PrivateSearchReceiptSession } from './private-delivery-fence.ts';
 import { PRIVATE_SEARCH_GRAPH, privateDraftUnit } from './private-projection.ts';
+import type { PrivateSearchSettlement } from './private-search-settlement.ts';
 
 export class InvalidPrivateQuery extends Error {}
 export class PrivateSearchUnavailable extends Error {}
@@ -157,10 +158,17 @@ export async function queryPrivateContributionPhrase(env: WorkActivationEnvironm
   return (await queryPrivateContributionPhraseCandidate(env, input)).response;
 }
 
+export type PrivateSearchAccess = Pick<AccessAdmissionRegistry, 'admitContributionSearchRead'
+  | 'beginContributionSearchDelivery' | 'armContributionSearchSend' | 'finishContributionSearchRead'>;
+
 /** Binds the pre-match Access admission to the exact native candidate. The
- * session rechecks native position after begin and before its durable send arm. */
+ * session begins delivery, commits the durable Access arm, and only then runs
+ * the final native position check, so no owner round trip separates that check
+ * from the offer. A moved position after the arm settles the row as withheld;
+ * a strong closure after the arm keeps it pending until its terminal outcome. */
 export async function prepareAdmittedPrivateContributionPhrase(env: WorkActivationEnvironment,
-  access: AccessAdmissionRegistry, principal: VerifiedPrincipal, actingSubject: string,
+  access: PrivateSearchAccess, settlement: Pick<PrivateSearchSettlement, 'settle'>,
+  principal: VerifiedPrincipal, actingSubject: string,
   input: PrivateContributionPhraseInput): Promise<PrivateSearchReceiptSession> {
   privatePhrase(input);
   const lease = await access.admitContributionSearchRead(principal, actingSubject,
@@ -176,13 +184,12 @@ export async function prepareAdmittedPrivateContributionPhrase(env: WorkActivati
   return new PrivateSearchReceiptSession(access, lease.id, candidate.response, async () => {
     await access.beginContributionSearchDelivery(lease.id, principal, actingSubject,
       input.contribution);
-    await withPrivateSearchBudget(async () => {
-      const final = await position(env, input.contribution);
-      if (!samePosition(candidate.position, final)) {
-        throw new PrivateSearchUnavailable('private position moved before delivery');
-      }
-    }, PRIVATE_SEARCH_FINAL_FUSEKI_CALLS);
-  });
+  }, { settlement, afterArm: () => withPrivateSearchBudget(async () => {
+    const final = await position(env, input.contribution);
+    if (!samePosition(candidate.position, final)) {
+      throw new PrivateSearchUnavailable('private position moved before delivery');
+    }
+  }, PRIVATE_SEARCH_FINAL_FUSEKI_CALLS) });
 }
 
 export async function withPrivateSearchBudget<T>(read: () => Promise<T>,
