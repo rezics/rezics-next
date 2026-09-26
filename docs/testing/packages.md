@@ -52,22 +52,27 @@ The real Account/Access/Main/PostgreSQL fixture checks concurrent same-key
 convergence, exact bytes and receipt replay, private/scope denial, byte/policy
 key conflicts, every outcome, immutable rows and inactive-principal fencing.
 It bulk-copies 64/512/4,096 unrelated owner receipts, observes real owner query
-row counts and checks native indexed read plans/buffers. Those runtime assertions
-await execution on the merged migration chain and do not yet qualify bounded
-selection under history growth or deployment capacity.
+row counts and checks native read plans/buffers. At 64 rows PostgreSQL can choose
+a short sequential scan; the filter-count bound applies at 512 and 4,096 rows,
+while page and one-result bounds apply at each scale. These checks do not qualify
+deployment capacity.
 The physical owner-cut fixture retains npm beside Cargo v1/v2/v3 and all six
 Go receipt profiles. Signed Content coverage v4 includes `pkg.npm_resolution`;
 a changed restored npm outcome blocks both exact read and graph hold release.
-These recovery assertions also await the manager's merged run. Eight npm unit
+These recovery assertions passed in the manager's merged physical cut
+`20260926t080447-f54717`. Eight npm unit
 and contract tests, all fifteen retained Cargo unit cases, the eight-case native
 npm oracle, generation, backend static and documentation checks passed in the
 worker. API attempt `20260926t074528-c08118` stopped before npm behavior because
 the initially selected migration number duplicated existing Source migration
-017. The npm migration is now 020; G-018 owns preceding 019. Per manager direction,
-the worker does not fabricate or temporarily copy that migration. The manager
-must merge G-018 first, then run `yarn test tests/qa/integration/source-authenticated-api.test.ts`
-and `yarn test tests/qa/fault-recovery/coordinated-owner-cut.test.ts services/main/tests/content-recovery.integration.test.ts`
-on the merged 019+020 chain. No API/restore pass is claimed by this handoff.
+017. The npm migration is now 020; G-018 owns preceding 019. The worker did not
+fabricate or temporarily copy that migration. The manager's first merged API
+run `20260926t080308-47d285` reached npm behavior and found that the 64-row
+query plan violates an assertion requiring every plan to filter at most one row.
+After the small-table correction at `3f8aefd`, stable merged API
+`20260926t080416-91b114` passed the same complete fixture with 512/4,096-row
+selectivity and page bounds; the physical restore above passed on the same
+source. These are selected passes, not full qualification.
 Partial PKG03/PKG12/PKG13 only: live registry resolution, range solving,
 optional/platform/alias/workspace behavior, artifact verification and installation
 remain unqualified. A lock parser or source-only graph does not close PKG03.
