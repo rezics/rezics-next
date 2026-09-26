@@ -98,3 +98,55 @@ export async function fetchOpenLibraryWork(workId: string,
     lastModified: headerValue(response.headers.get('last-modified')),
     fetchedAt } };
 }
+
+export type OpenLibraryFetchFailure = { ok: false; outcome: 'failed' | 'unqualified'; reason: string;
+  status: number | null };
+export type OpenLibraryFetchResult = { ok: true; url: string; bytes: Buffer; parsed: unknown;
+  etag: string | null; lastModified: string | null; fetchedAt: string } | OpenLibraryFetchFailure;
+
+/**
+ * One fixed-origin JSON request for a run surface. Every failure is classified: an access
+ * limit is `unqualified`, any other refusal is `failed`; neither yields bytes or guessed values.
+ */
+export async function fetchOpenLibraryJson(path: string,
+  fetcher: typeof fetch = fetch): Promise<OpenLibraryFetchResult> {
+  if (!/^\/[A-Za-z0-9/_.-]{1,200}(\?[A-Za-z0-9=&_.-]{0,200})?$/.test(path) || path.includes('..')) {
+    throw new OpenLibraryAcquisitionInvalid('invalid Open Library request path');
+  }
+  const url = `https://openlibrary.org${path}`;
+  const fail = (outcome: 'failed' | 'unqualified', reason: string, status: number | null = null):
+    OpenLibraryFetchFailure => ({ ok: false, outcome, reason, status });
+  let response: Response;
+  try {
+    response = await fetcher(url, { method: 'GET', redirect: 'manual',
+      signal: AbortSignal.timeout(5_000), headers: {
+        accept: 'application/json', 'user-agent': 'REZICS-source-capture/1 (bounded run)',
+      } });
+  } catch (error) {
+    return fail('failed', error instanceof Error && error.name === 'TimeoutError' ? 'timeout' : 'network');
+  }
+  if (response.status === 401) return fail('unqualified', 'authentication-required', 401);
+  if (response.status === 403) return fail('unqualified', 'authorization-denied', 403);
+  if (response.status === 429) return fail('failed', 'rate-limited', 429);
+  if (response.status >= 300 && response.status < 400) return fail('failed', 'redirect-refused', response.status);
+  if (response.status !== 200) return fail('failed', 'http-status', response.status);
+  if (!/^application\/json(?:\s*;|$)/i.test(response.headers.get('content-type') ?? '')) {
+    return fail('failed', 'malformed', 200);
+  }
+  let bytes: Buffer;
+  let etag: string | null;
+  let lastModified: string | null;
+  try {
+    etag = headerValue(response.headers.get('etag'));
+    lastModified = headerValue(response.headers.get('last-modified'));
+    bytes = await responseBytes(response);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : '';
+    return fail('failed', /capture limit/.test(message) ? 'oversized'
+      : /interrupted/.test(message) ? 'network' : 'malformed', 200);
+  }
+  let parsed: unknown;
+  try { parsed = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes)); }
+  catch { return fail('failed', 'malformed', 200); }
+  return { ok: true, url, bytes, parsed, etag, lastModified, fetchedAt: new Date().toISOString() };
+}

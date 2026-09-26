@@ -505,3 +505,77 @@ test('LIVE01/LIVE03/LIVE04/LIVE05/LIVE06/LIVE07/LIVE08: sealed dispositions, gen
   expect(plan['Shared Hit Blocks'] + plan['Shared Read Blocks']).toBeLessThan(48);
   expect(plan['Temp Read Blocks']).toBe(0);
 }, 60_000);
+
+test('LIVE09/LIVE12: run capture reuse, run reads and feed checkpoint reads stay indexed as owners grow', async () => {
+  const o = owner('cost');
+  await o.apply([...HEAD, ...NEW]);
+  const principal = randomUUID();
+  const record = await o.record();
+  const feed = randomUUID();
+  await o.run(`INSERT INTO source.feed (id, principal_id, provider, namespace, feed_key, position_scheme, max_page_items)
+    VALUES ($1,$2,'fixture','work','changes','provider-sequence',10)`, [feed, principal]);
+  const baselineRun = await completedRun(o, principal);
+  await o.run(`INSERT INTO source.feed_checkpoint (id, feed_id, seq, kind, run_id, from_position, to_position,
+    item_count, continuity) VALUES ($1,$2,1,'baseline',$3,0,0,0,'baseline')`, [randomUUID(), feed, baselineRun]);
+  let built = 0;
+  const grow = async (size: number) => {
+    // Bulk-built runs, each with one frozen page, then one checkpoint per page on the feed chain.
+    await o.tx(async query => {
+      await query(`CREATE TEMP TABLE IF NOT EXISTS grow (n int, run uuid, observation uuid, capture uuid) ON COMMIT DROP`);
+      await query(`INSERT INTO grow SELECT n, gen_random_uuid(), gen_random_uuid(), gen_random_uuid()
+        FROM generate_series($1::int + 1, $2::int) n`, [built, size]);
+      await query(`INSERT INTO source.observation (id, record_id, principal_id, media_type, retention, coverage,
+        rights_evidence) SELECT observation, $1, $2, 'application/json', 'not-retained', '{}', '{}' FROM grow`,
+      [record, principal]);
+      await query(`INSERT INTO source.acquisition_run (id, principal_id, provider, profile, surface_count,
+        idempotency_key, request_digest) SELECT run, $1, 'fixture', 'fixture-run-v1', 1, 'grow-' || n, repeat('c', 64)
+        FROM grow`, [principal]);
+      await query(`INSERT INTO source.acquisition_run_surface (run_id, surface, ordinal, required, capture_limit,
+        requested_retention, retention_terms, terms_reference)
+        SELECT run, 'changes', 0, true, 8, 'not-retained', 'permitted', 't' FROM grow`);
+      await query(`INSERT INTO source.run_capture (id, run_id, surface, ordinal, role, request_key, observation_id)
+        SELECT capture, run, 'changes', 0, 'response', 'GET /changes?offset=' || n, observation FROM grow`);
+      await query(`DO $$ DECLARE item record; BEGIN
+        FOR item IN SELECT * FROM grow ORDER BY n LOOP
+          INSERT INTO source.feed_checkpoint (id, feed_id, seq, predecessor_id, kind, run_id, capture_id, from_position,
+            to_position, item_count, continuity)
+          SELECT gen_random_uuid(), h.feed_id, h.seq + 1, h.checkpoint_id, 'change', item.run, item.capture,
+            h.position + 1, h.position + 10, 10, 'contiguous'
+          FROM source.feed_head h WHERE h.feed_id = '${feed}';
+        END LOOP; END $$`);
+    });
+    built = size;
+    for (const table of ['run_capture', 'observation', 'feed_checkpoint', 'acquisition_run']) {
+      await o.run(`ANALYZE source.${table}`);
+    }
+  };
+  const nodes = (plan: Record<string, unknown>): Array<Record<string, unknown>> =>
+    [plan, ...((plan.Plans as Array<Record<string, unknown>> | undefined) ?? []).flatMap(nodes)];
+  const bounded = async (text: string, params: unknown[], rows: number) => {
+    const plan = (await o.run(`EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON, TIMING OFF) ${text}`, params))
+      .rows[0]!['QUERY PLAN'][0].Plan as Record<string, number>;
+    expect(plan['Actual Rows']).toBe(rows);
+    expect(plan['Shared Hit Blocks'] + plan['Shared Read Blocks']).toBeLessThan(48);
+    expect(plan['Temp Read Blocks']).toBe(0);
+    expect(nodes(plan).filter(node => node['Node Type'] === 'Seq Scan'
+      && ['run_capture', 'feed_checkpoint', 'observation'].includes(String(node['Relation Name'])))).toEqual([]);
+  };
+  for (const size of [256, 2048]) {
+    await grow(size);
+    const target = (await o.run(`SELECT r.id AS run, c.request_key FROM source.acquisition_run r
+      JOIN source.run_capture c ON c.run_id = r.id WHERE r.idempotency_key = 'grow-7'`)).rows[0]!;
+    // Frozen capture reuse (SourceRunStore.frozen): one unique-key lookup, never a history scan.
+    await bounded(`SELECT c.id, c.ordinal, o.raw_bytes, o.byte_digest FROM source.run_capture c
+      JOIN source.observation o ON o.id = c.observation_id WHERE c.run_id = $1 AND c.request_key = $2`,
+    [target.run, target.request_key], 1);
+    // Exact run read (readRun): captures of one run in surface/ordinal order.
+    await bounded(`SELECT c.surface, c.ordinal, o.retention, r.namespace FROM source.run_capture c
+      JOIN source.observation o ON o.id = c.observation_id JOIN source.record r ON r.id = o.record_id
+      WHERE c.run_id = $1 ORDER BY c.surface, c.ordinal`, [target.run], 1);
+    // Window replay and the bounded recent-checkpoint read.
+    await bounded(`SELECT id FROM source.feed_checkpoint WHERE feed_id = $1 AND run_id = $2 ORDER BY seq`,
+      [feed, target.run], 1);
+    await bounded(`SELECT id FROM source.feed_checkpoint WHERE feed_id = $1 ORDER BY seq DESC LIMIT 20`, [feed], 20);
+    expect((await o.run('SELECT seq FROM source.feed_head WHERE feed_id = $1', [feed])).rows[0]!.seq).toBe(size + 1);
+  }
+}, 120_000);

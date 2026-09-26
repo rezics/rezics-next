@@ -23,6 +23,7 @@ import { AccessRoles } from './modules/access/roles.ts';
 import { ReaderVariantPreferenceStore } from './modules/work/native-variants.ts';
 import { RealmVariantRecommendationStore } from './modules/work/realm-variant-recommendation.ts';
 import { SourceIntakeStore } from './modules/source/intake.ts';
+import { sourceAcquisitionServices } from './modules/source/acquisition.ts';
 import { OpenLibraryConversionStore } from './modules/source/open-library-conversion.ts';
 import { SourceChildCorrespondenceStore }
   from './modules/source/record-child-correspondence.ts';
@@ -123,6 +124,8 @@ const app = createMainApp(fuseki, {
   eligibleOrgMemberSet: new AccessEligibleOrgMemberSet(pool),
   roles: new AccessRoles(pool),
   sourceIntake,
+  sourceAcquisitions: sourceAcquisitionServices(contentPool,
+    { reserve: () => sourceIntake.reserveOpenLibrarySlot() }),
   sourceConversions,
   sourceCorrespondences,
   sourceAuthorCredits: new SourceAuthorCreditStore(contentPool, sourceProposals, sourceConversions,

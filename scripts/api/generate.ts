@@ -81,6 +81,9 @@ const sourceReads = [
   '/v2/works/{id}/source-supports/{binding}',
   '/v1/works/{id}/source-refresh-assessments/{candidateProposal}',
   '/v1/works/{id}/source-title-applications/{candidateProposal}',
+  '/v1/sources/runs/{run}',
+  '/v1/sources/runs/{base}/drift/{candidate}',
+  '/v1/sources/feeds/{feed}',
 ] as const;
 const sourceWrites = [
   '/v1/works/{id}/source-author-credits',
@@ -96,6 +99,10 @@ const sourceWrites = [
   '/v1/works/{id}/source-support/withdrawal',
   '/v2/works/{id}/source-supports',
   '/v2/works/{id}/source-supports/{binding}/withdrawal',
+  '/v1/sources/acquisitions',
+  '/v1/sources/feeds',
+  '/v1/sources/feeds/{feed}/baselines',
+  '/v1/sources/feeds/{feed}/windows',
 ] as const;
 const packageReads = ['/v1/package-resolutions/{resolution}',
   '/v1/package-resolutions/cargo/{resolution}',
@@ -212,7 +219,8 @@ export async function buildMainOpenApi(): Promise<string> {
   }
   for (const path of [...packageWrites, '/v2/works/{id}/source-supports',
     '/v1/works/{id}/source-author-credits', '/v1/sources/author-credit-supports/{support}/withdrawals',
-    '/v2/works/{id}/source-supports/{binding}/withdrawal']) {
+    '/v2/works/{id}/source-supports/{binding}/withdrawal', '/v1/sources/acquisitions',
+    '/v1/sources/feeds/{feed}/windows']) {
     const operation = document.paths?.[path]?.post;
     if (!operation) throw new Error(`Main package write is missing from OpenAPI: ${path}`);
     operation.parameters = [...(operation.parameters ?? []), {
