@@ -242,6 +242,14 @@ counting identity. The generic registry binding checks focus roles and keys;
 the node-local value checks that Realm observations receive from command-module
 code are enforced here by the guarded update and receipt verification.
 
+Global Context creation and observation writes use the standing command cost
+contract: a fixed number of exact admission, receipt, Context, target and slot
+lookups, one manifest and one guarded successful command. A losing head race may
+add one terminal stale command. Neither operation enumerates other raters or
+revision history. The API fixture meters graph reads within 24 calls and 64 KiB
+per branch and checks correction cost after unrelated observations are added;
+native operator work and deployment capacity remain separate qualifications.
+
 `global-rating-standing-latest-mean-v1` reduces one Global Context/MainVersion.
 It compares the bounded Access inventory with one graph snapshot of every head,
 receipt and manifest, exactly as the experience reads do, and returns population
@@ -274,7 +282,7 @@ aggregate reads; it exposes no counting identity.
 Cost: two inventory reads, each within the five-SQL, 101-row aggregate
 ceiling; one graph query of at most 1 MiB covering two Contexts and 202
 candidate heads; at most 512 KiB of manifests across both Contexts; one shared
-ten-second deadline; two final recovery-fence checks. Larger populations
+ten-second deadline; one final recovery-fence check. Larger populations
 receive a budget outcome. Other Contexts, MainVersions and revision history do
 not change the work.
 

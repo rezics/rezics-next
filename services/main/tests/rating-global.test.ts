@@ -1,7 +1,6 @@
 import { expect, test } from 'bun:test';
-import { mkdtempSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
+import { join, resolve } from 'node:path';
 import type { SparqlResult } from '../src/infrastructure/fuseki.ts';
 import type { RatingAggregateInventory } from '../src/modules/access/rating-aggregate-inventory.ts';
 import { InvalidRatingAggregateQuery, RatingAggregateBudgetExceeded, RatingAggregateUnavailable }
@@ -48,7 +47,9 @@ class FakeAccess {
 
 /** A sealed owner snapshot: immutable manifests on disk, Access heads and matching graph rows. */
 function fixture(realmValues: (number | null)[], globalValues: (number | null)[]): Fixture {
-  const directory = mkdtempSync(join(tmpdir(), 'rating-global-'));
+  const scratch = resolve(import.meta.dir, '../../../.temp');
+  mkdirSync(scratch, { recursive: true });
+  const directory = mkdtempSync(join(scratch, 'rating-global-'));
   const env = { fuseki: new FakeGraph(), lineage: { dataEpoch: 'epoch-1', routingEpoch: '1' },
     objectDirectory: directory } as unknown as WorkActivationEnvironment;
   const graph = env.fuseki as unknown as FakeGraph;
