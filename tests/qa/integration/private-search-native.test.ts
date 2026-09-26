@@ -308,6 +308,9 @@ test('SEARCH11/SEARCH12: native private field, exact source and durable read rec
   const publicBefore = await publicPhrase(visibleTerm);
   expect(publicBefore.total).toBe(1);
   expect(publicBefore.results[0]?.contribution).toBe(published.contribution);
+  const hiddenBefore = await publicPhrase(hiddenTerm);
+  expect(hiddenBefore.total).toBe(0);
+  expect(hiddenBefore.results).toEqual([]);
 
   const draft = await privateDraft(work.work, hiddenBody);
   const privateContribution = draft.contribution;
@@ -321,17 +324,14 @@ test('SEARCH11/SEARCH12: native private field, exact source and durable read rec
   const publicAfter = await publicPhrase(visibleTerm);
   expect(publicAfter.total).toBe(publicBefore.total);
   expect(publicAfter.population).toBe(publicBefore.population);
-  // Lucene may rescore the same public hit after another unit is indexed.
-  // The private draft must leave the public result identities unchanged.
-  const identities = (rows: typeof publicAfter.results) => rows.map(row =>
-    Object.fromEntries(Object.entries(row).filter(([key]) => key !== 'score')));
-  expect(identities(publicAfter.results)).toEqual(identities(publicBefore.results));
+  expect(publicAfter.results).toEqual(publicBefore.results);
   for (const result of [...publicBefore.results, ...publicAfter.results]) {
     expect(result.score).toBeGreaterThan(0);
   }
   const hiddenPublic = await publicPhrase(hiddenTerm);
-  expect(hiddenPublic.total).toBe(0);
-  expect(hiddenPublic.results).toEqual([]);
+  expect(hiddenPublic.total).toBe(hiddenBefore.total);
+  expect(hiddenPublic.population).toBe(hiddenBefore.population);
+  expect(hiddenPublic.results).toEqual(hiddenBefore.results);
   expect(JSON.stringify(hiddenPublic)).not.toContain(hiddenBody);
   expect(JSON.stringify(hiddenPublic)).not.toContain(hiddenTerm);
   expect(hiddenPublic).not.toHaveProperty('snippets');
