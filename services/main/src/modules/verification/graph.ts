@@ -24,6 +24,10 @@ function iri(value: string): string {
   return `<${value}>`;
 }
 
+export function validateVerificationReference(value: string, name: string): void {
+  try { iri(value); } catch { throw new InvalidVerificationInput(`${name} is not an admitted IRI`); }
+}
+
 export class InvalidVerificationInput extends Error {}
 export class VerificationGraphStale extends Error {}
 
@@ -478,7 +482,8 @@ export interface AssessmentRecordInput {
   coverage: 'complete' | 'partial' | 'incomplete';
   support: 'supported' | 'contradicted' | 'material-conflict' | 'insufficient' | 'abstained';
   dependence: 'established' | 'unknown' | 'circular' | 'over-budget'; independentOrigins: number | null;
-  scorePerMillion: number | null; calibration: string | null; limitations: string;
+  scorePerMillion: number | null; calibration: string | null; evaluationReference?: string | null;
+  limitations: string;
   assessorKind: 'human' | 'automated'; actingSubject: string;
 }
 
@@ -511,6 +516,7 @@ export async function recordAssessment(env: WorkActivationEnvironment, admission
       ${input.scorePerMillion === null ? '' : `rv:scorePerMillion ${integer(input.scorePerMillion)} ;
         rv:scoreCalibration rv:${input.calibration ? 'CalibratedScore' : 'UncalibratedScore'} ;`}
       ${input.calibration ? `rv:calibration ${iri(input.calibration)} ;` : ''}
+      ${input.evaluationReference ? `rv:evaluationReference ${iri(input.evaluationReference)} ;` : ''}
       rv:limitations ${lit(input.limitations)} ; rv:assessor ${iri(input.actingSubject)} ;
       rv:assessorKind rv:${input.assessorKind === 'human' ? 'HumanAssessor' : 'AutomatedAssessor'} ;
       rv:assessedAt ${dateTime(new Date().toISOString())} ;
@@ -531,7 +537,7 @@ const inverse = <T extends Record<string, string>>(map: T) =>
 
 export async function readAssessment(env: WorkActivationEnvironment, assessment: string): Promise<AssessmentRecord | null> {
   const response = await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?claim ?claimRevision ?evidence ?source
-    ?method ?methodRevision ?policy ?context ?coverage ?support ?dependence ?origins ?score ?calibration
+    ?method ?methodRevision ?policy ?context ?coverage ?support ?dependence ?origins ?score ?calibration ?evaluation
     ?limitations ?assessor ?kind ?assessedAt ?epoch ?sequence WHERE {
     GRAPH ${iri(GRAPHS.revisions)} { ${iri(assessment)} a rv:ClaimAssessment ; rv:component ?claim ;
       rv:claimRevision ?claimRevision ; rv:evidenceSetRevision ?evidence ; rv:method ?method ;
@@ -542,7 +548,8 @@ export async function readAssessment(env: WorkActivationEnvironment, assessment:
       OPTIONAL { ${iri(assessment)} rv:sourceAssessment ?source }
       OPTIONAL { ${iri(assessment)} rv:independentOriginCount ?origins }
       OPTIONAL { ${iri(assessment)} rv:scorePerMillion ?score }
-      OPTIONAL { ${iri(assessment)} rv:calibration ?calibration } }
+      OPTIONAL { ${iri(assessment)} rv:calibration ?calibration }
+      OPTIONAL { ${iri(assessment)} rv:evaluationReference ?evaluation } }
   }`);
   const rows = response.results?.bindings ?? [];
   if (!rows.length) return null;
@@ -555,6 +562,7 @@ export async function readAssessment(env: WorkActivationEnvironment, assessment:
     support: inverse(SUPPORT)[local(row.support!.value)]!, dependence: inverse(DEPENDENCE)[local(row.dependence!.value)]!,
     independentOrigins: row.origins ? Number(row.origins.value) : null,
     scorePerMillion: row.score ? Number(row.score.value) : null, calibration: row.calibration?.value ?? null,
+    evaluationReference: row.evaluation?.value ?? null,
     limitations: row.limitations!.value, actingSubject: row.assessor!.value,
     assessorKind: local(row.kind!.value) === 'HumanAssessor' ? 'human' : 'automated',
     assessedAt: row.assessedAt!.value, dataEpoch: row.epoch!.value, sequence: row.sequence!.value };

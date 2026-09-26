@@ -13,6 +13,7 @@ import { analyzeClaimSupport, currentVerificationHead, HUMAN_REVIEW_METHOD, SUMM
   type AnalysisResult, type ClaimScope, type Support } from './analysis.ts';
 import { ADMISSIONS, claimDigest, createClaim, graphHeads, InvalidVerificationInput, native,
   readAcceptance, readAssessment, readClaimHead, readClaimRevisions, readReliability, readReceipt, recordAssessment,
+  validateVerificationReference,
   recordReliability, reliabilityDigest, sealVerificationAdmission,
   VerificationGraphStale, type ClaimRecord, type CreateClaimInput, type Family, type GraphReceipt,
   type ReliabilityInput } from './graph.ts';
@@ -136,7 +137,8 @@ export interface AssessClaimInput {
   claimRevision: string; evidenceSetRevision: string; sourceAssessments: readonly string[];
   method: 'automated' | 'human-review'; judgment: Exclude<Support, 'abstained'> | null;
   evaluationContext: string; adoptedRevision: string | null;
-  scorePerMillion: number | null; calibration: string | null; limitations: string;
+  scorePerMillion: number | null; calibration: string | null; evaluationReference?: string | null;
+  limitations: string;
   expectedSummary: string | null; resolvesChallenges: readonly string[]; actingSubject: string;
 }
 
@@ -156,8 +158,10 @@ function assessmentDigest(claim: string, input: AssessClaimInput): string {
     || (input.calibration !== null && input.scorePerMillion === null)) {
     throw new InvalidVerificationInput('assessment request is invalid');
   }
+  if (input.evaluationReference != null) validateVerificationReference(input.evaluationReference, 'evaluationReference');
   for (const item of input.sourceAssessments) native(item, 'sourceAssessment');
   return hash(JSON.stringify({ family: 'claim-assessment-v1', claim, ...input,
+    evaluationReference: input.evaluationReference ?? null,
     sourceAssessments: [...input.sourceAssessments].sort(), resolvesChallenges: [...input.resolvesChallenges].sort() }));
 }
 
@@ -252,7 +256,8 @@ export async function assessAdmittedClaim(deps: VerificationDependencies, reques
         policyRevision: SUMMARY_POLICY, evaluationContext: input.evaluationContext,
         coverage: basis.analysis.coverage, support: basis.support, dependence: basis.analysis.dependence,
         independentOrigins: basis.analysis.independentOrigins, scorePerMillion: input.scorePerMillion,
-        calibration: input.calibration, limitations: input.limitations,
+        calibration: input.calibration, evaluationReference: input.evaluationReference ?? null,
+        limitations: input.limitations,
         assessorKind: input.method === 'human-review' ? 'human' : 'automated', actingSubject: input.actingSubject });
     }, error => error instanceof VerificationMissing || error instanceof VerificationStale
       || error instanceof VerificationGraphStale);

@@ -14,6 +14,7 @@ const reliabilityScope: readonly PropertyDefinition[] = [
 const method: readonly PropertyDefinition[] = [
   requiredIri('rv:method'),
   requiredIri('rv:methodRevision'),
+  { path: 'rv:evaluationReference', maxCount: 1, nodeKind: 'sh:IRI' },
   { path: 'rv:calibration', maxCount: 1, nodeKind: 'sh:IRI' },
   { path: 'rv:scorePerMillion', maxCount: 1, datatype: 'xsd:integer', minInclusive: 0, maxInclusive: 1000000 },
   { path: 'rv:scoreCalibration', maxCount: 1, in: ['rv:CalibratedScore', 'rv:UncalibratedScore'] },

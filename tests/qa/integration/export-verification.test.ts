@@ -1,3 +1,5 @@
+import { evaluateFeverHeldOut, FEVER_EVALUATION_REFERENCE } from './export-method-evaluation-report.ts';
+import { assessAdmittedClaim } from '../../../services/main/src/modules/verification/operations.ts';
 import { expect, test } from 'bun:test';
 import { mkdirSync, rmSync } from 'node:fs';
 import { join, resolve } from 'node:path';
@@ -8,7 +10,7 @@ import { migrateContent } from '../../../services/content/src/migrate.ts';
 import { FusekiClient } from '../../../services/main/src/infrastructure/fuseki.ts';
 import { AccessAdmissionRegistry } from '../../../services/main/src/modules/access/admission.ts';
 import { ExportStore } from '../../../services/main/src/modules/export/store.ts';
-import { claimDigest, createClaim, readAssessment, readReceipt, recordAssessment }
+import { claimDigest, createClaim, readAssessment, readReceipt }
   from '../../../services/main/src/modules/verification/graph.ts';
 import { SUPPORT_METHOD, SUMMARY_POLICY } from '../../../services/main/src/modules/verification/analysis.ts';
 import { VerificationStore } from '../../../services/main/src/modules/verification/store.ts';
@@ -35,7 +37,7 @@ test('FACT05: exact claim and assessment export retains method output while reda
     try {
       await migrateContent(contentPool);
       account = await ratingAccount({ ...Bun.env, ACCOUNT_DATABASE_URL: databases.urls.account } as
-        Record<string, string>, 'openid export:create export:read');
+        Record<string, string>, 'openid export:create export:read claim:assess');
       const principalId = randomUUID();
       const actor = agent();
       const environment = { fuseki: new FusekiClient(Bun.env.FUSEKI_URL),
@@ -86,20 +88,22 @@ test('FACT05: exact claim and assessment export retains method output while reda
           expectedHead: null, items: [{ stance: 'supports', contentRevision: draft.revisionId,
             selector: { kind: 'whole' }, availability: 'available' }] });
       await grant('verification:assess:global', 'verification.claim-assess');
-      const assessmentDigest = 'b'.repeat(64);
-      const assessmentAdmission = await access.register({ principal, actingSubject: actor,
-        scope: 'verification:assess:global', action: 'verification.claim-assess',
-        idempotencyKey: `assessment-${randomUUID()}`, requestDigest: assessmentDigest });
-      const assessmentReceipt = await recordAssessment(environment,
-        await access.claim(assessmentAdmission.id, assessmentDigest), assessmentDigest,
-      { claim, claimRevision, evidenceSetRevision: evidence.evidence.revision,
-        sourceAssessments: [], method: SUPPORT_METHOD, methodRevision: SUPPORT_METHOD,
-        policyRevision: SUMMARY_POLICY, evaluationContext: 'urn:context:export-fixture',
-        coverage: 'complete', support: 'insufficient', dependence: 'established', independentOrigins: 1,
-        scorePerMillion: 800_000, calibration: null,
-        limitations: 'This method output has no representative probability calibration.',
-        assessorKind: 'automated', actingSubject: actor });
-      const assessed = await readAssessment(environment, assessmentReceipt.result.assessment!);
+      const feverEvaluation = evaluateFeverHeldOut();
+      const limitations = JSON.stringify({
+        scoreSemantics: '800000 is method output only; without calibration evidence it is not a calibrated fact probability.',
+        evaluation: feverEvaluation,
+      });
+      const assessmentOperation = await assessAdmittedClaim({ env: environment, account: account.verifier,
+        access, store: verification }, new Request('http://main.local', {
+          headers: { authorization: `Bearer ${account.tokenA}` },
+        }), claim, { claimRevision, evidenceSetRevision: evidence.evidence.revision,
+        sourceAssessments: [], method: 'automated', judgment: null,
+        evaluationContext: 'urn:context:export-fixture', adoptedRevision: null,
+        scorePerMillion: 800_000, calibration: null, evaluationReference: FEVER_EVALUATION_REFERENCE,
+        limitations, expectedSummary: null, resolvesChallenges: [], actingSubject: actor,
+        idempotencyKey: `assessment-${randomUUID()}` });
+      expect(assessmentOperation.assessment.evaluationReference).toBe(FEVER_EVALUATION_REFERENCE);
+      const assessed = await readAssessment(environment, assessmentOperation.assessment.assessment);
       if (!assessed) throw new Error('Assessment fixture was unavailable');
       await grant(`export:${assessed.assessment}`, 'export.create');
       const app = exportRoutes({ environment, account: account.verifier, access,
@@ -119,12 +123,15 @@ test('FACT05: exact claim and assessment export retains method output while reda
           detail: Record<string, unknown> }> } };
       expect(saved.plan.members.map(item => item.sourceGrain)).toEqual(['claim', 'assessment']);
       expect(saved.plan.members[0]?.data.valueQualifiers).toEqual(['inferred']);
-      expect(saved.plan.members[1]?.data).toMatchObject({ method: SUPPORT_METHOD,
+      const exportedAssessment = saved.plan.members[1]!.data;
+      expect(exportedAssessment).toMatchObject({ method: SUPPORT_METHOD,
         methodRevision: SUPPORT_METHOD, policyRevision: SUMMARY_POLICY,
-        evaluationContext: 'urn:context:export-fixture', coverage: 'complete',
-        support: 'insufficient', dependence: 'established', independentOrigins: 1,
-        scoreKind: 'method-output', scorePerMillion: 800_000, calibration: null,
-        limitations: 'This method output has no representative probability calibration.' });
+        claimRevision, evidenceSetRevision: evidence.evidence.revision, sourceAssessments: [],
+        evaluationReference: FEVER_EVALUATION_REFERENCE, evaluationContext: 'urn:context:export-fixture',
+        coverage: 'complete', support: 'insufficient', dependence: 'unknown', independentOrigins: null,
+        scoreKind: 'method-output', scorePerMillion: 800_000, calibration: null, limitations });
+      expect(exportedAssessment).not.toHaveProperty('probability');
+      expect(exportedAssessment).not.toHaveProperty('factProbability');
       expect(saved.plan.members[1]?.data.evidence).toMatchObject({ itemCount: 1,
         items: [{ ordinal: 0, stance: 'supports', recordedAvailability: 'available',
           currentAvailability: 'available' }] });
@@ -136,7 +143,6 @@ test('FACT05: exact claim and assessment export retains method output while reda
         .toBe('No representative labelled calibration record was verified for this method');
       expect(raw).not.toContain(privateBody);
       expect(raw).not.toContain(draft.revisionId);
-      expect(raw).not.toContain('probability:');
       const reread = await app.handle(new Request(`http://main.local/v1/exports/${saved.manifestId}`, {
         headers: { authorization: `Bearer ${account.tokenA}` },
       }));

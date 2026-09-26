@@ -1,8 +1,7 @@
 import { expect, test } from 'bun:test';
-import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
 import { analyzeClaimSupport, type AnalysisInput, type Support }
   from '../../../services/main/src/modules/verification/analysis.ts';
+import { evaluateFeverHeldOut } from './export-method-evaluation-report.ts';
 
 const claim = { referent: 'urn:fact:1', context: 'urn:context:1', predicate: 'urn:predicate:1',
   editionScope: null, validFrom: null, validUntil: null };
@@ -101,46 +100,16 @@ test('FACT05: labelled method set reports held-out errors, coverage and abstenti
   expect(report.every(row => !('probability' in row.actual))).toBe(true);
 });
 
-test('FACT05: FEVER subset reports held-out class calibration baseline and its evidence-text limit', () => {
-  type FeverLabel = 'SUPPORTS' | 'REFUTES' | 'NOT ENOUGH INFO';
-  type FeverRow = { id: number; label: FeverLabel; domain: string; claim: string;
-    evidence: [string, number][] };
-  const rows = readFileSync(resolve(import.meta.dir, '../fixtures/fact-calibration/claims.jsonl'), 'utf8')
-    .trim().split('\n').map(line => JSON.parse(line) as FeverRow);
-  const labels: FeverLabel[] = ['SUPPORTS', 'REFUTES', 'NOT ENOUGH INFO'];
-  const counts = Object.fromEntries(labels.map(label => [label,
-    rows.filter(row => row.label === label).length])) as Record<FeverLabel, number>;
-  const strata = new Map<string, number>();
-  for (const row of rows) {
-    const key = `${row.label}\0${row.domain}`;
-    strata.set(key, (strata.get(key) ?? 0) + 1);
-  }
-  const probabilities = Object.fromEntries(labels.map(label => [label, counts[label] / rows.length])) as
-    Record<FeverLabel, number>;
-  const brier = rows.reduce((total, row) => total + labels.reduce((sum, label) =>
-    sum + (probabilities[label] - Number(row.label === label)) ** 2, 0), 0) / rows.length;
-  const logLoss = rows.reduce((total, row) => total - Math.log(probabilities[row.label]), 0) / rows.length;
-  const predicted = labels[0]!; // Stable tie break for the uniform-prior baseline.
-  const accuracy = rows.filter(row => row.label === predicted).length / rows.length;
-  const confidence = probabilities[predicted];
-  const calibrationError = Math.abs(confidence - accuracy);
-  const report = { dataset: 'fact-calibration-v1', n: rows.length, counts, accuracy,
-    multiclassBrier: brier, logLoss, topLabelCalibrationError: calibrationError,
-    predictor: 'uniform class-prior baseline; not the REZICS support method' };
-
-  expect(rows).toHaveLength(384);
-  expect(counts).toEqual({ SUPPORTS: 128, REFUTES: 128, 'NOT ENOUGH INFO': 128 });
-  expect(new Set(rows.map(row => row.domain)).size).toBe(8);
-  expect(strata.size).toBe(24);
-  expect([...strata.values()].every(count => count === 16)).toBe(true);
-  expect(rows.every(row => row.claim.length > 0
-    && row.evidence.every(([page, sentence]) => page.length > 0 && Number.isInteger(sentence)))).toBe(true);
-  expect(report.accuracy).toBeCloseTo(1 / 3, 12);
-  expect(report.multiclassBrier).toBeCloseTo(2 / 3, 12);
-  expect(report.logLoss).toBeCloseTo(Math.log(3), 12);
-  expect(report.topLabelCalibrationError).toBeCloseTo(0, 12);
-  // FEVER contributes labels, claims and Wikipedia sentence pointers, but no
-  // evidence text; it cannot generate predictions for the lineage method.
-  expect(rows.every(row => !('evidenceText' in row))).toBe(true);
-  console.info('FACT05 FEVER balanced-prior baseline:', JSON.stringify(report));
+test('FACT05: FEVER held-out evaluates categorical method coverage, abstention and error types', () => {
+  const report = evaluateFeverHeldOut();
+  expect(report.n).toBe(384);
+  expect(report.sha256).toBe('90705d7358b377469f3efa1fda31849cb10b29072cbd86def1d7d225552b6293');
+  expect(report.coverage).toEqual({ complete: 128, partial: 256, incomplete: 0 });
+  expect(report.abstention).toBe(0);
+  expect(report.predictions).toEqual({ SUPPORTS: 0, REFUTES: 0, 'NOT ENOUGH INFO': 384,
+    'material-conflict': 0, abstained: 0 });
+  expect(report.errorTypes).toEqual({ 'REFUTES→NOT ENOUGH INFO': 128, 'SUPPORTS→NOT ENOUGH INFO': 128 });
+  expect(report.calibration).toEqual({ status: 'unmeasured',
+    reason: 'method output is categorical; no probability forecast was evaluated' });
+  console.info('FACT05 FEVER held-out categorical evaluation:', JSON.stringify(report));
 });
