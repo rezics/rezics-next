@@ -196,3 +196,13 @@ head fixture advanced history, and concurrent same-key writes converged. The
 consistency function was injected in this owner test; separate synthetic and
 live tile tests exercise the real function. This remains partial PKG05/PKG14
 until scoped API exposure and broader rollback/recovery checks.
+
+The scoped Main API passed isolated Account-verifier/Access/Main/PostgreSQL
+integration `20260925t232828-32bfc4`. A read-only token could not verify; a
+verify-only token wrote but could not read; an active other principal could not
+use the capture or read the receipt. Owner exact read, idempotent replay without
+a second lookup, changed-capture key conflict and deactivation denial passed.
+The test used retained real signed lookup/latest fixtures with an injected
+consistency function, while separate live and synthetic tests exercise that
+function. This is partial PKG05/PKG14/IAM10 evidence pending real Account OAuth
+and recovery.

@@ -84,11 +84,16 @@ export class GoSumdbTrustStore {
     if (!capture || capture.manifest.rawSha256 !== row.capture_mod_sha256) {
       throw new GoSumdbTrustUnavailable('Go checksum capture evidence differs');
     }
-    validateIncludedGoSumdbLookup(row.evidence,
-      { path: capture.path, version: capture.version }, capture.manifest.goModH1);
-    const trustedTree = checkedHead({ history_id: row.trusted_head_id,
-      tree_size: row.trusted_tree_size, root_hash: row.trusted_root_hash,
-      signed_note: row.trusted_signed_note });
+    let trustedTree: VerifiedGoSumdbTreeNote;
+    try {
+      validateIncludedGoSumdbLookup(row.evidence,
+        { path: capture.path, version: capture.version }, capture.manifest.goModH1);
+      trustedTree = checkedHead({ history_id: row.trusted_head_id,
+        tree_size: row.trusted_tree_size, root_hash: row.trusted_root_hash,
+        signed_note: row.trusted_signed_note });
+    } catch {
+      throw new GoSumdbTrustUnavailable('stored Go checksum proof differs');
+    }
     if (trustedTree.size < row.evidence.tree.size
       || (trustedTree.size === row.evidence.tree.size
         && trustedTree.rootHash !== row.evidence.tree.rootHash)) {

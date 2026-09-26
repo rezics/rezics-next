@@ -158,7 +158,13 @@ revalidates the signed note, record proof and captured bytes without network.
 The checkpoint is monotonic within this database's history. Restoring an older
 complete database backup could roll it back; an independent external checkpoint
 or witness is still needed for stronger cross-restore rollback detection. The
-HTTP route and Account scope are the next boundary.
+`POST /v1/package-sources/go/{capture}/verify` route requires `package:verify`,
+an active Access principal and an idempotency key. It refuses another principal's
+capture before lookup. `GET /v1/package-sources/go-verifications/{verification}`
+requires `package:read` and returns the exact private receipt after offline
+evidence revalidation. Both responses use `no-store`; the receipt identifies
+its included and locally trusted signed trees. A calculated capture h1 remains
+separate from this explicit verification operation.
 `POST /v1/package-resolutions/from-captures` accepts up to 128 private capture
 IDs. Its v1 body supplies a main module and direct requirements. Its v2 body
 supplies the main module's raw UTF-8 `go.mod` as canonical base64 (at most 64

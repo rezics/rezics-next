@@ -32,6 +32,8 @@ import { GoMvsResolutionStore, GoResolutionInvalid, GoResolutionConflict,
 import { GoProxyCaptureStore, GoProxyCaptureInvalid, GoProxyCaptureConflict,
   GoProxyCaptureMissing, GoProxyCaptureUnavailable }
   from './modules/package/go-proxy-capture.ts';
+import { GoSumdbTrustStore, GoSumdbTrustInvalid, GoSumdbTrustConflict,
+  GoSumdbTrustUnavailable } from './modules/package/go-sumdb-trust.ts';
 import { OpenLibrarySourceGraph, SourceGraphUnavailable }
   from './modules/source/graph-projection.ts';
 import { SourceNativeWorkProposalStore, SourceProposalInvalid,
@@ -183,6 +185,7 @@ export interface MainWorkDependencies {
   sourceCorrespondences?: SourceChildCorrespondenceStore;
   packageResolutions?: GoMvsResolutionStore;
   packageCaptures?: GoProxyCaptureStore;
+  packageVerifications?: GoSumdbTrustStore;
   sourceGraph?: OpenLibrarySourceGraph;
   sourceProposals?: SourceNativeWorkProposalStore;
   sourceAdoptions?: SourceNativeWorkAdoptionStore;
@@ -382,6 +385,18 @@ const goProxyCaptureResult = t.Object({
 });
 const goProxyCaptureWrite = t.Object({ capture: goProxyCaptureResult,
   replayed: t.Boolean() });
+const goSumdbTree = t.Object({ server: t.Literal('sum.golang.org'),
+  size: t.Number(), rootHash: t.String(), noteSha256: t.String() });
+const goSumdbVerificationResult = t.Object({
+  profile: t.Literal('go-sumdb-capture-verification-v1'),
+  verification: t.String(), capture: t.String(), path: t.String(),
+  version: t.String(), manifestSha256: t.String(), goModH1: t.String(),
+  recordIndex: t.Number(), recordSha256: t.String(),
+  includedTree: goSumdbTree, trustedTree: goSumdbTree,
+  createdAt: t.String(),
+});
+const goSumdbVerificationWrite = t.Object({
+  verification: goSumdbVerificationResult, replayed: t.Boolean() });
 const sourceGraphResult = t.Object({ profile: t.Literal('open-library-work-source-graph-v1'),
   state: t.Literal('staged'), record: t.String(), observation: t.String(),
   conversion: t.String(), sourceDigest: t.String(),
@@ -780,6 +795,18 @@ function commandError(error: unknown): Response {
   }
   if (error instanceof GoProxyCaptureUnavailable) {
     return problem(503, 'go_capture_unavailable', 'Go proxy capture is unavailable');
+  }
+  if (error instanceof GoSumdbTrustInvalid) {
+    return problem(422, 'go_sumdb_verification_invalid',
+      'Go checksum verification request is invalid');
+  }
+  if (error instanceof GoSumdbTrustConflict) {
+    return problem(409, 'go_sumdb_verification_conflict',
+      'Go checksum verification key binds another capture');
+  }
+  if (error instanceof GoSumdbTrustUnavailable) {
+    return problem(503, 'go_sumdb_verification_unavailable',
+      'Go checksum evidence or trust timeline is unavailable');
   }
   if (error instanceof SourceGraphUnavailable) {
     return problem(503, 'source_graph_unavailable', 'Source graph projection is unavailable');
@@ -1303,6 +1330,44 @@ export function createMainApp(fuseki: FusekiClient, work?: MainWorkDependencies)
         if (!principalId) return problem(403, 'authority_denied', 'Package principal is inactive');
         const result = await work.packageCaptures.read(principalId, params.capture);
         if (!result) return problem(404, 'go_capture_missing', 'Go capture is unavailable');
+        return Response.json(result, { headers: { 'cache-control': 'no-store' } });
+      } catch (error) { return commandError(error); }
+    })
+    .post('/v1/package-sources/go/:capture/verify', {
+      params: t.Object({ capture: groupUuid }),
+      response: { 200: goSumdbVerificationWrite, 201: goSumdbVerificationWrite,
+        ...writeProblems, 404: problemResult(404), 422: problemResult(422) },
+    }, async ({ request, params }) => {
+      try {
+        if (!work.packageVerifications) return problem(503,
+          'go_sumdb_verification_unavailable', 'Go checksum verifier is unavailable');
+        const key = request.headers.get('idempotency-key');
+        if (!key) return problem(400, 'invalid_idempotency_key', 'Idempotency-Key is required');
+        const principal = await work.account.verify(request, ['package:verify']);
+        const principalId = await work.access.activePrincipalId(principal);
+        if (!principalId) return problem(403, 'authority_denied', 'Package principal is inactive');
+        const result = await work.packageVerifications.verify(principalId,
+          key, params.capture);
+        if (!result) return problem(404, 'go_capture_missing',
+          'Go capture is unavailable');
+        return Response.json(result, { status: result.replayed ? 200 : 201,
+          headers: { 'cache-control': 'no-store' } });
+      } catch (error) { return commandError(error); }
+    })
+    .get('/v1/package-sources/go-verifications/:verification', {
+      params: t.Object({ verification: groupUuid }),
+      response: { 200: goSumdbVerificationResult, ...authorizedReadProblems },
+    }, async ({ request, params }) => {
+      try {
+        if (!work.packageVerifications) return problem(503,
+          'go_sumdb_verification_unavailable', 'Go checksum verifier is unavailable');
+        const principal = await work.account.verify(request, ['package:read']);
+        const principalId = await work.access.activePrincipalId(principal);
+        if (!principalId) return problem(403, 'authority_denied', 'Package principal is inactive');
+        const result = await work.packageVerifications.read(principalId,
+          params.verification);
+        if (!result) return problem(404, 'go_sumdb_verification_missing',
+          'Go checksum verification is unavailable');
         return Response.json(result, { headers: { 'cache-control': 'no-store' } });
       } catch (error) { return commandError(error); }
     })
