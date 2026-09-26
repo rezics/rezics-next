@@ -1,6 +1,10 @@
 import type { CaseDeclarations } from './declaration.ts';
 
 export const liveControlCases: CaseDeclarations = {
+  LIVE03: [
+    { tier: 'integration', file: 'tests/qa/integration/source-field.test.ts',
+      name: 'LIVE03: synopsis source refresh yields to a same-value human control epoch' },
+  ],
   LIVE05: [
     { tier: 'integration', file: 'tests/qa/integration/source-field.test.ts',
       name: 'LIVE05: generic field withdrawal serializes one support and preserves independent acceptance' },

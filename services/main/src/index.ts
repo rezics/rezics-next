@@ -73,6 +73,7 @@ import { SourceNativeWorkAttachmentStore } from './modules/source/native-work-at
 import { SourceAuthorCreditStore } from './modules/source/author-credit.ts';
 import { SourceFieldWithdrawalStore } from './modules/source/withdrawal.ts';
 import { SourceFieldAttachmentStore } from './modules/source/support-attach.ts';
+import { SourceFieldApplicationStore } from './modules/source/field-application.ts';
 import { ProviderIdentityStore } from './modules/source/provider-identity.ts';
 import { SourceScoreStore } from './modules/source/score.ts';
 import { AccountAssertionVerifier } from './modules/account/verify-assertion.ts';
@@ -246,6 +247,7 @@ const connectedApps = new ConnectedAppStore(contentPool);
 const sourceAdoptions = new SourceNativeWorkAdoptionStore(contentPool, sourceProposals,
   environment, account, access);
 const sourceCorrespondences = new SourceChildCorrespondenceStore(contentPool, sourceConversions);
+const sourceFieldWithdrawals = new SourceFieldWithdrawalStore(contentPool, environment);
 const correctionWorker = new VerificationCorrectionWorker(new VerificationCorrectionPublisher(
   new VerificationStore(contentPool), new NotificationStore(pool)));
 const app = createMainApp(fuseki, {
@@ -309,7 +311,9 @@ const app = createMainApp(fuseki, {
   sourceCorrespondences,
   sourceAuthorCredits: new SourceAuthorCreditStore(contentPool, sourceProposals, sourceConversions,
     sourceCorrespondences, environment, account, access),
-  sourceFieldWithdrawals: new SourceFieldWithdrawalStore(contentPool, environment),
+  sourceFieldWithdrawals,
+  sourceFieldApplications: new SourceFieldApplicationStore(contentPool, environment,
+    account, access, sourceConversions, sourceAdoptions, sourceFieldWithdrawals),
   sourceFieldAttachments: new SourceFieldAttachmentStore(contentPool, environment, access),
   sourceProviderIdentity: new ProviderIdentityStore(contentPool),
   sourceScores: new SourceScoreStore(contentPool),

@@ -5,6 +5,8 @@ import { authorCreditBody, authorCreditSupportResult, authorCreditWriteResult,
 import { readAuthorCredit } from '../modules/work/author-credit.ts';
 import { readAuthorCreditRetirement, retireAuthorCredit } from '../modules/work/author-credit-retirement.ts';
 import { readTitleControl } from '../modules/work/title-control.ts';
+import { changeNativeFieldControl, readNativeFieldControl, NativeFieldConflict,
+  NativeFieldInvalid, NativeFieldUnavailable } from '../modules/source/field-control-native.ts';
 import { FieldWithdrawalConflict, FieldWithdrawalInvalid, FieldWithdrawalPending,
   FieldWithdrawalUnavailable } from '../modules/source/withdrawal.ts';
 import { assertGraphAdmissionOpen } from '../modules/work/restore-lineage.ts';
@@ -21,7 +23,28 @@ export const openApiOperations = {
   '/v1/sources/field-supports/{support}': { get: { bearer: true } },
   '/v1/sources/field-supports': { post: { bearer: true, idempotencyKey: true } },
   '/v1/sources/withdrawals': { post: { bearer: true, idempotencyKey: true } },
+  '/v1/works/{id}/fields/synopsis/control': { get: { bearer: true },
+    post: { bearer: true, idempotencyKey: true } },
 };
+
+const synopsisBasis = t.Object({ contentHead: t.Nullable(groupAgent),
+  head: t.Nullable(groupAgent), epoch: t.String({ pattern: '^(0|[1-9][0-9]{0,18})$' }),
+  protection: t.Nullable(groupAgent) }, { additionalProperties: false });
+const synopsisSource = t.Object({ record: groupAgent, observation: groupAgent,
+  conversion: groupAgent, mapping: t.Literal('open-library-work-map-v1') },
+{ additionalProperties: false });
+const synopsisState = t.Object({ profile: t.Literal('work-editorial-field-control-v1'),
+  work: groupAgent, field: t.Literal('synopsis'), slot: t.String(), workHead: groupAgent,
+  contentHead: t.Nullable(groupAgent), controlHead: t.Nullable(groupAgent),
+  controlEpoch: t.String(), protectionHead: t.Nullable(groupAgent),
+  mode: t.Union([t.Literal('unestablished'), t.Literal('human-controlled'),
+    t.Literal('source-managed')]), value: t.Nullable(t.String()),
+  rightsStatus: t.Nullable(t.Literal('undetermined')) });
+const synopsisReceipt = t.Object({ outcome: t.Literal('succeeded'), receipt: t.String(),
+  admissionId: t.String(), requestDigest: t.String(), authorityEpoch: t.String(),
+  scope: t.String(), dataEpoch: t.String(), sequence: t.String(), replayed: t.Boolean(),
+  work: groupAgent, slot: t.String(), content: groupAgent, control: groupAgent,
+  support: t.Optional(groupAgent) });
 
 const fieldWithdrawal = t.Object({ profile: t.Literal('source-field-withdrawal-v1'),
   state: t.Literal('withdrawn'), withdrawal: t.String(), support: t.String(),
@@ -168,6 +191,73 @@ const sourceTitleApplicationWriteResult = t.Object({ application: sourceTitleApp
 
 export function sourceSupportRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
   return new Elysia()
+    .get('/v1/works/:id/fields/synopsis/control', {
+      params: t.Object({ id: groupUuid }), query: t.Object({ actingSubject: groupAgent }),
+      response: { 200: synopsisState, ...authorizedReadProblems },
+    }, async ({ request, params, query }) => {
+      try {
+        const principal = await work.account.verify(request, ['work:read']);
+        const native = `https://rezics.com/id/${params.id}`;
+        if (!await work.access.canReadWork(principal, query.actingSubject, native)) {
+          return problem(404, 'field_unavailable', 'Work field is unavailable');
+        }
+        const state = await readNativeFieldControl(work.environment, native);
+        return Response.json(state, { headers: { 'cache-control': 'no-store' } });
+      } catch (error) { return commandError(error); }
+    })
+    .post('/v1/works/:id/fields/synopsis/control', {
+      params: t.Object({ id: groupUuid }),
+      body: t.Object({ profile: t.Literal('work-editorial-field-control-v1'),
+        field: t.Literal('synopsis'), expectedWorkHead: groupAgent, basis: synopsisBasis,
+        value: t.String({ minLength: 1, maxLength: 8000 }),
+        origin: t.Union([t.Literal('human'), t.Literal('source')]),
+        source: t.Nullable(synopsisSource), actingSubject: groupAgent },
+      { additionalProperties: false }),
+      response: { 200: synopsisReceipt, 201: synopsisReceipt,
+        202: pendingOperation, ...writeProblems, 404: problemResult(404) },
+    }, async ({ request, params, body }) => {
+      try {
+        const key = request.headers.get('idempotency-key');
+        if (!key) return problem(400, 'invalid_idempotency_key', 'Idempotency-Key is required');
+        if (!work.access.issueTitleAdmission) {
+          return problem(503, 'field_control_unavailable', 'Field admission signer is unavailable');
+        }
+        const native = `https://rezics.com/id/${params.id}`;
+        if (body.origin === 'source') {
+          if (!body.source || !work.sourceFieldApplications) {
+            return problem(400, 'invalid_field_source', 'Verified source basis is required');
+          }
+          const principal = await work.account.verify(request, ['source:adopt', 'work:edit']);
+          const principalId = await work.access.activePrincipalId(principal);
+          if (!principalId) return problem(403, 'authority_denied', 'Source principal is inactive');
+          const visible = await work.sourceConversions?.verifiedRead(principalId,
+            body.source.conversion.split('/').at(-1)!);
+          if (!visible) return problem(404, 'field_source_unavailable', 'Source evidence is unavailable');
+          const result = await work.sourceFieldApplications.apply(principal, principalId, request,
+            key, { profile: body.profile, work: native, field: body.field,
+              expectedWorkHead: body.expectedWorkHead, basis: body.basis, value: body.value,
+              origin: 'source', source: body.source, actingSubject: body.actingSubject });
+          return Response.json({ ...result.receipt, support: result.support.support,
+            replayed: result.replayed }, { status: result.replayed ? 200 : 201,
+            headers: { 'cache-control': 'no-store' } });
+        }
+        const result = await changeNativeFieldControl(work.environment, work.account,
+          { register: work.access.register.bind(work.access), claim: work.access.claim.bind(work.access),
+            recordGraphOutcome: work.access.recordGraphOutcome.bind(work.access),
+            issueTitleAdmission: work.access.issueTitleAdmission.bind(work.access) },
+          request, { profile: body.profile, work: native, field: body.field,
+            expectedWorkHead: body.expectedWorkHead, basis: body.basis,
+            value: body.value, origin: body.origin, source: body.source,
+            actingSubject: body.actingSubject, idempotencyKey: key });
+        return Response.json(result, { status: result.replayed ? 200 : 201,
+          headers: { 'cache-control': 'no-store' } });
+      } catch (error) {
+        if (error instanceof NativeFieldInvalid) return problem(400, 'invalid_field_control', 'Field control is invalid');
+        if (error instanceof NativeFieldConflict) return problem(409, 'field_control_changed', 'Field control changed');
+        if (error instanceof NativeFieldUnavailable) return problem(503, 'field_control_unavailable', 'Field control is unavailable');
+        return commandError(error);
+      }
+    })
     .post('/v1/sources/field-supports', {
       body: t.Object({ profile: t.Literal('source-field-support-attachment-v1'),
         target: groupAgent, slot: t.String({ minLength: 1, maxLength: 200 }),

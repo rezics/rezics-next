@@ -43,6 +43,7 @@ import type { SourceNativeWorkAttachmentStore } from '../modules/source/native-w
 import type { SourceAuthorCreditStore } from '../modules/source/author-credit.ts';
 import type { SourceFieldWithdrawalStore } from '../modules/source/withdrawal.ts';
 import type { SourceFieldAttachmentStore } from '../modules/source/support-attach.ts';
+import type { SourceFieldApplicationStore } from '../modules/source/field-application.ts';
 import type { ProviderIdentityStore } from '../modules/source/provider-identity.ts';
 import type { SourceScoreStore } from '../modules/source/score.ts';
 import type { AccessActingContexts } from '../modules/access/contexts.ts';
@@ -150,6 +151,7 @@ export interface MainWorkDependencies {
   sourceAuthorCredits?: SourceAuthorCreditStore;
   sourceFieldWithdrawals?: SourceFieldWithdrawalStore;
   sourceFieldAttachments?: SourceFieldAttachmentStore;
+  sourceFieldApplications?: SourceFieldApplicationStore;
   sourceProviderIdentity?: ProviderIdentityStore;
   sourceScores?: SourceScoreStore;
   openLibraryFetch?: typeof fetch;

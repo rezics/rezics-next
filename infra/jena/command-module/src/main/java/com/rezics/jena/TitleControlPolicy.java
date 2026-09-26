@@ -54,8 +54,8 @@ final class TitleControlPolicy {
                 || data.contains(CURRENT, q.getSubject(), rv("titleControlHead"), Node.ANY)
                 || data.contains(CURRENT, q.getSubject(), rv("protectionHead"), Node.ANY)))
                 protectedTitle = true;
-            if (REVISIONS.equals(q.getGraph()) && RDF.type.asNode().equals(q.getPredicate())
-                && q.getObject().equals(rv("EditorialControlRevision"))) protectedTitle = true;
+            if (REVISIONS.equals(q.getGraph()) && q.getPredicate().equals(rv("controlField"))
+                && "title:en".equals(text(q.getObject()))) protectedTitle = true;
         }
         if (control == null && !protectedTitle) return null;
         if (control == null || !control.isURI()) return error("title control expectation and successor required");

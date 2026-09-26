@@ -2,6 +2,8 @@ import type { Pool } from 'pg';
 import type { WorkActivationEnvironment } from '../work/activate.ts';
 import { checkedFieldEvidence, checkedFieldNativeValue,
   fieldAttachmentEvidenceSql } from './support-attach.ts';
+import { readNativeFieldReceipt, synopsisSlot } from './field-control-native.ts';
+import { hash, GRAPHS, RV, iri as graphIri } from '../work/activate.ts';
 
 export class FieldWithdrawalInvalid extends Error {}
 export class FieldWithdrawalConflict extends Error {}
@@ -19,8 +21,10 @@ interface SupportRow {
   context: string; record_id: string; settled_step_id: string | null; pending_step_id: string | null;
   conversion_id: string | null; mapping_revision: string | null; grain: string | null;
   source_field: string | null; source_occurrence: string | null; value_digest: string | null;
-  expected_head: string | null; receipt: { profile?: string; sourcePointer?: string; valueDigest?: string } | null;
+  expected_head: string | null; receipt: { profile?: string; sourcePointer?: string;
+    valueDigest?: string; control?: string } | null;
   native_revision: string | null; graph_receipt: string | null;
+  admission_id: string | null; data_epoch: string | null; sequence: string | null;
   head_guarantee: 'transaction-guarded' | 'verified-before-commit' | null;
   outcome: string | null; created_at: Date;
   withdrawal_id: string | null; withdrawal_key: string | null; withdrawal_reason: string | null;
@@ -43,7 +47,8 @@ export interface FieldSupportResult {
 
 const readSql = `SELECT s.*, h.settled_step_id, h.pending_step_id, st.conversion_id,
   st.mapping_revision, st.grain, st.source_field, st.source_occurrence, st.value_digest,
-  st.expected_head, out.native_revision, out.graph_receipt, out.head_guarantee, out.outcome, out.receipt,
+  st.expected_head, out.native_revision, out.graph_receipt, out.admission_id,
+  out.data_epoch, out.sequence, out.head_guarantee, out.outcome, out.receipt,
   w.id AS withdrawal_id, w.idempotency_key AS withdrawal_key,
   w.reason AS withdrawal_reason, w.created_at AS withdrawn_at
   FROM source.field_support s JOIN source.field_support_head h ON h.support_id = s.id
@@ -136,6 +141,31 @@ export class SourceFieldWithdrawalStore {
         await checkedFieldNativeValue(this.env, { target: row.target, slot: row.slot,
           expectedHead: row.expected_head }, checked.digest);
       } catch { throw new FieldWithdrawalUnavailable('field attachment evidence is unavailable'); }
+    }
+    if (row.receipt?.profile === 'source-field-native-certificate-v1') {
+      if (!this.env || row.slot !== 'work-editorial-field-v1#synopsis'
+        || !row.admission_id || !row.graph_receipt || !row.native_revision
+        || !row.data_epoch || !row.sequence || !row.value_digest
+        || row.receipt.valueDigest !== row.value_digest) {
+        throw new FieldWithdrawalUnavailable('native field certificate is incomplete');
+      }
+      const native = await readNativeFieldReceipt(this.env, row.admission_id);
+      const slot = synopsisSlot(row.target);
+      if (!native || native.outcome !== 'succeeded' || native.receipt !== row.graph_receipt
+        || native.content !== row.native_revision || native.slot !== slot
+        || native.control !== row.receipt.control || native.dataEpoch !== row.data_epoch
+        || native.sequence !== row.sequence) {
+        throw new FieldWithdrawalUnavailable('native field receipt differs from source support');
+      }
+      const exact = await this.env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?value WHERE {
+        GRAPH ${graphIri(GRAPHS.revisions)} { ${graphIri(row.native_revision)} a rv:EditorialFieldRevision ;
+          rv:component ${graphIri(slot)} ; rv:fieldValue ?value ; rv:rightsStatus rv:Undetermined . }
+      } LIMIT 2`, 8192);
+      const values = exact.results?.bindings ?? [];
+      if (values.length !== 1 || !values[0]?.value
+        || hash(JSON.stringify(values[0].value.value)) !== row.value_digest) {
+        throw new FieldWithdrawalUnavailable('native field value differs from retained Source value');
+      }
     }
     return value;
   }

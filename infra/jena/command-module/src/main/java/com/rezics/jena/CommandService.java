@@ -244,6 +244,9 @@ final class CommandService extends ActionService {
                 update, titleAdmission, titleAdmissionKey);
             TitleControlPolicy.Snapshot title = TitleControlPolicy.capture(dataset, plan, receipt, digest,
                 update, titleAdmission, titleAdmissionKey, protection != null && protection.action() != null);
+            EditorialFieldPolicy.Snapshot editorialField = EditorialFieldPolicy.capture(dataset, plan,
+                receipt, digest, update, titleAdmission, titleAdmissionKey,
+                protection != null && protection.action() != null);
             RebuildPolicy.Snapshot rebuild = RebuildPolicy.capture(dataset, plan, receipt);
             ModelMutationPolicy.Snapshot model = ModelMutationPolicy.capture(profiles, dataset, plan);
             UpdateAction.execute(plan.request(), DatasetFactory.wrap(delta == null ? dataset : delta.observed()));
@@ -258,6 +261,8 @@ final class CommandService extends ActionService {
             if (headInvariant != null) return invalid(headInvariant);
             String titleInvariant = TitleControlPolicy.check(dataset, receipt, title);
             if (titleInvariant != null) return invalid(titleInvariant);
+            String fieldInvariant = EditorialFieldPolicy.check(dataset, receipt, editorialField);
+            if (fieldInvariant != null) return invalid(fieldInvariant);
             String protectionInvariant = ProtectionPolicy.check(dataset, receipt, protection);
             if (protectionInvariant != null) return invalid(protectionInvariant);
             String rebuildInvariant = RebuildPolicy.check(dataset, receipt, rebuild);
@@ -392,7 +397,8 @@ final class CommandService extends ActionService {
             for (String type : List.of("PublicationDecision", "ContentPublicationDecision",
                 "ContentSearchEligibilityDecision", "ContentProjection", "PublicationSelection",
                 "RealmPublicationRejection", "ClassificationDecision", "RatingObservationRevision",
-                "TranslationLink", "WorkDerivation", "AuthorCreditRevision")) {
+                "TranslationLink", "WorkDerivation", "AuthorCreditRevision",
+                "EditorialFieldRevision", "EditorialFieldControlRevision", "EditorialControlRevision")) {
                 if (dataset.contains(revisionGraph, node,
                     org.apache.jena.vocabulary.RDF.type.asNode(), NodeFactory.createURI(RV + type))
                     && !revisionFocus.contains(subject)) return invalid("revision graph focus omitted: " + subject);
