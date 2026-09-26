@@ -57,6 +57,53 @@ authority remains pending/rejected under the declared policy; it cannot silently
 retarget an approval. Security revocation of an operator and governance
 invalidation of an already admitted ballot are separate attributable transitions.
 
+The first executable capability is `access.org.roster.policy`, the protected
+`POST /v1/access/organization-roster-policy` operation in the [managed
+organization contract](realm-participation.md#explicit-managed-organization-profile).
+Its effect profile names the organization, the existing managed grant and exact
+recipient, the grant generation, the recipient representation ID and generation,
+the expected roster policy revision, and `admissionsOpen`. The proposal target
+must be that organization IRI and its capability must be exactly
+`access.org.roster.policy`; the body's capability grant is scoped to
+`access:org-roster:<organization UUID>`. No other capability or scope is
+executable in this profile.
+
+For this effect profile, canonical JSON is UTF-8 JSON with recursively sorted
+object keys, no insignificant whitespace, and array order preserved.
+`effectDigest` is SHA-256 of that encoding for the complete
+`access-organization-roster-policy-v1` request fields, including the profile
+and `admissionsOpen`. `expectedTargetState` is SHA-256 of that encoding for
+`{ profile: "access-organization-roster-policy-state-v1",
+organizationSubject, policyRevision, admissionsOpen }` read from Access at
+approval. The client operation ID is bound to the exact proposal revision,
+resolution and effect digest; all retries recover the same Access and target
+owner receipts by that ID. The execution admission records the finalized adopting resolution,
+exact proposal revision/digest/target, the executor's current mandate for the
+voting body and that body's active generation of the exact capability grant.
+The handler re-reads the current policy and submits the existing G-017 operation
+with the approved payload and expected revision. An unsupported capability,
+scope mismatch, changed policy generation, grant or representation returns a
+denial or stale conflict before changing policy. Retries use the same operation
+ID and return the saved result; they do not apply another policy revision.
+
+The selected write is bounded by the proposal's exact poll/resolution and
+revision, one body mandate and one capability grant, one organization policy
+row, and one history/receipt record. It does not scan members, other
+organizations or corpus content. Admission and API tests count those owner
+reads and verify that denied, stale and recovered calls do not repeat the
+policy write.
+
+Moderation decisions use the reviewed owner head as a compare-and-apply
+condition in the admitted command: Content checks and applies against its exact
+draft head, and Jena checks and applies against its exact graph head. Access
+commits the case decision and enforcement fence only after every target owner
+accepts the same operation ID and expected head. A failed owner CAS returns
+stale and leaves the Access decision and enforcement unchanged. If an owner
+accepts but the caller loses the response, retry reconciles that owner's
+operation receipt before finishing the Access decision; it never substitutes
+the then-current head. Work is bounded by the declared target limit, with one
+owner CAS per target and no corpus scan.
+
 ## Persistence and capacity
 
 Store rules, localized forms, decisions and exact anchors in Jena. Access owns
