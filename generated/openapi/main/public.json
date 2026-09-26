@@ -217210,6 +217210,9 @@
                   {
                     "additionalProperties": false,
                     "properties": {
+                      "bookshelves": {
+                        "type": "boolean"
+                      },
                       "editions": {
                         "type": "boolean"
                       },
@@ -217271,6 +217274,9 @@
                   {
                     "additionalProperties": false,
                     "properties": {
+                      "bookshelves": {
+                        "type": "boolean"
+                      },
                       "editions": {
                         "type": "boolean"
                       },
@@ -217332,6 +217338,9 @@
                   {
                     "additionalProperties": false,
                     "properties": {
+                      "bookshelves": {
+                        "type": "boolean"
+                      },
                       "editions": {
                         "type": "boolean"
                       },
@@ -236040,6 +236049,9 @@
                         "scorePointer": {
                           "type": "string"
                         },
+                        "sourceScore": {
+                          "type": "string"
+                        },
                         "state": {
                           "const": "recorded",
                           "type": "string"
@@ -236054,6 +236066,13 @@
                             "string",
                             "null"
                           ]
+                        },
+                        "valuePrecision": {
+                          "enum": [
+                            "exact",
+                            "rounded-to-six-decimals"
+                          ],
+                          "type": "string"
                         }
                       },
                       "required": [
@@ -236067,6 +236086,8 @@
                         "userPointer",
                         "providerUserKey",
                         "score",
+                        "sourceScore",
+                        "valuePrecision",
                         "observationDigest",
                         "nativeEffect",
                         "createdAt"
@@ -236135,6 +236156,9 @@
                         "scorePointer": {
                           "type": "string"
                         },
+                        "sourceScore": {
+                          "type": "string"
+                        },
                         "state": {
                           "const": "recorded",
                           "type": "string"
@@ -236149,6 +236173,13 @@
                             "string",
                             "null"
                           ]
+                        },
+                        "valuePrecision": {
+                          "enum": [
+                            "exact",
+                            "rounded-to-six-decimals"
+                          ],
+                          "type": "string"
                         }
                       },
                       "required": [
@@ -236162,6 +236193,8 @@
                         "userPointer",
                         "providerUserKey",
                         "score",
+                        "sourceScore",
+                        "valuePrecision",
                         "observationDigest",
                         "nativeEffect",
                         "createdAt"
@@ -236465,6 +236498,9 @@
                     "scorePointer": {
                       "type": "string"
                     },
+                    "sourceScore": {
+                      "type": "string"
+                    },
                     "state": {
                       "const": "recorded",
                       "type": "string"
@@ -236479,6 +236515,13 @@
                         "string",
                         "null"
                       ]
+                    },
+                    "valuePrecision": {
+                      "enum": [
+                        "exact",
+                        "rounded-to-six-decimals"
+                      ],
+                      "type": "string"
                     }
                   },
                   "required": [
@@ -236492,6 +236535,8 @@
                     "userPointer",
                     "providerUserKey",
                     "score",
+                    "sourceScore",
+                    "valuePrecision",
                     "observationDigest",
                     "nativeEffect",
                     "createdAt"
