@@ -127,6 +127,9 @@ log is kept in [its history](../goals/history/codex-program-2026-09-26.md).
 | [G-122](../goals/tasks/G-122.md) / IAM18 | GPT-6 Luna high: Realm mute and block with separate presentation, interaction and access effects (IAM18). | Dispatched 23:05 UTC. |
 | [G-123](../goals/tasks/G-123.md) / WORK07 | GPT-6 Luna high: Package Main Version as install request resolved to a concrete release (WORK07). | Dispatched 23:05 UTC. |
 | [G-124](../goals/tasks/G-124.md) / FACT05/FACT06 | GPT-6 Luna xhigh: verification export calibration and published-recipient delivery. | Dispatched 23:15 UTC after G-109 and G-116. |
+| [G-125](../goals/tasks/G-125.md) / LIVE01/LIVE07/LIVE09/LIVE11/LIVE12 | GPT-6 Luna xhigh: Source field drift, frozen runs, access limits, streams and value round trip with export dispositions (LIVE01, LIVE07, LIVE09, LIVE11, LIVE12). | Dispatched 23:25 UTC. |
+| [G-126](../goals/tasks/G-126.md) / VIEW07/VIEW08/BOOK09 | GPT-6 Luna xhigh: Media previews after privacy or erasure, language fallback summaries, image- and poll-only publication (VIEW07, VIEW08, BOOK09). | Dispatched 23:25 UTC. |
+| [G-127](../goals/tasks/G-127.md) / SYS07 | GPT-6 Luna xhigh: Erase, restore older stores and replay events without resurrection (SYS07). | Dispatched 23:25 UTC. |
 | Authority and model backlog | IAM07–IAM37 and MODEL05–MODEL27 gaps, sequenced behind required Access and semantic owner decisions. | Planned at the [operation map](backend-operations.md); create bounded briefs when interfaces stabilize. |
 | Content, Space and community backlog | CTX, WORK, RATE, GRAPH, VIEW, BOOK, RECIPE, SUB and other M01–M10 gaps. | Planned at the operation map; retain all backend assertions. |
 | Search, sources and packages backlog | SEARCH, LIVE, PKG and HUB gaps after B75, with source/owner integration and recovery. | Planned at the operation map; selected B14–B74 evidence remains partial where named. |
