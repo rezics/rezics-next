@@ -1,5 +1,6 @@
 import type { ContentCore } from '../../../content/src/core.ts';
 import type { ContentProtectionStore } from '../modules/protection/content-store.ts';
+import type { ProtectionAdmissionSigner } from '../modules/access/protection-admission.ts';
 import type { ContentComments } from '../../../content/src/comments.ts';
 import type { ContentProjectionCursor } from '../../../content/src/projection-cursor.ts';
 import type { AccessAdmissionRegistry } from '../modules/access/admission.ts';
@@ -88,6 +89,7 @@ export interface MainWorkDependencies {
   account: Pick<AccountAssertionVerifier, 'verify'>;
   content?: Pick<ContentCore, 'owningResourceForRevision' | 'readExactBatch'>;
   editorialProtection?: ContentProtectionStore;
+  protectionSigner?: ProtectionAdmissionSigner;
   contentAuthoring?: ContentCore;
   comments?: ContentComments;
   contentProjection?: { content: ContentCore; cursor: ContentProjectionCursor; consumer: string };

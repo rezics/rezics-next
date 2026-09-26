@@ -11,7 +11,8 @@ export const correctionDecisionProfile = {
   prefixes: [['sh', 'http://www.w3.org/ns/shacl#'], ['rdf', 'http://www.w3.org/1999/02/22-rdf-syntax-ns#'],
     ['xsd', 'http://www.w3.org/2001/XMLSchema#'], ['schema', 'https://schema.org/'], ['rv', 'https://rezics.com/vocab/']],
   shapes: [
-    { iri: 'https://rezics.com/definition/correction-decision-v1/decision-shape', properties: [
+    { iri: 'https://rezics.com/definition/correction-decision-v1/decision-shape',
+      canonical: { types: ['rv:CorrectionDecision'] }, properties: [
       { path: 'rdf:type', in: ['rv:CorrectionDecision', 'rv:RevisionAnchor'], minCount: 2, maxCount: 2 },
       { path: 'rv:proposalRevision', minCount: 1, maxCount: 1, class: 'rv:CorrectionProposal' },
       { path: 'rv:component', minCount: 1, maxCount: 1, class: 'schema:CreativeWork' },
@@ -34,7 +35,8 @@ export const correctionDecisionProfile = {
         { path: 'rv:independenceProof', minCount: 1, maxCount: 1, nodeKind: 'sh:IRI' }],
       [{ path: 'rv:outcome', hasValue: 'rv:Rejected' }, { path: 'rv:independenceProof', maxCount: 1, nodeKind: 'sh:IRI' }],
     ] },
-    { iri: 'https://rezics.com/definition/correction-decision-v1/application-shape', properties: [
+    { iri: 'https://rezics.com/definition/correction-decision-v1/application-shape',
+      canonical: { types: ['rv:CorrectionApplication'] }, properties: [
       { path: 'rdf:type', in: ['rv:CorrectionApplication', 'rv:RevisionAnchor'], minCount: 2, maxCount: 2 },
       { path: 'rv:proposalRevision', minCount: 1, maxCount: 1, class: 'rv:CorrectionProposal' },
       { path: 'rv:decision', minCount: 1, maxCount: 1, class: 'rv:CorrectionDecision' },

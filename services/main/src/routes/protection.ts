@@ -6,6 +6,10 @@ import { changeAdmittedProtection, decideAdmittedCorrection, proposeAdmittedCorr
 import { MAX_EDITORIAL_TARGETS, ProtectionIdempotencyConflict, ProtectionInvalid,
   type OwnerOutcome } from '../modules/protection/content-store.ts';
 import { PROTECTION_CONFLICTS } from '../modules/protection/schema.ts';
+import { changeWorkProtection, proposeWorkCorrection, readWorkCorrectionRecord,
+  readWorkEditorialState, reviewWorkCorrection, WorkProtectionConflict, WorkProtectionInvalid,
+  WorkProtectionMissing, WorkProtectionPending, WorkProtectionUnavailable,
+  type WorkProtectionReceipt } from '../modules/protection/work.ts';
 import type { MainWorkDependencies } from './dependencies.ts';
 import { commandError, problem } from './problems.ts';
 
@@ -18,6 +22,11 @@ export const openApiOperations = {
   '/v1/corrections/{proposalRevision}': { get: { bearer: true } },
   '/v1/corrections/{proposalRevision}/decisions': { post: { bearer: true, idempotencyKey: true } },
   '/v1/editorial-state-queries': { post: { bearer: true } },
+  '/v1/work-title-protections': { post: { bearer: true, idempotencyKey: true } },
+  '/v1/work-title-corrections': { post: { bearer: true, idempotencyKey: true } },
+  '/v1/work-title-corrections/{proposalRevision}/decisions': { post: { bearer: true, idempotencyKey: true } },
+  '/v1/work-title-corrections/{proposalRevision}': { get: { bearer: true } },
+  '/v1/works/{id}/editorial-state': { get: { bearer: true } },
 } as const;
 
 const NATIVE = '^https://rezics\\.com/id/[0-9a-f-]{36}$';
@@ -50,6 +59,37 @@ const basis = {
   reason: t.String({ minLength: 1, maxLength: 2000 }),
   evidence: t.Array(t.String({ minLength: 1, maxLength: 300 }), { maxItems: 32 }),
 };
+const workBasis = {
+  work: t.String({ pattern: NATIVE }), expectedHead: t.String({ pattern: NATIVE }),
+  expectedProtection: t.Nullable(t.String({ pattern: NATIVE })),
+  expectedControl: t.Nullable(t.String({ pattern: NATIVE })),
+  expectedControlEpoch: t.String({ pattern: '^(0|[1-9][0-9]{0,18})$' }),
+  expectedRuleRevision: t.Literal('urn:rezics:protection-rule:independent-human-review-v1'),
+  actingSubject: t.String({ pattern: NATIVE }), reason: t.String({ minLength: 1, maxLength: 2000 }),
+  evidence: t.Array(t.String({ minLength: 1, maxLength: 300 }), { maxItems: 32 }),
+};
+const graphReceipt = t.Object({ operation: t.String(), receipt: t.String(),
+  outcome: t.Union([t.Literal('succeeded'), t.Literal('cancelled')]),
+  work: t.Optional(t.String()), protectionRevision: t.Optional(t.String()),
+  proposalRevision: t.Optional(t.String()), decision: t.Optional(t.String()),
+  reviewOutcome: t.Optional(t.Union([t.Literal('approved'), t.Literal('rejected')])),
+  sourcePosition: t.Object({ datasetId: t.Literal('product'), dataEpoch: t.String(), sequence: t.String() }),
+  replayed: t.Boolean() });
+const graphWriteResponses = { 200: graphReceipt, 201: graphReceipt,
+  202: t.Object({ admissionId: t.String(), status: t.Literal('reconciling') }),
+  ...writeProblems, 404: problemResult(404) };
+const workCorrectionRecord = t.Object({ proposal: t.Object({
+  proposal: t.String(), work: t.String(), baseHead: t.String(), baseProtection: nullableRef,
+  baseControl: nullableRef, baseControlEpoch: t.String(), candidate: t.String(), candidateDigest: t.String(),
+  candidateManifest: t.String(), proposerAdmissionId: t.String(), title: t.String(),
+}), decision: t.Nullable(t.Object({ decision: t.String(),
+  outcome: t.Union([t.Literal('approved'), t.Literal('rejected')]),
+  operation: t.String(), agent: t.String() })) });
+const workEditorialState = t.Object({ work: t.String(), fieldKey: t.Literal('title:en'),
+  context: t.Literal('global-native'), contentHead: t.String(), protectionHead: nullableRef,
+  protectionMode: t.Union([t.Literal('open'), t.Literal('review-required')]),
+  protectionEpoch: t.String(), controlHead: nullableRef, controlEpoch: t.String(),
+  ruleRevision: t.String() });
 const writeResponses = { 200: outcome, 201: outcome,
   202: t.Object({ operationId: t.String(), status: t.Literal('reconciling') }),
   ...writeProblems, 404: problemResult(404) };
@@ -84,6 +124,28 @@ function failed(error: unknown): Response {
   if (constraint && constraint in PROTECTION_CONFLICTS) {
     return problem(409, PROTECTION_CONFLICTS[constraint as keyof typeof PROTECTION_CONFLICTS], 'Owner basis changed');
   }
+  return commandError(error);
+}
+
+function writtenGraph(terminal: WorkProtectionReceipt): Response {
+  return Response.json({ operation: terminal.operation, receipt: terminal.receipt, outcome: terminal.outcome,
+    ...(terminal.work ? { work: terminal.work } : {}),
+    ...(terminal.protectionRevision ? { protectionRevision: terminal.protectionRevision } : {}),
+    ...(terminal.proposalRevision ? { proposalRevision: terminal.proposalRevision } : {}),
+    ...(terminal.decision ? { decision: terminal.decision } : {}),
+    ...(terminal.reviewOutcome ? { reviewOutcome: terminal.reviewOutcome } : {}),
+    sourcePosition: { datasetId: 'product', dataEpoch: terminal.dataEpoch, sequence: terminal.sequence },
+    replayed: terminal.replayed }, { status: terminal.replayed ? 200 : 201,
+    headers: { 'cache-control': 'no-store' } });
+}
+
+function failedGraph(error: unknown): Response {
+  if (error instanceof WorkProtectionPending) return Response.json({ admissionId: error.admissionId,
+    status: 'reconciling' }, { status: 202, headers: { 'cache-control': 'no-store' } });
+  if (error instanceof WorkProtectionInvalid) return problem(400, 'invalid_protection_request', error.message);
+  if (error instanceof WorkProtectionConflict) return problem(409, 'stale_editorial_basis', error.message);
+  if (error instanceof WorkProtectionMissing) return problem(404, 'correction_not_found', error.message);
+  if (error instanceof WorkProtectionUnavailable) return problem(503, 'protection_unavailable', error.message);
   return commandError(error);
 }
 
@@ -219,5 +281,72 @@ export function protectionRoutes(work: ProtectionDependencies) {
             ? { ...item, availability: 'available', state } : { ...item, availability: 'unavailable' };
         }) }, { headers: { 'cache-control': 'no-store' } });
       } catch (error) { return failed(error); }
+    })
+    .post('/v1/work-title-protections', {
+      body: t.Object({ profile: t.Literal('work-title-protection-v1'),
+        action: t.Union([t.Literal('tighten'), t.Literal('confirm'), t.Literal('relax')]), ...workBasis },
+      { additionalProperties: false }), response: graphWriteResponses,
+    }, async ({ request, body }) => {
+      if (!work.protectionSigner) return unavailable();
+      const key = idempotencyKey(request);
+      if (!key) return problem(400, 'invalid_idempotency_key', 'A valid Idempotency-Key header is required');
+      try { return writtenGraph(await changeWorkProtection(work.environment, work.account,
+        work.access, work.protectionSigner, request, { ...body, idempotencyKey: key })); }
+      catch (error) { return failedGraph(error); }
+    })
+    .post('/v1/work-title-corrections', {
+      body: t.Object({ profile: t.Literal('work-title-correction-v1'),
+        title: t.String({ minLength: 1, maxLength: 200 }), predecessor: t.Null(), ...workBasis },
+      { additionalProperties: false }), response: graphWriteResponses,
+    }, async ({ request, body }) => {
+      if (!work.protectionSigner) return unavailable();
+      const key = idempotencyKey(request);
+      if (!key) return problem(400, 'invalid_idempotency_key', 'A valid Idempotency-Key header is required');
+      try { return writtenGraph(await proposeWorkCorrection(work.environment, work.account,
+        work.access, work.protectionSigner, request, { ...body, idempotencyKey: key })); }
+      catch (error) { return failedGraph(error); }
+    })
+    .post('/v1/work-title-corrections/:proposalRevision/decisions', {
+      params: t.Object({ proposalRevision: t.String({ pattern: UUID }) }),
+      body: t.Object({ profile: t.Literal('work-title-correction-review-v1'),
+        outcome: t.Union([t.Literal('approved'), t.Literal('rejected')]),
+        candidateDigest: t.String({ pattern: '^[0-9a-f]{64}$' }), expectedDecisionHead: t.Null(), ...workBasis },
+      { additionalProperties: false }), response: graphWriteResponses,
+    }, async ({ request, params, body }) => {
+      if (!work.protectionSigner) return unavailable();
+      const key = idempotencyKey(request);
+      if (!key) return problem(400, 'invalid_idempotency_key', 'A valid Idempotency-Key header is required');
+      try { return writtenGraph(await reviewWorkCorrection(work.environment, work.account,
+        work.access, work.protectionSigner, request,
+        { ...body, proposalRevision: `https://rezics.com/id/${params.proposalRevision}`, idempotencyKey: key })); }
+      catch (error) { return failedGraph(error); }
+    })
+    .get('/v1/work-title-corrections/:proposalRevision', {
+      params: t.Object({ proposalRevision: t.String({ pattern: UUID }) }),
+      query: t.Object({ actingSubject: t.String({ pattern: NATIVE }) }),
+      response: { 200: workCorrectionRecord, ...authorizedReadProblems },
+    }, async ({ request, params, query }) => {
+      try {
+        const record = await readWorkCorrectionRecord(work.environment, `https://rezics.com/id/${params.proposalRevision}`);
+        if (!record || !await readable(request, query.actingSubject, record.proposal.work)) {
+          return problem(404, 'correction_not_found', 'Correction is not available');
+        }
+        return Response.json(record, { headers: { 'cache-control': 'no-store' } });
+      } catch (error) { return failedGraph(error); }
+    })
+    .get('/v1/works/:id/editorial-state', {
+      params: t.Object({ id: t.String({ pattern: UUID }) }),
+      query: t.Object({ actingSubject: t.String({ pattern: NATIVE }) }),
+      response: { 200: workEditorialState, ...authorizedReadProblems },
+    }, async ({ request, params, query }) => {
+      try {
+        const resource = `https://rezics.com/id/${params.id}`;
+        if (!await readable(request, query.actingSubject, resource)) {
+          return problem(404, 'editorial_state_not_found', 'Editorial state is not available');
+        }
+        const state = await readWorkEditorialState(work.environment, resource);
+        return state ? Response.json(state, { headers: { 'cache-control': 'no-store' } })
+          : problem(404, 'editorial_state_not_found', 'Editorial state is not available');
+      } catch (error) { return failedGraph(error); }
     });
 }

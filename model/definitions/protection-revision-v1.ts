@@ -17,7 +17,8 @@ export const protectionRevisionProfile = {
       // Every pre-protection Work writer already fails closed on this predicate.
       { path: 'rv:protectionHead', minCount: 1, maxCount: 1, class: 'rv:ProtectionRevision' },
     ] },
-    { iri: 'https://rezics.com/definition/protection-revision-v1/protection-shape', properties: [
+    { iri: 'https://rezics.com/definition/protection-revision-v1/protection-shape',
+      canonical: { types: ['rv:ProtectionRevision'] }, properties: [
       { path: 'rdf:type', in: ['rv:ProtectionRevision', 'rv:RevisionAnchor'], minCount: 2, maxCount: 2 },
       { path: 'rv:component', minCount: 1, maxCount: 1, class: 'schema:CreativeWork' },
       { path: 'rv:protectedSlot', hasValue: '"title:en"', maxCount: 1 },

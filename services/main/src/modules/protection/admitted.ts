@@ -5,7 +5,7 @@ import { AdmissionDenied, AdmissionExpired, type AccessAdmissionRegistry,
 import { ProtectionInvalid, type ContentProtectionAction, type ContentProtectionStore, type CorrectionDecision,
   type CorrectionProposal, type OwnerOutcome, type ProtectionState, ProtectionIdempotencyConflict } from './content-store.ts';
 import type { ProtectionAction } from './schema.ts';
-import { protectionReceiptIri, receiptFamilies, type ProtectionAdmissionAction } from './receipt-family.ts';
+import { protectionReceiptIri, contentReceiptFamilies, type ContentProtectionAdmissionAction } from './receipt-family.ts';
 
 /** Account, Access and the Content owner admit each protected command. Edit, protect,
  * relax, propose and review are distinct Access actions; the client never supplies origin. */
@@ -45,9 +45,9 @@ function target(resourceId: string, variantId: string, actingSubject: string) {
 }
 
 function terminalProof(admission: RegisteredAdmission, result: OwnerOutcome<unknown>): GraphTerminalProof {
-  if (!Object.hasOwn(receiptFamilies, admission.action)) throw new ProtectionDenied('wrong protection admission action');
+  if (!Object.hasOwn(contentReceiptFamilies, admission.action)) throw new ProtectionDenied('wrong protection admission action');
   return { outcome: result.outcome === 'succeeded' ? 'succeeded' : 'cancelled',
-    receipt: protectionReceiptIri(admission.id, admission.action as ProtectionAdmissionAction),
+    receipt: protectionReceiptIri(admission.id, admission.action as ContentProtectionAdmissionAction),
     admissionId: admission.id, requestDigest: admission.requestDigest,
     authorityEpoch: admission.authorityEpoch, scope: admission.scope,
     dataEpoch: result.position.dataEpoch, sequence: result.position.sequence };
@@ -55,13 +55,13 @@ function terminalProof(admission: RegisteredAdmission, result: OwnerOutcome<unkn
 
 /** Register and claim; a denied claim may still replay an already recorded owner outcome. */
 async function admit(access: Access, store: ContentProtectionStore, request: Request, account: Account, input: {
-  scope: string; action: ProtectionAdmissionAction; oauthScope: 'content:protect' | 'content:correct' | 'content:review';
+  scope: string; action: ContentProtectionAdmissionAction; oauthScope: 'content:protect' | 'content:correct' | 'content:review';
   actingSubject: string; idempotencyKey: string; digest: string;
 }): Promise<{ admission: RegisteredAdmission; operationId: string }> {
   const principal = await account.verify(request, [input.oauthScope]);
   const admission = await access.register({ principal, actingSubject: input.actingSubject, scope: input.scope,
     action: input.action, idempotencyKey: input.idempotencyKey, requestDigest: input.digest });
-  const operationId = `${receiptFamilies[input.action]}:${admission.id}`;
+  const operationId = `${contentReceiptFamilies[input.action]}:${admission.id}`;
   if (admission.state === 'sealed') {
     // After a Content rollback, Access can retain the terminal proof while the
     // Content receipt is gone. Re-executing that old intent would undo the fence.
@@ -101,7 +101,7 @@ async function resolveOwnerResponse<T>(store: ContentProtectionStore, operationI
 
 async function complete<T>(store: ContentProtectionStore, access: Access, admission: RegisteredAdmission,
   digest: string, action: ContentProtectionAction, dispatch: () => Promise<OwnerOutcome<T>>): Promise<OwnerOutcome<T>> {
-  const operationId = `${receiptFamilies[admission.action as ProtectionAdmissionAction]}:${admission.id}`;
+  const operationId = `${contentReceiptFamilies[admission.action as ContentProtectionAdmissionAction]}:${admission.id}`;
   const result = await resolveOwnerResponse(store, operationId, digest, action, dispatch);
   try { await access.recordGraphOutcome(admission.id, terminalProof(admission, result)); }
   catch { throw new ProtectionPending(operationId); }
@@ -167,11 +167,11 @@ export async function decideAdmittedCorrection(store: ContentProtectionStore, ac
 
 /** Terminal cancellation for a fenced admission; the Content operation lock admits one winner. */
 export async function sealContentProtectionAdmission(store: ContentProtectionStore, admission: RegisteredAdmission) {
-  if (!Object.hasOwn(receiptFamilies, admission.action)) throw new ProtectionDenied('not a Content protection admission');
+  if (!Object.hasOwn(contentReceiptFamilies, admission.action)) throw new ProtectionDenied('not a Content protection admission');
   const action = admission.action === PROTECTION_ADMISSION.propose ? 'correction.propose'
     : admission.action === PROTECTION_ADMISSION.review ? 'correction.decide' : 'protection.change';
   const result = await store.cancel(action satisfies ContentProtectionAction,
-    `${receiptFamilies[admission.action as ProtectionAdmissionAction]}:${admission.id}`, admission.requestDigest);
+    `${contentReceiptFamilies[admission.action as ContentProtectionAdmissionAction]}:${admission.id}`, admission.requestDigest);
   return terminalProof(admission, result);
 }
 
@@ -180,7 +180,7 @@ type ClosureAccess = Pick<AccessAdmissionRegistry, 'strongCloseScope' | 'listUns
 
 async function sealPending(access: ClosureAccess, store: ContentProtectionStore, pending: RegisteredAdmission[]) {
   for (const admission of pending) {
-    if (!Object.hasOwn(receiptFamilies, admission.action)) continue;
+    if (!Object.hasOwn(contentReceiptFamilies, admission.action)) continue;
     try {
       const proof = await sealContentProtectionAdmission(store, admission);
       await access.recordGraphOutcome(admission.id, proof);

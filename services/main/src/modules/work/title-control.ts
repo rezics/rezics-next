@@ -10,10 +10,11 @@ import { PendingAdmittedWork } from './create-admitted.ts';
 import { assertGraphAdmissionOpen } from './restore-lineage.ts';
 import { readWorkPayloadForRevision, RevisionCorrupt } from './history.ts';
 import { sameScalar, scalarFromBinding, SCALAR_PREDICATE } from './scalar-value.ts';
+import { validEditorialControlBasis, type EditorialControlBasis } from '../protection/field-control.ts';
 
 export const TITLE_PROFILE = 'https://rezics.com/definition/work-title-control-v1';
 const NATIVE = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
-export interface TitleControlBasis { head: string | null; epoch: string; protection: null }
+export interface TitleControlBasis extends EditorialControlBasis {}
 export interface TitleSourceBasis {
   binding: string; record: string; observation: string; conversion: string; proposal: string;
   mapping: 'open-library-work-map-v1'; initialHead: string;
@@ -42,10 +43,10 @@ export class TitleControlUnavailable extends Error {}
 export const titleControlReceiptIri = (admission: string) => `urn:rezics:receipt:${hash(`${admission}\0edit-metadata-work`)}`;
 
 export function titleControlDigest(intent: TitleControlIntent): string {
-  if (!NATIVE.test(intent.work) || !NATIVE.test(intent.expectedHead) || !intent.basis
-    || !Object.hasOwn(intent.basis, 'head') || !Object.hasOwn(intent.basis, 'protection')
-    || intent.basis.protection !== null || !/^(0|[1-9][0-9]{0,18})$/.test(intent.basis.epoch)
-    || (intent.basis.head === null ? intent.basis.epoch !== '0' : !NATIVE.test(intent.basis.head))) {
+  if (!NATIVE.test(intent.work) || !NATIVE.test(intent.expectedHead)
+    || !validEditorialControlBasis(intent.basis)
+    || (intent.basis.head !== null && !NATIVE.test(intent.basis.head))
+    || (intent.basis.protection !== null && !NATIVE.test(intent.basis.protection))) {
     throw new TitleControlInvalid('exact title control and absent protection expectations are required');
   }
   metadataWorkRequestDigest(intent.title);
@@ -60,7 +61,8 @@ export function titleControlDigest(intent: TitleControlIntent): string {
   }
   // Canonicalize explicitly: JSON property order from an HTTP client is not an identity.
   return hash(JSON.stringify({ profile: 'work-title-control-v1', work: intent.work,
-    expectedHead: intent.expectedHead, basis: { head: intent.basis.head, epoch: intent.basis.epoch, protection: null },
+    expectedHead: intent.expectedHead, basis: { head: intent.basis.head, epoch: intent.basis.epoch,
+      protection: intent.basis.protection },
     action: intent.action, title: intent.title, source: intent.source ? {
       binding: intent.source.binding, record: intent.source.record, observation: intent.source.observation,
       conversion: intent.source.conversion, proposal: intent.source.proposal,
@@ -69,10 +71,13 @@ export function titleControlDigest(intent: TitleControlIntent): string {
 
 export async function readTitleControl(env: WorkActivationEnvironment, work: string): Promise<TitleControlState> {
   if (!NATIVE.test(work)) throw new TitleControlInvalid('invalid Work');
-  const result = await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?content ?control ?protection ?intent ?epoch ?mode WHERE {
+  const result = await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?content ?control ?protection ?protectionMode ?intent ?epoch ?mode WHERE {
     GRAPH ${iri(GRAPHS.current)} { ${iri(work)} a <https://schema.org/CreativeWork> ; rv:head ?content .
       OPTIONAL { ${iri(work)} rv:titleControlHead ?control }
       OPTIONAL { ${iri(work)} rv:protectionHead ?protection } }
+    OPTIONAL { GRAPH ${iri(GRAPHS.current)} { ${iri(work)} rv:protectionHead ?protection }
+      GRAPH ${iri(GRAPHS.revisions)} { ?protection a rv:ProtectionRevision ; rv:component ${iri(work)} ;
+        rv:protectionMode ?protectionMode . } }
     OPTIONAL { GRAPH ${iri(GRAPHS.current)} { ${iri(work)} rv:titleControlHead ?control }
       GRAPH ${iri(GRAPHS.revisions)} { ?control a rv:EditorialControlRevision ;
       rv:component ${iri(work)} ; rv:controlEpoch ?epoch ; rv:controlMode ?mode ; rv:controlIntent ?intent . }
@@ -80,23 +85,38 @@ export async function readTitleControl(env: WorkActivationEnvironment, work: str
   } LIMIT 2`, 16_384);
   const rows = result.results?.bindings ?? [];
   const row = rows[0];
-  if (rows.length !== 1 || !row?.content || row.protection) throw new TitleControlUnavailable('title basis is unavailable or protected');
+  if (rows.length !== 1 || !row?.content || (row.protection
+    && ![`${RV}Open`, `${RV}ReviewRequired`].includes(row.protectionMode?.value ?? ''))) {
+    throw new TitleControlUnavailable('title basis or protection is unavailable');
+  }
+  const protection = row.protection?.value ?? null;
   if (!row.control) return { work, contentHead: row.content.value,
-    basis: { head: null, epoch: '0', protection: null }, mode: 'unestablished', source: null };
+    basis: { head: null, epoch: '0', protection }, mode: 'unestablished', source: null };
   if (!row.intent || !row.epoch || !row.mode) throw new TitleControlUnavailable('title control revision is unavailable');
-  const intent = JSON.parse(row.intent.value) as TitleControlIntent;
-  titleControlDigest(intent);
-  if (intent.work !== work || BigInt(row.epoch.value) !== BigInt(intent.basis.epoch) + 1n) {
-    throw new TitleControlUnavailable('title control basis differs');
+  const intent = JSON.parse(row.intent.value) as TitleControlIntent | {
+    work: string; expectedHead: string; expectedControlEpoch: string; action: string; title?: string;
+  };
+  const protectedControl = intent.action === 'work.protection.confirm' || intent.action === 'work.correction.review';
+  if (protectedControl) {
+    if (intent.work !== work || !NATIVE.test(intent.expectedHead)
+      || !/^(0|[1-9][0-9]{0,18})$/.test(intent.expectedControlEpoch)
+      || BigInt(row.epoch.value) !== BigInt(intent.expectedControlEpoch) + 1n) {
+      throw new TitleControlUnavailable('protected title control basis differs');
+    }
+  } else {
+    titleControlDigest(intent as TitleControlIntent);
+    if (intent.work !== work || BigInt(row.epoch.value) !== BigInt((intent as TitleControlIntent).basis.epoch) + 1n) {
+      throw new TitleControlUnavailable('title control basis differs');
+    }
   }
   const mode = row.mode.value === `${RV}SourceManaged` ? 'source-managed'
     : row.mode.value === `${RV}HumanControlled` ? 'human-controlled' : null;
-  if (!mode || (mode === 'human-controlled') !== (intent.action === 'work.edit')) {
+  if (!mode || (mode === 'human-controlled') !== (intent.action === 'work.edit' || protectedControl)) {
     throw new TitleControlUnavailable('title control mode differs from its origin');
   }
   return { work, contentHead: row.content.value,
-    basis: { head: row.control.value, epoch: row.epoch.value, protection: null },
-    mode, source: intent.source };
+    basis: { head: row.control.value, epoch: row.epoch.value, protection },
+    mode, source: protectedControl ? null : (intent as TitleControlIntent).source };
 }
 
 export async function readTitleControlReceipt(env: Pick<WorkActivationEnvironment, 'fuseki'>, admissionId: string): Promise<TitleControlReceipt | null> {
@@ -193,6 +213,7 @@ export async function titleControlCommand(env: WorkActivationEnvironment, admiss
     continuityProfile: CONTINUITY, title: intent.title, language: 'en', ...(semanticTypes.length ? { semanticTypes } : {}),
     ...(prior.scalarValue === undefined ? {} : { scalarValue: prior.scalarValue }) }, PROFILE);
   const expected = intent.basis.head ? iri(intent.basis.head) : 'rv:Absent';
+  const expectedProtection = intent.basis.protection ? iri(intent.basis.protection) : 'rv:Absent';
   let update = `PREFIX rv: <${RV}> PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
     DELETE { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?n }
       GRAPH ${iri(GRAPHS.current)} { ${iri(intent.work)} rv:titleControlHead ?oldControl .
@@ -215,7 +236,7 @@ export async function titleControlCommand(env: WorkActivationEnvironment, admiss
         rv:authorityEpoch ${lit(admission.authorityEpoch)} ; rv:admittedScope ${lit(admission.scope)} ;
         rv:work ${iri(intent.work)} ; rv:workRevision ${iri(revision)} ; rv:expectedHead ${iri(intent.expectedHead)} ;
         rv:titleControl ${iri(control)} ; rv:expectedControl ${expected} ; rv:expectedControlEpoch ${intent.basis.epoch} ;
-        rv:expectedProtection rv:Absent ; rv:operation ${iri(operation)} ; rv:datasetId ${iri(DATASET)} ;
+        rv:expectedProtection ${expectedProtection} ; rv:operation ${iri(operation)} ; rv:datasetId ${iri(DATASET)} ;
         rv:dataEpoch ${lit(env.lineage.dataEpoch)} ; rv:sequence ?next . }
       GRAPH ${iri(GRAPHS.outbox)} { ${iri(batch)} a rv:OutboxBatch ; rv:dataEpoch ${lit(env.lineage.dataEpoch)} ;
         rv:sequence ?next ; rv:eventCount 1 ; rv:event ${iri(event)} . ${iri(event)} a rv:WorkTitleControlEvent ;
@@ -223,9 +244,10 @@ export async function titleControlCommand(env: WorkActivationEnvironment, admiss
     WHERE { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:dataEpoch ${lit(env.lineage.dataEpoch)} ;
       rv:routingEpoch ${lit(env.lineage.routingEpoch)} ; rv:sequence ?n . }
       GRAPH ${iri(GRAPHS.current)} { ${iri(intent.work)} rv:head ${iri(intent.expectedHead)} ; rdfs:label ?oldTitle .
-        OPTIONAL { ${iri(intent.work)} rv:titleControlHead ?oldControl } }
+        OPTIONAL { ${iri(intent.work)} rv:titleControlHead ?oldControl }
+        OPTIONAL { ${iri(intent.work)} rv:protectionHead ?oldProtection } }
       FILTER(${intent.basis.head ? `?oldControl = ${iri(intent.basis.head)}` : '!BOUND(?oldControl)'})
-      FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} { ${iri(intent.work)} rv:protectionHead ?protection } }
+      FILTER(${intent.basis.protection ? `?oldProtection = ${iri(intent.basis.protection)}` : '!BOUND(?oldProtection)'})
       FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:restoreHold true } }
       FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} ?p ?o } } BIND(?n + 1 AS ?next) }`;
   if (retained) {

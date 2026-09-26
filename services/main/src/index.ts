@@ -12,6 +12,7 @@ import { StructureStageStore } from './modules/structure/stage.ts';
 import { AccessAdmissionRegistry } from './modules/access/admission.ts';
 import { AccessDownloadLeases } from './modules/access/download-leases.ts';
 import { AgentProvisioning } from './modules/agent/provision.ts';
+import { ProtectionAdmissionSigner } from './modules/access/protection-admission.ts';
 import { ErasureService } from './modules/erasure/request.ts';
 import { ContentProtectionStore } from './modules/protection/content-store.ts';
 import { PrivateSearchSettlement } from './modules/contribution/private-search-settlement.ts';
@@ -230,6 +231,7 @@ const app = createMainApp(fuseki, {
   progress: new StructureProgressStore(contentPool),
   access,
   downloadLeases,
+  protectionSigner: new ProtectionAdmissionSigner(pool),
   erasures: erasureRelayPool ? new ErasureService(erasureRelayPool, contentPool) : undefined,
   recommendations,
   governance: governanceServices(pool, contentPool, content, sourceIntake, access, environment),

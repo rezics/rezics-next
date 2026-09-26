@@ -12,7 +12,8 @@ export const correctionProposalProfile = {
     ['xsd', 'http://www.w3.org/2001/XMLSchema#'], ['schema', 'https://schema.org/'], ['rv', 'https://rezics.com/vocab/']],
   shapes: [
     // One current log per target/context bounds history pages without scanning Work-wide revisions.
-    { iri: 'https://rezics.com/definition/correction-proposal-v1/log-shape', properties: [
+    { iri: 'https://rezics.com/definition/correction-proposal-v1/log-shape',
+      canonical: { types: ['rv:CorrectionLog'] }, properties: [
       { path: 'rdf:type', hasValue: 'rv:CorrectionLog' },
       { path: 'rv:component', minCount: 1, maxCount: 1, class: 'schema:CreativeWork' },
       { path: 'rv:protectedSlot', hasValue: '"title:en"', maxCount: 1 },
@@ -20,7 +21,8 @@ export const correctionProposalProfile = {
       { path: 'rv:proposalHead', minCount: 1, maxCount: 1, class: 'rv:CorrectionProposal' },
       { path: 'rv:proposalCount', minCount: 1, maxCount: 1, datatype: 'xsd:integer', minInclusive: 1 },
     ] },
-    { iri: 'https://rezics.com/definition/correction-proposal-v1/proposal-shape', properties: [
+    { iri: 'https://rezics.com/definition/correction-proposal-v1/proposal-shape',
+      canonical: { types: ['rv:CorrectionProposal'] }, properties: [
       { path: 'rdf:type', in: ['rv:CorrectionProposal', 'rv:RevisionAnchor'], minCount: 2, maxCount: 2 },
       { path: 'rv:proposal', minCount: 1, maxCount: 1, nodeKind: 'sh:IRI' },
       { path: 'rv:proposalRevisionNumber', minCount: 1, maxCount: 1, datatype: 'xsd:integer', minInclusive: 1 },
@@ -37,8 +39,11 @@ export const correctionProposalProfile = {
       { path: 'rv:baseControlEpoch', minCount: 1, maxCount: 1, datatype: 'xsd:integer', minInclusive: 0 },
       { path: 'rv:ruleRevision', minCount: 1, maxCount: 1, in: ['<urn:rezics:protection-rule:independent-human-review-v1>'] },
       { path: 'rv:proposalOrigin', minCount: 1, maxCount: 1, in: ['rv:HumanProposal', 'rv:SourceProposal'] },
+      { path: 'rv:candidateRevision', minCount: 1, maxCount: 1, class: 'rv:RevisionAnchor' },
       { path: 'rv:candidateManifest', minCount: 1, maxCount: 1, nodeKind: 'sh:IRI' },
       { path: 'rv:candidateDigest', minCount: 1, maxCount: 1, datatype: 'xsd:string', pattern: '^[0-9a-f]{64}$' },
+      { path: 'rv:proposalAdmission', minCount: 1, maxCount: 1, datatype: 'xsd:string',
+        pattern: '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' },
       { path: 'rv:evidence', maxCount: 32, nodeKind: 'sh:IRI' },
       { path: 'rv:agent', maxCount: 1, nodeKind: 'sh:IRI' },
       { path: 'rv:operation', minCount: 1, maxCount: 1, nodeKind: 'sh:IRI' },

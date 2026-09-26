@@ -32,7 +32,11 @@ final class TitleControlPolicy {
     private static Snapshot error(String reason) { return new Snapshot(null, null, null, null, null, null, null, reason); }
 
     static Snapshot capture(DatasetGraph data, CommandPolicy.Plan plan, String receipt,
-                            String digest, String update, JsonValue proof, byte[] key) {
+                            String digest, String update, JsonValue proof, byte[] key,
+                            boolean protectedCommand) {
+        // ProtectionPolicy validates the complete reviewed footprint and its own
+        // Access-bound proof. The ordinary title path still rejects review-required.
+        if (protectedCommand) return null;
         // Exact old revisions are immutable, including additions and type/manifest deletion.
         for (String subject : plan.revisions()) {
             if (data.contains(REVISIONS, uri(subject), RDF.type.asNode(), rv("EditorialControlRevision")))
@@ -75,7 +79,7 @@ final class TitleControlPolicy {
             Node expectedProtection = template(modify.getInsertQuads(), RECEIPTS, own, rv("expectedProtection"));
             Node expectedEpoch = template(modify.getInsertQuads(), RECEIPTS, own, rv("expectedControlEpoch"));
             if (work == null || !work.isURI() || head == null || !head.isURI() || expectedControl == null || expectedEpoch == null
-                || !rv("Absent").equals(expectedProtection)) return error("title expectations incomplete");
+                || expectedProtection == null || !expectedProtection.isURI()) return error("title expectations incomplete");
             String prefix = action.equals("work.edit") ? "work:edit:" : action.equals("work.title.apply") ? "work:title:apply:"
                 : action.equals("work.title.return") ? "work:title:return:" : null;
             if (prefix == null || !scope.equals(prefix + work.getURI())) return error("title admission action or scope differs");
@@ -86,9 +90,11 @@ final class TitleControlPolicy {
                     return error("title receipt admission differs");
             }
             Node old = one(data, CURRENT, work, rv("titleControlHead"));
+            Node protection = one(data, CURRENT, work, rv("protectionHead"));
             BigInteger epoch = old == null ? BigInteger.ZERO : integer(one(data, REVISIONS, old, rv("controlEpoch")));
             if (epoch == null || !epoch.equals(integer(expectedEpoch)) || !(old == null ? rv("Absent").equals(expectedControl) : old.equals(expectedControl))
-                || data.contains(CURRENT, work, rv("protectionHead"), Node.ANY)
+                || !(protection == null ? rv("Absent").equals(expectedProtection) : protection.equals(expectedProtection))
+                || protection != null && !rv("Open").equals(one(data, REVISIONS, protection, rv("protectionMode")))
                 || !head.equals(one(data, CURRENT, work, rv("head")))) return error("title transaction basis changed");
             Node json = template(modify.getInsertQuads(), REVISIONS, control, rv("controlIntent"));
             if (json == null || !json.isLiteral()) return error("title control intent missing");
@@ -98,7 +104,8 @@ final class TitleControlPolicy {
                 || !ProfileRegistry.required(intent, "expectedHead").equals(head.getURI())
                 || !ProfileRegistry.required(intent, "action").equals(action)
                 || !ProfileRegistry.required(basis, "epoch").equals(epoch.toString())
-                || !basis.get("protection").isNull()
+                || !(protection == null ? basis.get("protection").isNull()
+                    : ProfileRegistry.required(basis, "protection").equals(protection.getURI()))
                 || (old == null ? !basis.get("head").isNull() : !ProfileRegistry.required(basis, "head").equals(old.getURI())))
                 return error("title immutable intent differs from transaction basis");
             if (data.contains(REVISIONS, control, Node.ANY, Node.ANY)) return error("control successor is not fresh");

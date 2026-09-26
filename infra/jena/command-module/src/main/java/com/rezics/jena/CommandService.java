@@ -235,7 +235,10 @@ final class CommandService extends ActionService {
             if (authorCredit != null) return invalid(authorCredit);
             CommandInvariant.Control before = plan.bootstrap() ? null : CommandInvariant.readControl(dataset);
             HeadCasPolicy.Snapshot heads = HeadCasPolicy.capture(dataset, plan, receipt);
-            TitleControlPolicy.Snapshot title = TitleControlPolicy.capture(dataset, plan, receipt, digest, update, titleAdmission, titleAdmissionKey);
+            ProtectionPolicy.Snapshot protection = ProtectionPolicy.capture(dataset, plan, receipt, digest,
+                update, titleAdmission, titleAdmissionKey);
+            TitleControlPolicy.Snapshot title = TitleControlPolicy.capture(dataset, plan, receipt, digest,
+                update, titleAdmission, titleAdmissionKey, protection != null && protection.action() != null);
             RebuildPolicy.Snapshot rebuild = RebuildPolicy.capture(dataset, plan, receipt);
             UpdateAction.execute(plan.request(), DatasetFactory.wrap(delta == null ? dataset : delta.observed()));
             String stored = receiptValue(dataset, receipt, "requestDigest");
@@ -247,6 +250,8 @@ final class CommandService extends ActionService {
             if (headInvariant != null) return invalid(headInvariant);
             String titleInvariant = TitleControlPolicy.check(dataset, receipt, title);
             if (titleInvariant != null) return invalid(titleInvariant);
+            String protectionInvariant = ProtectionPolicy.check(dataset, receipt, protection);
+            if (protectionInvariant != null) return invalid(protectionInvariant);
             String rebuildInvariant = RebuildPolicy.check(dataset, receipt, rebuild);
             if (rebuildInvariant != null) return invalid(rebuildInvariant);
             Map<String, Object> scope = validateScope(dataset, receipt, plan, validations);

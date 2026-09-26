@@ -111,8 +111,9 @@ final class HeadCasPolicy {
                 || !same(data, RECEIPTS, own, "workRevision", next))
                 return "Work edit head differs from its receipt";
             Node titleAction = one(data, RECEIPTS, own, rv("action"));
-            requiredScope = (titleAction != null && titleAction.isLiteral()
-                && titleAction.getLiteralLexicalForm().equals("work.title.apply") ? "work:title:apply:" : "work:edit:") + subject.getURI();
+            String action = titleAction != null && titleAction.isLiteral() ? titleAction.getLiteralLexicalForm() : "";
+            requiredScope = (action.equals("work.title.apply") ? "work:title:apply:"
+                : action.equals("work.correction.review") ? "work:review:" : "work:edit:") + subject.getURI();
         } else if (same(data, RECEIPTS, own, "selection", next)) {
             Node realm = one(data, RECEIPTS, own, rv("realm"));
             if (realm == null) {
