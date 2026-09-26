@@ -484,10 +484,13 @@ lanes above do not yet implement general grouped statements or avatars.
 
 The cutover classified Work lanes now batch the exact active `rv:support`
 Statement IDs for each accepted qualified-fact Decision at the query's graph
-position. The response exposes those IDs and their exact count at supporting
-Statement grain; the rated lane still returns one result per effective Main
-Version and does not multiply its Lucene score or standing-rating aggregate by
-support count. At most 512 support IDs are hydrated in one graph read; overflow
+position, then use the Statement owner's bounded public batch read to verify
+their subject, meaning key, active revision and readable semantic basis. A
+missing or private support makes the relation unavailable. The response exposes
+those IDs and their exact count at supporting Statement grain; the rated lane
+still returns one result per effective Main Version and does not multiply its
+Lucene score or standing-rating aggregate by support count. At most 512 support
+IDs are hydrated in the owner batch; overflow
 is a typed budget result. Each returned support is checked against the current
 Access judgment population of the effective decision: Realm-local decisions use
 the Realm population, and Global or inherited decisions use Global. Protection,

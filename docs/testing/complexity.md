@@ -61,8 +61,10 @@ The public Work title/body profile has two independent Lucene probes capped at
 limit, at most 512 accepted units, and the shared 1,500 ms, 72 Fuseki-call,
 8 MiB request ceilings. The title field lives on an already eligible public
 MatchUnit; unrelated label resources cannot grow its candidate population.
-The exact supporting-Statement hydration uses one `VALUES` graph read for at
-most 512 IDs, with a 513th row proving overflow. At most 512 Access judgment
+The exact supporting-Statement hydration uses one bounded decision/support
+association read and one owner `VALUES` batch read for at most 512 active public
+IDs, plus the owner's graph-admission guard. Both reads have a one MiB response
+ceiling; a 513th support is a typed budget outcome. At most 512 Access judgment
 checks run in batches of 16 under the same request deadline. A bearer read
 does two bounded Access mute-list reads (at most 256 rows each), one graph author
 batch for at most 512 Contributions when author facts are needed, and one
@@ -71,6 +73,18 @@ authors. The final mute-list read rejects a concurrent revision change.
 These are logical limits; native Jena work, SQL plan rows and title-index update
 fanout still need measured qualification across unrelated corpus, affected units,
 author membership degree and common rejected terms.
+
+Context interpretation takes two graph-position reads around at most one
+speaker-selection read, one Global-head read and one bounded inherited-chain
+read. A changed graph position makes the resolution unavailable rather than
+returning a mixed semantic basis. The public Statement owner reads at most 512
+exact IDs in one query, with at most eight interpretation definitions and eight
+applicability values per Statement; an absent or Private basis invalidates the
+batch. Graph relation reads check up to eight explicit participant constraints
+with Access before their role/text match, in addition to the anchor and at most
+65 discovered occurrence/target candidate proofs. Discovery of unknown
+occurrences still precedes their Access proof; the bounded frontier must not be
+presented as an exact complete count.
 
 ### IAM07 media download stream
 

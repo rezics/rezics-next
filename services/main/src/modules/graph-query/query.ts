@@ -160,16 +160,23 @@ export async function queryRelationGraph(env: WorkActivationEnvironment, authori
   return withGraphReadBudget({ calls: GRAPH_QUERY_READ_LIMITS.fusekiCalls,
     bytes: GRAPH_QUERY_READ_LIMITS.fusekiBytes, requestMs: GRAPH_QUERY_READ_LIMITS.requestMs }, async () => {
   await assertGraphAdmissionOpen(env.fuseki, env.lineage);
+  if (input.anchor.kind === 'resource' && !await authority.canReadResource(input.anchor.id)) {
+    // Missing and private anchors share the same public outcome.
+    throw new GraphQueryNotFound('graph anchor is unavailable');
+  }
+  // Explicit participant constraints are authority inputs. Check them before
+  // the ARQ role/text match so a hidden participant cannot act as a probe.
+  for (const participant of new Set(input.roleBindings.map(binding => binding.participant))) {
+    if (!await authority.canReadResource(participant)) {
+      throw new GraphQueryNotFound('graph participant is unavailable');
+    }
+  }
   const definition = await readExactDefinition(env, input.definition);
   if (!definition) throw new GraphQueryNotFound('relation definition is unavailable');
   const roles = new Map(definition.roles.map(role => [definition.roleKeys[role.role]!, role.role]));
   if (!roles.has(input.fromRole) || !roles.has(input.toRole)
     || input.roleBindings.some(binding => !roles.has(binding.role))) {
     throw new InvalidGraphQuery('role key is not present in the pinned relation definition');
-  }
-  if (input.anchor.kind === 'resource' && !await authority.canReadResource(input.anchor.id)) {
-    // Missing and private anchors share the same public outcome.
-    throw new GraphQueryNotFound('graph anchor is unavailable');
   }
   const index = input.anchor.kind === 'phrase'
     ? await assertPublicTextReady(env.fuseki, env.lineage) : null;

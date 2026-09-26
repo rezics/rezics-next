@@ -33,7 +33,7 @@ test('GRAPH01: query binds role predicates and participants through one exact oc
 test('GRAPH03/GRAPH04: traversal has a hard candidate bound and does not expose hidden candidate counts', () => {
   expect(GRAPH_QUERY_LIMITS.edges).toBe(64);
   expect(GRAPH_QUERY_LIMITS.candidates).toBe(65);
-  expect(GRAPH_QUERY_COST.relationPage.maxAccessProofs).toBe(133);
+  expect(GRAPH_QUERY_COST.relationPage.maxAccessProofs).toBe(141);
   expect(GRAPH_QUERY_COST.relationPage.maxResponseBytes).toBe(1_048_576);
   expect(GRAPH_QUERY_COST.relationPage.textSeed).toMatchObject({ maxCandidates: 513,
     maxFusekiCalls: 72, maxFusekiBytes: 8_388_608, maxRequestMs: 10_000 });

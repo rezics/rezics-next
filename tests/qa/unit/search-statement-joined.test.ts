@@ -34,6 +34,12 @@ function fixture(candidateCount = 1, includeMatch = true, hiddenPin = false) {
         ...(hiddenPin ? { pin: value(id(12)), pinContext: value(id(13)),
           pinDisclosure: value('https://rezics.com/vocab/Private') } : {}) }] } };
     }
+    if (sparql.includes('VALUES ?statement')) {
+      return { results: { bindings: [{ epoch: value('epoch'), sequence: value('7'),
+        statement: value(id(10)), subject: value(id(2)), predicate: value(id(8)),
+        object: value(id(11)), relation: value(id(8)), speaker: value(id(7)),
+        key: value(`urn:rezics:meaning:${'a'.repeat(64)}`), head: value(id(12)) }] } };
+    }
     if (sparql.includes('?ratingPopulation') && sparql.includes('text:query')) {
       return { results: { bindings: [{
         epoch: value('epoch'), sequence: value('7'), indexGeneration: value(generation),

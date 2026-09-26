@@ -1,4 +1,4 @@
-import { GRAPHS, RV, iri, type WorkActivationEnvironment } from '../work/activate.ts';
+import { DATASET, GRAPHS, RV, iri, lit, type WorkActivationEnvironment } from '../work/activate.ts';
 import { term } from './command.ts';
 import type { PrivateSelectionCandidateRow } from './private-selection-schema.ts';
 import { CONTEXT_LIMITS, GLOBAL_SEMANTIC_CONTEXT, contextSelectionCandidates, contextSelectionKey,
@@ -8,20 +8,21 @@ import { CONTEXT_LIMITS, GLOBAL_SEMANTIC_CONTEXT, contextSelectionCandidates, co
 // meaning): explicit request, the speaker's object-relation / object / default
 // selection, then the published Global head. Entry-point defaults and admitted
 // domain candidates are not supplied by this first profile. Cost: at most one
-// speaker selection read, one Global head read and one bounded chain read; a
+// speaker selection read, one Global head read, one bounded chain read and two
+// graph-position reads that fence them; a
 // Private Context adds one Access proof per distinct Context in the chain.
 
 export type InterpretationBasis = 'explicit' | 'speaker-object-relation' | 'speaker-object'
   | 'speaker-default' | 'global' | 'none';
 
-export type Interpretation =
+export type Interpretation = (
   | { state: 'resolved'; basis: InterpretationBasis; context: string | null; semanticRevision: string | null;
     definition: string | null; entryRevision: string | null; selectionRevision: string | null }
   | { state: 'unresolved' | 'disabled'; basis: InterpretationBasis; context: string; semanticRevision: string;
     entryRevision: string; selectionRevision: string | null }
   | { state: 'ambiguous'; basis: InterpretationBasis; context: string; semanticRevision: string;
     selectionRevision: string | null; candidates: { relation: string; definition: string; entryRevision: string }[] }
-  | { state: 'unavailable' };
+  | { state: 'unavailable' }) & { sourcePosition?: { datasetId: 'product'; dataEpoch: string; sequence: string } };
 
 export interface InterpretationSpeaker {
   kind: 'realm' | 'personal';
@@ -89,6 +90,31 @@ async function speakerSelection(env: WorkActivationEnvironment, request: Interpr
 
 /** Resolve one interpretation slot and walk only the pinned base chain of the chosen revision. */
 export async function resolveInterpretation(env: WorkActivationEnvironment,
+  request: InterpretationRequest): Promise<Interpretation> {
+  const before = await interpretationGraphPosition(env);
+  if (!before) return { state: 'unavailable' };
+  const interpretation = await resolveInterpretationAtPosition(env, request);
+  const after = await interpretationGraphPosition(env);
+  if (!after || after.dataEpoch !== before.dataEpoch || after.sequence !== before.sequence) {
+    return { state: 'unavailable' };
+  }
+  return interpretation.state === 'unavailable' ? interpretation
+    : { ...interpretation, sourcePosition: before };
+}
+
+async function interpretationGraphPosition(env: WorkActivationEnvironment) {
+  const rows = (await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?epoch ?sequence WHERE {
+    GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:dataEpoch ?epoch ; rv:sequence ?sequence .
+      FILTER NOT EXISTS { ${iri(DATASET)} rv:restoreHold true } }
+    FILTER(?epoch = ${lit(env.lineage.dataEpoch)})
+  } LIMIT 2`)).results?.bindings ?? [];
+  if (rows.length !== 1 || rows[0]?.epoch?.value !== env.lineage.dataEpoch
+    || !/^(0|[1-9][0-9]*)$/u.test(rows[0].sequence?.value ?? '')) return null;
+  return { datasetId: 'product' as const, dataEpoch: rows[0].epoch.value,
+    sequence: rows[0].sequence!.value };
+}
+
+async function resolveInterpretationAtPosition(env: WorkActivationEnvironment,
   request: InterpretationRequest): Promise<Interpretation> {
   const levels = contextSelectionCandidates(request.object, request.relation, []);
   let selected: Selected | null | 'unavailable' = request.explicit

@@ -2,6 +2,8 @@ import { DATASET, GRAPHS, RV, iri, lit, type WorkActivationEnvironment } from '.
 import { MAX_SEARCH_RESPONSE_BYTES, SearchSnapshotMoved } from './search-readiness.ts';
 import { PublicQueryBudgetExceeded, PublicQueryUnavailable } from './search-budget.ts';
 import { STATEMENT_DECISION_PROFILE, STATEMENT_LIMITS } from '../statement/schema.ts';
+import { readPublicStatementsAt, StatementBatchBudgetExceeded }
+  from '../statement/read.ts';
 
 export const MAX_SEARCH_SUPPORTS = 512;
 
@@ -82,6 +84,24 @@ export async function readSearchDecisionSupports(env: WorkActivationEnvironment,
   }
   if ([...supports.values()].some(set => set.size > STATEMENT_LIMITS.support)) {
     throw new PublicQueryUnavailable('accepted decision exceeds its Statement support bound');
+  }
+  const ids = [...new Set([...supports.values()].flatMap(set => [...set]))];
+  let hydrated;
+  try { hydrated = await readPublicStatementsAt(env, ids, position); }
+  catch (error) {
+    if (error instanceof StatementBatchBudgetExceeded) {
+      throw new PublicQueryBudgetExceeded('Statement support read exceeds its budget', { cause: error });
+    }
+    throw new PublicQueryUnavailable('Statement support read is unavailable', { cause: error });
+  }
+  for (const candidate of distinct.values()) {
+    const key = `${candidate.mainVersion}\0${candidate.decision}`;
+    for (const support of supports.get(key) ?? []) {
+      const read = hydrated.get(support);
+      if (!read || read.subject !== candidate.mainVersion || read.meaningKey !== candidate.meaningKey) {
+        throw new PublicQueryUnavailable('Statement support does not match its accepted fact');
+      }
+    }
   }
   return new Map([...supports].map(([key, set]) => [key, [...set].sort()]));
 }

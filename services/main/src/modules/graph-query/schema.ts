@@ -22,7 +22,8 @@ export const GRAPH_QUERY_COST = {
     maxResponseBytes: MAX_SEARCH_RESPONSE_BYTES,
     accessProofsPerCandidate: 2, // the occurrence and the other participant
     routeAnchorAccessProofs: 3, // semantic, Work fallback and module anchor checks
-    maxAccessProofs: GRAPH_QUERY_LIMITS.candidates * 2 + 3,
+    explicitParticipantAccessProofs: GRAPH_QUERY_LIMITS.roleBindings,
+    maxAccessProofs: GRAPH_QUERY_LIMITS.candidates * 2 + 3 + GRAPH_QUERY_LIMITS.roleBindings,
     textSeed: { maxCandidates: PHRASE_HIT_PROBE, maxFusekiCalls: GRAPH_QUERY_READ_LIMITS.fusekiCalls,
       maxFusekiBytes: GRAPH_QUERY_READ_LIMITS.fusekiBytes, maxRequestMs: GRAPH_QUERY_READ_LIMITS.requestMs },
     noPerEdgeGraphHydration: true,

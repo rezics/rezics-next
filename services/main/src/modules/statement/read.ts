@@ -3,12 +3,16 @@ import { CLASSIFICATION_INHERIT_POLICY, CLASSIFICATION_ISOLATE_POLICY,
 import { ContextCommandUnavailable } from '../context/command.ts';
 import { DATASET, GRAPHS, RV, iri, lit, type WorkActivationEnvironment } from '../work/activate.ts';
 import { assertGraphAdmissionOpen } from '../work/restore-lineage.ts';
+import { MAX_SEARCH_RESPONSE_BYTES } from '../work/search-readiness.ts';
 import type { Acceptance } from './graph.ts';
 import { decisionSlotIri, resolveAcceptance, type AcceptanceResolution, type DecisionOutcome,
-  type DecisionTarget, type SlotReading, type StatementValue } from './schema.ts';
+  STATEMENT_LIMITS, type DecisionTarget, type SlotReading, type StatementValue } from './schema.ts';
 
 const RDF = 'http://www.w3.org/1999/02/22-rdf-syntax-ns#';
 export class StatementNotFound extends Error {}
+export class StatementBatchBudgetExceeded extends Error {}
+export class StatementBatchUnavailable extends Error {}
+export const MAX_PUBLIC_STATEMENT_BATCH = 512;
 
 /**
  * The meaning basis is readable only when its Context is Public or the caller holds the
@@ -103,6 +107,104 @@ export async function readStatement(env: WorkActivationEnvironment, statement: s
     meaningKey: row.key!.value, state: row.state!.value === `${RV}Withdrawn` ? 'withdrawn' : 'active',
     revision: row.head!.value, meaningBasis, export: exported,
     sourcePosition: { datasetId: 'product', dataEpoch: row.epoch!.value, sequence: row.sequence!.value } };
+}
+
+export interface PublicStatementBatchRow {
+  statement: string;
+  subject: string;
+  predicate: string;
+  relationDefinition: string;
+  value: StatementValue;
+  speaker: string;
+  meaningKey: string;
+  revision: string;
+  applicability: string[];
+  meaningBasis: Exclude<MeaningBasis, { state: 'unavailable' }>;
+  sourcePosition: { datasetId: 'product'; dataEpoch: string; sequence: string };
+}
+
+/** One bounded graph read hydrates exact active public supports at one position.
+ * A missing/private pin or changed position invalidates the whole batch. */
+export async function readPublicStatementsAt(env: WorkActivationEnvironment,
+  statements: readonly string[], position: { dataEpoch: string; sequence: string }):
+  Promise<Map<string, PublicStatementBatchRow>> {
+  const unique = [...new Set(statements)];
+  if (unique.length > MAX_PUBLIC_STATEMENT_BATCH) {
+    throw new StatementBatchBudgetExceeded('public Statement batch exceeds 512 supports');
+  }
+  if (unique.some(id => !/^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/u.test(id))
+    || position.dataEpoch !== env.lineage.dataEpoch
+    || !/^(0|[1-9][0-9]*)$/u.test(position.sequence)) {
+    throw new StatementBatchUnavailable('public Statement batch input is invalid');
+  }
+  if (unique.length === 0) return new Map();
+  await assertGraphAdmissionOpen(env.fuseki, env.lineage);
+  const result = await env.fuseki.query(`PREFIX rv: <${RV}> PREFIX rdf: <${RDF}>
+    SELECT ?epoch ?sequence ?statement ?subject ?predicate ?object ?relation ?speaker ?key ?head
+      ?pin ?context ?disclosure
+      (GROUP_CONCAT(DISTINCT STR(?definition); separator="|") AS ?definitions)
+      (GROUP_CONCAT(DISTINCT STR(?app); separator="|") AS ?applicability) WHERE {
+      GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:dataEpoch ?epoch ; rv:sequence ?sequence .
+        FILTER NOT EXISTS { ${iri(DATASET)} rv:restoreHold true } }
+      FILTER(?epoch = ${lit(position.dataEpoch)} && ?sequence = ${position.sequence})
+      VALUES ?statement { ${unique.map(iri).join(' ')} }
+      GRAPH ${iri(GRAPHS.current)} {
+        ?statement a rdf:Statement ; rv:statementState rv:Active ; rdf:subject ?subject ;
+          rdf:predicate ?predicate ; rdf:object ?object ; rv:relationDefinition ?relation ;
+          rv:speaker ?speaker ; rv:meaningKey ?key ; rv:head ?head .
+        OPTIONAL { ?statement rv:interpretationDefinition ?definition }
+        OPTIONAL { ?statement rv:applicability ?app }
+        OPTIONAL { ?statement rv:semanticContextRevision ?pin }
+      }
+      GRAPH ${iri(GRAPHS.revisions)} { ?head a rv:StatementRevision ; rv:component ?statement . }
+      OPTIONAL { GRAPH ${iri(GRAPHS.revisions)} {
+        ?pin a rv:ContextSemanticRevision ; rv:component ?context . }
+        GRAPH ${iri(GRAPHS.current)} { ?context rv:disclosure ?disclosure . } }
+    } GROUP BY ?epoch ?sequence ?statement ?subject ?predicate ?object ?relation ?speaker ?key ?head
+      ?pin ?context ?disclosure
+    LIMIT ${MAX_PUBLIC_STATEMENT_BATCH + 1}`, MAX_SEARCH_RESPONSE_BYTES);
+  const rows = result.results?.bindings ?? [];
+  if (rows.length > MAX_PUBLIC_STATEMENT_BATCH) {
+    throw new StatementBatchBudgetExceeded('public Statement batch result exceeds 512 supports');
+  }
+  const parsed = new Map<string, PublicStatementBatchRow>();
+  const references = (raw: string | undefined, limit: number) => {
+    if (!raw) return [];
+    const values = [...new Set(raw.split('|'))].sort();
+    if (values.length > limit || values.some(value => !/^https?:\/\/[^\s<>"{}|\\^`]+$/u.test(value))) {
+      throw new StatementBatchUnavailable('public Statement qualifier list is incomplete');
+    }
+    return values;
+  };
+  for (const row of rows) {
+    const id = row.statement?.value;
+    if (!id || !unique.includes(id) || parsed.has(id)
+      || row.epoch?.value !== position.dataEpoch || row.sequence?.value !== position.sequence
+      || !row.subject || !row.predicate || !row.object || !row.relation || !row.speaker
+      || !row.key || !row.head) {
+      throw new StatementBatchUnavailable('public Statement batch is incomplete or ambiguous');
+    }
+    let meaningBasis: PublicStatementBatchRow['meaningBasis'] = { state: 'none' };
+    if (row.pin) {
+      if (!row.context || row.disclosure?.value !== `${RV}Public`) {
+        throw new StatementBatchUnavailable('public Statement meaning basis is unavailable');
+      }
+      meaningBasis = { state: 'readable', context: row.context.value,
+        semanticRevision: row.pin.value,
+        interpretationDefinitions: references(row.definitions?.value, STATEMENT_LIMITS.interpretationDefinitions) };
+    }
+    parsed.set(id, { statement: id, subject: row.subject.value,
+      predicate: row.predicate.value, relationDefinition: row.relation.value,
+      value: valueOf(row.object), speaker: row.speaker.value, meaningKey: row.key.value,
+      revision: row.head.value,
+      applicability: references(row.applicability?.value, STATEMENT_LIMITS.applicability),
+      meaningBasis,
+      sourcePosition: { datasetId: 'product', dataEpoch: position.dataEpoch, sequence: position.sequence } });
+  }
+  if (parsed.size !== unique.length) {
+    throw new StatementBatchUnavailable('an active public Statement support is missing');
+  }
+  return parsed;
 }
 
 export interface StatementResolution {

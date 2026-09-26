@@ -49,6 +49,7 @@ test('SEARCH01/SEARCH04: one native graph/text read preserves scores across thre
     const main = mains[index]!;
     const statement = id(41 + index), slot = `urn:rezics:decision-slot:statement-${index}`;
     const additionalSupport = index === 0 ? id(43) : null;
+    const statementHead = id(121 + index), additionalHead = additionalSupport ? id(123) : null;
     const decision = id(51 + index), selection = id(61 + index);
     return `GRAPH ${iri(GRAPHS.current)} {
       ${iri(work)} a schema:CreativeWork ; rv:mainVersion ${iri(main)} .
@@ -57,17 +58,22 @@ test('SEARCH01/SEARCH04: one native graph/text read preserves scores across thre
         rdf:subject ${iri(main)} ; rdf:predicate <${CLASSIFIED_AS}> ;
         rdf:object ${iri(concept)} ;
         rv:relationDefinition ${iri(CLASSIFICATION_PROPOSITION_PROFILE)} ;
-        rv:interpretationDefinition ${iri(senseHead)} ; rv:meaningKey ${iri(keys[index]!)} .
+        rv:interpretationDefinition ${iri(senseHead)} ; rv:meaningKey ${iri(keys[index]!)} ;
+        rv:speaker ${iri(id(1))} ; rv:head ${iri(statementHead)} .
       ${additionalSupport ? `${iri(additionalSupport)} a rdf:Statement ; rv:statementState rv:Active ;
         rdf:subject ${iri(main)} ; rdf:predicate <${CLASSIFIED_AS}> ;
         rdf:object ${iri(concept)} ; rv:relationDefinition ${iri(CLASSIFICATION_PROPOSITION_PROFILE)} ;
-        rv:interpretationDefinition ${iri(senseHead)} ; rv:meaningKey ${iri(keys[index]!)} .` : ''}
+        rv:interpretationDefinition ${iri(senseHead)} ; rv:meaningKey ${iri(keys[index]!)} ;
+        rv:speaker ${iri(id(1))} ; rv:head ${iri(additionalHead!)} .` : ''}
       ${iri(slot)} a rv:DecisionSlot ; rv:targetKind rv:QualifiedFactTarget ;
         rv:decisionTarget ${iri(keys[index]!)} ;
         rv:acceptanceContext ${iri(GLOBAL_CLASSIFICATION_CONTEXT)} ;
         rv:decisionHead ${iri(decision)} .
     }
     GRAPH ${iri(GRAPHS.revisions)} {
+      ${iri(statementHead)} a rv:StatementRevision, rv:RevisionAnchor ; rv:component ${iri(statement)} .
+      ${additionalSupport ? `${iri(additionalHead!)} a rv:StatementRevision, rv:RevisionAnchor ;
+        rv:component ${iri(additionalSupport)} .` : ''}
       ${iri(decision)} a rv:StatementDecision, rv:RevisionAnchor ;
         rv:component ${iri(slot)} ; rv:decisionPolicy ${iri(STATEMENT_DECISION_PROFILE)} ;
         rv:outcome rv:Accepted ; rv:support ${iri(statement)}
@@ -256,7 +262,8 @@ test('SEARCH01/SEARCH04: one native graph/text read preserves scores across thre
       const answer = await native.query(sparql);
       return answer;
     }
-    if (sparql.includes('VALUES (?main ?key ?decision ?context)')) return native.query(sparql);
+    if (sparql.includes('VALUES (?main ?key ?decision ?context)')
+      || sparql.includes('VALUES ?statement')) return native.query(sparql);
     return { results: { bindings: [{ epoch: binding('epoch'), sequence: binding('7'),
       generation: binding(generation) }] } };
   } } as FusekiClient;
