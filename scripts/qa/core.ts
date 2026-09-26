@@ -109,6 +109,7 @@ function shardLines(tiers: { name: Tier; shards?: ShardRecord[] }[], isolation: 
   for (const item of isolation) {
     lines.push(`- Isolation ${item.tier}: ${item.file} failed after ${item.afterFiles} other files in ${item.afterProject}; `
       + (item.status === 'order-dependent' ? `passed alone in ${item.project} (order-dependent: assumes a fresh database)`
+        : item.status === 'infrastructure-dependent' ? `passed alone in ${item.project} after Docker network exhaustion`
         : item.status === 'failed-alone' ? `also failed alone in ${item.project}` : 'not rerun alone'));
   }
   return lines.length ? ['', ...lines] : [];
@@ -177,7 +178,8 @@ export function writeSummary(directory: string, report: {
 export interface ShardRecord { project: string; files: string[]; status: 'passed' | 'failed';
   stage: 'stack' | 'bootstrap' | 'test'; elapsedMs?: number; isolation?: boolean }
 export interface IsolationRecord { tier: Tier; file: string; afterProject: string; afterFiles: number;
-  project?: string; shardFailures: string[]; status: 'order-dependent' | 'failed-alone' | 'not-run' }
+  project?: string; shardFailures: string[];
+  status: 'order-dependent' | 'infrastructure-dependent' | 'failed-alone' | 'not-run' }
 
 export async function commandAsync(root: string, name: string, args: string[], timeoutMs: number,
   env: NodeJS.ProcessEnv = process.env): Promise<{ ok: boolean; output: string; elapsedMs: number;
@@ -240,9 +242,12 @@ function logDurations(text: string): Map<string, number> {
 // across the given artifact roots, from merged JUnit or, for killed runs, logs.
 export function recordedFileDurations(artifactRoots: string[], tier: Tier, maxRuns = 60): Map<string, number> {
   const artifact = tierArtifactName(tier);
+  const logName = new RegExp(`^${artifact}(?:-f?r?\\d+)?\\.log$`);
   const runs = artifactRoots.filter(existsSync).flatMap(dir => readdirSync(dir, { withFileTypes: true })
     .filter(entry => entry.isDirectory() && /^\d{8}t\d{6}-[0-9a-f]{6}$/.test(entry.name))
     .map(entry => ({ name: entry.name, path: join(dir, entry.name) })))
+    .filter(run => existsSync(join(run.path, `${artifact}.xml`))
+      || (existsSync(join(run.path, 'logs')) && readdirSync(join(run.path, 'logs')).some(name => logName.test(name))))
     .sort((a, b) => b.name.localeCompare(a.name)).slice(0, maxRuns);
   const observed = new Map<string, number[]>();
   for (const run of runs) {
@@ -252,9 +257,12 @@ export function recordedFileDurations(artifactRoots: string[], tier: Tier, maxRu
       for (const test of parseJUnit(readFileSync(xml, 'utf8'), tier)) {
         if (test.durationMs !== undefined) perRun.set(test.file, (perRun.get(test.file) ?? 0) + test.durationMs);
       }
-    } else if (existsSync(join(run.path, 'logs'))) {
+    }
+    // A timed-out shard may leave a partial JUnit file. Its log still records
+    // completed files that never reached the reporter, so inspect both.
+    if (existsSync(join(run.path, 'logs'))) {
       for (const name of readdirSync(join(run.path, 'logs'))) {
-        if (!new RegExp(`^${artifact}(?:-f?r?\\d+)?\\.log$`).test(name)) continue;
+        if (!logName.test(name)) continue;
         // An isolated rerun repeats a shard's file; keep the longer observation.
         for (const [file, ms] of logDurations(readFileSync(join(run.path, 'logs', name), 'utf8'))) {
           perRun.set(file, Math.max(perRun.get(file) ?? 0, ms));
@@ -279,7 +287,9 @@ export function estimatedDurations(files: string[], recorded: ReadonlyMap<string
 // other), never more than the files or the allowed maximum.
 export function shardCount(estimates: ReadonlyMap<string, number>, budgetMs: number, maximum: number): number {
   const total = [...estimates.values()].reduce((sum, ms) => sum + ms, 0);
-  return Math.max(1, Math.min(maximum, estimates.size, Math.ceil(total / (budgetMs / 2))));
+  const minimum = estimates.size >= 8 ? 2 : 1;
+  return Math.max(1, Math.min(maximum, estimates.size,
+    Math.max(minimum, Math.ceil(total / (budgetMs / 2)))));
 }
 
 // Longest-processing-time assignment: deterministic and within 4/3 of optimal.
@@ -336,6 +346,31 @@ export function mergeJUnit(suites: string[], elapsedMs: number): string {
     }
   }
   return `<?xml version="1.0" encoding="UTF-8"?>\n<testsuites name="bun test" tests="${tests}" failures="${failures}" skipped="${skipped}" time="${elapsedMs / 1000}">\n${suites.map(suite => `  ${suite}`).join('\n')}\n</testsuites>\n`;
+}
+
+// A few failed files can be checked on fresh projects. A larger failure wave
+// usually means the shared stack failed; individual reruns cannot establish
+// which file caused it. The preceding count follows JUnit execution order.
+export function isolationCandidates(xml: string, tier: Tier, maxFailedFiles = 5):
+  { file: string; names: string[]; afterFiles: number; infrastructure: boolean }[] {
+  const suites = junitSuites(xml);
+  const order = new Map<string, number>();
+  for (const suite of suites) if (suite.file && !order.has(suite.file)) order.set(suite.file, order.size);
+  const failed = new Map<string, string[]>();
+  for (const test of parseJUnit(xml, tier)) if (test.failed) {
+    failed.set(test.file, [...failed.get(test.file) ?? [], test.name]);
+  }
+  if (failed.size > maxFailedFiles) return [];
+  return [...failed].filter(([file]) => order.has(file))
+    .map(([file, names]) => ({ file, names, afterFiles: order.get(file)!,
+      infrastructure: suites.some(suite => suite.file === file
+        && /all predefined address pools have been fully subnetted/.test(suite.xml)) }));
+}
+
+export function shardResolved(ok: boolean, stage: ShardRecord['stage'], timedOut: boolean,
+  failedFiles: ReadonlySet<string>, isolatedFiles: ReadonlySet<string>): boolean {
+  return ok || (stage === 'test' && !timedOut && failedFiles.size > 0
+    && [...failedFiles].every(file => isolatedFiles.has(file)));
 }
 
 // Bun exits 1 when `-t` matches nothing in a shard; other shards may hold the match.

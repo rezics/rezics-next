@@ -2,8 +2,9 @@ import { expect, test } from 'bun:test';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { acquireFullLock, acquireQaSlots, estimatedDurations, expandTestPaths, expectedFusekiModuleVersion,
-  junitSuites, matchedNoTests, maximumShards, mergeJUnit, parseArgs, planShards, recordedFileDurations,
-  shardCount, splitTestArgs, testLogEnvironment, writeSummary, implementedTiers, tierArtifactName,
+  isolationCandidates, junitSuites, matchedNoTests, maximumShards, mergeJUnit, parseArgs, planShards,
+  recordedFileDurations, shardCount, shardResolved, splitTestArgs, testLogEnvironment, writeSummary,
+  implementedTiers, tierArtifactName,
   xmlForCommand, type Tier } from '../../../scripts/qa/core.ts';
 import { parseJUnit } from '../../../scripts/qa/acceptance.ts';
 import { COMMAND_MODULE_VERSION } from '../../../services/main/src/infrastructure/profile.ts';
@@ -146,17 +147,21 @@ test('QA shards: recorded durations use the latest merged JUnit, killed-run logs
       '<testcase name="one" time="1" file="a.test.ts" /><testcase name="two" time="2" file="a.test.ts" />')) });
     run('20260903t000000-cccccc', { 'integration.xml': junit(suite('a.test.ts', '<testcase name="one" time="4" file="a.test.ts" />')) });
     run('20260904t000000-dddddd', { 'integration.xml': junit(suite('a.test.ts', '<testcase name="one" time="0.5" file="a.test.ts" />'),
-      suite('b.test.ts', '<testcase name="b" time="0.25" file="b.test.ts" />')) });
+      suite('b.test.ts', '<testcase name="b" time="0.25" file="b.test.ts" />')),
+    'logs/integration-1.log': 'a.test.ts:\n(pass) A01: slower log [7000ms]\n' });
     // A killed shard leaves no JUnit; its log still lists finished files.
     run('20260905t000000-eeeeee', { 'logs/integration-2.log': 'bun test\n\nc.test.ts:\n(pass) C01: c [1500.50ms]\n'
       + '(fail) C02: d [2.5s]\n\nd.test.ts:\nspawnSync bun ETIMEDOUT\n',
     'logs/integration-2-stack.log': 'c.test.ts:\n(pass) x [99999ms]\n', 'logs/fault-recovery-f1.log': 'c.test.ts:\n(pass) x [99999ms]\n' });
+    run('20260906t000000-ffffff', { 'unit.xml': junit(suite('unrelated.test.ts',
+      '<testcase name="unit" time="1" file="unrelated.test.ts" />')) });
     const durations = recordedFileDurations([dir, join(dir, 'absent')], 'integration');
-    // a.test.ts: newest three observations are 500, 4000 and 3000 ms; the oldest 9000 ms is ignored.
-    expect(Object.fromEntries(durations)).toEqual({ 'a.test.ts': 4000, 'b.test.ts': 250, 'c.test.ts': 4001 });
+    // a.test.ts: newest three observations are 7000, 4000 and 3000 ms; the oldest 9000 ms is ignored.
+    expect(Object.fromEntries(durations)).toEqual({ 'a.test.ts': 7000, 'b.test.ts': 250, 'c.test.ts': 4001 });
     expect(Object.fromEntries(recordedFileDurations([dir], 'fault/recovery'))).toEqual({ 'c.test.ts': 99999 });
+    expect(Object.fromEntries(recordedFileDurations([dir], 'integration', 1))).toEqual({ 'c.test.ts': 4001 });
     expect(Object.fromEntries(estimatedDurations(['a.test.ts', 'new.test.ts', 'b.test.ts'], durations)))
-      .toEqual({ 'a.test.ts': 4000, 'new.test.ts': 4000, 'b.test.ts': 250 });
+      .toEqual({ 'a.test.ts': 7000, 'new.test.ts': 7000, 'b.test.ts': 250 });
     expect(Object.fromEntries(estimatedDurations(['new.test.ts'], new Map()))).toEqual({ 'new.test.ts': 30_000 });
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
@@ -167,6 +172,8 @@ test('QA shards: shard count keeps each project near half its budget and plannin
   expect(shardCount(estimates, 480_000, 8)).toBe(4);
   expect(shardCount(estimates, 480_000, 2)).toBe(2);
   expect(shardCount(new Map([['a', 1_000]]), 480_000, 4)).toBe(1);
+  expect(shardCount(new Map(Array.from({ length: 8 }, (_, index) => [`f${index}`, 1_000])),
+    480_000, 4)).toBe(2);
   expect(shardCount(new Map([['a', 900_000], ['b', 900_000]]), 360_000, 8)).toBe(2);
   const plan = planShards(estimates, 4);
   expect(plan).toEqual([['a'], ['b', 'g'], ['c', 'f'], ['d', 'e']]);
@@ -199,6 +206,23 @@ test('QA shards: shard JUnit merges per file, keeps nested suites and replaces i
   expect(junitSuites(xmlForCommand('integration', false, 1, 'stack down'))[0]!.file).toBeUndefined();
   expect(matchedNoTests('bun test v1.4.2\n\nerror: regex "^X01" matched 0 tests. Searched 2 files')).toBe(true);
   expect(matchedNoTests('error: something else')).toBe(false);
+});
+
+test('QA shards: only a small file failure set is eligible for fresh-project isolation', () => {
+  const xml = junit(
+    suite('first.test.ts', '<testcase name="A01: pass" file="first.test.ts" />'),
+    suite('second.test.ts', '<testcase name="A02: fail" file="second.test.ts"><failure /></testcase>'),
+    suite('third.test.ts', '<testcase name="A03: fail" file="third.test.ts">'
+      + '<failure>all predefined address pools have been fully subnetted</failure></testcase>'));
+  expect(isolationCandidates(xml, 'integration')).toEqual([
+    { file: 'second.test.ts', names: ['A02: fail'], afterFiles: 1, infrastructure: false },
+    { file: 'third.test.ts', names: ['A03: fail'], afterFiles: 2, infrastructure: true }]);
+  expect(isolationCandidates(xml, 'integration', 1)).toEqual([]);
+  expect(shardResolved(false, 'test', false, new Set(), new Set())).toBe(false);
+  expect(shardResolved(false, 'test', false, new Set(['second.test.ts']),
+    new Set(['second.test.ts']))).toBe(true);
+  expect(shardResolved(false, 'test', true, new Set(['second.test.ts']),
+    new Set(['second.test.ts']))).toBe(false);
 });
 
 test('QA shards: Goal QA slots bound extra projects, keep the caller slot and release only their own', () => {
@@ -244,7 +268,9 @@ test('QA shards: summary records every project and per-file order dependence', (
           { project: 'run-2', files: ['c.test.ts'], status: 'failed', stage: 'stack' },
           { project: 'run-r1', files: ['b.test.ts'], status: 'passed', stage: 'test', elapsedMs: 10_000, isolation: true }] }],
       isolation: [{ tier: 'integration', file: 'b.test.ts', afterProject: 'run-1', afterFiles: 1, project: 'run-r1',
-        shardFailures: ['B01: b'], status: 'order-dependent' }] });
+        shardFailures: ['B01: b'], status: 'order-dependent' },
+      { tier: 'integration', file: 'c.test.ts', afterProject: 'run-2', afterFiles: 0, project: 'run-r2',
+        shardFailures: ['C01: c'], status: 'infrastructure-dependent' }] });
     const acceptance = JSON.parse(readFileSync(join(dir, 'acceptance.json'), 'utf8'));
     expect(acceptance.isolation[0].status).toBe('order-dependent');
     expect(acceptance.tiers[0].shards).toHaveLength(3);
@@ -252,5 +278,7 @@ test('QA shards: summary records every project and per-file order dependence', (
     expect(summary).toContain('- integration projects: run-1 2 files 190.0 s failed; run-2 1 files — failed at stack; '
       + 'run-r1 (isolated) 1 files 10.0 s passed');
     expect(summary).toContain('- Isolation integration: b.test.ts failed after 1 other files in run-1; passed alone in run-r1');
+    expect(summary).toContain('- Isolation integration: c.test.ts failed after 0 other files in run-2; '
+      + 'passed alone in run-r2 after Docker network exhaustion');
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });

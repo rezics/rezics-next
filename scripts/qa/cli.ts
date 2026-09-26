@@ -1,8 +1,9 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { acquireFullLock, acquireQaSlots, artifactRoots, backendTiers, command, commandAsync, estimatedDurations,
-  expandTestPaths, goalSlotDirectory, implementedTiers, junitSuites, matchedNoTests, maximumShards, mergeJUnit,
-  newRunId, parseArgs, planShards, recordedFileDurations, shardCount, sourceIdentity, splitTestArgs,
+  expandTestPaths, goalSlotDirectory, implementedTiers, isolationCandidates, junitSuites, matchedNoTests,
+  maximumShards, mergeJUnit, newRunId, parseArgs, planShards, recordedFileDurations, shardCount,
+  shardResolved, sourceIdentity, splitTestArgs,
   tierArtifactName, uncoveredTiers, writeSummary, xmlForCommand, type IsolationRecord, type ShardRecord,
   type Tier } from './core.ts';
 import { caseInventory, e2eArgs, failedSelection, junitResults, parseJUnit, testArgs } from './acceptance.ts';
@@ -140,28 +141,34 @@ async function runStackTier(tier: StackTier): Promise<void> {
       .map((files, index) => runShard(tier, `${runId}-${prefix}${index + 1}`, files, flags, budget)));
     const candidates = runs.filter(run => !run.ok && !run.timedOut && run.record.stage === 'test'
       && run.record.files.length > 1)
-      .flatMap(run => [...failedTests(run, tier)].map(([file, names]) => ({ run, file, names })));
-    const limit = Math.max(2, slots.count);
+      .flatMap(run => isolationCandidates(run.xml ?? '', tier)
+        .map(candidate => ({ run, ...candidate })));
     const reruns: (ShardRun | undefined)[] = [];
     let next = 0;
-    await Promise.all(Array.from({ length: Math.min(slots.count, limit, candidates.length) }, async () => {
-      while (next < Math.min(limit, candidates.length)) {
+    await Promise.all(Array.from({ length: Math.min(slots.count, candidates.length) }, async () => {
+      while (next < candidates.length) {
         const index = next++;
         reruns[index] = await runShard(tier, `${runId}-${prefix}r${index + 1}`, [candidates[index]!.file], flags, budget, true);
       }
     }));
     const replaced = new Map<string, ShardRun>();
-    candidates.forEach(({ run, file, names }, index) => {
+    candidates.forEach(({ run, file, names, afterFiles, infrastructure }, index) => {
       const rerun = reruns[index];
-      const ranAlone = rerun?.record.stage === 'test' && !rerun.timedOut;
-      const status = !ranAlone ? 'not-run' : rerun.ok && !failedTests(rerun, tier).size ? 'order-dependent' : 'failed-alone';
+      const observed = rerun ? parseJUnit(rerun.xml ?? '', tier) : [];
+      const ranAlone = rerun?.record.stage === 'test' && !rerun.timedOut && !rerun.noMatch
+        && names.every(name => observed.some(test => test.file === file && test.name === name));
+      const recovered = ranAlone && rerun.ok && !failedTests(rerun, tier).size;
+      const status = !ranAlone ? 'not-run' : !recovered ? 'failed-alone'
+        : infrastructure ? 'infrastructure-dependent' : 'order-dependent';
       if (ranAlone) replaced.set(file, rerun);
-      isolation.push({ tier, file, afterProject: run.record.project, afterFiles: run.record.files.length - 1,
+      isolation.push({ tier, file, afterProject: run.record.project, afterFiles,
         ...(rerun ? { project: rerun.record.project } : {}), shardFailures: names, status });
     });
-    const resolved = (run: ShardRun) => run.ok || (!run.timedOut && run.record.stage === 'test'
-      && [...failedTests(run, tier).keys()].every(file => isolation.some(item => item.tier === tier
-        && item.file === file && item.afterProject === run.record.project && item.status === 'order-dependent')));
+    const resolved = (run: ShardRun) => shardResolved(run.ok, run.record.stage, run.timedOut,
+      new Set(failedTests(run, tier).keys()),
+      new Set(isolation.filter(item => item.tier === tier && item.afterProject === run.record.project
+        && (item.status === 'order-dependent' || item.status === 'infrastructure-dependent'))
+        .map(item => item.file)));
     const suites = runs.flatMap(run => junitSuites(run.xml ?? '')
       .filter(suite => !suite.file || !replaced.has(suite.file)).map(suite => suite.xml));
     for (const rerun of replaced.values()) suites.push(...junitSuites(rerun.xml ?? '').map(suite => suite.xml));
