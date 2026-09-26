@@ -16,11 +16,16 @@ const capture = t.Object({ identity: t.String({ minLength: 1, maxLength: 160 }),
   sha256: t.Nullable(t.String({ pattern: '^[0-9a-f]{64}$' })),
   sourceUrl: t.Optional(t.String({ format: 'uri', maxLength: 512 })),
   httpStatus: t.Optional(t.Integer({ minimum: 100, maximum: 599 })),
+  nestedOf: t.Optional(t.String({ minLength: 1, maxLength: 64 })),
+  nestedPath: t.Optional(t.String({ minLength: 1, maxLength: 164 })),
 }, { additionalProperties: false });
 const requestSchema = t.Object({ profile: t.Literal('mod-native-capture-v1'),
   ecosystem, side: t.Union([t.Literal('CLIENT'), t.Literal('SERVER')]),
   runtime: t.Optional(t.Object({ loaderVersion: t.String({ maxLength: 32 }),
-    gameVersion: t.String({ maxLength: 32 }) }, { additionalProperties: false })),
+    gameVersion: t.String({ maxLength: 32 }),
+    features: t.Optional(t.Object({ openGLVersion: t.Optional(t.String({ maxLength: 32 })),
+      javaVersion: t.Optional(t.String({ maxLength: 32 })) }, { additionalProperties: false })),
+  }, { additionalProperties: false })),
   root: t.String({ minLength: 1, maxLength: 160 }),
   captures: t.Array(capture, { maxItems: 33 }),
 }, { additionalProperties: false });
@@ -59,7 +64,7 @@ function modError(error: unknown): Response {
   return commandError(error);
 }
 
-/** POST: one Account and Access check, bounded O(B+C log C+R) profile, one insert and indexed read.
+/** POST: one Account and Access check, bounded O(B+C²+R) profile, one insert and indexed read.
  * GET: one Account and Access check, one indexed row and bounded revalidation. */
 export function packageModRoutes(work: MainWorkDependencies) {
   return new Elysia()

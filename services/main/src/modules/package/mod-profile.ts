@@ -11,12 +11,16 @@ export interface ModCapture {
   sha256: string | null;
   sourceUrl?: string;
   httpStatus?: number;
+  /** Caller-observed location of a Fabric child manifest inside its parent's declared JAR. */
+  nestedOf?: string;
+  nestedPath?: string;
 }
 export interface ModRequest {
   profile: 'mod-native-capture-v1';
   ecosystem: ModEcosystem;
   side: 'CLIENT' | 'SERVER';
-  runtime?: { loaderVersion: string; gameVersion: string };
+  runtime?: { loaderVersion: string; gameVersion: string;
+    features?: { openGLVersion?: string; javaVersion?: string } };
   root: string;
   captures: ModCapture[];
 }
@@ -43,6 +47,7 @@ const SHA = /^[0-9a-f]{64}$/;
 const ID = /^[A-Za-z0-9_./:-]{1,160}$/;
 const FABRIC_ID = /^[a-z][a-z0-9_-]{1,63}$/;
 const FORGE_ID = /^[a-z][a-z0-9_]{1,63}$/;
+const NESTED_PATH = /^(?!\/)(?!.*(?:^|\/)\.\.(?:\/|$))(?!.*\/\/)[A-Za-z0-9_./-]{1,160}\.jar$/;
 const MAX_CAPTURES = 32;
 const MAX_BYTES = 65_536;
 const MAX_RELATIONS = 256;
@@ -120,7 +125,8 @@ function compareVersion(actual: string, range: string, ecosystem: ModEcosystem):
     default: return null;
   }
 }
-interface NativeNode { id: string; project: string; version: string | null; relations: ModRelation[] }
+interface NativeNode { id: string; project: string; version: string | null;
+  relations: ModRelation[]; activeSide?: 'CLIENT' | 'SERVER'; nestedPaths?: string[] }
 function relation(from: string, to: string, kind: string, strength: ModRelation['strength'],
   range: string | null = null, side: string | null = null): ModRelation {
   if (!ID.test(to)) invalid('invalid native dependency identity');
@@ -131,10 +137,15 @@ function fabric(doc: Record<string, unknown>, source: string): NativeNode {
   const id = string(doc.id, 'Fabric id');
   const version = string(doc.version, 'Fabric version');
   if (!FABRIC_ID.test(id)) invalid('invalid Fabric id');
-  if (doc.jars !== undefined || doc.provides !== undefined
-    || (doc.environment !== undefined && doc.environment !== '*')) {
-    throw new Unsupported('Fabric nested jars, provided IDs or side-specific manifest');
-  }
+  if (doc.provides !== undefined) throw new Unsupported('Fabric provided IDs');
+  const environment = doc.environment === undefined ? '*' : string(doc.environment, 'environment');
+  if (!['*', 'client', 'server'].includes(environment)) throw new Unsupported('Fabric environment');
+  const nestedPaths = array(doc.jars ?? [], 'Fabric jars').map(entry => {
+    const path = string(obj(entry).file, 'Fabric nested JAR path');
+    if (!NESTED_PATH.test(path)) throw new Unsupported('Fabric nested JAR path');
+    return path;
+  });
+  if (new Set(nestedPaths).size !== nestedPaths.length) invalid('duplicate Fabric nested JAR path');
   const relations: ModRelation[] = [];
   for (const [kind, strength] of [
     ['depends', 'hard'], ['breaks', 'hard'], ['recommends', 'advisory'],
@@ -144,20 +155,24 @@ function fabric(doc: Record<string, unknown>, source: string): NativeNode {
     for (const [target, value] of Object.entries(obj(map))) {
       if (!FABRIC_ID.test(target)) invalid('invalid Fabric dependency ID');
       if (typeof value !== 'string') throw new Unsupported('Fabric range alternatives');
-      relations.push(relation(id, target, kind, strength, value));
+      relations.push(relation(id, target, kind, strength, value,
+        environment === '*' ? null : environment.toUpperCase()));
     }
   }
   if (source !== id) invalid('Fabric capture identity differs from mod ID');
-  return { id, project: id, version, relations };
+  return { id, project: id, version, relations,
+    ...(environment === '*' ? {} : { activeSide: environment.toUpperCase() as 'CLIENT' | 'SERVER' }),
+    nestedPaths };
 }
 function forge(doc: Record<string, unknown>, source: string, ecosystem: 'forge' | 'neoforge'): NativeNode {
   const modLoader = string(doc.modLoader, 'modLoader');
   if (!['javafml', 'lowcodefml'].includes(modLoader)) throw new Unsupported('loader language');
   const loaderVersion = string(doc.loaderVersion, 'loaderVersion');
   string(doc.license, 'license');
-  if (doc.clientSideOnly === true || doc.features !== undefined || doc.mixins !== undefined) {
-    throw new Unsupported('loader side, features or mixins');
+  if (doc.clientSideOnly !== undefined && typeof doc.clientSideOnly !== 'boolean') {
+    throw new Unsupported('clientSideOnly value');
   }
+  if (doc.mixins !== undefined && ecosystem === 'forge') throw new Unsupported('Forge mixin metadata');
   const mods = array(doc.mods, 'mods');
   if (mods.length !== 1) throw new Unsupported('multiple mod IDs in one manifest');
   const mod = obj(mods[0]);
@@ -171,6 +186,31 @@ function forge(doc: Record<string, unknown>, source: string, ecosystem: 'forge' 
   const dependencies = obj(doc.dependencies ?? {});
   const relations: ModRelation[] = [relation(id, ecosystem, 'required-runtime', 'hard',
     loaderVersion, 'BOTH')];
+  const featureMap = obj(obj(doc.features ?? {})[id] ?? {});
+  for (const [name, bound] of Object.entries(featureMap)) {
+    if (!['openGLVersion', 'javaVersion'].includes(name) || typeof bound !== 'string') {
+      throw new Unsupported('loader feature');
+    }
+    relations.push(relation(id, `feature:${name}`, 'required-feature', 'hard', bound,
+      name === 'openGLVersion' ? 'CLIENT' : 'BOTH'));
+  }
+  if (ecosystem === 'neoforge') {
+    for (const entry of array(doc.mixins ?? [], 'NeoForge mixins')) {
+      const mixin = obj(entry);
+      const config = string(mixin.config, 'NeoForge mixin config');
+      if (!/^[A-Za-z0-9_./-]{1,160}\.json$/.test(config) || config.includes('..')) {
+        throw new Unsupported('NeoForge mixin config path');
+      }
+      if (mixin.behaviorVersion !== undefined) {
+        throw new Unsupported('NeoForge mixin behaviorVersion');
+      }
+      for (const target of array(mixin.requiredMods ?? [], 'NeoForge mixin requiredMods')) {
+        const targetId = string(target, 'NeoForge required mod ID');
+        if (!FORGE_ID.test(targetId)) invalid('invalid NeoForge mixin required mod ID');
+        relations.push(relation(id, targetId, `mixin-conditional:${config}`, 'metadata'));
+      }
+    }
+  }
   for (const entry of array(dependencies[id] ?? [], 'dependencies')) {
     const dep = obj(entry);
     const target = string(dep.modId, 'dependency modId');
@@ -186,19 +226,21 @@ function forge(doc: Record<string, unknown>, source: string, ecosystem: 'forge' 
         throw new Unsupported('Forge dependency field');
       }
       kind = dep.mandatory ? 'required' : 'optional';
-      strength = dep.mandatory ? 'hard' : 'advisory';
+      // An installed optional mod outside versionRange still fails native FML validation.
+      strength = 'hard';
     } else {
       if (dep.mandatory !== undefined) throw new Unsupported('NeoForge mandatory field');
       kind = dep.type === undefined ? 'required' : string(dep.type, 'type');
       if (!['required', 'optional', 'incompatible', 'discouraged'].includes(kind)) {
         throw new Unsupported('NeoForge dependency type');
       }
-      strength = kind === 'required' || kind === 'incompatible' ? 'hard' : 'advisory';
+      strength = kind === 'discouraged' ? 'advisory' : 'hard';
     }
     const range = dep.versionRange === undefined ? '' : string(dep.versionRange, 'versionRange');
     relations.push(relation(id, target, `${kind}:${ordering}`, strength, range, side));
   }
-  return { id, project: id, version, relations };
+  return { id, project: id, version, relations,
+    ...(ecosystem === 'forge' && doc.clientSideOnly === true ? { activeSide: 'CLIENT' as const } : {}) };
 }
 function modrinth(doc: Record<string, unknown>, source: string): NativeNode {
   const id = string(doc.id, 'Modrinth version id');
@@ -282,7 +324,7 @@ function hasCycle(relations: ModRelation[]): boolean {
   const graph = new Map<string, string[]>();
   for (const item of relations) {
     const [, order] = item.kind.split(':');
-    if (order === 'NONE' || !order) continue;
+    if (order !== 'BEFORE' && order !== 'AFTER') continue;
     const before = order === 'BEFORE' ? item.from : item.to;
     const after = order === 'BEFORE' ? item.to : item.from;
     const outgoing = graph.get(before) ?? [];
@@ -302,7 +344,7 @@ function hasCycle(relations: ModRelation[]): boolean {
   };
   return [...graph.keys()].some(visit);
 }
-/** Work: O(B + C log C + R), with B <= 2 MiB, C <= 32 and R <= 256. */
+/** Work: O(B + C² + R), with B <= 2 MiB, C <= 32 and R <= 256. */
 export function solveModCaptures(request: ModRequest): ModOutcome {
   if (request.profile !== 'mod-native-capture-v1'
     || !['fabric', 'forge', 'neoforge', 'modrinth', 'curseforge', 'nexus', 'steam'].includes(request.ecosystem)
@@ -318,6 +360,7 @@ export function solveModCaptures(request: ModRequest): ModOutcome {
     [{ source: request.root, target: null, kind: 'capture-limit' }]);
   const seen = new Set<string>();
   const nodes = new Map<string, NativeNode>();
+  const nestedCaptures = new Map<string, string>();
   let inaccessible = false;
   try {
     for (const capture of request.captures) {
@@ -326,6 +369,15 @@ export function solveModCaptures(request: ModRequest): ModOutcome {
       if (capture.httpStatus !== undefined
         && (!Number.isInteger(capture.httpStatus) || capture.httpStatus < 100
           || capture.httpStatus > 599)) invalid('invalid provider HTTP status');
+      if (capture.nestedOf !== undefined || capture.nestedPath !== undefined) {
+        if (request.ecosystem !== 'fabric' || capture.surface !== 'manifest'
+          || typeof capture.nestedOf !== 'string' || !FABRIC_ID.test(capture.nestedOf)
+          || typeof capture.nestedPath !== 'string' || !NESTED_PATH.test(capture.nestedPath)
+          || capture.identity === capture.nestedOf) invalid('invalid Fabric nested capture');
+        const key = `${capture.nestedOf}\u0000${capture.nestedPath}`;
+        if (nestedCaptures.has(key)) invalid('duplicate Fabric nested capture');
+        nestedCaptures.set(key, capture.identity);
+      }
       if (capture.sourceUrl !== undefined) {
         try {
           const url = new URL(capture.sourceUrl);
@@ -392,6 +444,48 @@ export function solveModCaptures(request: ModRequest): ModOutcome {
     return failed('incomplete-source-data',
       [{ source: request.root, target: null, kind: 'Steam-children-unobserved' }]);
   }
+  if (request.ecosystem === 'fabric') {
+    for (const [key] of nestedCaptures) {
+      const [parent, path] = key.split('\u0000');
+      const node = nodes.get(parent!);
+      if (!node) return failed('incomplete-source-data',
+        [{ source: parent!, target: path!, kind: 'nested-parent-unobserved' }]);
+      if (!node.nestedPaths?.includes(path!)) invalid('undeclared Fabric nested capture');
+    }
+    for (const node of nodes.values()) {
+      if (node.activeSide && node.activeSide !== request.side) continue;
+      for (const path of node.nestedPaths ?? []) {
+        const child = nestedCaptures.get(`${node.id}\u0000${path}`);
+        if (!child || !nodes.has(child)) return failed('incomplete-source-data',
+          [{ source: node.id, target: path, kind: 'nested-jar-unobserved' }]);
+        node.relations.push(relation(node.id, child, 'nested-jar', 'embedded'));
+      }
+    }
+    const parentByChild = new Map<string, string>();
+    for (const [key, child] of nestedCaptures) parentByChild.set(child, key.split('\u0000')[0]!);
+    for (const child of parentByChild.keys()) {
+      const visited = new Set<string>();
+      let current: string | undefined = child;
+      while (current && parentByChild.has(current)) {
+        if (visited.has(current)) invalid('cyclic Fabric nested capture');
+        visited.add(current);
+        current = parentByChild.get(current);
+      }
+    }
+  }
+  const activeNodes = new Map([...nodes].filter(([, node]) =>
+    !node.activeSide || node.activeSide === request.side));
+  // A nested candidate is discovered only through a parent active on this side.
+  if (request.ecosystem === 'fabric') {
+    let changed = true;
+    while (changed) {
+      changed = false;
+      for (const [key, child] of nestedCaptures) {
+        const parent = key.split('\u0000')[0]!;
+        if (!activeNodes.has(parent) && activeNodes.delete(child)) changed = true;
+      }
+    }
+  }
   const relations = [...nodes.values()].flatMap(node => node.relations);
   cost.relations = relations.length;
   if (relations.length > MAX_RELATIONS) return failed('budget-exhausted',
@@ -401,9 +495,10 @@ export function solveModCaptures(request: ModRequest): ModOutcome {
   let unsupported = false;
   let unsatisfiable = false;
   const projects = new Map<string, NativeNode | null>();
-  for (const node of nodes.values()) projects.set(node.project,
+  for (const node of activeNodes.values()) projects.set(node.project,
     projects.has(node.project) ? null : node);
   for (const edge of relations) {
+    if (!activeNodes.has(edge.from)) continue;
     if (edge.strength === 'embedded' && !nodes.has(edge.to)
       && projects.get(edge.to) === null) {
       unsupported = true;
@@ -411,15 +506,17 @@ export function solveModCaptures(request: ModRequest): ModOutcome {
     }
   }
   for (const edge of relations) {
+    if (!activeNodes.has(edge.from)) continue;
     if (edge.side && edge.side !== 'BOTH' && edge.side !== request.side) continue;
     if (edge.strength === 'embedded' || edge.strength === 'collection'
       || edge.strength === 'metadata') continue;
     const runtimeVersion = request.runtime && (edge.to === request.ecosystem
       || (request.ecosystem === 'fabric' && edge.to === 'fabricloader')
       ? request.runtime.loaderVersion : edge.to === 'minecraft'
-        ? request.runtime.gameVersion : null);
+        ? request.runtime.gameVersion : edge.to.startsWith('feature:')
+          ? request.runtime.features?.[edge.to.slice(8) as 'openGLVersion' | 'javaVersion'] : null);
     const target = runtimeVersion ? { id: edge.to, project: edge.to,
-      version: runtimeVersion, relations: [] } : nodes.get(edge.to) ?? projects.get(edge.to);
+      version: runtimeVersion, relations: [] } : activeNodes.get(edge.to) ?? projects.get(edge.to);
     cost.comparisons++;
     const kind = edge.kind.split(':')[0]!;
     if (target === null) { unsupported = true;
@@ -427,6 +524,15 @@ export function solveModCaptures(request: ModRequest): ModOutcome {
       continue;
     }
     if (!target) {
+      if (nodes.has(edge.to) && !activeNodes.has(edge.to)
+        && (kind === 'depends' || kind === 'required')) { unsatisfiable = true;
+        issues.push({ source: edge.from, target: edge.to, kind: 'target-skipped-on-side' });
+        continue;
+      }
+      if (kind === 'required-feature') { unsupported = true;
+        issues.push({ source: edge.from, target: edge.to, kind: 'feature-runtime-unbound' });
+        continue;
+      }
       if (kind === 'depends' || kind === 'required' || kind === 'required-runtime') { incomplete = true;
         issues.push({ source: edge.from, target: edge.to, kind: 'required-target-unobserved' }); }
       else if (kind === 'recommends') issues.push({ source: edge.from, target: edge.to, kind: 'advisory-missing' });
@@ -439,6 +545,7 @@ export function solveModCaptures(request: ModRequest): ModOutcome {
       continue;
     }
     const bad = (kind === 'depends' || kind === 'required' || kind === 'required-runtime'
+      || kind === 'required-feature'
       || kind === 'optional')
       ? !match : (kind === 'breaks' || kind === 'incompatible' || kind === 'conflicts'
         || kind === 'discouraged') ? match : false;
@@ -451,13 +558,13 @@ export function solveModCaptures(request: ModRequest): ModOutcome {
   }
   const selection = unsupported ? 'unsupported-semantics' : incomplete
     ? 'incomplete-source-data' : unsatisfiable ? 'unsatisfiable' : 'valid';
-  const activeRelations = relations.filter(edge => !edge.side || edge.side === 'BOTH'
-    || edge.side === request.side);
+  const activeRelations = relations.filter(edge => activeNodes.has(edge.from)
+    && (!edge.side || edge.side === 'BOTH' || edge.side === request.side));
   const ordering = selection === 'valid' || selection === 'unsatisfiable'
     ? hasCycle(activeRelations) ? 'cycle' : 'valid' : 'not-evaluated';
   const embedded = new Set(relations.filter(edge => edge.strength === 'embedded'
     && projects.get(edge.to) !== null).map(edge => edge.to));
-  const independentDownloads = [...nodes.values()].filter(node =>
+  const independentDownloads = [...activeNodes.values()].filter(node =>
     !embedded.has(node.id) && !embedded.has(node.project)).map(node => node.id).sort();
   return { provenance: 'caller-supplied-captures', selection, ordering,
     relations, issues, independentDownloads, coverage, cost };

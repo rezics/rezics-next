@@ -1,0 +1,6 @@
+modLoader="javafml"
+loaderVersion="[4,)"
+license="MIT"
+[[mods]]
+modId="other"
+version="2.1.0"

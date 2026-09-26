@@ -1,0 +1,17 @@
+modLoader="javafml"
+loaderVersion="[4,)"
+license="MIT"
+[[mods]]
+modId="root"
+version="1.0.0"
+[[dependencies.root]]
+modId="other"
+type="optional"
+versionRange="[2.0,3.0)"
+ordering="AFTER"
+side="SERVER"
+[features.root]
+openGLVersion="[3.2,)"
+[[mixins]]
+config="root.mixins.json"
+requiredMods=["other"]

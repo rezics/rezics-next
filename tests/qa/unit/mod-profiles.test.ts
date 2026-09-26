@@ -17,6 +17,98 @@ function request(ecosystem: ModRequest['ecosystem'], root: string, captures: Mod
 }
 
 describe('mod native capture profiles', () => {
+  test('PKG07 native Fabric side filtering and declared nested child', () => {
+    const clientOnly = observed('root', 'manifest', { schemaVersion: 1, id: 'root',
+      version: '1.0.0', environment: 'client', depends: { missing: '*' } });
+    const server = solveModCaptures(request('fabric', 'root', [clientOnly], 'SERVER'));
+    expect(server.selection).toBe('valid');
+    expect(server.independentDownloads).toEqual([]);
+    expect(server.cost.comparisons).toBe(0);
+    expect(solveModCaptures(request('fabric', 'root', [clientOnly])).selection)
+      .toBe('incomplete-source-data');
+    const sideDependency = solveModCaptures(request('fabric', 'parent', [
+      observed('parent', 'manifest', { schemaVersion: 1, id: 'parent',
+        version: '1.0.0', depends: { child: '*' } }),
+      observed('child', 'manifest', { schemaVersion: 1, id: 'child',
+        version: '1.0.0', environment: 'client' }),
+    ], 'SERVER'));
+    expect(sideDependency.selection).toBe('unsatisfiable');
+    expect(sideDependency.issues[0]?.kind).toBe('target-skipped-on-side');
+
+    const parent = observed('parent', 'manifest', { schemaVersion: 1, id: 'parent',
+      version: '1.0.0', jars: [{ file: 'META-INF/jars/child.jar' }],
+      depends: { child: '*' } });
+    const child = { ...observed('child', 'manifest', { schemaVersion: 1, id: 'child',
+      version: '1.0.0' }), nestedOf: 'parent', nestedPath: 'META-INF/jars/child.jar' };
+    const nested = solveModCaptures(request('fabric', 'parent', [parent, child]));
+    expect(nested.selection).toBe('valid');
+    expect(nested.independentDownloads).toEqual(['parent']);
+    expect(nested.relations.find(edge => edge.kind === 'nested-jar'))
+      .toMatchObject({ from: 'parent', to: 'child', strength: 'embedded' });
+    expect(solveModCaptures(request('fabric', 'parent', [parent])).issues[0]?.kind)
+      .toBe('nested-jar-unobserved');
+    const clientParent = observed('parent', 'manifest', { schemaVersion: 1,
+      id: 'parent', version: '1.0.0', environment: 'client',
+      jars: [{ file: 'META-INF/jars/child.jar' }] });
+    expect(solveModCaptures(request('fabric', 'parent', [clientParent], 'SERVER')).selection)
+      .toBe('valid');
+    const unsatisfiedChild = { ...observed('child', 'manifest', { schemaVersion: 1,
+      id: 'child', version: '1.0.0', depends: { absent: '*' } }),
+      nestedOf: 'parent', nestedPath: 'META-INF/jars/child.jar' };
+    expect(solveModCaptures(request('fabric', 'parent', [parent, unsatisfiedChild])).selection)
+      .toBe('incomplete-source-data');
+    expect(() => solveModCaptures(request('fabric', 'parent', [parent,
+      { ...child, nestedPath: 'other.jar' }]))).toThrow(ModProfileInvalid);
+  });
+
+  test('PKG08 native feature side and NeoForge conditional mixin semantics', () => {
+    const forgeManifest = `modLoader="javafml"\nloaderVersion="[52,)"\nlicense="MIT"\nclientSideOnly=true\n[[mods]]\nmodId="root"\nversion="1.0.0"\n[features.root]\nopenGLVersion="[3.2,)"`;
+    const base = request('forge', 'root', [observed('root', 'manifest', forgeManifest)]);
+    const client = solveModCaptures({ ...base,
+      runtime: { ...base.runtime!, features: { openGLVersion: '3.1' } } });
+    expect(client.selection).toBe('unsatisfiable');
+    expect(client.issues[0]?.kind).toBe('hard-constraint');
+    const server = solveModCaptures({ ...base, side: 'SERVER' });
+    expect(server.selection).toBe('valid');
+    expect(server.independentDownloads).toEqual([]);
+
+    const neoManifest = `modLoader="javafml"\nloaderVersion="[4,)"\nlicense="MIT"\n[[mods]]\nmodId="root"\nversion="1.0.0"\n[features.root]\nopenGLVersion="[3.2,)"\n[[mixins]]\nconfig="root.mixins.json"\nrequiredMods=["other"]`;
+    const neo = request('neoforge', 'root', [observed('root', 'manifest', neoManifest)]);
+    const noFeature = solveModCaptures(neo);
+    expect(noFeature.selection).toBe('unsupported-semantics');
+    expect(noFeature.issues[0]?.kind).toBe('feature-runtime-unbound');
+    const withFeature = solveModCaptures({ ...neo,
+      runtime: { ...neo.runtime!, features: { openGLVersion: '3.2' } } });
+    expect(withFeature.selection).toBe('valid');
+    expect(withFeature.relations.find(edge => edge.kind === 'mixin-conditional:root.mixins.json'))
+      .toMatchObject({ to: 'other', strength: 'metadata' });
+    expect(withFeature.issues).toEqual([]);
+    const reciprocalMixin = observed('other', 'manifest',
+      'modLoader="javafml"\nloaderVersion="[4,)"\nlicense="MIT"\n[[mods]]\nmodId="other"\nversion="1.0.0"\n[[mixins]]\nconfig="other.mixins.json"\nrequiredMods=["root"]');
+    const conditionalPair = solveModCaptures({ ...neo,
+      captures: [...neo.captures, reciprocalMixin],
+      runtime: { ...neo.runtime!, features: { openGLVersion: '3.2' } } });
+    expect(conditionalPair.selection).toBe('valid');
+    expect(conditionalPair.ordering).toBe('valid');
+    const neoServer = solveModCaptures({ ...neo, side: 'SERVER' });
+    expect(neoServer.selection).toBe('valid');
+    expect(neoServer.cost.comparisons).toBe(1);
+  });
+
+  test('PKG08 optional loader dependency is hard when an installed version is outside range', () => {
+    for (const ecosystem of ['forge', 'neoforge'] as const) {
+      const field = ecosystem === 'forge' ? 'mandatory=false' : 'type="optional"';
+      const root = `modLoader="javafml"\nloaderVersion="[4,)"\nlicense="MIT"\n[[mods]]\nmodId="root"\nversion="1.0.0"\n[[dependencies.root]]\nmodId="other"\n${field}\nversionRange="[2.0,3.0)"\nside="BOTH"`;
+      const other = 'modLoader="javafml"\nloaderVersion="[4,)"\nlicense="MIT"\n[[mods]]\nmodId="other"\nversion="1.0.0"';
+      const absent = solveModCaptures(request(ecosystem, 'root', [observed('root', 'manifest', root)]));
+      expect(absent.selection).toBe('valid');
+      const installed = solveModCaptures(request(ecosystem, 'root', [
+        observed('root', 'manifest', root), observed('other', 'manifest', other)]));
+      expect(installed.selection).toBe('unsatisfiable');
+      expect(installed.issues[0]?.kind).toBe('hard-constraint');
+    }
+  });
+
   test('PKG07 Fabric conflicts warn while breaks fail', () => {
     const other = observed('other', 'manifest', { schemaVersion: 1, id: 'other', version: '1.0.0' });
     const soft = solveModCaptures(request('fabric', 'root', [

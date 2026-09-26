@@ -1,0 +1,15 @@
+modLoader="javafml"
+loaderVersion="[52,)"
+license="MIT"
+clientSideOnly=true
+[[mods]]
+modId="root"
+version="1.0.0"
+[[dependencies.root]]
+modId="other"
+mandatory=true
+versionRange="[2.0,3.0)"
+ordering="BEFORE"
+side="CLIENT"
+[features.root]
+openGLVersion="[3.2,)"

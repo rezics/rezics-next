@@ -138,9 +138,18 @@ test('PKG07-PKG11/IAM10: real Account, Access, Main and Content protect mod capt
           breaks: { peer: '*' } }),
         capture('peer', 'manifest', { schemaVersion: 1, id: 'peer', version: '1.0.0' })]),
         selection: 'unsatisfiable' },
+      { id: 'PKG07-nested', request: modRequest('fabric', 'parent', [
+        capture('parent', 'manifest', { schemaVersion: 1, id: 'parent', version: '1.0.0',
+          jars: [{ file: 'META-INF/jars/child.jar' }], depends: { child: '*' } }),
+        { ...capture('child', 'manifest', { schemaVersion: 1, id: 'child', version: '1.0.0' }),
+          nestedOf: 'parent', nestedPath: 'META-INF/jars/child.jar' }]), selection: 'valid' },
       { id: 'PKG08', request: modRequest('forge', 'root', [
         capture('root', 'manifest', 'modLoader="javafml"\nloaderVersion="[52,)"\nlicense="MIT"\n[[mods]]\nmodId="root"\nversion="1.0.0"')]),
         selection: 'valid' },
+      { id: 'PKG08-neo-mixin', request: { ...modRequest('neoforge', 'root', [
+        capture('root', 'manifest', 'modLoader="javafml"\nloaderVersion="[4,)"\nlicense="MIT"\n[[mods]]\nmodId="root"\nversion="1.0.0"\n[features.root]\nopenGLVersion="[3.2,)"\n[[mixins]]\nconfig="root.mixins.json"\nrequiredMods=["other"]')]),
+        runtime: { loaderVersion: '4', gameVersion: '1.21.1',
+          features: { openGLVersion: '3.2' } } }, selection: 'valid' },
       { id: 'PKG09', request: modRequest('modrinth', 'V1', [
         capture('V1', 'version', { id: 'V1', project_id: 'P1', dependencies: [
           { project_id: 'P2', version_id: 'V2', dependency_type: 'embedded' }] }),

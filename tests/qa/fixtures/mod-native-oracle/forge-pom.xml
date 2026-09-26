@@ -1,0 +1,6 @@
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+  <groupId>rezics.oracle</groupId><artifactId>forge-oracle</artifactId><version>1.0</version>
+  <repositories><repository><id>forge</id><url>https://maven.minecraftforge.net/</url></repository><repository><id>mojang</id><url>https://libraries.minecraft.net/</url></repository></repositories>
+  <dependencies><dependency><groupId>net.minecraftforge</groupId><artifactId>fmlloader</artifactId><version>1.21.1-52.0.0</version></dependency></dependencies>
+</project>
