@@ -24,6 +24,12 @@ import { GoMvsResolutionStore }
   from '../../../services/main/src/modules/package/go-mvs.ts';
 import { GoProxyCaptureStore }
   from '../../../services/main/src/modules/package/go-proxy-capture.ts';
+import { GoSumdbTrustStore }
+  from '../../../services/main/src/modules/package/go-sumdb-trust.ts';
+import { type IncludedGoSumdbLookup }
+  from '../../../services/main/src/modules/package/go-sumdb-lookup.ts';
+import includedGoSumdb from '../fixtures/go-sumdb-x-sync.json';
+import latestGoSumdb from '../fixtures/go-sumdb-latest.json';
 
 async function freePort(): Promise<number> {
   return new Promise((resolvePort, reject) => {
@@ -37,7 +43,7 @@ async function freePort(): Promise<number> {
   });
 }
 
-test('IAM10/LIVE01/LIVE02/LIVE03/LIVE13/PKG05/PKG13/PKG20: real Account and Access fence source and package operations', async () => {
+test('IAM10/LIVE01/LIVE02/LIVE03/LIVE13/PKG05/PKG13/PKG14/PKG20: real Account and Access fence source and package operations', async () => {
   if (!Bun.env.REZICS_QA_RUN_ID || !Bun.env.CONTENT_DATABASE_URL
     || !Bun.env.ACCESS_DATABASE_URL || !Bun.env.ACCOUNT_DATABASE_URL
     || !Bun.env.ACCOUNT_MAIN_RESOURCE || !Bun.env.FUSEKI_URL
@@ -73,7 +79,7 @@ test('IAM10/LIVE01/LIVE02/LIVE03/LIVE13/PKG05/PKG13/PKG20: real Account and Acce
       token_endpoint_auth_method: 'client_secret_post', grant_types: ['client_credentials'],
       client_credentials_scopes: ['source:intake'] } });
     const redirectUri = 'http://localhost:3000/auth/callback';
-    const allowed = 'openid source:intake source:acquire source:convert source:propose source:correspond source:adopt source:read package:capture package:resolve package:read work:create work:edit';
+    const allowed = 'openid source:intake source:acquire source:convert source:propose source:correspond source:adopt source:read package:capture package:resolve package:verify package:read work:create work:edit';
     const client = await auth.api.adminCreateOAuthClient({ headers, body: {
       client_name: 'Source API client', application_type: 'native',
       redirect_uris: [redirectUri], token_endpoint_auth_method: 'none',
@@ -118,6 +124,7 @@ test('IAM10/LIVE01/LIVE02/LIVE03/LIVE13/PKG05/PKG13/PKG20: real Account and Acce
     const sourceCorrespondToken = await tokenFor('openid source:correspond');
     const packageResolveToken = await tokenFor('openid package:resolve');
     const packageCaptureToken = await tokenFor('openid package:capture');
+    const packageVerifyToken = await tokenFor('openid package:verify');
     const packageReadToken = await tokenFor('openid package:read');
     await migrateContent(contentPool);
     const sourceIntake = new SourceIntakeStore(contentPool);
@@ -165,6 +172,12 @@ test('IAM10/LIVE01/LIVE02/LIVE03/LIVE13/PKG05/PKG13/PKG20: real Account and Acce
         if (value.endsWith('.mod')) return new Response('module golang.org/x/sync\n');
         return new Response('', { status: 404 });
       }) as typeof fetch);
+    let checksumLookups = 0;
+    const packageVerifications = new GoSumdbTrustStore(contentPool, packageCaptures,
+      (async () => { checksumLookups++; return includedGoSumdb as IncludedGoSumdbLookup; }) as
+        ConstructorParameters<typeof GoSumdbTrustStore>[2],
+      (async () => []) as ConstructorParameters<typeof GoSumdbTrustStore>[3],
+      (async () => latestGoSumdb) as ConstructorParameters<typeof GoSumdbTrustStore>[4]);
     const app = createMainApp(fuseki, {
       environment,
       account: mainAccount,
@@ -174,6 +187,7 @@ test('IAM10/LIVE01/LIVE02/LIVE03/LIVE13/PKG05/PKG13/PKG20: real Account and Acce
         sourceConversions),
       packageResolutions: new GoMvsResolutionStore(contentPool, packageCaptures),
       packageCaptures,
+      packageVerifications,
       sourceProposals,
       sourceAdoptions: new SourceNativeWorkAdoptionStore(bindingFaultPool, sourceProposals,
         environment, mainAccount, mainAccess),
@@ -190,7 +204,8 @@ test('IAM10/LIVE01/LIVE02/LIVE03/LIVE13/PKG05/PKG13/PKG20: real Account and Acce
     const call = (method: string, path: string, token: string, body?: object,
       key = `source-${randomUUID()}`) => app.handle(new Request(`http://main.local${path}`, {
       method, headers: { authorization: `Bearer ${token}`,
-        ...(body ? { 'content-type': 'application/json', 'idempotency-key': key } : {}) },
+        ...(method === 'POST' ? { 'idempotency-key': key } : {}),
+        ...(body ? { 'content-type': 'application/json' } : {}) },
       ...(body ? { body: JSON.stringify(body) } : {}),
     }));
     const manual = { profile: 'source-manual-intake-v1', provider: 'example',
@@ -650,6 +665,32 @@ test('IAM10/LIVE01/LIVE02/LIVE03/LIVE13/PKG05/PKG13/PKG20: real Account and Acce
       packageReadToken)).status).toBe(200);
     expect((await call('GET', `${capturePath}/${captureId}`,
       otherPackageReadToken)).status).toBe(404);
+    const verifyPath = `${capturePath}/${captureId}/verify`;
+    const verificationKey = `go-verify-${randomUUID()}`;
+    expect((await call('POST', verifyPath, packageReadToken,
+      undefined, verificationKey)).status).toBe(401);
+    expect((await call('POST', verifyPath, packageCaptureToken,
+      undefined, verificationKey)).status).toBe(401);
+    const otherPackageVerifyToken = await tokenFor('openid package:verify',
+      otherMember.cookie);
+    expect((await call('POST', verifyPath, otherPackageVerifyToken,
+      undefined, verificationKey)).status).toBe(404);
+    expect(checksumLookups).toBe(0);
+    const verified = await call('POST', verifyPath, packageVerifyToken,
+      undefined, verificationKey);
+    expect(verified.status).toBe(201);
+    const verification = (await verified.json() as { verification: {
+      verification: string; trustedTree: { size: number } }; replayed: boolean });
+    expect(verification).toMatchObject({ replayed: false,
+      verification: { trustedTree: latestGoSumdb.tree } });
+    const verificationId = verification.verification.verification.split('/').at(-1)!;
+    const receiptPath = `/v1/package-sources/go-verifications/${verificationId}`;
+    expect((await call('GET', receiptPath, packageVerifyToken)).status).toBe(401);
+    expect((await call('GET', receiptPath, otherPackageReadToken)).status).toBe(404);
+    expect((await call('GET', receiptPath, packageReadToken)).status).toBe(200);
+    expect(await (await call('POST', verifyPath, packageVerifyToken,
+      undefined, verificationKey)).json()).toEqual({ ...verification, replayed: true });
+    expect(checksumLookups).toBe(1);
     const derivedPath = '/v1/package-resolutions/from-captures';
     const derivedBody = { profile: 'go-mvs-from-captures-v1',
       mainModule: 'example.com/main',
@@ -698,6 +739,8 @@ test('IAM10/LIVE01/LIVE02/LIVE03/LIVE13/PKG05/PKG13/PKG20: real Account and Acce
       packageReadToken)).status).toBe(403);
     expect((await call('POST', derivedPath, packageResolveToken,
       derivedBody)).status).toBe(403);
+    expect((await call('POST', verifyPath, packageVerifyToken)).status).toBe(403);
+    expect((await call('GET', receiptPath, packageReadToken)).status).toBe(403);
   } finally {
     server.stop();
     await Promise.all([accountPool.end(), accessPool.end(), contentPool.end()]);

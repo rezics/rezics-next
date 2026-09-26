@@ -206,3 +206,14 @@ The test used retained real signed lookup/latest fixtures with an injected
 consistency function, while separate live and synthetic tests exercise that
 function. This is partial PKG05/PKG14/IAM10 evidence pending real Account OAuth
 and recovery.
+
+Real Account authorization-code tokens qualified `package:verify` in the
+Account/Access/Main/PostgreSQL integration `20260926t030902-dbecb4`. Read-only
+and capture-only tokens failed before checksum work; another active principal
+could not use the capture or read the receipt. The owner's verify-only token
+created the private receipt but could not read it; `package:read` could read,
+replay made no second lookup, and principal deactivation blocked both routes.
+The checksum provider was represented by retained signed lookup/latest fixtures
+and an injected consistency function here; separate live and synthetic checks
+exercise the real verifier. IAM10/PKG05/PKG14 remain partial pending full
+recovery and broader package behavior.
