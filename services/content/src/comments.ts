@@ -18,6 +18,8 @@ export interface ContentCommentCommand extends ContentCommentInput {
 }
 
 export interface ContentComment {
+  type: 'Annotation';
+  motivation: 'commenting';
   comment: string;
   author: string;
   resourceId: string;
@@ -131,7 +133,8 @@ export function resolveParagraphSelector(text: string, exact: string): {
 }
 
 function asComment(row: Record<string, any>, replayed: boolean): ContentComment {
-  return { comment: `https://rezics.com/id/${row.id}`, author: row.author,
+  return { type: 'Annotation', motivation: 'commenting',
+    comment: `https://rezics.com/id/${row.id}`, author: row.author,
     resourceId: row.resource_id, variantId: row.variant_id, revisionId: row.revision_id,
     byteDigest: row.byte_digest, body: row.comment_body,
     target: { type: 'SpecificResource', source: `urn:rezics:content:revision:${row.revision_id}`,

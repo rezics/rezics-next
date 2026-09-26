@@ -99,6 +99,7 @@ export const exactContentRevision = t.Object({
 });
 
 export const contentCommentResult = t.Object({
+  type: t.Literal('Annotation'), motivation: t.Literal('commenting'),
   comment: ref, author: ref, resourceId: ref, variantId: ref, revisionId: ref,
   byteDigest: t.String({ pattern: '^[0-9a-f]{64}$' }), body: t.String(),
   target: t.Object({ type: t.Literal('SpecificResource'), source: ref,
