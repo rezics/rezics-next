@@ -1,4 +1,5 @@
 import { fusekiReadBudget } from '../../infrastructure/fuseki.ts';
+import { COMMAND_MODULE_VERSION } from '../../infrastructure/profile.ts';
 import type { AccessAdmissionRegistry, VerifiedPrincipal } from '../access/admission.ts';
 import { DATASET, GRAPHS, RV, iri, lit, type WorkActivationEnvironment }
   from '../work/activate.ts';
@@ -47,7 +48,7 @@ function samePosition(left: PrivatePosition, right: PrivatePosition): boolean {
 
 async function position(env: WorkActivationEnvironment, contribution: string): Promise<PrivatePosition> {
   const health = await env.fuseki.commandHealth();
-  if (health.moduleVersion !== '0.5.22' || !health.privateSearchWriteEpoch
+  if (health.moduleVersion !== COMMAND_MODULE_VERSION || !health.privateSearchWriteEpoch
     || !/^(0|[1-9][0-9]*)$/.test(health.privateSearchWriteEpoch)
     || health.privateSearchWriteActive !== false
     || health.publicSearchDeltaAvailable !== true

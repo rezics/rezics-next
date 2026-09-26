@@ -2,10 +2,11 @@ import { profileRegistry } from '../../../../packages/model/src/generated/profil
 import type { CommandValidation, FusekiClient } from './fuseki.ts';
 
 export type ProfileId = keyof typeof profileRegistry;
+export const COMMAND_MODULE_VERSION = '0.5.23';
 
 export async function assertCommandProfiles(fuseki: FusekiClient): Promise<void> {
   const health = await fuseki.commandHealth();
-  if (health.moduleVersion !== '0.5.22') throw new Error('unsupported Fuseki command module');
+  if (health.moduleVersion !== COMMAND_MODULE_VERSION) throw new Error('unsupported Fuseki command module');
   for (const [id, profile] of Object.entries(profileRegistry)) {
     if (health.profiles[id] !== profile.sha256) {
       throw new Error(`Fuseki profile ${id} differs from reviewed artifact`);
