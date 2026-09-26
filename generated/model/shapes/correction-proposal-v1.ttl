@@ -32,8 +32,10 @@
     sh:property [ sh:path rv:baseControlEpoch ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:integer ; sh:minInclusive 0 ] ;
     sh:property [ sh:path rv:ruleRevision ; sh:minCount 1 ; sh:maxCount 1 ; sh:in ( <urn:rezics:protection-rule:independent-human-review-v1> ) ] ;
     sh:property [ sh:path rv:proposalOrigin ; sh:minCount 1 ; sh:maxCount 1 ; sh:in ( rv:HumanProposal rv:SourceProposal ) ] ;
+    sh:property [ sh:path rv:candidateRevision ; sh:minCount 1 ; sh:maxCount 1 ; sh:class rv:RevisionAnchor ] ;
     sh:property [ sh:path rv:candidateManifest ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
     sh:property [ sh:path rv:candidateDigest ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:string ; sh:pattern "^[0-9a-f]{64}$" ] ;
+    sh:property [ sh:path rv:proposalAdmission ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:string ; sh:pattern "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" ] ;
     sh:property [ sh:path rv:evidence ; sh:maxCount 32 ; sh:nodeKind sh:IRI ] ;
     sh:property [ sh:path rv:agent ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
     sh:property [ sh:path rv:operation ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;

@@ -233,7 +233,7 @@ export const profileRegistry = {
     ]
   },
   "correction-proposal-v1": {
-    "sha256": "0b77f780705d41705ab4a5ecad9f705594562160cbc8aa11dcc307b0eecda28b",
+    "sha256": "9339a7d90b95ee5e93f40031bbd1564b60aff045081c590d579ff89f8e347fc5",
     "file": "shapes/correction-proposal-v1.ttl",
     "shapes": [
       "https://rezics.com/definition/correction-proposal-v1/log-shape",

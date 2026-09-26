@@ -55,6 +55,10 @@
       "@id": "https://rezics.com/vocab/candidateManifest",
       "@type": "@id"
     },
+    "rv:candidateRevision": {
+      "@id": "https://rezics.com/vocab/candidateRevision",
+      "@type": "@id"
+    },
     "rv:component": {
       "@id": "https://rezics.com/vocab/component",
       "@type": "@id"
@@ -93,6 +97,9 @@
     "rv:proposal": {
       "@id": "https://rezics.com/vocab/proposal",
       "@type": "@id"
+    },
+    "rv:proposalAdmission": {
+      "@id": "https://rezics.com/vocab/proposalAdmission"
     },
     "rv:proposalCount": {
       "@id": "https://rezics.com/vocab/proposalCount",
