@@ -179,24 +179,35 @@ test('QA08: IAM25 needs the exact selected-set API and restored authority episod
   expect(acceptanceStatuses(cases, results, true, coverage).IAM25.status).toBe('passed');
 });
 
-test('QA08: SEARCH03 needs the real public Content phrase and retained private draft', () => {
+test('QA08: SEARCH03 public Content phrase remains partial without statement disclosure aggregation', () => {
   const coverage = declaredCaseCoverage(cases, 'backend');
-  const identities = coverage.get('SEARCH03')!;
-  expect(identities).toHaveLength(1);
-  const [tier, file, ...title] = identities[0]!.split(':');
-  const name = title.join(':');
+  expect(coverage.has('SEARCH03')).toBe(false);
+  const tier = 'integration';
+  const file = 'tests/qa/integration/content-publication-native.test.ts';
+  const name = 'WORK09/WORK10/SEARCH03/SEARCH19: Content CAS, private drafts and exact public search';
   const source = readFileSync(resolve(import.meta.dir, '../../..', file!), 'utf8');
   expect(source).toContain(`test('${name}'`);
   const result = { tier, file, name, failed: false, skipped: false } as TestResult;
   expect(acceptanceStatuses(cases, [result], false, coverage).SEARCH03.status).toBe('partial-pass');
-  expect(acceptanceStatuses(cases, [result], true, coverage).SEARCH03.status).toBe('passed');
+  expect(acceptanceStatuses(cases, [result], true, coverage).SEARCH03.status).toBe('partial-pass');
   expect(acceptanceStatuses(cases, [{ ...result, failed: true }], true, coverage).SEARCH03.status)
     .toBe('failed');
 });
 
-test('QA08: SEARCH02 and SEARCH04 require real relation and bounded candidate evidence', () => {
+test('QA08: CTX02/CTX03 installed v1 decisions remain partial after the Statement contract change', () => {
   const coverage = declaredCaseCoverage(cases, 'backend');
-  for (const [id, count] of [['SEARCH02', 3], ['SEARCH04', 2]] as const) {
+  const result = { tier: 'integration', file: 'tests/qa/integration/public-selection-oracle.test.ts',
+    name: 'CTX02/CTX03/WORK03/SEARCH07/SEARCH19: joined decisions and Realm selection refresh only affected roots',
+    failed: false, skipped: false } as TestResult;
+  for (const id of ['CTX02', 'CTX03'] as const) {
+    expect(coverage.has(id)).toBe(false);
+    expect(acceptanceStatuses(cases, [result], true, coverage)[id].status).toBe('partial-pass');
+  }
+});
+
+test('QA08: SEARCH02 requires real relation and bounded candidate evidence', () => {
+  const coverage = declaredCaseCoverage(cases, 'backend');
+  for (const [id, count] of [['SEARCH02', 3]] as const) {
     const identities = coverage.get(id)!;
     expect(identities).toHaveLength(count);
     const results = identities.map(identity => {
@@ -212,6 +223,17 @@ test('QA08: SEARCH02 and SEARCH04 require real relation and bounded candidate ev
         .toBe('partial-pass');
     }
     expect(acceptanceStatuses(cases, results, true, coverage)[id].status).toBe('passed');
+  }
+});
+
+test('QA08: SEARCH01/04 rated phrase evidence remains partial without Statement aggregation', () => {
+  const coverage = declaredCaseCoverage(cases, 'backend');
+  const result = { tier: 'integration', file: 'tests/qa/integration/public-search-scale.test.ts',
+    name: 'SEARCH01/SEARCH02/SEARCH04/SEARCH07/SEARCH08/SEARCH16/SEARCH18: rated Realm join, bounded paging and author switch',
+    failed: false, skipped: false } as TestResult;
+  for (const id of ['SEARCH01', 'SEARCH04'] as const) {
+    expect(coverage.has(id)).toBe(false);
+    expect(acceptanceStatuses(cases, [result], true, coverage)[id].status).toBe('partial-pass');
   }
 });
 

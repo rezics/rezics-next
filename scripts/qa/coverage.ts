@@ -66,16 +66,6 @@ const completeCases: Record<string, readonly TestIdentity[]> = {
     file: 'tests/qa/unit/work-address-chain.test.ts',
     name: 'VIEW02: a cycle or missing redirect target is unavailable',
   }],
-  CTX02: [{
-    tier: 'integration',
-    file: 'tests/qa/integration/public-selection-oracle.test.ts',
-    name: 'CTX02/CTX03/WORK03/SEARCH07/SEARCH19: joined decisions and Realm selection refresh only affected roots',
-  }],
-  CTX03: [{
-    tier: 'integration',
-    file: 'tests/qa/integration/public-selection-oracle.test.ts',
-    name: 'CTX02/CTX03/WORK03/SEARCH07/SEARCH19: joined decisions and Realm selection refresh only affected roots',
-  }],
   IAM10: [{
     tier: 'integration',
     file: 'tests/qa/integration/authenticated-api-journey.test.ts',
@@ -240,11 +230,6 @@ const completeCases: Record<string, readonly TestIdentity[]> = {
     file: 'model/tests/experience-rating.test.ts',
     name: 'RATE05/MODEL17: native policy successor keeps the question head and rejects malformed revisions',
   }],
-  SEARCH01: [{
-    tier: 'integration',
-    file: 'tests/qa/integration/public-search-scale.test.ts',
-    name: 'SEARCH01/SEARCH02/SEARCH04/SEARCH07/SEARCH08/SEARCH16/SEARCH18: rated Realm join, bounded paging and author switch',
-  }],
   SEARCH02: [{
     tier: 'integration',
     file: 'tests/qa/integration/public-search-scale.test.ts',
@@ -257,20 +242,6 @@ const completeCases: Record<string, readonly TestIdentity[]> = {
     tier: 'fault/recovery',
     file: 'tests/qa/fault-recovery/search-candidate-overflow.test.ts',
     name: 'SEARCH02/SEARCH10: 513 real text hits with no eligible relation return a budget outcome',
-  }],
-  SEARCH03: [{
-    tier: 'integration',
-    file: 'tests/qa/integration/content-publication-native.test.ts',
-    name: 'WORK09/WORK10/SEARCH03/SEARCH19: Content CAS, private drafts and exact public search',
-  }],
-  SEARCH04: [{
-    tier: 'integration',
-    file: 'tests/qa/integration/public-search-scale.test.ts',
-    name: 'SEARCH01/SEARCH02/SEARCH04/SEARCH07/SEARCH08/SEARCH16/SEARCH18: rated Realm join, bounded paging and author switch',
-  }, {
-    tier: 'unit',
-    file: 'tests/qa/unit/search-budgets.test.ts',
-    name: 'SEARCH04/SEARCH10: the rated Realm join rejects an over-budget raw hit set before dedupe',
   }],
   SEARCH05: [{
     tier: 'integration',
