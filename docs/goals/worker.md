@@ -47,7 +47,9 @@ Parallel workers must not collide on derived or registry files:
   `scripts/qa/coverage/` when the brief claims it; otherwise give the exact tier,
   file and test name in the handoff and the manager declares it.
 - Add new Main routes in a route module the brief claims, registered by one
-  `.use()` line in `services/main/src/app.ts`.
+  import and one `.use()` line in `services/main/src/app.ts`. That composition
+  root uses git's union merge driver, so it needs no claim; change nothing else
+  in it.
 
 ## Work order
 

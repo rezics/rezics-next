@@ -478,7 +478,10 @@ async function mergeTask(id: string, flags: Set<string>): Promise<void> {
     const { committed, dirty, ahead } = changedFiles(task);
     if (dirty.length) throw new Error(`${task.id} worktree has uncommitted files:\n  ${dirty.join('\n  ')}`);
     if (!ahead) throw new Error(`${task.id} has no commits to merge`);
-    const violations = outOfScope(committed, task.paths);
+    // Files merged with git's union driver take concurrent appends (route registrations), so any task may add to them.
+    const union = new Set(committed.filter(file =>
+      git(root, ['check-attr', 'merge', '--', file], true).endsWith(': merge: union')));
+    const violations = outOfScope(committed.filter(file => !union.has(file)), task.paths);
     if (violations.length && !flags.has('--allow-scope')) {
       throw new Error(`${task.id} changed files outside its claim:\n  ${violations.join('\n  ')}`);
     }
