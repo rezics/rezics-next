@@ -26,6 +26,10 @@ const migrations = join(root, 'services/main/migrations/access');
 const files = [...new Bun.Glob('*.sql').scanSync({ cwd: migrations })].sort();
 const headFiles = files.filter(file => file < '040');
 const newFiles = files.filter(file => file >= '040');
+// Later sibling ranges may deliberately replace shared constraints; the additive
+// check covers only this owner's 040-049 range.
+const ownFiles = newFiles.filter(file => /^04\d_/.test(file));
+const laterFiles = newFiles.filter(file => !ownFiles.includes(file));
 const iri = () => `https://rezics.com/id/${randomUUID()}`;
 const digest = (value: unknown) => createHash('sha256').update(JSON.stringify(value)).digest('hex');
 
@@ -296,12 +300,13 @@ test('Access G-046 schema: empty install equals an upgrade from the dispatch hea
     'membership', 'private_membership', 'admission', 'search_read_lease'];
   const before = await Promise.all(tables.map(count));
   const headSignature = await schemaSignature(upgrade);
-  await applyFiles(upgrade, newFiles);
+  await applyFiles(upgrade, ownFiles);
   expect(await Promise.all(tables.map(count))).toEqual(before);
-  const upgraded = await schemaSignature(upgrade);
+  const withOwn = await schemaSignature(upgrade);
   // Additive only: no existing column, constraint, index, trigger or function changed.
-  expect(headSignature.filter(item => !upgraded.includes(item))).toEqual([]);
-  expect(upgraded).toEqual(await schemaSignature(empty));
+  expect(headSignature.filter(item => !withOwn.includes(item))).toEqual([]);
+  await applyFiles(upgrade, laterFiles);
+  expect(await schemaSignature(upgrade)).toEqual(await schemaSignature(empty));
 
   // The new records bind to rows that existed before the upgrade.
   await upgrade.query(`INSERT INTO access.policy_set_admission (id, set_kind, set_owner_subject,

@@ -20,6 +20,7 @@ import { AccessRepresentations } from './modules/access/representations.ts';
 import { AccessRepresentedMembershipAuthority } from './modules/access/represented-membership-authority.ts';
 import { AccessEligibleOrgMemberSet } from './modules/access/eligible-org-member-set.ts';
 import { AccessRoles } from './modules/access/roles.ts';
+import { AccessPolicyOwner } from './modules/access/policy-owner.ts';
 import { ReaderVariantPreferenceStore } from './modules/work/native-variants.ts';
 import { RealmVariantRecommendationStore } from './modules/work/realm-variant-recommendation.ts';
 import { SourceIntakeStore } from './modules/source/intake.ts';
@@ -123,6 +124,7 @@ const app = createMainApp(fuseki, {
   representedMembershipAuthority: new AccessRepresentedMembershipAuthority(pool),
   eligibleOrgMemberSet: new AccessEligibleOrgMemberSet(pool),
   roles: new AccessRoles(pool),
+  accessPolicy: new AccessPolicyOwner(pool),
   sourceIntake,
   sourceAcquisitions: sourceAcquisitionServices(contentPool,
     { reserve: () => sourceIntake.reserveOpenLibrarySlot() }),

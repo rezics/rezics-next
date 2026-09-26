@@ -154,6 +154,38 @@ receipt shape; no second epoch, grant, roster, outbox or recovery hold exists.
   revocation fixes up to 256 affected admissions and private read leases in
   `revocation_affected_work` and completes only when all are terminal.
 
+### Policy, interaction and revocation operations
+
+The first `access-policy-v1` profile is served by `routes/access-policy.ts`. Every
+write is an owner transaction under the recovery fence and scope lock, with an
+immutable principal/key/intent receipt, an expected scope epoch and 503 for lock,
+timeout or recovery hold.
+
+- `POST /v1/access/policy-changes` (`access:manage`) publishes the next revision
+  as the owner Agent's `access.policy.manage` representative holding that grant
+  on the scope, or admits or revokes a set reference as the set owner's
+  `access.policy.set-admission` representative. An unusable reference always gets
+  the same `policy_reference_not_admitted` answer.
+  `GET /v1/access/policies/{policyId}/revisions/{revision}` reads one revision.
+- `POST /v1/access/policy-decisions` needs the action's Account scope
+  (`work.read`, `work.edit` or `work.create`) and decides only for the caller's own
+  principal and selected Agent. It returns `allow`, `deny` or `unavailable`, the
+  revision, the epoch and any allowing grant sources, with no reasons. A reusable
+  allow can be checked through `POST /v1/access/policy-decision-revalidations`.
+- `PUT` and `GET /v1/me/interaction-mutes` hold the private presentation
+  preference. `POST /v1/access/interaction-blocks` is the recipient Agent's
+  `access.interaction.manage` rule. `POST /v1/access/interaction-decisions`
+  (`comment:create`) reads only blocks.
+- `POST /v1/access/revocations` (`access:grant`, `access.revoke` representative)
+  revokes one grant or representation, ordinary or strong.
+  `GET /v1/access/revocations/{id}` reports pending work and acknowledges
+  completion only after the drain list is terminal.
+
+The module note `services/main/src/modules/access/policy-template.md` names the
+files to copy and records the measured cost contract. No feed or search
+selection consumes the mute preference yet, and no download admission exists for
+strong revocation to drain.
+
 ## Ordered policies and joint wiki governance
 
 A joint wiki has one explicit governing scope and admitted maintainer/approval

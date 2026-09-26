@@ -2,6 +2,7 @@ import { Elysia, NotFound, ParseError, ValidationError } from 'elysia';
 import type { FusekiClient } from './infrastructure/fuseki.ts';
 import { accessAuthorityRoutes } from './routes/access-authority.ts';
 import { accessMembershipRoutes } from './routes/access-memberships.ts';
+import { accessPolicyRoutes } from './routes/access-policy.ts';
 import { accessRoleRoutes } from './routes/access-roles.ts';
 import { actingContextRoutes } from './routes/acting-contexts.ts';
 import { addressRoutes } from './routes/addresses.ts';
@@ -48,6 +49,7 @@ export function createMainApp(fuseki: FusekiClient, work?: MainWorkDependencies)
       .use(accessAuthorityRoutes(work))
       .use(accessMembershipRoutes(work))
       .use(accessRoleRoutes(work))
+      .use(accessPolicyRoutes(work))
       .use(searchRoutes(fuseki, work))
       .use(contentRoutes(fuseki, work))
       .use(ratingRoutes(fuseki, work))
