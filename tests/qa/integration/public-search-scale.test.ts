@@ -36,10 +36,12 @@ const root = resolve(import.meta.dir, '../../..');
 class CountingFusekiClient extends FusekiClient {
   inventories = 0;
   queryCalls = 0;
+  phraseQueries = 0;
   healthCalls = 0;
   joinedQueries = 0;
   override async query(sparql: string, maxResponseBytes?: number): Promise<SparqlResult> {
     this.queryCalls++;
+    if (sparql.includes('?candidateCount') && sparql.includes('text:query')) this.phraseQueries++;
     if (sparql.includes('"body:*"')) this.inventories++;
     if (sparql.includes('ratingPopulation') && sparql.includes('text:query')) this.joinedQueries++;
     return super.query(sparql, maxResponseBytes);
@@ -182,7 +184,8 @@ test('SEARCH01/SEARCH02/SEARCH04/SEARCH07/SEARCH08/SEARCH16/SEARCH18: rated Real
     expect(fuseki.inventories).toBe(1);
     expect(fuseki.queryCalls - warmStart.queries).toBe(3);
     expect(fuseki.healthCalls - warmStart.health).toBe(3);
-    const pageStart = { queries: fuseki.queryCalls, inventories: fuseki.inventories };
+    const pageStart = { queries: fuseki.queryCalls, inventories: fuseki.inventories,
+      phrases: fuseki.phraseQueries };
     const firstPageResponse = await page();
     expect(firstPageResponse.status).toBe(200);
     const firstPage = await firstPageResponse.json() as { relationComplete: boolean;
@@ -198,12 +201,14 @@ test('SEARCH01/SEARCH02/SEARCH04/SEARCH07/SEARCH08/SEARCH16/SEARCH18: rated Real
     expect(thirdPage.next).toBeNull();
     expect([...firstPage.results, ...secondPage.results, ...thirdPage.results]
       .map(row => row.work)).toEqual(all.results.map(row => row.work));
+    expect(fuseki.phraseQueries - pageStart.phrases).toBe(3);
     expect(fuseki.inventories).toBe(pageStart.inventories);
     expect(fuseki.queryCalls - pageStart.queries).toBeLessThanOrEqual(12);
     const nextWork = await addWork(102, 'en');
     const stalePage = await page(firstPage.next!);
     expect(stalePage.status).toBe(409);
     expect(await stalePage.json()).toMatchObject({ code: 'search_restart_required' });
+    expect(fuseki.phraseQueries - pageStart.phrases).toBe(4);
     const afterWrite = await query('en');
     expect(afterWrite.population).toBe(existingPopulation + 103);
     expect(afterWrite.total).toBe(2);
@@ -526,6 +531,24 @@ test('SEARCH01/SEARCH02/SEARCH04/SEARCH07/SEARCH08/SEARCH16/SEARCH18: rated Real
     expect(secondRated.next).toBeNull();
     expect([...firstRated.results, ...secondRated.results].map(row => row.work))
       .toEqual(chineseRated.results.map(row => row.work));
+    const beforeNarrowing = await ratedPage();
+    expect(beforeNarrowing.status).toBe(200);
+    const narrowingPage = await beforeNarrowing.json() as typeof firstRated;
+    expect(narrowingPage.next).not.toBeNull();
+    const narrowingContext = { kind: 'realm-classification' as const, id: space.realm };
+    const narrowingInput = { context: narrowingContext, work: chineseB,
+      mainVersion: mainByWork.get(chineseB)!, sense,
+      expectedDecisionHead: chineseDecisionB, outcome: 'rejected' as const,
+      actingSubject: actor };
+    const narrowed = await setClassificationDecision(env,
+      admission(classificationDecisionScope(narrowingContext), 'classification.decision.set',
+        classificationDecisionDigest(narrowingInput)), narrowingInput);
+    expect(narrowed.outcome).toBe('succeeded');
+    const narrowedPage = await ratedPage(narrowingPage.next!);
+    expect(narrowedPage.status).toBe(409);
+    expect(await narrowedPage.json()).toMatchObject({ code: 'search_restart_required' });
+    const currentAfterNarrowing = await joinedRated(chinesePhrase, 'zh');
+    expect(currentAfterNarrowing.results.map(row => row.work)).toEqual([chineseA]);
   } finally {
     await accessPool.end();
     rmSync(state, { recursive: true, force: true });

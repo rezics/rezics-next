@@ -78,3 +78,23 @@ test('SEARCH08/SEARCH16: classified and rated page keys bind every authority dim
       .toThrow(SearchContinuationRestart);
   }
 });
+
+test('SEARCH10/SEARCH16: only a complete, exact-population relation can issue a page', () => {
+  for (const changed of [
+    { ...relation, complete: false },
+    { ...relation, resultGrain: 'matchUnit' },
+    { ...relation, population: 104 },
+    { ...relation, population: Number.NaN },
+    { ...relation, sourcePosition: { ...position, sequence: '-1' } },
+  ]) {
+    expect(() => pageCompletePublicRelation(request,
+      changed as typeof relation, 1_000)).toThrow(InvalidSearchContinuation);
+  }
+  const first = pageCompletePublicRelation(request, relation, 1_000);
+  expect(first.population).toBe(105);
+  expect(first.total).toBe(105);
+  expect(first.results).toHaveLength(40);
+  expect(() => pageCompletePublicRelation({ ...request, continuation: {
+    ...first.next!, sourcePosition: { ...position, sequence: '-1' } },
+  }, relation, 1_100)).toThrow(InvalidSearchContinuation);
+});

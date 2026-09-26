@@ -58,12 +58,21 @@ function requestDigest(input: PublicPhrasePageRequest): string {
 }
 
 /** Each page re-runs the complete bounded relation; a changed source, reader or
- * ordered result demands a new query from page one. This is not an HTTP snapshot. */
+ * ordered result demands a new query from page one. This is not an HTTP snapshot.
+ * Cost after the read is O(k + serialized row bytes) for k <= 512; the caller's
+ * 1 MiB phrase response and 1,500 ms request deadline bound the input and time. */
 export function pageCompletePublicRelation<Row>(input: PublicPhrasePageRequest,
   relation: CompletePublicRelation<Row>, now = Date.now()) {
   const main = input.profile === 'public-main-phrase-page-v1'
     || input.profile === 'public-main-classified-phrase-page-v1';
-  if (!Number.isSafeInteger(input.pageSize) || input.pageSize < 1
+  if (relation.resultGrain !== 'mainVersion' || relation.complete !== true
+    || !Number.isSafeInteger(relation.population) || relation.population < relation.total
+    || relation.sourcePosition.datasetId !== 'product'
+    || !/^(0|[1-9][0-9]*)$/.test(relation.sourcePosition.sequence)
+    || typeof relation.sourcePosition.dataEpoch !== 'string'
+    || !relation.sourcePosition.dataEpoch
+    || typeof relation.indexGeneration !== 'string' || !relation.indexGeneration
+    || !Number.isSafeInteger(input.pageSize) || input.pageSize < 1
     || input.pageSize > MAX_SEARCH_PAGE_SIZE || !Number.isSafeInteger(now) || now < 0
     || !Number.isSafeInteger(relation.total) || relation.total < 0
     || relation.total !== relation.results.length || relation.total >= MAX_PHRASE_CANDIDATES + 1
@@ -79,7 +88,12 @@ export function pageCompletePublicRelation<Row>(input: PublicPhrasePageRequest,
     || !/^[0-9a-f]{64}$/.test(prior.resultDigest)
     || !Number.isSafeInteger(prior.nextOffset) || prior.nextOffset < 1
     || prior.nextOffset > MAX_PHRASE_CANDIDATES
-    || !Number.isSafeInteger(prior.expiresAt))) {
+    || !Number.isSafeInteger(prior.expiresAt) || prior.expiresAt < 0
+    || prior.sourcePosition.datasetId !== 'product'
+    || !/^(0|[1-9][0-9]*)$/.test(prior.sourcePosition.sequence)
+    || typeof prior.sourcePosition.dataEpoch !== 'string'
+    || !prior.sourcePosition.dataEpoch
+    || typeof prior.indexGeneration !== 'string' || !prior.indexGeneration)) {
     throw new InvalidSearchContinuation('public page continuation is malformed');
   }
   if (prior && (prior.expiresAt <= now || prior.queryDigest !== queryDigest

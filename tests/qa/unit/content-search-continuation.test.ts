@@ -49,3 +49,19 @@ test('SEARCH08/SEARCH16: Content, graph, index, query and ordered result changes
     ...first.next!, nextOffset: 600 } }, relation, 1_100))
     .toThrow(InvalidSearchContinuation);
 });
+
+test('SEARCH10/SEARCH16: Content page count requires a complete owner-fenced population', () => {
+  for (const changed of [
+    { ...relation, complete: false },
+    { ...relation, population: 104 },
+    { ...relation, contentPosition: { ...relation.contentPosition, sequence: '-1' } },
+    { ...relation, graphPosition: { ...relation.graphPosition, dataEpoch: '' } },
+  ]) {
+    expect(() => pageCompleteContentRelation(request,
+      changed as typeof relation, 1_000)).toThrow(InvalidSearchContinuation);
+  }
+  const first = pageCompleteContentRelation(request, relation, 1_000);
+  expect(first.population).toBe(105);
+  expect(first.total).toBe(105);
+  expect(first.results).toHaveLength(40);
+});

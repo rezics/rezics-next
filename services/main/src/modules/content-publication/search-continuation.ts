@@ -28,7 +28,9 @@ const digest = (value: unknown): string => createHash('sha256')
   .update(JSON.stringify(value)).digest('hex');
 const decimal = /^(0|[1-9][0-9]*)$/;
 
-/** Re-run the complete relation on every page and restart if either owner moved. */
+/** Re-run the complete relation on every page and restart if either owner moved.
+ * Paging hashes at most 512 rows from the caller's 1 MiB bounded phrase response;
+ * work is O(row bytes + rows), within the shared 1,500 ms request deadline. */
 export function pageCompleteContentRelation(input: ContentPhrasePageRequest,
   relation: ContentRelation, now = Date.now()) {
   if (relation.profile !== 'public-content-phrase-v1' || relation.resultGrain !== 'content-variant'
@@ -39,6 +41,9 @@ export function pageCompleteContentRelation(input: ContentPhrasePageRequest,
     || relation.total !== relation.results.length || relation.total > MAX_PHRASE_CANDIDATES
     || !Number.isSafeInteger(relation.population) || relation.population < relation.total
     || relation.contentPosition.owner !== 'content'
+    || typeof relation.graphPosition.dataEpoch !== 'string' || !relation.graphPosition.dataEpoch
+    || typeof relation.contentPosition.dataEpoch !== 'string' || !relation.contentPosition.dataEpoch
+    || typeof relation.indexGeneration !== 'string' || !relation.indexGeneration
     || !decimal.test(relation.graphPosition.sequence)
     || !decimal.test(relation.contentPosition.sequence)) {
     throw new InvalidSearchContinuation('Content page request or complete relation is invalid');
@@ -53,6 +58,9 @@ export function pageCompleteContentRelation(input: ContentPhrasePageRequest,
     || prior.nextOffset > MAX_PHRASE_CANDIDATES
     || !Number.isSafeInteger(prior.expiresAt) || prior.expiresAt < 0
     || prior.contentPosition.owner !== 'content'
+    || typeof prior.graphPosition.dataEpoch !== 'string' || !prior.graphPosition.dataEpoch
+    || typeof prior.contentPosition.dataEpoch !== 'string' || !prior.contentPosition.dataEpoch
+    || typeof prior.indexGeneration !== 'string' || !prior.indexGeneration
     || !decimal.test(prior.graphPosition.sequence)
     || !decimal.test(prior.contentPosition.sequence))) {
     throw new InvalidSearchContinuation('Content page continuation is malformed');
