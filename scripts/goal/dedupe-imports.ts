@@ -5,7 +5,20 @@ import { readFileSync, writeFileSync } from 'node:fs';
 const roots = ['services/main/src/app.ts', 'services/main/src/index.ts', 'services/main/src/routes/dependencies.ts'];
 const pattern = /^import (type )?\{ ([^}]+) \} from '([^']+)';$/;
 for (const file of roots) {
-  const lines = readFileSync(file, 'utf8').split('\n');
+  // Union merges can place a branch's new import lines inside later code; hoist them to the header.
+  const raw = readFileSync(file, 'utf8').split('\n');
+  const firstCode = raw.findIndex(line => line.trim() && !line.startsWith('import ') && !line.startsWith('//')
+    && !line.startsWith(' ') && !line.startsWith('}') && !/^(export )?type .* from /.test(line));
+  const stray = firstCode < 0 ? [] : raw.slice(firstCode).filter(line => pattern.test(line));
+  let lines = raw;
+  if (stray.length) {
+    const header = raw.slice(0, firstCode);
+    const rest = raw.slice(firstCode).filter(line => !pattern.test(line));
+    const lastImport = header.map(line => line.startsWith('import ')).lastIndexOf(true);
+    lines = [...header.slice(0, lastImport + 1), ...stray, ...header.slice(lastImport + 1), ...rest];
+    writeFileSync(file, lines.join('\n'));
+    console.log(`${file}: hoisted ${stray.length} import(s)`);
+  }
   const imports = lines.map((line, index) => ({ index, match: pattern.exec(line) })).filter(item => item.match);
   const names = (match: RegExpExecArray) => new Set(match[2]!.split(',').map(name => name.trim().replace(/^type /, '')));
   const drop = new Set<number>();

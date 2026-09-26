@@ -1777,6 +1777,56 @@
       ]
     },
     {
+      "type": "https://rezics.com/vocab/RightsDeclaration",
+      "routes": [
+        {
+          "profile": "rights-offering-v1",
+          "shape": "https://rezics.com/definition/rights-offering-v1/declaration-shape",
+          "when": []
+        }
+      ]
+    },
+    {
+      "type": "https://rezics.com/vocab/RightsOffering",
+      "routes": [
+        {
+          "profile": "rights-offering-v1",
+          "shape": "https://rezics.com/definition/rights-offering-v1/offering-shape",
+          "when": []
+        }
+      ]
+    },
+    {
+      "type": "https://rezics.com/vocab/RightsOfferingRevision",
+      "routes": [
+        {
+          "profile": "rights-offering-v1",
+          "shape": "https://rezics.com/definition/rights-offering-v1/offering-revision-shape",
+          "when": []
+        }
+      ]
+    },
+    {
+      "type": "https://rezics.com/vocab/RightsOfferingSlot",
+      "routes": [
+        {
+          "profile": "rights-offering-v1",
+          "shape": "https://rezics.com/definition/rights-offering-v1/slot-shape",
+          "when": []
+        }
+      ]
+    },
+    {
+      "type": "https://rezics.com/vocab/RightsRecognitionRevision",
+      "routes": [
+        {
+          "profile": "rights-offering-v1",
+          "shape": "https://rezics.com/definition/rights-offering-v1/recognition-revision-shape",
+          "when": []
+        }
+      ]
+    },
+    {
       "type": "https://rezics.com/vocab/SemanticContext",
       "routes": [
         {
