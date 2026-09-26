@@ -49786,6 +49786,605 @@
         ]
       }
     },
+    "/v1/concepts/{id}/spoiler-hints": {
+      "post": {
+        "operationId": "postV1ConceptsByIdSpoiler-hints",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 128,
+              "minLength": 1,
+              "pattern": "^[A-Za-z0-9:_./-]{1,128}$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "actingSubject": {
+                    "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                    "type": "string"
+                  },
+                  "context": {
+                    "anyOf": [
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "kind": {
+                            "const": "global",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "kind"
+                        ],
+                        "type": "object"
+                      },
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "kind": {
+                            "const": "realm",
+                            "type": "string"
+                          },
+                          "realm": {
+                            "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "realm"
+                        ],
+                        "type": "object"
+                      }
+                    ]
+                  },
+                  "expectedGeneration": {
+                    "pattern": "^(0|[1-9][0-9]*)$",
+                    "type": "string"
+                  },
+                  "hint": {
+                    "enum": [
+                      "not-spoiler",
+                      "minor",
+                      "major"
+                    ],
+                    "type": "string"
+                  },
+                  "profile": {
+                    "const": "concept-spoiler-hint-v1",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "profile",
+                  "context",
+                  "hint",
+                  "expectedGeneration",
+                  "actingSubject"
+                ],
+                "type": "object"
+              }
+            },
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "actingSubject": {
+                    "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                    "type": "string"
+                  },
+                  "context": {
+                    "anyOf": [
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "kind": {
+                            "const": "global",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "kind"
+                        ],
+                        "type": "object"
+                      },
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "kind": {
+                            "const": "realm",
+                            "type": "string"
+                          },
+                          "realm": {
+                            "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "realm"
+                        ],
+                        "type": "object"
+                      }
+                    ]
+                  },
+                  "expectedGeneration": {
+                    "pattern": "^(0|[1-9][0-9]*)$",
+                    "type": "string"
+                  },
+                  "hint": {
+                    "enum": [
+                      "not-spoiler",
+                      "minor",
+                      "major"
+                    ],
+                    "type": "string"
+                  },
+                  "profile": {
+                    "const": "concept-spoiler-hint-v1",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "profile",
+                  "context",
+                  "hint",
+                  "expectedGeneration",
+                  "actingSubject"
+                ],
+                "type": "object"
+              }
+            },
+            "multipart/form-data": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "actingSubject": {
+                    "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                    "type": "string"
+                  },
+                  "context": {
+                    "anyOf": [
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "kind": {
+                            "const": "global",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "kind"
+                        ],
+                        "type": "object"
+                      },
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "kind": {
+                            "const": "realm",
+                            "type": "string"
+                          },
+                          "realm": {
+                            "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "realm"
+                        ],
+                        "type": "object"
+                      }
+                    ]
+                  },
+                  "expectedGeneration": {
+                    "pattern": "^(0|[1-9][0-9]*)$",
+                    "type": "string"
+                  },
+                  "hint": {
+                    "enum": [
+                      "not-spoiler",
+                      "minor",
+                      "major"
+                    ],
+                    "type": "string"
+                  },
+                  "profile": {
+                    "const": "concept-spoiler-hint-v1",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "profile",
+                  "context",
+                  "hint",
+                  "expectedGeneration",
+                  "actingSubject"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "concept": {
+                      "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                      "type": "string"
+                    },
+                    "context": {
+                      "anyOf": [
+                        {
+                          "additionalProperties": false,
+                          "properties": {
+                            "kind": {
+                              "const": "global",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "kind"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "additionalProperties": false,
+                          "properties": {
+                            "kind": {
+                              "const": "realm",
+                              "type": "string"
+                            },
+                            "realm": {
+                              "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "realm"
+                          ],
+                          "type": "object"
+                        }
+                      ]
+                    },
+                    "generation": {
+                      "pattern": "^(0|[1-9][0-9]*)$",
+                      "type": "string"
+                    },
+                    "hint": {
+                      "enum": [
+                        "not-spoiler",
+                        "minor",
+                        "major"
+                      ],
+                      "type": "string"
+                    },
+                    "profile": {
+                      "const": "concept-spoiler-hint-v1",
+                      "type": "string"
+                    },
+                    "receipt": {
+                      "type": "string"
+                    },
+                    "replayed": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "profile",
+                    "concept",
+                    "context",
+                    "hint",
+                    "generation",
+                    "receipt",
+                    "replayed"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 200"
+          },
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "concept": {
+                      "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                      "type": "string"
+                    },
+                    "context": {
+                      "anyOf": [
+                        {
+                          "additionalProperties": false,
+                          "properties": {
+                            "kind": {
+                              "const": "global",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "kind"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "additionalProperties": false,
+                          "properties": {
+                            "kind": {
+                              "const": "realm",
+                              "type": "string"
+                            },
+                            "realm": {
+                              "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "realm"
+                          ],
+                          "type": "object"
+                        }
+                      ]
+                    },
+                    "generation": {
+                      "pattern": "^(0|[1-9][0-9]*)$",
+                      "type": "string"
+                    },
+                    "hint": {
+                      "enum": [
+                        "not-spoiler",
+                        "minor",
+                        "major"
+                      ],
+                      "type": "string"
+                    },
+                    "profile": {
+                      "const": "concept-spoiler-hint-v1",
+                      "type": "string"
+                    },
+                    "receipt": {
+                      "type": "string"
+                    },
+                    "replayed": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "profile",
+                    "concept",
+                    "context",
+                    "hint",
+                    "generation",
+                    "receipt",
+                    "replayed"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 201"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 400,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 400"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 401,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 401"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 403,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 403"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 409,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 409"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 500,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 500"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 503,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 503"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
     "/v1/connected-apps/consent-ceilings": {
       "post": {
         "operationId": "postV1Connected-appsConsent-ceilings",
@@ -245628,6 +246227,14 @@
               "application/json": {
                 "schema": {
                   "properties": {
+                    "badgeSourceEvent": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
                     "conceptHint": {
                       "enum": [
                         "unknown",
@@ -245635,6 +246242,10 @@
                         "minor",
                         "major"
                       ],
+                      "type": "string"
+                    },
+                    "conceptHintGeneration": {
+                      "pattern": "^(0|[1-9][0-9]*)$",
                       "type": "string"
                     },
                     "context": {
@@ -245982,6 +246593,8 @@
                     "context",
                     "statementRevision",
                     "generation",
+                    "conceptHintGeneration",
+                    "badgeSourceEvent",
                     "policy",
                     "conceptHint",
                     "fit",
