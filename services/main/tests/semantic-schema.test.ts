@@ -54,7 +54,8 @@ test('MODEL14 schema: owner profiles compile, stay open on the resource and pin 
   const resource = renderProfile(byId('semantic-resource-v1'));
   // Open resource: no closure and no fixed type; only the component head and forbidden merge axiom.
   expect(resource).not.toContain('sh:closed');
-  expect(resource).toContain('sh:path rdf:type ; sh:minCount 1 ; sh:maxCount 32 ; sh:nodeKind sh:IRI');
+  // The routing type rdfs:Resource is stored alongside up to 32 caller types.
+  expect(resource).toContain('sh:path rdf:type ; sh:maxCount 33 ; sh:nodeKind sh:IRI ; sh:hasValue rdfs:Resource');
   expect(resource).toContain('sh:path owl:sameAs ; sh:maxCount 0');
   expect(resource).toContain('sh:path rv:semanticHead ; sh:maxCount 0');
   expect(renderProfile(byId('semantic-model-generation-v1'))).toContain('sh:hasValue rv:RejectOnViolation');

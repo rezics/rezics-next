@@ -200,7 +200,8 @@ export async function sendSemanticWrite(env: WorkActivationEnvironment, write: S
         rv:dataEpoch ${lit(env.lineage.dataEpoch)} ; rv:sequence ?next . }
       GRAPH ${iri(GRAPHS.outbox)} { ${iri(batch)} a rv:OutboxBatch ; rv:dataEpoch ${lit(env.lineage.dataEpoch)} ;
         rv:sequence ?next ; rv:eventCount 1 ; rv:event ${iri(event)} .
-        ${iri(event)} a rv:SemanticChangedEvent ; rv:ordinal 0 ; rv:action ${lit(write.admission.action)} ;
+        ${iri(event)} a rv:${write.admission.action === 'relation.change' ? 'RelationChangedEvent' : 'SemanticChangedEvent'} ;
+          rv:ordinal 0 ; rv:action ${lit(write.admission.action)} ;
           rv:receipt ${iri(write.receipt)} . }
     }
     WHERE {
@@ -271,7 +272,6 @@ export async function ensureModelGeneration(env: WorkActivationEnvironment): Pro
   const manifest = await sealComponentState(env, ACTIVE_GENERATION, PROFILES.generation, {
     modelManifestSha256: MODEL_MANIFEST_SHA256, commandModule: COMMAND_MODULE_VERSION, entailment: 'none' });
   const receipt = `urn:rezics:receipt:${hash(`${ACTIVE_GENERATION}\0model-generation`)}`;
-  const event = `urn:rezics:event:${hash(`${receipt}\0model-generation`)}`;
   const operation = `https://rezics.com/id/${Bun.randomUUIDv7()}`;
   const digest = hash(JSON.stringify({ family: 'model-generation-v1', manifest: MODEL_MANIFEST_SHA256 }));
   const update = `PREFIX rv: <${RV}>
@@ -291,9 +291,7 @@ export async function ensureModelGeneration(env: WorkActivationEnvironment): Pro
         rv:requestDigest ${lit(digest)} ; rv:outcome rv:Succeeded ; rv:datasetId ${iri(DATASET)} ;
         rv:dataEpoch ${lit(env.lineage.dataEpoch)} ; rv:sequence ?next . }
       GRAPH ${iri(GRAPHS.outbox)} { ${iri(`urn:rezics:outbox:${hash(receipt)}`)} a rv:OutboxBatch ;
-        rv:dataEpoch ${lit(env.lineage.dataEpoch)} ; rv:sequence ?next ; rv:eventCount 1 ; rv:event ${iri(event)} .
-        ${iri(event)} a rv:ModelGenerationRecordedEvent ; rv:ordinal 0 ; rv:action "model.generation.record" ;
-          rv:receipt ${iri(receipt)} . }
+        rv:dataEpoch ${lit(env.lineage.dataEpoch)} ; rv:sequence ?next ; rv:eventCount 0 . }
     }
     WHERE {
       ${controlGuard(env)}

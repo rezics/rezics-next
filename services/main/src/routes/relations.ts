@@ -24,6 +24,12 @@ const relationRead = t.Object({ profile: t.Literal('relation-change-v1'), occurr
     position: t.Optional(t.Integer()), availability: t.String() })),
   applicability: t.Array(t.String()), sourcePosition: position });
 
+export const openApiOperations = {
+  '/v1/relations/changes': { post: { bearer: true, idempotencyKey: true } },
+  '/v1/relations/{id}': { get: { bearer: true } },
+  '/v1/relations/{id}/revisions/{revision}': { get: { bearer: true } },
+} as const;
+
 export function relationRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
   const exact = async (request: Request, actingSubject: string, occurrence: string, revision?: string) => {
     await assertGraphAdmissionOpen(fuseki, work.environment.lineage);

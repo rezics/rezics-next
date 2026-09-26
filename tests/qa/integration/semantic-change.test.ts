@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { authorCreditFixture, nativeId, shortId } from '../fixtures/author-credit.ts';
-import { GRAPHS, iri } from '../../../services/main/src/modules/work/activate.ts';
+import { GRAPHS, hash, iri } from '../../../services/main/src/modules/work/activate.ts';
 import { ACTIVE_GENERATION } from '../../../services/main/src/modules/semantic/command.ts';
 
 const RV = 'https://rezics.com/vocab/';
@@ -51,6 +51,13 @@ test('MODEL01/MODEL03/MODEL04/MODEL08/MODEL10/MODEL14: semantic change write, ex
     const key = `semantic-${randomUUID()}`;
     const created = await f.json<Write>(await change(person, key), 201);
     expect(created).toMatchObject({ predecessor: null, replayed: false });
+    const generationReceipt = `urn:rezics:receipt:${hash(`${ACTIVE_GENERATION}\0model-generation`)}`;
+    const generationBatch = `urn:rezics:outbox:${hash(generationReceipt)}`;
+    expect((await f.env.fuseki.query(`PREFIX rv: <${RV}> ASK { GRAPH ${iri(GRAPHS.outbox)} {
+      ${iri(generationBatch)} a rv:OutboxBatch ; rv:eventCount 0 } }`)).boolean).toBe(true);
+    const semanticEvent = await f.env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?kind WHERE {
+      GRAPH ${iri(GRAPHS.outbox)} { ?event a ?kind ; rv:receipt ${iri(created.receipt)} } }`);
+    expect(semanticEvent.results?.bindings.map(row => row.kind!.value)).toEqual([`${RV}SemanticChangedEvent`]);
     const replay = await f.json<Write>(await change(person, key), 201);
     expect(replay).toMatchObject({ component: created.component, revision: created.revision, receipt: created.receipt,
       replayed: true });

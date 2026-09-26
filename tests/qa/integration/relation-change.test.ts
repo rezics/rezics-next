@@ -2,6 +2,7 @@ import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { resolve } from 'node:path';
 import { authorCreditFixture, shortId } from '../fixtures/author-credit.ts';
+import { GRAPHS, iri } from '../../../services/main/src/modules/work/activate.ts';
 
 type Changed = { component: string; revision: string; receipt: string; replayed: boolean };
 type Relation = { occurrence: string; revision: string; predecessor: string | null;
@@ -42,6 +43,10 @@ test('MODEL05/MODEL06: repeated participants keep two identified occurrences and
     const firstKey = randomUUID();
     const first = await f.json<{ occurrence: string; revision: string; receipt: string; replayed: boolean }>(
       await write(body, firstKey), 201);
+    const relationEvent = await f.env.fuseki.query(`PREFIX rv: <https://rezics.com/vocab/> SELECT ?kind WHERE {
+      GRAPH ${iri(GRAPHS.outbox)} { ?event a ?kind ; rv:receipt ${iri(first.receipt)} } }`);
+    expect(relationEvent.results?.bindings.map(row => row.kind!.value))
+      .toEqual(['https://rezics.com/vocab/RelationChangedEvent']);
     const replay = await f.json<typeof first>(await write(body, firstKey), 201);
     expect(replay).toMatchObject({ occurrence: first.occurrence, revision: first.revision,
       receipt: first.receipt, replayed: true });

@@ -9,12 +9,13 @@ single Fuseki command, validation bindings, receipt, position and outbox event.
 `src/routes/semantic.ts`; the owner shapes live in `model/definitions/semantic-*`
 and `model/definitions/value-exact-v1.ts`.
 
-Committed graph mutations have one outbox event because the native command
-requires it. The shared relay event mapping and graph recovery coverage need
-owner work before these routes can be integrated.
-The Access owner also needs a semantic Resource read grant check and receipt
-family mapping for `semantic.change` and `relation.change`; without them writes
-cannot seal and current reads remain unavailable.
+Committed semantic and relation changes have distinct owner-declared outbox
+events in `outbox-event.ts`, each bound to its Access admission, receipt and
+exact revision. Their deterministic receipt families live in each owner's
+`receipt-family.ts`. Internal model generation records a zero-event outbox batch
+so the relay advances its sequence without fabricating Access authority. The Access owner also
+needs a semantic Resource read grant check; until then current and exact reads
+of semantic Resources and relation occurrences remain unavailable.
 
 To extend a semantic operation, copy the admission, digest, expected-head guard,
 poststate validation, terminal receipt resolution and exact-manifest read from

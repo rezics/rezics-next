@@ -21,6 +21,12 @@ const semanticRead = t.Object({ profile: t.Literal('semantic-change-v1'), compon
   references: t.Record(t.String(), t.Object({ state: t.Union([t.Literal('available'), t.Literal('unavailable')]) })),
   export: t.Record(t.String(), t.Unknown()), sourcePosition: position });
 
+export const openApiOperations = {
+  '/v1/semantic/changes': { post: { bearer: true, idempotencyKey: true } },
+  '/v1/semantic/resources/{id}': { get: { bearer: true } },
+  '/v1/semantic/resources/{id}/revisions/{revision}': { get: { bearer: true } },
+} as const;
+
 /** Typed semantic outcomes; everything else uses the shared command problem map. */
 export function semanticError(error: unknown): Response {
   if (error instanceof SemanticChangeRejected) {
