@@ -28,6 +28,7 @@ final class ProtectionPolicy {
     private static final Node CURRENT = uri(CommandPolicy.CURRENT), REVISIONS = uri(CommandPolicy.REVISIONS),
         RECEIPTS = uri(CommandPolicy.RECEIPTS), OUTBOX = uri(CommandPolicy.OUTBOX);
     private static final Node LABEL = uri("http://www.w3.org/2000/01/rdf-schema#label");
+    private static final Node WORK = uri("https://schema.org/CreativeWork");
     private static final Set<String> ACTIONS = Set.of("work.protection.tighten", "work.protection.confirm",
         "work.protection.relax", "work.correction.propose", "work.correction.review");
     record Snapshot(String action, Node work, Node head, Node protection, Node control,
@@ -46,7 +47,11 @@ final class ProtectionPolicy {
         all.addAll(modify.getDeleteQuads());
         for (Quad q : all) {
             if (CURRENT.equals(q.getGraph()) && (rv("protectionHead").equals(q.getPredicate())
-                || rv("proposalHead").equals(q.getPredicate()))) touchesProtection = true;
+                || (rv("proposalHead").equals(q.getPredicate())
+                    && (data.contains(CURRENT, q.getSubject(), RDF.type.asNode(), WORK)
+                        || all.contains(Quad.create(CURRENT, q.getSubject(), RDF.type.asNode(), WORK)))))) {
+                touchesProtection = true;
+            }
             if (REVISIONS.equals(q.getGraph()) && RDF.type.asNode().equals(q.getPredicate())
                 && Set.of(rv("ProtectionRevision"), rv("CorrectionProposal"), rv("CorrectionDecision"),
                     rv("CorrectionApplication")).contains(q.getObject())) touchesProtection = true;

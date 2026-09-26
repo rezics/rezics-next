@@ -8,6 +8,7 @@ import org.apache.jena.graph.NodeFactory;
 import org.apache.jena.query.DatasetFactory;
 import org.apache.jena.sparql.core.DatasetGraph;
 import org.junit.Test;
+import org.apache.jena.vocabulary.RDF;
 
 public class ProtectionPolicyTest {
     private static final String RV = "https://rezics.com/vocab/";
@@ -48,5 +49,24 @@ public class ProtectionPolicyTest {
 
     @Test public void reviewedActionRequiresAnExactSignedEffect() {
         assertNotNull(capture("ReviewRequired", "work.correction.review").error());
+    }
+
+    @Test public void pollProposalHeadDoesNotEnterWorkProtectionPolicy() {
+        for (String type : new String[] { RV + "Poll", "https://schema.org/CreativeWork" }) {
+            DatasetGraph data = DatasetFactory.createTxnMem().asDatasetGraph();
+            data.begin(org.apache.jena.query.ReadWrite.WRITE);
+            try {
+                data.add(NodeFactory.createURI(CommandPolicy.CURRENT), NodeFactory.createURI(WORK),
+                    RDF.type.asNode(), NodeFactory.createURI(type));
+                String update = "PREFIX rv: <" + RV + "> INSERT { GRAPH " + iri(CommandPolicy.CURRENT)
+                    + " { " + iri(WORK) + " rv:proposalHead " + iri(PROTECTION) + " } "
+                    + "GRAPH " + iri(CommandPolicy.RECEIPTS) + " { " + iri(RECEIPT)
+                    + " rv:outcome rv:Succeeded ; rv:action \"governance.poll.administer\" } } WHERE {}";
+                ProtectionPolicy.Snapshot result = ProtectionPolicy.capture(data,
+                    CommandPolicy.parse(update, RECEIPT), RECEIPT, "digest", update, null, new byte[32]);
+                if (type.equals(RV + "Poll")) assertNull(result);
+                else assertEquals("protected Work mutation requires a reviewed protection action", result.error());
+            } finally { data.abort(); data.end(); data.close(); }
+        }
     }
 }
