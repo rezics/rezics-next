@@ -233,6 +233,9 @@ export function launchCommand(options: { id: string; effort: string; session: st
 function workerPrompt(task: Task, manager: string, engine: Engine = engineOf(task), effort = task.effort): string {
   return [
     `You are REZICS Goal worker ${task.id} (${modelOf(engine)}/${effort}). Work only inside ${task.worktree}.`,
+    `Edit, create and delete files only under ${task.worktree} (and /tmp). The main checkout ${root} and every`
+      + ' other worktree are read-only for you, even when a brief or handoff cites an absolute path there;'
+      + ` translate such paths to ${task.worktree}.`,
     'Read docs/goals/worker.md there, then your brief at .temp/goal/brief.md, and follow both.',
     `The manager session is "${manager}". End with the handoff that the worker protocol specifies.`,
   ].join('\n');
