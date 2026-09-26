@@ -11,7 +11,7 @@ import { ID } from '../../../services/main/src/modules/work/activate.ts';
 
 const native = () => ID + randomUUID();
 
-test('GOV11/GOV12/GOV13/GOV14/GOV15/GOV16/GOV17/GOV18/GOV21/GOV22: admitted poll, allocation, mandate and ballot template', async () => {
+test('GOV11/GOV12/GOV13/GOV14/GOV15/GOV16/GOV17/GOV18/GOV19/GOV20/GOV21/GOV22/GOV23: admitted poll, allocation, proxy, mandate and ballot template', async () => {
   if (!Bun.env.REZICS_QA_RUN_ID || !Bun.env.FUSEKI_URL || !Bun.env.MAIN_DATA_EPOCH
     || !Bun.env.MAIN_ROUTING_EPOCH || !Bun.env.ACCESS_DATABASE_URL) {
     throw new Error('Run through the isolated QA integration tier');
@@ -75,7 +75,7 @@ test('GOV11/GOV12/GOV13/GOV14/GOV15/GOV16/GOV17/GOV18/GOV21/GOV22: admitted poll
       representationId, grantId,
       charter: { ruleRevision: native(), unitScale: 1, countingUnit: 'weight',
         admittedSeatClasses: ['organization'], allocation: true, quorumThreshold: 1,
-        abstention: 'counts', passNumerator: 1, passDenominator: 2, invalidation: 'none' },
+        abstention: 'counts', passNumerator: 1, passDenominator: 2, invalidation: 'declared' },
       question: { text: 'Choose', language: 'en' },
       options: [{ key: 'yes', role: 'approve', label: 'Yes' },
         { key: 'no', role: 'reject', label: 'No' }],
@@ -601,10 +601,175 @@ test('GOV11/GOV12/GOV13/GOV14/GOV15/GOV16/GOV17/GOV18/GOV21/GOV22: admitted poll
     await pool.query('UPDATE access.representation SET active = false WHERE id = $1', [mandateOne]);
     expect((await request('POST', `${path}/ballots`, 'representative-one', {
       ...castBody, expectedHead: frozenHead }, 'departed-operator')).status).toBe(403);
-    expect((await request('POST', `${path}/ballots`, 'representative-two', {
+    const replacement = await request('POST', `${path}/ballots`, 'representative-two', {
       ...castBody, representationId: mandateTwo, expectedHead: frozenHead },
-    'replacement-operator')).status).toBe(201);
+    'replacement-operator');
+    expect(replacement.status).toBe(201);
     expect(await (await request('GET', `${path}/tallies`, 'administrator')).json())
       .toMatchObject({ seatCount: 1, countedUnits: 100, castSeats: 1, castUnits: 100 });
+
+    // The body makes a separate, digest-bound invalidation decision; the old cast remains historical.
+    const invalidatorRepresentation = randomUUID(), invalidatorGrant = randomUUID();
+    await pool.query(`INSERT INTO access.representation
+      (id, principal_id, subject_id, action, valid_until)
+      VALUES ($1,$2,$3,'governance.ballot.invalidate', now() + interval '1 hour')`,
+    [invalidatorRepresentation, principalId, administrator]);
+    await pool.query(`INSERT INTO access.permission_grant
+      (id, issuer_subject, recipient_subject, scope_id, action, valid_until)
+      VALUES ($1,$2,$3,$4,'governance.ballot.invalidate', now() + interval '1 hour')`,
+    [invalidatorGrant, body, administrator, scope]);
+    const replacementHead = (await replacement.json() as { revision: string }).revision;
+    const invalidation = { profile: 'ballot-invalidation-v1', seat: root, holder,
+      expectedHead: replacementHead, ruleRevision: input.charter.ruleRevision,
+      evidenceDigest: 'a'.repeat(64), actingSubject: administrator,
+      representationId: invalidatorRepresentation, grantId: invalidatorGrant };
+    expect((await request('POST', `${path}/ballot-invalidations`, 'administrator',
+      { ...invalidation, expectedHead: frozenHead }, 'invalidation-stale')).status).toBe(409);
+    expect((await request('POST', `${path}/ballot-invalidations`, 'representative-two', {
+      ...invalidation, actingSubject: holder, representationId: mandateTwo },
+    'invalidation-with-cast-mandate')).status).toBe(403);
+    const invalidated = await request('POST', `${path}/ballot-invalidations`,
+      'administrator', invalidation, 'invalidation-decision');
+    expect(invalidated.status).toBe(201);
+    const invalidationReceipt = await invalidated.json() as { revision: string; receipt: string };
+    expect((await request('POST', `${path}/ballot-invalidations`, 'administrator',
+      invalidation, 'invalidation-decision')).status).toBe(200);
+    expect(await (await request('GET', `${path}/ballots/${root!.slice(ID.length)}`,
+      'administrator')).json()).toMatchObject({ revision: invalidationReceipt.revision,
+      predecessor: replacementHead, availability: 'invalidated', countedUnits: 0, shares: [] });
+    expect(await (await request('GET', `${path}/tallies`, 'administrator')).json())
+      .toMatchObject({ seatCount: 1, countedUnits: 100, castSeats: 0, castUnits: 0,
+        uncastUnits: 100 });
+    const preservedCast = await fuseki.query(`PREFIX rv: <https://rezics.com/vocab/>
+      SELECT ?availability WHERE { GRAPH <urn:rezics:graph:revisions> {
+        <${replacementHead}> rv:ballotAvailability ?availability } }`);
+    expect(preservedCast.results?.bindings[0]?.availability?.value)
+      .toBe('https://rezics.com/vocab/BallotCast');
+    expect((await eventFor(invalidationReceipt.receipt)).type)
+      .toBe('com.rezics.vote.ballot-invalidated.v1');
+
+    // One frozen proxy hop shares the source seat's single ballot head with a holder override.
+    const proxyPoll = native(), proxyScope = pollScopeId(proxyPoll), proxyGrant = randomUUID();
+    await pool.query('INSERT INTO access.scope_gate (id) VALUES ($1)', [proxyScope]);
+    await pool.query(`INSERT INTO access.permission_grant
+      (id, issuer_subject, recipient_subject, scope_id, action, valid_until)
+      VALUES ($1,$2,$3,$4,'governance.poll.administer',now() + interval '1 hour')`,
+    [proxyGrant, body, administrator, proxyScope]);
+    const proxyPath = `/v1/polls/${proxyPoll.slice(ID.length)}`;
+    expect((await request('POST', '/v1/polls', 'administrator', { ...input,
+      poll: proxyPoll, grantId: proxyGrant, charter: { ...input.charter,
+        proxy: 'one-hop', holderOverride: true }, entitlements: [
+        { holder, seatClass: 'organization', units: 100 },
+        { holder: child, seatClass: 'organization', units: 20 }],
+    }, 'proxy-prepare')).status).toBe(201);
+    const proxySeats = await fuseki.query(`PREFIX rv: <https://rezics.com/vocab/>
+      SELECT ?seat ?holder WHERE { GRAPH <urn:rezics:graph:revisions> {
+        ?seat a rv:SourceEntitlement ; rv:poll <${proxyPoll}> ; rv:holder ?holder } }`);
+    const holderSeat = proxySeats.results?.bindings.find(row => row.holder?.value === holder)?.seat?.value;
+    const childSeat = proxySeats.results?.bindings.find(row => row.holder?.value === child)?.seat?.value;
+    expect(holderSeat).toBeTruthy();
+    expect(childSeat).toBeTruthy();
+    const routeIntent = { profile: 'ballot-proxy-v1', action: 'designate', seat: holderSeat,
+      holder, proxy: child, expectedHead: null, representationId: seatManager };
+    const designated = await request('POST', `${proxyPath}/proxies`, 'representative-one',
+      routeIntent, 'proxy-designate');
+    expect(designated.status).toBe(201);
+    const designatedReceipt = await designated.json() as { revision: string; receipt: string };
+    expect((await request('POST', `${proxyPath}/proxies`, 'representative-one',
+      routeIntent, 'proxy-designate')).status).toBe(200);
+    expect((await eventFor(designatedReceipt.receipt)).type).toBe('com.rezics.vote.proxy-designated.v1');
+    expect((await request('POST', `${proxyPath}/allocations`, 'representative-one', {
+      profile: 'poll-allocation-v1', rootEntitlement: holderSeat, holder,
+      representationId: seatManager,
+      leaves: [{ holder: another, seatClass: 'organization', units: 40 }],
+    }, 'proxy-allocation-conflict')).status).toBe(409);
+    const childManager = randomUUID();
+    await pool.query(`INSERT INTO access.representation
+      (id, principal_id, subject_id, action, valid_until)
+      VALUES ($1,$2,$3,'governance.seat.manage',now() + interval '1 hour')`,
+    [childManager, repTwo, child]);
+    expect((await request('POST', `${proxyPath}/proxies`, 'representative-two', {
+      ...routeIntent, seat: childSeat, holder: child, proxy: holder,
+      representationId: childManager }, 'proxy-cycle')).status).toBe(409);
+    expect((await request('POST', `${proxyPath}/openings`, 'administrator', {
+      profile: 'poll-opening-v1', actingSubject: administrator,
+      representationId, grantId: proxyGrant }, 'proxy-open')).status).toBe(201);
+    expect((await request('POST', `${proxyPath}/proxies`, 'representative-two', {
+      ...routeIntent, seat: childSeat, holder: child, proxy: another,
+      representationId: childManager }, 'proxy-late')).status).toBe(409);
+    const proxyMandate = randomUUID();
+    await pool.query(`INSERT INTO access.representation
+      (id, principal_id, subject_id, action, resource_subject, valid_until)
+      VALUES ($1,$2,$3,'governance.ballot.operate',$4,now() + interval '1 hour')`,
+    [proxyMandate, repTwo, child, body]);
+    const proxyCast = await request('POST', `${proxyPath}/ballots`, 'representative-two', {
+      ...castBody, seat: holderSeat, proxySubject: child, proxyRoute: designatedReceipt.revision,
+      representationId: proxyMandate, expectedHead: null }, 'proxy-cast');
+    expect(proxyCast.status).toBe(201);
+    const proxyHead = (await proxyCast.json() as { revision: string }).revision;
+    expect(await (await request('GET', `${proxyPath}/ballots/${holderSeat!.slice(ID.length)}`,
+      'administrator')).json()).toMatchObject({ revision: proxyHead, castRoute: 'proxy',
+      proxyRoute: designatedReceipt.revision });
+    const override = await request('POST', `${proxyPath}/ballots`, 'representative-two', {
+      ...castBody, seat: holderSeat, representationId: mandateTwo, expectedHead: proxyHead }, 'proxy-override');
+    expect(override.status).toBe(201);
+    const overrideHead = (await override.json() as { revision: string }).revision;
+    expect(await (await request('GET', `${proxyPath}/ballots/${holderSeat!.slice(ID.length)}`,
+      'administrator')).json()).toMatchObject({ revision: overrideHead,
+      predecessor: proxyHead, castRoute: 'override' });
+    expect(await (await request('GET', `${proxyPath}/tallies`, 'administrator')).json())
+      .toMatchObject({ seatCount: 2, countedUnits: 120, castSeats: 1, castUnits: 100 });
+    const revoked = await request('POST', `${proxyPath}/proxies`, 'representative-one', {
+      ...routeIntent, action: 'revoke', expectedHead: designatedReceipt.revision }, 'proxy-revoke');
+    expect(revoked.status).toBe(201);
+    expect((await request('POST', `${proxyPath}/ballots`, 'representative-two', {
+      ...castBody, seat: holderSeat, proxySubject: child, proxyRoute: designatedReceipt.revision,
+      representationId: proxyMandate, expectedHead: overrideHead }, 'revoked-proxy-cast')).status).toBe(409);
+
+    // A proposal's immutable effect basis is attached to the poll and its adopting resolution.
+    const proposalPoll = native(), proposal = native(), proposalScope = pollScopeId(proposalPoll);
+    const proposalGrant = randomUUID(), effectTarget = native(), effectDigest = 'b'.repeat(64);
+    await pool.query('INSERT INTO access.scope_gate (id) VALUES ($1)', [proposalScope]);
+    await pool.query(`INSERT INTO access.permission_grant
+      (id, issuer_subject, recipient_subject, scope_id, action, valid_until)
+      VALUES ($1,$2,$3,$4,'governance.poll.administer',now() + interval '1 hour')`,
+    [proposalGrant, body, administrator, proposalScope]);
+    const proposalInput = { ...input, poll: proposalPoll, grantId: proposalGrant,
+      proposal: { proposal, effectDigest, effectTarget,
+        effectCapability: 'realm.policy.update', expectedTargetState: 'c'.repeat(64) } };
+    expect((await request('POST', '/v1/polls', 'administrator', {
+      ...proposalInput, proposal: { ...proposalInput.proposal,
+        effectCapability: 'governance.poll.administer' } }, 'proposal-out-of-scope')).status).toBe(409);
+    expect((await request('POST', '/v1/polls', 'administrator', proposalInput,
+      'proposal-prepare')).status).toBe(201);
+    const proposalPath = `/v1/polls/${proposalPoll.slice(ID.length)}`;
+    const proposalView = (await (await request('GET', proposalPath, 'administrator')).json()) as {
+      proposal: string; proposalRevision: string };
+    expect(proposalView.proposal).toBe(proposal);
+    expect(proposalView.proposalRevision).toStartWith(ID);
+    const proposalSeats = await fuseki.query(`PREFIX rv: <https://rezics.com/vocab/>
+      SELECT ?seat WHERE { GRAPH <urn:rezics:graph:revisions> {
+        ?seat a rv:SourceEntitlement ; rv:poll <${proposalPoll}> ; rv:holder <${holder}> } }`);
+    const proposalSeat = proposalSeats.results?.bindings[0]?.seat?.value;
+    expect(proposalSeat).toBeTruthy();
+    expect((await request('POST', `${proposalPath}/openings`, 'administrator', {
+      profile: 'poll-opening-v1', actingSubject: administrator,
+      representationId, grantId: proposalGrant }, 'proposal-open')).status).toBe(201);
+    expect((await request('POST', `${proposalPath}/ballots`, 'representative-two', {
+      ...castBody, seat: proposalSeat, representationId: mandateTwo }, 'proposal-cast')).status).toBe(201);
+    expect((await request('POST', `${proposalPath}/closures`, 'administrator', {
+      profile: 'poll-closure-v1', actingSubject: administrator,
+      representationId, grantId: proposalGrant }, 'proposal-close')).status).toBe(201);
+    expect((await request('POST', `${proposalPath}/resolutions`, 'administrator', {
+      profile: 'poll-resolution-v1', actingSubject: administrator,
+      representationId, grantId: proposalGrant }, 'proposal-finalize')).status).toBe(201);
+    expect(await (await request('GET', `${proposalPath}/resolutions`, 'administrator')).json())
+      .toMatchObject({ outcome: 'adopted', proposalRevision: proposalView.proposalRevision,
+        effectDigest });
+    const proposalState = await fuseki.query(`PREFIX rv: <https://rezics.com/vocab/>
+      SELECT ?state WHERE { GRAPH <urn:rezics:graph:current> {
+        <${proposal}> rv:proposalState ?state } }`);
+    expect(proposalState.results?.bindings[0]?.state?.value)
+      .toBe('https://rezics.com/vocab/ProposalAdopted');
   } finally { await pool.end(); }
 }, 120_000);

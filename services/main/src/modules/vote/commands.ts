@@ -3,8 +3,9 @@ import { RV, iri, lit, type WorkActivationEnvironment } from '../work/activate.t
 import type { SeatClass, VoteAdmission, VotePolicyHead } from './access.ts';
 import { CURRENT, DEF, REVISIONS, VoteRejected, VoteStale, dateTime, digestOf, executeVoteCommand,
   langText, newId, voteId } from './graph.ts';
-import { ballotComponent, holderCharterComponent, optionRoleTerm, readBallot, readHolderCharter, readPoll,
-  readResolution, readSeat, readTally, ruleTerm, seatClassTerm, type Aggregation, type HolderCharterView, type MandateRule,
+import { activeProxyRoutes, ballotComponent, holderCharterComponent, optionRoleTerm, proxyRouteComponent,
+  readBallot, readHolderCharter, readPoll, readProxyRoute, readResolution, readSeat, readTally,
+  ruleTerm, seatClassTerm, type Aggregation, type HolderCharterView, type MandateRule,
   type OptionRole, type PollView, type SeatView } from './read.ts';
 
 /**
@@ -33,6 +34,8 @@ export interface ElectorateCharterInput {
   passNumerator: number;
   passDenominator: number;
   invalidation: 'none' | 'declared';
+  proxy?: 'disabled' | 'one-hop';
+  holderOverride?: boolean;
 }
 
 export interface PreparePollIntent {
@@ -42,6 +45,8 @@ export interface PreparePollIntent {
   question: { text: string; language: string };
   options: { key: string; role: OptionRole; label: string }[];
   entitlements: { holder: string; seatClass: SeatClass; units: number }[];
+  proposal?: { proposal: string; effectDigest: string; effectTarget: string;
+    effectCapability: string; expectedTargetState: string };
 }
 
 /** Pure intent checks; `slots` are the Access counting identities in entitlement order. */
@@ -60,10 +65,20 @@ export function checkPreparePoll(intent: PreparePollIntent, slots: readonly stri
     throw new VoteRejected('seat_class_not_admitted');
   }
   if (new Set(slots).size !== slots.length) throw new VoteRejected('duplicate_counting_identity');
+  if (intent.charter.proxy !== 'one-hop' && intent.charter.holderOverride) {
+    throw new VoteRejected('holder_override_requires_proxy');
+  }
+  if (intent.proposal && (!/^[0-9a-f]{64}$/.test(intent.proposal.effectDigest)
+    || !/^[0-9a-f]{64}$/.test(intent.proposal.expectedTargetState)
+    || !/^[a-z][a-z0-9-]*(\.[a-z][a-z0-9-]*)+$/.test(intent.proposal.effectCapability)
+    || intent.proposal.effectCapability.startsWith('governance.')
+    || intent.proposal.proposal === intent.poll)) throw new VoteRejected('invalid_proposal_effect');
 }
 
 export function electorateCharterDigest(charter: ElectorateCharterInput): string {
-  return digestOf({ ...charter, admittedSeatClasses: [...charter.admittedSeatClasses].sort() });
+  return digestOf({ ...charter, proxy: charter.proxy ?? 'disabled',
+    holderOverride: charter.holderOverride ?? false,
+    admittedSeatClasses: [...charter.admittedSeatClasses].sort() });
 }
 
 export async function dispatchPreparePoll(env: WorkActivationEnvironment, admission: VoteAdmission,
@@ -73,6 +88,7 @@ export async function dispatchPreparePoll(env: WorkActivationEnvironment, admiss
   const revision = newId();
   const question = newId();
   const snapshot = newId();
+  const proposalRevision = intent.proposal ? newId() : null;
   const operation = operationIri();
   const at = now();
   const options = intent.options.map(option => ({ ...option, iri: newId() }));
@@ -84,7 +100,11 @@ export async function dispatchPreparePoll(env: WorkActivationEnvironment, admiss
     ${iri(component)} a rv:VotingCharter ; rv:governingBody ${iri(intent.body)} ;
       rv:charterKind rv:ElectorateCharter ; rv:charterHead ${iri(revision)} ; rv:poll ${iri(poll)} .
     ${iri(poll)} a rv:Poll ; rv:governingBody ${iri(intent.body)} ; rv:electorateCharter ${iri(revision)} ;
-      rv:questionHead ${iri(question)} ; rv:pollState rv:PollDraft ; rv:electorateSnapshot ${iri(snapshot)} .`)}
+      rv:questionHead ${iri(question)} ; rv:pollState rv:PollDraft ;
+      rv:electorateSnapshot ${iri(snapshot)}
+      ${proposalRevision ? `; rv:proposalRevision ${iri(proposalRevision)}` : ''} .
+    ${intent.proposal ? `${iri(intent.proposal.proposal)} a rv:Proposal ; rv:governingBody ${iri(intent.body)} ;
+      rv:proposalHead ${iri(proposalRevision!)} ; rv:proposalState rv:ProposalOpen .` : ''}`)}
     ${G(REVISIONS, `
     ${iri(revision)} a rv:VotingCharterRevision, rv:ElectorateCharterRevision ; rv:charter ${iri(component)} ;
       rv:ruleRevision ${iri(charter.ruleRevision)} ; rv:charterDigest ${lit(electorateCharterDigest(charter))} ;
@@ -93,7 +113,8 @@ export async function dispatchPreparePoll(env: WorkActivationEnvironment, admiss
       ${charter.admittedSeatClasses.map(value => `rv:admittedSeatClass rv:${seatClassTerm[value]} ;`).join(' ')}
       rv:personCountingBasis rv:AccessPrincipalCounting ;
       rv:allocationPolicy rv:${charter.allocation ? 'ExplicitSeatAllocation' : 'AllocationDisabled'} ;
-      rv:proxyPolicy rv:ProxyDisabled ; rv:holderOverridePolicy rv:HolderOverrideDenied ;
+      rv:proxyPolicy rv:${charter.proxy === 'one-hop' ? 'OneHopProxy' : 'ProxyDisabled'} ;
+      rv:holderOverridePolicy rv:${charter.holderOverride ? 'HolderOverrideAllowed' : 'HolderOverrideDenied'} ;
       rv:proxyRoutingPolicy rv:FrozenAtOpening ; rv:quorumThreshold ${charter.quorumThreshold} ;
       rv:abstentionPolicy rv:${charter.abstention === 'counts' ? 'AbstentionCountsForQuorum' : 'AbstentionExcludedFromQuorum'} ;
       rv:uncastPolicy rv:UncastNotCounted ; rv:passNumerator ${charter.passNumerator} ;
@@ -110,12 +131,20 @@ export async function dispatchPreparePoll(env: WorkActivationEnvironment, admiss
       rv:entitlementCount ${entitlements.length} ; rv:issuedUnits ${issued} ;
       rv:snapshotDigest ${lit(digestOf(entitlements.map(item => [item.slot, item.holder, item.seatClass, item.units]).sort()))} ;
       rv:operation ${iri(operation)} ; rv:preparedAt ${dateTime(at)} .
+    ${intent.proposal ? `${iri(proposalRevision!)} a rv:ProposalRevision ;
+      rv:proposal ${iri(intent.proposal.proposal)} ; rv:ruleRevision ${iri(charter.ruleRevision)} ;
+      rv:effectDigest ${lit(intent.proposal.effectDigest)} ;
+      rv:effectTarget ${iri(intent.proposal.effectTarget)} ;
+      rv:effectCapability ${lit(intent.proposal.effectCapability)} ;
+      rv:expectedTargetState ${lit(intent.proposal.expectedTargetState)} ;
+      rv:operation ${iri(operation)} ; rv:revisedAt ${dateTime(at)} .` : ''}
     ${entitlements.map(item => `${iri(item.iri)} a rv:SourceEntitlement, rv:VotingSeat ;
       rv:electorateSnapshot ${iri(snapshot)} ; rv:poll ${iri(poll)} ; rv:holder ${iri(item.holder)} ;
       rv:seatClass rv:${seatClassTerm[item.seatClass]} ; rv:countingSlot ${iri(item.slot)} ;
       rv:issuedUnits ${item.units} ; rv:operation ${iri(operation)} .`).join('\n')}`)}`;
   const where = `FILTER NOT EXISTS { ${G(CURRENT, `${iri(poll)} ?p0 ?o0`)} }
-    FILTER NOT EXISTS { ${G(CURRENT, `${iri(component)} ?p1 ?o1`)} }`;
+    FILTER NOT EXISTS { ${G(CURRENT, `${iri(component)} ?p1 ?o1`)} }
+    ${intent.proposal ? `FILTER NOT EXISTS { ${G(CURRENT, `${iri(intent.proposal.proposal)} ?p2 ?o2`)} }` : ''}`;
   const validations = [
     ...await profileValidations(env.fuseki, 'charter-revision-v1', [
       { shape: `${DEF}charter-revision-v1/charter-shape`, focus: [component], graphs },
@@ -126,6 +155,9 @@ export async function dispatchPreparePoll(env: WorkActivationEnvironment, admiss
       { shape: `${DEF}poll-snapshot-v1/option-shape`, focus: options.map(option => option.iri), graphs },
       { shape: `${DEF}poll-snapshot-v1/snapshot-shape`, focus: [snapshot], graphs },
       { shape: `${DEF}poll-snapshot-v1/entitlement-shape`, focus: entitlements.map(item => item.iri), graphs }]),
+    ...(intent.proposal ? await profileValidations(env.fuseki, 'proposal-v1', [
+      { shape: `${DEF}proposal-v1/proposal-shape`, focus: [intent.proposal.proposal], graphs },
+      { shape: `${DEF}proposal-v1/revision-shape`, focus: [proposalRevision!], graphs }]) : []),
   ];
   return executeVoteCommand(env, { admission, validations, insert, where, component: poll, revision: snapshot,
     operation, event: 'PollPreparedEvent' });
@@ -258,6 +290,9 @@ export async function dispatchAllocation(env: WorkActivationEnvironment, admissi
       rv:holder ${iri(intent.holder)} ; rv:issuedUnits ${root.units} .`)}
     FILTER NOT EXISTS { ${G(REVISIONS, `?active a rv:AllocationActivation ; rv:poll ${iri(intent.poll)} ;
       rv:rootEntitlement ${iri(intent.rootEntitlement)} .`)} }
+    FILTER NOT EXISTS { ${G(CURRENT, `?route a rv:ProxyRoute ; rv:poll ${iri(intent.poll)} ;
+      rv:seat ${iri(intent.rootEntitlement)} ; rv:routeHead ?routeHead .`)}
+      ${G(REVISIONS, `?routeHead rv:routeState rv:RouteActive .`)} }
     FILTER NOT EXISTS { ${G(REVISIONS, `VALUES ?newSlot { ${placed.map(leaf => iri(leaf.slot)).join(' ')} }
       ?existing rv:countingSlot ?newSlot .
       FILTER(?existing != ${iri(intent.rootEntitlement)})`)} }`;
@@ -296,10 +331,91 @@ async function frozenSeats(env: WorkActivationEnvironment, poll: string): Promis
 
 export interface PollLifecycleIntent { poll: string; closesAt?: string }
 
+// ------------------------------------------------------------- proxy routes
+
+export interface ProxyIntent { poll: string; seat: string; holder: string; proxy: string;
+  expectedHead: string | null }
+
+export async function checkProxyRoute(env: WorkActivationEnvironment, intent: ProxyIntent,
+  operation: 'proxy.designate' | 'proxy.revoke') {
+  const poll = await readPoll(env, intent.poll);
+  if (poll.charter.proxy !== 'one-hop') throw new VoteRejected('proxy_not_chartered');
+  if (operation === 'proxy.designate' && poll.state !== 'draft') throw new VoteRejected('poll_not_draft');
+  if (operation === 'proxy.revoke' && !['draft', 'open'].includes(poll.state)) {
+    throw new VoteRejected('poll_not_active');
+  }
+  const seat = await readSeat(env, intent.poll, intent.seat);
+  if (!seat.counted || seat.holder !== intent.holder || intent.proxy === intent.holder) {
+    throw new VoteRejected('invalid_proxy_seat');
+  }
+  const route = await readProxyRoute(env, intent.poll, intent.seat);
+  if ((route?.revision ?? null) !== intent.expectedHead) throw new VoteStale('proxy route head changed');
+  if (operation === 'proxy.designate' && route) throw new VoteRejected('proxy_route_already_exists');
+  if (operation === 'proxy.revoke' && (route?.state !== 'active' || route.proxy !== intent.proxy)) {
+    throw new VoteRejected('proxy_route_not_active');
+  }
+  if (operation === 'proxy.designate') {
+    const routes = await activeProxyRoutes(env, intent.poll);
+    if (routes.some(item => item.proxy === intent.holder || item.holder === intent.proxy)) {
+      throw new VoteRejected('proxy_chain_or_cycle');
+    }
+  }
+  return { poll, seat, route };
+}
+
+export async function dispatchProxyRoute(env: WorkActivationEnvironment, admission: VoteAdmission,
+  intent: ProxyIntent, operationKind: 'proxy.designate' | 'proxy.revoke', poll: PollView,
+  seat: SeatView): Promise<boolean> {
+  const route = proxyRouteComponent(intent.poll, intent.seat);
+  const revision = newId(), operation = operationIri();
+  const designate = operationKind === 'proxy.designate';
+  const insert = `${designate ? G(CURRENT, `${iri(route)} a rv:ProxyRoute ; rv:poll ${iri(intent.poll)} ;
+    rv:seat ${iri(intent.seat)} ; rv:sourceEntitlement ${iri(seat.sourceEntitlement)} ;
+    rv:proxyHolder ${iri(intent.proxy)} ; rv:routeHead ${iri(revision)} .`)
+    : G(CURRENT, `${iri(route)} rv:routeHead ${iri(revision)} .`)}
+    ${G(REVISIONS, `${iri(revision)} a rv:ProxyRouteRevision ; rv:proxyRoute ${iri(route)} ;
+      ${intent.expectedHead ? `rv:predecessor ${iri(intent.expectedHead)} ;` : ''}
+      rv:routeState rv:${designate ? 'RouteActive' : 'RouteRevoked'} ; rv:proxyHopLimit 1 ;
+      rv:redelegation rv:RedelegationForbidden ; rv:electorateCharter ${iri(poll.electorateCharter)} ;
+      rv:operation ${iri(operation)} ; rv:revisedAt ${dateTime(now())} .`)}`;
+  const existingGuard = designate
+    ? `FILTER NOT EXISTS { ${G(CURRENT, `${iri(route)} ?p ?o .`)} }
+       FILTER NOT EXISTS { ${G(CURRENT, `?incoming a rv:ProxyRoute ; rv:poll ${iri(intent.poll)} ;
+         rv:proxyHolder ${iri(intent.holder)} ; rv:routeHead ?incomingHead .`)}
+         ${G(REVISIONS, `?incomingHead rv:routeState rv:RouteActive .`)} }
+       FILTER NOT EXISTS { ${G(CURRENT, `?outgoing a rv:ProxyRoute ; rv:poll ${iri(intent.poll)} ;
+         rv:seat ?outgoingSeat ; rv:routeHead ?outgoingHead .`)}
+         ${G(REVISIONS, `?outgoingHead rv:routeState rv:RouteActive .
+           ?outgoingSeat rv:holder ${iri(intent.proxy)} .`)} }`
+    : `${G(CURRENT, `${iri(route)} a rv:ProxyRoute ; rv:poll ${iri(intent.poll)} ;
+        rv:seat ${iri(intent.seat)} ; rv:proxyHolder ${iri(intent.proxy)} ;
+        rv:routeHead ${iri(intent.expectedHead!)} .`)}
+       ${G(REVISIONS, `${iri(intent.expectedHead!)} rv:routeState rv:RouteActive .`)}`;
+  const countedGuard = seat.kind === 'root'
+    ? `FILTER NOT EXISTS { ${G(REVISIONS, `?allocation a rv:AllocationActivation ;
+        rv:poll ${iri(intent.poll)} ; rv:rootEntitlement ${iri(intent.seat)} .`)} }`
+    : G(REVISIONS, `?allocation a rv:AllocationActivation ; rv:poll ${iri(intent.poll)} ;
+        rv:allocationPlan ${iri(seat.plan!)} .`);
+  const where = `${G(CURRENT, `${iri(intent.poll)} rv:pollState ${designate ? 'rv:PollDraft' : '?pollState'} ;
+      rv:electorateCharter ${iri(poll.electorateCharter)} .`)}
+    ${designate ? '' : 'FILTER(?pollState IN (rv:PollDraft, rv:PollOpen))'}
+    ${G(REVISIONS, `${iri(poll.electorateCharter)} rv:proxyPolicy rv:OneHopProxy .
+      ${iri(intent.seat)} rv:holder ${iri(intent.holder)} .`)}
+    ${countedGuard} ${existingGuard}`;
+  const validations = await profileValidations(env.fuseki, 'ballot-proxy-v1', [
+    { shape: `${DEF}ballot-proxy-v1/route-shape`, focus: [route], graphs },
+    { shape: `${DEF}ballot-proxy-v1/revision-shape`, focus: [revision], graphs }]);
+  return executeVoteCommand(env, { admission, validations, insert, where, component: route,
+    revision, operation, event: designate ? 'ProxyDesignatedEvent' : 'ProxyRevokedEvent',
+    remove: designate ? undefined : G(CURRENT, `${iri(route)} rv:routeHead ${iri(intent.expectedHead!)} .`) });
+}
+
 export async function dispatchOpenPoll(env: WorkActivationEnvironment, admission: VoteAdmission,
   intent: PollLifecycleIntent, poll: PollView): Promise<boolean> {
   if (poll.state !== 'draft' || !poll.snapshot || poll.issuedUnits === null) throw new VoteRejected('poll_not_draft');
   const seats = await frozenSeats(env, intent.poll);
+  const routes = await activeProxyRoutes(env, intent.poll);
+  if (routes.length && poll.charter.proxy !== 'one-hop') throw new VoteRejected('proxy_not_chartered');
   // Conservation: every issued unit is counted exactly once, by a root or by its leaves.
   if (seats.countedUnits !== poll.issuedUnits) throw new VoteRejected('units_not_conserved');
   const opening = newId();
@@ -311,16 +427,27 @@ export async function dispatchOpenPoll(env: WorkActivationEnvironment, admission
       rv:questionRevision ${iri(poll.question)} ; rv:electorateCharter ${iri(poll.electorateCharter)} ;
       rv:electorateSnapshot ${iri(poll.snapshot)} ;
       rv:allocationManifestDigest ${lit(digestOf(seats.activations))} ;
-      rv:proxyRouteManifestDigest ${lit(digestOf([]))} ; rv:seatCount ${seats.seatCount} ;
+      rv:proxyRouteManifestDigest ${lit(digestOf(routes.map(route =>
+        [route.route, route.revision, route.holder, route.proxy]).sort()))} ;
+      ${routes.map(route => `rv:frozenProxyRoute ${iri(route.revision)} ;`).join(' ')}
+      rv:seatCount ${seats.seatCount} ;
       rv:countedUnits ${seats.countedUnits} ;
       rv:openingDigest ${lit(digestOf({ poll: intent.poll, charter: poll.electorateCharter, question: poll.question,
-        snapshot: poll.snapshot, activations: seats.activations, seats: seats.seatCount, units: seats.countedUnits }))} ;
+        snapshot: poll.snapshot, activations: seats.activations,
+        routes: routes.map(route => [route.route, route.revision]).sort(),
+        seats: seats.seatCount, units: seats.countedUnits }))} ;
       rv:closesAt ${dateTime(closesAt)} ; rv:openedAt ${dateTime(at)} ; rv:operation ${iri(operation)} .`)}`;
   const listed = seats.activations.map(iri).join(', ');
+  const routeHeads = routes.map(route => iri(route.revision)).join(', ');
   const where = `${G(CURRENT, `${iri(intent.poll)} rv:pollState rv:PollDraft ; rv:electorateSnapshot ${iri(poll.snapshot)} ;
       rv:questionHead ${iri(poll.question)} ; rv:electorateCharter ${iri(poll.electorateCharter)} .`)}
     FILTER NOT EXISTS { ${G(REVISIONS, `?activation a rv:AllocationActivation ; rv:poll ${iri(intent.poll)} .
-      ${listed ? `FILTER(?activation NOT IN (${listed}))` : ''}`)} }`;
+      ${listed ? `FILTER(?activation NOT IN (${listed}))` : ''}`)} }
+    ${routes.map(route => `${G(CURRENT, `${iri(route.route)} rv:routeHead ${iri(route.revision)} .`)}
+      ${G(REVISIONS, `${iri(route.revision)} rv:routeState rv:RouteActive .`)}`).join('\n')}
+    FILTER NOT EXISTS { ${G(CURRENT, `?newRoute a rv:ProxyRoute ; rv:poll ${iri(intent.poll)} ;
+      rv:routeHead ?newHead .`)} ${G(REVISIONS, `?newHead rv:routeState rv:RouteActive .`)}
+      ${routeHeads ? `FILTER(?newHead NOT IN (${routeHeads}))` : ''} }`;
   const validations = await profileValidations(env.fuseki, 'poll-snapshot-v1', [
     { shape: `${DEF}poll-snapshot-v1/poll-shape`, focus: [intent.poll], graphs },
     { shape: `${DEF}poll-snapshot-v1/opening-shape`, focus: [opening], graphs }]);
@@ -366,10 +493,12 @@ export async function dispatchFinalizePoll(env: WorkActivationEnvironment, admis
   const resolution = newId();
   const operation = operationIri();
   const at = now();
+  const proposalState = outcome === 'ResolutionAdopted' ? 'ProposalAdopted' : 'ProposalRejected';
   const optionTallies = tally.options.map(option => ({ ...option, option: poll.options.find(item => item.key === option.key)!.option,
     iri: voteId('option-tally', resolution, option.key) }));
   const insert = `${G(CURRENT, `${iri(intent.poll)} rv:pollState rv:PollFinalized ;
-    rv:pollResolution ${iri(resolution)} .`)}
+    rv:pollResolution ${iri(resolution)} .
+    ${poll.proposal ? `${iri(poll.proposal)} rv:proposalState rv:${proposalState} .` : ''}`)}
     ${G(REVISIONS, `${iri(resolution)} a rv:PollResolution ; rv:poll ${iri(intent.poll)} ;
       rv:pollOpening ${iri(poll.opening)} ; rv:electorateCharter ${iri(poll.electorateCharter)} ;
       rv:electorateSnapshot ${iri(poll.snapshot)} ;
@@ -378,6 +507,8 @@ export async function dispatchFinalizePoll(env: WorkActivationEnvironment, admis
       rv:abstainUnits ${tally.abstainUnits} ; rv:uncastUnits ${tally.uncastUnits} ;
       rv:quorumOutcome rv:${quorumMet ? 'QuorumMet' : 'QuorumNotMet'} ;
       rv:resolutionOutcome rv:${outcome} ;
+      ${poll.proposalRevision ? `rv:proposalRevision ${iri(poll.proposalRevision)} ;
+        rv:effectDigest ?effectDigest ;` : ''}
       ${outcome === 'ResolutionAdopted'
         ? `rv:winningOption ${iri(poll.options.find(option => option.key === winner!.key)!.option)} ;` : ''}
       rv:operation ${iri(operation)} ; rv:finalizedAt ${dateTime(at)} .
@@ -386,15 +517,23 @@ export async function dispatchFinalizePoll(env: WorkActivationEnvironment, admis
   const where = `${G(CURRENT, `${iri(intent.poll)} rv:pollState rv:PollClosed ;
     rv:pollOpening ${iri(poll.opening)} ; rv:electorateSnapshot ${iri(poll.snapshot)} ;
     rv:electorateCharter ${iri(poll.electorateCharter)} .`)}
-    FILTER NOT EXISTS { ${G(CURRENT, `${iri(intent.poll)} rv:pollResolution ?prior .`)} }`;
+    FILTER NOT EXISTS { ${G(CURRENT, `${iri(intent.poll)} rv:pollResolution ?prior .`)} }
+    ${poll.proposal && poll.proposalRevision
+      ? `${G(CURRENT, `${iri(poll.proposal)} rv:proposalState rv:ProposalOpen ;
+        rv:proposalHead ${iri(poll.proposalRevision)} .`)}
+        ${G(REVISIONS, `${iri(poll.proposalRevision)} rv:proposal ${iri(poll.proposal)} ;
+          rv:ruleRevision ${iri(poll.charter.ruleRevision)} ; rv:effectDigest ?effectDigest .`)}` : ''}`;
   const validations = await profileValidations(env.fuseki, 'poll-resolution-v1', [
     { shape: `${DEF}poll-resolution-v1/resolution-shape`, focus: [resolution], graphs },
     { shape: `${DEF}poll-resolution-v1/tally-shape`, focus: optionTallies.map(option => option.iri), graphs }]);
   validations.push(...await profileValidations(env.fuseki, 'poll-snapshot-v1', [
     { shape: `${DEF}poll-snapshot-v1/poll-shape`, focus: [intent.poll], graphs }]));
+  if (poll.proposal) validations.push(...await profileValidations(env.fuseki, 'proposal-v1', [
+    { shape: `${DEF}proposal-v1/proposal-shape`, focus: [poll.proposal], graphs }]));
   return executeVoteCommand(env, { admission, validations, insert, where, component: intent.poll,
     revision: resolution, operation, event: 'PollFinalizedEvent',
-    remove: G(CURRENT, `${iri(intent.poll)} rv:pollState rv:PollClosed .`) });
+    remove: G(CURRENT, `${iri(intent.poll)} rv:pollState rv:PollClosed .
+      ${poll.proposal ? `${iri(poll.proposal)} rv:proposalState rv:ProposalOpen .` : ''}`) });
 }
 
 // ------------------------------------------------------------ ballots / approvals
@@ -410,6 +549,8 @@ export interface BallotIntent extends BallotCandidate {
   poll: string;
   seat: string;
   holder: string;
+  proxySubject?: string;
+  proxyRoute?: string;
   approvals: string[];
 }
 
@@ -421,6 +562,9 @@ export interface BallotContext {
   aggregation: Aggregation;
   policyRevision: string | null;
   candidateDigest: string;
+  castRoute: 'HolderCast' | 'ProxyCast' | 'HolderOverride';
+  proxyRoute: string | null;
+  proxyHolder: string | null;
   shares: { option: string; key: string; units: number }[];
 }
 
@@ -461,9 +605,22 @@ async function internalDecision(env: WorkActivationEnvironment, internalPoll: st
 
 /** Bounded reads plus every rule that needs no admission: seat, charter, aggregation and conservation. */
 export async function checkBallot(env: WorkActivationEnvironment, intent: BallotCandidate & {
-  poll: string; seat: string; holder: string }, policy: VotePolicyHead | null): Promise<BallotContext> {
+  poll: string; seat: string; holder: string; proxySubject?: string; proxyRoute?: string },
+  policy: VotePolicyHead | null): Promise<BallotContext> {
   const poll = await readPoll(env, intent.poll);
   if (poll.state !== 'open' || !poll.opening) throw new VoteRejected('poll_not_open');
+  const route = await readProxyRoute(env, intent.poll, intent.seat);
+  if (intent.proxySubject && (route?.state !== 'active' || route.proxy !== intent.proxySubject
+    || route.revision !== intent.proxyRoute || poll.charter.proxy !== 'one-hop')) {
+    throw new VoteRejected('proxy_route_not_active');
+  }
+  if (!intent.proxySubject && intent.proxyRoute) throw new VoteRejected('proxy_subject_required');
+  if (!intent.proxySubject && route?.state === 'active' && !poll.charter.holderOverride) {
+    throw new VoteRejected('holder_override_not_chartered');
+  }
+  const castRoute = intent.proxySubject ? 'ProxyCast' : route?.state === 'active'
+    ? 'HolderOverride' : 'HolderCast';
+  const routeRevision = route?.state === 'active' ? route.revision : null;
   const seat = await readSeat(env, intent.poll, intent.seat);
   if (!seat.counted) throw new VoteRejected('seat_not_counted');
   if (seat.holder !== intent.holder) throw new VoteRejected('not_seat_holder');
@@ -504,8 +661,10 @@ export async function checkBallot(env: WorkActivationEnvironment, intent: Ballot
   }
   const candidateDigest = digestOf({ poll: intent.poll, seat: intent.seat, opening: poll.opening,
     holderCharter: charter?.revision ?? null, expectedHead: intent.expectedHead, availability: intent.availability,
-    shares: shares.map(share => [share.key, share.units]), internalPoll: intent.internalPoll, policyRevision });
-  return { poll, seat, charter, rule, aggregation, policyRevision, candidateDigest, shares };
+    shares: shares.map(share => [share.key, share.units]), internalPoll: intent.internalPoll, policyRevision,
+    castRoute, proxyRoute: routeRevision });
+  return { poll, seat, charter, rule, aggregation, policyRevision, candidateDigest, shares,
+    castRoute, proxyRoute: routeRevision, proxyHolder: route?.state === 'active' ? route.proxy : null };
 }
 
 /** Guards that keep the frozen seat, head and holder charter exactly as read. */
@@ -544,7 +703,8 @@ export async function dispatchBallot(env: WorkActivationEnvironment, admission: 
       ${prior ? `rv:predecessor ${iri(prior)} ;` : ''} rv:pollOpening ${iri(context.poll.opening!)} ;
       ${context.charter ? `rv:holderCharter ${iri(context.charter.revision)} ;` : ''}
       rv:ballotAvailability rv:${intent.availability === 'cast' ? 'BallotCast' : 'BallotWithdrawn'} ;
-      rv:castRoute rv:HolderCast ;
+      rv:castRoute rv:${context.castRoute} ;
+      ${context.proxyRoute ? `rv:proxyRoute ${iri(context.proxyRoute)} ;` : ''}
       ${intent.approvals.map(approval => `rv:mandateApproval ${iri(approval)} ;`).join(' ')}
       ${intent.internalPoll ? `rv:internalPoll ${iri(intent.internalPoll)} ;` : ''}
       ${shares.map(share => `rv:ballotShare ${iri(share.iri)} ;`).join(' ')}
@@ -559,7 +719,16 @@ export async function dispatchBallot(env: WorkActivationEnvironment, admission: 
     ? `FILTER(${intent.approvals.flatMap((_, i) => intent.approvals.slice(i + 1).map((__, j) => `?slot${i} != ?slot${i + j + 1}`)).join(' && ')})` : '';
   const internalGuard = intent.internalPoll
     ? G(CURRENT, `${iri(intent.internalPoll)} rv:pollState rv:PollFinalized ; rv:pollResolution ?internalResolution .`) : '';
-  const where = `${seatGuards(intent, context, ballot)} ${approvalGuards} ${distinct} ${internalGuard}`;
+  const route = proxyRouteComponent(intent.poll, intent.seat);
+  const routeGuard = context.proxyRoute
+    ? `${G(CURRENT, `${iri(route)} rv:routeHead ${iri(context.proxyRoute)} ;
+        rv:proxyHolder ${iri(context.proxyHolder!)} .`)}
+        ${G(REVISIONS, `${iri(context.proxyRoute)} rv:routeState rv:RouteActive .
+          ${iri(context.poll.opening!)} rv:frozenProxyRoute ${iri(context.proxyRoute)} .`)}`
+    : `FILTER NOT EXISTS { ${G(CURRENT, `${iri(route)} rv:routeHead ?activeRoute .`)}
+        ${G(REVISIONS, `?activeRoute rv:routeState rv:RouteActive .`)} }`;
+  const where = `${seatGuards(intent, context, ballot)} ${approvalGuards} ${distinct} ${internalGuard}
+    ${routeGuard}`;
   const validations = await profileValidations(env.fuseki, 'ballot-v1', [
     { shape: `${DEF}ballot-v1/ballot-shape`, focus: [ballot], graphs },
     { shape: `${DEF}ballot-v1/revision-shape`, focus: [revision], graphs },
@@ -589,6 +758,47 @@ export async function dispatchApproval(env: WorkActivationEnvironment, admission
     FILTER NOT EXISTS { ${G(REVISIONS, `${iri(approval)} a rv:MandateApproval .`)} }`;
   return executeVoteCommand(env, { admission, validations, insert, where,
     component: intent.seat, revision: approval, operation, event: 'MandateApprovalRecordedEvent' });
+}
+
+// ---------------------------------------------------------- ballot.invalidate
+
+export interface InvalidateBallotIntent {
+  poll: string; seat: string; holder: string; expectedHead: string;
+  ruleRevision: string; evidenceDigest: string;
+}
+
+/** A separate body-granted decision removes one current contribution, retaining its cast revision. */
+export async function dispatchInvalidateBallot(env: WorkActivationEnvironment, admission: VoteAdmission,
+  intent: InvalidateBallotIntent, poll: PollView): Promise<boolean> {
+  const ballot = ballotComponent(intent.poll, intent.seat);
+  const decision = newId(), revision = newId(), operation = operationIri(), at = now();
+  const insert = `${G(CURRENT, `${iri(ballot)} rv:ballotHead ${iri(revision)} .`)}
+    ${G(REVISIONS, `${iri(decision)} a rv:BallotInvalidation ; rv:poll ${iri(intent.poll)} ;
+      rv:ballot ${iri(ballot)} ; rv:invalidatedRevision ${iri(intent.expectedHead)} ;
+      rv:electorateCharter ${iri(poll.electorateCharter)} ; rv:ruleRevision ${iri(intent.ruleRevision)} ;
+      rv:evidenceDigest ${lit(intent.evidenceDigest)} ; rv:operation ${iri(operation)} ;
+      rv:decidedAt ${dateTime(at)} .
+      ${iri(revision)} a rv:BallotRevision ; rv:ballot ${iri(ballot)} ;
+      rv:predecessor ${iri(intent.expectedHead)} ; rv:pollOpening ${iri(poll.opening!)} ;
+      rv:ballotAvailability rv:BallotInvalidated ; rv:castRoute ?priorRoute ;
+      rv:invalidationDecision ${iri(decision)} ; rv:ballotDigest ${lit(digestOf(intent))} ;
+      rv:countedUnits 0 ; rv:operation ${iri(operation)} ; rv:submittedAt ${dateTime(at)} .`)}`;
+  const where = `${G(CURRENT, `${iri(intent.poll)} rv:pollState rv:PollOpen ;
+      rv:pollOpening ${iri(poll.opening!)} ; rv:electorateCharter ${iri(poll.electorateCharter)} .
+      ${iri(ballot)} a rv:Ballot ; rv:poll ${iri(intent.poll)} ; rv:seat ${iri(intent.seat)} ;
+        rv:ballotHead ${iri(intent.expectedHead)} .`)}
+    ${G(REVISIONS, `${iri(poll.electorateCharter)} rv:invalidationPolicy rv:DeclaredInvalidationDecision ;
+      rv:ruleRevision ${iri(intent.ruleRevision)} .
+      ${iri(intent.expectedHead)} a rv:BallotRevision ; rv:ballot ${iri(ballot)} ;
+        rv:ballotAvailability rv:BallotCast ; rv:castRoute ?priorRoute .`)}`;
+  const validations = await profileValidations(env.fuseki, 'poll-resolution-v1', [
+    { shape: `${DEF}poll-resolution-v1/invalidation-shape`, focus: [decision], graphs }]);
+  validations.push(...await profileValidations(env.fuseki, 'ballot-v1', [
+    { shape: `${DEF}ballot-v1/ballot-shape`, focus: [ballot], graphs },
+    { shape: `${DEF}ballot-v1/revision-shape`, focus: [revision], graphs }]));
+  return executeVoteCommand(env, { admission, validations, insert, where, component: ballot,
+    revision, operation, event: 'BallotInvalidatedEvent',
+    remove: G(CURRENT, `${iri(ballot)} rv:ballotHead ${iri(intent.expectedHead)} .`) });
 }
 
 /** Classify an unmatched guard from a fresh read: a changed head is stale, anything else a typed rejection. */

@@ -2,11 +2,13 @@ import { Elysia, t } from 'elysia';
 import { ID } from '../modules/work/activate.ts';
 import { AdmissionConflict, AdmissionDenied, AdmissionUnavailable } from '../modules/access/admission.ts';
 import { VoteIneligible, VotePolicyStale } from '../modules/vote/access.ts';
-import { activateAllocation, approveBallot, changePollState, preparePoll, setBallot,
+import { activateAllocation, approveBallot, changePollState, changeProxyRoute,
+  invalidateBallot, preparePoll, setBallot,
   setHolderCharter, type AdmittedVote, type VoteDependencies } from '../modules/vote/admitted.ts';
 import { PendingVoteWork, VoteConflict, VoteRejected, VoteStale, VoteUnavailable,
   digestOf } from '../modules/vote/graph.ts';
-import { readBallot, readHolderCharter, readPoll, readResolution, readSeat, readTally } from '../modules/vote/read.ts';
+import { readBallot, readHolderCharter, readPoll, readProxyRoute, readResolution, readSeat,
+  readTally } from '../modules/vote/read.ts';
 import { pendingOperation, problemResult } from '../api-contract.ts';
 import { authorizedReadProblems, writeProblems } from '../api-responses.ts';
 import type { MainWorkDependencies } from './dependencies.ts';
@@ -31,12 +33,15 @@ const pollResult = t.Object({ profile: t.Literal('poll-snapshot-v1'), poll: nati
   body: native, state: t.Union([t.Literal('draft'), t.Literal('open'), t.Literal('closed'),
     t.Literal('finalized')]),
   electorateCharter: native, question: native, snapshot: t.Nullable(native),
+  proposal: t.Nullable(native), proposalRevision: t.Nullable(native),
   opening: t.Nullable(native), issuedUnits: t.Nullable(t.Number()),
   entitlementCount: t.Nullable(t.Number()), seatCount: t.Nullable(t.Number()),
   countedUnits: t.Nullable(t.Number()), closesAt: t.Nullable(t.String()),
   charter: t.Object({ allocation: t.Boolean(), admittedSeatClasses: t.Array(seatClass),
     unitScale: t.Number(), countingUnit: t.String(), quorumThreshold: t.Number(),
-    abstention: t.String(), passNumerator: t.Number(), passDenominator: t.Number(), digest }),
+    abstention: t.String(), ruleRevision: native, invalidation: t.String(),
+    proxy: t.Union([t.Literal('disabled'), t.Literal('one-hop')]), holderOverride: t.Boolean(),
+    passNumerator: t.Number(), passDenominator: t.Number(), digest }),
   options: t.Array(t.Object({ option: native, key: t.String(), role: optionRole })) });
 const tallyResult = t.Object({ profile: t.Literal('poll-tally-v1'), poll: native,
   state: t.String(), seatCount: t.Number(), countedUnits: t.Number(),
@@ -45,11 +50,13 @@ const tallyResult = t.Object({ profile: t.Literal('poll-tally-v1'), poll: native
     units: t.Number(), seats: t.Number() })) });
 const resolutionResult = t.Object({ profile: t.Literal('poll-resolution-v1'), resolution: native,
   outcome: t.Union([t.Literal('adopted'), t.Literal('rejected'), t.Literal('no-quorum')]),
-  winningOption: t.Nullable(native) });
+  winningOption: t.Nullable(native), proposalRevision: t.Nullable(native), effectDigest: t.Nullable(digest) });
 const ballotResult = t.Object({ profile: t.Literal('ballot-v1'), ballot: native,
   revision: native, predecessor: t.Nullable(native),
-  availability: t.Union([t.Literal('cast'), t.Literal('withdrawn')]),
-  countedUnits: t.Number(), digest, shares: t.Array(t.Object({ option: native, units: t.Number() })) });
+  availability: t.Union([t.Literal('cast'), t.Literal('withdrawn'), t.Literal('invalidated')]),
+  countedUnits: t.Number(), digest,
+  castRoute: t.Union([t.Literal('holder'), t.Literal('proxy'), t.Literal('override')]),
+  proxyRoute: t.Nullable(native), shares: t.Array(t.Object({ option: native, units: t.Number() })) });
 const holderCharterResult = t.Object({ profile: t.Literal('holder-charter-v1'), charter: native,
   revision: native, rule: t.String(), threshold: t.Nullable(t.Number()),
   aggregation: t.String(), digest });
@@ -78,6 +85,9 @@ export const openApiOperations = {
   '/v1/polls/{poll}/holder-charters/{entitlement}': { get: { bearer: true } },
   '/v1/polls/{poll}/representative-policies': { post: { bearer: true, idempotencyKey: true } },
   '/v1/polls/{poll}/ballots': { post: { bearer: true, idempotencyKey: true } },
+  '/v1/polls/{poll}/ballot-invalidations': { post: { bearer: true, idempotencyKey: true } },
+  '/v1/polls/{poll}/proxies': { post: { bearer: true, idempotencyKey: true } },
+  '/v1/polls/{poll}/proxies/{seat}': { get: { bearer: true } },
   '/v1/polls/{poll}/ballots/{seat}': { get: { bearer: true } },
   '/v1/polls/{poll}/mandate-approvals': { post: { bearer: true, idempotencyKey: true } },
 } as const;
@@ -130,7 +140,9 @@ export function pollRoutes(work: MainWorkDependencies) {
           abstention: t.Union([t.Literal('counts'), t.Literal('excluded')]),
           passNumerator: t.Integer({ minimum: 1, maximum: 1_000_000 }),
           passDenominator: t.Integer({ minimum: 1, maximum: 1_000_000 }),
-          invalidation: t.Union([t.Literal('none'), t.Literal('declared')]) }, { additionalProperties: false }),
+          invalidation: t.Union([t.Literal('none'), t.Literal('declared')]),
+          proxy: t.Optional(t.Union([t.Literal('disabled'), t.Literal('one-hop')])),
+          holderOverride: t.Optional(t.Boolean()) }, { additionalProperties: false }),
         question: t.Object({ text: t.String({ minLength: 1, maxLength: 500 }),
           language: t.String({ minLength: 2, maxLength: 32 }) }, { additionalProperties: false }),
         options: t.Array(t.Object({ key: t.String({ pattern: '^[a-z0-9]+(-[a-z0-9]+)*$' }),
@@ -139,6 +151,9 @@ export function pollRoutes(work: MainWorkDependencies) {
         entitlements: t.Array(t.Object({ holder: native, seatClass,
           units: t.Integer({ minimum: 1, maximum: 1_000_000 }) },
         { additionalProperties: false }), { minItems: 1, maxItems: 1000 }),
+        proposal: t.Optional(t.Object({ proposal: native, effectDigest: digest, effectTarget: native,
+          effectCapability: t.String({ pattern: '^[a-z][a-z0-9-]*(\\.[a-z][a-z0-9-]*)+$' }),
+          expectedTargetState: digest }, { additionalProperties: false })),
       }, { additionalProperties: false }),
       response: commandResponses,
     }, async ({ request, body }) => {
@@ -301,6 +316,7 @@ export function pollRoutes(work: MainWorkDependencies) {
     })
     .post('/v1/polls/:poll/ballots', { params: t.Object({ poll: uuid }),
       body: t.Object({ profile: t.Literal('ballot-v1'), seat: native, holder: native,
+        proxySubject: t.Optional(native), proxyRoute: t.Optional(native),
         representationId: uuid, approvals: t.Array(native, { maxItems: 64 }),
         ...ballotCandidate.properties }, { additionalProperties: false }),
       response: commandResponses }, async ({ request, params, body }) => {
@@ -310,6 +326,7 @@ export function pollRoutes(work: MainWorkDependencies) {
       const poll = pollIri(params.poll);
       try { return succeeded(await setBallot(vote, request, { poll, seat: body.seat,
         holder: body.holder, representationId: body.representationId,
+        proxySubject: body.proxySubject, proxyRoute: body.proxyRoute,
         approvals: body.approvals, expectedHead: body.expectedHead,
         availability: body.availability, shares: body.shares, internalPoll: body.internalPoll,
         idempotencyKey: key }), body.availability === 'cast' ? 'ballot.cast' : 'ballot.withdraw', poll); }
@@ -322,6 +339,49 @@ export function pollRoutes(work: MainWorkDependencies) {
         const ballot = await readBallot(work.environment, pollIri(params.poll), pollIri(params.seat));
         return ballot ? Response.json({ profile: 'ballot-v1', ...ballot }, { headers: noStore })
           : problem(404, 'ballot_unavailable', 'Ballot is unavailable');
+      } catch (error) { return voteError(error); }
+    })
+    .post('/v1/polls/:poll/ballot-invalidations', { params: t.Object({ poll: uuid }),
+      body: t.Object({ profile: t.Literal('ballot-invalidation-v1'), seat: native,
+        holder: native, expectedHead: native, ruleRevision: native, evidenceDigest: digest,
+        actingSubject: native, representationId: uuid, grantId: uuid },
+      { additionalProperties: false }), response: commandResponses }, async ({ request, params, body }) => {
+      const key = idempotencyKey(request), vote = deps(work);
+      if (!key) return problem(400, 'invalid_idempotency_key', 'A valid Idempotency-Key header is required');
+      if (!vote) return problem(503, 'vote_owner_unavailable', 'Vote owner is unavailable');
+      const poll = pollIri(params.poll);
+      try { return succeeded(await invalidateBallot(vote, request, { poll, seat: body.seat,
+        holder: body.holder, expectedHead: body.expectedHead, ruleRevision: body.ruleRevision,
+        evidenceDigest: body.evidenceDigest, actingSubject: body.actingSubject,
+        representationId: body.representationId, grantId: body.grantId,
+        idempotencyKey: key }), 'ballot.invalidate', poll); }
+      catch (error) { return voteError(error); }
+    })
+    .post('/v1/polls/:poll/proxies', { params: t.Object({ poll: uuid }),
+      body: t.Object({ profile: t.Literal('ballot-proxy-v1'), action: t.Union([
+        t.Literal('designate'), t.Literal('revoke')]), seat: native, holder: native,
+        proxy: native, expectedHead: t.Nullable(native), representationId: uuid },
+      { additionalProperties: false }), response: commandResponses }, async ({ request, params, body }) => {
+      const key = idempotencyKey(request), vote = deps(work);
+      if (!key) return problem(400, 'invalid_idempotency_key', 'A valid Idempotency-Key header is required');
+      if (!vote) return problem(503, 'vote_owner_unavailable', 'Vote owner is unavailable');
+      const poll = pollIri(params.poll);
+      const operation = body.action === 'designate' ? 'proxy.designate' : 'proxy.revoke';
+      try { return succeeded(await changeProxyRoute(vote, request, { poll,
+        seat: body.seat, holder: body.holder, proxy: body.proxy, expectedHead: body.expectedHead,
+        representationId: body.representationId, idempotencyKey: key }, operation), operation, poll); }
+      catch (error) { return voteError(error); }
+    })
+    .get('/v1/polls/:poll/proxies/:seat', { params: t.Object({ poll: uuid, seat: uuid }),
+      response: { 200: t.Object({ profile: t.Literal('ballot-proxy-v1'), route: native,
+        revision: native, holder: native, proxy: native,
+        sourceEntitlement: native, state: t.Union([t.Literal('active'), t.Literal('revoked')]) }),
+        ...authorizedReadProblems } }, async ({ request, params }) => {
+      try {
+        await work.account.verify(request, ['vote:read']);
+        const route = await readProxyRoute(work.environment, pollIri(params.poll), pollIri(params.seat));
+        return route ? Response.json({ profile: 'ballot-proxy-v1', ...route }, { headers: noStore })
+          : problem(404, 'proxy_route_unavailable', 'Proxy route is unavailable');
       } catch (error) { return voteError(error); }
     })
     .post('/v1/polls/:poll/mandate-approvals', { params: t.Object({ poll: uuid }),

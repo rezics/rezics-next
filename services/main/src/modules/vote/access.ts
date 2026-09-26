@@ -24,6 +24,7 @@ export interface VoteAuthority {
   actingSubject: string;
   representationId: string;
   holder?: string;
+  proxySubject?: string;
   seat?: string;
   sourceEntitlement?: string;
   grantId?: string;
@@ -204,8 +205,9 @@ export class AccessVotes {
     const action = voteOperationAction[authority.operation];
     const scope = pollScopeId(authority.poll);
     const bodyPath = action === 'governance.poll.administer' || action === 'governance.ballot.invalidate';
-    if (!bodyPath && authority.actingSubject !== authority.holder) {
-      throw new AdmissionDenied('a holder operation acts as the seat holder');
+    const proxyPath = !!authority.proxySubject && action === 'governance.ballot.operate';
+    if (!bodyPath && authority.actingSubject !== (proxyPath ? authority.proxySubject : authority.holder)) {
+      throw new AdmissionDenied('a vote operation must act as its admitted holder or proxy');
     }
     const client = await this.connect();
     try {
@@ -275,12 +277,14 @@ export class AccessVotes {
         action, key, requestDigest, gate.authority_epoch, validUntil])).rows[0];
       if (!inserted) throw new AdmissionDenied('authority expired during admission');
       await client.query(`INSERT INTO access.vote_admission (admission_id, operation, poll, body_subject,
-          holder_subject, seat, source_entitlement, authority_path, representation_id,
+          holder_subject, proxy_subject, seat, source_entitlement, authority_path, representation_id,
           representation_generation, grant_id, grant_generation, policy_id, policy_revision,
           principal_epoch, acting_subject_generation, candidate_digest, expected_head)
-        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)`,
-      [inserted.id, authority.operation, authority.poll, authority.body, bodyPath ? null : authority.holder,
-        authority.seat ?? null, authority.sourceEntitlement ?? null, bodyPath ? 'body-grant' : 'holder-mandate',
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)`,
+      [inserted.id, authority.operation, authority.poll, authority.body,
+        authority.operation === 'ballot.invalidate' || !bodyPath ? authority.holder : null,
+        authority.proxySubject ?? null, authority.seat ?? null, authority.sourceEntitlement ?? null,
+        bodyPath ? 'body-grant' : proxyPath ? 'proxy-mandate' : 'holder-mandate',
         mandate.id, mandate.generation, grant?.id ?? null, grant?.generation ?? null,
         policy?.id ?? null, policy?.revision ?? null, identity.enforcement_epoch, mandate.subject_generation,
         authority.candidateDigest, authority.expectedHead]);

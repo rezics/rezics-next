@@ -32,18 +32,22 @@ export const optionRoleTerm: Record<OptionRole, string> = { approve: 'ApproveOpt
 export interface PollView {
   poll: string; body: string; state: PollState;
   electorateCharter: string; question: string; snapshot: string | null; opening: string | null;
+  proposal: string | null; proposalRevision: string | null;
   issuedUnits: number | null; entitlementCount: number | null;
   seatCount: number | null; countedUnits: number | null; closesAt: string | null;
   charter: { allocation: boolean; admittedSeatClasses: SeatClass[]; unitScale: number;
     countingUnit: string; quorumThreshold: number; abstention: string;
+    ruleRevision: string; invalidation: string;
+    proxy: 'disabled' | 'one-hop'; holderOverride: boolean;
     passNumerator: number; passDenominator: number; digest: string };
   options: { option: string; key: string; role: OptionRole }[];
 }
 
 export async function readPoll(env: WorkActivationEnvironment, poll: string): Promise<PollView> {
   const result = await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?body ?state ?charter ?question ?snapshot
+    ?proposal ?proposalRevision
     ?opening ?issued ?count ?seats ?counted ?closes ?allocation ?scale ?unit ?quorum ?abstention
-    ?passNumerator ?passDenominator ?digest
+    ?passNumerator ?passDenominator ?digest ?ruleRevision ?invalidation ?proxy ?override
     (GROUP_CONCAT(DISTINCT STR(?class); separator=" ") AS ?classes)
     (GROUP_CONCAT(DISTINCT CONCAT(STR(?option), "|", ?key, "|", STR(?role)); separator=" ") AS ?options)
     WHERE {
@@ -53,15 +57,21 @@ export async function readPoll(env: WorkActivationEnvironment, poll: string): Pr
       ?charter rv:allocationPolicy ?allocation ; rv:unitScale ?scale ; rv:countingUnit ?unit ;
         rv:quorumThreshold ?quorum ; rv:abstentionPolicy ?abstention ;
         rv:passNumerator ?passNumerator ; rv:passDenominator ?passDenominator ;
-        rv:charterDigest ?digest ;
+        rv:charterDigest ?digest ; rv:ruleRevision ?ruleRevision ;
+        rv:invalidationPolicy ?invalidation ; rv:proxyPolicy ?proxy ;
+        rv:holderOverridePolicy ?override ;
         rv:admittedSeatClass ?class .
       ?option a rv:PollOption ; rv:questionRevision ?question ; rv:optionKey ?key ; rv:optionRole ?role . }
     OPTIONAL { GRAPH ${iri(CURRENT)} { ${iri(poll)} rv:electorateSnapshot ?snapshot }
       GRAPH ${iri(REVISIONS)} { ?snapshot rv:issuedUnits ?issued ; rv:entitlementCount ?count } }
     OPTIONAL { GRAPH ${iri(CURRENT)} { ${iri(poll)} rv:pollOpening ?opening }
       GRAPH ${iri(REVISIONS)} { ?opening rv:seatCount ?seats ; rv:countedUnits ?counted ; rv:closesAt ?closes } }
+    OPTIONAL { GRAPH ${iri(CURRENT)} { ${iri(poll)} rv:proposalRevision ?proposalRevision }
+      GRAPH ${iri(REVISIONS)} { ?proposalRevision rv:proposal ?proposal } }
   } GROUP BY ?body ?state ?charter ?question ?snapshot ?opening ?issued ?count ?seats ?counted ?closes
-    ?allocation ?scale ?unit ?quorum ?abstention ?passNumerator ?passDenominator ?digest`);
+    ?proposal ?proposalRevision
+    ?allocation ?scale ?unit ?quorum ?abstention ?passNumerator ?passDenominator ?digest
+    ?ruleRevision ?invalidation ?proxy ?override`);
   const rows = result.results?.bindings ?? [];
   const row = rows[0];
   const state = states[local(row?.state?.value) ?? ''];
@@ -69,12 +79,16 @@ export async function readPoll(env: WorkActivationEnvironment, poll: string): Pr
   const number = (name: string) => row[name] ? Number(row[name]!.value) : null;
   return { poll, body: row.body!.value, state, electorateCharter: row.charter!.value,
     question: row.question!.value, snapshot: row.snapshot?.value ?? null, opening: row.opening?.value ?? null,
+    proposal: row.proposal?.value ?? null, proposalRevision: row.proposalRevision?.value ?? null,
     issuedUnits: number('issued'), entitlementCount: number('count'), seatCount: number('seats'),
     countedUnits: number('counted'), closesAt: row.closes?.value ?? null,
     charter: { allocation: local(row.allocation?.value) === 'ExplicitSeatAllocation',
       admittedSeatClasses: row.classes!.value.split(' ').map(value => classes[local(value) ?? '']!).sort(),
       unitScale: Number(row.scale!.value), countingUnit: local(row.unit!.value)!,
       quorumThreshold: Number(row.quorum!.value), abstention: local(row.abstention!.value)!,
+      ruleRevision: row.ruleRevision!.value, invalidation: local(row.invalidation!.value)!,
+      proxy: local(row.proxy?.value) === 'OneHopProxy' ? 'one-hop' : 'disabled',
+      holderOverride: local(row.override?.value) === 'HolderOverrideAllowed',
       passNumerator: Number(row.passNumerator!.value), passDenominator: Number(row.passDenominator!.value),
       digest: row.digest!.value },
     options: row.options!.value.split(' ').map(entry => {
@@ -114,6 +128,47 @@ export async function readSeat(env: WorkActivationEnvironment, poll: string, sea
 export const holderCharterComponent = (poll: string, entitlement: string) =>
   voteId('holder-charter', poll, entitlement);
 
+export const proxyRouteComponent = (poll: string, seat: string) => voteId('proxy-route', poll, seat);
+
+export interface ProxyRouteView { route: string; revision: string; holder: string; proxy: string;
+  state: 'active' | 'revoked'; sourceEntitlement: string }
+
+export async function readProxyRoute(env: WorkActivationEnvironment, poll: string,
+  seat: string): Promise<ProxyRouteView | null> {
+  const route = proxyRouteComponent(poll, seat);
+  const result = await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?head ?holder ?proxy ?state ?root WHERE {
+    GRAPH ${iri(CURRENT)} { ${iri(route)} a rv:ProxyRoute ; rv:poll ${iri(poll)} ;
+      rv:seat ${iri(seat)} ; rv:sourceEntitlement ?root ; rv:proxyHolder ?proxy ;
+      rv:routeHead ?head . }
+    GRAPH ${iri(REVISIONS)} { ?head a rv:ProxyRouteRevision ; rv:routeState ?state .
+      ${iri(seat)} rv:holder ?holder . }
+  } LIMIT 2`);
+  const rows = result.results?.bindings ?? [];
+  if (!rows.length) return null;
+  const row = rows[0]!;
+  if (rows.length !== 1 || !row.head || !row.proxy || !row.state || !row.root) {
+    throw new VoteUnavailable('proxy route is unavailable');
+  }
+  return { route, revision: row.head.value, holder: row.holder?.value ?? '',
+    proxy: row.proxy.value, state: local(row.state.value) === 'RouteActive' ? 'active' : 'revoked',
+    sourceEntitlement: row.root.value };
+}
+
+export async function activeProxyRoutes(env: WorkActivationEnvironment,
+  poll: string): Promise<ProxyRouteView[]> {
+  const result = await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?route ?seat ?root ?holder ?proxy ?head WHERE {
+    GRAPH ${iri(CURRENT)} { ?route a rv:ProxyRoute ; rv:poll ${iri(poll)} ; rv:seat ?seat ;
+      rv:sourceEntitlement ?root ; rv:proxyHolder ?proxy ; rv:routeHead ?head . }
+    GRAPH ${iri(REVISIONS)} { ?head rv:routeState rv:RouteActive .
+      ?seat rv:holder ?holder . }
+  } LIMIT 1001`);
+  const rows = result.results?.bindings ?? [];
+  if (rows.length > 1000) throw new VoteUnavailable('too many proxy routes');
+  return rows.map(row => ({ route: row.route!.value, revision: row.head!.value,
+    holder: row.holder!.value, proxy: row.proxy!.value, state: 'active' as const,
+    sourceEntitlement: row.root!.value }));
+}
+
 export interface HolderCharterView {
   charter: string; revision: string; rule: MandateRule; threshold: number | null;
   aggregation: Aggregation; digest: string;
@@ -142,7 +197,8 @@ export const ballotComponent = (poll: string, seat: string) => voteId('ballot', 
 
 export interface BallotView {
   ballot: string; revision: string; predecessor: string | null;
-  availability: 'cast' | 'withdrawn'; countedUnits: number; digest: string;
+  availability: 'cast' | 'withdrawn' | 'invalidated'; countedUnits: number; digest: string;
+  castRoute: 'holder' | 'proxy' | 'override'; proxyRoute: string | null;
   shares: { option: string; units: number }[];
 }
 
@@ -152,14 +208,17 @@ export async function readBallot(env: WorkActivationEnvironment, poll: string, s
   const ballot = ballotComponent(poll, seat);
   const target = revision ? iri(revision) : '?revision';
   const result = await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?revision ?predecessor ?availability
-    ?units ?digest (GROUP_CONCAT(CONCAT(STR(?option), "|", STR(?shareUnits)); separator=" ") AS ?shares) WHERE {
+    ?units ?digest ?castRoute ?proxyRoute
+    (GROUP_CONCAT(CONCAT(STR(?option), "|", STR(?shareUnits)); separator=" ") AS ?shares) WHERE {
     ${revision ? '' : `GRAPH ${iri(CURRENT)} { ${iri(ballot)} a rv:Ballot ; rv:ballotHead ?revision }`}
     GRAPH ${iri(REVISIONS)} { ${target} a rv:BallotRevision ; rv:ballot ${iri(ballot)} ;
-        rv:ballotAvailability ?availability ; rv:countedUnits ?units ; rv:ballotDigest ?digest .
+        rv:ballotAvailability ?availability ; rv:countedUnits ?units ; rv:ballotDigest ?digest ;
+        rv:castRoute ?castRoute .
       ${revision ? `BIND(${iri(revision)} AS ?revision)` : ''}
       OPTIONAL { ${target} rv:predecessor ?predecessor }
+      OPTIONAL { ${target} rv:proxyRoute ?proxyRoute }
       OPTIONAL { ?share rv:ballotRevision ${target} ; rv:option ?option ; rv:shareUnits ?shareUnits } }
-  } GROUP BY ?revision ?predecessor ?availability ?units ?digest`);
+  } GROUP BY ?revision ?predecessor ?availability ?units ?digest ?castRoute ?proxyRoute`);
   const rows = result.results?.bindings ?? [];
   if (!rows.length || !rows[0]?.revision) return null;
   const row = rows[0];
@@ -168,8 +227,12 @@ export async function readBallot(env: WorkActivationEnvironment, poll: string, s
     return { option: option!, units: Number(units) };
   }).sort((a, b) => a.option.localeCompare(b.option)) : [];
   return { ballot, revision: row.revision.value, predecessor: row.predecessor?.value ?? null,
-    availability: local(row.availability!.value) === 'BallotCast' ? 'cast' : 'withdrawn',
-    countedUnits: Number(row.units!.value), digest: row.digest!.value, shares };
+    availability: local(row.availability!.value) === 'BallotCast' ? 'cast'
+      : local(row.availability!.value) === 'BallotInvalidated' ? 'invalidated' : 'withdrawn',
+    countedUnits: Number(row.units!.value), digest: row.digest!.value,
+    castRoute: local(row.castRoute?.value) === 'ProxyCast' ? 'proxy'
+      : local(row.castRoute?.value) === 'HolderOverride' ? 'override' : 'holder',
+    proxyRoute: row.proxyRoute?.value ?? null, shares };
 }
 
 /** Distinct approver slots among the listed approvals that bind this exact candidate. */
@@ -193,13 +256,16 @@ export interface ResolutionView {
   resolution: string;
   outcome: 'adopted' | 'rejected' | 'no-quorum';
   winningOption: string | null;
+  proposalRevision: string | null; effectDigest: string | null;
 }
 
 export async function readResolution(env: WorkActivationEnvironment, poll: string): Promise<ResolutionView | null> {
-  const result = await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?resolution ?outcome ?winner WHERE {
+  const result = await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?resolution ?outcome ?winner
+    ?proposalRevision ?effectDigest WHERE {
     GRAPH ${iri(CURRENT)} { ${iri(poll)} rv:pollState rv:PollFinalized ; rv:pollResolution ?resolution }
     GRAPH ${iri(REVISIONS)} { ?resolution a rv:PollResolution ; rv:poll ${iri(poll)} ;
-      rv:resolutionOutcome ?outcome . OPTIONAL { ?resolution rv:winningOption ?winner } }
+      rv:resolutionOutcome ?outcome . OPTIONAL { ?resolution rv:winningOption ?winner }
+      OPTIONAL { ?resolution rv:proposalRevision ?proposalRevision ; rv:effectDigest ?effectDigest } }
   } LIMIT 2`);
   const rows = result.results?.bindings ?? [];
   if (!rows.length) return null;
@@ -211,7 +277,8 @@ export async function readResolution(env: WorkActivationEnvironment, poll: strin
     ResolutionNoQuorum: 'no-quorum' } as const;
   const outcome = outcomes[local(row.outcome!.value) as keyof typeof outcomes];
   if (!outcome) throw new VoteUnavailable('poll resolution outcome is unavailable');
-  return { resolution: row.resolution!.value, outcome, winningOption: row.winner?.value ?? null };
+  return { resolution: row.resolution!.value, outcome, winningOption: row.winner?.value ?? null,
+    proposalRevision: row.proposalRevision?.value ?? null, effectDigest: row.effectDigest?.value ?? null };
 }
 
 /** Replayable tally: current ballot heads under the frozen opening; approvals never count. */

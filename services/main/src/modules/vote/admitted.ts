@@ -7,10 +7,12 @@ import { type AccessVotes, type PolicyRole, type VoteAdmission, type VoteAuthori
 import { type AllocationIntent, type BallotIntent, type HolderCharterIntent, type PreparePollIntent,
   approvalIri, checkBallot, checkHolderCharter, checkPreparePoll, classifyBallotGuard, dispatchAllocation,
   dispatchApproval, dispatchBallot, dispatchClosePoll, dispatchFinalizePoll, dispatchHolderCharter, dispatchOpenPoll,
-  dispatchPreparePoll, holderCharterDigest, planAllocation, type BallotCandidate, type BallotContext } from './commands.ts';
+  dispatchPreparePoll, dispatchInvalidateBallot, dispatchProxyRoute, checkProxyRoute,
+  holderCharterDigest, planAllocation, type BallotCandidate, type BallotContext,
+  type InvalidateBallotIntent, type ProxyIntent } from './commands.ts';
 import { PendingVoteWork, VoteConflict, VoteRejected, VoteStale, VoteUnavailable, checkedVoteReceipt, digestOf,
   readVoteReceipt, sealVoteTerminal, type VoteReceipt } from './graph.ts';
-import { countApprovals, readPoll, readSeat } from './read.ts';
+import { countApprovals, readBallot, readPoll, readSeat } from './read.ts';
 import type { VoteOperation } from './schema.ts';
 
 /**
@@ -26,7 +28,8 @@ export interface VoteDependencies {
   votes: AccessVotes;
 }
 
-export const VOTE_SCOPES = { cast: ['vote:cast'], manage: ['vote:manage'], read: ['vote:read'] } as const;
+export const VOTE_SCOPES = { cast: ['vote:cast'], manage: ['vote:manage'], read: ['vote:read'],
+  invalidate: ['vote:invalidate'] } as const;
 
 export interface AdmittedVote { admission: VoteAdmission; receipt: VoteReceipt; principal: VerifiedPrincipal }
 
@@ -171,6 +174,31 @@ export async function activateAllocation(deps: VoteDependencies, request: Reques
   });
 }
 
+export async function changeProxyRoute(deps: VoteDependencies, request: Request,
+  input: ProxyIntent & Omit<MandateRequest, 'actingSubject'>,
+  operation: 'proxy.designate' | 'proxy.revoke'): Promise<AdmittedVote> {
+  const { idempotencyKey, representationId, ...intent } = input;
+  const digest = digestOf({ operation, intent, representationId });
+  const prior = await recoverExisting(deps, request, VOTE_SCOPES.manage, operation,
+    intent.poll, intent.holder, idempotencyKey, digest);
+  if (prior) return prior;
+  const env = deps.environment;
+  const { poll, seat } = await checkProxyRoute(env, intent, operation);
+  return admitted(deps, request, VOTE_SCOPES.manage, async () => ({ operation,
+    poll: intent.poll, body: poll.body, actingSubject: intent.holder, holder: intent.holder,
+    proxySubject: intent.proxy, seat: intent.seat, sourceEntitlement: seat.sourceEntitlement,
+    representationId, candidateDigest: digestOf(intent), expectedHead: intent.expectedHead }),
+  idempotencyKey, digest,
+  admission => dispatchProxyRoute(env, admission, intent, operation, poll, seat), async () => {
+    try { await checkProxyRoute(env, intent, operation); return 'proxy_route_guard_failed'; }
+    catch (error) {
+      if (error instanceof VoteStale) return 'stale-head';
+      if (error instanceof VoteRejected) return error.code;
+      throw error;
+    }
+  });
+}
+
 export async function changePollState(deps: VoteDependencies, request: Request,
   input: BodyRequest & { poll: string; closesAt?: string },
   operation: 'poll.open' | 'poll.close' | 'resolution.finalize'): Promise<AdmittedVote> {
@@ -205,7 +233,7 @@ export async function setBallot(deps: VoteDependencies, request: Request,
   const digest = digestOf({ operation: 'ballot', intent, representationId });
   const operation = intent.availability === 'cast' ? 'ballot.cast' : 'ballot.withdraw';
   const prior = await recoverExisting(deps, request, VOTE_SCOPES.cast, operation,
-    intent.poll, intent.holder, idempotencyKey, digest);
+    intent.poll, intent.proxySubject ?? intent.holder, idempotencyKey, digest);
   if (prior) return prior;
   const env = deps.environment;
   if (intent.approvals.length > 64) throw new VoteRejected('too_many_approvals');
@@ -219,8 +247,10 @@ export async function setBallot(deps: VoteDependencies, request: Request,
   } else if (intent.approvals.length) throw new VoteRejected('approvals_not_chartered');
   return admitted(deps, request, VOTE_SCOPES.cast, async () => ({
     operation, poll: intent.poll, body,
-    actingSubject: intent.holder, holder: intent.holder, seat: intent.seat,
-    sourceEntitlement: context.seat.sourceEntitlement, representationId, policyRoles: policyRoles(context),
+    actingSubject: intent.proxySubject ?? intent.holder, holder: intent.holder,
+    proxySubject: intent.proxySubject, seat: intent.seat,
+    sourceEntitlement: context.seat.sourceEntitlement, representationId,
+    policyRoles: intent.proxySubject ? undefined : policyRoles(context),
     candidateDigest: context.candidateDigest, expectedHead: intent.expectedHead }), idempotencyKey, digest,
   admission => dispatchBallot(env, admission, intent, context), async () => classifyBallotGuard(env, intent));
 }
@@ -249,4 +279,32 @@ export async function approveBallot(deps: VoteDependencies, request: Request,
       context.candidateDigest)) return 'duplicate_approval';
     return classifyBallotGuard(env, intent);
   });
+}
+
+export async function invalidateBallot(deps: VoteDependencies, request: Request,
+  input: InvalidateBallotIntent & BodyRequest): Promise<AdmittedVote> {
+  const { idempotencyKey, actingSubject, representationId, grantId, ...intent } = input;
+  const digest = digestOf({ operation: 'ballot.invalidate', intent, actingSubject, representationId, grantId });
+  const prior = await recoverExisting(deps, request, VOTE_SCOPES.invalidate, 'ballot.invalidate',
+    intent.poll, actingSubject, idempotencyKey, digest);
+  if (prior) return prior;
+  const env = deps.environment;
+  const poll = await readPoll(env, intent.poll);
+  if (poll.state !== 'open' || poll.charter.invalidation !== 'DeclaredInvalidationDecision') {
+    throw new VoteRejected('ballot_invalidation_not_declared');
+  }
+  if (poll.charter.ruleRevision !== intent.ruleRevision
+    || !/^[0-9a-f]{64}$/.test(intent.evidenceDigest)) throw new VoteRejected('invalidation_basis_mismatch');
+  const seat = await readSeat(env, intent.poll, intent.seat);
+  if (!seat.counted || seat.holder !== intent.holder) throw new VoteRejected('not_seat_holder');
+  const ballot = await readBallot(env, intent.poll, intent.seat);
+  if (ballot?.revision !== intent.expectedHead) throw new VoteStale('ballot head is stale');
+  if (ballot.availability !== 'cast') throw new VoteRejected('ballot_not_cast');
+  return admitted(deps, request, VOTE_SCOPES.invalidate, async () => ({
+    operation: 'ballot.invalidate', poll: intent.poll, body: poll.body, actingSubject,
+    holder: intent.holder, seat: intent.seat, sourceEntitlement: seat.sourceEntitlement,
+    representationId, grantId, candidateDigest: digestOf(intent), expectedHead: intent.expectedHead,
+  }), idempotencyKey, digest,
+  admission => dispatchInvalidateBallot(env, admission, intent, poll), async () =>
+    classifyBallotGuard(env, intent));
 }

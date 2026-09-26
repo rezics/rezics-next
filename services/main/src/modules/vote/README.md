@@ -29,10 +29,25 @@ one candidate and one principal counting slot. Tally reads current ballot heads
 and their shares, O(current ballots + current shares). The governance workload
 check remains an integration-wave task.
 
+Invalidation reads one current ballot and its seat, then appends one decision
+and a zero-unit successor. Proxy designation reads at most 1,001 active routes
+to reject chains and cycles; opening freezes at most 1,000 route revisions and
+guards every frozen head in its atomic graph command. Casting reads one current
+route and requires the opening's frozen route revision. Revocation preserves the
+frozen opening and blocks later proxy writes. These bounded operations are
+O(active routes) for designation/opening and O(1) for a ballot or revocation.
+The integration template checks stale invalidation, route replay and cycle,
+late designation, holder override and revoked proxy use.
+
+An optional proposal revision is created with poll preparation, and finalization
+binds its exact effect digest to the resolution. The owner still needs a concrete
+target capability executor before a proposal can apply its effect; recording an
+execution without changing the target would be incorrect.
+
 `tests/qa/integration/poll-template.test.ts` exercises the real Access and Jena
 write/read path, lost-seal recovery, allocation/opening races, ballot replacement,
 independent approvals and internal resolution aggregation. Account requires the
-separate `vote:manage`, `vote:cast` and `vote:read` scopes.
+separate `vote:manage`, `vote:cast`, `vote:invalidate` and `vote:read` scopes.
 
 `outbox-event.ts` registers exact vote event classes for the relay. Success
 handlers make one bounded graph read to match the event, receipt, operation and

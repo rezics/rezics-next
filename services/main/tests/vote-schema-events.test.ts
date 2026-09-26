@@ -7,12 +7,14 @@ import { receiptFamilies } from '../src/modules/vote/receipt-family.ts';
 import { RV, hash } from '../src/modules/work/activate.ts';
 
 test('GOV11/GOV22: vote scopes and receipt event classes are owner-discovered', async () => {
-  expect(oauthScopes).toEqual(['vote:manage', 'vote:cast', 'vote:read']);
+  expect(oauthScopes).toEqual(['vote:manage', 'vote:cast', 'vote:invalidate', 'vote:read']);
   for (const scope of oauthScopes) expect(resourceScopes).toContain(scope);
-  expect(VOTE_SCOPES).toEqual({ cast: ['vote:cast'], manage: ['vote:manage'], read: ['vote:read'] });
+  expect(VOTE_SCOPES).toEqual({ cast: ['vote:cast'], invalidate: ['vote:invalidate'],
+    manage: ['vote:manage'], read: ['vote:read'] });
   const kinds = [
     'PollPreparedEvent', 'HolderCharterChangedEvent', 'AllocationActivatedEvent',
     'PollOpenedEvent', 'PollClosedEvent', 'PollFinalizedEvent', 'BallotChangedEvent',
+    'BallotInvalidatedEvent', 'ProxyDesignatedEvent', 'ProxyRevokedEvent',
     'MandateApprovalRecordedEvent', 'VotePollCancelledEvent', 'VoteSeatCancelledEvent',
     'VoteBallotCancelledEvent', 'VoteInvalidationCancelledEvent',
   ];
