@@ -561,6 +561,15 @@ one hour to the 13:57:20 UTC target and no measured full-case completion rate,
 the target is forecast to miss and a later finish timestamp is not defensible.
 Reconcile by 13:27 UTC or immediately on handoff, blocker or failure.
 
+**WORK02 acceptance assembly, 2026-09-26 13:00 UTC.** The complete-case
+declaration now requires the real same-language native-variant and independent
+translated-Work integrations plus retained empty-graph recovery. The existing
+fault fixture includes native Contribution publication and an admitted
+MainVersion revision; the outdated pending/mock description was corrected.
+The 16 affected coverage units and backend static checks pass. The three owner
+tests await selected execution on current merged source after G-035 releases
+the shared QA stack, so WORK02 does not enter the 25-case candidate set yet.
+
 **30-minute checkpoint, 2026-09-26 11:57 UTC, reconciled at 11:58.** The Goal
 remains active under one manager, and Docker Desktop engine 29.7.2 is reachable.
 G-030 is the sole live worker on its isolated worktree, explicitly pinned to

@@ -134,6 +134,19 @@ const completeCases: Record<string, readonly TestIdentity[]> = {
     file: 'apps/web/tests/authenticated-create.e2e.ts',
     name: 'WORK01: authenticated member creates a metadata-only Work with an empty Main Version',
   }],
+  WORK02: [{
+    tier: 'integration',
+    file: 'tests/qa/integration/native-variants.test.ts',
+    name: 'WORK02: two same-language native variants keep one Main spine and sparse reader choice',
+  }, {
+    tier: 'integration',
+    file: 'tests/qa/integration/translated-work-links.test.ts',
+    name: 'WORK02: independent translated Works retain exact and unresolved source provenance',
+  }, {
+    tier: 'fault/recovery',
+    file: 'tests/qa/fault-recovery/translated-work-recovery.test.ts',
+    name: 'WORK02/OPS03: isolated graph loss restores exact translated Work links from retained events',
+  }],
   WORK03: [{
     tier: 'integration',
     file: 'tests/qa/integration/public-selection-oracle.test.ts',

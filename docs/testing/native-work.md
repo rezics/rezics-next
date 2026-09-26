@@ -61,8 +61,11 @@ and unresolved third-party provenance, a duplicate receipt, and rejected
 missing or altered authority. The isolated WORK02/OPS03 fault test now rebuilds
 three admitted Works and both links from an empty graph snapshot using retained
 relay and Access state, then checks duplicate replay and missing/corrupt evidence.
-Its native execution remains pending; the existing later-target-revision test is
-mocked until an admitted MainVersion revision command exists.
+It executes native Contribution publication and an admitted MainVersion revision,
+then restores the exact links and selected revision from retained relay and
+Access evidence. WORK02 complete-case coverage requires both real integration
+fixtures and this recovery fixture in one full run; selected checks on the
+current merged source are pending.
 
 The WORK04 integration case creates four distinct Works through the real graph
 command and records adaptation, new-recording and software-fork declarations
