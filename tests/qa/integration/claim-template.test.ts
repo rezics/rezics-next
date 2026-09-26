@@ -89,7 +89,8 @@ test('FACT01/FACT02/FACT03/FACT04/FACT06: claim verification preserves origin, h
     const key = `claim-${randomUUID()}`;
     loseGraphResponse = true;
     const createdResponse = await call('POST', '/v1/claims', intent, key);
-    const created = await createdResponse.json() as { claim?: { claim: string; revision: string }; operationId?: string };
+    const created = await createdResponse.json() as { claim?: { claim: string; revision: string };
+      operationId?: string; sourcePosition: { dataEpoch: string; sequence: string } };
     if (createdResponse.status !== 201) console.error('claim create', createdResponse.status, created);
     expect(createdResponse.status).toBe(201);
     expect(loseGraphResponse).toBe(false);
@@ -581,10 +582,13 @@ test('FACT01/FACT02/FACT03/FACT04/FACT06: claim verification preserves origin, h
       `/v1/claims/${short(created.claim!.claim)}/assessments/${short(currentAssessment.assessment.assessment)}`);
     expect((await retainedSupported.json() as { assessment: { support: string } }).assessment.support).toBe('supported');
 
-    let cursor = '0';
+    // Start at this claim's retained position. Earlier files may already have
+    // filled the shared QA graph with more than one page of unrelated batches.
+    expect(created.sourcePosition.dataEpoch).toBe(apps.MAIN_DATA_EPOCH);
+    let cursor = (BigInt(created.sourcePosition.sequence) - 1n).toString();
     const eventTypes: string[] = [];
     for (let page = 0; page < 24; page++) {
-      const batch = await readNextMainOutboxBatch(fuseki, apps.MAIN_DATA_EPOCH!, cursor);
+      const batch = await readNextMainOutboxBatch(fuseki, created.sourcePosition.dataEpoch, cursor);
       if (!batch) break;
       for (const eventId of batch.eventIds) {
         eventTypes.push((await readMainOutboxEnvelope(fuseki, batch, eventId)).type);
