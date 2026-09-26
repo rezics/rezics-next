@@ -1,10 +1,13 @@
 import { spawnSync } from 'node:child_process';
 
-/** Match stack:up's Docker selection before inspecting its containers. */
+/** Match stack:up's Docker selection before inspecting its containers. Docker
+ * Desktop 4.90.0 exits 0 with an empty version while its engine is down. */
 export function loadDockerEnvironment(env: NodeJS.ProcessEnv = process.env,
-  probe: (candidate: NodeJS.ProcessEnv) => boolean = candidate =>
-    spawnSync('docker', ['info', '--format', '{{.ServerVersion}}'],
-      { env: candidate, encoding: 'utf8', timeout: 10_000 }).status === 0): NodeJS.ProcessEnv {
+  probe: (candidate: NodeJS.ProcessEnv) => boolean = candidate => {
+    const info = spawnSync('docker', ['info', '--format', '{{.ServerVersion}}'],
+      { env: candidate, encoding: 'utf8', timeout: 10_000 });
+    return info.status === 0 && info.stdout.trim() !== '';
+  }): NodeJS.ProcessEnv {
   const selected = { ...env };
   if (!probe(selected)) throw new Error('Docker is unavailable; start it with `systemctl --user start docker-desktop`');
   return selected;
