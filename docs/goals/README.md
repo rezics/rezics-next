@@ -222,7 +222,9 @@ Duplicate work is prevented mechanically:
   defaults", which deletes every named volume. Results produced while the engine
   was down are void; re-run the affected checks. The engine panicked on
   2026-09-26 at 18:43 UTC during a 400,000-file volume copy under full QA load,
-  so run such bulk volume copies alone.
+  so run such bulk volume copies alone. Sharded QA stacks exhausted Docker's
+  default bridge address pools; the manager set `default-address-pools` to
+  `10.210.0.0/16` in /24 subnets in `~/.docker/daemon.json` (256 networks).
 
 ## Research
 

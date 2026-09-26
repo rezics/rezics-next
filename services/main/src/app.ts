@@ -94,6 +94,11 @@ function domainRoutes(fuseki: FusekiClient, work: SearchRouteDependencies) {
     .use(compositionRoutes(fuseki, work));
 }
 
+function extraRoutes1(fuseki: FusekiClient, work: SearchRouteDependencies) {
+  return new Elysia()
+    .use(packageModRoutes(work));
+}
+
 /** Composition root: each domain plugin under `routes/` owns its registrations. */
 export function createMainApp(fuseki: FusekiClient, work?: SearchRouteDependencies) {
   // Registered first so it also handles every plugin route mounted below.
@@ -114,29 +119,8 @@ export function createMainApp(fuseki: FusekiClient, work?: SearchRouteDependenci
       .use(identitySourceRoutes(fuseki, work))
       .use(accessSearchRoutes(fuseki, work))
       .use(contentCommunityRoutes(fuseki, work))
-      .use(domainRoutes(fuseki, work));
-      .use(operationsRoutes(work))
-      .use(actingContextRoutes(work))
-      .use(sourceRoutes(work))
-      .use(sourceRunRoutes(work))
-      .use(packageRoutes(work))
-      .use(packageModRoutes(work))
-      .use(sourceSupportRoutes(fuseki, work))
-      .use(accessAuthorityRoutes(work))
-      .use(accessMembershipRoutes(work))
-      .use(accessRoleRoutes(work))
-      .use(accessPolicyRoutes(work))
-      .use(searchRoutes(fuseki, work))
-      .use(contentRoutes(fuseki, work))
-      .use(ratingRoutes(fuseki, work))
-      .use(classificationRoutes(fuseki, work))
-      .use(spaceRoutes(fuseki, work))
-      .use(publicationRoutes(fuseki, work))
-      .use(contributionRoutes(fuseki, work))
-      .use(addressRoutes(work))
-      .use(commerceRoutes(fuseki, work))
-      .use(resourceRoutes(fuseki, work))
-      .use(workRoutes(fuseki, work));
+      .use(domainRoutes(fuseki, work))
+      .use(extraRoutes1(fuseki, work));
   }
   return app;
 }
