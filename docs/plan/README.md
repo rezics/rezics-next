@@ -138,6 +138,7 @@ log is kept in [its history](../goals/history/codex-program-2026-09-26.md).
 | [G-133](../goals/tasks/G-133.md) / WORK08 | GPT-6 Sol high: equal provider names and IDs at different grains (WORK08). | Dispatched 22:16 UTC. |
 | [G-134](../goals/tasks/G-134.md) / BOOK02/BOOK06/BOOK07/COMP01/COMP07 | GPT-6 Sol xhigh: Structure occurrences, embeds, refresh and dataset movement (split from G-107). | Dispatched 22:57 UTC. |
 | [G-135](../goals/tasks/G-135.md) / GOV01 | GPT-6 Sol high: governance reports anchor exact catalog use. | Dispatched 22:57 UTC. |
+| [G-136](../goals/tasks/G-136.md) / MODEL13 | GPT-6 Sol high: standard Statement, Annotation, Label and ListItem profiles with local fields. | Dispatched 23:33 UTC. |
 | Authority and model backlog | IAM07–IAM37 and MODEL05–MODEL27 gaps, sequenced behind required Access and semantic owner decisions. | Planned at the [operation map](backend-operations.md); create bounded briefs when interfaces stabilize. |
 | Content, Space and community backlog | CTX, WORK, RATE, GRAPH, VIEW, BOOK, RECIPE, SUB and other M01–M10 gaps. | Planned at the operation map; retain all backend assertions. |
 | Search, sources and packages backlog | SEARCH, LIVE, PKG and HUB gaps after B75, with source/owner integration and recovery. | Planned at the operation map; selected B14–B74 evidence remains partial where named. |
