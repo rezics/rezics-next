@@ -6,6 +6,8 @@ import { createAdmittedTextContribution } from '../modules/contribution/create-a
 import { readExactContributionDraft } from '../modules/contribution/history.ts';
 import { editAdmittedTextContribution } from '../modules/contribution/edit-admitted.ts';
 import { publishAdmittedTextContribution } from '../modules/contribution/publish-admitted.ts';
+import { StaleContributionDraftHead } from '../modules/contribution/edit.ts';
+import { readContributionHead } from '../modules/studio/contribution-head.ts';
 import { pendingOperation, problemResult } from '../api-contract.ts';
 import { authorizedReadProblems, contributionDraftReadResult, contributionEditWriteResult,
   contributionPublicationWriteResult, contributionWriteResult, writeProblems }
@@ -15,6 +17,27 @@ import { commandError, problem } from './problems.ts';
 
 export function contributionRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
   return new Elysia()
+    .get('/v1/contributions/:contribution', {
+      params: t.Object({ contribution: t.String({ pattern: '^[0-9a-f-]{36}$' }) }),
+      query: t.Object({ actingSubject: t.String({
+        pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$',
+      }) }, { additionalProperties: false }),
+      response: { 200: t.Object({ contribution: t.String(), work: t.String(),
+        language: t.String(), author: t.String(), draftHead: t.String(),
+        publicationHead: t.Nullable(t.String()) }), ...authorizedReadProblems },
+    }, async ({ request, params, query }) => {
+      try {
+        await assertGraphAdmissionOpen(fuseki, work.environment.lineage);
+        const principal = await work.account.verify(request, ['work:read']);
+        const contribution = `https://rezics.com/id/${params.contribution}`;
+        if (!await work.access.canReadContributionDraft(principal, query.actingSubject, contribution)) {
+          return problem(404, 'contribution_unavailable', 'Contribution is unavailable');
+        }
+        const head = await readContributionHead(work.environment, contribution);
+        if (!head) return problem(404, 'contribution_unavailable', 'Contribution is unavailable');
+        return Response.json(head, { headers: { 'cache-control': 'no-store' } });
+      } catch (error) { return commandError(error); }
+    })
     .post('/v1/contribution-publications', {
       body: t.Object({
         profile: t.Literal('text-publication-v1'),
@@ -76,7 +99,16 @@ export function contributionRoutes(fuseki: FusekiClient, work: MainWorkDependenc
             sequence: receipt.sequence }, replayed: receipt.replayed }, {
           status: 200, headers: { 'cache-control': 'no-store' },
         });
-      } catch (error) { return commandError(error); }
+      } catch (error) {
+        if (error instanceof StaleContributionDraftHead) {
+          const head = await readContributionHead(work.environment, body.contribution);
+          return Response.json({ type: 'https://rezics.com/problems/stale_head',
+            title: 'Expected Contribution draft revision is stale', status: 409,
+            code: 'stale_head', currentHead: head?.draftHead ?? null,
+          }, { status: 409, headers: { 'cache-control': 'no-store' } });
+        }
+        return commandError(error);
+      }
     })
     .post('/v1/contributions', {
       body: t.Object({

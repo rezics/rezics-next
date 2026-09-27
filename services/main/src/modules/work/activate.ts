@@ -61,6 +61,9 @@ export interface CreateMetadataWorkIntent {
   /** Trusted Access record; never populated from a browser request body. */
   admission: Pick<RegisteredAdmission, 'id' | 'scope' | 'action' | 'idempotencyKey' | 'requestDigest' | 'authorityEpoch' | 'expiresAt'>;
   title: string;
+  language?: string;
+  localizedTitle?: { value: string; language: string };
+  description?: { value: string; language: string };
   semanticTypes?: readonly string[];
 }
 
@@ -93,12 +96,26 @@ export function normalizeWorkSemanticTypes(types: readonly string[] = []): strin
 }
 
 export function metadataWorkRequestDigest(title: string,
-  semanticTypes?: readonly string[]): string {
+  semanticTypes?: readonly string[], language = 'en',
+  details: { localizedTitle?: { value: string; language: string };
+    description?: { value: string; language: string } } = {}): string {
   if (title.length < 1 || title.length > 200 || /[\u0000-\u001f\u007f]/.test(title)) {
     throw new Error('invalid title');
   }
   const types = normalizeWorkSemanticTypes(semanticTypes);
+  if (!/^[a-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$/.test(language) || language.length > 35) {
+    throw new Error('invalid title language');
+  }
+  for (const [name, value, maximum] of [['localized title', details.localizedTitle, 500],
+    ['description', details.description, 4000]] as const) {
+    if (value && (!value.value || value.value.length > maximum || /[\u0000-\u001f\u007f]/.test(value.value)
+      || !/^[a-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$/.test(value.language)
+      || value.language.length > 35)) throw new Error(`invalid ${name}`);
+  }
   return hash(JSON.stringify({ family: 'create-metadata-work-v1', title, continuity: CONTINUITY,
+    ...(language === 'en' ? {} : { language }),
+    ...(details.localizedTitle ? { localizedTitle: details.localizedTitle } : {}),
+    ...(details.description ? { description: details.description } : {}),
     ...(types.length ? { semanticTypes: types } : {}) }));
 }
 
@@ -201,7 +218,9 @@ async function throwAfterStagedCleanup(error: unknown, env: WorkActivationEnviro
 
 function updateText(env: WorkActivationEnvironment, args: {
   work: string; main: string; workRevision: string; mainRevision: string;
-  operation: string; receipt: string; digest: string; title: string;
+  operation: string; receipt: string; digest: string; title: string; language: string;
+  localizedTitle?: { value: string; language: string };
+  description?: { value: string; language: string };
   semanticTypes: readonly string[];
   admission: CreateMetadataWorkIntent['admission'];
   workManifest: string; mainManifest: string;
@@ -214,7 +233,9 @@ function updateText(env: WorkActivationEnvironment, args: {
     `INSERT {\n` +
     ` GRAPH ${iri(g.control)} { ${iri(DATASET)} rv:sequence ?next }\n` +
     ` GRAPH ${iri(g.current)} {\n` +
-    `  ${iri(args.work)} a schema:CreativeWork${args.semanticTypes.map(type => `, <${type}>`).join('')} ; rv:mainVersion ${iri(args.main)} ; rv:continuityProfile ${iri(CONTINUITY)} ; rdfs:label ${lit(args.title)}@en ; rv:head ${iri(args.workRevision)} .\n` +
+    `  ${iri(args.work)} a schema:CreativeWork${args.semanticTypes.map(type => `, <${type}>`).join('')} ; rv:mainVersion ${iri(args.main)} ; rv:continuityProfile ${iri(CONTINUITY)} ; rdfs:label ${lit(args.title)}@${args.language} ; rv:head ${iri(args.workRevision)} .\n` +
+    (args.localizedTitle ? `  ${iri(args.work)} schema:alternateName ${lit(args.localizedTitle.value)}@${args.localizedTitle.language} .\n` : '') +
+    (args.description ? `  ${iri(args.work)} schema:description ${lit(args.description.value)}@${args.description.language} .\n` : '') +
     `  ${iri(args.main)} a rv:MainVersion ; rv:work ${iri(args.work)} ; rv:hostingPolicy rv:MetadataOnly ; rv:head ${iri(args.mainRevision)} .\n` +
     ` }\n` +
     ` GRAPH ${iri(g.revisions)} {\n` +
@@ -242,7 +263,8 @@ export async function activateMetadataWork(env: WorkActivationEnvironment, inten
     throw new Error('invalid Work admission');
   }
   const semanticTypes = normalizeWorkSemanticTypes(intent.semanticTypes);
-  const digest = metadataWorkRequestDigest(intent.title, semanticTypes);
+  const language = intent.language ?? 'en';
+  const digest = metadataWorkRequestDigest(intent.title, semanticTypes, language, intent);
   if (admission.requestDigest !== digest) throw new IdempotencyConflict('admission digest does not match Work intent');
   const receipt = workReceiptIri(admission.id);
   await assertNotInvalidProfileReceipt(env.fuseki, workReceiptIri(admission.id));
@@ -271,7 +293,9 @@ export async function activateMetadataWork(env: WorkActivationEnvironment, inten
   const operation = ID + Bun.randomUUIDv7();
   const validations = await workMetadataValidations(env, work, main);
   const workState = { mainVersion: main, continuityProfile: CONTINUITY, title: intent.title,
-    language: 'en', ...(semanticTypes.length ? { semanticTypes } : {}) };
+    language, ...(intent.localizedTitle ? { localizedTitle: intent.localizedTitle } : {}),
+    ...(intent.description ? { description: intent.description } : {}),
+    ...(semanticTypes.length ? { semanticTypes } : {}) };
   const mainState = { work, hostingPolicy: 'metadata-only' };
   const candidates = stagedWorkObjectCandidates();
   let workManifest: string;
@@ -297,7 +321,8 @@ export async function activateMetadataWork(env: WorkActivationEnvironment, inten
   try {
     commandResult = await validatedCommand(env, { receipt, digest,
       update: updateText(env, { work, main, workRevision, mainRevision, operation, receipt,
-        digest, title: intent.title, semanticTypes, admission, workManifest, mainManifest }),
+        digest, title: intent.title, language, localizedTitle: intent.localizedTitle,
+        description: intent.description, semanticTypes, admission, workManifest, mainManifest }),
       validations, deadlineMs: 10_000 }, admission);
     if (commandResult.status === 'invalid' || commandResult.status === 'unknown-profile'
       || commandResult.status === 'conflict') throw new CommandRejected(commandResult);

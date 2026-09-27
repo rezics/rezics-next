@@ -8,7 +8,9 @@ import { AdmissionDenied, AdmissionExpired, type AccessAdmissionRegistry,
 import { DATASET, GRAPHS, iri, lit, type WorkActivationEnvironment } from '../work/activate.ts';
 
 export class ContentDraftDenied extends Error {}
-export class ContentDraftStale extends Error {}
+export class ContentDraftStale extends Error {
+  constructor(message: string, readonly currentHead: string | null = null) { super(message); }
+}
 export class ContentDraftUnavailable extends Error {}
 
 export interface AuthoredContentDraftInput {
@@ -65,7 +67,7 @@ async function assertCurrentTarget(env: WorkActivationEnvironment,
 export async function saveAdmittedContentDraft(env: WorkActivationEnvironment,
   content: ContentCore, account: Pick<AccountAssertionVerifier, 'verify'>,
   access: Pick<AccessAdmissionRegistry, 'register' | 'claim' | 'recordGraphOutcome'>,
-  request: Request, input: AuthoredContentDraftInput): Promise<SaveDraftResult> {
+  request: Request, input: AuthoredContentDraftInput): Promise<SaveDraftResult & { byteDigest: string }> {
   if (input.variant.resourceId !== input.resourceId
     || !/^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/i.test(input.resourceId)
     || !/^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/i.test(input.actingSubject)
@@ -108,6 +110,10 @@ export async function saveAdmittedContentDraft(env: WorkActivationEnvironment,
   const saved = await content.saveDraft(command);
   await access.recordGraphOutcome(registered.id, terminalProof(registered, saved));
   if (saved.outcome === 'cancelled') throw new ContentDraftDenied('draft admission was fenced');
-  if (saved.outcome === 'stale_head') throw new ContentDraftStale('Content draft head changed');
-  return { ...saved, replayed: registered.replayed || saved.replayed };
+  if (saved.outcome === 'stale_head') {
+    const current = await content.readDraftHead(input.resourceId, input.variant.id);
+    throw new ContentDraftStale('Content draft head changed', current?.revisionId ?? null);
+  }
+  return { ...saved, byteDigest: createHash('sha256').update(serializedJson).digest('hex'),
+    replayed: registered.replayed || saved.replayed };
 }

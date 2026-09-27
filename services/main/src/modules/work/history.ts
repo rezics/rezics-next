@@ -19,7 +19,9 @@ export interface ExactWorkRevision {
   operation: string;
   mainVersion: string;
   title: string;
-  language: 'en';
+  language: string;
+  localizedTitle?: { value: string; language: string };
+  description?: { value: string; language: string };
   semanticTypes: string[];
   scalarValue?: WorkScalarValue;
   sourcePosition: { datasetId: 'product'; dataEpoch: string; sequence: string };
@@ -48,7 +50,9 @@ export interface MainPayload {
 export interface WorkPayload {
   mainVersion: string;
   title: string;
-  language: 'en';
+  language: string;
+  localizedTitle?: { value: string; language: string };
+  description?: { value: string; language: string };
   semanticTypes: string[];
   scalarValue?: WorkScalarValue;
 }
@@ -156,10 +160,12 @@ export function readWorkPayloadFromManifest(
 ): WorkPayload {
   const state = readComponentState(objectDirectory, manifestIri, work);
   if (typeof state.mainVersion !== 'string' || !state.mainVersion.startsWith('https://rezics.com/id/')
-    || typeof state.title !== 'string' || state.language !== 'en') {
+    || typeof state.title !== 'string' || typeof state.language !== 'string'
+    || !/^[a-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$/.test(state.language)) {
     throw new RevisionCorrupt('payload does not match Work profile');
   }
-  return { mainVersion: state.mainVersion, title: state.title, language: 'en',
+  return { mainVersion: state.mainVersion, title: state.title, language: state.language,
+    ...checkedRecordedDetails(state),
     semanticTypes: checkedWorkSemanticTypes(state.semanticTypes),
     ...checkedScalarPayload(state) };
 }
@@ -171,6 +177,27 @@ function checkedScalarPayload(state: Record<string, unknown>): { scalarValue?: W
     if (value === undefined) throw new InvalidWorkScalarValue('undefined scalar payload');
     return { scalarValue: value };
   } catch { throw new RevisionCorrupt('Work scalar manifest state is invalid'); }
+}
+
+function checkedRecordedDetails(state: Record<string, unknown>) {
+  const checked = (value: unknown, maximum: number) => {
+    if (value === undefined) return undefined;
+    if (!value || typeof value !== 'object' || Array.isArray(value)
+      || typeof (value as Record<string, unknown>).value !== 'string'
+      || typeof (value as Record<string, unknown>).language !== 'string') {
+      throw new RevisionCorrupt('Work localized metadata is invalid');
+    }
+    const record = value as { value: string; language: string };
+    if (!record.value || record.value.length > maximum || /[\u0000-\u001f\u007f]/.test(record.value)
+      || !/^[a-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$/.test(record.language)) {
+      throw new RevisionCorrupt('Work localized metadata is invalid');
+    }
+    return record;
+  };
+  const localizedTitle = checked(state.localizedTitle, 500);
+  const description = checked(state.description, 4000);
+  return { ...(localizedTitle ? { localizedTitle } : {}),
+    ...(description ? { description } : {}) };
 }
 
 function checkedWorkSemanticTypes(value: unknown): string[] {
@@ -192,10 +219,12 @@ export async function readWorkPayloadForRevision(
 ): Promise<WorkPayload> {
   const state = await readWorkComponentState(env, manifestIri, work);
   if (typeof state.mainVersion !== 'string' || !state.mainVersion.startsWith('https://rezics.com/id/')
-    || typeof state.title !== 'string' || state.language !== 'en') {
+    || typeof state.title !== 'string' || typeof state.language !== 'string'
+    || !/^[a-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$/.test(state.language)) {
     throw new RevisionCorrupt('payload does not match Work profile');
   }
-  return { mainVersion: state.mainVersion, title: state.title, language: 'en',
+  return { mainVersion: state.mainVersion, title: state.title, language: state.language,
+    ...checkedRecordedDetails(state),
     semanticTypes: checkedWorkSemanticTypes(state.semanticTypes),
     ...checkedScalarPayload(state) };
 }
@@ -328,7 +357,9 @@ export async function readExactWorkRevision(
   const state = await readWorkPayloadForRevision(env, row.manifest?.value ?? '', work);
   return { revision, work, ...(row.predecessor ? { predecessor: row.predecessor.value } : {}),
     operation: row.operation.value, mainVersion: state.mainVersion, title: state.title,
-    language: 'en', semanticTypes: state.semanticTypes,
+    language: state.language, semanticTypes: state.semanticTypes,
+    ...(state.localizedTitle ? { localizedTitle: state.localizedTitle } : {}),
+    ...(state.description ? { description: state.description } : {}),
     ...(state.scalarValue === undefined ? {} : { scalarValue: state.scalarValue }),
     sourcePosition: { datasetId: 'product', dataEpoch: row.epoch.value,
       sequence: row.sequence.value } };

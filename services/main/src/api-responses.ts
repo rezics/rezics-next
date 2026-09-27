@@ -305,6 +305,7 @@ export const contentEditWriteResult = t.Object({
 });
 export const contentDraftWriteResult = t.Object({
   resourceId: ref, variantId: ref, revisionId: ref,
+  byteDigest: t.String({ pattern: '^[0-9a-f]{64}$' }),
   predecessor: nullableRef,
   sourcePosition: t.Object({ owner: t.Literal('content'), dataEpoch: t.String(),
     sequence: t.String() }),

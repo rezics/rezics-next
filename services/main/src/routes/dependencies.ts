@@ -103,6 +103,7 @@ export interface MainWorkDependencies {
   maintainers?: import('../modules/work/maintainers.ts').WorkMaintainers;
   discovery?: import('../modules/discovery/store.ts').DiscoveryProjection;
   profiles?: ProfilesAccess;
+  studioAccess?: import('../modules/studio/access.ts').StudioAccess;
   libraryStatus?: ReaderLibraryStatusStore;
   libraryRatings?: ReaderLibraryRatings;
   agentProvisioning?: AgentProvisioning;

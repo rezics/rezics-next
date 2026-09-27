@@ -6,12 +6,13 @@ import { IdempotencyConflict, type WorkActivationEnvironment } from '../work/act
 import { PendingAdmittedWork } from '../work/create-admitted.ts';
 import { sealMetadataWorkEditAdmission } from '../work/edit.ts';
 import { assertGraphAdmissionOpen } from '../work/restore-lineage.ts';
-import { changeComposition, compositionChangeDigest, compositionCreateDigest,
+import { changeComposition, chapterCreateDigest, compositionChangeDigest, compositionCreateDigest,
   changeStructureMeasures, structureMeasureDigest,
   compositionSealDigest, createComposition, readCompositionReceipt, sealComposition,
   compositionRestoreDigest, compositionStageDigest, restoreComposition, structureCreateDigest,
   sealStructureAdmissionCancellation,
   terminalResult, type CompositionConflict, type CompositionCost, type CompositionOperation,
+  type NewChapterWork,
   type CompositionTerminal } from './change.ts';
 import { CompositionCorrupt, CompositionUnavailable, readCompositionHeader } from './graph.ts';
 import { InvalidCompositionChange } from './change.ts';
@@ -113,11 +114,15 @@ export function createAdmittedComposition(env: WorkActivationEnvironment, accoun
 
 export async function changeAdmittedComposition(env: WorkActivationEnvironment, account: Account,
   access: Access, request: Request, input: { structure: string; expectedHead: string;
-    operations: readonly CompositionOperation[]; actingSubject: string; idempotencyKey: string }) {
+    operations: readonly CompositionOperation[]; actingSubject: string; idempotencyKey: string;
+    newWork?: NewChapterWork }) {
   const { header, profile } = await structureOwner(env, input.structure);
-  const digest = compositionChangeDigest(input.structure, input.expectedHead, input.operations, profile.id);
+  const digest = input.newWork
+    ? chapterCreateDigest(input.structure, input.expectedHead, input.operations, input.newWork)
+    : compositionChangeDigest(input.structure, input.expectedHead, input.operations, profile.id);
   const targets = [...new Set(input.operations.flatMap(operation => operation.op === 'insert'
-    && operation.target && !isCatalogTarget(profile, operation.target) ? [operation.target] : []))];
+    && operation.target && operation.target !== input.newWork?.work
+    && !isCatalogTarget(profile, operation.target) ? [operation.target] : []))];
   const principal = await account.verify(request, [profile.editPermission,
     ...(targets.length && profile.targetReadPermission ? [profile.targetReadPermission] : [])]);
   for (const target of targets) {
@@ -130,7 +135,8 @@ export async function changeAdmittedComposition(env: WorkActivationEnvironment, 
     actingSubject: input.actingSubject,
     idempotencyKey: input.idempotencyKey, digest },
   admission => changeComposition(env, { admission, structure: input.structure,
-    expectedHead: input.expectedHead, operations: input.operations }));
+    expectedHead: input.expectedHead, operations: input.operations,
+    newWork: input.newWork }));
 }
 
 export async function changeAdmittedStructureMeasures(env: WorkActivationEnvironment,

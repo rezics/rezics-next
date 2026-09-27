@@ -353,6 +353,34 @@ export class ContentCore {
     return { revisionId: row.revision_id, position: position(row) };
   }
 
+  /** Indexed private inventory; Main fences the owner position before delivery. */
+  async listVariantHeads(resourceId: string, after: string, limit: number): Promise<{
+    items: Array<{ id: string; languageKind: string; languageTag: string | null;
+      originalLanguageTag: string | null; direction: string; draftHead: string | null }>;
+    nextCursor: string | null; position: ContentPosition;
+  }> {
+    checkId(resourceId, 'resource id');
+    if (!Number.isInteger(limit) || limit < 1 || limit > 20 || after.length > 300) {
+      throw new ContentConflict('invalid variant page');
+    }
+    const result = await this.pool.query<{ id: string; language_kind: string;
+      language_tag: string | null; original_language_tag: string | null;
+      direction: string; draft_head: string | null; data_epoch: string; sequence: string }>(`
+      SELECT v.id, v.language_kind, v.language_tag, v.original_language_tag,
+        v.direction, v.draft_head::text, c.data_epoch, c.sequence::text AS sequence
+      FROM content.variant v CROSS JOIN content.owner_control c
+      WHERE v.resource_id = $1 AND v.id > $2 AND c.singleton
+      ORDER BY v.id LIMIT $3`, [resourceId, after, limit + 1]);
+    const rows = result.rows;
+    const tail = rows[limit - 1];
+    const control = rows[0] ? position(rows[0]) : await this.ownerPosition();
+    return { items: rows.slice(0, limit).map(row => ({ id: row.id,
+      languageKind: row.language_kind, languageTag: row.language_tag,
+      originalLanguageTag: row.original_language_tag, direction: row.direction,
+      draftHead: row.draft_head })),
+    nextCursor: rows.length > limit ? tail!.id : null, position: control };
+  }
+
   /** Fence the Content owner cut during the short cross-owner rebuild activation.
    * Writers advance owner_control and therefore wait until the graph CAS resolves. */
   async withOwnerPositionLock<T>(expected: ContentPosition, work: () => Promise<T>): Promise<T> {

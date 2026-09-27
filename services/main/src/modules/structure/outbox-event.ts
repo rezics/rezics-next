@@ -75,11 +75,14 @@ export const outboxEventHandlers = [
       const digest = value('digest');
       if (!receipt || !digest || batch.batchId !== `urn:rezics:outbox:${hash(receipt)}`
         || eventId !== `urn:rezics:event:${hash(`${receipt}\0structure`)}`
-        || ordinal !== 0 || batch.eventIds.length !== 1) {
+        || ordinal !== 0 || ![1, 2].includes(batch.eventIds.length)
+        || batch.eventIds[0] !== eventId
+        || (batch.eventIds.length === 2
+          && batch.eventIds[1] !== `urn:rezics:event:${hash(`${receipt}\0chapter`)}`)) {
         throw new Error('Structure command event differs from its source position');
       }
       const proof = await fuseki.query(`PREFIX rv: <${RV}> SELECT ?action ?operation ?structure
-        ?revision ?reason WHERE {
+        ?revision ?reason ?chapterWork WHERE {
         GRAPH ${iri(GRAPHS.outbox)} { ${iri(eventId)} a rv:StructureCommandEvent ;
           rv:ordinal 0 ; rv:action "structure.command" ; rv:receipt ${iri(receipt)} . }
         GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} a rv:OperationReceipt ;
@@ -90,6 +93,7 @@ export const outboxEventHandlers = [
           OPTIONAL { ${iri(receipt)} rv:structure ?structure }
           OPTIONAL { ${iri(receipt)} rv:structureRevision ?revision }
           OPTIONAL { ${iri(receipt)} rv:reason ?reason }
+          OPTIONAL { ${iri(receipt)} rv:chapterWork ?chapterWork }
         }
       } LIMIT 2`);
       const rows = proof.results?.bindings ?? [];
@@ -100,6 +104,7 @@ export const outboxEventHandlers = [
         value('scope')?.startsWith(profile.editScopePrefix)
         && receipt === `urn:rezics:receipt:${hash(`${admissionId}\0${profile.receiptFamily}`)}`);
       if (rows.length !== 1 || !action || !admissionId || matches.length !== 1
+        || !!rows[0]?.chapterWork !== (batch.eventIds.length === 2)
         || (value('operation') && rows[0]?.operation?.value !== value('operation'))) {
         throw new Error('Structure command event has no matching terminal receipt');
       }
@@ -116,7 +121,8 @@ export const outboxEventHandlers = [
             ...(rows[0]?.operation ? { operation: rows[0].operation.value } : {}),
             ...(rows[0]?.structure ? { structure: rows[0].structure.value } : {}),
             ...(rows[0]?.revision ? { revision: rows[0].revision.value } : {}),
-            ...(rows[0]?.reason ? { reason: rows[0].reason.value } : {}) } } };
+            ...(rows[0]?.reason ? { reason: rows[0].reason.value } : {}),
+            ...(rows[0]?.chapterWork ? { chapterWork: rows[0].chapterWork.value } : {}) } } };
     } },
   structureStageEvent('StructureProjectionEvent', 'structure.project',
     'com.rezics.structure.projected.v1'),

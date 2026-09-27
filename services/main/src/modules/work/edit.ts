@@ -274,6 +274,7 @@ async function editWorkRevision(env: WorkActivationEnvironment,
   try { currentScalar = scalarFromBinding(scalarBindings[0]); }
   catch { throw new RevisionCorrupt('Work scalar graph term is invalid'); }
   if (prior.mainVersion !== main || prior.title !== titles.values().next().value
+    || prior.language !== rows[0]!.title!['xml:lang']
     || !sameScalar(prior.scalarValue, currentScalar)
     || JSON.stringify(prior.semanticTypes) !== JSON.stringify(semanticTypes)) {
     throw new RevisionCorrupt('Work graph differs from its retained head');
@@ -282,7 +283,9 @@ async function editWorkRevision(env: WorkActivationEnvironment,
   const nextTitle = change.kind === 'title' ? change.title : prior.title;
   const nextScalar = change.kind === 'scalar' ? change.value : prior.scalarValue;
   const state = { mainVersion: main, continuityProfile: CONTINUITY, title: nextTitle,
-    language: 'en', ...(semanticTypes.length ? { semanticTypes } : {}),
+    language: prior.language, ...(semanticTypes.length ? { semanticTypes } : {}),
+    ...(prior.localizedTitle ? { localizedTitle: prior.localizedTitle } : {}),
+    ...(prior.description ? { description: prior.description } : {}),
     ...(nextScalar === undefined ? {} : { scalarValue: nextScalar }) };
   const manifest = env.workObjects
     ? await prepareWorkComponent(env.workObjects, intent.work, state)
@@ -302,7 +305,7 @@ async function editWorkRevision(env: WorkActivationEnvironment,
     }
     INSERT {
       GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?next }
-      GRAPH ${iri(GRAPHS.current)} { ${iri(intent.work)} rv:head ${iri(revision)} ; rdfs:label ${lit(nextTitle)}@en .
+      GRAPH ${iri(GRAPHS.current)} { ${iri(intent.work)} rv:head ${iri(revision)} ; rdfs:label ${lit(nextTitle)}@${prior.language} .
         ${nextScalarTerm ? `${iri(intent.work)} <${SCALAR_PREDICATE}> ${nextScalarTerm} .` : ''} }
       GRAPH ${iri(GRAPHS.revisions)} { ${iri(revision)} a rv:RevisionAnchor ; rv:component ${iri(intent.work)} ;
         rv:predecessor ${iri(intent.expectedHead)} ; rv:operation ${iri(operation)} ;

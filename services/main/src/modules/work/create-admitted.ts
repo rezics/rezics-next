@@ -15,6 +15,9 @@ export interface AdmittedMetadataWorkInput {
   authorityPath?: 'represented-agent' | 'direct-principal';
   idempotencyKey: string;
   title: string;
+  language?: string;
+  localizedTitle?: { value: string; language: string };
+  description?: { value: string; language: string };
   semanticTypes?: readonly string[];
 }
 
@@ -68,7 +71,8 @@ export async function createAdmittedMetadataWork(
   request: Request,
   input: AdmittedMetadataWorkInput,
 ): Promise<WorkActivationReceipt> {
-  const digest = metadataWorkRequestDigest(input.title, input.semanticTypes);
+  const digest = metadataWorkRequestDigest(input.title, input.semanticTypes, input.language,
+    input);
   await assertGraphAdmissionOpen(env.fuseki, env.lineage);
   const principal = await account.verify(request, ['work:create']);
   const registered = await access.register({
@@ -94,6 +98,8 @@ export async function createAdmittedMetadataWork(
       throw error;
     }
     const result = await activateMetadataWork(env, { admission, title: input.title,
+      language: input.language,
+      localizedTitle: input.localizedTitle, description: input.description,
       semanticTypes: input.semanticTypes });
     const terminal = await readWorkTerminalReceipt(env.fuseki, admission.id);
     if (!terminal || terminal.outcome !== 'succeeded') {

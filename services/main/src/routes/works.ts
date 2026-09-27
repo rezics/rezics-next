@@ -74,6 +74,12 @@ export function workRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
         authorityPath: t.Optional(t.Union([
           t.Literal('represented-agent'), t.Literal('direct-principal')])),
         title: t.String({ minLength: 1, maxLength: 200, pattern: '^[^\\u0000-\\u001f\\u007f]+$' }),
+        language: t.Optional(t.String({ minLength: 2, maxLength: 35,
+          pattern: '^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$' })),
+        localizedTitle: t.Optional(t.Object({ value: t.String({ minLength: 1, maxLength: 500 }),
+          language: t.String({ minLength: 2, maxLength: 35 }) }, { additionalProperties: false })),
+        description: t.Optional(t.Object({ value: t.String({ minLength: 1, maxLength: 4000 }),
+          language: t.String({ minLength: 2, maxLength: 35 }) }, { additionalProperties: false })),
         semanticTypes: t.Optional(t.Array(t.Union([
           t.Literal('https://schema.org/Book'),
           t.Literal('https://schema.org/DigitalDocument'),
@@ -92,7 +98,9 @@ export function workRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
       }
       try {
         const receipt = await createAdmittedMetadataWork(work.environment, work.account, work.access,
-          request, { title: body.title, semanticTypes: body.semanticTypes,
+          request, { title: body.title, language: body.language,
+            localizedTitle: body.localizedTitle, description: body.description,
+            semanticTypes: body.semanticTypes,
             actingSubject: body.actingSubject,
             authorityPath: body.authorityPath, idempotencyKey });
         return Response.json({ work: receipt.work, mainVersion: receipt.mainVersion,

@@ -75,6 +75,7 @@ import { workContentsRoutes } from './routes/work-contents.ts';
 import { readingSettingsRoutes } from './routes/reading-settings.ts';
 import { workActivityRoutes } from './routes/work-activity.ts';
 import { profileRoutes } from './routes/profiles.ts';
+import { studioRoutes } from './routes/studio.ts';
 import { libraryRoutes } from './routes/library.ts';
 import { realmProfileRoutes } from './routes/realm-profile.ts';
 import { workMetadataRoutes } from './routes/work-metadata.ts';
@@ -127,6 +128,7 @@ function contentCommunityRoutes(fuseki: FusekiClient, work: SearchRouteDependenc
 
 function domainRoutes(fuseki: FusekiClient, work: SearchRouteDependencies) {
   return new Elysia()
+    .use(studioRoutes(work))
     .use(realmAdminRoutes(work))
     .use(memberReplyRoutes(work))
     .use(workMaintainerRoutes(work))

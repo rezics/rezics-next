@@ -25,6 +25,7 @@ import { AgentProvisioning } from './modules/agent/provision.ts';
 import { AgentVanityHandles } from './modules/agent/vanity.ts';
 import { AgentPublicProfiles } from './modules/agent/profile.ts';
 import { ProfilesAccess } from './modules/profiles/access.ts';
+import { StudioAccess } from './modules/studio/access.ts';
 import { ReaderLibraryStatusStore } from './modules/library/status.ts';
 import { ReaderLibraryRatings } from './modules/library/ratings.ts';
 import { ProtectionAdmissionSigner } from './modules/access/protection-admission.ts';
@@ -291,6 +292,7 @@ const app = createMainApp(fuseki, {
   readRankings,
   discovery: new DiscoveryProjection(pool),
   profiles: new ProfilesAccess(pool),
+  studioAccess: new StudioAccess(pool),
   agentHandles: new AgentVanityHandles(pool),
   agentProfiles: new AgentPublicProfiles(pool, environment, media.store),
   libraryStatus: new ReaderLibraryStatusStore(contentPool),

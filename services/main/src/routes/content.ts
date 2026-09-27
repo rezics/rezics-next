@@ -4,7 +4,7 @@ import type { FusekiClient } from '../infrastructure/fuseki.ts';
 import { editAdmittedMetadataWork } from '../modules/work/edit-admitted.ts';
 import { assertGraphAdmissionOpen } from '../modules/work/restore-lineage.ts';
 import { iri } from '../modules/work/activate.ts';
-import { saveAdmittedContentDraft } from '../modules/content-publication/draft.ts';
+import { ContentDraftStale, saveAdmittedContentDraft } from '../modules/content-publication/draft.ts';
 import { createAdmittedContentComment } from '../modules/content-publication/comment.ts';
 import { publishAdmittedContent } from '../modules/content-publication/publish-admitted.ts';
 import { selectAdmittedPublicContentSearch }
@@ -53,10 +53,17 @@ export function contentRoutes(fuseki: FusekiClient, work: MainWorkDependencies) 
             actingSubject: body.actingSubject, idempotencyKey });
         return Response.json({ resourceId: body.resourceId, variantId: body.variantId,
           revisionId: saved.revisionId, predecessor: saved.predecessor,
+          byteDigest: saved.byteDigest,
           sourcePosition: saved.position, replayed: saved.replayed }, {
           status: saved.replayed ? 200 : 201, headers: { 'cache-control': 'no-store' },
         });
-      } catch (error) { return commandError(error); }
+      } catch (error) {
+        if (error instanceof ContentDraftStale) return Response.json({
+          type: 'https://rezics.com/problems/stale_head', title: error.message,
+          status: 409, code: 'stale_head', currentHead: error.currentHead,
+        }, { status: 409, headers: { 'cache-control': 'no-store' } });
+        return commandError(error);
+      }
     })
     .post('/v1/content-comments', {
       body: t.Object({ profile: t.Literal('content-paragraph-comment-v1'),

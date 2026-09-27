@@ -57,7 +57,9 @@ export const workScalarWrite = t.Object({
 export const exactWorkRevision = t.Object({
   revision: t.String(), work: t.String(), predecessor: t.Optional(t.String()),
   operation: t.String(), mainVersion: t.String(), title: t.String(),
-  language: t.Literal('en'), semanticTypes: t.Array(t.String()), sourcePosition,
+  language: t.String(), semanticTypes: t.Array(t.String()), sourcePosition,
+  localizedTitle: t.Optional(t.Object({ value: t.String(), language: t.String() })),
+  description: t.Optional(t.Object({ value: t.String(), language: t.String() })),
   scalarValue: t.Optional(workScalarValue),
 });
 
@@ -76,7 +78,7 @@ export const pendingOperation = t.Object({
 
 export function problemResult<const Status extends number>(status: Status) {
   return t.Object({ type: t.String(), title: t.String(), status: t.Literal(status),
-    code: t.String() });
+    code: t.String(), currentHead: t.Optional(t.Nullable(t.String())) });
 }
 
 const phraseMatch = t.Object({

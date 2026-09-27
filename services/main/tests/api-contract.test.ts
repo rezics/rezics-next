@@ -58,7 +58,7 @@ type _WorkPendingShape = Assert<WorkPost['response'][202] extends {
 type _RevisionPath = Assert<RevisionGet['params']['revision'] extends string ? true : false>;
 type _RevisionRead = Assert<200 extends keyof RevisionGet['response'] ? true : false>;
 type _RevisionShape = Assert<RevisionGet['response'][200] extends {
-  revision: string; title: string; language: 'en'
+  revision: string; title: string; language: string
 } ? true : false>;
 type _MainRevisionShape = Assert<MainRevisionGet['response'][200] extends {
   revision: string; mainVersion: string; defaultSelection: string | null;

@@ -92,7 +92,7 @@ function key(request: Request): string | null {
   return value && /^[A-Za-z0-9:_./-]{1,128}$/.test(value) ? value : null;
 }
 
-function compositionError(error: unknown): Response {
+export function compositionError(error: unknown): Response {
   if (error instanceof StructureStageInvalid || error instanceof InvalidStructureObject) {
     return problem(400, 'invalid_structure_stage', error.message);
   }
