@@ -8,6 +8,7 @@ import { readResourceSummaries, type ResourceSummary } from '../media/summary.ts
 import { DEFAULT_MEDIA_CONTEXT } from '../media/store.ts';
 import { DATASET, GRAPHS, RV, iri, lit } from './activate.ts';
 import { WORK_READ_COST } from './read-contract.ts';
+export { publicWork, unerased } from './public-patterns.ts';
 
 export class WorkReadInvalid extends Error {}
 export class WorkReadMissing extends Error {}
@@ -22,26 +23,6 @@ export const READ_PREFIX = `PREFIX rv: <${RV}> PREFIX schema: <https://schema.or
   PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
   PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
   PREFIX skos: <http://www.w3.org/2004/02/skos/core#>`;
-export const unerased = (work: string) => `FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} {
-  ?erasedVariant rv:resource ${work} ; rv:contentPublicationHead ?erasedPublication }
-  GRAPH ${iri(GRAPHS.revisions)} { ?erasedPublication rv:contentRevision ?erasedRevision .
-    ?erasedRevision a rv:ErasedRevision } }
-  FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} { ${work} rv:head ?erasedWorkHead }
-    GRAPH ${iri(GRAPHS.revisions)} { ?erasedWorkHead a rv:ErasedRevision } }
-  FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} { ${work} rv:protectionHead ?protection } }`;
-/** A current reviewed selection, not a draft or an old public publication. */
-export const publicWork = (work: string, main: string) => `GRAPH ${iri(GRAPHS.current)} {
-  ${work} a schema:CreativeWork ; rv:mainVersion ${main} .
-  ${main} a rv:MainVersion ; rv:work ${work} ; rv:selectionHead ?publicSelection .
-  ?publicContribution rv:work ${work} ; rv:publicationHead ?publicDecision . }
-  GRAPH ${iri(GRAPHS.revisions)} { ?publicSelection a rv:PublicationSelection ;
-    rv:work ${work} ; rv:mainVersion ${main} ;
-    rv:contribution ?publicContribution ; rv:publicationDecision ?publicDecision ; rv:selectedDraft ?publicDraft .
-    ?publicDecision a rv:PublicationDecision ; rv:component ?publicContribution ; rv:work ${work} ;
-      rv:contribution ?publicContribution ; rv:disclosure rv:Public ; rv:selectedDraft ?publicDraft .
-    ?publicDraft a rv:RevisionAnchor ; rv:component ?publicContribution .
-    FILTER NOT EXISTS { ?publicDraft a rv:ErasedRevision } } ${unerased(work)}`;
-
 // Process-local encrypted cursors intentionally expire on restart; never authorization.
 const cursorKey = randomBytes(32);
 interface Cursor { version: 1; binding: string; position: ReadPosition; after: string; order: string }

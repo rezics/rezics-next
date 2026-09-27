@@ -59,10 +59,11 @@ export async function createAdmittedContentComment(env: WorkActivationEnvironmen
   const scope = `content:comment:${input.resourceId}`;
   const digest = contentCommentIntentDigest(input);
   const registered = await access.register({ principal, actingSubject: input.author,
+    baselineSourceRevision: input.revisionId,
     scope, action: 'content.comment', idempotencyKey: input.idempotencyKey,
     requestDigest: digest });
   if (registered.state !== 'sealed') {
-    try { await access.claim(registered.id, digest); }
+    try { await access.claim(registered.id, digest, principal); }
     catch (error) {
       if (!(error instanceof AdmissionDenied || error instanceof AdmissionExpired)) throw error;
       if (!await comments.readReceipt(registered.id)) {

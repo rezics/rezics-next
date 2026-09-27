@@ -199,6 +199,7 @@ const account = new AccountAssertionVerifier({
   clientId: config.ACCOUNT_MAIN_CLIENT_ID, clientSecret: config.ACCOUNT_MAIN_CLIENT_SECRET,
 });
 const access = new AccessAdmissionRegistry(pool, config.FUSEKI_TITLE_ADMISSION_KEY);
+access.configureBaseline(fuseki);
 const rankingContextSelections = new PrivateContextSelections(pool);
 const recommendations = recommendationRelayPool ? new RankingGenerations({ access: pool,
   relay: recommendationRelayPool, dataEpoch: environment.lineage.dataEpoch,

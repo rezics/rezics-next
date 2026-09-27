@@ -1,6 +1,6 @@
 import type { AccountAssertionVerifier } from '../account/verify-assertion.ts';
 import { AdmissionDenied, AdmissionExpired, type AccessAdmissionRegistry,
-  type RegisteredAdmission } from '../access/admission.ts';
+  type RegisteredAdmission, type VerifiedPrincipal } from '../access/admission.ts';
 import { assertGraphAdmissionOpen } from '../work/restore-lineage.ts';
 import { CancelledActivation, IdempotencyConflict, type WorkActivationEnvironment } from '../work/activate.ts';
 import { PendingAdmittedWork } from '../work/create-admitted.ts';
@@ -14,12 +14,12 @@ import { RatingObservationUnavailable, readStandingRatingReceipt, sealStandingRa
 type Access = Pick<AccessAdmissionRegistry, 'register' | 'claim' | 'recordGraphOutcome'>;
 
 /** Claim when eligible; an ineligible or failed claim seals a terminal cancellation. */
-async function dispatch(access: Access, registered: RegisteredAdmission, digest: string,
+async function dispatch(access: Access, registered: RegisteredAdmission, digest: string, principal: VerifiedPrincipal,
   run: (admission: RegisteredAdmission) => Promise<unknown>,
   cancel: (admission: RegisteredAdmission) => Promise<unknown>) {
   let admission = registered;
   if (registered.state !== 'sealed' && registered.dispatchEligible) {
-    try { admission = await access.claim(registered.id, digest); }
+    try { admission = await access.claim(registered.id, digest, principal); }
     catch (error) { if (!(error instanceof AdmissionDenied || error instanceof AdmissionExpired)) throw error; }
   }
   if (admission.state === 'sealed') return;
@@ -38,7 +38,7 @@ export async function createAdmittedGlobalRatingContext(env: WorkActivationEnvir
     scope: GLOBAL_CONTEXT_SCOPE, action: 'rating.context.create',
     idempotencyKey: input.idempotencyKey, requestDigest: digest });
   try {
-    await dispatch(access, registered, digest, async admission => {
+    await dispatch(access, registered, digest, principal, async admission => {
       try { await createGlobalRatingContext(env, admission, input); }
       catch (error) { if (error instanceof IdempotencyConflict) throw error; }
     }, admission => sealRatingContextAdmission(env, admission));
@@ -61,9 +61,10 @@ export async function setAdmittedGlobalRating(env: WorkActivationEnvironment,
   const principal = await account.verify(request, ['rating:submit']);
   const registered = await access.register({ principal, actingSubject: input.actingSubject,
     scope: `rating:observe:${input.context}`, action: 'rating.observation.set',
+    baselineRelatedWork: input.work,
     idempotencyKey: input.idempotencyKey, requestDigest: digest });
   try {
-    await dispatch(access, registered, digest, async admission => {
+    await dispatch(access, registered, digest, principal, async admission => {
       try { await setGlobalRating(env, admission, input); }
       catch (error) {
         if (error instanceof IdempotencyConflict) throw error;

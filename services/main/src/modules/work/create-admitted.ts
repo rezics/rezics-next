@@ -86,7 +86,7 @@ export async function createAdmittedMetadataWork(
     }
     let admission;
     try {
-      admission = await access.claim(registered.id, digest);
+      admission = await access.claim(registered.id, digest, principal);
     } catch (error) {
       if (error instanceof AdmissionDenied || error instanceof AdmissionExpired) {
         return await reconcileExisting(env, access, registered, digest);

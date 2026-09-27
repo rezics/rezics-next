@@ -143,7 +143,7 @@ export class AccessSessionAgents {
         throw new ActingContextStale('Agent choice revision changed');
       }
       if (input.actingSubject !== null && (!gate.open || !gate.dispatch_open
-        || !(await eligibleSubject(client, principalId, input.actingSubject)
+        || !(await eligibleSubject(client, principalId, input.actingSubject, principal.emailVerified === true)
           || await directWorkCreateProof(client, principalId, input.actingSubject)))) {
         throw new ActingContextDenied('selected Agent is not eligible');
       }

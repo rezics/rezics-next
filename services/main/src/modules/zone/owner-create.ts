@@ -49,10 +49,11 @@ export async function createAdmittedOwner(env: WorkActivationEnvironment,
   const principal = await account.verify(request, [`${namespace}:edit`]);
   const registered = await access.register({ principal, actingSubject: input.actingSubject,
     scope, action: def.action, idempotencyKey: input.idempotencyKey,
+    ...(input.kind !== 'zone' ? { baselineCollectionCreate: true } : {}),
     requestDigest: input.requestDigest });
   let admission = registered;
   if (registered.state !== 'sealed' && registered.dispatchEligible) {
-    try { admission = await access.claim(registered.id, input.requestDigest); }
+    try { admission = await access.claim(registered.id, input.requestDigest, principal); }
     catch (error) {
       if (!(error instanceof AdmissionDenied || error instanceof AdmissionExpired)) throw error;
     }

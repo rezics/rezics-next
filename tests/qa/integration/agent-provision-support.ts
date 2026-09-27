@@ -25,7 +25,7 @@ async function freePort(): Promise<number> {
   });
 }
 
-export async function agentProvisionHarness() {
+export async function agentProvisionHarness(scopes: readonly string[] = ['agent:create', 'work:create']) {
   if (!Bun.env.REZICS_QA_RUN_ID || !Bun.env.FUSEKI_URL || !Bun.env.ACCOUNT_DATABASE_URL
     || !Bun.env.ACCESS_DATABASE_URL || !Bun.env.ACCOUNT_MAIN_RESOURCE
     || !Bun.env.MAIN_DATA_EPOCH || !Bun.env.MAIN_ROUTING_EPOCH) {
@@ -62,14 +62,14 @@ export async function agentProvisionHarness() {
     VALUES ($1, 'owner')`, [operator.id]);
   const headers = new Headers({ cookie: operator.cookie, origin: base });
   const verifierClient = await auth.api.adminCreateOAuthClient({ headers, body: {
-    client_name: 'Agent provision verifier', scope: 'agent:create work:create',
+    client_name: 'Agent provision verifier', scope: scopes.join(' '),
     token_endpoint_auth_method: 'client_secret_post', grant_types: ['client_credentials'],
-    client_credentials_scopes: ['agent:create', 'work:create'] } });
+    client_credentials_scopes: [...scopes] } });
   const redirectUri = 'http://localhost:3000/auth/callback';
   const client = await auth.api.adminCreateOAuthClient({ headers, body: {
     client_name: 'Agent provision native client', application_type: 'native',
     redirect_uris: [redirectUri], token_endpoint_auth_method: 'none',
-    grant_types: ['authorization_code'], scope: 'openid agent:create work:create',
+    grant_types: ['authorization_code'], scope: `openid ${scopes.join(' ')}`,
     skip_consent: true, require_pkce: true } });
 
   async function tokenFor(user: { email: string; password: string }, scope: string) {
@@ -119,7 +119,7 @@ export async function agentProvisionHarness() {
       headers: { authorization: `Bearer ${bearer}`, 'content-type': 'application/json',
         'idempotency-key': key }, body: JSON.stringify(body) }));
   }
-  return { accountPool, accessPool, accountApp, auth, base, user, token,
+  return { accountPool, accessPool, accountApp, auth, base, user, token, client, verifierClient, redirectUri,
     wrongScopeToken, fuseki, env, verifier, main, call,
     close: async () => { await accountApp.stop();
       await Promise.all([accountPool.end(), accessPool.end()]);

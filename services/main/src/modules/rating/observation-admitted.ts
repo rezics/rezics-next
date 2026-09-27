@@ -20,11 +20,12 @@ export async function setAdmittedStandingRating(
   const principal = await account.verify(request, ['rating:submit']);
   const registered = await access.register({ principal, actingSubject: input.actingSubject,
     scope: `rating:observe:${input.context}`, action: 'rating.observation.set',
+    baselineRelatedWork: input.work,
     idempotencyKey: input.idempotencyKey, requestDigest: digest });
   try {
     let admission = registered;
     if (registered.state !== 'sealed' && registered.dispatchEligible) {
-      try { admission = await access.claim(registered.id, digest); }
+      try { admission = await access.claim(registered.id, digest, principal); }
       catch (error) {
         if (!(error instanceof AdmissionDenied || error instanceof AdmissionExpired)) throw error;
       }

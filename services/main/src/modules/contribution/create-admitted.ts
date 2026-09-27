@@ -26,7 +26,7 @@ export async function createAdmittedTextContribution(
   try {
     let admission = registered;
     if (registered.state !== 'sealed' && registered.dispatchEligible) {
-      try { admission = await access.claim(registered.id, digest); }
+      try { admission = await access.claim(registered.id, digest, principal); }
       catch (error) {
         if (!(error instanceof AdmissionDenied || error instanceof AdmissionExpired)) throw error;
       }

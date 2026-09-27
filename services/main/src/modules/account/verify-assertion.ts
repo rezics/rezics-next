@@ -101,6 +101,9 @@ export class AccountAssertionVerifier {
     const aud = typeof signed.aud === 'string' ? [signed.aud]
       : Array.isArray(signed.aud) ? signed.aud.filter((value): value is string => typeof value === 'string') : [];
     return { issuer: signed.iss!, subject: signed.sub,
+      currentAssertion: () => this.verify(request, requiredScopes),
+      ...(current.email_verified === true && signed.rezics_auth_mode !== 'workload'
+        ? { emailVerified: true } : {}),
       accountAuthMode: typeof signed.rezics_auth_mode === 'string' ? signed.rezics_auth_mode : undefined,
       accountClientId: typeof current.client_id === 'string' ? current.client_id : undefined,
       accountConsentId: typeof signed.rezics_consent_id === 'string' ? signed.rezics_consent_id : undefined,

@@ -56,7 +56,7 @@ async function admitted(env: WorkActivationEnvironment, account: Account, access
   try {
     let admission = registered;
     if (registered.state !== 'sealed' && registered.dispatchEligible) {
-      try { admission = await access.claim(registered.id, input.digest); }
+      try { admission = await access.claim(registered.id, input.digest, principal); }
       catch (error) {
         if (!(error instanceof AdmissionDenied || error instanceof AdmissionExpired)) throw error;
       }

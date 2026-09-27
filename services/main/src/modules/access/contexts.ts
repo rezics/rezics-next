@@ -10,6 +10,7 @@ import { directWorkCreateProof } from './direct-principal.ts';
 import { groupWorkCreateProof, groupWorkCreateSubjects, GroupUnavailable } from './groups.ts';
 import { RoleUnavailable } from './roles.ts';
 import { roleWorkCreateProof, roleWorkCreateSubjects } from './role-proof.ts';
+import { baselineMemberProof } from './baseline.ts';
 
 export class ActingContextDenied extends Error {}
 export class ActingContextInvalid extends Error {}
@@ -133,7 +134,10 @@ async function activePrincipal(client: PoolClient, principal: VerifiedPrincipal)
 }
 
 export async function eligibleSubject(client: PoolClient, principalId: string,
-  actingSubject: string): Promise<boolean> {
+  actingSubject: string, emailVerified = false): Promise<boolean> {
+  if (emailVerified
+    && !(await client.query('SELECT id FROM access.policy WHERE scope_id = $1', [WORK_CREATE_CONTEXT.scope])).rowCount
+    && await baselineMemberProof(client, principalId, actingSubject)) return true;
   const subject = await client.query(`SELECT id FROM access.authority_subject
     WHERE id = $1 AND kind = 'agent' AND active FOR SHARE`, [actingSubject]);
   const represented = await client.query(`SELECT id FROM access.representation
@@ -252,9 +256,23 @@ export class AccessActingContexts {
       const roleGranted = await roleWorkCreateSubjects(client,
         candidateSubjects.filter(subject => !directGranted.has(subject)
           && !groupGranted.has(subject)));
-      const representedSubjects = candidateSubjects
+      let representedSubjects = candidateSubjects
         .filter(subject => directGranted.has(subject) || groupGranted.has(subject)
           || roleGranted.has(subject));
+      if (principal.emailVerified === true) {
+        // A bounded private candidate lookup; every candidate still needs its
+        // exact live control proof. Overflow fails closed, never truncates.
+        const provisioned = (await client.query<{ agent_id: string }>(`SELECT agent_id
+          FROM access.agent_provision WHERE principal_id = $1 AND state = 'active' AND agent_kind = 'person'
+          ORDER BY agent_id LIMIT $2`, [principalId, bounds.actingContexts + 1])).rows;
+        if (provisioned.length > bounds.actingContexts) {
+          throw new ActingContextUnavailable('acting context discovery exceeds supported limit');
+        }
+        for (const row of provisioned) {
+          if (await eligibleSubject(client, principalId, row.agent_id, true)) representedSubjects.push(row.agent_id);
+        }
+        representedSubjects = [...new Set(representedSubjects)].sort();
+      }
       const direct = await client.query<{ acting_subject: string }>(`
         SELECT DISTINCT s.id AS acting_subject
         FROM access.principal_agent_attribution a
@@ -314,7 +332,7 @@ export class AccessActingContexts {
       if (!principalId) throw new ActingContextDenied('principal is not admitted');
       const eligible = authorityPath === 'direct-principal'
         ? await directWorkCreateProof(client, principalId, actingSubject) !== null
-        : await eligibleSubject(client, principalId, actingSubject);
+        : await eligibleSubject(client, principalId, actingSubject, principal.emailVerified === true);
       if (!eligible) {
         throw new ActingContextDenied('selected context has no complete authority path');
       }
@@ -404,7 +422,7 @@ export class AccessActingContexts {
       }
       if (input.actingSubject !== null) {
         if (!gate.open || !gate.dispatch_open
-          || !await eligibleSubject(client, principalId, input.actingSubject)) {
+          || !await eligibleSubject(client, principalId, input.actingSubject, principal.emailVerified === true)) {
           throw new ActingContextDenied('preferred Agent is unavailable for this task');
         }
       }

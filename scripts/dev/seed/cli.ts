@@ -29,25 +29,21 @@ function commonRoot(): string {
   return dirname(isAbsolute(common) ? common : resolve(root, common));
 }
 
-function configuration(): { endpoints: SeedEndpoints; owner: { email: string; password: string;
-  actingSubject: string } } {
-  const directory = join(commonRoot(), '.temp/stack/rezics-dev');
+function configuration(): { endpoints: SeedEndpoints } {
+  const directory = Bun.env.REZICS_SEED_STACK_DIRECTORY
+    ? resolve(Bun.env.REZICS_SEED_STACK_DIRECTORY) : join(commonRoot(), '.temp/stack/rezics-dev');
   const envPath = join(directory, 'dev.env');
   const publicPath = join(directory, 'web-auth/public.json');
-  const privatePath = join(directory, 'web-auth/private.json');
-  if (![envPath, publicPath, privatePath].every(existsSync)) {
+  if (![envPath, publicPath].every(existsSync)) {
     throw new Error('Shared dev stack is absent; start it from the main checkout with task dev');
   }
   const env = readEnv(envPath);
   const publicConfig = JSON.parse(readFileSync(publicPath, 'utf8')) as {
     clientId: string; redirectUris: string[]; scope: string; resource: string };
-  const privateConfig = JSON.parse(readFileSync(privatePath, 'utf8')) as {
-    member: { email: string; password: string }; actingSubject: string };
   const account = env.ACCOUNT_ORIGIN ?? env.ACCOUNT_BASE_URL;
   const main = env.MAIN_ORIGIN;
-  if (!account || !main || !publicConfig.redirectUris[0] || !publicConfig.scope
-    || !privateConfig.member?.email || !privateConfig.actingSubject) {
-    throw new Error('Shared dev stack lacks its public OAuth client or bootstrap member');
+  if (!account || !main || !publicConfig.redirectUris[0] || !publicConfig.scope) {
+    throw new Error('Dev stack lacks its public OAuth client');
   }
   for (const origin of [account, main]) {
     if (!['127.0.0.1', 'localhost'].includes(new URL(origin).hostname)) {
@@ -58,8 +54,7 @@ function configuration(): { endpoints: SeedEndpoints; owner: { email: string; pa
     mailpit: `http://127.0.0.1:${env.MAILPIT_HTTP_PORT ?? '8025'}`,
     clientId: publicConfig.clientId,
     redirectUri: publicConfig.redirectUris[0], resource: publicConfig.resource,
-    scope: publicConfig.scope }, owner: { ...privateConfig.member,
-    actingSubject: privateConfig.actingSubject } };
+    scope: publicConfig.scope } };
 }
 
 function stableId(id: string): string {
@@ -87,26 +82,27 @@ async function run(options: Options): Promise<boolean> {
     throw new Error('--reset-own is unavailable: public APIs cannot remove seed-owned Works, '
       + 'Agents, Spaces and Access grants together. No data was changed.');
   }
-  const { endpoints, owner } = configuration();
+  const { endpoints } = configuration();
   const api = new SeedApi(endpoints);
   const findings = new Set<string>();
   async function optional<T>(label: string, operation: () => Promise<T>): Promise<T | null> {
     try { return await operation(); }
     catch (error) { findings.add(`${label}: ${describe(error)}`); return null; }
   }
-  const ownerSession = await api.signInOrUp(owner);
-  const ownerToken = await api.token(ownerSession.cookie);
-  const sessions: Array<{ id: string; token: string }> = [];
+  const sessions: Array<{ id: string; token: string; actingSubject: string }> = [];
   let agentCount = 0;
   for (const person of people) {
     const signed = await api.signInOrUp(person);
     const token = await api.token(signed.cookie);
-    sessions.push({ id: person.id, token });
-    const agent = await optional('Agent creation', () => api.post<AgentReceipt>('/v1/agents', {
+    const agent = await api.post<AgentReceipt>('/v1/agents', {
       profile: 'agent-provision-v1', kind: 'person', displayName: person.name },
-    token, seedKey('agent', person.id)));
-    if (agent?.state === 'active') agentCount++;
+    token, seedKey('agent', person.id));
+    if (agent.state !== 'active') throw new Error(`Agent for ${person.id} is not active`);
+    sessions.push({ id: person.id, token, actingSubject: agent.agent });
+    agentCount++;
   }
+  const owner = sessions[0]!;
+  const ownerToken = owner.token;
   for (const [id, displayName, kind] of [
     ['moonlight', '月下书生 · Moonlit Scribe', 'person'],
     ['northstar', 'North Star Editions · 北辰出版', 'organization'],
@@ -168,8 +164,8 @@ async function run(options: Options): Promise<boolean> {
   for (const person of sessions) await optional('Personal collection', () => api.post('/v1/collections', {
     collection: `https://rezics.com/id/${stableId(`collection:${person.id}`)}`,
     name: `${people.find(item => item.id === person.id)!.name} · Reading shelf`,
-    disclosure: 'public', actingSubject: owner.actingSubject },
-  ownerToken, seedKey('collection', person.id)));
+    disclosure: 'public', actingSubject: person.actingSubject },
+  person.token, seedKey('collection', person.id)));
 
   const search = await optional('Public search', () => fetch(`${endpoints.main}/v1/queries`, { method: 'POST',
     headers: { 'content-type': 'application/json' }, body: JSON.stringify({
@@ -185,7 +181,6 @@ async function run(options: Options): Promise<boolean> {
   console.log(`\nSeeded ${created.size} Works, ${createdRealms.length} Realms, ${people.length} Account users, ${agentCount} Agents, ${publishedCount} published contributions.`);
   console.log('Demo sign-in credentials:');
   for (const person of people) console.log(`  ${person.name}: ${person.email} / ${person.password}`);
-  console.log(`  Local Work creator: ${owner.email} / ${owner.password}`);
   console.log('Search URLs:');
   for (const id of ['pride', 'journey-west', 'dumplings']) {
     const work = works.find(item => item.id === id)!;

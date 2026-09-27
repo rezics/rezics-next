@@ -10,11 +10,21 @@ import { roleWorkCreateProof } from './role-proof.ts';
 import { withWorkEditAuthority, type WorkEditAuthorityProof } from './work-edit-authority.ts';
 import { issueTitleAdmission } from './title-admission.ts';
 import type { CommandEnvelope } from '../../infrastructure/fuseki.ts';
+import type { FusekiClient } from '../../infrastructure/fuseki.ts';
+import { baselineMemberProof, baselineProofCurrent, baselineTargetAllowed,
+  newBaselineProof, saveBaselineProof, savedBaselineProof } from './baseline.ts';
+import { reserveBaselineSpace, settleBaselineSpace } from './baseline-quota.ts';
+import { ensureBaselineScopeGate } from './scope-gates.ts';
+import { AccountAssertionDenied } from '../account/verify-assertion.ts';
 
 /** Populated only by Account assertion verification, never from a request body. */
 export interface VerifiedPrincipal {
   issuer: string;
   subject: string;
+  /** Current Account introspection only; absent never implies verified. */
+  emailVerified?: boolean;
+  /** Server-only callback bound to the original token and OAuth scope ceiling. */
+  currentAssertion?: () => Promise<VerifiedPrincipal>;
 }
 
 export interface AdmissionRequest {
@@ -26,6 +36,12 @@ export interface AdmissionRequest {
   action: string;
   idempotencyKey: string;
   requestDigest: string;
+  /** Owner adapter only: authorizes creating an absent personal Collection. */
+  baselineCollectionCreate?: boolean;
+  /** Owner-bound rating target or translation source, covered by requestDigest. */
+  baselineRelatedWork?: string;
+  /** Owner-bound quoted Content revision; a public Work does not disclose drafts. */
+  baselineSourceRevision?: string;
 }
 
 export interface RegisteredAdmission {
@@ -228,6 +244,11 @@ export async function releaseAccessRecoveryFence(pool: Pool, generation: string)
 
 export class AccessAdmissionRegistry {
   constructor(private readonly pool: Pool, private readonly titleAdmissionKey = Bun.env.FUSEKI_TITLE_ADMISSION_KEY) {}
+
+  private baselineGraph?: Pick<FusekiClient, 'query'>;
+
+  /** Composition supplies the existing bounded graph client; Access owns the rules. */
+  configureBaseline(graph: Pick<FusekiClient, 'query'>): void { this.baselineGraph = graph; }
 
   issueTitleAdmission(admission: RegisteredAdmission, command: CommandEnvelope) {
     return issueTitleAdmission(this.pool, admission, command, this.titleAdmissionKey);
@@ -594,7 +615,7 @@ export class AccessAdmissionRegistry {
       await requireRecoveryOpen(client);
       const gate = await client.query<{ open: boolean }>(
         'SELECT open FROM access.scope_gate WHERE id = $1 FOR SHARE', [scope]);
-      if (gate.rows[0]?.open !== true) {
+      if (gate.rows[0]?.open === false) {
         await client.query('COMMIT');
         return false;
       }
@@ -603,6 +624,21 @@ export class AccessAdmissionRegistry {
           AND active FOR SHARE`, [principal.issuer, principal.subject]);
       const principalId = identity.rows[0]?.id;
       if (!principalId) {
+        await client.query('COMMIT');
+        return false;
+      }
+      const readKind = action === 'work.read' ? 'work' : action === 'semantic.read' ? 'collection'
+        : action === 'contribution.read' ? 'contribution' : null;
+      const targetId = scope.slice(scope.indexOf(':', scope.indexOf(':') + 1) + 1);
+      if (readKind && principal.emailVerified === true
+        && !(await client.query('SELECT id FROM access.policy WHERE scope_id = $1', [scope])).rowCount
+        && await baselineMemberProof(client, principalId, actingSubject)
+        && await baselineTargetAllowed(client, this.baselineGraph, principalId, actingSubject,
+          { kind: readKind, id: targetId }, false)) {
+        await client.query('COMMIT');
+        return true;
+      }
+      if (!gate.rows[0]?.open) {
         await client.query('COMMIT');
         return false;
       }
@@ -645,6 +681,7 @@ export class AccessAdmissionRegistry {
       await client.query("SET LOCAL lock_timeout = '2s'");
       await client.query("SET LOCAL statement_timeout = '5s'");
       await requireRecoveryOpen(client);
+      await ensureBaselineScopeGate(client, request.scope);
       const gateResult = await client.query<GateRow & { group_generation: string }>(
         `SELECT authority_epoch, group_generation, open, dispatch_open
          FROM access.scope_gate WHERE id = $1 FOR UPDATE`, [request.scope]);
@@ -679,6 +716,29 @@ export class AccessAdmissionRegistry {
          WHERE principal_id = $1 AND action = $2 AND idempotency_key = $3`,
         [principalId, request.action, request.idempotencyKey]);
       const existing = existingResult.rows[0];
+
+      const savedBaseline = existing ? await savedBaselineProof(client, existing.id) : null;
+      if (existing && savedBaseline) {
+        if (existing.request_digest !== request.requestDigest
+          || existing.acting_subject !== request.actingSubject
+          || existing.authority_path !== authorityPath || existing.scope_id !== request.scope
+          || savedBaseline.collection_create !== (request.baselineCollectionCreate === true)
+          || savedBaseline.related_work !== (request.baselineRelatedWork ?? null)
+          || savedBaseline.source_revision !== (request.baselineSourceRevision ?? null)) {
+          throw new AdmissionConflict('idempotency key belongs to a different intent');
+        }
+        const dispatchEligible = request.principal.emailVerified === true
+          && ['registered', 'claimed'].includes(existing.state) && existing.eligible
+          && gate.open && gate.dispatch_open && existing.authority_epoch === gate.authority_epoch
+          && await baselineProofCurrent(client, this.baselineGraph, savedBaseline, existing);
+        await client.query('COMMIT');
+        return { id: existing.id, principalId: existing.principal_id,
+          actingSubject: existing.acting_subject, authorityPath: existing.authority_path,
+          scope: existing.scope_id, action: existing.action, idempotencyKey: existing.idempotency_key,
+          requestDigest: existing.request_digest, authorityEpoch: existing.authority_epoch,
+          registeredAt: existing.registered_at.toISOString(), expiresAt: existing.expires_at.toISOString(),
+          state: existing.state as RegisteredAdmission['state'], dispatchEligible, replayed: true };
+      }
 
       // A retry may recover the immutable receipt after authority changes. Its
       // saved proof, rather than a newly selected alternative, decides dispatch.
@@ -756,7 +816,11 @@ export class AccessAdmissionRegistry {
       let roleBindingGeneration: string | null = null;
       let roleFamilyId: string | null = null;
       let roleRevision: string | null = null;
-      if (authorityPath === 'direct-principal') {
+      const baseline = !existing ? await newBaselineProof(client, this.baselineGraph, request, principalId) : null;
+      if (baseline) {
+        // A named grant source with its own pinned proof, recorded below in the
+        // same transaction as the ordinary admission, receipt and audit outbox.
+      } else if (authorityPath === 'direct-principal') {
         if (subject.rows[0]?.kind !== 'agent') throw new AdmissionDenied('public attribution is not an Agent');
         const proof = await directWorkCreateProof(client, principalId, request.actingSubject);
         if (!proof) {
@@ -885,6 +949,10 @@ export class AccessAdmissionRegistry {
           roleBindingId, roleBindingGeneration, roleFamilyId, roleRevision,
           request.scope, request.action, request.idempotencyKey,
           request.requestDigest, gate.authority_epoch]);
+      if (baseline) {
+        await saveBaselineProof(client, id, baseline);
+        if (request.action === 'space.create') await reserveBaselineSpace(client, principalId, id, request.requestDigest);
+      }
       await client.query(
         `INSERT INTO access.admission_receipt
            (admission_id, principal_id, action, idempotency_key, request_digest, outcome)
@@ -914,7 +982,8 @@ export class AccessAdmissionRegistry {
   }
 
   /** Gate-first claim linearizes dispatch against a strong scope closure. */
-  async claim(admissionId: string, requestDigest: string): Promise<ClaimedAdmission> {
+  async claim(admissionId: string, requestDigest: string,
+    accountPrincipal?: VerifiedPrincipal): Promise<ClaimedAdmission> {
     const client = await this.pool.connect();
     try {
       await client.query('BEGIN');
@@ -955,16 +1024,39 @@ export class AccessAdmissionRegistry {
       if (row.authority_epoch !== gateResult.rows[0]?.authority_epoch) {
         throw new AdmissionDenied('admission scope epoch is stale');
       }
-      const principal = await client.query<{ active: boolean; enforcement_epoch: string }>(
-        'SELECT active, enforcement_epoch FROM access.principal WHERE id = $1 FOR SHARE',
+      const principal = await client.query<{ active: boolean; enforcement_epoch: string;
+        account_issuer: string; account_subject: string }>(
+        'SELECT active, enforcement_epoch, account_issuer, account_subject FROM access.principal WHERE id = $1 FOR SHARE',
         [row.principal_id]);
       if (principal.rows[0]?.active !== true) throw new AdmissionDenied('principal dispatch is fenced');
+      const baseline = await savedBaselineProof(client, row.id);
+      if (baseline) {
+        const identity = principal.rows[0]!;
+        let current: VerifiedPrincipal | undefined;
+        try { current = await accountPrincipal?.currentAssertion?.(); }
+        catch (error) {
+          if (error instanceof AccountAssertionDenied) throw new AdmissionDenied('baseline Account assertion is inactive');
+          throw error;
+        }
+        if (current?.emailVerified !== true || current.issuer !== identity.account_issuer
+          || current.subject !== identity.account_subject) {
+          throw new AdmissionDenied('baseline claim needs the current verified Account assertion');
+        }
+      }
+      if (baseline && !await baselineProofCurrent(client, this.baselineGraph, baseline, row)) {
+        throw new AdmissionDenied('baseline member authority changed before claim');
+      }
+      if (baseline && (await client.query(`SELECT id FROM access.admission
+        WHERE id = $1 AND expires_at > clock_timestamp()`, [row.id])).rowCount !== 1) {
+        // Account and target reads can consume the remainder of the lease.
+        throw new AdmissionExpired('baseline admission expired during claim verification');
+      }
       if (row.authority_path === 'direct-principal') {
         if (!await selectedDirectWorkProof(client, row, principal.rows[0]!.enforcement_epoch)) {
           throw new AdmissionDenied('private principal authority changed before claim');
         }
       }
-      if (row.authority_path === 'represented-agent'
+      if (!baseline && row.authority_path === 'represented-agent'
         && row.action === 'work.create' && row.scope_id === 'work:create:root'
         && !await selectedRepresentedWorkProof(client, row,
           principal.rows[0]!.enforcement_epoch, gateResult.rows[0]!.group_generation)) {
@@ -1209,6 +1301,7 @@ export class AccessAdmissionRegistry {
         throw new AdmissionConflict('unclaimed admission cannot succeed');
       }
       await recordRatingAggregateHead(client, row, proof);
+      if (row.action === 'space.create') await settleBaselineSpace(client, admissionId, proof.outcome);
       await client.query(
         `UPDATE access.admission SET state = 'sealed', graph_receipt = $2,
              graph_outcome = $3, graph_data_epoch = $4, graph_sequence = $5,

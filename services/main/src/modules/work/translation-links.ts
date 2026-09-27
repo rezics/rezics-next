@@ -324,11 +324,12 @@ export async function createAdmittedTranslationLink(env: WorkActivationEnvironme
     ? translationAuthorizationScope(input) : `translation:link:${input.targetWork}`;
   const action = input.status === 'official' ? 'translation.authorize' : 'translation.link';
   const registered = await access.register({ principal, actingSubject: input.actingSubject,
+    ...(input.status !== 'official' ? { baselineRelatedWork: input.sourceWork } : {}),
     scope, action, idempotencyKey: input.idempotencyKey, requestDigest: digest });
   try {
     let admission = registered;
     if (registered.state !== 'sealed' && registered.dispatchEligible) {
-      try { admission = await access.claim(registered.id, digest); }
+      try { admission = await access.claim(registered.id, digest, principal); }
       catch (error) {
         if (!(error instanceof AdmissionDenied || error instanceof AdmissionExpired)) throw error;
       }

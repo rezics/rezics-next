@@ -266,7 +266,7 @@ export async function runAdmittedCommand<I>(env: WorkActivationEnvironment,
     await assertNotInvalidProfileReceipt(env.fuseki, commandReceiptIri(registered.id, command.family));
     let admission = registered;
     if (registered.state !== 'sealed' && registered.dispatchEligible) {
-      try { admission = await access.claim(registered.id, command.digest); }
+      try { admission = await access.claim(registered.id, command.digest, principal); }
       catch (error) {
         if (!(error instanceof AdmissionDenied || error instanceof AdmissionExpired)) throw error;
       }

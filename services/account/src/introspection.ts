@@ -15,7 +15,8 @@ import { ACCESS_TOKEN_SECONDS, SIGNING_ALLOWANCE_SECONDS, signingKeyAccepts } fr
  * live traffic, and the key and installation reads never delay a lifecycle
  * change. Missing database evidence is unavailable, never an allow. Cost:
  * three primary-key reads and one client read, independent of retained key,
- * installation, consent and token history. */
+ * installation, consent and token history. Verified membership adds one current
+ * user lookup by primary key; workload tokens never receive that assertion. */
 export async function currentIntrospection(pool: Pool, presented: string | null,
   provider: Response): Promise<Response> {
   if (!provider.ok) return provider;
@@ -48,9 +49,17 @@ export async function currentIntrospection(pool: Pool, presented: string | null,
         && await consentBasisActive(client, payload, clientId)
         && (payload[AUTH_MODE_CLAIM] === 'workload'
           || (await recoveryBasisActive(client, payload) && await accountBasisActive(client, payload, clientId)));
+      // Current Account state, not an email claim cached in a five-minute JWT.
+      // RFC 7662 permits authorization-context metadata in introspection:
+      // https://www.rfc-editor.org/rfc/rfc7662.html#section-2.2
+      const verified = active && payload[AUTH_MODE_CLAIM] !== 'workload'
+        ? (await client.query<{ emailVerified: boolean }>(
+          'SELECT "emailVerified" FROM "user" WHERE id = $1', [payload.sub])).rows[0]?.emailVerified === true
+        : false;
       await client.query('COMMIT');
       committed = true;
-      return active ? provider : inactive();
+      return active ? Response.json({ ...payload, email_verified: verified },
+        { headers: { 'cache-control': 'no-store' } }) : inactive();
     } finally {
       try { if (!committed) await client.query('ROLLBACK'); } finally { client.release(); }
     }
