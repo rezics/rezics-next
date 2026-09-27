@@ -53,7 +53,7 @@ describe('authoring: edit, compare, publish', () => {
     expect(languageStatus(both, spoilers)).toEqual({ en: 'edited', 'zh-CN': 'edited' });
     expect(languageStatus(spoilers, spoilers)).toEqual({ en: 'unchanged', 'zh-CN': 'unchanged' });
     expect(languageStatus(emptyRule('new'), undefined)).toEqual({ en: 'missing', 'zh-CN': 'missing' });
-    expect(languageStatus({ ...kind, id: 'new' }, undefined)).toEqual({ en: 'new', 'zh-CN': 'new' });
+    expect(languageStatus({ title: kind.title, body: kind.body }, undefined)).toEqual({ en: 'new', 'zh-CN': 'new' });
   });
 
   test('comparing names every change a publication would make, including translation-only edits', () => {

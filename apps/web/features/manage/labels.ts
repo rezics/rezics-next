@@ -45,7 +45,6 @@ export function stateLabel(item: ModerationItem, t: T): string {
     case 'changes-requested': return t.stateChangesRequested;
     case 'withdrawn': return t.stateWithdrawn;
     case 'stale': return t.stateStale;
-    default: return t.statePending;
   }
 }
 

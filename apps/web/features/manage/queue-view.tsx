@@ -7,7 +7,7 @@ import { Kbd } from '@rezics/ui/kbd';
 import { cn } from '@rezics/ui/utils';
 import { CheckCheckIcon, InboxIcon, KeyboardIcon, SirenIcon, XIcon } from 'lucide-react';
 import { materializeData } from 'native-i18n';
-import { Fragment, type ReactNode, useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
+import { Fragment, useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import type { UiLocale } from '../../i18n/define.ts';
 import LocalizedLink from '../shell/localized-link.tsx';
 import { EmptyState } from '../shell/empty-state.tsx';
@@ -15,7 +15,7 @@ import type { Outcome } from './commands.ts';
 import { agentLabel, relativeTime } from './format.ts';
 import { actionLabel, decidedText, kindLabel, reasonText, shortcutKeys, stateLabel } from './labels.ts';
 import type { ManageMessages } from './messages.ts';
-import { Thumb } from './parts.tsx';
+import { Pill, Thumb } from './parts.tsx';
 import { bffQueueApi, type QueueApi } from './queue-api.ts';
 import { QueueDetail } from './queue-detail.tsx';
 import { actionsFor, commonActions, type Decision, initialTriage, needsReason, type PendingDecision,
@@ -55,14 +55,6 @@ function outcomeOf(result: Outcome<unknown>): Settled {
 
 const typing = (target: EventTarget | null) => target instanceof HTMLElement && target.closest(
   'input:not([type=checkbox]):not([type=radio]), textarea, select, [contenteditable=""], [contenteditable="true"]') !== null;
-
-function Pill({ href, current, children }: { href: string; current: boolean; children: ReactNode }) {
-  return <LocalizedLink href={href} aria-current={current ? 'page' : undefined} className={cn(
-    'inline-flex h-8 shrink-0 items-center rounded-full border border-border px-3.5 font-medium text-sm outline-none',
-    'transition-colors hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring',
-    'aria-[current=page]:border-primary/40 aria-[current=page]:bg-primary/10 aria-[current=page]:text-primary')}>
-    {children}</LocalizedLink>;
-}
 
 /**
  * The Realm's triage list: one list across reports, rights complaints and

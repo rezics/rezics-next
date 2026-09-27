@@ -6,6 +6,7 @@ import type { ReactNode } from 'react';
 import type { UiLocale } from '../../i18n/define.ts';
 import { BFF_PREFIX } from '../api/browser.ts';
 import { EmptyState } from '../shell/empty-state.tsx';
+import LocalizedLink from '../shell/localized-link.tsx';
 import { initials } from './format.ts';
 import type { ManageMessages } from './messages.ts';
 import type { Avatar, LocalizedName, ReadFailure } from './types.ts';
@@ -89,4 +90,13 @@ export function SectionHeader({ id, title, description, actions, level = 2 }: {
     </div>
     {actions ? <div className="flex shrink-0 flex-wrap gap-2">{actions}</div> : null}
   </div>;
+}
+
+/** A filter or view choice that lives in the address, marked current for assistive technology. */
+export function Pill({ href, current, children }: { href: string; current: boolean; children: ReactNode }) {
+  return <LocalizedLink href={href} aria-current={current ? 'page' : undefined} className={cn(
+    'inline-flex h-8 shrink-0 items-center rounded-full border border-border px-3.5 font-medium text-sm outline-none',
+    'transition-colors hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring',
+    'aria-[current=page]:border-primary/40 aria-[current=page]:bg-primary/10 aria-[current=page]:text-primary')}>
+    {children}</LocalizedLink>;
 }

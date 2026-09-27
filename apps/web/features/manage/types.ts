@@ -12,8 +12,17 @@ type Body<Call> = Call extends (body: infer Input, ...rest: never[]) => unknown 
 type Realm = ReturnType<MainClient['v1']['realms']>;
 type Submission = ReturnType<Realm['submissions']>;
 
-export type ModerationPage = Ok<Realm['moderation']['get']>;
-export type ModerationItem = ModerationPage['items'][number];
+/**
+ * Main builds `submissionState` from a mapped array (`realm-submission/schema.ts`),
+ * which its schema type reads as `never`; these are the values it validates.
+ */
+export type SubmissionState = 'pending' | 'deciding' | 'accepted' | 'rejected' | 'changes-requested' | 'withdrawn'
+  | 'stale';
+type RawModerationPage = Ok<Realm['moderation']['get']>;
+type RawItem = RawModerationPage['items'][number];
+export type ModerationItem = Omit<RawItem, 'submission'> & {
+  submission: (Omit<NonNullable<RawItem['submission']>, 'state'> & { state: SubmissionState }) | null };
+export type ModerationPage = Omit<RawModerationPage, 'items'> & { items: ModerationItem[] };
 export type ModerationKind = ModerationItem['kind'];
 export type AuditPage = Ok<Realm['audit']['get']>;
 export type AuditItem = AuditPage['items'][number];
