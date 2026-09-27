@@ -12,6 +12,10 @@ import { WORK_CONTENTS_COST } from './read-contract.ts';
 
 const contentPrefix = 'urn:rezics:content:revision:';
 const missing = () => new WorkReadMissing('Chapter is unavailable');
+const localizedLabel = (labels: readonly { value: string; language: string }[], language: string) =>
+  labels.find(label => label.language.toLowerCase() === language.toLowerCase())
+  ?? labels.find(label => label.language.toLowerCase().split('-')[0] === language.toLowerCase().split('-')[0])
+  ?? labels[0] ?? null;
 
 function structureError(error: unknown): never {
   if (error instanceof CompositionUnavailable) throw missing();
@@ -103,7 +107,7 @@ export async function readContents(session: WorkReadSession, work: string,
         ? await selectedContent(session, record.target, language,
           record.selection?.mode === 'fixed-revision' ? record.selection.revision : null) : null;
       return { occurrence: record.occurrence, parent: record.parent,
-        role: record.role as 'group' | 'chapter', label: record.labels[0] ?? null,
+        role: record.role as 'group' | 'chapter', label: localizedLabel(record.labels, language ?? ''),
         target: record.target?.startsWith('https://rezics.com/id/') ? record.target : null,
         selectedRevision: selected?.revision ?? null,
         progress: selected ? { composition: header.structure, occurrence: record.occurrence,
@@ -163,6 +167,7 @@ export async function readChapter(session: WorkReadSession, occurrence: string,
     if (page.revision !== header.head) throw new WorkReadMoved('Composition changed');
     if (!record || record.state !== 'active' || record.role !== 'chapter' || !record.target
       || !record.selection) throw missing();
+    if (!page.occurrenceContext) throw new WorkReadUnavailable('Chapter position is unavailable');
     const selected = await selectedContent(session, record.target, language,
       record.selection.mode === 'fixed-revision' ? record.selection.revision : null);
     if (!selected) throw missing();
@@ -202,7 +207,10 @@ export async function readChapter(session: WorkReadSession, occurrence: string,
     if (!await canReadTarget(session, record.target) || again?.revision !== selected.revision) throw missing();
     return { profile: 'work-chapter-v1' as const, work: header.work, version: header.component,
       composition: header.structure, compositionRevision: header.head, occurrence,
-      parent: record.parent, language, selectedRevision: selected.revision,
+      parent: record.parent, parentPath: page.occurrenceContext.path.map(item => ({
+        occurrence: item.occurrence, label: localizedLabel(item.labels, language) })),
+      ordinal: page.occurrenceContext.ordinal, label: localizedLabel(record.labels, language),
+      language, selectedRevision: selected.revision,
       progress: { composition: header.structure, occurrence, selectedRevision: selected.revision },
       previous, next, content: { reference: exact.reference, serializedJson: exact.serializedJson,
         body: exact.body }, sourcePosition: session.position };

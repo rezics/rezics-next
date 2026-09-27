@@ -171,6 +171,22 @@ export class StructureTree<T> {
     return found;
   }
 
+  /** Number of entries before a key, using subtree counts rather than scanning siblings. */
+  async countBefore(root: TreeRoot, key: string, cost: TreeCost): Promise<number> {
+    let page = root.page;
+    let count = 0;
+    for (;;) {
+      const node = await this.load(page, cost);
+      if (node.level === 0) {
+        return count + (node.entries as T[]).filter(entry => this.keyOf(entry) < key).length;
+      }
+      const children = node.entries as Child[];
+      const index = this.childIndex(children, key);
+      for (let i = 0; i < index; i++) count += children[i]!.count;
+      page = children[index]!.page;
+    }
+  }
+
   /** Ordered entries with from <= key < to, stopping after `limit`. */
   async range(root: TreeRoot, from: string, to: string, limit: number, cost: TreeCost): Promise<T[]> {
     const out: T[] = [];

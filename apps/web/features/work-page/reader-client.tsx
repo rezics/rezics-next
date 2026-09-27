@@ -7,13 +7,17 @@ import { useRouter } from 'next/navigation';
 import { type CSSProperties, type ReactNode, useCallback, useEffect, useRef, useState } from 'react';
 import { browserMainApi } from '../api/browser.ts';
 import { preferenceCookie } from '../shell/preferences.ts';
-import { lineWidths, paragraphPosition, READER_COOKIE, type ReaderSettings,
+import { completeReaderSettings, lineWidths, paragraphPosition, READER_COOKIE, type CompleteReaderSettings,
+  type ReaderSettings,
   serializeReaderSettings, textSizes, typefaces } from './reader-settings.ts';
 import type { ChapterRead, Progress } from './types.ts';
 
 export interface SettingsLabels {
   settings: string; textSize: string; smallerText: string; largerText: string; lineWidth: string;
   narrow: string; medium: string; wide: string; typeface: string; serif: string; sans: string; settingsLocal: string;
+  paragraphIndent: string; theme: string; system: string; light: string; dark: string;
+  cjkSpacing: string; cjkAuto: string; cjkNone: string; cjkPunctuation: string;
+  cjkStandard: string; cjkStrict: string; settingsFailed: string;
 }
 
 function Choice({ pressed, onClick, children }: { pressed: boolean; onClick: () => void; children: ReactNode }) {
@@ -26,26 +30,109 @@ function Choice({ pressed, onClick, children }: { pressed: boolean; onClick: () 
  * the server; the settings apply as CSS variables and persist in a cookie, so
  * the next page renders with them.
  */
-export function ReaderSurface({ initial, labels, toolbar, children }: {
-  initial: ReaderSettings; labels: SettingsLabels; toolbar: ReactNode; children: ReactNode;
+export function ReaderSurface({ initial, actingSubject, labels, toolbar, children }: {
+  initial: ReaderSettings; actingSubject: string | null; labels: SettingsLabels;
+  toolbar: ReactNode; children: ReactNode;
 }) {
-  const [settings, setSettings] = useState(initial);
-  const update = (next: Partial<ReaderSettings>) => {
-    const value = { ...settings, ...next };
+  const [settings, setSettings] = useState(() => completeReaderSettings(initial));
+  const [syncFailed, setSyncFailed] = useState(false);
+  const latest = useRef(completeReaderSettings(initial));
+  const version = useRef<number | null>(null);
+  const edited = useRef(false);
+  const pending = useRef<Partial<CompleteReaderSettings>>({});
+  const ready = useRef(Promise.resolve());
+  const queue = useRef(Promise.resolve());
+  const persist = (value: CompleteReaderSettings) => {
+    latest.current = value;
     setSettings(value);
     document.cookie = preferenceCookie(READER_COOKIE, encodeURIComponent(serializeReaderSettings(value)),
       location.protocol === 'https:');
   };
+  const payload = (value: CompleteReaderSettings, expectedVersion: number) => ({
+    actingSubject: actingSubject!, expectedVersion, fontSize: textSizes[value.size],
+    lineWidth: value.width, typeface: value.face, paragraphIndent: value.indent,
+    theme: value.theme, cjkSpacing: value.cjkSpacing, cjkPunctuation: value.cjkPunctuation,
+  });
+  const fromRemote = (value: { fontSize: number; lineWidth: ReaderSettings['width'];
+    typeface: ReaderSettings['face']; paragraphIndent: boolean; theme: CompleteReaderSettings['theme'];
+    cjkSpacing: CompleteReaderSettings['cjkSpacing']; cjkPunctuation: CompleteReaderSettings['cjkPunctuation'] }) =>
+    ({ size: Math.max(0, textSizes.indexOf(value.fontSize as typeof textSizes[number])),
+      width: value.lineWidth, face: value.typeface, indent: value.paragraphIndent,
+      theme: value.theme, cjkSpacing: value.cjkSpacing,
+      cjkPunctuation: value.cjkPunctuation });
+  useEffect(() => {
+    if (!actingSubject) return;
+    let active = true;
+    ready.current = (async () => {
+      try {
+        const response = await browserMainApi().v1.reader.settings.get({ query: { actingSubject } });
+        if (!active || !response.data) { if (active) setSyncFailed(true); return; }
+        version.current = response.data.version;
+        if (response.data.version > 0) persist({ ...fromRemote(response.data), ...pending.current });
+        else if (!edited.current && JSON.stringify(latest.current)
+          !== JSON.stringify(completeReaderSettings({ size: 1, width: 'medium', face: 'serif' }))) {
+          const seeded = await browserMainApi().v1.reader.settings.put(payload(latest.current, 0),
+            { headers: { 'idempotency-key': crypto.randomUUID() } });
+          if (seeded.data) version.current = seeded.data.version;
+          else setSyncFailed(true);
+        }
+      } catch { if (active) setSyncFailed(true); }
+    })();
+    return () => { active = false; };
+  }, [actingSubject]);
+  useEffect(() => {
+    const root = document.documentElement;
+    const previous = { light: root.classList.contains('light'), dark: root.classList.contains('dark') };
+    if (settings.theme !== 'system') {
+      root.classList.remove('light', 'dark');
+      root.classList.add(settings.theme);
+    }
+    return () => {
+      root.classList.remove('light', 'dark');
+      if (previous.light) root.classList.add('light');
+      if (previous.dark) root.classList.add('dark');
+    };
+  }, [settings.theme]);
+  const update = (next: Partial<CompleteReaderSettings>) => {
+    const value = { ...latest.current, ...next };
+    edited.current = true;
+    pending.current = { ...pending.current, ...next };
+    persist(value);
+    if (!actingSubject) return;
+    queue.current = queue.current.then(async () => {
+      await ready.current;
+      const api = browserMainApi().v1.reader.settings;
+      if (version.current === null) {
+        const fresh = await api.get({ query: { actingSubject } });
+        if (fresh.data) version.current = fresh.data.version;
+        else { setSyncFailed(true); return; }
+      }
+      let response = await api.put(payload(latest.current, version.current),
+        { headers: { 'idempotency-key': crypto.randomUUID() } });
+      if (response.error?.status === 409) {
+        const fresh = await api.get({ query: { actingSubject } });
+        if (fresh.data) {
+          version.current = fresh.data.version;
+          response = await api.put(payload(latest.current, fresh.data.version),
+            { headers: { 'idempotency-key': crypto.randomUUID() } });
+        }
+      }
+      if (response.data) { version.current = response.data.version; setSyncFailed(false); }
+      else setSyncFailed(true);
+    }).catch(() => setSyncFailed(true));
+  };
   const style = { '--reader-size': `${textSizes[settings.size]}px`,
     '--reader-width': `${lineWidths[settings.width]}rem` } as CSSProperties;
-  return <div style={style} data-face={settings.face} className="group/reader grid gap-6">
+  return <div style={style} data-face={settings.face} data-indent={settings.indent}
+    data-cjk-spacing={settings.cjkSpacing} data-cjk-punctuation={settings.cjkPunctuation}
+    className="group/reader grid gap-6">
     <div className="flex flex-wrap items-center justify-between gap-2">
       {toolbar}
       <Popover>
         <PopoverTrigger asChild>
           <Button variant="outline" size="sm"><TypeIcon aria-hidden="true" />{labels.settings}</Button>
         </PopoverTrigger>
-        <PopoverContent className="w-72">
+        <PopoverContent className="max-h-[min(80dvh,40rem)] w-72 overflow-y-auto">
           <PopoverHeader title={labels.settings} description={labels.settingsLocal} />
           <PopoverBody className="grid gap-4 text-sm">
             <div className="grid gap-1.5">
@@ -75,6 +162,36 @@ export function ReaderSurface({ initial, labels, toolbar, children }: {
                   onClick={() => update({ face })}>{labels[face]}</Choice>)}
               </div>
             </div>
+            <div role="group" aria-label={labels.paragraphIndent} className="grid gap-1.5">
+              <Choice pressed={settings.indent} onClick={() => update({ indent: !settings.indent })}>
+                {labels.paragraphIndent}</Choice>
+            </div>
+            <div role="group" aria-label={labels.theme} className="grid gap-1.5">
+              <p aria-hidden="true" className="font-medium">{labels.theme}</p>
+              <div className="flex gap-1">{(['system', 'light', 'dark'] as const).map(theme =>
+                <Choice key={theme} pressed={settings.theme === theme} onClick={() => update({ theme })}>
+                  {labels[theme]}</Choice>)}</div>
+            </div>
+            <div role="group" aria-label={labels.cjkSpacing} className="grid gap-1.5">
+              <p aria-hidden="true" className="font-medium">{labels.cjkSpacing}</p>
+              <div className="flex gap-1">
+                <Choice pressed={settings.cjkSpacing === 'auto'} onClick={() => update({ cjkSpacing: 'auto' })}>
+                  {labels.cjkAuto}</Choice>
+                <Choice pressed={settings.cjkSpacing === 'none'} onClick={() => update({ cjkSpacing: 'none' })}>
+                  {labels.cjkNone}</Choice>
+              </div>
+            </div>
+            <div role="group" aria-label={labels.cjkPunctuation} className="grid gap-1.5">
+              <p aria-hidden="true" className="font-medium">{labels.cjkPunctuation}</p>
+              <div className="flex gap-1">
+                <Choice pressed={settings.cjkPunctuation === 'standard'}
+                  onClick={() => update({ cjkPunctuation: 'standard' })}>{labels.cjkStandard}</Choice>
+                <Choice pressed={settings.cjkPunctuation === 'strict'}
+                  onClick={() => update({ cjkPunctuation: 'strict' })}>{labels.cjkStrict}</Choice>
+              </div>
+            </div>
+            {syncFailed ? <p role="status" className="text-destructive-foreground text-xs">
+              {labels.settingsFailed}</p> : null}
           </PopoverBody>
         </PopoverContent>
       </Popover>

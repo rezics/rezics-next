@@ -6,6 +6,8 @@ import { InvalidStructureProgress, StaleStructureProgress, StructureProgressConf
 import { CompositionCorrupt, CompositionUnavailable, NATIVE_ID, readCompositionHeader,
   readPublishedVariants } from '../modules/structure/graph.ts';
 import { readCompositionPage } from '../modules/structure/read.ts';
+import { GRAPHS, iri } from '../modules/work/activate.ts';
+import { publicWork } from '../modules/work/public-patterns.ts';
 import { StructureObjectCorrupt, StructureObjectUnavailable } from '../modules/structure/tree.ts';
 import { assertGraphAdmissionOpen } from '../modules/work/restore-lineage.ts';
 import { problemResult } from '../api-contract.ts';
@@ -51,13 +53,31 @@ export function progressRoutes(fuseki: FusekiClient, work: MainWorkDependencies)
     await assertGraphAdmissionOpen(fuseki, work.environment.lineage);
     const principal = await work.account.verify(request, ['work:read']);
     const header = await readCompositionHeader(work.environment, structure);
-    if (!header || header.profile !== 'book-composition'
-      || !await work.access.canReadWork(principal, actingSubject, header.work)) {
+    if (!header || header.profile !== 'book-composition') {
       throw new CompositionUnavailable('composition is unavailable');
     }
+    const grantedWork = await work.access.canReadWork(principal, actingSubject, header.work);
+    const publicReader = !!work.access.canReadAsBaselineMember
+      && await work.access.canReadAsBaselineMember(principal, actingSubject)
+      && (await fuseki.query(`PREFIX rv: <https://rezics.com/vocab/>
+        PREFIX schema: <https://schema.org/> ASK {
+          ${publicWork(iri(header.work), iri(header.mainVersion))}
+        }`, 1024)).boolean === true;
+    if (!grantedWork && !publicReader) throw new CompositionUnavailable('composition is unavailable');
     const page = await readCompositionPage(work.environment, { structure, occurrence, limit: 1,
       canReadTarget: target => NATIVE_ID.test(target)
-        ? work.access.canReadWork(principal, actingSubject, target) : Promise.resolve(false) });
+        ? work.access.canReadWork(principal, actingSubject, target).then(async granted =>
+          granted || !!publicReader && (await fuseki.query(`PREFIX rv: <https://rezics.com/vocab/>
+            ASK { GRAPH ${iri(GRAPHS.current)} {
+              ?variant a rv:ContentVariant ; rv:resource ${iri(target)} ;
+                rv:contentPublicationHead ?decision ; rv:publicSearchEligibilityHead ?eligibility . }
+              GRAPH ${iri(GRAPHS.revisions)} {
+                ?eligibility a rv:ContentSearchEligibilityDecision ;
+                  rv:publicationDecision ?decision ; rv:disclosure rv:Public .
+                ?decision rv:contentRevision ?revision .
+                FILTER NOT EXISTS { ?revision a rv:ErasedRevision }
+              }
+            }`, 1024)).boolean === true) : Promise.resolve(false) });
     const record = page.occurrences[0];
     if (!record || record.role !== 'chapter' || !record.target) {
       throw new CompositionUnavailable('chapter occurrence is unavailable');

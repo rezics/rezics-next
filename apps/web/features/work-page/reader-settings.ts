@@ -1,6 +1,4 @@
-// Reading settings: text size, line width and typeface. Main has no settings
-// read or write yet, so they live in a cookie on this device, which the server
-// reads so the first paint already uses them.
+// The cookie supplies the first paint. Main owns the account copy for signed-in readers.
 
 export const READER_COOKIE = 'rezics_reader';
 
@@ -12,7 +10,16 @@ export const typefaces = ['serif', 'sans'] as const;
 
 export type LineWidth = keyof typeof lineWidths;
 export type Typeface = (typeof typefaces)[number];
-export interface ReaderSettings { size: number; width: LineWidth; face: Typeface }
+export interface ReaderSettings { size: number; width: LineWidth; face: Typeface;
+  indent?: boolean; theme?: 'system' | 'light' | 'dark'; cjkSpacing?: 'auto' | 'none';
+  cjkPunctuation?: 'standard' | 'strict' }
+
+export type CompleteReaderSettings = Required<ReaderSettings>;
+export const completeReaderSettings = (settings: ReaderSettings): CompleteReaderSettings => ({
+  size: settings.size, width: settings.width, face: settings.face,
+  indent: settings.indent ?? false, theme: settings.theme ?? 'system',
+  cjkSpacing: settings.cjkSpacing ?? 'auto', cjkPunctuation: settings.cjkPunctuation ?? 'standard',
+});
 
 export const defaultReaderSettings: ReaderSettings = { size: 1, width: 'medium', face: 'serif' };
 
@@ -22,16 +29,29 @@ export function parseReaderSettings(value: string | undefined): ReaderSettings {
   const size = Number(params.get('size'));
   const width = params.get('width');
   const face = params.get('face');
+  const indent = params.get('indent');
+  const theme = params.get('theme');
+  const cjkSpacing = params.get('cjkSpacing');
+  const cjkPunctuation = params.get('cjkPunctuation');
   return {
     size: Number.isInteger(size) && size >= 0 && size < textSizes.length && params.has('size')
       ? size : defaultReaderSettings.size,
     width: width && width in lineWidths ? width as LineWidth : defaultReaderSettings.width,
     face: typefaces.includes(face as Typeface) ? face as Typeface : defaultReaderSettings.face,
+    ...(indent === 'true' || indent === 'false' ? { indent: indent === 'true' } : {}),
+    ...(theme === 'system' || theme === 'light' || theme === 'dark' ? { theme } : {}),
+    ...(cjkSpacing === 'auto' || cjkSpacing === 'none' ? { cjkSpacing } : {}),
+    ...(cjkPunctuation === 'standard' || cjkPunctuation === 'strict' ? { cjkPunctuation } : {}),
   };
 }
 
 export function serializeReaderSettings(settings: ReaderSettings): string {
-  return new URLSearchParams({ size: String(settings.size), width: settings.width, face: settings.face }).toString();
+  return new URLSearchParams({ size: String(settings.size), width: settings.width, face: settings.face,
+    ...(settings.indent !== undefined ? { indent: String(settings.indent) } : {}),
+    ...(settings.theme ? { theme: settings.theme } : {}),
+    ...(settings.cjkSpacing ? { cjkSpacing: settings.cjkSpacing } : {}),
+    ...(settings.cjkPunctuation ? { cjkPunctuation: settings.cjkPunctuation } : {}),
+  }).toString();
 }
 
 /** A reading position Main stores for a chapter: the paragraph the reader reached. */

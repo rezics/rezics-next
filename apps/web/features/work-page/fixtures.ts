@@ -190,7 +190,8 @@ const chapterText = ['The tide went out at four and took the eastern bank with i
     + 'ledger, but the city was where people lived.'].join('\n');
 export const chapter: ChapterRead = { profile: 'work-chapter-v1', work: workId, version: mainVersion,
   composition: structure, compositionRevision: iri('e8f0a2b4-c6d8-4e0f-9a1b-3c5d7e9f1a2b'), occurrence: occurrence(3),
-  parent: structure, language: 'en', selectedRevision: contentRevision(3),
+  parent: structure, parentPath: [], ordinal: 2, label: { value: 'The Surveyor’s Chain', language: 'en' },
+  language: 'en', selectedRevision: contentRevision(3),
   progress: { composition: structure, occurrence: occurrence(3), selectedRevision: contentRevision(3) },
   previous: occurrence(2), next: occurrence(4), sourcePosition,
   content: { reference: { owner: 'content', resourceId: iri('d7e9f1a3-b5c7-4d9e-8f1a-000000000003'),
@@ -202,6 +203,7 @@ export const chapter: ChapterRead = { profile: 'work-chapter-v1', work: workId, 
 const cjkText = ['潮水在四点退去，把东岸也一并带走了。', '她学会了不去相信河流留下的任何东西：像街道的沙洲，和只是怀着野心的浅水的街道。',
   '她把测链铺过泥滩，大声数着链环，在海水反驳之前把数字写进账簿。'].join('\n');
 export const cjkChapter: ChapterRead = { ...chapter, language: 'zh-Hans', previous: null,
+  label: { value: '测量员的链条', language: 'zh-Hans' },
   content: { ...chapter.content, reference: { ...chapter.content.reference,
     language: { kind: 'tag', tag: 'zh-Hans', originalTag: 'zh-Hans' } },
   serializedJson: JSON.stringify({ body: cjkText }), body: { body: cjkText } } };

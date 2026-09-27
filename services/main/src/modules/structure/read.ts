@@ -1,5 +1,5 @@
 import { GRAPHS, RV, iri, type WorkActivationEnvironment } from '../work/activate.ts';
-import { checkOccurrenceRecord, checkStructureManifest, InvalidStructureObject,
+import { checkOccurrenceRecord, checkStructureManifest, InvalidStructureObject, STRUCTURE_LIMITS,
   type OccurrenceRecord, type RecipeMeasure } from './format.ts';
 import { orderTree, recordTree, structureObjects } from './change.ts';
 import { CompositionCorrupt, CompositionUnavailable, NATIVE_ID, orderTreeKey,
@@ -21,6 +21,8 @@ export interface CompositionPage {
   next: string | null;
   sourcePosition: { datasetId: 'product'; dataEpoch: string; sequence: string };
   cost: TreeCost;
+  occurrenceContext?: { ordinal: number; path: Array<{ occurrence: string;
+    labels: OccurrenceRecord['labels'] }> };
 }
 
 /** The measure set is part of an exact immutable revision, including an empty set. */
@@ -144,12 +146,31 @@ export async function readCompositionPage(env: WorkActivationEnvironment, input:
     const visible = record.target && !isCatalogTarget(profile, record.target)
       && !await input.canReadTarget(record.target)
       ? { ...record, target: undefined, selection: undefined, labels: [] } : record;
+    let occurrenceContext: CompositionPage['occurrenceContext'];
+    if (record.state === 'active' && record.segmentKey && record.orderKey) {
+      const key = orderTreeKey(record as Required<Pick<OccurrenceRecord,
+        'parent' | 'segmentKey' | 'orderKey'>>);
+      const before = await orderTree(objects).countBefore(manifest.order, key, cost);
+      const first = await orderTree(objects).countBefore(manifest.order, `${record.parent}\u0001`, cost);
+      const path: NonNullable<CompositionPage['occurrenceContext']>['path'] = [];
+      let parent = record.parent;
+      for (let depth = 0; parent !== input.structure && depth < STRUCTURE_LIMITS.maxDepth; depth++) {
+        const ancestor = (await recordTree(objects).lookup(manifest.records, [parent], cost)).get(parent);
+        if (!ancestor || ancestor.state !== 'active' || ancestor.role !== 'group') {
+          throw new StructureObjectCorrupt('Chapter ancestry is unavailable');
+        }
+        path.unshift({ occurrence: ancestor.occurrence, labels: ancestor.labels });
+        parent = ancestor.parent;
+      }
+      if (parent !== input.structure) throw new StructureObjectCorrupt('Chapter ancestry exceeds depth');
+      occurrenceContext = { ordinal: before - first + 1, path };
+    }
     return { structure: input.structure, owner: header.owner, component: header.component,
       work: header.work, mainVersion: header.mainVersion,
       revision, predecessor: value('predecessor') ?? null, placementCount: manifest.placementCount,
       occurrences: [visible], next: null,
       sourcePosition: { datasetId: 'product', dataEpoch: value('epoch')!, sequence: value('sequence')! },
-      cost };
+      cost, occurrenceContext };
   }
   const parent = input.parent ?? input.structure;
   if (parent !== input.structure) {

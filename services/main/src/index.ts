@@ -11,6 +11,7 @@ import { DiscoveryRefreshStore } from './modules/discovery/refresh-store.ts';
 import { FusekiClient } from './infrastructure/fuseki.ts';
 import { S3ImmutableObjects } from './infrastructure/immutable-objects.ts';
 import { StructureProgressStore } from './modules/progress/store.ts';
+import { ReadingSettingsStore } from './modules/reading-settings/store.ts';
 import { StructureStageStore } from './modules/structure/stage.ts';
 import { SemanticStageStore } from './modules/semantic/staging.ts';
 import { AccessAdmissionRegistry } from './modules/access/admission.ts';
@@ -267,6 +268,7 @@ const app = createMainApp(fuseki, {
   semanticStages: new SemanticStageStore(contentPool, semanticStageObjects),
   account,
   progress: new StructureProgressStore(contentPool),
+  readingSettings: new ReadingSettingsStore(contentPool),
   access,
   contextSelections: rankingContextSelections,
   eventQueries,

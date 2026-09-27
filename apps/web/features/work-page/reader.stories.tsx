@@ -36,6 +36,7 @@ export const Reading: Story = {
 };
 
 export const Settings: Story = {
+  args: { actingSubject: null },
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     await userEvent.click(canvas.getByRole('button', { name: 'Reading settings' }));
@@ -43,8 +44,12 @@ export const Settings: Story = {
     await userEvent.click(within(dialog).getByRole('button', { name: 'Larger text' }));
     await userEvent.click(within(dialog).getByRole('button', { name: 'Wide' }));
     await userEvent.click(within(dialog).getByRole('button', { name: 'Sans serif' }));
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Indent paragraphs' }));
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Strict' }));
     const surface = canvasElement.querySelector<HTMLElement>('[data-face]')!;
     await expect(surface).toHaveAttribute('data-face', 'sans');
+    await expect(surface).toHaveAttribute('data-indent', 'true');
+    await expect(surface).toHaveAttribute('data-cjk-punctuation', 'strict');
     await expect(surface.style.getPropertyValue('--reader-size')).toBe('19px');
     await expect(surface.style.getPropertyValue('--reader-width')).toBe('50rem');
     await expect(within(dialog).getByRole('button', { name: 'Wide' })).toHaveAttribute('aria-pressed', 'true');

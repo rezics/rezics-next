@@ -23,7 +23,9 @@ export const contentsPage = t.Object({ profile: t.Literal('work-contents-v1'), w
   language: t.Nullable(readLanguage), items: t.Array(contentsItem, { maxItems: 20 }), ...pageFields });
 export const chapterRead = t.Object({ profile: t.Literal('work-chapter-v1'), work: readId,
   version: readId, composition: readId, compositionRevision: readId, occurrence: readId,
-  parent: readId, language: readLanguage, selectedRevision: contentRevision,
+  parent: readId, parentPath: t.Array(t.Object({ occurrence: readId, label: t.Nullable(label) }),
+    { maxItems: 16 }), ordinal: t.Integer({ minimum: 1 }), label: t.Nullable(label),
+  language: readLanguage, selectedRevision: contentRevision,
   progress,
   previous: t.Nullable(readId), next: t.Nullable(readId),
   content: exactContentRevision, sourcePosition: readPosition });

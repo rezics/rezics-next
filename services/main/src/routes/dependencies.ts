@@ -67,6 +67,7 @@ import type { EventTemporalQueries } from '../modules/event/queries.ts';
 import type { AccessVotes } from '../modules/vote/access.ts';
 import type { AccessJudgments } from '../modules/judgment/access.ts';
 import type { StructureProgressStore } from '../modules/progress/store.ts';
+import type { ReadingSettingsStore } from '../modules/reading-settings/store.ts';
 import type { StructureStageStore } from '../modules/structure/stage.ts';
 import type { SemanticStageStore } from '../modules/semantic/staging.ts';
 import type { ImmutableObjects } from '../infrastructure/immutable-objects.ts';
@@ -107,6 +108,7 @@ export interface MainWorkDependencies {
   structureStages?: StructureStageStore;
   semanticStages?: SemanticStageStore;
   progress?: StructureProgressStore;
+  readingSettings?: ReadingSettingsStore;
   account: Pick<AccountAssertionVerifier, 'verify'>;
   content?: Pick<ContentCore, 'owningResourceForRevision' | 'readExactBatch'>;
   editorialProtection?: ContentProtectionStore;
@@ -122,6 +124,7 @@ export interface MainWorkDependencies {
   access: Pick<AccessAdmissionRegistry,
     'register' | 'claim' | 'recordGraphOutcome' | 'canReadWork' | 'canReadContributionDraft'
     | 'canReadStandingRating' | 'canLinkTranslation' | 'activePrincipalId'>
+    & Partial<Pick<AccessAdmissionRegistry, 'canReadAsBaselineMember'>>
     & Partial<Pick<AccessAdmissionRegistry, 'verifyContentDraftProof'
       | 'withWorkEditAuthority'
       | 'canReadSemanticResource'

@@ -68,6 +68,7 @@ import { realmReadRoutes } from './routes/realm-reads.ts';
 import { realmDirectoryRoutes } from './routes/realm-directory.ts';
 import { realmSubmissionRoutes } from './routes/realm-submissions.ts';
 import { workContentsRoutes } from './routes/work-contents.ts';
+import { readingSettingsRoutes } from './routes/reading-settings.ts';
 import { workActivityRoutes } from './routes/work-activity.ts';
 import { profileRoutes } from './routes/profiles.ts';
 import { realmProfileRoutes } from './routes/realm-profile.ts';
@@ -127,6 +128,7 @@ function domainRoutes(fuseki: FusekiClient, work: SearchRouteDependencies) {
     .use(workContentsRoutes(work))
     .use(workActivityRoutes(work))
     .use(profileRoutes(work))
+    .use(readingSettingsRoutes(work))
     .use(realmProfileRoutes(work));
 }
 

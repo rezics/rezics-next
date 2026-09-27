@@ -304,6 +304,29 @@ export class AccessAdmissionRegistry {
     return this.canReadScopedResource(principal, actingSubject, `work:read:${work}`, 'work.read');
   }
 
+  /** Current person-Agent baseline for private reader state on public chapters. */
+  async canReadAsBaselineMember(principal: VerifiedPrincipal, actingSubject: string): Promise<boolean> {
+    if (!principal.emailVerified || !/^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/.test(actingSubject)) {
+      return false;
+    }
+    const client = await this.pool.connect();
+    try {
+      await client.query('BEGIN');
+      await client.query("SET LOCAL lock_timeout = '2s'");
+      await client.query("SET LOCAL statement_timeout = '5s'");
+      await requireRecoveryOpen(client);
+      const identity = await client.query<{ id: string }>(`SELECT id FROM access.principal
+        WHERE account_issuer = $1 AND account_subject = $2 AND active FOR SHARE`,
+      [principal.issuer, principal.subject]);
+      const allowed = !!identity.rows[0] && !!await baselineMemberProof(client, identity.rows[0].id, actingSubject);
+      await client.query('COMMIT');
+      return allowed;
+    } catch (error) {
+      await rollback(client);
+      throw error;
+    } finally { client.release(); }
+  }
+
   /** Current disclosure decision for a semantic Resource or relation occurrence. */
   async canReadSemanticResource(principal: VerifiedPrincipal, actingSubject: string,
     resource: string): Promise<boolean> {

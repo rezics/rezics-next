@@ -1,6 +1,9 @@
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { startMediaStack } from '../../../tests/qa/integration/media-support.ts';
+import { createMainApp } from '../src/app.ts';
+import type { VerifiedPrincipal } from '../src/modules/access/admission.ts';
+import { StructureProgressStore } from '../src/modules/progress/store.ts';
 import { activateMetadataWork, metadataWorkRequestDigest } from '../src/modules/work/activate.ts';
 import { mainSelectionDigest, selectMainDefault } from '../src/modules/work/select-main.ts';
 import { GRAPHS, RV, iri } from '../src/modules/work/activate.ts';
@@ -99,7 +102,8 @@ test('Reader: public and private composition pages, current Content, cursor and 
     const beforeChapter = stack.fuseki.queries;
     const chapter = await json<{ content: { body: { body: string } }; selectedRevision: string;
       progress: { composition: string; occurrence: string; selectedRevision: string };
-      previous: string | null; next: string | null }>(await get(chapterPath));
+      previous: string | null; next: string | null; label: { value: string; language: string };
+      ordinal: number; parentPath: unknown[] }>(await get(chapterPath));
     expect(stack.fuseki.queries - beforeChapter).toBeLessThanOrEqual(64);
     expect(chapter.content.body.body).toBe('Exact reader body');
     expect(chapter.selectedRevision).toBe(`urn:rezics:content:revision:${saved.revisionId}`);
@@ -107,10 +111,45 @@ test('Reader: public and private composition pages, current Content, cursor and 
       occurrence: changed.occurrences[0], selectedRevision: chapter.selectedRevision });
     expect(chapter.previous).toBeNull();
     expect(chapter.next).toBe(changed.occurrences[1]);
-    const secondChapter = await json<{ previous: string | null; next: string | null }>(await get(
+    expect(chapter.label).toEqual({ value: 'Chapter one', language: 'en' });
+    expect(chapter.ordinal).toBe(1);
+    expect(chapter.parentPath).toEqual([]);
+    const secondChapter = await json<{ previous: string | null; next: string | null;
+      ordinal: number; label: { value: string } }>(await get(
       `/v1/chapters/${short(changed.occurrences[1]!)}`));
     expect(secondChapter.previous).toBe(changed.occurrences[0]);
     expect(secondChapter.next).toBeNull();
+    expect(secondChapter.ordinal).toBe(2);
+    expect(secondChapter.label.value).toBe('Chapter two');
+    let baselineActive = true;
+    const progressApp = createMainApp(stack.fuseki, { environment: stack.env,
+      account: { verify: async request => {
+        const token = request.headers.get('authorization')?.slice(7);
+        if (token === a.token) return { ...a.principal, emailVerified: true };
+        if (token === b.token) return { ...b.principal, emailVerified: true };
+        throw new Error('unknown bearer');
+      } },
+      access: { canReadWork: stack.access.canReadWork.bind(stack.access),
+        canReadAsBaselineMember: async (principal: VerifiedPrincipal, actor: string) => baselineActive
+          && principal.subject === b.principal.subject && actor === b.actor } as never,
+      progress: new StructureProgressStore(stack.contentPool) });
+    const progressPath = `/v1/compositions/${short(made.structure)}/occurrences/${short(changed.occurrences[0]!)}/progress`;
+    const progressCall = (method: string, token: string, actor: string, body?: object, key?: string) =>
+      progressApp.handle(new Request(`http://main.local${progressPath}${method === 'GET'
+        ? `?actingSubject=${encodeURIComponent(actor)}&selectedRevision=${encodeURIComponent(chapter.selectedRevision)}` : ''}`,
+      { method, headers: { authorization: `Bearer ${token}`,
+        ...(body ? { 'content-type': 'application/json', 'idempotency-key': key ?? randomUUID() } : {}) },
+      ...(body ? { body: JSON.stringify(body) } : {}) }));
+    const empty = await json<{ version: number }>(await progressCall('GET', b.token, b.actor));
+    expect(empty.version).toBe(0);
+    const savedProgress = await json<{ completed: boolean; version: number }>(await progressCall('PUT',
+      b.token, b.actor, { actingSubject: b.actor, selectedRevision: chapter.selectedRevision,
+        expectedVersion: 0, completed: true, position: null }));
+    expect(savedProgress).toMatchObject({ completed: true, version: 1 });
+    baselineActive = false;
+    expect((await progressCall('GET', b.token, b.actor)).status).toBe(404);
+    baselineActive = true;
+    expect((await progressCall('GET', b.token, a.actor)).status).toBe(404);
     expect((await get(`${chapterPath}?language=ja`)).status).toBe(404);
     expect((await get(`${chapterPath}?revision=${encodeURIComponent(made.revision)}`)).status).toBe(409);
     expect((await get(`/v1/chapters/${short(changed.occurrences[2]!)}`)).status).toBe(404);
