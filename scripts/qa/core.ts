@@ -398,6 +398,7 @@ export const isolatedFaultFiles = new Set([
   'tests/qa/fault-recovery/partition-relocation.test.ts',
   'tests/qa/fault-recovery/rights-restriction-replay.test.ts',
   'tests/qa/fault-recovery/semantic-lost-response.test.ts',
+  'tests/qa/fault-recovery/source-author-credit.test.ts',
 ]);
 
 // These files create and reset their own named QA projects (or one standalone
