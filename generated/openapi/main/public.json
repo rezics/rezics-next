@@ -92654,6 +92654,10 @@
               "application/json": {
                 "schema": {
                   "properties": {
+                    "generation": {
+                      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                      "type": "string"
+                    },
                     "items": {
                       "items": {
                         "properties": {
@@ -92716,6 +92720,21 @@
                       "const": "discovery-popular-terms-v1",
                       "type": "string"
                     },
+                    "projectionPosition": {
+                      "properties": {
+                        "dataEpoch": {
+                          "type": "string"
+                        },
+                        "sequence": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "dataEpoch",
+                        "sequence"
+                      ],
+                      "type": "object"
+                    },
                     "scope": {
                       "properties": {
                         "kind": {
@@ -92756,10 +92775,16 @@
                         "sequence"
                       ],
                       "type": "object"
+                    },
+                    "stale": {
+                      "type": "boolean"
                     }
                   },
                   "required": [
                     "profile",
+                    "generation",
+                    "stale",
+                    "projectionPosition",
                     "scope",
                     "sourcePosition",
                     "items"
@@ -132995,11 +133020,37 @@
                                   "moderation_outcome",
                                   "realm_role_change",
                                   "follow",
-                                  "claim_correction"
+                                  "claim_correction",
+                                  "review",
+                                  "review_helpful"
                                 ],
                                 "type": "string"
                               },
                               "realm": {
+                                "~elyTyp": 7,
+                                "nullable": true,
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              },
+                              "realmName": {
+                                "~elyTyp": 7,
+                                "nullable": true,
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              },
+                              "realmRouteSegment": {
+                                "~elyTyp": 7,
+                                "nullable": true,
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              },
+                              "roleName": {
                                 "~elyTyp": 7,
                                 "nullable": true,
                                 "type": [
@@ -133055,6 +133106,9 @@
                               "kind",
                               "actor",
                               "realm",
+                              "realmName",
+                              "realmRouteSegment",
+                              "roleName",
                               "groupKey",
                               "target"
                             ],
@@ -140612,6 +140666,9 @@
                                     "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                                     "type": "string"
                                   },
+                                  "stale": {
+                                    "type": "boolean"
+                                  },
                                   "value": {
                                     "~elyTyp": 7,
                                     "maximum": 10,
@@ -140627,7 +140684,8 @@
                                   "context",
                                   "value",
                                   "availability",
-                                  "revision"
+                                  "revision",
+                                  "stale"
                                 ],
                                 "type": [
                                   "object",
@@ -140653,6 +140711,9 @@
                                     "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                                     "type": "string"
                                   },
+                                  "stale": {
+                                    "type": "boolean"
+                                  },
                                   "value": {
                                     "~elyTyp": 7,
                                     "maximum": 10,
@@ -140668,7 +140729,8 @@
                                   "context",
                                   "value",
                                   "availability",
-                                  "revision"
+                                  "revision",
+                                  "stale"
                                 ],
                                 "type": [
                                   "object",
@@ -369094,6 +369156,10 @@
                       ],
                       "type": "object"
                     },
+                    "generation": {
+                      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                      "type": "string"
+                    },
                     "items": {
                       "items": {
                         "properties": {
@@ -369747,6 +369813,21 @@
                       "const": "discovery-works-v1",
                       "type": "string"
                     },
+                    "projectionPosition": {
+                      "properties": {
+                        "dataEpoch": {
+                          "type": "string"
+                        },
+                        "sequence": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "dataEpoch",
+                        "sequence"
+                      ],
+                      "type": "object"
+                    },
                     "scope": {
                       "properties": {
                         "kind": {
@@ -369787,10 +369868,16 @@
                         "sequence"
                       ],
                       "type": "object"
+                    },
+                    "stale": {
+                      "type": "boolean"
                     }
                   },
                   "required": [
                     "profile",
+                    "generation",
+                    "stale",
+                    "projectionPosition",
                     "order",
                     "scope",
                     "context",
@@ -386127,6 +386214,9 @@
                               "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                               "type": "string"
                             },
+                            "stale": {
+                              "type": "boolean"
+                            },
                             "value": {
                               "~elyTyp": 7,
                               "maximum": 10,
@@ -386142,7 +386232,8 @@
                             "context",
                             "value",
                             "availability",
-                            "revision"
+                            "revision",
+                            "stale"
                           ],
                           "type": [
                             "object",
@@ -386168,6 +386259,9 @@
                               "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                               "type": "string"
                             },
+                            "stale": {
+                              "type": "boolean"
+                            },
                             "value": {
                               "~elyTyp": 7,
                               "maximum": 10,
@@ -386183,7 +386277,8 @@
                             "context",
                             "value",
                             "availability",
-                            "revision"
+                            "revision",
+                            "stale"
                           ],
                           "type": [
                             "object",
