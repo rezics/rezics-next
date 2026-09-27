@@ -44,7 +44,8 @@ export const works: Record<string, WorkSummary> = Object.fromEntries(titles.map(
 export const header: RealmHeader = { profile: 'realm-read-v1', id: iri(1), space: iri(2), revision: iri(3),
   name: name('Classic Literature · 经典文学'), icon: { ...fallback(iri(1)), resourceType: 'realm' }, profileRevision: null,
   description: null, banner: null, rules: null, membership: { count: { kind: 'unknown', value: null }, publicMembers: null },
-  moderators: { kind: 'known', items: [people.mei] }, sourcePosition: position,
+  moderators: { kind: 'known', items: [people.mei] }, visibility: 'public', reviewMode: 'mandatory',
+  policyRevision: null, sourcePosition: position,
   links: { works: `/v1/realms/${realm}/works`, decisions: `/v1/realms/${realm}/decisions` } };
 
 function report(n: number, work: number, reason: string, hours: number, overrides: Partial<ModerationItem> = {}): ModerationItem {
