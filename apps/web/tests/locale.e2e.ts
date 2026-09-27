@@ -29,8 +29,10 @@ test('interface locale persists without changing public search language or anoth
     await page.goto('/studio');
     await expect(page).toHaveURL(/\/sign-in\?next=%2Fstudio$/);
     await expect(page.getByRole('heading', { name: '登录 REZICS' })).toBeVisible();
+    // Choosing an Agent needs a session, so a signed-out visit asks to sign in, still in Chinese.
     await page.goto('/identity?next=/studio');
-    await expect(page.getByRole('heading', { name: '选择操作身份' })).toBeVisible();
+    await expect(page).toHaveURL(/\/sign-in\?next=%2Fidentity/);
+    await expect(page.getByRole('heading', { name: '登录 REZICS' })).toBeVisible();
     await page.goto('/');
     await expect(page.getByRole('heading', { name: '寻找作品，追寻其意义。' })).toBeVisible();
 
