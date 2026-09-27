@@ -38,6 +38,9 @@ that TDB2 can recover missing historical content from a current-state RDF dump.
 
 ## Task reading routes
 
+The main site's [read API design and Work template](read-api-design.md) map the
+browse, reader, profile, Realm and management read families to their next owners.
+
 Start with the active scope above and the [coverage map](../architecture/coverage.md).
 These routes select initial context; follow additional owning links when a change
 affects their invariants. They do not redefine contracts or waive acceptance cases.
