@@ -27,6 +27,7 @@ const commands: string[][] = [
     ? [
         ['bun', 'node_modules/typescript/bin/tsc', '--project', 'packages/ui/tsconfig.json'],
         ['bun', 'node_modules/typescript/bin/tsc', '--project', 'apps/web/tsconfig.json'],
+        ['bun', 'node_modules/typescript/bin/tsc', '--project', 'apps/accounts/tsconfig.json'],
       ]
     : []),
   ['bun', 'node_modules/typescript/bin/tsc', '--project', 'scripts/load/tsconfig.json'],
@@ -68,7 +69,7 @@ const commands: string[][] = [
     'node_modules/.bin/biome',
     'format',
     'package.json',
-    ...(!backend ? ['apps/web/package.json'] : []),
+    ...(!backend ? ['apps/web/package.json', 'apps/accounts/package.json'] : []),
     'services/main/package.json',
     'services/account/package.json',
     'services/content/package.json',
@@ -97,7 +98,17 @@ const graph = Bun.spawnSync({
     '--output-type',
     'err',
     ...(!backend
-      ? ['apps/web/app', 'apps/web/features', 'apps/web/i18n', 'apps/web/worker', 'packages/ui/src']
+      ? [
+          'apps/web/app',
+          'apps/web/features',
+          'apps/web/i18n',
+          'apps/web/worker',
+          'apps/accounts/app',
+          'apps/accounts/features',
+          'apps/accounts/i18n',
+          'apps/accounts/worker',
+          'packages/ui/src',
+        ]
       : []),
     'packages/model/src',
     'services/main/src',

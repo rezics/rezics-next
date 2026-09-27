@@ -4,7 +4,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@rezics/ui/avatar';
 
 export interface AvatarUser { name: string; email: string; image: string | null }
 
-export function initials(value: string): string {
+function initials(value: string): string {
   return [...value.trim()][0]?.toUpperCase() ?? '?';
 }
 

@@ -3,7 +3,7 @@
 import { classifyFailure, type Result } from './errors.ts';
 
 /** Where to go next: the provider's continuation of an OAuth request, if any. */
-export interface Continuation { redirect?: string }
+interface Continuation { redirect?: string }
 
 export interface AccountApi {
   signIn(input: { email: string; password: string; oauthQuery?: string }): Promise<Result<Continuation>>;
@@ -51,7 +51,7 @@ function done<T>(result: Result<T>): Result<void> {
 }
 
 // Account emails link back here; Better Auth accepts relative callback paths.
-export const callbackPaths = { resetPassword: '/reset-password', verifyEmail: '/verify-email' };
+const callbackPaths = { resetPassword: '/reset-password', verifyEmail: '/verify-email' };
 
 export const browserAccountApi: AccountApi = {
   async signIn({ email, password, oauthQuery }) {

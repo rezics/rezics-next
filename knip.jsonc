@@ -45,6 +45,13 @@
       "project": ["src/**/*.ts", "tests/**/*.ts"]
     },
     "services/content": { "entry": ["src/*.ts"], "project": ["src/**/*.ts", "tests/**/*.ts"] },
+    // vinext loads App Router files and the Worker entry by convention.
+    "apps/accounts": {
+      "entry": ["app/**/{page,layout,loading,error,not-found}.tsx", "tests/**/*.{test,e2e}.ts"],
+      "project": ["**/*.{ts,tsx}"],
+      // Imported from app/styles.css, which Knip does not follow.
+      "ignoreDependencies": ["@fontsource-variable/manrope", "tailwindcss"]
+    },
     "packages/model": { "project": ["src/**/*.ts", "tests/**/*.ts"] },
     // Aspire runs the AppHost with `npx tsx`; the CLI launcher and the generated
     // SDK in the ignored `.aspire/` directory use these dependencies.

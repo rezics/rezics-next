@@ -5,7 +5,7 @@ import { type AccountSession, list, parseConsent, parseDeviceSession, parseLinke
   parsePublicClient, parseSession, record } from './account-data.ts';
 import { accountsConfig, httpOrigin } from '../config/env.ts';
 
-export type { AccountSession, AccountUser } from './account-data.ts';
+export type { AccountSession } from './account-data.ts';
 
 /** `stale`: the service wants a recent sign-in first; `missing`: the endpoint
  * is not deployed yet. */

@@ -1,7 +1,7 @@
 // Account service responses cross a trust boundary; each is narrowed to the
 // fields the pages show.
 
-export interface AccountUser { id: string; name: string; email: string; emailVerified: boolean;
+interface AccountUser { id: string; name: string; email: string; emailVerified: boolean;
   image: string | null; createdAt: string }
 export interface AccountSession { user: AccountUser; sessionId: string }
 export interface DeviceSession { id: string; token: string; createdAt: string; updatedAt: string;

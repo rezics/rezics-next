@@ -5,7 +5,7 @@ export type FailureKind = 'invalid-credentials' | 'email-not-verified' | 'rate-l
   | 'not-enabled' | 'password-too-short' | 'password-too-long' | 'invalid-token'
   | 'expired-request' | 'unauthenticated' | 'stale' | 'conflict' | 'unavailable' | 'failed';
 
-export interface Failure { ok: false; kind: FailureKind; status: number }
+interface Failure { ok: false; kind: FailureKind; status: number }
 export type Result<T> = { ok: true; data: T } | Failure;
 
 const byCode: Record<string, FailureKind> = {

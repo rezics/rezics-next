@@ -21,10 +21,17 @@
       }
     },
     {
+      "name": "accounts-reaches-account-over-http",
+      "comment": "The Accounts site talks to the Account service only through its HTTP API and proxy.",
+      "severity": "error",
+      "from": { "path": "(^|/)apps/accounts/(app|features|i18n|worker)/" },
+      "to": { "path": "(^|/)(services/[^/]+|apps/web)/" }
+    },
+    {
       "name": "browser-code-has-no-server-dependencies",
       "comment": "Shared UI and browser feature modules cannot depend on server-only builtins or packages.",
       "severity": "error",
-      "from": { "path": "(^|/)(apps/web/features|packages/ui/src)/" },
+      "from": { "path": "(^|/)(apps/web/features|apps/accounts/features|packages/ui/src)/" },
       "to": {
         "path": "^(node:)?(bun|fs|path|crypto|child_process|net|tls|http|https|pg)(/|$)"
       }
@@ -45,10 +52,10 @@
     },
     {
       "name": "service-source-does-not-import-web",
-      "comment": "Backend and model production code may not depend on the web application.",
+      "comment": "Backend and model production code may not depend on the web or Accounts applications.",
       "severity": "error",
       "from": { "path": "(^|/)(services/[^/]+|packages/model)/src/" },
-      "to": { "path": "(^|/)apps/web/" }
+      "to": { "path": "(^|/)apps/(web|accounts)/" }
     }
   ],
   "options": {

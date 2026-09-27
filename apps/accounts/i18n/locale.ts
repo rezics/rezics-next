@@ -6,7 +6,7 @@ export const uiLocales = ['en', 'zh-CN'] as const;
 export type UiLocale = (typeof uiLocales)[number];
 export const i18n = create(resources);
 
-export function isUiLocale(value: unknown): value is UiLocale {
+function isUiLocale(value: unknown): value is UiLocale {
   return uiLocales.includes(value as UiLocale);
 }
 
