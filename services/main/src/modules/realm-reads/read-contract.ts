@@ -4,10 +4,18 @@ import { pageFields, readAvatar, readId, readName, readPosition, WORK_READ_COST,
 
 export const realmHeader = t.Object({ profile: t.Literal('realm-read-v1'), id: readId,
   space: readId, revision: readId, name: readName, icon: readAvatar,
-  description: t.Null(), banner: t.Null(), rules: t.Null(),
-  membership: t.Object({ count: t.Object({ kind: t.Literal('unknown'), value: t.Null() }),
+  profileRevision: t.Nullable(readId), description: t.Nullable(readName),
+  banner: t.Nullable(readAvatar),
+  rules: t.Nullable(t.Array(t.Object({ id: t.String(), title: readName,
+    body: readName, governanceRule: t.Nullable(t.Object({ ref: t.String(),
+      revision: t.String() })) }), { maxItems: 12 })),
+  membership: t.Object({ count: t.Union([
+    t.Object({ kind: t.Literal('unknown'), value: t.Null() }),
+    t.Object({ kind: t.Literal('estimated'), value: t.Integer({ minimum: 0 }) }),
+  ]),
     publicMembers: t.Null() }),
-  moderators: t.Object({ kind: t.Literal('unknown'), items: t.Array(readId, { maxItems: 0 }) }),
+  moderators: t.Object({ kind: t.Union([t.Literal('unknown'), t.Literal('known')]),
+    items: t.Array(readId, { maxItems: 16 }) }),
   sourcePosition: readPosition,
   links: t.Object({ works: t.String(), decisions: t.String() }) });
 

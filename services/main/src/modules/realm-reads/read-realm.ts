@@ -1,5 +1,8 @@
 import { GRAPHS, iri } from '../work/activate.ts';
 import { WorkReadMissing, WorkReadUnavailable, type WorkReadSession } from '../work/read-session.ts';
+import { chosenModerators, readCurrentProfile } from '../realm-profile/commands.ts';
+import { AVATAR_POLICY, avatarImageEligible, DEFAULT_MEDIA_CONTEXT } from '../media/store.ts';
+import { fallbackAvatar, selectName } from '../media/summary.ts';
 
 export interface RealmBasis { id: string; space: string; revision: string }
 
@@ -22,10 +25,52 @@ export async function readRealmHeader(session: WorkReadSession, realm: string) {
   }
   await readRealmBasis(session, realm);
   const path = `/v1/realms/${realm.slice(-36)}`;
-  return { profile: 'realm-read-v1' as const, ...basis, name: summary.name, icon: summary.avatar,
-    // No public description, banner, community rules or roster publication exists yet.
-    description: null, banner: null, rules: null,
-    membership: { count: { kind: 'unknown' as const, value: null }, publicMembers: null },
-    moderators: { kind: 'unknown' as const, items: [] }, sourcePosition: session.position,
+  const published = await readCurrentProfile(session.deps.environment, realm);
+  const selected = (value: { en: string; 'zh-CN': string }) =>
+    selectName(new Map([['en', value.en], ['zh-cn', value['zh-CN']]]),
+      session.options.language?.toLowerCase() ?? null)!;
+  const profile = published?.profile;
+  let banner = null;
+  if (profile?.bannerSelection && session.deps.media?.store) {
+    const row = await session.deps.media.store.avatarDelivery(profile.bannerSelection);
+    if (row?.target === realm && row.context === realm && avatarImageEligible(row)) {
+      banner = { kind: 'image' as const, selection: row.selection!,
+        url: `/v1/media/avatars/${row.selection}`, mediaType: row.mediaType!,
+        width: row.width!, height: row.height!, crop: row.crop,
+        basis: { policy: AVATAR_POLICY, context: realm } };
+    }
+  }
+  const icon = profile?.iconSelection
+    ? summary.avatar.kind === 'image' && summary.avatar.selection === profile.iconSelection
+      && summary.avatar.basis.context === DEFAULT_MEDIA_CONTEXT
+      ? summary.avatar : fallbackAvatar('realm', realm)
+    : profile ? fallbackAvatar('realm', realm) : summary.avatar;
+  const moderators = profile ? [...await chosenModerators(session.deps.environment,
+    realm, profile.moderators)] : [];
+  const rules = profile ? await Promise.all(profile.rules.map(async rule => {
+    let governanceRule = rule.governanceRule;
+    if (governanceRule) {
+      if (!session.deps.governance?.rules) governanceRule = null;
+      else {
+        let current: { revision: string } | null;
+        try { current = await session.deps.governance.rules.current(governanceRule.ref,
+          `governance:realm:${realm}`); }
+        catch { throw new WorkReadUnavailable('Realm governance rule is unavailable'); }
+        if (current?.revision !== governanceRule.revision) governanceRule = null;
+      }
+    }
+    return { id: rule.id, title: selected(rule.title), body: selected(rule.body), governanceRule };
+  })) : null;
+  await readRealmBasis(session, realm);
+  return { profile: 'realm-read-v1' as const, ...basis,
+    name: profile ? selected(profile.name) : summary.name, icon,
+    profileRevision: published?.revision ?? null,
+    description: profile ? selected(profile.description) : null,
+    banner, rules,
+    membership: { count: profile?.count ?? { kind: 'unknown' as const, value: null },
+      publicMembers: null },
+    moderators: { kind: profile ? 'known' as const : 'unknown' as const,
+      items: profile ? profile.moderators.filter(agent => moderators.includes(agent)) : [] },
+    sourcePosition: session.position,
     links: { works: `${path}/works`, decisions: `${path}/decisions` } };
 }

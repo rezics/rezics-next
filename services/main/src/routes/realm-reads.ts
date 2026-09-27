@@ -6,6 +6,7 @@ import { realmDecisionsPage, realmHeader, realmWorksPage } from '../modules/real
 import { readRealmHeader } from '../modules/realm-reads/read-realm.ts';
 import { readRealmWorks } from '../modules/realm-reads/read-works.ts';
 import { readRealmDecisions } from '../modules/realm-reads/public-decision-index.ts';
+import { RealmProfileUnavailable } from '../modules/realm-profile/schema.ts';
 import type { MainWorkDependencies } from './dependencies.ts';
 import { commandError, problem } from './problems.ts';
 import { workReadProblems } from './work-reads.ts';
@@ -21,6 +22,8 @@ function realmReadError(error: unknown): Response {
   if (error instanceof WorkReadMoved) return problem(409, 'read_basis_changed', 'Restart from the first page');
   if (error instanceof WorkReadLimit) return problem(422, 'realm_read_budget_exceeded', 'Realm read exceeds its budget');
   if (error instanceof WorkReadUnavailable) return problem(503, 'realm_read_unavailable', 'Realm read is unavailable');
+  if (error instanceof RealmProfileUnavailable) return problem(503, 'realm_read_unavailable',
+    'Realm public profile is unavailable');
   return commandError(error);
 }
 
