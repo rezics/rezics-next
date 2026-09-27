@@ -357,7 +357,8 @@ try {
           JSON.stringify(fixtureResults)));
         continue;
       }
-      const budget = 180_000;
+      // docs/testing/test-harness.md#tiers-and-budgets: 4 min since the phase D probes.
+      const budget = 240_000;
       const result = command(root, 'bun', ['test', ...testArgs(tier, selection, chosen), '--reporter=junit',
         `--reporter-outfile=${join(directory, `${artifact}.xml`)}`], budget,
       { ...process.env, ...apps, REZICS_QA_RUN_ID: projectRunId,
