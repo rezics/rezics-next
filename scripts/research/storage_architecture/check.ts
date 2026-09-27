@@ -112,6 +112,8 @@ const graph = Bun.spawnSync({
         ]
       : []),
     'packages/model/src',
+    'model/definitions',
+    'model/compiler',
     'services/main/src',
     'services/account/src',
     'services/content/src',

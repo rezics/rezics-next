@@ -92,9 +92,9 @@ gate. Existing correctness, bounded-query and practical-load obligations remain.
 
 ## Dependency order
 
-The [repository organization proposal](../development/repository-structure.md)
-defines the workspace layout and bootstrap preparation for these stages. It does
-not change the selected owners or mark any runtime gate complete.
+The [repository organization](../development/repository-structure.md)
+explains the current workspace and owner boundaries. It does not change the
+selected owners or mark any runtime gate complete.
 
 | Stage | Complete implementation scope | Exit evidence |
 | --- | --- | --- |

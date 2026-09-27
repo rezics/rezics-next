@@ -56,6 +56,20 @@
       "severity": "error",
       "from": { "path": "(^|/)(services/[^/]+|packages/model)/src/" },
       "to": { "path": "(^|/)apps/(web|accounts)/" }
+    },
+    {
+      "name": "shared-packages-do-not-import-executables",
+      "comment": "Reusable package source depends on contracts, never an application or service implementation.",
+      "severity": "error",
+      "from": { "path": "(^|/)packages/[^/]+/src/" },
+      "to": { "path": "(^|/)(apps|services)/" }
+    },
+    {
+      "name": "authored-model-does-not-import-consumers",
+      "comment": "The authored model and compiler cannot depend on generated bindings or runtime consumers.",
+      "severity": "error",
+      "from": { "path": "(^|/)model/(schema|definitions|compiler)/" },
+      "to": { "path": "(^|/)(apps|services|packages/model/src/generated|generated)/" }
     }
   ],
   "options": {

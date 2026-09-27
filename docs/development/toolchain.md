@@ -1,490 +1,288 @@
-# Toolchain lock
+# Toolchain and root commands
 
-This page records the adopted toolchain: the tools in use, their versions and
-the root commands below. Update it in the same change that adds or replaces a tool.
-Versions were checked on 2026-09-24 against the npm registry, Docker Hub, Maven
-Central and upstream release pages. The [toolchain survey](../research/toolchain-survey.md)
-and [stack review](../research/application-stack.md) remain research inputs; they
-do not select tools.
+This is the maintainer entry point for tools used by this checkout. The tables
+below come from the root and workspace manifests, release/runtime pins, Aspire
+config, Compose, the Fuseki Dockerfile and `Taskfile.yml`. The
+[toolchain survey](../research/toolchain-survey.md) records alternatives and
+revisit reasons; it does not select dependencies.
 
-## Rules
+## Prerequisites and pin changes
 
-- **Exact pins.** `package.json` files use exact versions; Yarn installs with
-  `--immutable`. Compose files and Dockerfiles reference images by tag and
-  digest; record the digest in the same commit that first pulls an image.
-- **Install scripts.** Yarn 4.18 runs no dependency lifecycle scripts by
-  default (`enableScripts` is false). The root `package.json` allowlists the
-  packages whose `postinstall` must run through `dependenciesMeta.<name>.built`:
-  `@ast-grep/cli`, `esbuild` and `workerd`, which link or verify their native
-  binaries. Add a package to that list only after reading its script, in the
-  same commit as the dependency; never enable scripts globally, because an
-  install script runs with the developer's credentials.
-- **One command facade.** [Task](https://taskfile.dev) is the only command
-  entry point for developers and agents: the root `Taskfile.yml` defines every
-  command with a description (`task --list`), and extra arguments follow `--`
-  (`task qa -- --backend --record`). Yarn only installs dependencies and manages
-  workspaces; `package.json` files carry no scripts. Scripts and tests that start
-  another root command call its Bun entry point directly, through
-  `scripts/dev/commands.ts` where a name is needed, so code depends on neither
-  Task nor Yarn at runtime. Nx and Turbo are not used; the
-  [tooling re-evaluation](../research/agent-efficiency-tooling.md) records why
-  Task and Aspire were adopted on 2026-09-27.
-- **Local processes.** [Aspire](https://aspire.dev) runs the development
-  processes; `scripts/dev` keeps ownership of Compose, secrets, migrations,
-  lineage, backups and fixtures. `task dev` in the main checkout serves the one
-  shared backend and frontend on fixed ports through Aspire's proxy (web 3000,
-  Main 3001, Account 3002, Storybook 6006). In a linked worktree it runs only the
-  web app and Storybook, on random ports, against that shared backend; with
-  `-- --backend` the worktree gets its own isolated stack and services, also on
-  random ports. `task urls` and Aspire's MCP server report the actual addresses.
-  The backend topology starts Main's graph outbox relay, initializes its checkpoint
-  during preparation and rebuilds an uncertain public search index before Main starts.
-  Each process receives only the variables its envalid spec declares, secrets as
-  Aspire secret parameters and service addresses through endpoint references.
-- **Configuration.** Each process entry declares its environment in a
-  `config.ts` envalid spec; the generated `.env.example` beside each workspace
-  documents every variable. `task dev:prepare` writes the local values, including
-  generated secrets, to the stack's private `dev.env` (`task env` shows them
-  masked); personal overrides go in the ignored repository-root `.env.dev` (see
-  `.env.dev.example`), never `.env` or `.env.local`, which Bun loads into every
-  process, tests included.
-- **Status values.** *Adopted*: use now. *Stage X*: adopt when that
-  [dependency stage](../plan/README.md#dependency-order) starts, after rechecking
-  the version. *Not used*: do not add.
-- **Changing a row.** Edit this page in the same commit as the dependency
-  change, with the reason and the check that passed. A tool that is absent from
-  this page is not available to an implementation batch.
-- **Qualification gates.** Rows marked *gate* are proven in Phase 0 of the
-  [plan](../plan/README.md#current-state) within one batch. If a
-  gate fails, apply its documented fallback and update this page; do not start
-  open-ended research during implementation batches.
+Install the Bun, Node.js and Task versions in the generated runtime table, a
+Docker-compatible daemon, and Python 3.10+ for documentation checks. The
+[installation guide](../operations/installation.md) gives the clean-checkout
+procedure. Host Java is unnecessary: the Fuseki image builds and runs it.
 
-## Root commands
+Task is the command facade for developers and agents. Run `task --list`; pass
+extra arguments after `--`. Yarn installs dependencies with `task install` or
+`task toolchain:install`; it does not run application commands. The lockfile is
+the source for transitive package versions. Root and workspace package manifests
+use exact direct pins; Compose and Dockerfiles pin external images by digest.
+The locally built Fuseki image has a content-addressed tag derived by
+`scripts/dev/fuseki-image.ts` and checked by `task gen:check`.
 
-### Architecture evaluation exception (2026-09-24)
+When adding or replacing a tool, update its owning manifest/configuration, the
+lockfile or image digest where applicable, and the reason and verification in
+the owning change. Regenerate this page with
+`python3 scripts/documentation/toolchain_inventory.py --write`; `task docs:check`
+rejects a stale table. For native install scripts, inspect the script and add
+only the required package to `dependenciesMeta.<name>.built`; Yarn's global
+`enableScripts` remains disabled. The repository uses a private TypeScript 6
+parser for dependency-cruiser through `.yarnrc.yml`; product typechecks use the
+TypeScript version in their manifests.
 
-The maintainer requested executable architecture research before resuming P0.1.
-The following tools are admitted only for disposable comparisons, not selected
-as product dependencies. All generated data, downloads, logs and processes are
-scoped to `.temp/storage-architecture/`; existing services and datasets are not
-modified. Evidence must record actual versions, storage, request counts and
-limitations. Reuse installed binaries where their versions match.
+`task dev` starts the shared local stack through Aspire in the main checkout.
+In a worktree it starts the Accounts app, web app and Storybook on allocated
+ports against the shared backend; `task dev -- --backend` creates an isolated
+backend. Use `task urls` for addresses. The Accounts app is the public Account
+origin. `task env` masks local secrets;
+workspace `.env.example` files show variables. Personal overrides belong in
+the ignored root `.env.dev`, not `.env` or `.env.local`, which Bun can load into
+unrelated processes.
 
-| Tool | Research pin | Reason and qualification |
-| --- | --- | --- |
-| PostgreSQL native utilities | 18.6 | Isolated loopback clusters with fsync on; compare JSON payload reads and transactional publication. |
-| OpenJDK | 25.0.4.1 | Installed research JVM, matching the earlier Jena CJK probe; this does not replace production Java 21. |
-| Jena embedded/Fuseki server jar | 6.2.0; `jena-fuseki-server` SHA-1 `d3490295a2b95677c1227d25bca8564d40f993a7` | Reuse the prior pinned artifact for graph/text HTTP comparisons. |
-| Fluree | 4.2.1, source commit `82dbcec3e435d6ed1d45bc0ed929432323b6b201` | Candidate graph authority; verify downloaded release checksum before execution. |
-| Dgraph research container | `docker.io/dgraph/dgraph:v25.4.1`, release commit `759e242be62c91f8d084da06ad0c8d21256d9c07`; inspected image ID `023abcb91868d151df1889342041529670580773b8de48a48d2bb6dd466007d0`, manifest digest `sha256:056bd94a3cd67da552fe6ddb575a1d6f0b5597eb9d96da73827bcb1e80cf5f8f` | Bounded challenger probe of relation occurrences, scoped selection and application-owned history/CAS, requested during the broader architecture review. Run an isolated Zero/Alpha pair or standalone mode with the admitted Podman runtime, private loopback endpoints and `.temp/storage-architecture/dgraph/` data; never touch product services. `dgraph --prepare-only` inspected the image before execution. [Release](https://github.com/dgraph-io/dgraph/releases/tag/v25.4.1). |
-| fluree-sql-bridge | Source from the same Fluree commit; package version 4.1.6 | Candidate SQL federation; compile with its checked-in lockfile and record source digest. |
-| Rust / Cargo | 1.98.1 | Build the upstream SQL bridge only, with `--locked`; no product Rust dependency is adopted. |
-| Docker CLI / Docker Desktop engine | 29.8.1 / 29.7.2 | Compose-backed product and isolated QA stacks use the host's `desktop-linux` context. The CLI also inspects local images and runs disposable search comparison containers; record image digests before use. |
-| Host inspection/archive utilities | Installed `lscpu`, `df`, `tar` | Read host/storage metadata and extract checksum-verified upstream archives through the research runner. |
-| Podman | 5.8.7 | Only the retained `task research:architecture` search, OpenSearch, Dgraph and Virtuoso probes call it directly. Product, development and QA stacks never use Podman. |
-| PGroonga research image | PostgreSQL 18.6 / PGroonga 4.0.8; local image ID `df9394ae660618227f519eeb0c2a4d9721c0b590ffaf4c49652747a601c1bf91`, manifest digest `sha256:c8052fbed36391ce9c01825ede5f70d78ddac575ae00b2c2f6f72642736afe81` | Reuse the old repository's inspected image with a new isolated data directory; verify extension version inside the probe. |
-| OpenSearch research image | `docker.io/opensearchproject/opensearch:3.6.0`; image ID `b1b447d0d021b051fdb1ae6be100e106667bbe302aa8d6855a4f6d726863d766`, manifest digest `sha256:b5dd1512af2a99748c942cfbbd7f32162623336b210667d0fc6333c6321f171d` | Isolated relation-aware ranked-search probe using the existing Podman runtime. Verify and retain image identity before measuring, run by that ID, and verify server version. This is a research pin, not a claim of the newest release or a production selection. [Release](https://opensearch.org/blog/introducing-opensearch-3-6/). |
-| Virtuoso Open Source research image | `docker.io/openlink/virtuoso-opensource-7:7.2.17-r25-g6eb68b6-ubuntu`; image ID `a6cbc2c869d23c04b131fa2c0e1663abc347747f12efe9bd62453eab1ea8575e`, manifest digest `sha256:2a9914b95f8a52927a73947c87ec2727f78f87d38e41c38c379efb121f9cbed1`. The initially inspected `7.2.17-r25.1-g2850f18-ubuntu` image (ID `07263730abf06071e50b89b03c0f027cd37e3205df13134ace7dc97bb5817d08`, digest `sha256:0dbe1ab4fa0cb7bbafc1f6c0c2b0a5d6f22d918dbd17672f2ddb24580aa6756a`) was rejected because its binary reports `7.2.18-dev.3243` (`8439c5e52f`) despite the tag. | Disposable native RDF plus free-text challenger on loopback only, with data under `.temp/storage-architecture/virtuoso/`. Run by inspected image ID and verify binary version. This is research, not a product dependency. [Release](https://github.com/openlink/virtuoso-opensource/releases/tag/v7.2.17), [official image](https://hub.docker.com/r/openlink/virtuoso-opensource-7/tags). |
+## Architecture evaluation exception (2026-09-24)
 
-`task research:architecture -- inspect|prepare|graph|search|opensearch|bridge|dgraph|virtuoso|report` is the only
-research execution entry point. `inspect` reads tool/service inventory; `prepare`
-downloads/verifies the pinned engines and builds the bridge; the other commands
-run maintained probes. `report --retain` copies selected raw results and tool
-metadata to the dated research evidence directory. Probe correctness tests run
-with `task test -- <research-test-path>`.
-`dgraph --prepare-only` may pull/inspect the pinned image without starting it;
-record the digest above before `dgraph` executes the bounded challenger. This
-probe does not qualify distributed scale or change the production selection.
-`opensearch` pulls/inspects the pinned image if needed and runs only a disposable
-loopback-bound container, retaining fixture/query/latency/update evidence under
-`.temp/storage-architecture/opensearch/`. It must clean up its own container and
-never change the application's services or host-wide kernel settings.
-
-Docker Desktop's user service stopped when the graphical session disappeared on
-2026-09-26. If the `desktop-linux` socket disappears, check `docker info`, start
-the existing service with `systemctl --user start docker-desktop`, then verify
-Compose readiness through the documented
-`task test -- tests/qa/integration/shared-stack.test.ts` selection. This restored
-Docker engine 29.7.2 and the shared-stack selection passed on 2026-09-26;
-neither result certifies a backend acceptance case or the final recorded QA.
-Docker Desktop's VM memory was raised from its 8 GB default to 24 GB
-(`MemoryMiB: 24576`, `SwapMiB: 4096` in `~/.docker/desktop/settings-store.json`)
-on 2026-09-26 so that up to eight disposable QA projects can run concurrently.
-`virtuoso --prepare-only` may pull and inspect the pinned image without starting
-it; record the resulting image ID and manifest digest above before executing the
-bounded probe. The probe retains its queries, results and logs under
-`.temp/storage-architecture/virtuoso/` and removes its container.
-The documented supplements `search --pg-contains-control` and
-`GRAPH_POST_INDEX=1 task research:architecture -- graph` reuse only retained probe
-databases. `search --report-only` refreshes explanation text without remeasurement.
-`REZICS_BRIDGE_SNAPSHOT=1 task research:architecture -- bridge` runs the controlled
-concurrent-update counterexample and preserves the prior timing baseline.
-`task check` runs the existing workspace and external Eden Main consumer types,
-development script types (`task dev:typecheck`), research types, documentation and
-`gen:check`, followed by Biome lint, the
-ast-grep rule tests and scan, oxlint's type-aware promise rules, Knip's unused
-file and dependency report, Biome format checks and dependency-cruiser
-import-boundary checks. The static tools run from
-their exact root Yarn pins through the same command facade. The P0.4 static
-scope is intentionally explicit: Biome enforces six error-level correctness and
-suspicious-code rules over application and service workspaces, selected scripts
-and QA/recovery tests; format enforcement currently covers package manifests,
-static gate configuration, the check runner and its regression test. Import
-rules cover the public web-to-Main type edge, browser-only modules, and Main
-entrypoint and infrastructure dependency direction. Full repository formatting,
-the remaining Biome recommended rules, `scripts/dev`, and replacement of Main's
-existing direct infrastructure imports with explicit interfaces are still open
-P0.4 debt. A survey before introducing this gate found 29 recommended-rule
-errors, 535 warnings and two Tailwind parser errors over apps, services and
-packages; the parser errors are resolved by the Biome setting. P0.3 `task gen`
-generates the 12 reviewed Turtle shapes from authored TypeScript IR with stable
-digests, plus
-JSON-LD contexts and node-local TypeBox/types/arbitraries. The isolated
-cmd0.4.0 image reproduced all 66 recorded candidate outcomes and report paths
-through the QA model tier. The handwritten Turtle/Python validators are retired.
-`task docs:check` runs the documentation checker and its regression
-tests. The P0.4 `task qa` core runs static, unit, shared-stack integration,
-isolated model, fault/recovery, load and built-Worker browser tiers with an
-acceptance inventory. Successful `--record` qualification remains pending. Entries below
-describe the target command surface; incomplete entries are called out explicitly.
-
-| Command | Effect |
-| --- | --- |
-| `task toolchain:install` | From a clean clone with Task installed, runs Yarn's immutable install, then checks Bun, Node, Yarn, Task, the Aspire CLI and Docker, pulls pinned images, builds the Fuseki image and installs the Playwright Chromium build. Idempotent. |
-| `task release:build` | Package the pinned Bun 1.4.2 runtime, Main/Account/Content source, generated model inputs, workspace packages, installed dependencies and schema/config inputs in a content-addressed, read-only local release directory under `.temp/releases/`. A file-digest manifest binds every file, runtime pins and exact Compose image identities. Rebuilding identical inputs reuses and verifies the same artifact; a changed input produces a new identity. No new package manager or base image is introduced. |
-| `task release:install -- --artifact <release-directory> [--profile qa --run-id <id> --persistent]` | Verify every artifact file and the checked-in release pins before provisioning an isolated or development project. Apply owner migrations, verify Account/Access/Content/Fuseki readiness and record the release and format identity; reject an unmarked or incompatible saved project. The command can be repeated without changing owner data. QA projects use the usual `stack:reset` cleanup. |
-| `yarn install --immutable` | Install only the pinned Yarn workspace dependencies in an isolated worktree when the current host already has the adopted service images and browser. This leaves those shared images unchanged while another pinned host experiment runs; use `toolchain:install` for a clean host or image verification. |
-| `yarn install --mode=update-lockfile` | Dependency-change batches only: resolve newly exact-pinned workspace packages into `yarn.lock` without linking them. Review the lockfile, then run `yarn install --immutable` or `task toolchain:install` before checks. |
-| `bun scripts/dev/cli.ts toolchain:install` | Runs the same pinned toolchain/image preparation directly from an already installed checkout; use it in a nested worktree when verifying a newly tagged native Fuseki image. |
-| `task stack:up -- [--profile dev\|qa --run-id <id> [--persistent [--raw-update]]]` | Starts the Compose project for local services and prints generated endpoints. QA is disposable tmpfs by default; `--persistent` gives an isolated QA project named volumes for offline recovery drills. Persistent QA alone may select `--raw-update`, which exposes a bare-TDB2 update alias for fault injection while retaining the text-wrapped product service. Quarantine public search before using it. Use the same options for `stack:down` and `stack:reset`; reset removes its volumes. A saved project cannot switch storage or raw-update mode. |
-| `task stack:logs -- [--profile dev\|qa --run-id <id> [--persistent [--raw-update]]]` | Prints a bounded tail of service logs for startup and health diagnostics; options must match the saved project. |
-| `task stack:status -- [--profile dev\|qa --run-id <id> [--persistent [--raw-update]]]` | Shows the current service state and health for a saved local project; options must match the saved project. |
-| `task stack:backup -- --profile qa --run-id owner-cut-<id>` | OPS03 fault fixture only: after the fixture fences Access and graph admission, runs pinned `pg_basebackup -X stream` through project-scoped Compose `exec` inside that disposable PostgreSQL container, then copies the physical backup under that project's `.temp/stack/.../recovery-backups/`. Prints the backup path for `pg_verifybackup` and isolated host replay. It refuses other project IDs and has bounded command waits; `stack:reset` removes the copied backup. |
-| `task stack:clone -- --profile qa --run-id <source> --persistent --to-run-id <target>` | After the source stack has stopped, verify retained storage/model/analyzer inputs and exact Fuseki engine identity, then copy its entire PostgreSQL, Fuseki TDB2/Lucene and RustFS named volumes and immutable object directory into a new isolated QA project. Code-only runner changes do not invalidate the backup; earlier manifests with runner-file hashes are compared on their storage inputs. Use the pinned PostgreSQL image as the copy helper. Preserve source owner credentials and graph lineage while assigning fresh loopback ports. Reject a live source or an existing target. The B12 10,000-Work profile qualified this path for its exact compatible source; the B16 small generation passed current-image restore, fresh commands, restart and source-isolation probes. |
-| `task fixture:build -- --profile small\|medium [--seed <seed>]` | Build one deterministic background corpus directly into owner storage, never through public commands, in a `rezics-fixture-<id>` Compose project that no `stack:*` command addresses. Profiles are sized by Works: `small` 1,000 and `medium` 100,000, with one background Agent per 100 Works. The real graph bootstrap commits first; with Fuseki stopped, the pinned image's `tdb2.tdbloader --loader=phased` loads the Works' current and revision quads from stdin and `jena.textindexer` rebuilds Lucene for that generation. Work component manifests and payloads go to RustFS by signed conditional PUT; Access Agents, Work read gates and grants and Content variants with exact draft revisions use batched `unnest` inserts. Imported data holds graph position 0 and has no Access admissions, receipts or outbox events. Exact per-owner counts, sample exact reads through Main's and Content's readers and a Lucene lookup must pass before every service stops; the stopped named volumes are the backup. `.temp/fixture/<id>/manifest.json` records fixture format, seed, profile, lineage, per-owner generator, digest, counts and model inputs, migration digests, engine image IDs, samples, phase times and bytes. The ID derives from the deterministic part, so a rebuild with the same inputs reuses the backup; one builder holds each ID's lock. Measured 2026-09-27 on this 64-CPU host with a 25 GB Docker Desktop VM: `small` built in 28.3 s into a 373 MB backup; `medium` built in 370.3 s, including 303.5 s of RustFS object PUTs (RustFS saturated near 1,450 PUT/s), 23.8 s to load 2,758,334 quads and index 100,001 labels, and 14.6 s of planning. Its backup is 2.91 GB. |
-| `task fixture:restore -- --fixture <fixture-id> --run-id <fixture-target-id>` or `--from <load-source-id> --run-id <fixture-target-id>` | With `--fixture`, read only the manifest, reject a stale backup (changed owner generator or model/analyzer input, changed or reordered applied migration, other PostgreSQL or RustFS image), copy the stopped backup volumes into a new persistent QA stack with the fixture's credentials and lineage and fresh ports, start it with `stack:up`, apply only appended migrations, check the four PostgreSQL owners, graph lineage, Main's public text readiness probe and the RustFS bucket, then read the manifest samples' exact Work, MainVersion and Content revisions and Access grants. Everything shares one 600-second deadline; evidence is `.artifacts/fixture-restore/<target>/run.json`, and a failed restore removes its target. A changed Fuseki image with the same Jena version and assembler is recorded as `engineChanged`. Measured: `small` restored in 13.0 s and `medium` in 92.3 s. The medium restore spent 80.0 s copying the 400,016-file RustFS volume, 10.8 s starting the stack and under 1 s on migrations, readiness and smoke. With `--from`, restore one stopped, compatible load baseline into a separate writable QA stack using `stack:clone`, then check Account, Access, Content and relay PostgreSQL connections and a bounded Fuseki query. Record elapsed time and fail if clone, startup and readiness exceed 600 seconds. It does not run full-corpus validation or replay old commands. The source must be a retained successful `load:prepare` generation. B16's ten-Work source `load-20260925t171808-58c1f9` restored as `fixture-b16-first` in 10.361 seconds and passed a ten-fresh-Work/restart/source-isolation probe; this does not create or qualify a complete M01–M10 fixture. |
-| `task load:prepare -- --works <background-count> [--seed-workers 1]` | Build a reusable, command-created background corpus in an isolated persistent QA stack. Seed exact Work/Contribution/selection receipts and Content projection, validate public queries and owner checkpoints, expire the baseline actor's grants after its commands seal, retain a hashed corpus manifest and engine/schema identity, then stop all services while keeping the volumes. The baseline has no mixed traffic or host-capacity qualification. |
-| `task load:clone-probe -- --source-run-id <load-id> --run-id <target-id> [--read-only]` | Against a running cloned QA stack, compare retained cold Main, Realm and Content cases and sampled receipts, create ten newly admitted Works with disjoint tokens through real commands, verify the old and new results and Content projection, then restart storage and recheck. `--read-only` checks the untouched stopped-source stack after restarting it, to prove clone isolation. Writes probe evidence under `.artifacts/load-clone/<target-id>/`; failures leave the stack for inspection. This is the small falsifier for the clone candidate, not the 10,000-Work qualification. |
-| `task dev -- [--backend] [--profile qa --run-id <id>]` | Starts the Aspire AppHost in the background for this checkout, waits for its resources and prints their URLs and health. In the main checkout it first runs `dev:prepare`, then serves Account, Main and its graph relay in Bun processes, web after Main, and Storybook on the fixed ports. In a linked worktree it starts web and Storybook with `--isolated` random ports against the shared backend, shown as external services, and fails if that backend is not running. `-- --backend` in a worktree prepares an isolated QA stack (`wt-<directory>` by default) and runs its own services on that stack's ports. |
-| `task dev:seed -- [--dry-run]` | Runs the demo seed through the shared stack's public APIs. |
-| `task dev:typecheck` | Checks the development scripts with the adopted TypeScript pin; `task check` includes this project. |
-| `task dev:stop -- [--backend]` | Stops this checkout's AppHost; a worktree backend also removes its Compose project and volumes. |
-| `task urls` | Lists this checkout's running resources with URLs, state and health from `aspire describe`. |
-| `task env -- [--backend]` | Prints the application environment this checkout uses and its source file, with secrets masked. |
-| `task env:example` | Regenerates `services/main/.env.example`, `services/account/.env.example` and `apps/web/.env.example` from the envalid specs; `task check` fails when one is stale. |
-| `task dev:prepare -- [...]` | Starts storage, applies migrations, checks graph lineage, registers the local web OAuth client and Access actor on first use (dev and QA alike), and writes the application environment to the stack's private `dev.env`: the stack's derived variables, the values that registration issued, and `.env.dev` overrides. `apps.env` is regenerated from `compose.env` whenever its derived variables are out of date. The web client's two loopback callbacks match any port, because Account compares loopback redirect URIs without their port (RFC 8252). |
-| `task aspire -- <command>` | Runs the pinned Aspire CLI from the repository root, for example `describe`, `logs <resource>`, `wait <resource>`, `resource <resource> restart` or `agent mcp`. Agents inspect running processes through `aspire agent mcp` (resources, console logs, structured logs, traces, resource commands); environment and secret values are hidden. |
-| `task aspire:restore` | Generates the AppHost's TypeScript SDK into ignored `apphost/.aspire/`; Task skips it while `aspire.config.json` is unchanged. |
-| `task web:dev -- [--port <n>]` | Runs vinext alone, without Aspire, using the `apps/web/.env.example` defaults for the shared backend. vinext allows one dev server per directory. |
-| `task gen` | Generates reviewed Turtle profiles, JSON-LD contexts, TypeBox schemas/types, vocabulary, arbitraries and registry from TypeScript IR, plus Main's public OpenAPI JSON, and stamps the content-addressed [Fuseki image tag](#fuseki-image-and-command-module) into `infra/dev/compose.yaml`; `task gen:check` detects drift in all of them. |
-| `task check` | Runs Main, Account, Content, model, UI and web workspace typechecks, the external Eden Main consumer gate, research types, `gen:check`, docs checks, the scoped Biome lint and format checks described above, ast-grep rule tests and scan, oxlint's type-aware promise rules over backend sources, Knip's unused files and dependencies, and dependency-cruiser import boundaries with a nonempty graph assertion. Target under 2 minutes. |
-| `task check:backend` | Runs the same generated-contract, documentation, backend type, lint, format, code-shape, promise, unused-file and import gates without UI or web source directories. This is the static tier for backend Goal qualification; it took 14.4 seconds on 2026-09-27. |
-| `task test -- <paths> [-t <ID>]` | Runs explicit unit files through Bun; registered QA integration, model, fault/recovery and load files route through their isolated tiers, with an optional acceptance ID. Other legacy integration files retain their explicit environment requirements until migrated. Direct Bun runs print only failures and the summary (`AGENT=1`); `AGENT=0` restores the per-test listing. |
-| `task test -- --affected [<base>] [--list]` | Selects the tests that can observe the changes since `<base>` (default: the merge base with `main`), including uncommitted and untracked files, and runs unit files through Bun and each stack tier once through `task qa -- --tier`; a widened tier runs its registered selection. `--list` prints the plan without running it. The [selection rules](../testing/test-harness.md#affected-test-selection) fail closed. |
-| `task check:unused -- [--include <kinds>]` | Knip report over backend workspaces, scripts and tests. `check` blocks unused files and dependencies only; unused exports and types are a cleanup report. |
-| `task ast-grep -- scan\|test` | Runs the pinned native ast-grep binary with `sgconfig.yml`. Rules and their valid/invalid cases live in `scripts/static/ast-grep/`; `check` runs `test --skip-snapshot-tests` and `scan`. |
-| `task api:fuzz -- [--max-examples <1-200>] [--seed <n> [--max-time <30-1800>]] [--update-baseline] [--keep]` | Starts an isolated QA stack with Account and Main, then runs the pinned Schemathesis image once against Main's generated public OpenAPI contract. The default is one deterministic pass compared with `tests/qa/api-fuzz/baseline.json`; `--update-baseline` records that pass's accepted failures and prunes fixed ones. `--seed` runs an exploratory random pass, and `--max-time` repeats its fuzzing and stateful phases until the budget is spent; neither can update the baseline. The log and JUnit report go to `.artifacts/api-fuzz/<run-id>/`, and the stack is reset unless `--keep`. See [API fuzzing](../testing/test-harness.md#schema-driven-api-fuzzing). |
-| `task qa:replay -- --seed <integer> <file> -t <ID>` | Re-runs one seeded fast-check acceptance test through the same unit or registered QA tier, preserving its exact seed and test selection. |
-| `task content:typecheck` | Checks the P0.8 Content owner workspace with the adopted TypeScript pin. |
-| `task main:typecheck` | Focused Main TypeScript diagnostic for a concrete implementation blocker; merged batches still run `task qa`. |
-| `task search:rebuild -- [--job <uuid>] [--profile qa --run-id <id> --persistent [--raw-update]]` | On the stopped-writer development stack or an isolated persistent QA stack, quarantines public search, replays the exact Content cut, stops Fuseki, runs the pinned `jena.textindexer` against its named volume, restarts Fuseki, verifies RDF/Lucene/source membership and activates a new index generation. A failed or interrupted run retains the quarantine and job ID for retry. QA tmpfs and production are not supported. |
-| `ACCESS_DATABASE_URL=<Access owner URL> task access:pending-search` | Read-only operator inventory of up to 100 unresolved private search deliveries. It shows the durable pre-send marker and lease identity without exposing receipt challenges or result bytes; strong closure and recovery reopening remain pending while these rows exist. |
-| `task qa` | Runs static, unit, integration, model, fault/recovery, built-Worker e2e plus Storybook browser tests, and load tiers, including `task check`, within the 30-minute budget. Supports selected-tier/failed-run diagnostics and `--record`; retained coverage and final qualification remain incomplete. |
-| `task qa -- --backend [--record]` | Selects the frozen backend acceptance inventory and six non-browser tiers, using `task check:backend` for static checks. `--record` requires a clean source tree and complete declarations for every retained backend case, then records the same passing run. `--backend --tier <non-browser-tier>` is a partial diagnostic and cannot record; `--backend --only-failed` is unsupported. |
-| `task fixtures:pull -- [--source wikidata] [--update-lock]` | Replays verified content-addressed factual fixtures from the local cache or committed seed; `REZICS_FIXTURES=live` fetches and reports drift. `--update-lock` accepts current normalized bytes and refreshes the lock and seed. Bun 1.4.2 built-in `fetch` and Node crypto/fs are sufficient; no new dependency. |
-| `task load -- [--works 10000 --duration 180 --seed-workers 1] [--keep] [--from <baseline-load-id> --cohort <fresh-count> [--allow-compatible-source]]` | Runs the separate OPS05/SEARCH07/SEARCH18/SEARCH19 mixed host profile in an isolated persistent QA Compose project, resetting its named volumes on completion unless `--keep` retains them. With `--from`, verify a stopped `load:prepare` baseline of exactly `works - cohort` Works, clone its owner/index volumes and immutable objects, and create only the fresh cohort through new Access admissions and product commands. An identical source tree is required by default; `--allow-compatible-source` explicitly accepts a different clean application revision only when the retained source was clean and stable and the schema/model/analyzer compatibility digest, pinned engine image and exact corpus manifest still match. Record both source fingerprints and run the full cold, fresh-command and restart proofs on the clone. Writers and private probes use fresh Works; reads and population checks include the background. Without `--from`, every Work is command seeded online. The profile retains cold/warm public queries, selected-Work native-delta proof, private Contribution adapter/restart probe, mixed reads/writes, engine restart checks and k6 metrics. Seed workers are bounded to 1–4. Artifacts remain under `.artifacts/load/<run-id>/`. Smaller runs are diagnostic only; the named 10,000-Work host profile needs 180 seconds and its full thresholds. This does not extend the 30-minute QA budget. |
-| `task load -- --fixture-run-id <restored-fixture-target> --works <fresh-count> --duration <seconds>` | Attach to a successfully restored persistent fixture stack, skip stack creation and bootstrap, and use its imported data as background while creating only the explicit fresh command cohort. Do not combine with `--from` or `--prepare`. Evidence is written under `.artifacts/load/<run-id>/`; the restored fixture remains running for explicit cleanup. A small fresh cohort on a larger background fixture is diagnostic and does not qualify the 10,000 searchable-Work host profile by itself. |
-| `task load -- --fixture-run-id <restored-fixture-target> --search-probe` | Cold-restart the persistent fixture storage services, then start Main without the background relay and record cold/warm phrase queries, language and rejected-result traces, payload limits, cursor advancement, selection-movement retry and stale-continuation behavior against the declared Search request ceilings. This is a read/search diagnostic with one authorized selection mutation; it does not qualify the mixed host workload or 10,000-unit growth objective. |
-| `task docs:check` | Runs the Python documentation checker and its regression tests. |
-| `task package:go-oracle` | Downloads and SHA-256 checks the pinned Go archive once under `.temp/`, then compares the bounded Go 1.16 and captured Go 1.17+ module snapshots with `go list -m all`, selected retraction metadata with `go list -m -u -json`, and the conservative captured-manifest parser with `go mod edit -json` through a generated local file proxy. Combined pruned main replace/exclude cases compare original/source coordinates, exact precedence and upgraded-root stabilization. Pruning cases withhold transitive `.mod` bytes, including a remote `/v2` replacement, to test lazy loading. Network module lookup is disabled. The archive and probe state stay under `.temp/package-go-oracle/`. |
-| `task package:go-probe` | Make one bounded, fixed-origin live metadata observation of `golang.org/x/sync@v0.1.0` through the package capture implementation. Save provider URLs, raw SHA-256 digests, calculated Go `go.mod` h1, byte counts, stable tag list, manifest text and conservative parser result under `.temp/package-go-provider/`; this diagnostic does not claim Go checksum-database verification or an atomic proxy cut. |
-| `task package:go-checksum-oracle` | Recheck the pinned Go archive through `package:go-oracle`, then use Go 1.27.1 `go mod download -json` with explicit public proxy and checksum database settings for fixed stable `golang.org/x/sync@v0.1.0` and exact pseudo `rsc.io/markdown@v0.0.0-20240306144322-0bf8f97ee8ef` (retained in the official toolchain's cmd/go.mod). Compare Go's verified `GoModSum` to the h1 value computed from each fresh bounded capture; verify each lookup's signed tree note, fetch bounded fixed-origin tiles, check record inclusion and compare that tree with a freshly signed `/latest` head. Separate fresh-cache `go list -m -json` checks whether native metadata-only paths fetch a module archive. Store diagnostic metadata under `.temp/package-go-checksum/`; durable Main API trust remains separately qualified. |
-| `task package:cargo-oracle` | Check the installed Rust/Cargo 1.98.1 binary, then run fixed Cargo resolver 2 snapshots against a disposable loopback-only local registry and isolated `CARGO_HOME` under `.temp/package-cargo-oracle/`. Compare selected package/source/version/role edges, feature activation, native links and fresh/existing-lock yanked eligibility with the bounded REZICS profiles. Retain native metadata/tree, exact lock inputs, explicit loopback-to-admitted HTTPS source mapping and comparison results there. The command never uses the public registry, installs artifacts, or runs build scripts. |
-| `task package:npm-oracle` | Check installed npm 11.19.1 and its bundled Arborist, then compare fixed caller-supplied lockfile-v3 fixtures with native `npm ls --package-lock-only --all --json --long --offline --ignore-scripts` and Arborist's virtual-tree edges. V2 explicitly applies the bundled platform checker and optional-region helper to declared Linux/Windows OS and CPU targets. V3 writes exact supplied workspace manifests only inside the disposable fixture and observes alias slots, package identities, workspace links and target-local dependencies. V4 composes both observations on Linux/Windows and x64/arm64, including exact omitted instance/edge cause paths and explicit stricter identity/source admission. V5 compares flat root override selectors and the pinned native per-node engine checker against explicit Node/npm targets, recording strict REZICS admission differences. Retain the full virtual tree and errors; this does not invoke ideal-tree solving or reification. Use isolated configuration/cache under `.temp/package-npm-oracle/`, retain exact input bytes, native paths, versions, peer hosts, source/integrity and errors in `result.json`, `platform-result.json`, `identity-result.json`, `composition-result.json`, `policy-result.json` and `summary.json`. No registry requests, installation, lifecycle scripts or artifact fetches. |
-| `task web:build` | Builds the vinext Workers application for deployability checks. |
-| `task web:preview -- --profile qa --run-id <id>` | Builds the web Worker with the selected running isolated stack's endpoints and registered local OAuth client when present, then starts its generated output under local `wrangler dev` on port 3003 for browser journeys. |
-| `task web:e2e` | Runs Playwright Chromium against the running built Worker preview and its isolated QA stack. |
-| `task storybook` | Runs the web component review server on loopback port 6006. |
-| `task storybook:test` | Runs web Storybook stories in Vitest browser mode with Playwright Chromium and a11y addon checks. |
-
-P0.8's first Content owner reuses the adopted TypeScript 7.0.2 and pg 8.23.0
-pins. Its typecheck and transactional integration test are registered in the
-central check and QA integration tiers.
-
-Dev and QA secrets are generated per Compose project into `.temp/stack/<project>/`
-and never committed. SOPS/age apply at the deployment stage.
+The [storage research runner](../../scripts/research/storage_architecture/README.md)
+admits native PostgreSQL, Java, Rust, Podman and candidate engines only for
+disposable comparisons. Its scripts pin images and downloaded artifacts and
+verify them before execution. Data, downloads and logs belong under
+`.temp/storage-architecture/`; product services and datasets are untouched.
+The PGroonga comparison needs the inspected local image
+`rezics-postgres:18.6-pgroonga-4.0.8` (ID
+`df9394ae660618227f519eeb0c2a4d9721c0b590ffaf4c49652747a601c1bf91`,
+digest `sha256:c8052fbed36391ce9c01825ede5f70d78ddac575ae00b2c2f6f72642736afe81`);
+the runner reports its absence rather than treating that comparison as a pass.
 
 ## Runtimes and languages
 
-| Tool | Version | Status | Use |
-| --- | --- | --- | --- |
-| Bun | 1.4.2 | Adopted | Main, Account, harness scripts and backend tests (`bun test`). |
-| Node.js | 26.8.2 (`.nvmrc`) | Adopted | Yarn, Vite/vinext, Storybook, Vitest, Playwright and wrangler. |
-| Yarn | 4.18.0, `nodeLinker: node-modules` | Adopted | Dependency installation and workspaces only; one lockfile for all workspaces. |
-| Task (go-task) | 3.53.1 | Adopted | The command facade (`Taskfile.yml`). Install once per host with the official script, which verifies the release checksum: `sh -c "$(curl --location https://taskfile.dev/install.sh)" -- -b ~/.local/bin v3.53.1`. `task toolchain:install` checks the version. Task's checksum cache lives in ignored `.task/`. |
-| Aspire CLI, `tsx`, `vscode-jsonrpc` | 13.5.4 (`@microsoft/aspire-cli`, platform binary from its optional dependency), 4.23.13, 8.2.1 | Adopted | The `apphost/` workspace. `aspire.config.json` at the root pins the SDK and `Aspire.Hosting.JavaScript` to 13.5.4 and points at `apphost/apphost.mts`; Aspire runs it with `npx tsx` and detects Yarn from the root `packageManager`, which requires the AppHost directory to sit directly under the root. The npm bin shim has a CRLF shebang, so Task and scripts start `node node_modules/@microsoft/aspire-cli/bin/aspire.js`. Telemetry is off (`ASPIRE_CLI_TELEMETRY_OPTOUT`). No .NET SDK is installed on the host. |
-| TypeScript | 7.0.2 | Adopted | `tsc --noEmit` per workspace. |
-| Java | Temurin 21 JRE in `eclipse-temurin:21.0.12_8-jre-noble` | Adopted | Fuseki runtime inside its image; no host Java required. |
-| Maven | `maven:3.9.16-eclipse-temurin-21` build stage | Adopted | Builds the Fuseki command module inside the image build. |
-| JUnit | 4.13.2, Maven test scope | Adopted, verification pending | Native command journal tests run in the pinned Maven image stage; no host Java or separate test command is required. |
-| Python | 3.10+ standard library | Adopted | The [documentation checker](README.md) and checksum-verified Go oracle archive extraction. The Python model validators are retired by Phase 0. |
-| Go | 1.27.1, official `go1.27.1.linux-amd64.tar.gz`, SHA-256 `63d339f0da5ab53635a56f2490a7984dfe12dfcff22ad749f63edaf590168445` | Adopted for package oracle only | Run only through `task package:go-oracle` against a local fixture proxy. The [official release](https://go.dev/dl/) supplied the version and digest on 2026-09-26. No Go product runtime is selected. |
-| Rust / Cargo | 1.98.1, installed stable toolchain | Adopted for package oracle only | `task package:cargo-oracle` checks the exact binary version before any native resolution. It uses an isolated local registry, cache and target directory; product Main does not invoke Cargo. The [Cargo resolver](https://doc.rust-lang.org/cargo/reference/resolver.html), [registry index](https://doc.rust-lang.org/cargo/reference/registry-index.html) and [metadata](https://doc.rust-lang.org/cargo/commands/cargo-metadata.html) references define the comparison surface. |
-| npm CLI and its bundled Arborist | 11.19.1, installed with Node 26.8.2 | Adopted for package oracle only | Run only through `task package:npm-oracle`; check CLI/package identity before interpreting virtual trees. The installed official [npm source](https://github.com/npm/cli/tree/v11.19.1) and [lockfile semantics](https://docs.npmjs.com/cli/v11/configuring-npm/package-lock-json) supply the bounded comparison. Main does not invoke npm or import its implementation. |
-| Docker CLI / Compose | 29.8.1 / 5.5.1 | Adopted | Root facade for pinned image build, local service lifecycle and disposable QA projects. The Compose version supports the QA overlay's `!override` and `!reset` tags; both configurations resolved and the dev stack started on 2026-09-25. |
-| Podman | 5.8.7 | Research probes only | Not a Docker fallback. The root facade, load, fuzz and operations scripts require the Docker Desktop daemon and fail when it is unavailable, so a run never switches engines silently. |
+<!-- toolchain-inventory:start -->
 
-## Local services
+### Runtime pins
 
-Docker Compose runs third-party services and databases. Main, Account and the
-web app run as host processes for fast reload in development and are started by
-the harness for end-to-end and load tiers. They are not containerized in the
-first delivery; production placement stays with [deployment](../operations/deployment.md).
-
-Docker Desktop's `desktop-linux` context is the only container engine for the
-root `docker compose` commands, load, API fuzz and operations scripts. Each probes
-`docker info` and stops with a `systemctl --user start docker-desktop` hint when
-the daemon is unavailable; none falls back to Podman, because a silent engine
-switch changes memory limits and host networking mid-run. On 2026-09-27 the
-maintainer retired the earlier Podman user-socket fallback, which P0.1 had used on
-2026-09-25 while the host Docker Engine daemon was inactive. The P0.1 clean-clone
-command exit is met; the broader OPS01/OPS14/OPS16 acceptance cases remain in the
-QA program. The disposable QA overlay still uses permissive tmpfs mount modes,
-originally because the Podman Docker API rejected Compose `uid`/`gid` tmpfs
-options; the services remain isolated inside the per-run Compose project.
-
-The topology lives in `infra/dev/compose.yaml` (project `rezics-dev`, or
-`rezics-qa-<run>` for the harness). Every published port binds to `127.0.0.1`.
-Development uses named volumes; QA uses tmpfs except in the recovery tier.
-
-| Service | Image | Status | Purpose |
-| --- | --- | --- | --- |
-| PostgreSQL | `postgres:18.6-trixie` | Adopted | One cluster with separate logical owners and login roles for Content, Account, Access and operations/relay. Content holds bounded body bytes/JSONB, revisions, drafts, publication pins and local receipts/outbox. P0.8 adds that binding. `wal_level=replica` and WAL archiving support PITR drills; initial polling needs no logical-decoding extension. Init SQL lives in `infra/dev/postgres/`. |
-| PostgreSQL recovery utilities | PostgreSQL 18.6: container `pg_basebackup`; host `pg_verifybackup`, `pg_ctl` | Adopted for isolated OPS03 QA fault fixtures | The fault tier takes a physical backup through local replication inside only its own disposable QA project's PostgreSQL container, verifies it and starts a distinct local replay copy under `.temp/` while the source is fenced. The registered `task test`/`task qa` case invokes the project-scoped root backup command; it never targets the development or practical-load project. Host and container major/minor versions match. |
-| Sanitized PostgreSQL custody drill | PostgreSQL 18.6 host `pg_dump`, `pg_restore`, `initdb`; the already adopted `pg_ctl` | Adopted for IAM11 isolated fault fixture | After retained-journal reconciliation, export only current owner rows into a fresh logical archive, restore into a new local cluster representing a second host, and probe erased credentials and Content. This is a simulated off-host copy; filesystem retirement does not certify production media destruction or independent custody. [Logical backup](https://www.postgresql.org/docs/18/backup-dump.html). |
-| Fixture bulk-load mechanisms | Jena 6.2.0 `tdb2.tdbloader --loader=phased` and `jena.textindexer` from the pinned Fuseki image's `fuseki-server.jar`; PostgreSQL `INSERT ... SELECT FROM unnest(...)` through `pg` 8.23.0; `aws4fetch` 1.0.20 signed conditional PUT | Adopted for `task fixture:build` only (2026-09-27, G-045) | Offline TDB2 load and text indexing run in one-shot containers of the stopped build project after the command module's real bootstrap, because the module bootstraps only an empty dataset. Phased loading is used because the dataset is not empty. Array-bound batches of 5,000 rows need no new client dependency, so PostgreSQL `COPY` and `pg-copy-streams` are not adopted. No product route uses these paths. Check: the small and medium builds passed their count, exact-read and Lucene checks, and the registered load test `tests/qa/load/fixture-restore.test.ts` passed. [TDB2 loaders](https://jena.apache.org/documentation/tdb2/tdb2_cmds.html), [offline text index](https://jena.apache.org/documentation/query/text-query.html#building-a-text-index). |
-| Fuseki prior | `rezics/fuseki:6.2.0-cmd0.5.21`, built locally | Superseded after B39; adopted for B28; selected VIEW02 integration `20260925t193537-c024de` and backend model tier `20260925t193558-6ff268` passed | TDB2 + jena-text with the REZICS command module and generated shapes. Cmd0.5.21 admits typed merged/retired route dispositions with separate revision shapes. Cmd0.5.20 admits an immutable redirected Work route binding with its lifecycle revision while retaining current-route validation under the earlier profile. Cmd0.5.19 admitted the typed Work route-binding profile in Main's current graph; VIEW01 integration `20260925t190251-2f11d0` and backend model tier `20260925t190442-72cd3e` passed. Cmd0.5.18 admitted the fixed native text release profile, sealed dependency bindings and receipt; its WORK05 API integration `20260925t165048-7dd8a1` and backend model tier `20260925t165108-1bd395` passed. Cmd0.5.17 replaces the active restore-cutover pointer during a later cutover while retaining the earlier marker's audit triples. Cmd0.5.16 adds the fixed Work derivation profile, exact source/target/receipt binding, and mandatory revision focus. Cmd0.5.15 admitted the atomic Main default selection's paired selection/Main Version head transition and verified both exact successors against the receipt and revision anchors. It retains cmd0.5.14's private MatchUnit graph, separately indexed body field and private-write epoch, plus cmd0.5.13's transaction-derived public delta journal and exact-subject Lucene proof. The module refuses the public shortcut if a standard write operation is installed alongside the native command, so the QA raw-update assembler continues using the full inventory. This host's BuildKit/Compose path has kept serving already tagged Podman images after rebuild; a changed module uses a fresh image tag. |
-| Fuseki prior (B39) | `rezics/fuseki:6.2.0-cmd0.5.22`, built locally | Adopted for B39; selected source API integration `20260925t210746-1c1306` and native model tier `20260925t205851-16577a` passed | Extends the reviewed native command module with a private validated source graph, fixed source receipt bindings and bounded source projection. The prior cmd0.5.21 evidence is retained in the row above. |
-| Fuseki prior (G-015) | `rezics/fuseki:6.2.0-cmd0.5.23`, built locally | Adopted for G-015; selected backend model `20260926t064840-65bfde` and standing/Access integration `20260926t064842-decc01` passed | Adds distinct daily Rating profiles, canonical type selection and exact period/predecessor bindings while retaining cmd0.5.22 behavior and standing profile digests. Daily API/recovery selected run `20260926t064839-dd976e` passed; final full backend qualification remains separate. |
-| Fuseki prior (G-018) | `rezics/fuseki:6.2.0-cmd0.5.24`, built locally | Adopted for G-018; selected API `20260926t074730-1831a8`, model `20260926t074739-acebf1` and recovery `20260926t074730-20dab9` passed | Adds the bounded immutable Work author-credit profile, exact receipt/source-intent binding and transactional Work head/protection checks. Existing profiles retain their digests. Full backend qualification remains separate. |
-| Fuseki prior (G-022) | `rezics/fuseki:6.2.0-cmd0.5.25`, built locally | G-022; selected native `20260926t090200-a6109e`, API/recovery `20260926t090251-7b7a83` and standing withdrawal `20260926t090346-d32b96` passed | Adds separate experience Rating profiles, exact occasion/predecessor/time bindings and canonical type selection. Existing standing/daily digests and all 66 historical outcomes are preserved. |
-| Fuseki prior (G-029) | `rezics/fuseki:6.2.0-cmd0.5.26`, built locally | Merged native/model `20260926t110725-868502` and API/recovery `20260926t110744-6cfcaf` passed | Adds the immutable aggregate-default policy profile while retaining earlier profile digests. |
-| Fuseki prior (G-028) | `rezics/fuseki:6.2.0-cmd0.5.28-title1`, built locally | Worker model/native `20260926t105709-004ea3`, title API `20260926t110130-337ca3`, Source API `20260926t105921-e4252f` and graph-loss recovery `20260926t110049-d25ec4` passed | Adds Work title control epoch, signed origin and exact control/protection CAS; merged qualification follows the combined image. |
-| Fuseki prior (G-028/G-029) | `rezics/fuseki:6.2.0-cmd0.5.29`, built locally | G-028/G-029 combined owner integration; merged model/native `20260926t111638-92c3d7`, title API `20260926t111657-90be23`, Source API `20260926t111739-c2ef74`, graph-loss recovery `20260926t111804-a91eab` and Rating recovery `20260926t111846-0ad0f6` passed | Combines the Rating policy and Work title control profiles with both native command guards. Built through `task toolchain:install` on merged `6f0404f`. |
-| Fuseki prior (G-035) | `rezics/fuseki:6.2.0-cmd0.5.29-scalar1`, built locally; image ID and local RepoDigest `sha256:7f20578694a47d3af2ee6fda6ceac3f2c162d7b6a3d85f88ff6741944e8c485a` | Selected native `20260926t131755-6d0a7c`, API `20260926t131838-6836e6` and recovery `20260926t131053-03fb93` passed; merged qualification pending | The reviewed Work shape adds one optional IRI-or-literal `rv:scalarValue` with cardinality one. The native command module stays at 0.5.29. A fresh tag is required because this host has served the prior tagged shape after an in-place rebuild. Built through `bun scripts/dev/cli.ts toolchain:install` in the isolated worktree on 2026-09-26. |
-| Fuseki | `rezics/fuseki:6.2.0-cmd0.5.29-4dc9015683cb`, built locally; image ID `sha256:a084c9bbc1b4e222683278a02b16f839bd34950581913be2ba2771526ab7d4d5` | Adopted; selected model tier `20260926t160230-be4cb6` passed | Same build inputs as cmd0.5.29-scalar1 under the content-addressed tag scheme below. `bun scripts/dev/cli.ts toolchain:install` built it in 16 seconds on 2026-09-27. |
-| Object storage | `rustfs/rustfs:1.0.0` | Adopted, gate | S3 API for sealed semantic payloads/manifests, large Content pages, media and artifacts. Ordinary bounded bodies/revisions move to PostgreSQL in P0.8; preserve exact references when replacing the filesystem baseline. |
-| Fault proxy | `ghcr.io/shopify/toxiproxy:2.12.0` | Adopted (QA) | Latency, timeout, reset and lost-response faults between the apps and Fuseki/PostgreSQL, controlled through its HTTP API. |
-| Mail sink | `axllent/mailpit:v1.31.2` | Adopted | SMTP sink for Account email; tests read messages through its HTTP API. |
-| Load generator | `grafana/k6:2.3.0` | Adopted | Run with `docker run --rm --add-host=host.docker.internal:host-gateway`. |
-
-The locally built cmd0.5.12 image passed focused WORK02 integration
-(`20260925t001401-08911f`) and the strict native model matrix
-(`20260925t001300-1a32c1`), including the 66 recorded profile outcomes.
-
-The object storage gate proves conditional create (`If-None-Match: *`), checksum
-verification, concurrent writers of one key and restore against RustFS through
-Main's adapter. Bun 1.4.2 `S3Client` has no custom-header option for the required
-conditional create, so the documented fallback, `aws4fetch` 1.0.20 signed
-`fetch`, is selected for this gate's writes and reads. Its read path also avoids
-the [Bun S3Client local proxy issue](https://github.com/oven-sh/bun/issues/32045)
-observed on this host. Verify conditional creation and read-back against RustFS
-before accepting the adapter. The [immutable-object adapter](../../services/main/src/infrastructure/immutable-objects.ts)
-defines the selected conditional-write contract. A different S3-compatible
-backend still needs its own conditional-create, checksum, concurrent-write,
-cleanup and restore qualification.
-
-### Fuseki image and command module
-
-`infra/jena/Dockerfile` builds the image in three stages:
-
-1. The Maven stage tests and builds `infra/jena/command-module/`, a Java 21 project
-   (`com.rezics:fuseki-command`). `jena-fuseki-main` 6.2.0 is a `provided`
-   dependency, because the pinned `fuseki-server.jar` already contains jena-text
-   and jena-shacl.
-2. The distribution stage downloads `apache-jena-fuseki-6.2.0.tar.gz`, verifies SHA-512
-   `ba65f5867d2d4741b2ed9e2af5a0d4fbb447909894ab2a0c6bc4dac8997f4fe339c87b13c48d45d054977769f0f8bf763ea346b1f7792d5cdc458041bd43a132`
-   and extracts it.
-3. The runtime stage uses `eclipse-temurin:21.0.12_8-jre-noble`. It copies the module jar into `$FUSEKI_BASE/extra/`
-   (the pinned launcher appends `${FUSEKI_BASE}/extra/*` to the classpath), the
-   generated shapes into `/fuseki/profiles/`, and the assembler.
-
-The Compose tag is `rezics/fuseki:<FUSEKI_VERSION>-cmd<module version>-<hash>`.
-The hash is the first 12 hex digits of SHA-256 over every build input's path and
-content digest: the Dockerfile and each local `COPY` source, which includes the
-command module, generated shapes and manifest, and both assemblers.
-`scripts/dev/fuseki-image.ts` derives it; `task gen` writes it into
-`infra/dev/compose.yaml` and `gen:check` fails when a Fuseki input changed without
-a regenerated tag. Any change therefore gets a fresh tag, which avoids this
-host's stale-tag reuse without manual suffixes. The load and restore commands
-also accept earlier plain `cmd<version>` tags.
-
-The product assembler moves from `docs/operations/examples/fuseki-text.ttl` to
-`infra/jena/fuseki-text.ttl` in Phase 0, and its references are updated. It
-exposes `/rezics/query` and `/rezics/command` on the text dataset. The isolated
-QA assembler alone exposes `/rezics/update` for fixture setup and fault tests.
-
-The module is a `FusekiAutoModule` registered through
-`META-INF/services/org.apache.jena.fuseki.main.sys.FusekiAutoModule`
-([module mechanism](https://jena.apache.org/documentation/fuseki2/fuseki-modules.html)).
-Its protocol is owned by the [storage binding](../storage/jena.md#transactional-command-endpoint).
-The module gate proves the following on the built image:
-
-- A valid write commits once.
-- An invalid write aborts with no receipt, sequence, graph or text index change.
-- An unmatched guard aborts.
-- Of competing same-head commands, exactly one wins.
-- `kill -9` during writes leaves TDB2 consistent and receipts reconcilable.
-- jena-text reflects committed writes and never aborted ones.
-
-If the module API cannot meet this gate, the fallback is a long-lived jena-shacl
-validator process in the same image on a private port. It keeps the preflight
-validation and guarded update protocol. Spawning a process per request is not
-allowed in either design.
-
-## Model pipeline
-
-| Item | Status | Detail |
+| Tool | Pin | Source |
 | --- | --- | --- |
-| Authored IR | Adopted | TypeScript definitions in `model/definitions/*.ts`; the compiler lives in `model/compiler/` (workspace `@rezics/model`). The reviewed Turtle profiles are converted into the IR. |
-| Generated artifacts | Adopted | `generated/model/shapes/*.ttl`, JSON-LD contexts and `generated/model/manifest.json` with SHA-256 per artifact; `packages/model/src/generated/` holds TypeBox schemas, TypeScript types, vocabulary/IRI constants, the profile registry (profile → shape, digest, focus roles) and fast-check arbitraries. |
-| Equivalence | Adopted | The cmd0.5.12 module retains fixed exact focus/link bindings for five historical profiles and adds a fixed translated-Work link binding while validating against selected named graphs without copying all triples; Content publication, MatchUnit projection and public eligibility have separate generated profiles and fixed poststate checks. The strict QA model tier must still match all 66 recorded outcomes and result paths; generated digests, TypeScript fixtures and historical reports remain. Handwritten Turtle/Python validators are retired. |
-| JSON Schema, LinkML, Rust bindings | Stage when a consumer exists | Not generated in the first delivery. |
+| Bun | 1.4.2 | scripts/dev/release-manifest.ts |
+| Node.js | 26.8.2 | .nvmrc |
+| Yarn | yarn@4.18.0 | package.json |
+| Task | 3.53.1 | scripts/dev/cli.ts |
+| Aspire SDK | 13.5.4 | aspire.config.json |
+| Go package oracle | 1.27.1 | scripts/package/go-oracle.ts |
+| Cargo package oracle | 1.98.1 | scripts/package/cargo-oracle.ts |
+| npm package oracle | 11.19.1 | scripts/package/npm-oracle.ts |
 
-## Backend delivery tooling proposal
+### Direct workspace packages
 
-The 2026-09-26 backend plan (now archived on the local `archive/goals` branch) proposed
-Drizzle ORM/Kit over the existing `pg` driver for ordinary PostgreSQL development,
-with Kysely as the bounded fallback. Content adopts `drizzle-orm` 0.45.3 over
-the existing `pg` driver for a typed owner-position/receipt/outbox pilot. Its
-real PostgreSQL test covers an empty install, existing v3 upgrade, transaction
-rollback, compare-and-swap, JSONB and bigint positions above the safe Number
-range. Content's trigger-bearing SQL migrations remain the single DDL owner;
-the runner discovers numbered files instead of adding a branch per version.
-Drizzle Kit 0.31.11 was considered for a later handoff but is not installed or
-an active migration runner: baseline adoption must first preserve the four
-existing versions and all trigger/constraint semantics in one history. pg-boss
-is a candidate only when a concrete ordinary job consumer needs scheduling/retries.
-The Kysely restriction below describes the current binding, not a prohibition on
-adopting the planned typed persistence layer.
+Exact direct pins from root and workspace manifests; `yarn.lock` resolves transitive dependencies.
 
-The backend/affected QA selection is documented above. The fixture construction,
-backup and restore facade is implemented through `task fixture:build` and
-`task fixture:restore` below for the current Work, Access, Content and object
-owners. Remaining M01–M10 background entities still need owner generators.
-Routine fixture preparation has one 600-second deadline including startup and
-readiness; it must not fall back to slow command seeding or full corpus
-validation. Use only the documented CLI flags.
+| Package | Pin | Manifest directories |
+| --- | --- | --- |
+| @ark-ui/react | 5.39.2 | packages/ui |
+| @ast-grep/cli | 0.45.3 | . |
+| @better-auth/core | 1.7.5 | services/account |
+| @better-auth/oauth-provider | 1.7.5 | services/account |
+| @better-auth/passkey | 1.7.5 | services/account |
+| @better-auth/utils | 0.4.2 | services/account |
+| @better-fetch/fetch | 1.3.2 | services/account |
+| @biomejs/biome | 2.5.14 | . |
+| @cloudflare/vite-plugin | 1.58.0 | apps/accounts, apps/web |
+| @elysia/eden | 2.0.0-beta.5 | apps/web, services/account, services/main |
+| @elysia/openapi | 2.0.0-beta.4 | services/account, services/main |
+| @fontsource-variable/geist-mono | 5.3.0 | apps/web |
+| @fontsource-variable/manrope | 5.3.0 | apps/accounts, apps/web |
+| @fontsource-variable/source-serif-4 | 5.3.0 | apps/web |
+| @js-temporal/polyfill | 0.5.1 | services/main |
+| @microsoft/aspire-cli | 13.5.4 | apphost |
+| @playwright/test | 1.63.0 | . |
+| @rezics/main | workspace:* | apps/web |
+| @rezics/ui | workspace:* | apps/accounts, apps/web |
+| @scalar/types | 0.18.3 | services/account, services/main |
+| @storybook/addon-a11y | 11.0.0-alpha.1 | apps/accounts, apps/web |
+| @storybook/addon-mcp | 11.0.0-alpha.1 | apps/web |
+| @storybook/addon-vitest | 11.0.0-alpha.1 | apps/accounts, apps/web |
+| @storybook/react-vite | 11.0.0-alpha.1 | apps/accounts, apps/web |
+| @tailwindcss/vite | 4.3.3 | apps/accounts, apps/web |
+| @tanstack/react-query | 5.103.2 | apps/web |
+| @types/bun | 1.4.2 | apps/accounts, packages/model, services/account, services/content, services/main |
+| @types/node | 26.6.2 | apphost, apps/accounts, apps/web |
+| @types/nodemailer | 8.0.2 | services/account |
+| @types/pg | 8.23.1 | services/account, services/content, services/main |
+| @types/react | 19.2.18 | apps/accounts, apps/web, packages/ui |
+| @types/react-dom | 19.2.7 | apps/accounts, apps/web, packages/ui |
+| @vinext/cloudflare | 1.0.0-beta.9 | apps/web |
+| @vitejs/plugin-react | 6.1.1 | apps/accounts, apps/web |
+| @vitejs/plugin-rsc | 0.5.35 | apps/accounts, apps/web |
+| @vitest/browser-playwright | 5.0.2 | apps/accounts, apps/web |
+| aws4fetch | 1.0.20 | services/main |
+| better-auth | 1.7.5 | services/account, services/main |
+| better-call | 1.4.0 | services/account |
+| clsx | 2.1.1 | packages/ui |
+| dependency-cruiser | 18.4.0 | . |
+| drizzle-orm | 0.45.3 | services/content |
+| elysia | 2.0.0-beta.16 | apps/web, services/account, services/main |
+| envalid | 8.2.0 | apps/accounts, apps/web, services/account, services/main |
+| exact-mirror | 1.2.6 | services/account, services/main |
+| fast-check | 4.10.2 | packages/model |
+| jose | 6.2.12 | services/account, services/main |
+| knip | 6.38.0 | . |
+| kysely | 0.29.6 | services/account |
+| lucide-react | 1.47.0 | apps/accounts, apps/web, packages/ui |
+| nanostores | 1.5.3 | services/account |
+| native-i18n | 0.2.0 | apps/accounts, apps/web |
+| next | 16.3.6 | apps/accounts, apps/web |
+| nodemailer | 10.0.10 | services/account |
+| nuqs | 2.10.1 | apps/web |
+| openapi-types | 12.1.3 | services/account, services/main |
+| oxlint | 1.85.0 | . |
+| oxlint-tsgolint | 7.0.2003 | . |
+| pg | 8.23.0 | services/account, services/content, services/main |
+| playwright | 1.63.0 | apps/accounts, apps/web |
+| react | 19.3.0 | apps/accounts, apps/web, packages/ui |
+| react-dom | 19.3.0 | apps/accounts, apps/web, packages/ui |
+| react-is | 19.3.0 | packages/ui |
+| react-server-dom-webpack | 19.3.0 | apps/accounts, apps/web |
+| recharts | 3.10.1 | packages/ui |
+| storybook | 11.0.0-alpha.1 | apps/accounts, apps/web |
+| tailwind-merge | 3.7.0 | packages/ui |
+| tailwind-variants | 3.3.1 | packages/ui |
+| tailwindcss | 4.3.3 | apps/accounts, apps/web |
+| tsx | 4.23.13 | apphost |
+| tw-animate-css | 1.4.0 | packages/ui |
+| typebox | 1.3.34 | packages/model, services/account, services/main |
+| typescript | 7.0.2 | apphost, apps/accounts, apps/web, packages/model, packages/ui, services/account, services/content, services/main |
+| vinext | 1.0.0-beta.11 | apps/accounts, apps/web |
+| vite | 8.3.0 | apps/accounts, apps/web |
+| vitest | 5.0.2 | apps/accounts, apps/web |
+| vscode-jsonrpc | 8.2.1 | apphost |
+| webpack | 5.110.3 | apps/accounts, apps/web |
+| wrangler | 4.137.0 | apps/accounts, apps/web |
 
-## API and clients
+### Service and Fuseki build images
 
-| Tool | Version | Status | Use |
-| --- | --- | --- | --- |
-| Elysia | 2.0.0-beta.16 | Adopted | Explicit TypeBox schemas for params, body and every response status. |
-| envalid | 8.2.0 | Adopted | Typed, validated environment configuration. Each process entry declares its variables once in a `config.ts` spec (type, default, description, example), parses `process.env` at startup and passes the typed object on; missing or malformed variables are reported together. The specs generate each workspace's committed `.env.example` (`task env:example`), and `task check` fails when one is stale. `@t3-oss/env-core` is not used because it needs zod, valibot or arktype beside TypeBox. |
-| TypeBox | 1.3.34 | Adopted | Schema library for Elysia and the generated model schemas. |
-| `@js-temporal/polyfill` | 0.5.1 | Adopted for G-015 daily Rating | Server-only named IANA timezone and ISO civil-day arithmetic. `startOfDay` resolves midnight transitions; stored UTC bounds and immutable timezone survive replay. Uses the pinned Bun runtime's ICU data; calendar regressions cover 23/25-hour and midnight-transition days. [Upstream release](https://github.com/js-temporal/temporal-polyfill/releases/tag/v0.5.1). |
-| aws4fetch | 1.0.20 | Adopted for P0.5 | Sign S3 object writes and reads. Immutable creation sends `If-None-Match: *` to RustFS; signed `fetch` reads bypass Bun S3Client's observed local proxy issue. |
-| `@elysia/openapi` | 2.0.0-beta.4 | Adopted | `task gen` writes `generated/openapi/main/public.json` from the live route schemas, excluding health routes and adding documented bearer/idempotency headers. `provider: null` drops the JSON route, so generation uses the default provider in an ephemeral app. TypeBox's draft-07 tuples are rewritten as JSON Schema 2020-12 `prefixItems`. `gen:check` detects drift. Account also serves its route-derived schema at `/api/account/openapi.json`. |
-| `@scalar/types` | 0.18.3 | Adopted | Type-only peer required by the pinned OpenAPI plugin; the generated contract does not publish a Scalar UI. |
-| `@elysia/eden` | 2.0.0-beta.5 | Adopted, gate | Main exports `type MainApp` through a type-only package export. `task check` compiles an external Eden consumer under 30 seconds on TypeScript 7; Account exports `AccountApp` and exercises a typed Eden consumer in its contract integration test; Server Component and client BFF calls remain P0.6 work. |
-| openapi-typescript / openapi-fetch | — | Not used | Revisit when an external TypeScript SDK ships. |
-| Nodemailer | 10.0.10 (`@types/nodemailer` 8.0.2) | Adopted | Account transactional SMTP, encrypted PostgreSQL queue and multipart messages; loopback Mailpit in development. [SMTP transport](https://nodemailer.com/smtp). |
-| Better Auth passkey | 1.7.5 | Adopted | Account WebAuthn plugin; requires user verification on registration and sign-in. |
-| Better Auth | 1.7.5 | Adopted | Account; plugin activation follows the [Account owner](../services/account.md). |
-| pg | 8.23.0 | Adopted | PostgreSQL driver for Content/Account/Access/operations/relay. Kysely 0.29.6 stays inside Account's Better Auth integration only. |
-| Drizzle ORM | 0.45.3 | Adopted for Content slice | Reuses the existing `pg` PoolClient transaction for typed owner sequence, receipt and outbox writes. Content's real PostgreSQL test passed CAS, forced-outbox rollback, exact JSONB payload, bigint above 2⁵³, empty install and v3 upgrade. Extend table coverage with owner features; do not infer full Content coverage from this slice. |
-| Drizzle Kit | 0.31.11 evaluated pin | Not installed | A later migration-owner handoff requires a reviewed baseline from all four trigger-bearing Content SQL versions and empty/existing upgrade proof. Do not run Kit alongside `content.schema_migration`. |
+| Source | Image and digest |
+| --- | --- |
+| Compose | postgres:18.6-trixie@sha256:5a5a84b19854a9ffaa54082c166ff4ec27473a361e496e5ea167f298f2da9722 |
+| Compose | rezics/fuseki:6.2.0-cmd0.5.33-9632dbc360a6 |
+| Compose | rustfs/rustfs:1.0.0@sha256:8cc9801755448b71a786705ce76692c77e14936cccd87cf2fc31842e58f4d1ff |
+| Compose | ghcr.io/shopify/toxiproxy:2.12.0@sha256:9378ed52a28bc50edc1350f936f518f31fa95f0d15917d6eb40b8e376d1a214e |
+| Compose | axllent/mailpit:v1.31.2@sha256:74d609a42ec279aa63c6b4622a6fa9b5408d1ad5b1d76a1c4be40a265ce0863d |
+| Fuseki build | maven:3.9.16-eclipse-temurin-21@sha256:c2a2c58516d160f43b50f12baa427ca86989e0bc942609e04aff61da5d9a7d74 |
+| Fuseki build | eclipse-temurin:21.0.12_8-jre-noble@sha256:7739f0ffce786528961eea6bf46d9610ee968ac6127c9b2e93494757bdecce9f |
 
-## Web
+### Other pinned images
 
-| Tool | Version | Status | Use |
-| --- | --- | --- | --- |
-| vinext / `@vinext/cloudflare` | 1.0.0-beta.11 / 1.0.0-beta.9 | Adopted | App Router on Vite, deployed to Workers. |
-| Next.js package/types | 16.3.6 | Adopted for P0.6 | Supplies App Router TypeScript declarations to vinext; runtime rendering remains vinext. |
-| Vite, `@vitejs/plugin-rsc`, `@vitejs/plugin-react` | 8.3.0, 0.5.35, 6.1.1 | Adopted | Build pipeline required by vinext. |
-| React, React DOM, `react-server-dom-webpack` | 19.3.0 | Adopted | UI runtime. |
-| `@types/react`, `@types/react-dom` | 19.2.18, 19.2.7 | Adopted for P0.6 | TypeScript JSX declarations. |
-| `@types/node` | 26.6.2 | Adopted for P0.6 | Worker build and tool configuration declarations for Node compatibility APIs. |
-| webpack | 5.110.3 | Adopted for P0.6 | Peer runtime for the pinned React Server Components transport package. |
-| `@cloudflare/vite-plugin`, wrangler | 1.58.0, 4.137.0 | Adopted | Workers build and local `wrangler dev` (workerd) for end-to-end tests. |
-| `@tanstack/react-query` | 5.103.2 | Adopted | Client components only; see [web organization](web-features.md#data-fetching). |
-| Tailwind CSS, `@tailwindcss/vite` | 4.3.3 | Adopted | Styling. |
-| Rezics UI on Ark UI | `@ark-ui/react` 5.39.2; SharkUI snapshot [`d43c3c2`](https://github.com/sharkui-inc/shark-ui/tree/d43c3c2c7a5e683d46930c2ce8eb22eca2f8a0a0) (MIT) | Adopted | `packages/ui` (`@rezics/ui`) holds all 95 SharkUI components and its hook as a project-maintained fork, styled with the [Rezics Aura theme](design-system.md). It is no longer synced from the registry; change components in place. |
-| `tailwind-variants`, `tailwind-merge`, `clsx`, `lucide-react` | 3.3.1, 3.7.0, 2.1.1, 1.47.0 | Adopted | Utilities used by Rezics UI components; the web app also imports `lucide-react` icons directly. |
-| Fontsource variable fonts: `@fontsource-variable/manrope`, `@fontsource-variable/source-serif-4`, `@fontsource-variable/geist-mono` | 5.3.0 | Adopted (2026-09-27) | Self-hosted Manrope, Source Serif 4 and Geist Mono for the [Aura type roles](design-system.md#radius-surfaces-and-type), bundled by Vite with no font CDN request. OFL-1.1; CSS and WOFF2 only, no install scripts. |
-| `tw-animate-css` | 1.4.0 | Adopted | Enter/exit animation utilities (`animate-in`, `fade-in-0`, `zoom-in-95`, `slide-in-from-*`) used by 20 Rezics UI overlays. Imported once from `packages/ui/src/styles.css`. |
-| Recharts, `react-is` | 3.10.1, 19.3.0 | Adopted | The Rezics UI `chart` component; `react-is` satisfies Recharts' peer dependency at the pinned React version. |
-| `native-i18n` | 0.2.0 | Adopted | UI messages, as in the old repository. Lingui and Paraglide are not used. |
-| `nuqs` | 2.10.1 | Adopted | URL search-parameter state for discovery and filters. |
-| Tiptap 3 | — | Stage C | Wiki/block editing. |
-| RJSF 6 | — | Stage E | Package parameter forms. |
+| Use | Image pin |
+| --- | --- |
+| Nix package oracle | docker.io/nixos/nix:2.35.2@sha256:617d914dba5384bf75adf17081583b69371031ec7defce36c34c5fa14fc819b0 |
+| Node package hooks | docker.io/library/node:26.8.2-bookworm-slim@sha256:6e685d638c472d81fdf86b944e3487f0d3b5e747d5099f936d4d2256cd1201d5 |
+| Load generator | grafana/k6:2.3.0 |
+| API fuzz | docker.io/schemathesis/schemathesis:4.28.0@sha256:0a71757c60ccdba270c154a859d9dd3d019625f782f23ab36ad604771e15f78b |
+| Research: dgraph | docker.io/dgraph/dgraph:v25.4.1 (docker.io/dgraph/dgraph@sha256:056bd94a3cd67da552fe6ddb575a1d6f0b5597eb9d96da73827bcb1e80cf5f8f) |
+| Research: opensearch | docker.io/opensearchproject/opensearch:3.6.0 (docker.io/opensearchproject/opensearch@sha256:b5dd1512af2a99748c942cfbbd7f32162623336b210667d0fc6333c6321f171d) |
+| Research: virtuoso | docker.io/openlink/virtuoso-opensource-7:7.2.17-r25-g6eb68b6-ubuntu (docker.io/openlink/virtuoso-opensource-7@sha256:2a9914b95f8a52927a73947c87ec2727f78f87d38e41c38c379efb121f9cbed1) |
 
-## Tests and static checks
+### Shared development ports
 
-Implement [complexity verification](../testing/complexity.md) with these existing
-tools, shared application counters and native engine plans/metrics. It is a
-required strategy, not an already complete automatic gate. Add the cases to the
-existing QA tiers; no new benchmark service, static cost analyzer or root command
-is selected. Import-boundary rules can prevent bypass of metered adapters, but
-neither dependency-cruiser nor TypeScript typechecking proves asymptotic cost.
+| Setting | Port |
+| --- | --- |
+| ACCOUNTS_PORT | 3004 |
+| ACCOUNT_PORT | 3002 |
+| FUSEKI_PORT | 3030 |
+| MAILPIT_HTTP_PORT | 8025 |
+| MAILPIT_SMTP_PORT | 1025 |
+| MAIN_PORT | 3001 |
+| POSTGRES_PORT | 5432 |
+| RUSTFS_CONSOLE_PORT | 9001 |
+| RUSTFS_PORT | 9000 |
+| TOXIPROXY_API_PORT | 8474 |
+| TOXIPROXY_FUSEKI_PORT | 13030 |
+| TOXIPROXY_POSTGRES_PORT | 15432 |
 
-| Tool | Version | Status | Use |
-| --- | --- | --- | --- |
-| `bun test` | Bun 1.4.2 | Adopted | Backend unit, property, integration, model-based and recovery tests with `--parallel`, `--shard`, `--timings` and the JUnit reporter. |
-| Nix native oracle container | Nix 2.35.2, `docker.io/nixos/nix:2.35.2@sha256:617d914dba5384bf75adf17081583b69371031ec7defce36c34c5fa14fc819b0` (linux/amd64) | Adopted for PKG06 | Main's bounded adapter and `bun scripts/package/nix-oracle.ts` run this exact image through the adopted Docker CLI against disposable fixtures under `.temp/`, with network disabled. They record the flake lock, selected derivation and observed output closure separately; evaluation and building are executable native Nix operations. The image manifest digest was inspected with the adopted Docker CLI on 2026-09-27. [Official image](https://hub.docker.com/r/nixos/nix/tags), [Nix derivation format](https://nix.dev/manual/nix/stable/command-ref/new-cli/nix3-derivation-show). |
-| Node package hook container | Node 26.8.2, `docker.io/library/node:26.8.2-bookworm-slim@sha256:6e685d638c472d81fdf86b944e3487f0d3b5e747d5099f936d4d2256cd1201d5` (linux/amd64) | Adopted for PKG15 | Main's approved npm lifecycle hooks run in this digest-pinned image through the adopted Docker CLI. The container has no network or inherited host environment, a read-only root, a single staged package bind mount, a non-root user, resource caps and a deadline. The linux/amd64 manifest digest was inspected with `docker buildx imagetools inspect` on 2026-09-27. [Official image](https://hub.docker.com/_/node), [Docker run isolation options](https://docs.docker.com/reference/cli/docker/container/run/). |
-| fast-check | 4.10.2 | Adopted | Properties, model-based command sequences, shrinking and logged seeds. |
-| Vitest, `@vitest/browser-playwright` | 5.0.2 | Adopted | Storybook component tests in browser mode. `@storybook/addon-vitest` 11 accepts Vitest 5; 10.6 did not. |
-| Storybook | 11.0.0-alpha.1 (`storybook`, `@storybook/react-vite`, `@storybook/addon-vitest`, `@storybook/addon-a11y`, `@storybook/addon-mcp`) | Adopted, prerelease (maintainer direction, 2026-09-27) | Component states, accessibility checks and the MCP endpoint through which agents read component docs and write and test stories. Chosen for Storybook 11's agent features over stability; move to beta, RC and stable as they ship (GA planned 2026-11-10) and fix breakage when it appears. |
-| `@testing-library/react` | 16.3.3 | Adopted | Component interaction assertions. |
-| msw | 2.15.0 | Adopted | Network mocks in stories and component tests only; never in backend integration tests. |
-| `@playwright/test`, `playwright` | 1.63.0 | Adopted | End-to-end journeys against the local stack and `wrangler dev`; Vitest's browser provider uses Playwright. |
-| k6 | 2.3.0 (image) | Adopted | Load tier. |
-| Toxiproxy | 2.12.0 (image) | Adopted | Fault tier. |
-| Biome | 2.5.14 | Adopted, scoped gate | Lint the source paths and selected rules described above; format the listed TypeScript gate files and JSON manifests/configuration. ESLint and Prettier are not used. Full formatting and recommended-rule migration remain open. |
-| dependency-cruiser | 18.4.0 | Adopted, scoped gate | Enforce public web-to-Main type, browser/server, Main entrypoint and infrastructure direction rules. Broader explicit-interface migration remains open. This release requires the TypeScript 6 parser pin below; TypeScript 7 is not a supported analyzer API and otherwise yields a false zero-file scan. |
-| TypeScript parser for dependency-cruiser | 6.0.2, private dependency via Yarn `packageExtensions` | Adopted, gate | Dependency-cruiser accepts `typescript <7`; install a private 6.0.2 copy under that tool for graph extraction only. Product typechecks remain on TypeScript 7.0.2. The static gate asserts that modules were actually scanned. Remove this compatibility pin when the analyzer supports the TypeScript 7 API. |
-| oxlint, oxlint-tsgolint | 1.85.0, 7.0.2003 | Adopted, scoped gate | Type-aware `typescript/no-floating-promises` (with `checkThenables`, so unawaited Drizzle builders count) and `no-misused-promises` over backend sources; every other category is off in `.oxlintrc.json`. Biome 2.5.14's nursery `noFloatingPromises`/`noMisusedPromises` were rejected because a probe showed they miss unawaited `pg` `Pool.query` calls and Drizzle thenables. The gate's first run fixed 20 findings, including Main's shutdown not awaiting `app.stop()`. Check: `check:backend` and the static-gate fixture test passed on 2026-09-27. [Type-aware linting](https://oxc.rs/blog/2026-07-22-type-aware-linting-stable). |
-| Knip | 6.38.0 | Adopted, scoped gate | `knip.jsonc` covers backend workspaces, scripts and tests; web and UI are ignored outside the Goal. The gate blocks unused files and dependencies (zero findings on adoption); `task check:unused` also reports 31 unused exports and 16 unused types for cleanup. `scripts/static/knip.ts` clears proxy variables that make Knip warn. [Knip v6](https://knip.dev/blog/knip-v6). |
-| ast-grep (`@ast-grep/cli`) | 0.45.3 | Adopted, gate | Structural rules for module boundaries that Biome and dependency-cruiser cannot express: no `new Pool`/`new Client`, `process.env` or `process.exit` in `services/*/src/modules/`, no `Math.random` in service or model sources, and no `eval`/`new Function`. Each rule has valid and invalid cases. Its postinstall is allowlisted (see [install scripts](#rules)) and links the native binary as `node_modules/.bin/ast-grep`. [CLI](https://ast-grep.github.io/reference/cli/scan.html). |
-| Schemathesis | 4.28.0 image `docker.io/schemathesis/schemathesis:4.28.0@sha256:0a71757c60ccdba270c154a859d9dd3d019625f782f23ab36ad604771e15f78b` | Adopted, diagnostic command | `task api:fuzz` only; not part of `task qa`. Its first run found that Main answered unknown routes and unsupported methods with 500 instead of 404, and that the generated contract carried 19 draft-07 tuples (`items` arrays), which OpenAPI 3.1 rejects; both are fixed. `filter_too_much` is suppressed because strict identifier patterns discard most generated values by design. Under Docker Desktop the container reaches host loopback services through `host.docker.internal`, not `--network host`. [CLI reference](https://schemathesis.readthedocs.io/en/stable/reference/cli/). |
-| Testcontainers, Polly, nock, Jest | — | Not used | The harness drives Docker Compose directly; remote fixtures use a content-addressed cache. |
+### Root commands
+
+Pass command arguments after `--`; run `task --list` for the live command menu.
+
+| Command | Task description |
+| --- | --- |
+| `task default` | List the available commands. |
+| `task install` | Install the pinned workspace dependencies from the lockfile. |
+| `task toolchain:install` | From a clean clone, install dependencies, check runtimes, pull images, build Fuseki and install Chromium. |
+| `task dev` | Start the dev environment under Aspire. Main checkout: shared backend and frontend on ports 3002 (Account), 3001 (Main), 3004 (Accounts app), 3000 (web), 6006 (Storybook). Worktree: Accounts app, web and Storybook on random ports against it, or -- --backend for its own isolated stack. |
+| `task dev:stop` | Stop this checkout's AppHost; a worktree backend also removes its isolated stack. |
+| `task urls` | Show this checkout's running resources with their URLs and health. |
+| `task env` | Show the application environment this checkout uses, secrets masked, and where it comes from. |
+| `task env:example` | Regenerate each workspace's .env.example from its envalid config specs. |
+| `task dev:prepare` | Start storage, apply migrations and write the application environment without starting processes. |
+| `task dev:seed` | Seed the shared local demo through its public APIs. |
+| `task dev:typecheck` | Type-check the development scripts. |
+| `task aspire` | Run the pinned Aspire CLI against the dev AppHost (describe, logs, wait, agent mcp, ...). |
+| `task aspire:restore` | Generate the TypeScript AppHost SDK for the pinned Aspire version. |
+| `task stack:up` | Start the Compose storage stack and print its endpoints. |
+| `task stack:down` | Stop the Compose storage stack and keep its data. |
+| `task stack:reset` | Stop the Compose storage stack and remove its volumes. |
+| `task stack:logs` | Print recent Compose service logs. |
+| `task stack:status` | Show Compose service status. |
+| `task stack:backup` | OPS03 fixture only; take a physical PostgreSQL backup of a disposable owner-cut QA stack. |
+| `task stack:clone` | Copy a stopped persistent load stack into a new isolated QA project. |
+| `task web:dev` | Run vinext alone, without Aspire, against the shared backend (defaults in apps/web/.env.example; pass -- --port <n>). |
+| `task web:build` | Build the vinext Workers application. |
+| `task web:preview` | Build the web Worker for a running QA stack and serve it with wrangler on port 3003. |
+| `task web:e2e` | Run Playwright journeys against the running web preview. |
+| `task web:typecheck` | Type-check the web workspace. |
+| `task storybook` | Run Storybook on port 6006 with its MCP endpoint at /mcp. |
+| `task storybook:build` | Build static Storybook into .temp/storybook/static. |
+| `task storybook:test` | Run Storybook stories as Vitest browser tests with accessibility checks. |
+| `task accounts:dev` | Run the Accounts app alone with vinext, without Aspire, against the shared Account service (defaults in apps/accounts/.env.example; pass -- --port <n>). |
+| `task accounts:build` | Build the Accounts vinext Workers application. |
+| `task accounts:typecheck` | Type-check the Accounts workspace. |
+| `task accounts:storybook` | Run the Accounts Storybook on port 6007. |
+| `task accounts:storybook:test` | Run the Accounts stories as Vitest browser tests with accessibility checks. |
+| `task accounts:e2e` | Run the Accounts Playwright journeys against a running Accounts app (ACCOUNTS_URL, default http://127.0.0.1:3004). |
+| `task ui:typecheck` | Type-check Rezics UI. |
+| `task check` | Run every static gate (types, generated contracts, docs, lint, format, code shape, unused files, imports). |
+| `task check:backend` | Run the static gates without UI and web sources. |
+| `task check:unused` | Report unused files, dependencies and exports with Knip. |
+| `task ast-grep` | Run the pinned ast-grep binary (scan or test) with sgconfig.yml. |
+| `task docs:check` | Check documentation links, fragments and navigation. |
+| `task test` | Run explicit test files or the affected plan (-- --affected [<base>] [--list]). |
+| `task qa` | Run the QA harness tiers (-- --backend, --tier, --record, ...). |
+| `task qa:replay` | Replay one property or model test with a logged seed. |
+| `task api:fuzz` | Run Schemathesis against Main's generated OpenAPI contract on an isolated stack. |
+| `task gen` | Regenerate model, OpenAPI and pinned-image artifacts. |
+| `task gen:check` | Fail if generated artifacts are stale. |
+| `task fixture:build` | Build a deterministic background corpus into owner storage. |
+| `task fixture:restore` | Restore a fixture backup into a new persistent QA stack. |
+| `task fixtures:pull` | Replay verified factual fixtures from the cache or committed seed. |
+| `task load` | Run the mixed host load profile. |
+| `task load:prepare` | Build a reusable command-created load baseline. |
+| `task load:clone-probe` | Probe a cloned load stack for isolation and fresh commands. |
+| `task release:build` | Package a content-addressed local release artifact. |
+| `task release:install` | Verify a release artifact and provision a project from it. |
+| `task search:rebuild` | Rebuild the public search index on a stopped-writer stack. |
+| `task access:pending-search` | List unresolved private search deliveries (needs ACCESS_DATABASE_URL). |
+| `task research:architecture` | Run the storage architecture research lab. |
+| `task package:go-oracle` | Compare Go module resolution with the pinned native Go. |
+| `task package:go-probe` | Run the Go provider probe. |
+| `task package:go-checksum-oracle` | Compare Go checksum provenance with the pinned native Go. |
+| `task package:cargo-oracle` | Compare Cargo resolution with the pinned native Cargo. |
+| `task package:npm-oracle` | Compare npm lockfile topology with the pinned native npm. |
+| `task account:dev` | Run Account in watch mode. |
+| `task account:test` | Run Account unit tests. |
+| `task account:typecheck` | Type-check Account. |
+| `task content:typecheck` | Type-check Content. |
+| `task content:test` | Run Content unit tests. |
+| `task main:dev` | Run Main in watch mode. |
+| `task main:relay` | Run the Main relay. |
+| `task main:relay:init` | Initialize the Main relay. |
+| `task main:typecheck` | Type-check Main. |
+| `task main:test` | Run Main unit tests. |
+| `task model:typecheck` | Type-check the model package. |
+| `task model:test` | Run model package tests. |
+
+<!-- toolchain-inventory:end -->
 
 ## Agent orchestration
 
-These development tools run [Goal](../goals/README.md) workers and research
-lookups; no product code depends on them. The [manager charter](../goals/manager.md#resources)
-describes when each is useful. Verified on 2026-09-27.
-
-| Tool | Version | Use |
-| --- | --- | --- |
-| Claude Code CLI | 2.1.283 | Manager: `claude -n goal-manager --model claude-opus-5-5 --effort xhigh --dangerously-skip-permissions`. Engine `claude`: `claude -p --model claude-opus-5-5 --effort <low…max> --dangerously-skip-permissions --session-id <uuid> --output-format json`, continued with `--resume <session-id>`. The status line writes the 5-hour and 7-day usage to `~/.claude/usage/latest.json`. |
-| Codex CLI | 0.157.1 | Engines `codex` (`gpt-6-sol`, `low`…`ultra`) and `luna` (`gpt-6-luna`, `low`…`max`) on the account in `~/.codex`: `codex exec -m <model> -c model_reasoning_effort=<e> --dangerously-bypass-approvals-and-sandbox --json -o <last-message> -C <worktree> "<prompt>"`, continued with `codex exec resume <thread-id> …`. Engine `astra` (`gpt-6-astra`, `low`…`ultra`) runs the same command with `CODEX_HOME=~/.codex-1`, the Astra account, which the `codex-1` wrapper also selects. Each account's weekly usage is in the `rate_limits` of its newest `sessions/**/rollout-*.jsonl`; interactive `/usage` shows it and the Astra account's usage-limit reset credits. |
-| Grok Build CLI | 1.0.41 | Engine `grok` (`grok-4.7`, `low`…`high`): `grok -p <prompt> -m grok-4.7 --reasoning-effort <e> --permission-mode bypassPermissions --no-subagents --output-format json --cwd <worktree>`, continued with `-r <session>`. Research lookups run `grok -m grok-4.7 -p "<question>" --output-format json` from an empty temporary directory without auto-approval; it searches X and the web, and its answers are leads to verify. |
-| Cursor Agent CLI | 2026.09.26-dd393fe | Engine `cursor` (Grok 4.7 through Cursor's own quota): `cursor-agent -p <prompt> --model grok-4.7-<low…xhigh> --force --trust --sandbox disabled --output-format json --workspace <worktree>`, continued with `--resume <session_id>`. Invoke it as `cursor-agent`; the bare `agent` command resolves to Grok's binary first on `PATH`. |
-| `bun scripts/goal/goalctl.ts` | Repository script | Worker lifecycle: claims, dispatch, background wait, resume, stop, scoped merge, close, status, usage of every account and QA slots. State lives in `.temp/goal-orchestration/`; worktrees in `.temp/worktrees/`. Unit tests: `task test -- scripts/goal/goalctl.test.ts`. |
-
-## Continuous integration
-
-`origin` is `github.com/rezics/rezics-next`. GitHub Actions running `task check`
-and a sharded `task qa` is adopted once the harness passes locally. Renovate and
-zizmor join at the same point. Syft and provenance attestations start at the first
-release (stage G). Trivy is not used, per the survey's advisory note.
-
-## Not used in the first delivery
-
-The selected startup storage is PostgreSQL + Jena/TDB2 with embedded
-jena-text/Lucene. OpenSearch, PGroonga, pg_bigm, Kafka, Flink, Debezium and other
-research engines are not required product dependencies. Research pins above do
-not select them. The body projection uses existing RDF MatchUnits and the text
-wrapper, not a separate process writing Lucene files. Required components must
-be self-hosted open-source or suitable source-available software.
-
-Nx/Turbo, moon, mise, Lefthook, PGlite, oasdiff, Spectral (the
-[2026-09-27 re-evaluation](../research/agent-efficiency-tooling.md) records
-revisit triggers), Redis, MinIO, openapi-fetch for the web, third-party Eden query wrappers
-(`@ap0nia/eden-react-query`, `eden2query`), Lingui, Paraglide, and Python
-model validators. Operations tooling (pgBackRest, restic, OpenTelemetry Collector,
-Prometheus, Grafana, VictoriaLogs, Caddy) is stage G; recheck versions from the
-survey when that stage starts.
+The [Goal program](../goals/README.md) owns the worker lifecycle and commands;
+the [manager charter](../goals/manager.md#resources) owns engine selection and
+usage limits. CLI versions are host installations, not product pins. Workers use
+the checked-in `scripts/goal/goalctl.ts` and its tests.

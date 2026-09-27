@@ -28,8 +28,8 @@ run by the manager from the main checkout:
 | `test <task test args>` / `slot -- <cmd>` | Runs a check inside one of the shared QA slots. |
 
 Engines are `claude`, `astra`, `codex`, `luna`, `grok` and `cursor`; the
-[charter](manager.md#resources) lists their models and accounts, and the
-[toolchain](../development/toolchain.md#agent-orchestration) their commands.
+[charter](manager.md#resources) lists their models and accounts; the
+[`goalctl` launcher](../../scripts/goal/goalctl.ts) owns their executable commands.
 A brief without `engine` runs on `claude` (`GOAL_ENGINE` changes the default).
 To add an engine, extend `launchCommand` and its tests in `goalctl.ts`.
 

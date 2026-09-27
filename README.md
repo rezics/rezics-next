@@ -53,8 +53,8 @@ implemented tiers in disposable projects; passing it currently leaves many
 retained acceptance IDs uncovered. See the [plan's current state](docs/plan/README.md#current-state)
 and the [qualification page](docs/plan/qualification.md) for results and remaining gates.
 
-- [Toolchain lock](docs/development/toolchain.md): every tool, version, local
-  service and root command (`task dev`, `task check`, `task qa`).
+- [Toolchain](docs/development/toolchain.md): pinned runtimes, direct packages,
+  service images and root commands (`task dev`, `task check`, `task qa`).
 - [Executable test harness](docs/testing/test-harness.md): implemented tiers,
   uncovered cases and final recording contract.
 

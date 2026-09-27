@@ -89,8 +89,8 @@ advanced concepts. Existing verification/authorization boundaries remain in forc
 
 The [API/UI skill](../../.agents/skills/api-ui-design/SKILL.md) provides task-specific
 methods; it does not duplicate this policy. The proposed shared UI owner is mapped
-in [repository structure](../development/repository-structure.md); implementation
-files are not present in this checkout. [Identity/access experience](../experience/identity-and-access-experience.md)
+in [repository structure](../development/repository-structure.md); the shared
+UI lives in `packages/ui`. [Identity/access experience](../experience/identity-and-access-experience.md)
 is one feature application. Keep source reasoning here and feature decisions with
 their owners; do not create a new skill or permanent rule for every suggestion.
 

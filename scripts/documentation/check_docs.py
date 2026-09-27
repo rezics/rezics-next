@@ -13,6 +13,8 @@ from collections import Counter, deque
 from pathlib import Path
 from urllib.parse import unquote, urlsplit
 
+from toolchain_inventory import check as check_toolchain_inventory
+
 ROOT = Path(__file__).resolve().parents[2]
 
 
@@ -141,7 +143,7 @@ def document_files(root: Path) -> list[Path]:
 
 def main() -> int:
     files = document_files(ROOT)
-    errors = check(ROOT, files)
+    errors = [*check(ROOT, files), *check_toolchain_inventory(ROOT)]
     if errors:
         print("\n".join(errors))
         print(f"Documentation checks failed: {len(errors)} issue(s).")

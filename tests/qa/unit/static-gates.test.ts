@@ -55,6 +55,16 @@ test('the lint gate rejects a dangerous debugger statement', () => {
   expect(result.output).toContain('lint/suspicious/noDebugger');
 });
 
+test('authored model and reusable packages cannot import their consumers', () => {
+  const failing = run('depcruise', [
+    '--config', '.dependency-cruiser.json', '--output-type', 'err',
+    'scripts/static/fixtures/failing',
+  ]);
+  expect(failing.code).not.toBe(0);
+  expect(failing.output).toContain('authored-model-does-not-import-consumers');
+  expect(failing.output).toContain('shared-packages-do-not-import-executables');
+});
+
 test('the promise gate rejects floating and misused promises with type information', () => {
   const result = run('oxlint', [
     '--type-aware',
