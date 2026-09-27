@@ -38,10 +38,38 @@ interface ShelfRow {
 }
 
 const shelf: ShelfRow[] = [
-  { id: 'w1', title: 'The Dispossessed', author: 'Ursula K. Le Guin', year: 1974, rating: 5, status: 'Read' },
-  { id: 'w2', title: 'The Three-Body Problem', author: 'Liu Cixin', year: 2008, rating: 4, status: 'Read' },
-  { id: 'w3', title: 'Piranesi', author: 'Susanna Clarke', year: 2020, rating: 5, status: 'Reading' },
-  { id: 'w4', title: 'A Memory Called Empire', author: 'Arkady Martine', year: 2019, rating: 0, status: 'Want to read' },
+  {
+    id: 'w1',
+    title: 'The Dispossessed',
+    author: 'Ursula K. Le Guin',
+    year: 1974,
+    rating: 5,
+    status: 'Read',
+  },
+  {
+    id: 'w2',
+    title: 'The Three-Body Problem',
+    author: 'Liu Cixin',
+    year: 2008,
+    rating: 4,
+    status: 'Read',
+  },
+  {
+    id: 'w3',
+    title: 'Piranesi',
+    author: 'Susanna Clarke',
+    year: 2020,
+    rating: 5,
+    status: 'Reading',
+  },
+  {
+    id: 'w4',
+    title: 'A Memory Called Empire',
+    author: 'Arkady Martine',
+    year: 2019,
+    rating: 0,
+    status: 'Want to read',
+  },
 ];
 
 const statusVariant = { Read: 'secondary', Reading: 'default', 'Want to read': 'outline' } as const;
@@ -186,7 +214,7 @@ const SelectableTable = () => {
       </TableHeader>
       <TableBody>
         {[
-          ['r1', 'Spoilers for the ending of Death\'s End', 4],
+          ['r1', "Spoilers for the ending of Death's End", 4],
           ['r2', 'Off-topic promotion of another Realm', 2],
           ['r3', 'Harassment of the reviewer', 7],
         ].map(([id, summary, reports]) => {
@@ -234,7 +262,14 @@ export const LongContent: Story = {
     <div className="max-w-md" lang="zh-CN">
       <ShelfTable
         rows={[
-          { id: 'z1', title: '三体 II：黑暗森林', author: '刘慈欣', year: 2008, rating: 5, status: 'Read' },
+          {
+            id: 'z1',
+            title: '三体 II：黑暗森林',
+            author: '刘慈欣',
+            year: 2008,
+            rating: 5,
+            status: 'Read',
+          },
           {
             id: 'z2',
             title: 'The Three-Body Problem 三体（英文版，Ken Liu 译，Tor Books 2014 年精装首版）',
@@ -243,7 +278,14 @@ export const LongContent: Story = {
             rating: 4,
             status: 'Reading',
           },
-          { id: 'z3', title: '球状闪电', author: '刘慈欣', year: 2004, rating: 0, status: 'Want to read' },
+          {
+            id: 'z3',
+            title: '球状闪电',
+            author: '刘慈欣',
+            year: 2004,
+            rating: 0,
+            status: 'Want to read',
+          },
         ]}
       />
     </div>

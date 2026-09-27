@@ -210,7 +210,8 @@ export const LongContent: Story = {
           《三体》The Three-Body Problem（地球往事三部曲之一，重庆出版社 2008 年首版）
         </ItemTitle>
         <ItemDescription>
-          刘慈欣 · 文化大革命如火如荼进行的同时，军方探寻外星文明的绝秘计划「红岸工程」取得了突破性进展。Translated
+          刘慈欣 ·
+          文化大革命如火如荼进行的同时，军方探寻外星文明的绝秘计划「红岸工程」取得了突破性进展。Translated
           by Ken Liu, winner of the 2015 Hugo Award for Best Novel.
         </ItemDescription>
       </ItemContent>

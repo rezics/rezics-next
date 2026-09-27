@@ -105,12 +105,7 @@ const itemMediaVariants = tv({
         "[&_svg:not([class*='size-'])]:size-5",
       ],
       // Item images are usually Work covers, which use the cover radius.
-      image: [
-        'size-10',
-        'rounded-sm',
-        'overflow-hidden',
-        '[&_img]:size-full [&_img]:object-cover',
-      ],
+      image: ['size-10', 'rounded-sm', 'overflow-hidden', '[&_img]:size-full [&_img]:object-cover'],
     },
   },
   defaultVariants: {

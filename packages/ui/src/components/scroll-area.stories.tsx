@@ -1,5 +1,5 @@
 import type { Decorator, Meta, StoryObj } from '@storybook/react-vite';
-import { expect, userEvent, waitFor, within } from 'storybook/test';
+import { expect, userEvent, waitFor } from 'storybook/test';
 import { cn } from '../utils.ts';
 import { ScrollArea } from './scroll-area.tsx';
 
@@ -76,7 +76,16 @@ export const ScrollFade: Story = {
   render: Vertical.render,
 };
 
-const covers = ['#2f63ad', '#1d8a7a', '#bf7a0e', '#6a5bb5', '#1f4a85', '#c42840', '#2c7a33', '#8a5a00'];
+const covers = [
+  '#2f63ad',
+  '#1d8a7a',
+  '#bf7a0e',
+  '#6a5bb5',
+  '#1f4a85',
+  '#c42840',
+  '#2c7a33',
+  '#8a5a00',
+];
 
 export const Horizontal: Story = {
   render: () => (
@@ -111,13 +120,23 @@ export const Chinese: Story = {
   render: () => (
     <ScrollArea className="h-48 w-72 rounded-2xl border border-border/60 bg-card" lang="zh-CN">
       <ol className="flex flex-col gap-1 p-4 text-sm">
-        {['科学边界', '台球', '射手和农场主', '三体、周文王、长夜', '叶文洁', '宇宙闪烁', '红岸之一', '红岸之二', '三体、墨子、烈焰', '古筝行动', '尾声'].map(
-          (title, index) => (
-            <li key={title}>
-              {index + 1}. {title}
-            </li>
-          ),
-        )}
+        {[
+          '科学边界',
+          '台球',
+          '射手和农场主',
+          '三体、周文王、长夜',
+          '叶文洁',
+          '宇宙闪烁',
+          '红岸之一',
+          '红岸之二',
+          '三体、墨子、烈焰',
+          '古筝行动',
+          '尾声',
+        ].map((title, index) => (
+          <li key={title}>
+            {index + 1}. {title}
+          </li>
+        ))}
       </ol>
     </ScrollArea>
   ),

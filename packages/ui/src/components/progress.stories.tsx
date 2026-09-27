@@ -57,7 +57,9 @@ export const Values: Story = {
     <div className="flex flex-col gap-5">
       {[0, 8, 50, 100].map((value) => (
         <Progress aria-label={`Challenge progress ${value}`} key={value} value={value}>
-          <ProgressLabel>{value === 100 ? '2026 challenge complete' : '2026 challenge'}</ProgressLabel>
+          <ProgressLabel>
+            {value === 100 ? '2026 challenge complete' : '2026 challenge'}
+          </ProgressLabel>
           <ProgressValue />
         </Progress>
       ))}

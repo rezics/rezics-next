@@ -79,8 +79,8 @@ export const InText: Story = {
   name: 'In running text',
   render: () => (
     <p className="max-w-md text-muted-foreground text-sm leading-relaxed">
-      Press <Kbd>J</Kbd> and <Kbd>K</Kbd> to move through the Realm feed, <Kbd>R</Kbd> to reply
-      and <Kbd>Esc</Kbd> to close the reader.
+      Press <Kbd>J</Kbd> and <Kbd>K</Kbd> to move through the Realm feed, <Kbd>R</Kbd> to reply and{' '}
+      <Kbd>Esc</Kbd> to close the reader.
     </p>
   ),
 };

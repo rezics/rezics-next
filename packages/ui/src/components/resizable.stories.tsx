@@ -27,7 +27,7 @@ const meta = {
     docs: {
       description: {
         component:
-          'Panels with draggable dividers for desktop tools: the reader\'s table of contents beside the text, a moderation queue beside the case, or a Work edit beside its preview. Each divider is a keyboard-operable `separator`; arrow keys resize, `Home` and `End` jump to the limits. Name each divider with `aria-label` for the panels it separates. On phones, stack the panels instead.',
+          "Panels with draggable dividers for desktop tools: the reader's table of contents beside the text, a moderation queue beside the case, or a Work edit beside its preview. Each divider is a keyboard-operable `separator`; arrow keys resize, `Home` and `End` jump to the limits. Name each divider with `aria-label` for the panels it separates. On phones, stack the panels instead.",
       },
     },
   },
@@ -85,7 +85,11 @@ export const WithHandle: Story = {
         <ResizablePanel id="contents">
           <Pane className="bg-secondary/40">Moderation queue · 14 open cases</Pane>
         </ResizablePanel>
-        <ResizableResizeTrigger aria-label="Resize queue and case" id="contents:reader" withHandle />
+        <ResizableResizeTrigger
+          aria-label="Resize queue and case"
+          id="contents:reader"
+          withHandle
+        />
         <ResizablePanel id="reader">
           <Pane>Case MOD-2026-0413: spoilers in a review of Death's End</Pane>
         </ResizablePanel>

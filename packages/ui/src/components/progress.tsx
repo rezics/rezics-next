@@ -48,7 +48,7 @@ export const Progress = (props: ProgressProps) => {
       className={cn(
         'flex flex-wrap gap-3',
         'data-[orientation=horizontal]:w-full',
-        'data-[orientation=vertical]:-scale-y-100',
+        'data-[orientation=vertical]:h-full data-[orientation=vertical]:-scale-y-100',
         className,
       )}
       data-slot="progress"
@@ -86,8 +86,9 @@ export const ProgressRange = (props: React.ComponentProps<typeof ArkProgress.Ran
       'bg-primary',
       'rounded-full',
       'transition-all duration-300 ease-out',
+      // Ark sets the length (width or height) inline; the class sets the thickness.
       'data-[orientation=horizontal]:h-full',
-      'data-[orientation=vertical]:h-full',
+      'data-[orientation=vertical]:w-full',
       'motion-reduce:animate-none! motion-reduce:transition-none!',
       'data-[state=indeterminate]:w-1/3 data-[state=indeterminate]:animate-indeterminate! data-[state=indeterminate]:duration-100',
     )}

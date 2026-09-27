@@ -76,7 +76,7 @@ export const KeyboardFocus: Story = {
 
 export const Placements: Story = {
   render: () => (
-    <div className="grid grid-cols-2 gap-x-32 gap-y-16">
+    <div className="grid grid-cols-2 gap-x-56 gap-y-20 py-8">
       {(['top', 'right', 'bottom', 'left'] as const).map((placement) => (
         <Hint defaultOpen key={placement} positioning={{ placement }}>
           <HintTrigger className={buttonVariants({ variant: 'outline', size: 'sm' })}>

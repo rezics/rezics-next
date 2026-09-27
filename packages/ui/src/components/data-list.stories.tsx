@@ -34,7 +34,7 @@ const meta = {
     docs: {
       description: {
         component:
-          'Label and value pairs describing one record, rendered as a `<dl>`: a Work\'s edition details, a Realm\'s settings summary, a member\'s profile facts or a moderation case. Use the horizontal orientation in wide panels and vertical in narrow sidebars. Use Table instead to compare several records.',
+          "Label and value pairs describing one record, rendered as a `<dl>`: a Work's edition details, a Realm's settings summary, a member's profile facts or a moderation case. Use the horizontal orientation in wide panels and vertical in narrow sidebars. Use Table instead to compare several records.",
       },
     },
   },
@@ -114,7 +114,8 @@ export const LongContent: Story = {
         <DataListItemLabel>简介</DataListItemLabel>
         <DataListItemValue>
           文化大革命如火如荼进行的同时，军方探寻外星文明的绝秘计划「红岸工程」取得了突破性进展。The
-          novel was translated into English by Ken Liu and won the Hugo Award for Best Novel in 2015.
+          novel was translated into English by Ken Liu and won the Hugo Award for Best Novel in
+          2015.
         </DataListItemValue>
       </DataListItem>
     </DataList>

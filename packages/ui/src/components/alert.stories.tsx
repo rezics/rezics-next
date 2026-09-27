@@ -47,8 +47,8 @@ export const Default: Story = {
       <InfoIcon aria-hidden />
       <AlertTitle>Ratings use the Realm context</AlertTitle>
       <AlertDescription>
-        Scores on this page come from members of Hard Science Fiction. Switch the context to see
-        the site-wide rating.
+        Scores on this page come from members of Hard Science Fiction. Switch the context to see the
+        site-wide rating.
       </AlertDescription>
     </Alert>
   ),
@@ -126,7 +126,9 @@ export const Announced: Story = {
     <Alert role="alert" variant="destructive">
       <CircleAlertIcon aria-hidden />
       <AlertTitle>Your rating was not saved</AlertTitle>
-      <AlertDescription>The connection dropped. Your 4-star rating is kept on this device.</AlertDescription>
+      <AlertDescription>
+        The connection dropped. Your 4-star rating is kept on this device.
+      </AlertDescription>
     </Alert>
   ),
   async play({ canvasElement }) {
@@ -153,8 +155,8 @@ export const LongContent: Story = {
         <AlertTitle>《三体》的书评区已进入慢速模式</AlertTitle>
         <AlertDescription>
           由于电视剧 3 Body Problem 上线后讨论激增，版主将「硬科幻」Realm 中的每位成员限制为每 10
-          分钟发表一条书评。含有剧透的内容请使用剧透标记，否则会被隐藏等待审核。此限制将于 2026 年 10
-          月 1 日自动解除。
+          分钟发表一条书评。含有剧透的内容请使用剧透标记，否则会被隐藏等待审核。此限制将于 2026 年
+          10 月 1 日自动解除。
         </AlertDescription>
         <AlertAction>
           <Button size="sm" variant="outline">

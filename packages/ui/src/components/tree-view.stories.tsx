@@ -127,7 +127,7 @@ const meta = {
     docs: {
       description: {
         component:
-          'A keyboard-navigable hierarchy for nested data: a genre taxonomy, a Work series with its volumes, or a Realm\'s nested reading lists. Build the data with `createTreeCollection`, render nodes recursively with `TreeViewNode`, and add `TreeViewCheckbox` for multi-select filters. Arrow keys move and expand, typeahead jumps by name. Use Accordion for a few collapsible sections of prose instead.',
+          "A keyboard-navigable hierarchy for nested data: a genre taxonomy, a Work series with its volumes, or a Realm's nested reading lists. Build the data with `createTreeCollection`, render nodes recursively with `TreeViewNode`, and add `TreeViewCheckbox` for multi-select filters. Arrow keys move and expand, typeahead jumps by name. Use Accordion for a few collapsible sections of prose instead.",
       },
     },
   },
@@ -169,7 +169,9 @@ export const Keyboard: Story = {
     const tree = canvas.getByRole('tree');
     await userEvent.tab();
     const sf = within(tree).getByRole('treeitem', { name: 'Science fiction' });
-    await waitFor(() => expect(sf.querySelector('[data-slot="tree-view-branch-control"]')).toHaveFocus());
+    await waitFor(() =>
+      expect(sf.querySelector('[data-slot="tree-view-branch-control"]')).toHaveFocus(),
+    );
 
     await userEvent.keyboard('{ArrowRight}');
     await waitFor(() => expect(sf).toHaveAttribute('aria-expanded', 'true'));
