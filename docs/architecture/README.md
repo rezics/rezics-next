@@ -18,7 +18,7 @@
 | Account and authority | [Identity/access](../contracts/identity-and-access.md), [connected applications](../contracts/connected-apps.md), [Account service](../services/account.md). |
 | Space and community context | [Space](../contracts/space.md), [Context](../contracts/context.md), [classification](../contracts/classification.md), [ratings](../contracts/ratings.md). |
 | Content spine | [Main version](../contracts/main-version.md), [Work/release](../contracts/work-and-release.md), [composition](../contracts/composition.md), [structure history](../contracts/structure-history.md). |
-| Indexing domains | [Catalog](../contracts/catalog.md), [recipes](../contracts/recipes.md), [package management](../contracts/package-management.md), [Skill/Prompt](../contracts/skills-and-prompts.md). |
+| Indexing domains | [Work and release](../contracts/work-and-release.md), [recipe profile](../../model/definitions/recipe-structure-v1.ts), [package management](../contracts/package-management.md), [Hub schema](../../services/main/src/modules/hub/schema.ts). |
 | Sources and knowledge | [Source lifecycle](../contracts/source-lifecycle.md), [standards](../contracts/standards.md), [information verification](../contracts/information-verification.md). |
 | Queries and interfaces | [Search](../contracts/search.md), [relationship graph](../contracts/relationship-graph.md), [API contracts](../contracts/api.md), [presentation](../contracts/presentation.md). |
 | Durable effects | [Commands](../contracts/commands.md), [events/jobs](../contracts/events-and-jobs.md), [governance](../contracts/content-governance.md), [notifications](../contracts/notifications.md). |

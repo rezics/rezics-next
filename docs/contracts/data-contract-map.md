@@ -44,7 +44,7 @@ recovery meaning when selecting physical indexes.
 
 Work/Main Version, contribution, external edition, cut/episode, release and exact selection.
 
-Owner: [Books, audiovisual works and distribution](catalog.md). Preserve exact identity, authority, lifecycle, query and
+Owner: [Work and release](work-and-release.md) and [distribution](distribution.md). Preserve exact identity, authority, lifecycle, query and
 recovery meaning when selecting physical indexes.
 
 ## D06. Music
@@ -174,7 +174,7 @@ recovery meaning when selecting physical indexes.
 
 Skill/Prompt/MCP content, requirements, profiles, resolution, lock/install/update/rollback.
 
-Owner: [Hub and universal package management](skills-and-prompts.md). Preserve exact identity, authority, lifecycle, query and
+Owner: [Hub schema](../../services/main/src/modules/hub/schema.ts) and [package management](package-management.md). Preserve exact identity, authority, lifecycle, query and
 recovery meaning when selecting physical indexes.
 
 ## D22. Subscribe and Realm participation

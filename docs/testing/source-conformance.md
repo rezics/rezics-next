@@ -36,9 +36,9 @@ Package/provider details are in [profiles](../contracts/package-profiles.md).
 
 ## Field and workflow coverage
 
-The adopted [concept/association mapping](../contracts/catalog.md#concept-and-association-source-mapping)
-requires a VNDB-oriented fixture within existing LIVE01/LIVE04/LIVE07-LIVE12
-coverage. It must retain provider concept IDs and unresolved terms, distinguish
+The concept/association mapping requires a VNDB-oriented fixture within existing
+LIVE01/LIVE04/LIVE07-LIVE12 coverage. It must retain provider concept IDs and
+unresolved terms, distinguish
 same-label meanings, preserve group-qualified display, keep repeated
 release-specific appearances and source spoiler/score fields, and verify exact
 native/export dispositions. Include the same-character role/trait conjunction

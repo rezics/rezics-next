@@ -25,11 +25,11 @@ interpretations. Naming another concept does not remove those local uses.
 | M01 Foundation | Account, public Agent, representation, groups/roles, recovery, OAuth/MCP and private preferences. | [Identity](../contracts/identity-and-access.md), [apps](../contracts/connected-apps.md). |
 | M02 Knowledge | Concepts/types/claims/evidence, shared versioned Contexts, personal/Realm interpretation choices, typed relations and bounded inference. | [Semantic model](../contracts/semantic-model.md), [Context](../contracts/context.md), [classification](../contracts/classification.md). |
 | M03 Content | Documents/media, revisions, contributions, selection, publication and rights. | [Main Version](../contracts/main-version.md), [media](../contracts/media.md). |
-| M04 Catalog | Five indexing domains, supporting entities, releases and source-free authoring. | [Catalog](../contracts/catalog.md). |
+| M04 Catalog | Five indexing domains, supporting entities, releases and source-free authoring. | [Work and release](../contracts/work-and-release.md), [remaining catalog grain](../contracts/catalog.md), [source conformance](../testing/source-conformance.md). |
 | M05 Creation/reading | Drafting, collaboration, Post chapters, translations, progress, citations and export. | [Creation](../contracts/creation.md), [composition](../contracts/composition.md). |
 | M06 Community | Space, membership, Collections, discussions, polls, ratings, contextual statements, follows, favorites, messaging and governance. | [Space](../contracts/space.md), [community interactions](../contracts/community-interactions.md). |
 | M07 Sources | Current acquisition, exact observations, mapping/adoption, refresh/withdraw and portable exchange. | [Sources](../contracts/source-lifecycle.md). |
-| M08 Packages/Hub | Skill/Prompt/MCP catalog, dependency solving, lock/install/update/rollback and controlled execution. | [Packages](../contracts/package-management.md), [Hub](../contracts/skills-and-prompts.md). |
+| M08 Packages/Hub | Skill/Prompt/MCP catalog, dependency solving, lock/install/update/rollback and controlled execution. | [Packages](../contracts/package-management.md), [Hub schema](../../services/main/src/modules/hub/schema.ts), [remaining Hub flows](../contracts/skills-and-prompts.md), [execution decision](../research/ai-hub-execution.md). |
 | M09 Query/operations | Graph-integrated full-text, filters, recommendation, event jobs, diagnostics, recovery and erasure. | [Search](../contracts/search.md), [operations](../operations/README.md). |
 | M10 Commercial | Multi-plan subscriptions, independent gifts, Realm quotas/review and Pro application. | [Subscribe](../contracts/subscriptions.md), [Realm policy](../contracts/realm-participation.md). |
 
