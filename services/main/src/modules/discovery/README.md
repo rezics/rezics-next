@@ -22,12 +22,18 @@ revision and scale. Questions currently come from the Context owner's English
 creation profile. Clients select a listed Context rather than combining scales.
 The collection uses the same graph-position cursor fence as Work reads.
 
-Cards include the first three native author credits in ordinal/IRI order and up
-to three accepted classifications in Sense IRI order. External author references
-retain explicit null Agent/display-name fields; the credit owner has no native
-author-name authority. Concept names are hydrated in the requested language with
-the existing summary fallback policy. A term match includes its localized name;
+Cards include the first three author credits in ordinal/IRI order and up to
+three accepted classifications in Sense IRI order. Public native Agent credits
+resolve their current display name and handle when the card is read. External
+Open Library references retain null names because the source conversion records
+only author keys. Concept names are hydrated in the requested language with the
+existing summary fallback policy. A term match includes its localized name;
 page-level `matchedTerm` is null when no admitted item matches.
+
+`GET /v1/discovery/popular-terms` reads the current generation's materialized
+Work counts by accepted Sense, optionally selecting a Realm and standing rating
+Context. It seeks at most 20 terms and hydrates Concept names in the requested
+language. Counts are built with the generation; a stale generation is withheld.
 
 The read chooses a bounded index page before hydrating current summaries. It
 returns an exact page count and a cumulative match count: a lower bound while
