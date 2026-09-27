@@ -46,7 +46,8 @@ choice is a cookie the server reads, and the `dark` variant in `styles.css`
 answers both an explicit `.dark` class and the system preference, so the first
 paint is right without an inline script and without a hydration mismatch.
 [`features/shell/preferences.ts`](../../apps/web/features/shell/preferences.ts)
-holds the cookie contract.
+holds the cookie contract. A `.dark` class on any element also switches the
+colors inside it, which stories use to show both themes side by side.
 
 ## Radius, surfaces and type
 
