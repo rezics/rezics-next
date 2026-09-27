@@ -8,7 +8,7 @@ export async function currentAccountGenerations(db: Pool | PoolClient, userId: s
   const result = await db.query<{ account: string; grant: string }>(`SELECT s.generation::text AS account,
     coalesce(g.generation, 0)::text AS grant FROM rezics_account_security s
     LEFT JOIN rezics_account_grant g ON g.user_id = s.user_id AND g.client_id = $2
-    WHERE s.user_id = $1 AND NOT s.password_reset_required
+    WHERE s.user_id = $1 AND s.deletion_started_at IS NULL AND NOT s.password_reset_required
       AND (s.suspended_at IS NULL OR s.suspended_until <= now())`, [userId, clientId]);
   return result.rows[0] ?? null;
 }

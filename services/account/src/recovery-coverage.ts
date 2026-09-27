@@ -18,11 +18,27 @@ const TABLES = [
   'rezics_account_recovery_claim', 'rezics_account_recovery_policy',
   'rezics_oauth_code_basis', 'rezics_oauth_installation', 'rezics_signing_key',
   'session', 'user', 'verification',
+  'passkey', 'twoFactor', 'rezics_account_email', 'rezics_account_rate_limit',
+  'rezics_account_pending_consent', 'rezics_account_step_up', 'rezics_account_security_event',
+  'rezics_account_security', 'rezics_account_grant', 'rezics_account_operator',
+  'rezics_account_operator_bootstrap', 'rezics_account_operator_audit', 'rezics_account_operator_note',
+  'rezics_account_operator_command',
 ] as const;
 const UUID_ID_TABLES = new Set<string>([
   'rezics_account_recovery_activation', 'rezics_account_recovery_approval',
   'rezics_account_recovery_claim',
+  'rezics_account_email', 'rezics_account_security_event', 'rezics_account_operator_audit',
+  'rezics_account_operator_note',
 ]);
+const KEYS: Record<string, [string, string][]> = {
+  rezics_account_rate_limit: [['key', 'text']],
+  rezics_account_step_up: [['session_id', 'text']],
+  rezics_account_security: [['user_id', 'text']],
+  rezics_account_grant: [['user_id', 'text'], ['client_id', 'text']],
+  rezics_account_operator: [['user_id', 'text']],
+  rezics_account_operator_bootstrap: [['singleton', 'boolean']],
+  rezics_account_operator_command: [['actor_id', 'text'], ['command_id', 'uuid']],
+};
 
 /** Offline coverage of every private Account table at one UTC snapshot. */
 export async function accountRecoveryCoverage(pool: Pool): Promise<AccountRecoveryCoverage> {
@@ -40,18 +56,20 @@ export async function accountRecoveryCoverage(pool: Pool): Promise<AccountRecove
     const digest = createHash('sha256');
     let count = 0n;
     for (const table of TABLES) {
-      const uuidId = UUID_ID_TABLES.has(table);
-      let lastId = uuidId ? '00000000-0000-0000-0000-000000000000' : '';
+      const keys = KEYS[table] ?? [['id', UUID_ID_TABLES.has(table) ? 'uuid' : 'text']];
+      const columns = keys.map(([name]) => `"${name}"`).join(', ');
+      let lastKey: unknown[] | null = null;
       while (true) {
         const page: QueryResult<{ id: string; body: string }> =
           await client.query<{ id: string; body: string }>(
-            `SELECT id::text AS id, to_jsonb(t)::text AS body FROM public."${table}" AS t
-             WHERE id > $1${uuidId ? '::uuid' : ''} ORDER BY id LIMIT 1000`, [lastId]);
+            `SELECT jsonb_build_array(${columns})::text AS id, to_jsonb(t)::text AS body FROM public."${table}" AS t
+             ${lastKey ? `WHERE ROW(${columns}) > ROW(${keys.map(([, type], index) => `$${index + 1}::${type}`).join(', ')})` : ''}
+             ORDER BY ${columns} LIMIT 1000`, lastKey ?? []);
         for (const row of page.rows) {
           digest.update(JSON.stringify([table, row.id, row.body]));
           digest.update('\n');
           count++;
-          lastId = row.id;
+          lastKey = JSON.parse(row.id) as unknown[];
         }
         if (page.rows.length < 1000) break;
       }

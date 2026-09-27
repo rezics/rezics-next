@@ -1,5 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
+import { writeAudit } from './operators.ts';
 
 export const INSTALLATION_CLAIM = 'rezics_installation_id';
 
@@ -63,17 +64,23 @@ export async function readInstallation(pool: Pool, clientId: string): Promise<In
 export async function revokeInstallation(pool: Pool, input: {
   installationId: string; operatorUserId: string;
 }): Promise<InstallationView> {
-  const revoked = await pool.query<InstallationRow>(`UPDATE public.rezics_oauth_installation
+  const db = await pool.connect();
+  try {
+    await db.query('BEGIN');
+    const before = await db.query<InstallationRow>('SELECT * FROM rezics_oauth_installation WHERE id = $1 FOR UPDATE', [input.installationId]);
+    if (!before.rows[0]) throw new InstallationNotFound('installation not found');
+    const revoked = await db.query<InstallationRow>(`UPDATE public.rezics_oauth_installation
     SET state = 'revoked', revoked_by = $2, revoked_at = now()
     WHERE id = $1 AND state = 'active'
     RETURNING id, client_id, state, scopes, installed_at, revoked_at`,
   [input.installationId, input.operatorUserId]);
-  if (revoked.rows[0]) return view(revoked.rows[0]);
-  const prior = await pool.query<InstallationRow>(`SELECT id, client_id, state, scopes,
-      installed_at, revoked_at FROM public.rezics_oauth_installation WHERE id = $1`,
-  [input.installationId]);
-  if (!prior.rows[0]) throw new InstallationNotFound('installation not found');
-  return view(prior.rows[0]);
+    const after = view(revoked.rows[0] ?? before.rows[0]);
+    await writeAudit(db, { actorId: input.operatorUserId, action: 'installation_revoked', targetId: input.installationId,
+      reason: 'Operator revoked App installation', before: view(before.rows[0]), after, requestId: randomUUID() });
+    await db.query('COMMIT');
+    return after;
+  } catch (error) { await db.query('ROLLBACK'); throw error; }
+  finally { db.release(); }
 }
 
 /** A new installation identity with an explicit ceiling inside the App's
@@ -119,8 +126,11 @@ export async function installClient(pool: Pool, input: {
       VALUES ($1, $2, 'active', to_jsonb($3::text[]), $4, $5, $6)
       RETURNING id, client_id, state, scopes, installed_at, revoked_at`,
     [randomUUID(), input.clientId, scopes, input.operatorUserId, input.changeKey, digest]);
+    const after = view(inserted.rows[0]!);
+    await writeAudit(client, { actorId: input.operatorUserId, action: 'installation_created', targetId: input.clientId,
+      reason: 'Operator installed App scopes', before: null, after, requestId: randomUUID() });
     await client.query('COMMIT');
-    return view(inserted.rows[0]!);
+    return after;
   } catch (error) {
     try { await client.query('ROLLBACK'); } catch { /* preserve the change failure */ }
     throw error;

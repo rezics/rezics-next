@@ -1,13 +1,19 @@
 import { randomUUID } from 'node:crypto';
 import { symmetricDecrypt, symmetricEncrypt } from 'better-auth/crypto';
 import nodemailer from 'nodemailer';
-import type { Pool } from 'pg';
+import type { Pool, PoolClient } from 'pg';
 
 export type AccountLocale = 'en' | 'zh-CN';
 export type EmailPurpose = 'verify' | 'reset' | 'change-email';
 export interface AccountEmail {
   enqueue(input: { userId: string; to: string; url: string; purpose: EmailPurpose;
     locale: AccountLocale }): Promise<void>;
+}
+
+export async function enqueueAccountEmail(db: Pool | PoolClient, secret: string, input: Parameters<AccountEmail['enqueue']>[0]) {
+  const payload = await symmetricEncrypt({ key: secret, data: JSON.stringify(input) });
+  await db.query(`INSERT INTO rezics_account_email (id, user_id, payload, expires_at)
+    VALUES ($1, $2, $3, now() + interval '30 minutes')`, [randomUUID(), input.userId, payload]);
 }
 
 export function accountLocale(request?: Request): AccountLocale {
@@ -64,9 +70,7 @@ export function smtpSender(config: { host: string; port: number; secure: boolean
 export function accountEmailQueue(pool: Pool, secret: string, send: ReturnType<typeof smtpSender>) {
   return {
     async enqueue(input: Parameters<AccountEmail['enqueue']>[0]) {
-      const payload = await symmetricEncrypt({ key: secret, data: JSON.stringify(input) });
-      await pool.query(`INSERT INTO rezics_account_email (id, user_id, payload, expires_at)
-        VALUES ($1, $2, $3, now() + interval '30 minutes')`, [randomUUID(), input.userId, payload]);
+      await enqueueAccountEmail(pool, secret, input);
     },
     async drain(limit = 20) {
       await pool.query(`UPDATE rezics_account_email SET state = 'uncertain', payload = NULL

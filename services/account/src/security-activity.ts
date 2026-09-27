@@ -38,8 +38,8 @@ export async function readSecurityActivity(pool: Pool, secret: string, userId: s
   const scope = `activity:${userId}`;
   const cursor = decodeCursor(secret, scope, query.cursor);
   const limit = query.limit ?? 25;
-  const result = await pool.query<{ id: string; action: string; detail: Record<string, unknown>; occurredAt: Date }>(`
-    SELECT id, action, detail, occurred_at AS "occurredAt" FROM rezics_account_security_event
+  const result = await pool.query<{ id: string; action: string; detail: Record<string, unknown>; occurredAt: Date; cursorKey: string }>(`
+    SELECT id, action, detail, occurred_at AS "occurredAt", occurred_at::text AS "cursorKey" FROM rezics_account_security_event
     WHERE user_id = $1 AND ($2::timestamptz IS NULL OR (occurred_at, id) < ($2, $3::uuid))
     ORDER BY occurred_at DESC, id DESC LIMIT $4`, [userId, cursor?.key ?? null, cursor?.id ?? null, limit + 1]);
   const rows = result.rows.slice(0, limit);
@@ -47,8 +47,8 @@ export async function readSecurityActivity(pool: Pool, secret: string, userId: s
   const failed = await pool.query<{ count: number }>(`SELECT count(*)::int AS count FROM (
     SELECT 1 FROM rezics_account_security_event WHERE user_id = $1 AND action = 'sign_in_failed'
       AND occurred_at > now() - interval '24 hours' LIMIT 1000) recent`, [userId]);
-  return { items: rows.map(row => ({ ...row, occurredAt: row.occurredAt.toISOString() })),
-    nextCursor: result.rows.length > limit && last ? encodeCursor(secret, scope, last.occurredAt.toISOString(), last.id) : null,
+  return { items: rows.map(({ cursorKey: _key, ...row }) => ({ ...row, occurredAt: row.occurredAt.toISOString() })),
+    nextCursor: result.rows.length > limit && last ? encodeCursor(secret, scope, last.cursorKey, last.id) : null,
     failedAttemptsLast24Hours: { count: failed.rows[0]!.count, capped: failed.rows[0]!.count === 1000 } };
 }
 
@@ -58,7 +58,7 @@ export async function readSessions(pool: Pool, secret: string, userId: string, c
   const cursor = decodeCursor(secret, scope, query.cursor);
   const limit = query.limit ?? 25;
   const result = await pool.query<{ id: string; createdAt: Date; updatedAt: Date; expiresAt: Date;
-    userAgent: string | null; ipAddress: string | null }>(`SELECT id, "createdAt", "updatedAt", "expiresAt", "userAgent", "ipAddress"
+    userAgent: string | null; ipAddress: string | null; cursorKey: string }>(`SELECT id, "createdAt", "updatedAt", "expiresAt", "userAgent", "ipAddress", "createdAt"::text AS "cursorKey"
     FROM "session" WHERE "userId" = $1 AND "expiresAt" > now()
       AND ($2::timestamptz IS NULL OR ("createdAt", id) < ($2, $3))
     ORDER BY "createdAt" DESC, id DESC LIMIT $4`, [userId, cursor?.key ?? null, cursor?.id ?? null, limit + 1]);
@@ -67,7 +67,7 @@ export async function readSessions(pool: Pool, secret: string, userId: string, c
   return { items: rows.map(row => ({ id: row.id, createdAt: row.createdAt.toISOString(),
     lastActiveAt: row.updatedAt.toISOString(), expiresAt: row.expiresAt.toISOString(),
     device: deviceLabel(row.userAgent), network: coarseNetwork(row.ipAddress), thisDevice: row.id === currentId })),
-  nextCursor: result.rows.length > limit && last ? encodeCursor(secret, scope, last.createdAt.toISOString(), last.id) : null };
+  nextCursor: result.rows.length > limit && last ? encodeCursor(secret, scope, last.cursorKey, last.id) : null };
 }
 
 export function securityActivityApi(auth: AccountAuth, pool: Pool) {

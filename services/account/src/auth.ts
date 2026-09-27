@@ -13,6 +13,8 @@ import { providerScopes, resourceScopes } from './oauth-scopes.ts';
 import { currentRecoveryGeneration, RECOVERY_GENERATION_CLAIM } from './recovery-claim.ts';
 import { accountLocale, type AccountEmail } from './email.ts';
 import { ACCOUNT_GENERATION_CLAIM, GRANT_GENERATION_CLAIM, currentAccountGenerations } from './account-fence.ts';
+import { bootstrapOperators, operatorRole, rolePermits } from './operators.ts';
+import { operatorAuthHooks } from './operator-auth-hooks.ts';
 
 export interface AccountConfig {
   baseURL: string;
@@ -21,12 +23,13 @@ export interface AccountConfig {
   pool: Pool;
   operatorUserIds: ReadonlySet<string>;
   email?: AccountEmail;
-  /** Only fixtures without email journeys disable verification; the HTTP process always requires it. */
+  /** The HTTP process requires verification. Embedded protocol fixtures without a sender can omit it. */
   requireEmailVerification?: boolean;
   accessDeletionFence?: (accountSubject: string) => Promise<void>;
 }
 
 export function accountAuthOptions(config: AccountConfig) {
+  const requireEmailVerification = config.requireEmailVerification ?? !!config.email;
   if (config.secret.length < 32) throw new Error('ACCOUNT_SECRET must contain at least 32 characters');
   const resource = new URL(config.resource);
   if (resource.hash || !['http:', 'https:'].includes(resource.protocol)) {
@@ -36,9 +39,20 @@ export function accountAuthOptions(config: AccountConfig) {
     baseURL: config.baseURL,
     secret: config.secret,
     database: config.pool,
-    session: { freshAge: 300 },
+    // The HTTP boundary checks our session-bound reauthentication proof. The
+    // provider's age-only check cannot recognize that proof after step-up.
+    session: { freshAge: 0 },
+    hooks: operatorAuthHooks(config.pool, config.operatorUserIds),
+    databaseHooks: { session: { create: { before: async (session: { userId: string }) => {
+      const blocked = await config.pool.query(`SELECT 1 FROM rezics_account_security WHERE user_id = $1
+        AND (deletion_started_at IS NOT NULL OR password_reset_required OR (suspended_at IS NOT NULL AND (suspended_until IS NULL OR suspended_until > now())))`, [session.userId]);
+      if (blocked.rowCount) {
+        throw new APIError('FORBIDDEN', { code: 'ACCOUNT_UNAVAILABLE', message: 'Sign-in is unavailable for this account' });
+      }
+      return { data: session };
+    } } } },
     emailAndPassword: { enabled: true,
-      requireEmailVerification: config.requireEmailVerification ?? true,
+      requireEmailVerification,
       minPasswordLength: 12,
       resetPasswordTokenExpiresIn: 1800,
       revokeSessionsOnPasswordReset: true,
@@ -50,7 +64,7 @@ export function accountAuthOptions(config: AccountConfig) {
     },
     emailVerification: { sendOnSignUp: true, expiresIn: 1800,
       sendVerificationEmail: async ({ user, url }: { user: { id: string; email: string }; url: string }, request?: Request) => {
-        if (!config.email && config.requireEmailVerification === false) return;
+        if (!config.email && !requireEmailVerification) return;
         if (!config.email) throw new Error('Account email delivery is not configured');
         await config.email.enqueue({ userId: user.id, to: user.email, url,
           purpose: 'verify', locale: accountLocale(request) });
@@ -64,7 +78,7 @@ export function accountAuthOptions(config: AccountConfig) {
       },
     }, deleteUser: { enabled: !!config.accessDeletionFence,
       beforeDelete: async (user: { id: string }) => {
-        if (config.operatorUserIds.has(user.id)) {
+        if (await operatorRole(config.pool, user.id)) {
           throw new APIError('CONFLICT', { message: 'transfer operator responsibility before deletion' });
         }
         const ownedClient = await config.pool.query(
@@ -77,7 +91,13 @@ export function accountAuthOptions(config: AccountConfig) {
         if (recoveryDuty.rowCount) {
           throw new APIError('CONFLICT', { message: 'transfer Account recovery duty before deletion' });
         }
-        try { await config.accessDeletionFence!(user.id); }
+        try {
+          await config.accessDeletionFence!(user.id);
+          // Better Auth deletes credential rows before the user row. Mark the
+          // fenced deletion so last-method protection permits only that path.
+          await config.pool.query(`UPDATE rezics_account_security SET deletion_started_at = now(), generation = generation + 1
+            WHERE user_id = $1 AND deletion_started_at IS NULL`, [user.id]);
+        }
         catch { throw new APIError('SERVICE_UNAVAILABLE',
           { message: 'Account deletion awaits the Access fence and retained deletion journal' }); }
       },
@@ -113,8 +133,18 @@ export function accountAuthOptions(config: AccountConfig) {
         allowDynamicClientRegistration: false,
         storeTokens: 'hashed',
         accessTokenExpiresIn: 300,
-        clientPrivileges: ({ user }) => !!user && config.operatorUserIds.has(user.id),
-        resourcePrivileges: ({ user }) => !!user && config.operatorUserIds.has(user.id),
+        clientPrivileges: async ({ user }) => {
+          if (!user) return false;
+          await bootstrapOperators(config.pool, config.operatorUserIds);
+          const role = await operatorRole(config.pool, user.id);
+          return !!role && rolePermits(role, 'clients:manage');
+        },
+        resourcePrivileges: async ({ user }) => {
+          if (!user) return false;
+          await bootstrapOperators(config.pool, config.operatorUserIds);
+          const role = await operatorRole(config.pool, user.id);
+          return !!role && rolePermits(role, 'clients:manage');
+        },
         extensions: [{ claims: { accessToken: async ({ ctx, user, client, scopes, resources,
           referenceId, grantType }) => {
           if (!user) {

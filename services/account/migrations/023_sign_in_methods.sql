@@ -22,6 +22,8 @@ BEGIN
   END IF;
   PERFORM 1 FROM public."user" WHERE id = OLD."userId" FOR UPDATE;
   IF NOT FOUND THEN RETURN OLD; END IF;
+  IF EXISTS (SELECT 1 FROM public.rezics_account_security
+      WHERE user_id = OLD."userId" AND deletion_started_at IS NOT NULL) THEN RETURN OLD; END IF;
   SELECT (SELECT count(*) FROM public.passkey WHERE "userId" = OLD."userId"
       AND (TG_TABLE_NAME <> 'passkey' OR id <> OLD.id))
     + (SELECT count(*) FROM public.account WHERE "userId" = OLD."userId"

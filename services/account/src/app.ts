@@ -11,6 +11,8 @@ import { methodsApi, requireStepUp, sensitiveAuthPaths } from './methods.ts';
 import { accountFailure, accountSession } from './http.ts';
 import { observeAuthentication, securityActivityApi } from './security-activity.ts';
 import { connectedAppsApi } from './connected-apps.ts';
+import { adminApi } from './admin.ts';
+import { bootstrapOperators, requireOperator } from './operators.ts';
 import { AccountRecoveryConflict, AccountRecoveryDenied, AccountRecoveryStale,
   activateAccountRecovery, approveAccountRecovery, enrollAccountRecovery,
   readAccountRecoveryClaim, requestAccountRecovery } from './recovery-claim.ts';
@@ -34,7 +36,6 @@ const recoveryView = t.Object({ claimId: t.String(), targetUserId: t.String(),
 
 export function createAccountApp(auth: ReturnType<typeof createAccountAuth>, pool: Pool,
   options: AccountAppOptions = {}) {
-  const operators = options.operatorUserIds ?? new Set<string>();
   const origin = new URL(String(auth.options.baseURL)).origin;
   // pg-pool emits errors for idle clients on the pool, but removes its client
   // listener while a connection is checked out. A database cut can then reject
@@ -71,15 +72,10 @@ export function createAccountApp(auth: ReturnType<typeof createAccountAuth>, poo
     max: options.codeGuardConnections ?? 4, connectionTimeoutMillis: 5_000,
     idleTimeoutMillis: 1_000, allowExitOnIdle: true }));
   const operator = async (request: Request, write: boolean): Promise<string | Response> => {
-    if (write && request.headers.get('origin') !== origin) {
-      return Response.json({ error: 'invalid_origin' }, { status: 403 });
-    }
-    let session;
-    try { session = await auth.api.getSession({ headers: request.headers }); }
-    catch { return Response.json({ error: 'temporarily_unavailable' }, { status: 503 }); }
-    if (!session) return Response.json({ error: 'unauthenticated' }, { status: 401 });
-    return operators.has(session.user.id) ? session.user.id
-      : Response.json({ error: 'forbidden' }, { status: 403 });
+    try {
+      await bootstrapOperators(pool, options.operatorUserIds ?? new Set());
+      return (await requireOperator(auth, pool, request, 'clients:manage', write)).userId;
+    } catch (error) { return accountFailure(error); }
   };
   const installationError = (error: unknown) => {
     if (error instanceof InstallationNotFound) return Response.json({ error: 'not_found' }, { status: 404 });
@@ -209,6 +205,7 @@ export function createAccountApp(auth: ReturnType<typeof createAccountAuth>, poo
     .use(methodsApi(auth, pool))
     .use(securityActivityApi(auth, pool))
     .use(connectedAppsApi(auth, pool))
+    .use(adminApi(auth, pool))
     .post('/api/auth/oauth2/token', ({ request }) =>
       guardedAuthorizationCodeExchange(guard(), request, () => auth.handler(request)))
     // A product must bind and consume state at its callback. Require the input

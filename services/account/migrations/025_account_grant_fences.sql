@@ -4,6 +4,7 @@ CREATE TABLE IF NOT EXISTS public.rezics_account_security (
   suspended_at timestamptz,
   suspended_until timestamptz,
   suspension_reason text,
+  deletion_started_at timestamptz,
   password_reset_required boolean NOT NULL DEFAULT false
 );
 INSERT INTO public.rezics_account_security (user_id) SELECT id FROM public."user" ON CONFLICT DO NOTHING;
@@ -47,7 +48,7 @@ LANGUAGE plpgsql AS $$
 DECLARE policy public.rezics_account_security%ROWTYPE;
 BEGIN
   SELECT * INTO policy FROM public.rezics_account_security WHERE user_id = NEW."userId" FOR SHARE;
-  IF NOT FOUND OR policy.password_reset_required OR
+  IF NOT FOUND OR policy.deletion_started_at IS NOT NULL OR policy.password_reset_required OR
     (policy.suspended_at IS NOT NULL AND (policy.suspended_until IS NULL OR policy.suspended_until > now())) THEN
     RAISE EXCEPTION 'account_unavailable' USING ERRCODE = '23514';
   END IF;
@@ -68,7 +69,7 @@ BEGIN
   IF EXISTS (SELECT 1 FROM public.rezics_oauth_code_basis WHERE id = NEW.identifier AND account_generation IS NOT NULL) THEN RETURN NEW; END IF;
   uid := payload->>'userId'; cid := payload->'query'->>'client_id';
   SELECT * INTO policy FROM public.rezics_account_security WHERE user_id = uid FOR SHARE;
-  IF NOT FOUND OR policy.password_reset_required OR
+  IF NOT FOUND OR policy.deletion_started_at IS NOT NULL OR policy.password_reset_required OR
     (policy.suspended_at IS NOT NULL AND (policy.suspended_until IS NULL OR policy.suspended_until > now())) THEN
     RAISE EXCEPTION 'account_unavailable' USING ERRCODE = '23514';
   END IF;
@@ -89,7 +90,7 @@ LANGUAGE plpgsql AS $$
 DECLARE policy public.rezics_account_security%ROWTYPE; grant_version bigint; account_basis bigint; grant_basis bigint;
 BEGIN
   SELECT * INTO policy FROM public.rezics_account_security WHERE user_id = NEW."userId" FOR SHARE;
-  IF NOT FOUND OR policy.password_reset_required OR
+  IF NOT FOUND OR policy.deletion_started_at IS NOT NULL OR policy.password_reset_required OR
     (policy.suspended_at IS NOT NULL AND (policy.suspended_until IS NULL OR policy.suspended_until > now())) THEN
     RAISE EXCEPTION 'account_unavailable' USING ERRCODE = '23514';
   END IF;
@@ -126,6 +127,7 @@ LANGUAGE plpgsql AS $$ BEGIN
     UPDATE public.rezics_account_security SET generation = generation + 1, password_reset_required = false
       WHERE user_id = NEW."userId";
     DELETE FROM public."session" WHERE "userId" = NEW."userId";
+    DELETE FROM public.verification WHERE value = NEW."userId";
     UPDATE public."oauthRefreshToken" SET revoked = now() WHERE "userId" = NEW."userId" AND revoked IS NULL;
   END IF;
   RETURN NEW;

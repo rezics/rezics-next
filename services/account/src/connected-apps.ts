@@ -14,8 +14,9 @@ export async function readConnectedApps(pool: Pool, secret: string, userId: stri
   const limit = query.limit ?? 25;
   const result = await pool.query<{ clientId: string; name: string; uri: string | null; icon: string | null;
     scopes: string[]; grantedAt: Date; lastUsedAt: Date | null; installationId: string | null;
-    installationState: string | null; trusted: boolean | null }>(`SELECT g.client_id AS "clientId", c.name, c.uri, c.icon,
+    installationState: string | null; trusted: boolean | null; cursorKey: string }>(`SELECT g.client_id AS "clientId", c.name, c.uri, c.icon,
       g.scopes, g.granted_at AS "grantedAt", g.last_used_at AS "lastUsedAt", c."skipConsent" AS trusted,
+      g.granted_at::text AS "cursorKey",
       i.id AS "installationId", i.state AS "installationState"
     FROM rezics_account_grant g JOIN "oauthClient" c ON c."clientId" = g.client_id
     LEFT JOIN LATERAL (SELECT id, state FROM rezics_oauth_installation WHERE client_id = g.client_id
@@ -26,10 +27,10 @@ export async function readConnectedApps(pool: Pool, secret: string, userId: stri
   [userId, cursor?.key ?? null, cursor?.id ?? null, limit + 1]);
   const rows = result.rows.slice(0, limit);
   const last = rows.at(-1);
-  return { items: rows.map(row => ({ ...row, trusted: !!row.trusted,
+  return { items: rows.map(({ cursorKey: _key, ...row }) => ({ ...row, trusted: !!row.trusted,
     scopes: row.scopes.map(describeScope), grantedAt: row.grantedAt.toISOString(),
     lastUsedAt: row.lastUsedAt?.toISOString() ?? null })),
-  nextCursor: result.rows.length > limit && last ? encodeCursor(secret, scope, last.grantedAt.toISOString(), last.clientId) : null };
+  nextCursor: result.rows.length > limit && last ? encodeCursor(secret, scope, last.cursorKey, last.clientId) : null };
 }
 
 export async function revokeConnectedApp(pool: Pool, userId: string, clientId: string) {

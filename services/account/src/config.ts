@@ -21,7 +21,7 @@ export const accountSpec = {
     example: 'postgres://access:password@127.0.0.1:5432/access' }),
   ACCOUNT_RELAY_DATABASE_URL: url({ default: undefined, desc: 'Relay URL for account deletion events.',
     example: 'postgres://relay:password@127.0.0.1:5432/relay' }),
-  ACCOUNT_OPERATOR_USER_IDS: str({ default: '', desc: 'Comma-separated Account user IDs with operator rights.' }),
+  ACCOUNT_OPERATOR_USER_IDS: str({ default: '', desc: 'One-time first-owner bootstrap candidates; subsequent authority uses stored roles.' }),
   ACCOUNT_SMTP_HOST: str({ default: '127.0.0.1', desc: 'SMTP host; local development uses Mailpit.' }),
   ACCOUNT_SMTP_PORT: port({ default: 1025, desc: 'SMTP port; Mailpit uses 1025 (web UI 8025).' }),
   ACCOUNT_SMTP_SECURE: bool({ default: false, desc: 'Use TLS immediately (usually port 465).' }),
