@@ -64,7 +64,7 @@ export const messages = defineMessages({
     fallbackTitle: 'Title in another language',
     untitled: insert('Work {{id}}', { id: String }),
   },
-  'zh-CN': {
+  'zh-Hans': {
     title: '发现作品',
     description: '按最近更新、读者评分和作品类型浏览已发布的作品。',
     scopeLabel: '范围', global: '全局', mine: '我的', mineScope: '我评分的',

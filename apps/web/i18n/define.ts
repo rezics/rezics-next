@@ -23,9 +23,8 @@ export function localeText(values: { en: string } & Partial<Record<Exclude<UiLoc
  * Export the result as `messages` from `features/<name>/messages.ts` and add one
  * line for it to `i18n/catalogs.ts`.
  */
-export function defineMessages<T extends object>(catalog: { en: T; 'zh-CN'?: Partial<NoInfer<T>> } & {
+export function defineMessages<T extends object>(catalog: { en: T } & {
   [Locale in Exclude<UiLocale, 'en'>]?: Partial<NoInfer<T>> }): Record<UiLocale, T> {
   return Object.fromEntries(uiLocales.map(locale => [locale,
-    locale === 'en' ? catalog.en : { ...catalog.en,
-      ...(locale === 'zh-Hans' ? catalog['zh-CN'] : undefined), ...catalog[locale] }])) as Record<UiLocale, T>;
+    locale === 'en' ? catalog.en : { ...catalog.en, ...catalog[locale] }])) as Record<UiLocale, T>;
 }

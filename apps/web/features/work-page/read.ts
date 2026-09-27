@@ -5,6 +5,7 @@ import { mainApiWithToken } from '../api/main.ts';
 import { ACCESS_COOKIE } from '../auth/cookies.ts';
 import { sessionAgentState } from '../auth/session.ts';
 import type { UiLocale } from '../../i18n/define.ts';
+import { localizedPath } from '../../i18n/locale.ts';
 import { type ContentsQuery, iriOf, mainScope, parseWorkRef, type VersionQuery, type WorkRef, type WorkScope, workHref } from './route.ts';
 import type { AdoptionPage, AgentCreditPage, ChapterRead, ClassificationPage, ContentsPage, CreditPage,
   DiscussionPage, HistoryKind, HistoryPage, Loaded, Progress, RatingContextPage, RatingRead, ReadFailure,
@@ -119,7 +120,7 @@ export async function loadWork(ref: string, locale: UiLocale):
   Promise<{ ok: true; id: string; header: WorkHeader } | { ok: false }> {
   const work = await resolveWork(ref, locale);
   if (work.kind === 'missing') notFound();
-  if (work.kind === 'moved') permanentRedirect(workHref(work.slug));
+  if (work.kind === 'moved') permanentRedirect(localizedPath(workHref(work.slug), locale));
   return work.kind === 'work' ? { ok: true, id: work.id, header: work.header } : { ok: false };
 }
 

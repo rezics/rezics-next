@@ -6,7 +6,7 @@ import { useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
 import { BanIcon, CircleSlashIcon, FileTextIcon, LibraryIcon, RefreshCwIcon, RotateCwIcon, SearchIcon, SearchXIcon,
   TagIcon, TriangleAlertIcon, UsersRoundIcon } from 'lucide-react';
 import { type ContractOf, materializeData } from 'native-i18n';
-import Link from 'next/link';
+import Link from '../shell/localized-link.tsx';
 import { useRouter } from 'next/navigation';
 import { type ReactNode, useEffect, useRef } from 'react';
 import type { UiLocale } from '../../i18n/define.ts';

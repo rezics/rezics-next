@@ -49,7 +49,7 @@ export const Versions: Story = {
     await expect(items[0]).toHaveTextContent('Main Version');
     await expect(items[3]).toHaveTextContent('Fixed release');
     await expect(within(region).getByRole('link', { name: 'Next page' }))
-      .toHaveAttribute('href', `/w/${fixture.workRef}/versions?cursor=next-page-cursor`);
+      .toHaveAttribute('href', `/en/w/${fixture.workRef}/versions?cursor=next-page-cursor`);
     const filters = within(region).getByRole('form', { name: 'Filter versions' });
     await expect(filters).toHaveAttribute('action', `/w/${fixture.workRef}/versions`);
     await expect(within(filters).getByRole('combobox', { name: 'Kind' })).toHaveValue('');
@@ -64,7 +64,7 @@ export const VersionsFiltered: Story = {
     const canvas = within(canvasElement);
     await expect(canvas.getByRole('heading', { name: 'No versions match these filters' })).toBeVisible();
     await expect(canvas.getByRole('combobox', { name: 'Kind' })).toHaveValue('release');
-    await expect(canvas.getAllByRole('link', { name: 'Clear filters' })[0]).toHaveAttribute('href', `/w/${fixture.workRef}/versions`);
+    await expect(canvas.getAllByRole('link', { name: 'Clear filters' })[0]).toHaveAttribute('href', `/en/w/${fixture.workRef}/versions`);
   },
 };
 
@@ -85,7 +85,7 @@ export const VersionsListChanged: Story = {
     const alert = within(canvasElement).getByRole('alert');
     await expect(alert).toHaveTextContent('This list changed while you were reading it.');
     await expect(within(alert).getByRole('link', { name: 'First page' }))
-      .toHaveAttribute('href', `/w/${fixture.workRef}/versions?language=en`);
+      .toHaveAttribute('href', `/en/w/${fixture.workRef}/versions?language=en`);
   },
 };
 
@@ -102,9 +102,9 @@ export const VersionsUnavailable: Story = {
 
 export const VersionsChinesePhone: Story = {
   parameters: at('versions'),
-  globals: { locale: 'zh-CN', viewport: { value: 'phone' } },
-  render: () => <Framed work={fixture.cjkWork} locale="zh-CN"><VersionsRegion versions={fixture.versions}
-    workRef={fixture.workRef} query={{}} locale="zh-CN" messages={messages['zh-CN']} /></Framed>,
+  globals: { locale: 'zh-Hans', viewport: { value: 'phone' } },
+  render: () => <Framed work={fixture.cjkWork} locale="zh-Hans"><VersionsRegion versions={fixture.versions}
+    workRef={fixture.workRef} query={{}} locale="zh-Hans" messages={messages['zh-Hans']} /></Framed>,
   async play({ canvasElement }) {
     const region = within(canvasElement).getByRole('region', { name: '版本' });
     await expect(within(region).getAllByRole('listitem')[1]).toHaveTextContent('日语');
@@ -123,13 +123,13 @@ export const History: Story = {
     await expect(items.map(item => item.querySelector('p')?.textContent)).toEqual(['Reply placed in a Realm',
       'Metadata revised', 'Version published', 'Metadata revised']);
     await expect(within(region).getAllByRole('link', { name: 'View revision' })[0])
-      .toHaveAttribute('href', `/works/${fixture.work.revision.slice(-36)}`);
+      .toHaveAttribute('href', `/en/works/${fixture.work.revision.slice(-36)}`);
     const filter = within(region).getByRole('navigation', { name: 'Show activity' });
     await expect(within(filter).getByRole('link', { name: 'All' })).toHaveAttribute('aria-current', 'true');
     await expect(within(filter).getByRole('link', { name: 'Publications' }))
-      .toHaveAttribute('href', `/w/${fixture.workRef}/history?kind=publication-decision`);
+      .toHaveAttribute('href', `/en/w/${fixture.workRef}/history?kind=publication-decision`);
     await expect(within(region).getByRole('link', { name: 'Next page' }))
-      .toHaveAttribute('href', `/w/${fixture.workRef}/history?cursor=history-next-cursor`);
+      .toHaveAttribute('href', `/en/w/${fixture.workRef}/history?cursor=history-next-cursor`);
   },
 };
 
@@ -163,9 +163,9 @@ export const Contents: Story = {
     const region = canvas.getByRole('region', { name: 'Contents' });
     await expect(region).toHaveTextContent('Contents in English');
     await expect(within(region).getByRole('link', { name: 'Start reading' }))
-      .toHaveAttribute('href', `/w/${fixture.workRef}/read/b5c7d9e1-f3a5-4b7c-9d1e-000000000002`);
+      .toHaveAttribute('href', `/en/w/${fixture.workRef}/read/b5c7d9e1-f3a5-4b7c-9d1e-000000000002`);
     await expect(within(region).getByRole('link', { name: /Part One: The Delta/ }))
-      .toHaveAttribute('href', `/w/${fixture.workRef}/contents?parent=b5c7d9e1-f3a5-4b7c-9d1e-000000000001`);
+      .toHaveAttribute('href', `/en/w/${fixture.workRef}/contents?parent=b5c7d9e1-f3a5-4b7c-9d1e-000000000001`);
     await expect(within(region).getByRole('link', { name: /Untitled chapter/ })).toBeVisible();
     // A chapter with no publication in this language is listed, not linked.
     await expect(within(region).queryByRole('link', { name: /Neap Tide/ })).toBeNull();
@@ -180,7 +180,7 @@ export const ContentsPart: Story = {
   async play({ canvasElement }) {
     const region = within(canvasElement).getByRole('region', { name: 'Contents' });
     await expect(within(region).getByRole('link', { name: 'Back to all contents' }))
-      .toHaveAttribute('href', `/w/${fixture.workRef}/contents`);
+      .toHaveAttribute('href', `/en/w/${fixture.workRef}/contents`);
     await expect(within(region).queryByRole('link', { name: 'Start reading' })).toBeNull();
   },
 };
@@ -221,7 +221,7 @@ export const Discussion: Story = {
     const replies = within(region).getAllByRole('article');
     await expect(replies).toHaveLength(3);
     await expect(within(replies[0]!).getByRole('link', { name: 'In Tidewater Readers' }))
-      .toHaveAttribute('href', `/w/${fixture.workRef}/discussion?scope=realm&realm=${fixture.realms[0]!.id}`);
+      .toHaveAttribute('href', `/en/w/${fixture.workRef}/discussion?scope=realm&realm=${fixture.realms[0]!.id}`);
     await expect(replies[1]).toHaveTextContent('In 海洋文学研究会');
     await expect(within(region).getByRole('link', { name: 'Next page' })).toBeVisible();
   },
@@ -233,7 +233,7 @@ export const DiscussionEmptyRealm: Story = {
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     await expect(canvas.getByRole('heading', { name: 'No reviewed replies in Tidewater Readers yet' })).toBeVisible();
-    await expect(canvas.getByRole('link', { name: 'See Global' })).toHaveAttribute('href', `/w/${fixture.workRef}/discussion`);
+    await expect(canvas.getByRole('link', { name: 'See Global' })).toHaveAttribute('href', `/en/w/${fixture.workRef}/discussion`);
   },
 };
 

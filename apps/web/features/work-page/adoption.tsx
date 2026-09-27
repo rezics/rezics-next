@@ -1,7 +1,7 @@
 import { Badge } from '@rezics/ui/badge';
 import { ChevronRightIcon, UsersRoundIcon } from 'lucide-react';
 import { materializeData } from 'native-i18n';
-import Link from 'next/link';
+import Link from '../shell/localized-link.tsx';
 import type { UiLocale } from '../../i18n/define.ts';
 import { languageName } from './format.ts';
 import type { WorkPageMessages } from './messages.ts';

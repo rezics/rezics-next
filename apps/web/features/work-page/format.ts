@@ -1,9 +1,6 @@
 import type { UiLocale } from '../../i18n/define.ts';
 import type { WorkPageMessages } from './messages.ts';
 
-/** The content language an interface locale reads: zh-CN readers read Simplified Chinese. */
-export const localeLanguage = (locale: UiLocale) => (locale === 'zh-CN' ? 'zh-Hans' : locale);
-
 /** Content text keeps one paragraph per line; blank lines separate nothing. */
 export const paragraphs = (text: string) => text.split('\n').filter(line => line.trim());
 

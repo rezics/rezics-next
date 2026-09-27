@@ -64,7 +64,7 @@ export const Global: Story = {
     const canvas = within(canvasElement);
     await expect(canvas.getByRole('heading', { level: 1, name: 'The Cartographer of Tides' })).toBeVisible();
     await expect(canvas.getByRole('link', { name: 'Overview' })).toHaveAttribute('aria-current', 'page');
-    await expect(canvas.getByRole('link', { name: 'Read' })).toHaveAttribute('href', `/w/${fixture.workRef}/contents`);
+    await expect(canvas.getByRole('link', { name: 'Read' })).toHaveAttribute('href', `/en/w/${fixture.workRef}/contents`);
     await expect(canvas.getByRole('link', { name: /Open Library author OL2162284A/ }))
       .toHaveAttribute('href', 'https://openlibrary.org/authors/OL2162284A');
     await expect(canvas.getByText('Maren Osei')).toBeVisible();
@@ -85,7 +85,7 @@ export const Global: Story = {
     await expect(chips.map(chip => chip.textContent)).toEqual(['Maritime fictionRelevance: Central',
       'AdventureRelevance: Substantial', 'Coming of ageRelevance: Incidental', 'Maps and cartography', '海洋']);
     await expect(within(canvas.getByRole('region', { name: 'Realm adoption' })).getByRole('link', { name: /Tidewater Readers/ }))
-      .toHaveAttribute('href', `/w/${fixture.workRef}?scope=realm&realm=${fixture.realms[0]!.id}`);
+      .toHaveAttribute('href', `/en/w/${fixture.workRef}?scope=realm&realm=${fixture.realms[0]!.id}`);
   },
 };
 
@@ -105,7 +105,7 @@ export const Realm: Story = {
     await expect(canvas.getByRole('region', { name: 'Realm adoption' })).toHaveTextContent('In scope');
     // The chosen scope travels with the tabs.
     await expect(canvas.getByRole('link', { name: 'Versions' }))
-      .toHaveAttribute('href', `/w/${fixture.workRef}/versions?scope=realm&realm=${fixture.realms[0]!.id}`);
+      .toHaveAttribute('href', `/en/w/${fixture.workRef}/versions?scope=realm&realm=${fixture.realms[0]!.id}`);
   },
 };
 
@@ -115,7 +115,7 @@ export const MineSignedOut: Story = {
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     await expect(canvas.getByRole('link', { name: 'Sign in' }))
-      .toHaveAttribute('href', `/sign-in?next=${encodeURIComponent(`/w/${fixture.workRef}?scope=mine`)}`);
+      .toHaveAttribute('href', `/auth/start?next=${encodeURIComponent(`/en/w/${fixture.workRef}?scope=mine`)}`);
     await expect(canvas.getByRole('region', { name: 'Classification' })).toHaveTextContent('Classification isn’t personal');
     await expect(canvas.getByRole('link', { name: 'See Global' })).toBeVisible();
   },
@@ -126,7 +126,7 @@ export const MineChooseIdentity: Story = {
   parameters: route(fixture.mineScope),
   async play({ canvasElement }) {
     await expect(within(canvasElement).getByRole('link', { name: 'Choose identity' }))
-      .toHaveAttribute('href', expect.stringMatching(/^\/identity\?next=/));
+      .toHaveAttribute('href', expect.stringMatching(/^\/en\/identity\?next=/));
   },
 };
 
@@ -157,7 +157,7 @@ export const EmptyRealm: Story = {
     const canvas = within(canvasElement);
     await expect(canvas.getByText('No ratings in Tidewater Readers yet')).toBeVisible();
     await expect(canvas.getByText('Tidewater Readers hasn’t classified this Work')).toBeVisible();
-    await expect(canvas.getAllByRole('link', { name: 'See Global' })[0]).toHaveAttribute('href', `/w/${fixture.workRef}`);
+    await expect(canvas.getAllByRole('link', { name: 'See Global' })[0]).toHaveAttribute('href', `/en/w/${fixture.workRef}`);
   },
 };
 
@@ -211,16 +211,16 @@ export const MetadataOnly: Story = {
 };
 
 export const TitleFallback: Story = {
-  args: { work: fixture.fallbackTitleWork, locale: 'zh-CN' },
-  globals: { locale: 'zh-CN' },
+  args: { work: fixture.fallbackTitleWork, locale: 'zh-Hans' },
+  globals: { locale: 'zh-Hans' },
   async play({ canvasElement }) {
     await expect(within(canvasElement).getByText(/尚无.*标题，以英语显示/)).toBeVisible();
   },
 };
 
 export const LongCjkTitle: Story = {
-  args: { work: fixture.cjkWork, locale: 'zh-CN' },
-  globals: { locale: 'zh-CN', viewport: { value: 'phone' } },
+  args: { work: fixture.cjkWork, locale: 'zh-Hans' },
+  globals: { locale: 'zh-Hans', viewport: { value: 'phone' } },
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     await expect(canvas.getByRole('heading', { level: 1 })).toHaveAttribute('lang', 'zh-Hans');
@@ -231,9 +231,9 @@ export const LongCjkTitle: Story = {
 };
 
 export const Chinese: Story = {
-  args: { locale: 'zh-CN', scope: fixture.realmScope, ratings: fixture.realmRatings,
+  args: { locale: 'zh-Hans', scope: fixture.realmScope, ratings: fixture.realmRatings,
     classifications: fixture.realmClassifications },
-  globals: { locale: 'zh-CN' },
+  globals: { locale: 'zh-Hans' },
   parameters: route(fixture.realmScope),
   async play({ canvasElement }) {
     const canvas = within(canvasElement);

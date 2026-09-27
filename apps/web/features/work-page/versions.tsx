@@ -4,7 +4,7 @@ import { Input } from '@rezics/ui/input';
 import { NativeSelect, NativeSelectOption } from '@rezics/ui/native-select';
 import { FileTextIcon, SearchXIcon } from 'lucide-react';
 import { materializeData } from 'native-i18n';
-import Link from 'next/link';
+import Link from '../shell/localized-link.tsx';
 import type { UiLocale } from '../../i18n/define.ts';
 import { EmptyState } from '../shell/empty-state.tsx';
 import { languageName } from './format.ts';

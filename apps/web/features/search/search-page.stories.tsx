@@ -57,7 +57,7 @@ export const Populated: Story = {
     await expect(completeness).toHaveTextContent('Exactly 5 works match · searched 42 published texts in Global');
     await expect(completeness).toHaveTextContent('index current as of change 47');
     await expect(canvas.getByRole('link', { name: 'Pride and Prejudice' }))
-      .toHaveAttribute('href', '/w/00000001-4b5a-4c6d-8e7f-9a0b1c2d3e4f');
+      .toHaveAttribute('href', '/en/w/00000001-4b5a-4c6d-8e7f-9a0b1c2d3e4f');
     await expect(canvas.getAllByRole('list', { name: 'Why this matched' })[0])
       .toHaveTextContent('Phrase found in the published English text');
     await userEvent.click(canvas.getByRole('button', { name: 'Show more' }));
@@ -81,7 +81,7 @@ export const FacetedTypes: Story = {
     const canvas = within(canvasElement);
     await expect(canvas.getByRole('link', { name: 'Include Book' })).toHaveAttribute('aria-current', 'true');
     await expect(canvas.getByRole('link', { name: 'Exclude Recipe' })).toHaveAttribute('href',
-      '/search?q=Pride&include=book&exclude=recipe');
+      '/en/search?q=Pride&include=book&exclude=recipe');
     await expect(canvas.getByRole('link', { name: 'Pride and Prejudice' })).toBeVisible();
   },
 };
@@ -106,7 +106,7 @@ export const RealmClassified: Story = {
     await expect(completeness).toHaveTextContent('only this classification');
     await expect(completeness).toHaveTextContent('works hidden by your mutes are left out');
     await expect(canvas.getAllByRole('link', { name: 'Remove filter: Only works with this classification' })[0])
-      .toHaveAttribute('href', `/search?q=${encodeURIComponent('西游记')}&scope=realm&realm=${realm}&lang=zh-Hans`);
+      .toHaveAttribute('href', `/en/search?q=${encodeURIComponent('西游记')}&scope=realm&realm=${realm}&lang=zh-Hans`);
   },
 };
 
@@ -117,9 +117,9 @@ export const EmptyOffersWiderSearch: Story = {
     const canvas = within(canvasElement);
     await expect(canvas.getByRole('heading', { name: 'No works in Classic Literature · 经典文学 match “river”' }))
       .toBeVisible();
-    await expect(canvas.getByRole('link', { name: 'Search Global' })).toHaveAttribute('href', '/search?q=river&lang=ja');
+    await expect(canvas.getByRole('link', { name: 'Search Global' })).toHaveAttribute('href', '/en/search?q=river&lang=ja');
     await expect(canvas.getByRole('link', { name: 'Search any language' })).toHaveAttribute('href',
-      `/search?q=river&scope=realm&realm=${realm}`);
+      `/en/search?q=river&scope=realm&realm=${realm}`);
     await expect(canvas.getByTestId('search-completeness')).toHaveTextContent('Exactly 0 works match');
   },
 };
@@ -182,7 +182,7 @@ export const MineIsNotSearchable: Story = {
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     await expect(canvas.getByRole('heading', { name: 'Your ratings cannot be searched' })).toBeVisible();
-    await expect(canvas.getByRole('link', { name: 'Search Global' })).toHaveAttribute('href', '/search?q=Pride');
+    await expect(canvas.getByRole('link', { name: 'Search Global' })).toHaveAttribute('href', '/en/search?q=Pride');
   },
 };
 
@@ -208,9 +208,9 @@ export const ImeCompositionDoesNotSubmit: Story = {
 };
 
 export const ChineseDark: Story = {
-  args: { parsed: state('《西游记》'), locale: 'zh-CN', messages: messages['zh-CN'], discoverMessages: discover['zh-CN'],
+  args: { parsed: state('《西游记》'), locale: 'zh-Hans', messages: messages['zh-Hans'], discoverMessages: discover['zh-Hans'],
     initial: results([hit(6, '西游记', 'zh-Hans'), hit(7, '西游记 · 第二回 悟彻菩提真妙理', 'zh-Hans')]) },
-  globals: { locale: 'zh-CN', theme: 'dark' },
+  globals: { locale: 'zh-Hans', theme: 'dark' },
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     await expect(canvas.getByRole('heading', { level: 1, name: '搜索作品' })).toBeVisible();
@@ -229,10 +229,10 @@ export const PhoneFilters: Story = {
 };
 
 export const PhoneChinese: Story = {
-  args: { parsed: state('《西游记》'), locale: 'zh-CN', messages: messages['zh-CN'], discoverMessages: discover['zh-CN'],
+  args: { parsed: state('《西游记》'), locale: 'zh-Hans', messages: messages['zh-Hans'], discoverMessages: discover['zh-Hans'],
     initial: results([hit(6, '西游记', 'zh-Hans'), hit(9, '雨夜书店 · 连载小说：一部关于深夜书店、未寄出的信和最后一班车的长篇连载',
       'zh-Hans')]) },
-  globals: { viewport: { value: 'phone' }, locale: 'zh-CN' },
+  globals: { viewport: { value: 'phone' }, locale: 'zh-Hans' },
   async play() {
     await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
   },

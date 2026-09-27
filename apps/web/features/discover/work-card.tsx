@@ -2,7 +2,7 @@ import { Badge } from '@rezics/ui/badge';
 import { cn } from '@rezics/ui/utils';
 import { StarIcon } from 'lucide-react';
 import { materializeData } from 'native-i18n';
-import Link from 'next/link';
+import Link from '../shell/localized-link.tsx';
 import type { ReactNode } from 'react';
 import type { UiLocale } from '../../i18n/define.ts';
 import { BFF_PREFIX } from '../api/browser.ts';

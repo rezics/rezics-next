@@ -4,7 +4,7 @@ import { Card } from '@rezics/ui/card';
 import { Skeleton, SkeletonText } from '@rezics/ui/skeleton';
 import { cn } from '@rezics/ui/utils';
 import { TriangleAlertIcon } from 'lucide-react';
-import Link from 'next/link';
+import Link from '../shell/localized-link.tsx';
 import type { ReactNode } from 'react';
 import type { WorkPageMessages } from './messages.ts';
 import { RetryButton } from './retry-button.tsx';

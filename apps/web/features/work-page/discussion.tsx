@@ -1,7 +1,7 @@
 import { buttonVariants } from '@rezics/ui/button';
 import { MessagesSquareIcon, UsersRoundIcon } from 'lucide-react';
 import { materializeData } from 'native-i18n';
-import Link from 'next/link';
+import Link from '../shell/localized-link.tsx';
 import type { UiLocale } from '../../i18n/define.ts';
 import { EmptyState } from '../shell/empty-state.tsx';
 import { paragraphs } from './format.ts';

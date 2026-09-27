@@ -3,7 +3,7 @@ import { Skeleton } from '@rezics/ui/skeleton';
 import { cn } from '@rezics/ui/utils';
 import { GlobeIcon, type LucideIcon, UserRoundIcon, UsersRoundIcon } from 'lucide-react';
 import { materializeData } from 'native-i18n';
-import Link from 'next/link';
+import Link from '../shell/localized-link.tsx';
 import type { ReactNode } from 'react';
 import type { UiLocale } from '../../i18n/define.ts';
 import type { WorkPageMessages } from './messages.ts';

@@ -2,7 +2,7 @@ import { buttonVariants } from '@rezics/ui/button';
 import { cn } from '@rezics/ui/utils';
 import { ArrowLeftIcon, BookOpenIcon, ChevronRightIcon, FileTextIcon, FolderIcon, ListTreeIcon } from 'lucide-react';
 import { materializeData } from 'native-i18n';
-import Link from 'next/link';
+import Link from '../shell/localized-link.tsx';
 import type { UiLocale } from '../../i18n/define.ts';
 import { EmptyState } from '../shell/empty-state.tsx';
 import { languageName } from './format.ts';

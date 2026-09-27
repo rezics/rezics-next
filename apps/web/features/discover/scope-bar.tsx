@@ -1,7 +1,7 @@
 import { cn } from '@rezics/ui/utils';
 import { GlobeIcon, type LucideIcon, UserRoundIcon, UsersRoundIcon } from 'lucide-react';
 import type { ContractOf } from 'native-i18n';
-import Link from 'next/link';
+import Link from '../shell/localized-link.tsx';
 import type { ReactNode } from 'react';
 import type { DiscoverMessages } from './messages.ts';
 import { type BrowseScope, sameScope, shortId } from './scope.ts';

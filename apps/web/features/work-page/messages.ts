@@ -140,7 +140,7 @@ export const messages = defineMessages({
     progressUnavailable: 'Progress isn’t kept for this Work yet.',
     progressFailed: 'Progress couldn’t be saved. Try again.',
   },
-  'zh-CN': {
+  'zh-Hans': {
     loading: '正在加载作品…', loadingRegion: '正在加载…',
     notFoundTitle: '找不到作品',
     notFoundBody: '没有与此地址对应的作品，或者您无权查看。',

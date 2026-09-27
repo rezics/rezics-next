@@ -1,5 +1,5 @@
 import { materializeData } from 'native-i18n';
-import Link from 'next/link';
+import Link from '../shell/localized-link.tsx';
 import type { UiLocale } from '../../i18n/define.ts';
 import type { WorkPageMessages } from './messages.ts';
 import { Region } from './region.tsx';

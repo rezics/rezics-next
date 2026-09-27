@@ -5,7 +5,7 @@ import { cn } from '@rezics/ui/utils';
 import { useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
 import { ArrowRightIcon, LibraryBigIcon, RotateCwIcon } from 'lucide-react';
 import { materializeData } from 'native-i18n';
-import Link from 'next/link';
+import Link from '../shell/localized-link.tsx';
 import { useRouter } from 'next/navigation';
 import { type RefObject, useEffect, useId, useRef } from 'react';
 import type { UiLocale } from '../../i18n/define.ts';

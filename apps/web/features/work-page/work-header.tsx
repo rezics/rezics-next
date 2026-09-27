@@ -3,11 +3,11 @@ import { buttonVariants } from '@rezics/ui/button';
 import { cn } from '@rezics/ui/utils';
 import { BookOpenIcon, LockIcon } from 'lucide-react';
 import { materializeData } from 'native-i18n';
-import Link from 'next/link';
+import Link from '../shell/localized-link.tsx';
 import type { CSSProperties, ReactNode } from 'react';
 import { BFF_PREFIX } from '../api/browser.ts';
 import type { UiLocale } from '../../i18n/define.ts';
-import { languageName, localeLanguage, paragraphs, typeNames } from './format.ts';
+import { languageName, paragraphs, typeNames } from './format.ts';
 import type { WorkPageMessages } from './messages.ts';
 import type { WorkCover as Cover, WorkHeader as Header } from './types.ts';
 
@@ -65,7 +65,7 @@ export function WorkHeader({ work, credits, readHref, locale, messages }: {
       <h1 lang={work.title.language} dir={work.title.direction} className="text-balance break-words font-semibold
         font-work-title text-2xl/tight sm:text-4xl/tight">{work.title.value}</h1>
       {work.title.basis === 'fallback' ? <p className="text-muted-foreground text-xs">
-        {t.titleFallback({ requested: languageName(localeLanguage(locale), locale),
+        {t.titleFallback({ requested: languageName(locale, locale),
           shown: languageName(work.title.language, locale) })}
       </p> : null}
       {work.originalTitle && work.originalTitle.value !== work.title.value

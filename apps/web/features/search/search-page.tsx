@@ -3,7 +3,7 @@ import { Card } from '@rezics/ui/card';
 import { cn } from '@rezics/ui/utils';
 import { ChevronDownIcon, LinkIcon, SlidersHorizontalIcon, UserRoundIcon, XIcon } from 'lucide-react';
 import { type ContractOf, materializeData } from 'native-i18n';
-import Link from 'next/link';
+import Link from '../shell/localized-link.tsx';
 import type { UiLocale } from '../../i18n/define.ts';
 import type { DiscoverMessages } from '../discover/messages.ts';
 import { Notice } from '../discover/notice.tsx';

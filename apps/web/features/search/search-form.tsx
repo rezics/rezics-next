@@ -8,6 +8,7 @@ import { materializeData } from 'native-i18n';
 import { useRouter } from 'next/navigation';
 import { type FormEvent, type KeyboardEvent, useId, useRef, useState } from 'react';
 import type { UiLocale } from '../../i18n/define.ts';
+import { localizedPath } from '../../i18n/locale.ts';
 import type { SearchMessages } from './messages.ts';
 import { normalizePhrase, PHRASE, phraseStatus, type SearchScope, type SearchState, searchHref } from './state.ts';
 
@@ -32,7 +33,7 @@ export function SearchForm({ state, realm, locale, messages }: {
     value === 'realm' && realm ? { kind: 'realm', realm: realm.id } : { kind: 'global' };
 
   function go(phrase: string, value: 'global' | 'realm') {
-    router.push(searchHref({ ...state, phrase, scope: selected(value) }));
+    router.push(localizedPath(searchHref({ ...state, phrase, scope: selected(value) }), locale));
   }
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();

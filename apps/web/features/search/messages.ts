@@ -58,7 +58,7 @@ export const messages = defineMessages({
     badLinkHelp: 'A scope, language or classification in the address is not one REZICS can search.',
     titlesUnavailable: 'Titles could not be loaded, so results show Work IDs.',
   },
-  'zh-CN': {
+  'zh-Hans': {
     title: '搜索作品', form: '搜索已发布的作品',
     phraseLabel: '搜索内容', placeholder: '标题、词句或想法…', search: '搜索',
     scopeLabel: '搜索范围', global: '全局',

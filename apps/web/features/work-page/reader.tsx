@@ -4,8 +4,10 @@ import { cn } from '@rezics/ui/utils';
 import { ArrowLeftIcon, ChevronLeftIcon, ChevronRightIcon, CircleAlertIcon, FileQuestionIcon, ListTreeIcon,
   TriangleAlertIcon } from 'lucide-react';
 import { materializeData } from 'native-i18n';
-import Link from 'next/link';
+import Link from '../shell/localized-link.tsx';
 import type { UiLocale } from '../../i18n/define.ts';
+import { localizedPath } from '../../i18n/locale.ts';
+import { signInPath } from '../auth/paths.ts';
 import { EmptyState } from '../shell/empty-state.tsx';
 import { paragraphs } from './format.ts';
 import type { WorkPageMessages } from './messages.ts';
@@ -15,8 +17,8 @@ import { RetryButton } from './retry-button.tsx';
 import { chapterHref, idOf, workHref } from './route.ts';
 import type { ChapterRead, Loaded, Progress, WorkHeader } from './types.ts';
 
-function ProgressPanel({ progress, chapter, actingSubject, here, messages }: {
-  progress: Loaded<Progress>; chapter: ChapterRead; actingSubject: string | null; here: string;
+function ProgressPanel({ progress, chapter, actingSubject, here, locale, messages }: {
+  progress: Loaded<Progress>; chapter: ChapterRead; actingSubject: string | null; here: string; locale: UiLocale;
   messages: WorkPageMessages;
 }) {
   const t = messages;
@@ -26,12 +28,14 @@ function ProgressPanel({ progress, chapter, actingSubject, here, messages }: {
         saving: t.saving, progressFailed: t.progressFailed }} />;
   }
   const failure = progress.ok ? 'identity' : progress.failure;
-  const step = failure === 'sign-in' ? { text: t.progressSignIn, label: t.signIn, path: '/sign-in' }
-    : failure === 'identity' ? { text: t.progressIdentity, label: t.chooseIdentity, path: '/identity' } : null;
+  const back = localizedPath(here, locale);
+  const step = failure === 'sign-in' ? { text: t.progressSignIn, label: t.signIn, href: signInPath(back) }
+    : failure === 'identity' ? { text: t.progressIdentity, label: t.chooseIdentity,
+      href: localizedPath(`/identity?next=${encodeURIComponent(back)}`, locale) } : null;
   return <div className="grid justify-items-start gap-2 text-sm">
     <p className="font-medium">{t.progress}</p>
     {step ? <p className="flex flex-wrap items-center gap-2 text-muted-foreground">{step.text}
-      <Link href={`${step.path}?next=${encodeURIComponent(here)}`} className={buttonVariants({ size: 'sm', variant: 'outline' })}>
+      <Link href={step.href} className={buttonVariants({ size: 'sm', variant: 'outline' })}>
         {step.label}</Link></p>
       : failure === 'missing' ? <p className="text-muted-foreground">{t.progressUnavailable}</p>
         : <p className="flex flex-wrap items-center gap-2 text-destructive-foreground">{t.progressFailed}
@@ -114,11 +118,12 @@ export function ChapterReader({ workRef, work, chapter, language, settings, prog
             {step(next, t.nextChapter, t.lastChapter, true)}
           </nav>
           <p className="hidden text-muted-foreground text-xs sm:block">{t.keyboardHint}</p>
-          <ProgressPanel progress={progress} chapter={chapter} actingSubject={actingSubject} here={here}
+          <ProgressPanel progress={progress} chapter={chapter} actingSubject={actingSubject} here={here} locale={locale}
             messages={messages} />
         </div>
       </ReaderSurface>
-      <ChapterKeys previous={previous} next={next} direction={direction} />
+      <ChapterKeys previous={previous && localizedPath(previous, locale)} next={next && localizedPath(next, locale)}
+        direction={direction} />
     </div>
   </div>;
 }

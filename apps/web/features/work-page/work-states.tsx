@@ -1,7 +1,7 @@
 import { buttonVariants } from '@rezics/ui/button';
 import { Skeleton, SkeletonText } from '@rezics/ui/skeleton';
 import { BookXIcon, TriangleAlertIcon } from 'lucide-react';
-import Link from 'next/link';
+import Link from '../shell/localized-link.tsx';
 import { EmptyState } from '../shell/empty-state.tsx';
 import { PageContainer } from '../shell/page.tsx';
 import type { WorkPageMessages } from './messages.ts';

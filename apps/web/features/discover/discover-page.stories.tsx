@@ -27,7 +27,7 @@ const overview = (key: string) => ({
 
 const meta = {
   title: 'Discover/Page', component: DiscoverPage,
-  args: { state: global, realm: null, question: null, shelves: shelves(global, overview), signInHref: '/sign-in',
+  args: { state: global, realm: null, question: null, shelves: shelves(global, overview), signInHref: '/auth/start?next=%2Fen%2Fdiscover',
     load: loader([works.frankenstein, works.chamber]), locale: 'en', messages: messages.en },
   decorators: [Story => <Providers><Story /></Providers>],
   parameters: { route: { pathname: '/discover' } },
@@ -44,13 +44,13 @@ export const GlobalOverview: Story = {
     const recent = canvas.getByRole('region', { name: 'Recently updated · Global' });
     await expect(within(recent).getByText('At least 6 works')).toBeVisible();
     await expect(within(recent).getByRole('link', { name: 'Pride and Prejudice' }))
-      .toHaveAttribute('href', '/w/00000001-3855-42be-84bb-88da77a5b247');
+      .toHaveAttribute('href', '/en/w/00000001-3855-42be-84bb-88da77a5b247');
     await expect(within(recent).getByText('Mean rating 4.4 of 5 from 12 in Global')).toBeInTheDocument();
     await userEvent.click(within(recent).getByRole('button', { name: 'Show more' }));
     await waitFor(() => expect(within(recent).getByText('8 works')).toBeVisible());
     await expect(within(recent).getByRole('link', { name: 'Frankenstein; or, The Modern Prometheus' })).toHaveFocus();
     await expect(within(recent).queryByRole('button', { name: 'Show more' })).toBeNull();
-    await expect(canvas.getByRole('link', { name: 'See all Books' })).toHaveAttribute('href', '/discover?type=book');
+    await expect(canvas.getByRole('link', { name: 'See all Books' })).toHaveAttribute('href', '/en/discover?type=book');
   },
 };
 
@@ -72,9 +72,9 @@ export const RealmTopRated: Story = {
     await expect(within(top).getByText('Inherited from Global')).toBeVisible();
     await expect(canvas.getByRole('link', { name: 'Classic Literature · 经典文学' }))
       .toHaveAttribute('aria-current', 'page');
-    await expect(canvas.getByRole('link', { name: 'Global' })).toHaveAttribute('href', '/discover');
+    await expect(canvas.getByRole('link', { name: 'Global' })).toHaveAttribute('href', '/en/discover');
     await expect(canvas.getByRole('link', { name: /Remove filter: Rating question/ }))
-      .toHaveAttribute('href', `/discover?scope=realm&realm=${realm}`);
+      .toHaveAttribute('href', `/en/discover?scope=realm&realm=${realm}`);
   },
 };
 
@@ -102,17 +102,17 @@ export const EmptyRealmOffersGlobal: Story = {
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     await expect(canvas.getByRole('heading', { name: 'No works in Realm 3f0e1c2d yet' })).toBeVisible();
-    await expect(canvas.getByRole('link', { name: 'See Global' })).toHaveAttribute('href', '/discover?type=recipe');
+    await expect(canvas.getByRole('link', { name: 'See Global' })).toHaveAttribute('href', '/en/discover?type=recipe');
     await expect(canvas.getByRole('link', { name: 'Recipes' })).toHaveAttribute('aria-current', 'page');
   },
 };
 
 const mine: DiscoverState = { scope: { kind: 'mine' }, context, type: null, term: null };
 export const MineSignedOut: Story = {
-  args: { state: mine, shelves: shelves(mine, () => failed('sign-in')), signInHref: '/sign-in?next=%2Fdiscover' },
+  args: { state: mine, shelves: shelves(mine, () => failed('sign-in')), signInHref: '/auth/start?next=%2Fen%2Fdiscover' },
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
-    await expect(canvas.getAllByRole('link', { name: 'Sign in' })[0]).toHaveAttribute('href', '/sign-in?next=%2Fdiscover');
+    await expect(canvas.getAllByRole('link', { name: 'Sign in' })[0]).toHaveAttribute('href', '/auth/start?next=%2Fen%2Fdiscover');
     await expect(canvas.getByText('Only public works you rated appear here, ranked by your own ratings.')).toBeVisible();
   },
 };
@@ -177,8 +177,8 @@ export const RealmMissing: Story = {
 };
 
 export const ChineseDark: Story = {
-  args: { locale: 'zh-CN', messages: messages['zh-CN'] },
-  globals: { locale: 'zh-CN', theme: 'dark' },
+  args: { locale: 'zh-Hans', messages: messages['zh-Hans'] },
+  globals: { locale: 'zh-Hans', theme: 'dark' },
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     await expect(canvas.getByRole('heading', { level: 1, name: '发现作品' })).toBeVisible();
@@ -195,8 +195,8 @@ export const Phone: Story = {
 };
 
 export const PhoneChineseDark: Story = {
-  args: { locale: 'zh-CN', messages: messages['zh-CN'] },
-  globals: { viewport: { value: 'phone' }, locale: 'zh-CN', theme: 'dark' },
+  args: { locale: 'zh-Hans', messages: messages['zh-Hans'] },
+  globals: { viewport: { value: 'phone' }, locale: 'zh-Hans', theme: 'dark' },
   async play() {
     await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
   },

@@ -28,9 +28,9 @@ export const Reading: Story = {
     await expect(canvas.getByRole('link', { name: 'Continue where you left off' })).toHaveAttribute('href', '#p-2');
     const chapters = canvas.getByRole('navigation', { name: 'Chapters' });
     await expect(within(chapters).getByRole('link', { name: 'Previous chapter' }))
-      .toHaveAttribute('href', `/w/${fixture.workRef}/read/b5c7d9e1-f3a5-4b7c-9d1e-000000000002`);
+      .toHaveAttribute('href', `/en/w/${fixture.workRef}/read/b5c7d9e1-f3a5-4b7c-9d1e-000000000002`);
     await expect(within(chapters).getByRole('link', { name: 'Next chapter' })).toHaveAttribute('rel', 'next');
-    await expect(canvas.getByRole('link', { name: 'The Cartographer of Tides' })).toHaveAttribute('href', `/w/${fixture.workRef}`);
+    await expect(canvas.getByRole('link', { name: 'The Cartographer of Tides' })).toHaveAttribute('href', `/en/w/${fixture.workRef}`);
     await expect(canvas.getByRole('button', { name: 'Mark chapter as read' })).toBeEnabled();
   },
 };
@@ -81,7 +81,7 @@ export const SignedOut: Story = {
   args: { progress: { ok: false, failure: 'sign-in' }, actingSubject: null },
   async play({ canvasElement }) {
     await expect(within(canvasElement).getByRole('link', { name: 'Sign in' }))
-      .toHaveAttribute('href', `/sign-in?next=${encodeURIComponent(chapterPath)}`);
+      .toHaveAttribute('href', `/auth/start?next=${encodeURIComponent(`/en${chapterPath}`)}`);
   },
 };
 
@@ -100,8 +100,8 @@ export const UnsupportedFormat: Story = {
 };
 
 export const ChinesePhoneDark: Story = {
-  args: { chapter: fixture.cjkChapter, work: fixture.cjkWork, locale: 'zh-CN', messages: messages['zh-CN'] },
-  globals: { locale: 'zh-CN', theme: 'dark', viewport: { value: 'phone' } },
+  args: { chapter: fixture.cjkChapter, work: fixture.cjkWork, locale: 'zh-Hans', messages: messages['zh-Hans'] },
+  globals: { locale: 'zh-Hans', theme: 'dark', viewport: { value: 'phone' } },
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     await expect(canvas.getByRole('article')).toHaveAttribute('lang', 'zh-Hans');
@@ -116,7 +116,7 @@ export const NotFound: Story = {
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     await expect(canvas.getByRole('heading', { level: 1, name: 'Chapter not found' })).toBeVisible();
-    await expect(canvas.getByRole('link', { name: 'Contents' })).toHaveAttribute('href', `/w/${fixture.workRef}/contents`);
+    await expect(canvas.getByRole('link', { name: 'Contents' })).toHaveAttribute('href', `/en/w/${fixture.workRef}/contents`);
   },
 };
 

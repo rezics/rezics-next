@@ -1,7 +1,7 @@
 'use client';
 
 import { cn } from '@rezics/ui/utils';
-import Link from 'next/link';
+import Link from '../shell/localized-link.tsx';
 import { usePathname, useSearchParams } from 'next/navigation';
 import { parseScope, tabOf, workHref, type WorkTab, workTabs } from './route.ts';
 

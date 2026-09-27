@@ -3,9 +3,11 @@ import { buttonVariants } from '@rezics/ui/button';
 import { cn } from '@rezics/ui/utils';
 import { MessageCircleQuestionIcon } from 'lucide-react';
 import { materializeData } from 'native-i18n';
-import Link from 'next/link';
+import Link from '../shell/localized-link.tsx';
 import type { ReactNode } from 'react';
 import type { UiLocale } from '../../i18n/define.ts';
+import { localizedPath } from '../../i18n/locale.ts';
+import { signInPath } from '../auth/paths.ts';
 import { formatNumber, formatShare } from './format.ts';
 import type { WorkPageMessages } from './messages.ts';
 import { Region, RegionFailure } from './region.tsx';
@@ -55,11 +57,13 @@ export function RatingSummaryRegion({ ratings, view, locale, messages }: {
   const badge = <Badge variant="outline" className="bg-card">{name}</Badge>;
   const here = workHref(view.workRef, 'overview', view.scope);
   if (!ratings.ok) {
-    const step = ratings.failure === 'sign-in' ? { title: t.mineSignIn, label: t.signIn, path: '/sign-in' }
-      : ratings.failure === 'identity' ? { title: t.mineIdentity, label: t.chooseIdentity, path: '/identity' } : null;
+    const back = localizedPath(here, locale);
+    const step = ratings.failure === 'sign-in' ? { title: t.mineSignIn, label: t.signIn, href: signInPath(back) }
+      : ratings.failure === 'identity' ? { title: t.mineIdentity, label: t.chooseIdentity,
+        href: localizedPath(`/identity?next=${encodeURIComponent(back)}`, locale) } : null;
     return <Region id={RATINGS_REGION} title={t.ratings} aside={badge}>
       {step ? <EmptyScope title={step.title}>
-        <Link href={`${step.path}?next=${encodeURIComponent(here)}`} className={buttonVariants({ size: 'sm' })}>
+        <Link href={step.href} className={buttonVariants({ size: 'sm' })}>
           {step.label}</Link>
       </EmptyScope> : <RegionFailure title={t.ratingsUnavailable} failure={ratings.failure} messages={messages} />}
     </Region>;
