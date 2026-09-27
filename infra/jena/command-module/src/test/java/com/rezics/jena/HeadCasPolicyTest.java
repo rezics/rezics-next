@@ -2,6 +2,7 @@ package com.rezics.jena;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertNotNull;
 
 import org.apache.jena.graph.NodeFactory;
 import org.apache.jena.query.DatasetFactory;
@@ -33,7 +34,7 @@ public class HeadCasPolicyTest {
             + " a rv:RevisionAnchor ; rv:component " + iri(MAIN)
             + (mainPredecessor ? " ; rv:predecessor " + iri(OLD_MAIN) : "") + " . "
             + iri(SELECTION) + " a rv:RevisionAnchor ; rv:component " + iri(selectionSubject)
-            + " ; rv:mainRevision " + iri(NEW_MAIN)
+            + " ; rv:language \"en\" ; rv:mainRevision " + iri(NEW_MAIN)
             + (replacement ? " ; rv:predecessor " + iri(PRIOR) : "") + " }\n"
             + "GRAPH " + iri(CommandPolicy.RECEIPTS) + " { " + iri(RECEIPT)
             + " rv:outcome rv:Succeeded ; rv:admissionId \"" + ADMISSION
@@ -56,12 +57,46 @@ public class HeadCasPolicyTest {
             if (replacement) data.add(NodeFactory.createURI(CommandPolicy.CURRENT),
                 NodeFactory.createURI(MAIN), NodeFactory.createURI(RV + "selectionHead"),
                 NodeFactory.createURI(PRIOR));
+            if (replacement) data.add(NodeFactory.createURI(CommandPolicy.REVISIONS),
+                NodeFactory.createURI(PRIOR), NodeFactory.createURI(RV + "language"),
+                NodeFactory.createLiteralString("en"));
             CommandPolicy.Plan plan = CommandPolicy.parse(update(replacement, selectionSubject,
                 receiptMainRevision, mainPredecessor), RECEIPT);
             HeadCasPolicy.Snapshot before = HeadCasPolicy.capture(data, plan, RECEIPT);
             UpdateAction.execute(plan.request(), DatasetFactory.wrap(data));
             return HeadCasPolicy.check(data, RECEIPT, before);
         } finally { data.abort(); data.end(); data.close(); }
+    }
+
+    private static String multilingual(boolean replacement, boolean deleteOther, boolean duplicateLanguage) {
+        DatasetGraph data = DatasetFactory.createTxnMem().asDatasetGraph();
+        data.begin(org.apache.jena.query.ReadWrite.WRITE);
+        try {
+            String other = "urn:test:chinese-head";
+            UpdateAction.parseExecute("PREFIX rv: <" + RV + "> INSERT DATA { GRAPH " + iri(CommandPolicy.CURRENT)
+                + " { " + iri(MAIN) + " rv:head " + iri(OLD_MAIN) + " ; rv:selectionHead " + iri(other)
+                + (replacement ? ", " + iri(PRIOR) : "") + " } GRAPH " + iri(CommandPolicy.REVISIONS)
+                + " { " + iri(other) + " rv:language \"zh-CN\" . " + iri(PRIOR) + " rv:language \"en\" . } }",
+                DatasetFactory.wrap(data));
+            if (duplicateLanguage) UpdateAction.parseExecute("PREFIX rv: <" + RV + "> INSERT DATA { GRAPH "
+                + iri(CommandPolicy.CURRENT) + " { " + iri(MAIN) + " rv:selectionHead <urn:test:duplicate> } GRAPH "
+                + iri(CommandPolicy.REVISIONS) + " { <urn:test:duplicate> rv:language \"zh-cn\" } }", DatasetFactory.wrap(data));
+            String text = update(replacement, MAIN, NEW_MAIN, true).replace("rv:selectionHead ?prior } } }",
+                "rv:selectionHead ?prior . FILTER(?prior = " + iri(PRIOR) + ") } } }");
+            CommandPolicy.Plan plan = CommandPolicy.parse(text, RECEIPT);
+            HeadCasPolicy.Snapshot before = HeadCasPolicy.capture(data, plan, RECEIPT);
+            UpdateAction.execute(plan.request(), DatasetFactory.wrap(data));
+            if (deleteOther) data.delete(NodeFactory.createURI(CommandPolicy.CURRENT), NodeFactory.createURI(MAIN),
+                NodeFactory.createURI(RV + "selectionHead"), NodeFactory.createURI(other));
+            return HeadCasPolicy.check(data, RECEIPT, before);
+        } finally { data.abort(); data.end(); data.close(); }
+    }
+
+    @Test public void perLanguageCasPreservesOtherLanguagesAndRejectsAmbiguity() {
+        assertNull(multilingual(false, false, false));
+        assertNull(multilingual(true, false, false));
+        assertNotNull(multilingual(false, true, false));
+        assertEquals("Main language heads are ambiguous", multilingual(false, false, true));
     }
 
     @Test public void mainSelectionAdvancesBothHeadsWithExactPredecessors() {

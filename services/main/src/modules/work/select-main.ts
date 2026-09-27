@@ -1,3 +1,4 @@
+import { unerased } from './public-patterns.ts';
 import { CommandRejected, type CommandValidation } from '../../infrastructure/fuseki.ts';
 import { profileValidations } from '../../infrastructure/profile.ts';
 import { assertNotInvalidProfileReceipt, validatedCommand } from '../../infrastructure/invalid-receipt.ts';
@@ -6,6 +7,7 @@ import { readExactContributionDraft } from '../contribution/history.ts';
 import { PUBLICATION_PROFILE } from '../contribution/publish.ts';
 import { publicTitleProjection } from '../content-publication/projection-recipes.ts';
 import { readComponentState } from './history.ts';
+import { languagePrior, readMainLanguageHeads, MAIN_LANGUAGE_LIMIT } from './selection-heads.ts';
 import { DATASET, GRAPHS, ID, PROFILE, RV, hash, iri, lit, prepareComponent,
   prepareWorkComponent, workMetadataValidations, IdempotencyConflict, PendingActivation,
   type WorkActivationEnvironment } from './activate.ts';
@@ -150,7 +152,7 @@ async function sealTerminal(env: WorkActivationEnvironment, admission: Registere
   const event = `urn:rezics:event:${suffix}`;
   const staleGuard = reason && input ? `GRAPH ${iri(GRAPHS.current)} {
       ${iri(input.context.id)} a rv:MainVersion ; rv:work ${iri(input.work)} .
-      OPTIONAL { ${iri(input.context.id)} rv:selectionHead ?prior }
+      ${languagePrior(input.context.id, input.publicationDecision)}
       OPTIONAL { ${iri(input.contribution)} a rv:TextContribution ;
         rv:work ${iri(input.work)} ; rv:publicationHead ?published }
     }
@@ -215,7 +217,7 @@ async function validateCandidate(env: WorkActivationEnvironment, selection: stri
 
 /** Select one eligible exact text state for the common Main Version entry. */
 export async function selectMainDefault(env: WorkActivationEnvironment,
-  admission: RegisteredAdmission, input: SelectMainDefaultInput): Promise<MainSelectionReceipt> {
+  admission: RegisteredAdmission, input: SelectMainDefaultInput, attempt = 0): Promise<MainSelectionReceipt> {
   const digest = mainSelectionDigest(input);
   if (admission.action !== 'publication.select'
     || admission.scope !== `publication:select:${input.context.id}`
@@ -236,7 +238,7 @@ export async function selectMainDefault(env: WorkActivationEnvironment,
           rv:head ?mainHead ; rv:hostingPolicy rv:MetadataOnly .
         ${iri(input.contribution)} a rv:TextContribution ; rv:work ${iri(input.work)} ;
           rv:publicationHead ${iri(input.publicationDecision)} .
-        OPTIONAL { ${iri(input.context.id)} rv:selectionHead ?prior }
+        ${languagePrior(input.context.id, input.publicationDecision)}
       }
       GRAPH ${iri(GRAPHS.revisions)} {
         ${iri(input.publicationDecision)} a rv:PublicationDecision ;
@@ -247,7 +249,9 @@ export async function selectMainDefault(env: WorkActivationEnvironment,
           rv:modelRevision ${iri(PUBLICATION_PROFILE)} ;
           rv:shapeRevision ${iri(PUBLICATION_PROFILE)} .
       }
-    }`);
+      ${unerased(iri(input.work))}
+    FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.revisions)} { ?draft a rv:ErasedRevision } }
+  }`);
   const rows = current.results?.bindings ?? [];
   if (rows.length !== 1 || !rows[0]?.draft || !rows[0]?.language || !rows[0]?.manifest
     || !rows[0]?.mainHead || !rows[0]?.title
@@ -287,8 +291,14 @@ export async function selectMainDefault(env: WorkActivationEnvironment,
       language: exact.language, selectionBasis: input.selectionBasis,
       selectionMode: 'fixed', predecessor: input.expectedSelectionHead,
       matchUnit: unit }, MAIN_SELECTION_PROFILE);
+  const heads = await readMainLanguageHeads(env, input.context.id);
+  const defaultSelections = Object.fromEntries(heads.map(head => [head.language.toLowerCase(), head.selection]));
+  defaultSelections[exact.language.toLowerCase()] = selection;
+  if (Object.keys(defaultSelections).length > MAIN_LANGUAGE_LIMIT) {
+    throw new InvalidMainSelectionInput('Main language head limit exceeded');
+  }
   const mainState = { work: input.work, hostingPolicy: 'metadata-only',
-    defaultSelection: selection, predecessor: row.mainHead!.value };
+    defaultSelection: selection, defaultSelections, predecessor: row.mainHead!.value };
   const mainManifest = env.workObjects
     ? await prepareWorkComponent(env.workObjects, input.context.id, mainState)
     : prepareComponent(env.objectDirectory, input.context.id, mainState);
@@ -376,7 +386,7 @@ export async function selectMainDefault(env: WorkActivationEnvironment,
           rv:head ${iri(row.mainHead!.value)} ; rv:hostingPolicy rv:MetadataOnly .
         ${iri(input.contribution)} a rv:TextContribution ; rv:work ${iri(input.work)} ;
           rv:publicationHead ${iri(input.publicationDecision)} .
-        OPTIONAL { ${iri(input.context.id)} rv:selectionHead ?prior }
+        ${languagePrior(input.context.id, input.publicationDecision)}
       }
       GRAPH ${iri(GRAPHS.revisions)} {
         ${iri(row.mainHead!.value)} a rv:RevisionAnchor ;
@@ -386,17 +396,18 @@ export async function selectMainDefault(env: WorkActivationEnvironment,
           rv:rightsBasis rv:OriginalContribution ; rv:disclosure rv:Public .
         ${iri(exact.revision)} a rv:RevisionAnchor ; rv:component ${iri(input.contribution)} .
       }
-      OPTIONAL {
-        FILTER(BOUND(?prior))
-        GRAPH ${iri(GRAPHS.revisions)} { ?prior rv:matchUnit ?oldUnit }
+      ${input.expectedSelectionHead ? `OPTIONAL {
+        GRAPH ${iri(GRAPHS.revisions)} { ${iri(input.expectedSelectionHead)} rv:matchUnit ?oldUnit }
         GRAPH ${iri(PUBLIC_SEARCH_GRAPH)} {
           ?oldUnit a rv:MatchUnit ; rv:mainVersion ${iri(input.context.id)} ;
-            rv:selection ?prior .
+            rv:selection ${iri(input.expectedSelectionHead)} .
           ?oldUnit ?oldPredicate ?oldValue .
         }
-      }
+      }` : ''}
       FILTER(COALESCE(?prior, ${iri(NONE)}) = ${iri(input.expectedSelectionHead ?? NONE)})
       FILTER(!BOUND(?prior) || BOUND(?oldUnit))
+      ${unerased(iri(input.work))}
+      FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.revisions)} { ${iri(exact.revision)} a rv:ErasedRevision } }
       FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:restoreHold true } }
       FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} ?p ?o } }
       FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.revisions)} { ${iri(selection)} ?p ?o } }
@@ -415,5 +426,10 @@ export async function selectMainDefault(env: WorkActivationEnvironment,
   if (committed) return checkedMainSelectionReceipt(committed, admission, input, digest);
   const stale = await sealTerminal(env, admission, 'stale-head', input);
   if (stale) return checkedMainSelectionReceipt(stale, admission, input, digest);
+  // Another language can move the aggregate Main revision without making this
+  // language's expected head stale. Re-read and rebuild the complete manifest.
+  if (attempt < 3 && Date.parse(admission.expiresAt) > Date.now()) {
+    return selectMainDefault(env, admission, input, attempt + 1);
+  }
   throw new PendingActivation('Main selection guard did not match');
 }

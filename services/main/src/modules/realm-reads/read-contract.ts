@@ -11,6 +11,7 @@ export const realmHeader = t.Object({ profile: t.Literal('realm-read-v1'), id: r
       revision: t.String() })) }), { maxItems: 12 })),
   membership: t.Object({ count: t.Union([
     t.Object({ kind: t.Literal('unknown'), value: t.Null() }),
+    t.Object({ kind: t.Literal('exact'), value: t.Integer({ minimum: 0 }), revision: t.String() }),
     t.Object({ kind: t.Literal('estimated'), value: t.Integer({ minimum: 0 }) }),
   ]),
     publicMembers: t.Null() }),

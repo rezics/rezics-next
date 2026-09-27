@@ -28,6 +28,8 @@ export const communityRule = t.Object({ id: t.String({ pattern: '^[a-z0-9]+(?:-[
     revision: t.String({ pattern: '^[1-9][0-9]{0,18}$' }) }, { additionalProperties: false })) },
 { additionalProperties: false });
 export const memberCount = t.Union([
+  // Exact requests select disclosure policy; Access supplies the value at read time.
+  t.Object({ kind: t.Literal('exact'), value: t.Null() }, { additionalProperties: false }),
   t.Object({ kind: t.Literal('unknown'), value: t.Null() }, { additionalProperties: false }),
   t.Object({ kind: t.Literal('estimated'), value: t.Integer({ minimum: 0, maximum: 1_000_000_000 }) },
     { additionalProperties: false }),
@@ -35,6 +37,7 @@ export const memberCount = t.Union([
 export const publicProfile = t.Object({ name: localizedName, description: localizedDescription,
   iconSelection: t.Nullable(t.String({ pattern: '^[0-9a-f-]{36}$' })),
   bannerSelection: t.Nullable(t.String({ pattern: '^[0-9a-f-]{36}$' })),
+  replyPolicy: t.Optional(t.Union([t.Literal('moderated'), t.Literal('members-direct')])),
   rules: t.Array(communityRule, { maxItems: MAX_RULES }), count: memberCount,
   moderators: t.Array(readId, { maxItems: MAX_MODERATORS }) }, { additionalProperties: false });
 

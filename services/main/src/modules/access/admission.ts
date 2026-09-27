@@ -1,3 +1,4 @@
+import { RealmDirectoryIndex } from '../realm-directory/index.ts';
 import { createHash } from 'node:crypto';
 import { receiptFamilyFor } from './receipt-families.ts';
 import { Pool, type PoolClient } from 'pg';
@@ -244,7 +245,25 @@ export async function releaseAccessRecoveryFence(pool: Pool, generation: string)
 }
 
 export class AccessAdmissionRegistry {
-  constructor(private readonly pool: Pool, private readonly titleAdmissionKey = Bun.env.FUSEKI_TITLE_ADMISSION_KEY) {}
+  readonly realmDirectory: RealmDirectoryIndex;
+  constructor(private readonly pool: Pool, private readonly titleAdmissionKey = Bun.env.FUSEKI_TITLE_ADMISSION_KEY) {
+    this.realmDirectory = new RealmDirectoryIndex(pool);
+  }
+
+  async hasRealmMemberAdmission(id: string): Promise<boolean> {
+    return (await this.pool.query(`SELECT 1 FROM access.baseline_admission
+      WHERE admission_id = $1 AND realm_membership IS NOT NULL`, [id])).rowCount === 1;
+  }
+
+  async publicRealmCount(realm: string): Promise<{ kind: 'exact'; value: number; revision: string }> {
+    const row = (await this.pool.query<{ value: string; revision: string }>(`
+      SELECT c.value, c.revision FROM access.recovery_fence f
+      LEFT JOIN access.realm_member_count c ON c.realm = $1 WHERE f.id AND f.open`, [realm])).rows[0];
+    if (!row) throw new AdmissionUnavailable('Realm count recovery is held');
+    const value = Number(row?.value ?? '0');
+    if (!Number.isSafeInteger(value) || value < 0) throw new AdmissionUnavailable('Realm count is unavailable');
+    return { kind: 'exact', value, revision: row?.revision ?? '0' };
+  }
 
   private baselineGraph?: Pick<FusekiClient, 'query'>;
 

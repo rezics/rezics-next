@@ -26,7 +26,7 @@ test('Realm directory cursor binds search, order, language and graph position', 
   expect(() => decodeReadCursor(cursor, ['realm-directory-v1', 'members', 'other', 'zh-CN'],
     position)).toThrow(WorkReadInvalid);
   expect(() => decodeReadCursor(cursor, binding, { ...position, sequence: '18' })).toThrow(WorkReadMoved);
-  expect(REALM_DIRECTORY_COST.candidateRows).toBe(128);
+  expect(REALM_DIRECTORY_COST.sourceBatch).toBe(32);
 });
 
 test('Realm directory is a public typed Main route', () => {
@@ -35,7 +35,7 @@ test('Realm directory is a public typed Main route', () => {
     const page = await client.v1.realms.get({ query: { sort: 'members', q: '阅读',
       language: 'zh-CN', limit: 5 } });
     const name: string | undefined = page.data?.items[0]?.name.value;
-    const countKind: 'unknown' | 'estimated' | undefined = page.data?.items[0]?.membership.count.kind;
+    const countKind: 'unknown' | 'estimated' | 'exact' | undefined = page.data?.items[0]?.membership.count.kind;
     return { name, countKind };
   };
   expect(typedRead).toBeFunction();

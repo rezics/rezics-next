@@ -1,3 +1,5 @@
+import { mainSearchMatches } from './selection-search.ts';
+import { fallbackLanguage, realmLanguage } from './selection-heads.ts';
 import { DATASET, GRAPHS, RV, iri, lit, PUBLIC_SEARCH_ANCHOR,
   type WorkActivationEnvironment } from './activate.ts';
 import { assertGraphAdmissionOpen } from './restore-lineage.ts';
@@ -112,13 +114,11 @@ export async function queryPublicMainPhrase(env: WorkActivationEnvironment,
   });
   const unique = new Set(matches.map(match => match.matchUnit));
   if (unique.size !== matches.length) throw new PublicQueryUnavailable('public query has duplicate units');
-  matches.sort((left, right) => right.score - left.score
-    || left.mainVersion.localeCompare(right.mainVersion)
-    || left.matchUnit.localeCompare(right.matchUnit));
+  const results = mainSearchMatches(matches);
   return { contractVersion: '1', resultGrain: 'mainVersion' as const,
     context: 'main-version-default' as const, complete: true as const, population: index.population,
     indexGeneration: index.generation,
-    total: matches.length, results: matches,
+    total: results.length, results,
     sourcePosition: { datasetId: 'product' as const,
       dataEpoch: rows[0].epoch.value, sequence: rows[0].sequence.value } };
 }
@@ -173,11 +173,14 @@ export async function queryPublicRealmPhrase(env: WorkActivationEnvironment,
         GRAPH ${iri(GRAPHS.current)} {
           ?work a schema:CreativeWork ; rv:mainVersion ?main .
           ?main a rv:MainVersion ; rv:work ?work .
-          OPTIONAL { ?slot a rv:RealmPublicationSlot ; rv:realm ${iri(realm)} ;
-            rv:mainVersion ?main ; rv:selectionHead ?local }
-          OPTIONAL { ?main rv:selectionHead ?fallback }
           ${input.author ? `?contribution a rv:TextContribution ; rv:author ${iri(input.author)} .` : ''}
         }
+        OPTIONAL { GRAPH ${iri(GRAPHS.current)} {
+          ?slot a rv:RealmPublicationSlot ; rv:realm ${iri(realm)} ;
+            rv:mainVersion ?main ; rv:selectionHead ?local . }
+          ${realmLanguage('?local', '?language')} }
+        OPTIONAL { GRAPH ${iri(GRAPHS.current)} { ?main rv:selectionHead ?fallback }
+          ${fallbackLanguage('?fallback', '?language')} }
         BIND(COALESCE(?local, ?fallback) AS ?effectiveSelection)
         BIND(IF(BOUND(?local), ${iri(realm)}, ?main) AS ?effectiveContext)
         BIND(IF(BOUND(?local), "realm-adoption", "main-fallback") AS ?reason)
@@ -228,12 +231,10 @@ export async function queryPublicRealmPhrase(env: WorkActivationEnvironment,
   if (unique.size !== matches.length || (matches.length === 0 && rows.length !== 1)) {
     throw new PublicQueryUnavailable('Realm query has ambiguous results');
   }
-  matches.sort((left, right) => right.score - left.score
-    || left.mainVersion.localeCompare(right.mainVersion)
-    || left.matchUnit.localeCompare(right.matchUnit));
+  const results = mainSearchMatches(matches);
   return { contractVersion: '1', resultGrain: 'mainVersion' as const,
     context: { kind: 'realm-local' as const, id: realm },
-    complete: true as const, population: index.population, total: matches.length, results: matches,
+    complete: true as const, population: index.population, total: results.length, results,
     indexGeneration: index.generation,
     sourcePosition: { datasetId: 'product' as const,
       dataEpoch: rows[0].epoch.value, sequence: rows[0].sequence.value } };

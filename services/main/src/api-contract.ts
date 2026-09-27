@@ -65,6 +65,7 @@ export const exactMainRevision = t.Object({
   revision: t.String(), mainVersion: t.String(), work: t.String(),
   predecessor: t.Optional(t.String()), operation: t.String(),
   hostingPolicy: t.Literal('metadata-only'), defaultSelection: t.Nullable(t.String()),
+  defaultSelections: t.Record(t.String(), t.String()),
   sourcePosition,
 });
 

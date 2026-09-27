@@ -1,3 +1,5 @@
+import { chooseMainLanguage, readMainLanguageHeads } from './selection-heads.ts';
+import { unerased } from './public-patterns.ts';
 import { createHash, randomUUID } from 'node:crypto';
 import type { Pool } from 'pg';
 import { readExactContributionDraft } from '../contribution/history.ts';
@@ -247,9 +249,11 @@ export class ReaderVariantPreferenceStore {
 }
 
 export async function readMainDefaultVariant(env: WorkActivationEnvironment,
-  mainVersion: string): Promise<{ work: string; selection: string;
+  mainVersion: string, language?: string): Promise<{ work: string; selection: string;
   variant: NativeVariant; body: string }> {
   checkedMain(mainVersion);
+  const selected = chooseMainLanguage(await readMainLanguageHeads(env, mainVersion, true), language);
+  if (!selected) throw new NativeVariantUnavailable('Main Version language is unavailable');
   const query = `PREFIX rv: <${RV}> SELECT
     ?work ?selection ?contribution ?decision ?draft ?language ?author ?body WHERE {
     GRAPH ${iri(GRAPHS.current)} {
@@ -270,6 +274,9 @@ export async function readMainDefaultVariant(env: WorkActivationEnvironment,
         rv:mainVersion ${iri(mainVersion)} ; rv:disclosure rv:Public ;
         rv:language ?language ; rv:searchBody ?body .
     }
+    FILTER(?selection = ${iri(selected.selection)})
+    FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.revisions)} { ?draft a rv:ErasedRevision } }
+    ${unerased('?work')}
   }`;
   const result = await env.fuseki.query(query);
   const rows = result.results?.bindings ?? [];

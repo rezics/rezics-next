@@ -1,3 +1,4 @@
+import { realmMemberProof } from '../realm-reply/member-policy.ts';
 import type { PoolClient } from 'pg';
 import type { FusekiClient } from '../../infrastructure/fuseki.ts';
 import { GRAPHS, iri } from '../work/activate.ts';
@@ -29,11 +30,12 @@ export interface BaselineProof {
   related_work: string | null;
   source_revision: string | null;
   maintainer_generation: string | null;
+  realm_membership?: string | null;
 }
 
 export type BaselineTarget = { kind: 'root' }
   | { kind: 'work' | 'collection' | 'contribution' | 'rating' | 'personal' | 'comment'
-    | 'maintainer' | 'reply' | 'reply-draft'; id: string };
+    | 'maintainer' | 'reply' | 'reply-draft' | 'realm-reply'; id: string };
 
 /** Closed permission vocabulary. In particular, a public Realm does not gain
  * a baseline policy, and translation authorization is not translation proposal. */
@@ -45,6 +47,7 @@ export function baselineTarget(action: string, scope: string): BaselineTarget | 
     'translation.link': { prefix: 'translation:link:', kind: 'work' },
     'content.comment': { prefix: 'content:comment:', kind: 'comment' },
     'publication.select': { prefix: 'publication:select:', kind: 'maintainer' },
+    'reply.place': { prefix: 'reply:place:', kind: 'realm-reply' },
     'reply.create': { prefix: 'reply:create:', kind: 'reply' },
     'content.draft': { prefix: 'content:draft:', kind: 'reply-draft' },
     'collection.edit': { prefix: 'collection:edit:', kind: 'collection' },
@@ -93,6 +96,13 @@ export async function baselineTargetAllowed(client: PoolClient, graph: Pick<Fuse
   if (target.kind === 'root') return true;
   if (target.kind === 'personal') return target.id === actingSubject;
   if (!graph) return false;
+  if (target.kind === 'realm-reply') {
+    if (!await realmMemberProof(client, target.id, principalId, actingSubject)) return false;
+    return (await graph.query(`PREFIX rv: <https://rezics.com/vocab/> ASK {
+      GRAPH ${iri(GRAPHS.current)} { ${iri(target.id)} a rv:Realm ; rv:realmState rv:Active ;
+        rv:space ?space . ?space rv:realmCapability ${iri(target.id)} ; rv:disclosure rv:Public }
+    }`, 1024)).boolean === true;
+  }
   if (target.kind === 'maintainer') {
     if (!relatedWork || !native.test(relatedWork)
       || await maintainerGeneration(client, target.id, relatedWork, actingSubject) === null) return false;
@@ -173,7 +183,9 @@ export async function newBaselineProof(client: PoolClient, graph: Pick<FusekiCli
   if (!proof || !await baselineTargetAllowed(client, graph, principalId, request.actingSubject,
     target, request.baselineCollectionCreate === true, request.baselineRelatedWork ?? null,
     request.baselineSourceRevision ?? null)) return null;
-  return { ...proof, collection_create: request.baselineCollectionCreate === true,
+  return { ...proof, realm_membership: target.kind === 'realm-reply'
+    ? await realmMemberProof(client, target.id, principalId, request.actingSubject) : null,
+    collection_create: request.baselineCollectionCreate === true,
     related_work: request.baselineRelatedWork ?? null, source_revision: request.baselineSourceRevision ?? null,
     maintainer_generation: target.kind === 'maintainer'
       ? await maintainerGeneration(client, target.id, request.baselineRelatedWork!, request.actingSubject) : null };
@@ -199,6 +211,9 @@ export async function baselineProofCurrent(client: PoolClient, graph: Pick<Fusek
   if (target.kind === 'maintainer' && (!saved.related_work
     || saved.maintainer_generation !== await maintainerGeneration(client, target.id,
       saved.related_work, admission.acting_subject))) return false;
+  if (target.kind === 'realm-reply' && (!saved.realm_membership
+    || saved.realm_membership !== await realmMemberProof(client, target.id, admission.principal_id,
+      admission.acting_subject))) return false;
   return baselineTargetAllowed(client, graph, admission.principal_id, admission.acting_subject,
     target, saved.collection_create, saved.related_work, saved.source_revision);
 }
@@ -206,9 +221,9 @@ export async function baselineProofCurrent(client: PoolClient, graph: Pick<Fusek
 export async function saveBaselineProof(client: PoolClient, admissionId: string, proof: BaselineProof) {
   await client.query(`INSERT INTO access.baseline_admission (admission_id, policy_id, policy_generation,
     provision_id, representation_id, representation_generation, subject_generation, principal_epoch,
-    collection_create, related_work, source_revision, maintainer_generation)
-    VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`, [admissionId, BASELINE_MEMBER_POLICY,
+    collection_create, related_work, source_revision, maintainer_generation, realm_membership)
+    VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`, [admissionId, BASELINE_MEMBER_POLICY,
     proof.policy_generation, proof.provision_id, proof.representation_id, proof.representation_generation,
     proof.subject_generation, proof.principal_epoch, proof.collection_create, proof.related_work,
-    proof.source_revision, proof.maintainer_generation]);
+    proof.source_revision, proof.maintainer_generation, proof.realm_membership ?? null]);
 }

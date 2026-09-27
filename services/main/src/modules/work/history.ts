@@ -33,6 +33,7 @@ export interface ExactMainRevision {
   operation: string;
   hostingPolicy: 'metadata-only';
   defaultSelection: string | null;
+  defaultSelections: Record<string, string>;
   sourcePosition: { datasetId: 'product'; dataEpoch: string; sequence: string };
 }
 
@@ -40,6 +41,7 @@ export interface MainPayload {
   work: string;
   hostingPolicy: 'metadata-only';
   defaultSelection: string | null;
+  defaultSelections: Record<string, string>;
   predecessor: string | null;
 }
 
@@ -210,7 +212,30 @@ export async function readMainPayloadForRevision(
     || (defaultSelection === null) !== (predecessor === null)) {
     throw new RevisionCorrupt('payload does not match MainVersion profile');
   }
-  return { work, hostingPolicy: 'metadata-only', defaultSelection, predecessor };
+  let defaultSelections: Record<string, string> = {};
+  if (state.defaultSelections !== undefined) {
+    if (!state.defaultSelections || typeof state.defaultSelections !== 'object'
+      || Array.isArray(state.defaultSelections)) throw new RevisionCorrupt('Main language map is invalid');
+    const entries = Object.entries(state.defaultSelections);
+    if ((defaultSelection === null && entries.length !== 0) || entries.length > 64 || entries.some(([language, selection]) =>
+      !/^[a-z]{2,3}(?:-[a-z0-9]{2,8})*$/.test(language)
+      || typeof selection !== 'string' || !native.test(selection))
+      || (defaultSelection !== null && !entries.some(([, selection]) => selection === defaultSelection))) {
+      throw new RevisionCorrupt('Main language map is invalid');
+    }
+    defaultSelections = Object.fromEntries(entries) as Record<string, string>;
+  } else if (defaultSelection) {
+    // Migrate the view of retained singleton manifests without changing their bytes.
+    const rows = (await env.fuseki.query(`PREFIX rv: <https://rezics.com/vocab/> SELECT ?language WHERE {
+      GRAPH ${iri(GRAPHS.revisions)} { ${iri(defaultSelection)} rv:mainVersion ${iri(mainVersion)} ;
+        rv:language ?language } } LIMIT 2`)).results?.bindings ?? [];
+    if (rows.length !== 1 || !rows[0]?.language
+      || !/^[a-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$/.test(rows[0].language.value)) {
+      throw new RevisionCorrupt('Legacy Main language is absent');
+    }
+    defaultSelections[rows[0].language.value.toLowerCase()] = defaultSelection;
+  }
+  return { work, hostingPolicy: 'metadata-only', defaultSelection, defaultSelections, predecessor };
 }
 
 /** Retained MainVersion revision under current Work disclosure. */
@@ -256,7 +281,7 @@ export async function readExactMainRevision(
   }
   return { revision, mainVersion, work, ...(predecessor ? { predecessor } : {}),
     operation: row.operation.value, hostingPolicy: payload.hostingPolicy,
-    defaultSelection: payload.defaultSelection,
+    defaultSelection: payload.defaultSelection, defaultSelections: payload.defaultSelections,
     sourcePosition: { datasetId: 'product', dataEpoch: row.epoch.value,
       sequence: row.sequence.value } };
 }

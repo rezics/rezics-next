@@ -1,3 +1,4 @@
+import { languagePrior, readMainLanguageHeads } from './selection-heads.ts';
 import { DAILY_CONTEXT_ID, DAILY_CONTEXT_PROFILE, DAILY_OBSERVATION_ID, DAILY_OBSERVATION_PROFILE,
   DAILY_CADENCE, ISO_CALENDAR, canonicalRatingTimeZone, dailyRatingSlotIri,
   retainedRatingPeriod, periodTriples, periodBinding } from '../rating/calendar.ts';
@@ -2893,6 +2894,21 @@ export async function reconcileRetainedMainSelection(
     throw new RetainedEffectConflict('retained Main Version payload differs');
   }
   iri(mainPredecessor);
+  const languageMap = mainState.defaultSelections;
+  if (languageMap !== undefined && (!languageMap || typeof languageMap !== 'object'
+    || Array.isArray(languageMap)
+    || (languageMap as Record<string, unknown>)[language.toLowerCase()] !== selection)) {
+    throw new RetainedEffectConflict('retained Main language map differs');
+  }
+  if (languageMap && !await readMainSelectionReceipt(env, receipt.admissionId)) {
+    const expected = Object.fromEntries((await readMainLanguageHeads(env, main))
+      .map(head => [head.language.toLowerCase(), head.selection]));
+    expected[language.toLowerCase()] = selection;
+    const normalized = (value: object) => JSON.stringify(Object.entries(value).sort(([a], [b]) => a.localeCompare(b)));
+    if (normalized(languageMap) !== normalized(expected)) {
+      throw new RetainedEffectConflict('retained Main language map loses another head');
+    }
+  }
   const exact = await readExactContributionDraft(env, contribution, draft, async () => true);
   if (exact.work !== work || exact.language !== language) {
     throw new RetainedEffectConflict('retained Main selected draft differs');
@@ -3013,7 +3029,7 @@ export async function reconcileRetainedMainSelection(
             rv:head ${iri(mainPredecessor)} ; rv:hostingPolicy rv:MetadataOnly .
           ${iri(contribution)} a rv:TextContribution ; rv:work ${iri(work)} ;
             rv:publicationHead ${iri(decision)} .
-          OPTIONAL { ${iri(main)} rv:selectionHead ?prior }
+          ${languageMap ? languagePrior(main, decision) : `OPTIONAL { ${iri(main)} rv:selectionHead ?prior }`}
         }
         GRAPH ${iri(GRAPHS.revisions)} {
           ${iri(mainPredecessor)} a rv:RevisionAnchor ; rv:component ${iri(main)} .
@@ -3022,14 +3038,13 @@ export async function reconcileRetainedMainSelection(
             rv:disclosure rv:Public .
           ${iri(draft)} a rv:RevisionAnchor ; rv:component ${iri(contribution)} .
         }
-        OPTIONAL {
-          FILTER(BOUND(?prior))
-          GRAPH ${iri(GRAPHS.revisions)} { ?prior rv:matchUnit ?oldUnit }
+        ${predecessor ? `OPTIONAL {
+          GRAPH ${iri(GRAPHS.revisions)} { ${iri(predecessor)} rv:matchUnit ?oldUnit }
           GRAPH ${iri(PUBLIC_SEARCH_GRAPH)} {
-            ?oldUnit a rv:MatchUnit ; rv:mainVersion ${iri(main)} ; rv:selection ?prior .
+            ?oldUnit a rv:MatchUnit ; rv:mainVersion ${iri(main)} ; rv:selection ${iri(predecessor)} .
             ?oldUnit ?oldPredicate ?oldValue .
           }
-        }
+        }` : ''}
         FILTER(COALESCE(?prior, ${iri('urn:rezics:none')}) = ${iri(predecessor ?? 'urn:rezics:none')})
         FILTER(!BOUND(?prior) || BOUND(?oldUnit))
         FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt.id)} ?p ?o } }

@@ -1,3 +1,4 @@
+import { chooseMainLanguage, readMainLanguageHeads } from '../modules/work/selection-heads.ts';
 import { Elysia, t } from 'elysia';
 import { ObjectIntegrityError, ObjectUnavailable } from '../infrastructure/immutable-objects.ts';
 import { readRealmMediaSet, RealmMediaUnavailable } from '../modules/content-publication/realm-media.ts';
@@ -8,7 +9,7 @@ import { rejectAdmittedOrganizationPublication }
 import { organizationRejectionBody, organizationRejectionResult }
   from '../modules/work/organization-rejection-schemas.ts';
 import { assertGraphAdmissionOpen } from '../modules/work/restore-lineage.ts';
-import { iri } from '../modules/work/activate.ts';
+import { iri, lit } from '../modules/work/activate.ts';
 import { selectAdmittedMainDefault } from '../modules/work/select-main-admitted.ts';
 import { selectAdmittedRealmLocal } from '../modules/work/select-realm-admitted.ts';
 import { rejectAdmittedRealmLocal } from '../modules/work/reject-realm-admitted.ts';
@@ -202,15 +203,17 @@ export function publicationRoutes(fuseki: FusekiClient, work: MainWorkDependenci
       } catch (error) { return commandError(error); }
     })
     .get('/v1/realms/:realm/main-versions/:mainVersion/selection', {
+      query: t.Object({ language: t.Optional(t.String({ pattern: '^[a-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$' })) }),
       params: t.Object({ realm: t.String({ pattern: '^[0-9a-f-]{36}$' }),
         mainVersion: t.String({ pattern: '^[0-9a-f-]{36}$' }) }),
       response: { 200: realmSelectionReadResult, ...readProblems },
-    }, async ({ params }) => {
+    }, async ({ params, query }) => {
       try {
         await assertGraphAdmissionOpen(fuseki, work.environment.lineage);
         const realm = `https://rezics.com/id/${params.realm}`;
         const main = `https://rezics.com/id/${params.mainVersion}`;
         const slot = realmSelectionSlotIri(realm, main);
+        const fallback = chooseMainLanguage(await readMainLanguageHeads(work.environment, main, true), query.language);
         const result = await fuseki.query(`PREFIX rv: <https://rezics.com/vocab/>
           SELECT ?work ?selection ?contribution ?draft ?language ?body ?reason
             ?mediaVariant ?mediaDecision ?mediaRevision ?mediaDigest ?mediaProof
@@ -221,8 +224,11 @@ export function publicationRoutes(fuseki: FusekiClient, work: MainWorkDependenci
                 rv:selectionPolicy ${iri(SELECTION_POLICY)} ; rv:reviewPolicy ${iri(REVIEW_POLICY)} .
               ${iri(main)} a rv:MainVersion ; rv:work ?work .
               OPTIONAL { ${iri(slot)} a rv:RealmPublicationSlot ; rv:realm ${iri(realm)} ;
-                rv:mainVersion ${iri(main)} ; rv:selectionHead ?local }
-              OPTIONAL { ${iri(main)} rv:selectionHead ?fallback }
+                rv:mainVersion ${iri(main)} ; rv:selectionHead ?local .
+                ${query.language ? `FILTER EXISTS { GRAPH <urn:rezics:graph:revisions> {
+                  { ?local a rv:RealmPublicationRejection } UNION { ?local rv:language ?localLanguage .
+                    FILTER(LCASE(STR(?localLanguage)) = ${lit(query.language.toLowerCase())}) } } }` : ''} }
+              OPTIONAL { ${iri(main)} rv:selectionHead ?fallback . FILTER(?fallback = ${iri(fallback?.selection ?? 'urn:rezics:none')}) }
             }
             BIND(COALESCE(?local, ?fallback) AS ?selection)
             BIND(IF(BOUND(?local), ${iri(realm)}, ${iri(main)}) AS ?effectiveContext)
@@ -433,10 +439,11 @@ export function publicationRoutes(fuseki: FusekiClient, work: MainWorkDependenci
       } catch (error) { return commandError(error); }
     })
     .get('/v1/me/main-versions/:mainVersion/selection', {
+      query: t.Object({ language: t.Optional(t.String({ pattern: '^[a-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$' })) }),
       params: t.Object({ mainVersion: t.String({ pattern: '^[0-9a-f-]{36}$' }) }),
       response: { 200: nativeVariantSelection, ...authorizedReadProblems,
         422: problemResult(422) },
-    }, async ({ params, request }) => {
+    }, async ({ params, request, query }) => {
       try {
         await assertGraphAdmissionOpen(fuseki, work.environment.lineage);
         if (!work.readerPreferences) {
@@ -450,7 +457,7 @@ export function publicationRoutes(fuseki: FusekiClient, work: MainWorkDependenci
         if (preference) {
           const preferred = await readEligibleNativeVariant(work.environment,
             mainVersion, preference.contribution);
-          if (preferred) {
+          if (preferred && (!query.language || preferred.variant.language.toLowerCase() === query.language.toLowerCase())) {
             return Response.json({ profile: 'reader-native-variant-selection-v1',
               work: preferred.work, mainVersion, mainSelection: null,
               reason: 'personal-preference', preference,
@@ -458,7 +465,7 @@ export function publicationRoutes(fuseki: FusekiClient, work: MainWorkDependenci
             { headers: { 'cache-control': 'no-store' } });
           }
         }
-        const fallback = await readMainDefaultVariant(work.environment, mainVersion);
+        const fallback = await readMainDefaultVariant(work.environment, mainVersion, query.language);
         return Response.json({ profile: 'reader-native-variant-selection-v1',
           work: fallback.work, mainVersion, mainSelection: fallback.selection,
           reason: preference ? 'preferred-ineligible' : 'main-default', preference,
@@ -498,12 +505,10 @@ export function publicationRoutes(fuseki: FusekiClient, work: MainWorkDependenci
           const decision = await readRealmVariantDecision(work.environment, realm, mainVersion);
           if (decision.kind !== 'none') return false;
           if (body.contribution === null) return true;
-          const [fallback, candidate] = await Promise.all([
-            readMainDefaultVariant(work.environment, mainVersion),
-            readEligibleNativeVariant(work.environment, mainVersion, body.contribution),
-          ]);
-          return !!candidate && candidate.work === decision.work
-            && candidate.variant.language === fallback.variant.language;
+          const candidate = await readEligibleNativeVariant(work.environment, mainVersion, body.contribution);
+          if (!candidate || candidate.work !== decision.work) return false;
+          const fallback = await readMainDefaultVariant(work.environment, mainVersion, candidate.variant.language);
+          return candidate.variant.language === fallback.variant.language;
         };
         const result = await work.realmRecommendations.set(principal, input, eligible);
         return Response.json({ realm, mainVersion, ...result }, {
@@ -512,11 +517,12 @@ export function publicationRoutes(fuseki: FusekiClient, work: MainWorkDependenci
       } catch (error) { return commandError(error); }
     })
     .get('/v1/me/realms/:realm/main-versions/:mainVersion/selection', {
+      query: t.Object({ language: t.Optional(t.String({ pattern: '^[a-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$' })) }),
       params: t.Object({ realm: t.String({ pattern: '^[0-9a-f-]{36}$' }),
         mainVersion: t.String({ pattern: '^[0-9a-f-]{36}$' }) }),
       response: { 200: realmNativeVariantSelection, ...authorizedReadProblems,
         422: problemResult(422) },
-    }, async ({ params, request }) => {
+    }, async ({ params, request, query }) => {
       try {
         await assertGraphAdmissionOpen(fuseki, work.environment.lineage);
         if (!work.readerPreferences || !work.realmRecommendations) {
@@ -531,7 +537,8 @@ export function publicationRoutes(fuseki: FusekiClient, work: MainWorkDependenci
         const profile = 'reader-realm-native-variant-selection-v1';
         const ensureNoRealmDecision = async () => {
           const current = await readRealmVariantDecision(work.environment, realm, mainVersion);
-          if (current.kind !== 'none' || current.work !== decision.work) {
+          if (current.kind !== decision.kind || current.selection !== decision.selection
+            || current.work !== decision.work) {
             throw new NativeVariantUnavailable('Realm decision changed during reader selection');
           }
         };
@@ -547,15 +554,17 @@ export function publicationRoutes(fuseki: FusekiClient, work: MainWorkDependenci
         if (decision.kind === 'adopted') {
           const chosen = await readRealmAdoptedVariant(work.environment, realm, mainVersion,
             decision.work, decision.selection!);
-          return Response.json({ profile, status: 'selected', work: decision.work,
+          if (!query.language || chosen.language.toLowerCase() === query.language.toLowerCase()) {
+            return Response.json({ profile, status: 'selected', work: decision.work,
             mainVersion, realm, mainSelection: null, realmSelection: decision.selection,
             reason: 'realm-adoption', preference, recommendation, chosen },
           { headers: { 'cache-control': 'no-store' } });
+          }
         }
         if (preference) {
           const preferred = await readEligibleNativeVariant(work.environment,
             mainVersion, preference.contribution);
-          if (preferred) {
+          if (preferred && (!query.language || preferred.variant.language.toLowerCase() === query.language.toLowerCase())) {
             await ensureNoRealmDecision();
             return Response.json({ profile, status: 'selected', work: preferred.work,
               mainVersion, realm, mainSelection: null, realmSelection: null,
@@ -564,7 +573,7 @@ export function publicationRoutes(fuseki: FusekiClient, work: MainWorkDependenci
             { headers: { 'cache-control': 'no-store' } });
           }
         }
-        const fallback = await readMainDefaultVariant(work.environment, mainVersion);
+        const fallback = await readMainDefaultVariant(work.environment, mainVersion, query.language);
         if (recommendation) {
           const recommended = await readEligibleNativeVariant(work.environment,
             mainVersion, recommendation.contribution);
@@ -588,38 +597,18 @@ export function publicationRoutes(fuseki: FusekiClient, work: MainWorkDependenci
       } catch (error) { return commandError(error); }
     })
     .get('/v1/main-versions/:mainVersion/selection', {
+      query: t.Object({ language: t.Optional(t.String({ pattern: '^[a-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$' })) }),
       params: t.Object({ mainVersion: t.String({ pattern: '^[0-9a-f-]{36}$' }) }),
       response: { 200: mainSelectionReadResult, ...readProblems },
-    }, async ({ params }) => {
+    }, async ({ params, query }) => {
       try {
         await assertGraphAdmissionOpen(fuseki, work.environment.lineage);
         const main = `https://rezics.com/id/${params.mainVersion}`;
-        const result = await fuseki.query(`PREFIX rv: <https://rezics.com/vocab/>
-          SELECT ?work ?selection ?contribution ?draft ?language ?body WHERE {
-            GRAPH <urn:rezics:graph:current> {
-              ${iri(main)} a rv:MainVersion ; rv:work ?work ; rv:selectionHead ?selection .
-            }
-            GRAPH <urn:rezics:graph:revisions> {
-              ?selection a rv:PublicationSelection ; rv:component ${iri(main)} ;
-                rv:contribution ?contribution ; rv:selectedDraft ?draft ; rv:matchUnit ?unit .
-            }
-            GRAPH ${iri(PUBLIC_SEARCH_GRAPH)} {
-              ?unit a rv:MatchUnit ; rv:selection ?selection ;
-                rv:mainVersion ${iri(main)} ; rv:disclosure rv:Public ;
-                rv:language ?language ; rv:searchBody ?body .
-            }
-          }`);
-        const rows = result.results?.bindings ?? [];
-        if (rows.length !== 1 || !rows[0]?.work || !rows[0]?.selection
-          || !rows[0]?.contribution || !rows[0]?.draft || !rows[0]?.language
-          || !rows[0]?.body) {
-          return problem(404, 'selection_unavailable', 'Main Version selection is unavailable');
-        }
-        const row = rows[0]!;
-        return Response.json({ work: row.work!.value, mainVersion: main,
-          selection: row.selection!.value, contribution: row.contribution!.value,
-          selectedDraft: row.draft!.value, language: row.language!.value,
-          body: row.body!.value }, { headers: { 'cache-control': 'no-store' } });
+        const selected = await readMainDefaultVariant(work.environment, main, query.language);
+        return Response.json({ work: selected.work, mainVersion: main,
+          selection: selected.selection, contribution: selected.variant.contribution,
+          selectedDraft: selected.variant.selectedDraft, language: selected.variant.language,
+          body: selected.body }, { headers: { 'cache-control': 'no-store' } });
       } catch (error) { return commandError(error); }
     });
 }

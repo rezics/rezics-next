@@ -1,3 +1,4 @@
+import { chooseMainLanguage, readMainLanguageHeads } from './selection-heads.ts';
 import type { Static } from 'typebox';
 import { iri, GRAPHS, WORK_SEMANTIC_TYPES } from './activate.ts';
 import { workCard } from './read-contract.ts';
@@ -9,14 +10,12 @@ export interface WorkBasis { card: WorkCard; mainRevision: string; selectedLangu
   metadataRevision: string | null; disclosure: 'public' | 'restricted' }
 
 export async function readWorkBasis(session: WorkReadSession, work: string): Promise<WorkBasis> {
-  const rows = await session.query(`SELECT ?head ?main ?mainHead ?metadataHead ?type ?language ?public WHERE {
+  const rows = await session.query(`SELECT ?head ?main ?mainHead ?metadataHead ?type ?public WHERE {
     GRAPH ${iri(GRAPHS.current)} {
       ${iri(work)} a schema:CreativeWork ; rv:head ?head ; rv:mainVersion ?main .
       ?main a rv:MainVersion ; rv:work ${iri(work)} ; rv:head ?mainHead .
       OPTIONAL { ${iri(work)} rv:descriptiveMetadataHead ?metadataHead }
       OPTIONAL { ${iri(work)} a ?type . VALUES ?type { ${WORK_SEMANTIC_TYPES.map(type => `<${type}>`).join(' ')} } }
-      OPTIONAL { ?main rv:selectionHead ?selection .
-        GRAPH ${iri(GRAPHS.revisions)} { ?selection rv:language ?language } }
     }
     ${unerased(iri(work))}
     BIND(EXISTS { ${publicWork(iri(work), '?main')} } AS ?public)
@@ -24,7 +23,7 @@ export async function readWorkBasis(session: WorkReadSession, work: string): Pro
   const row = rows[0];
   if (!row) throw new WorkReadMissing('Work is unavailable');
   if (!row.head || !row.main || !row.mainHead || !row.public
-    || ['head', 'main', 'mainHead', 'metadataHead', 'public', 'language'].some(key =>
+    || ['head', 'main', 'mainHead', 'metadataHead', 'public'].some(key =>
       new Set(rows.map(item => item[key]?.value)).size !== 1)) {
     throw new WorkReadUnavailable('Work basis is ambiguous');
   }
@@ -33,12 +32,14 @@ export async function readWorkBasis(session: WorkReadSession, work: string): Pro
     || !await session.deps.access.canReadWork(session.principal, session.options.actingSubject, work))) {
     throw new WorkReadMissing('Work is unavailable');
   }
+  const selected = isPublic ? chooseMainLanguage(await readMainLanguageHeads(session.deps.environment,
+    row.main.value, true), session.options.language) : null;
   const summary = (await session.summaries([work]))[0];
   if (summary?.status !== 'available' || summary.type !== 'work') throw new WorkReadMissing('Work is unavailable');
   return { card: { id: work, revision: row.head.value, mainVersion: row.main.value,
     title: summary.name, cover: summary.avatar, types: [...new Set(rows.flatMap(item => item.type ? [item.type.value] : []))].sort() },
   mainRevision: row.mainHead.value, metadataRevision: row.metadataHead?.value ?? null,
-  selectedLanguage: isPublic ? row.language?.value ?? null : null,
+  selectedLanguage: selected?.language ?? null,
   disclosure: isPublic ? 'public' : 'restricted' };
 }
 

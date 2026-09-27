@@ -1,3 +1,4 @@
+import { mainSearchMatches } from './selection-search.ts';
 import { DATASET, GRAPHS, RV, iri, lit, PUBLIC_SEARCH_ANCHOR,
   type WorkActivationEnvironment } from './activate.ts';
 import { assertGraphAdmissionOpen } from './restore-lineage.ts';
@@ -110,16 +111,14 @@ export async function queryPublicMainTitleBody(env: WorkActivationEnvironment,
       selection: row.selection.value, language: row.language.value,
       score: titleScore + bodyScore };
   });
-  if (new Set(matches.map(match => match.matchUnit)).size !== matches.length
-    || new Set(matches.map(match => match.mainVersion)).size !== matches.length) {
+  if (new Set(matches.map(match => match.matchUnit)).size !== matches.length) {
     throw new PublicQueryUnavailable('title/body relation has duplicate units');
   }
-  matches.sort((a, b) => b.score - a.score
-    || a.mainVersion.localeCompare(b.mainVersion));
+  const results = mainSearchMatches(matches);
   return { profile: 'public-main-title-body-v1' as const, contractVersion: '1' as const,
     resultGrain: 'mainVersion' as const, context: 'main-version-default' as const,
     complete: true as const, population: index.population, indexGeneration: index.generation,
-    total: matches.length, results: matches,
+    total: results.length, results,
     sourcePosition: { datasetId: 'product' as const, dataEpoch: first.epoch.value,
       sequence: first.sequence.value } };
 }

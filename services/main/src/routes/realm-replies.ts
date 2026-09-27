@@ -38,7 +38,7 @@ const reviewResult = t.Object({ profile: t.Literal('realm-reply-review-v1'),
   revisionDigest: digest, replayed: t.Boolean() });
 const placementBody = t.Object({ profile: t.Literal('realm-reply-placement-v1'),
   realm: native, reply: native, revisionId: uuid, revisionDigest: digest,
-  reviewDecisionId: uuid, expectedHead: optionalNative, actingSubject: native,
+  reviewDecisionId: t.Nullable(uuid), expectedHead: optionalNative, actingSubject: native,
 }, { additionalProperties: false });
 const placementResult = t.Object({ profile: t.Literal('realm-reply-placement-v1'),
   placement: native, realm: native, reply: native, revisionId: uuid,

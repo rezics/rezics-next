@@ -1,3 +1,5 @@
+import { mainSearchMatches } from './selection-search.ts';
+import { fallbackLanguage, realmLanguage } from './selection-heads.ts';
 import { DATASET, GRAPHS, RV, iri, lit, PUBLIC_SEARCH_ANCHOR,
   type WorkActivationEnvironment } from './activate.ts';
 import { assertGraphAdmissionOpen } from './restore-lineage.ts';
@@ -158,11 +160,14 @@ export async function queryPublicRealmClassifiedRatedPhrase(env: WorkActivationE
         GRAPH ${iri(GRAPHS.current)} {
           ?work a schema:CreativeWork ; rv:mainVersion ?main .
           ?main a rv:MainVersion ; rv:work ?work .
-          OPTIONAL { ?slot a rv:RealmPublicationSlot ; rv:realm ${iri(realm)} ;
-            rv:mainVersion ?main ; rv:selectionHead ?localSelection }
-          OPTIONAL { ?main rv:selectionHead ?fallbackSelection }
           ${input.author ? `?contribution a rv:TextContribution ; rv:author ${iri(input.author)} .` : ''}
         }
+        OPTIONAL { GRAPH ${iri(GRAPHS.current)} {
+          ?slot a rv:RealmPublicationSlot ; rv:realm ${iri(realm)} ;
+            rv:mainVersion ?main ; rv:selectionHead ?localSelection . }
+          ${realmLanguage('?localSelection', '?language')} }
+        OPTIONAL { GRAPH ${iri(GRAPHS.current)} { ?main rv:selectionHead ?fallbackSelection }
+          ${fallbackLanguage('?fallbackSelection', '?language')} }
         BIND(COALESCE(?localSelection, ?fallbackSelection) AS ?effectiveSelection)
         BIND(IF(BOUND(?localSelection), ${iri(realm)}, ?main) AS ?effectiveContext)
         BIND(IF(BOUND(?localSelection), "realm-adoption", "main-fallback") AS ?reason)
@@ -337,24 +342,21 @@ export async function queryPublicRealmClassifiedRatedPhrase(env: WorkActivationE
         precision: { kind: 'exact-rational' as const, numerator: sum, denominator: count } } };
   });
   if (new Set(matches.map(match => match.matchUnit)).size !== matches.length
-    || new Set(matches.map(match => match.mainVersion)).size !== matches.length
     || (matches.length === 0 && rows.length !== 1)) {
     throw new PublicQueryUnavailable('joined public query has ambiguous results');
   }
-  matches.sort((left, right) => right.score - left.score
-    || left.mainVersion.localeCompare(right.mainVersion)
-    || left.matchUnit.localeCompare(right.matchUnit));
+  const selected = mainSearchMatches(matches);
   const supports = cutover ? await readSearchDecisionSupports(env,
     { dataEpoch: first.epoch.value, sequence: first.sequence.value },
-    matches.map(match => ({ mainVersion: match.mainVersion,
+    selected.map(match => ({ mainVersion: match.mainVersion,
       meaningKey: match.classification.meaningKey!, decision: match.classification.decision,
       sourceContext: match.classification.sourceContext }))) : null;
-  const qualified = supports ? matches.map(match => ({ ...match,
+  const qualified = supports ? selected.map(match => ({ ...match,
     classification: { ...match.classification,
       supportingStatements: exactDecisionSupports(supports, match.mainVersion,
         match.classification.decision),
       supportingStatementCount: exactDecisionSupports(supports, match.mainVersion,
-        match.classification.decision).length } })) : matches;
+        match.classification.decision).length } })) : selected;
   return { profile: 'public-realm-classified-rated-phrase-v1' as const,
     contractVersion: '1', resultGrain: 'mainVersion' as const,
     context: input.context, classificationSense: input.sense,

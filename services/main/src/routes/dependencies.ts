@@ -126,6 +126,7 @@ export interface MainWorkDependencies {
     | 'canReadStandingRating' | 'canLinkTranslation' | 'activePrincipalId'>
     & Partial<Pick<AccessAdmissionRegistry, 'canReadAsBaselineMember'>>
     & Partial<Pick<AccessAdmissionRegistry, 'verifyContentDraftProof'
+      | 'publicRealmCount' | 'realmDirectory'
       | 'withWorkEditAuthority'
       | 'canReadSemanticResource'
       | 'readRatingAggregateInventory' | 'checkRatingAggregateFence'

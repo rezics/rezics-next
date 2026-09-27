@@ -1,3 +1,4 @@
+import { readCurrentProfile } from '../realm-profile/commands.ts';
 import { createHash } from 'node:crypto';
 import type { ContentCore } from '../../../../content/src/core.ts';
 import type { AccessAdmissionRegistry, RegisteredAdmission, VerifiedPrincipal } from '../access/admission.ts';
@@ -24,7 +25,8 @@ export function realmReplyDigest(value: unknown): string {
 export class RealmReplyStore {
   constructor(private readonly content: RealmReplyContentStore,
     private readonly contentCore: Pick<ContentCore, 'settlePublication'>,
-    private readonly access: Pick<AccessAdmissionRegistry, 'register' | 'claim' | 'recordGraphOutcome'>,
+    private readonly access: Pick<AccessAdmissionRegistry, 'register' | 'claim' | 'recordGraphOutcome'>
+      & Partial<Pick<AccessAdmissionRegistry, 'hasRealmMemberAdmission'>>,
     private readonly env: WorkActivationEnvironment) {}
 
   private async admission(principal: VerifiedPrincipal, actingSubject: string, action: string,
@@ -35,6 +37,8 @@ export class RealmReplyStore {
     const contentAction = action === 'reply.place' ? 'publication.prepare' : action;
     const saved = await this.content.hasReceipt(registered.id, contentAction, requestDigest);
     if (registered.state === 'sealed') {
+      const terminal = await readReplyGraphReceipt(this.env, registered);
+      if (terminal?.outcome === 'cancelled') return registered;
       if (!saved) throw new RealmReplyUnavailable('sealed admission lost its Content receipt');
       return registered;
     }
@@ -85,7 +89,29 @@ export class RealmReplyStore {
     key: string, digest: string) {
     const admission = await this.admission(principal, actingSubject, 'reply.place',
       `reply:place:${input.realm}`, key, digest);
-    const prepared = await this.content.preparePlacement(admission, input);
+    const existing = await readReplyGraphReceipt(this.env, admission);
+    if (existing?.outcome === 'cancelled') throw new RealmReplyStale('Realm reply placement was cancelled');
+    let prepared = await this.content.readPlacement(admission.id);
+    if (!prepared) {
+      try {
+        let directPolicyRevision: string | undefined;
+        if (input.reviewDecisionId === null) {
+          const policy = await readCurrentProfile(this.env, input.realm);
+          if (policy?.profile.replyPolicy !== 'members-direct'
+            || !await this.access.hasRealmMemberAdmission?.(admission.id)) {
+            throw new RealmReplyDenied('Realm policy requires moderator approval');
+          }
+          directPolicyRevision = policy.revision;
+        }
+        prepared = await this.content.preparePlacement(admission, input, directPolicyRevision);
+      } catch (error) {
+        if (error instanceof RealmReplyDenied || error instanceof RealmReplyInvalid || error instanceof RealmReplyStale) {
+          await cancelPlacement(this.env, admission);
+          await this.seal(admission);
+        }
+        throw error;
+      }
+    }
     let terminal = await readReplyGraphReceipt(this.env, admission);
     if (!terminal) {
       // A previous attempt can leave the pin while its graph result is unknown.
@@ -115,7 +141,7 @@ export class RealmReplyStore {
     });
     await this.seal(admission);
     return { placement: terminal.placement, reply: input.reply, realm: input.realm,
-      revisionId: input.revisionId, reviewDecisionId: input.reviewDecisionId,
+      revisionId: input.revisionId, reviewDecisionId: prepared.reviewDecisionId,
       replayed: admission.replayed || prepared.replayed };
   }
 

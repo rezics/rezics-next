@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
 import type { RegisteredAdmission } from '../access/admission.ts';
 
@@ -27,7 +27,7 @@ export interface ReviewInput {
 }
 export interface PlacementInput {
   realm: string; reply: string; revisionId: string; revisionDigest: string;
-  reviewDecisionId: string; expectedHead: string | null;
+  reviewDecisionId: string | null; expectedHead: string | null;
 }
 export interface ReplyIdentity extends ReplyIdentityInput { replayed: boolean }
 export interface ReviewDecision {
@@ -36,6 +36,7 @@ export interface ReviewDecision {
   replayed: boolean;
 }
 export interface PlacementPreparation {
+  directPolicyRevision?: string;
   operationId: string; realm: string; reply: string; revisionId: string;
   revisionDigest: string; reviewDecisionId: string; reviewDigest: string; author: string;
   ownerDataEpoch: string; ownerSequence: string;
@@ -345,9 +346,9 @@ export class RealmReplyContentStore {
   }
 
   async preparePlacement(admission: RegisteredAdmission,
-    input: PlacementInput): Promise<PlacementPreparation> {
+    input: PlacementInput, directPolicyRevision?: string): Promise<PlacementPreparation> {
     if (!native.test(input.realm) || !native.test(input.reply) || !uuid.test(input.revisionId)
-      || !uuid.test(input.reviewDecisionId) || !digest.test(input.revisionDigest)
+      || (input.reviewDecisionId !== null && !uuid.test(input.reviewDecisionId)) || !digest.test(input.revisionDigest)
       || (input.expectedHead !== null && !native.test(input.expectedHead))) {
       throw new RealmReplyInvalid('invalid placement');
     }
@@ -373,32 +374,64 @@ export class RealmReplyContentStore {
       if (exact.rows[0]?.byte_digest !== input.revisionDigest) {
         throw new RealmReplyStale('reply revision bytes changed or are unavailable');
       }
-      const approval = await client.query<{ request_digest: string }>(`SELECT c.request_digest
+      let reviewDecisionId = input.reviewDecisionId;
+      if (reviewDecisionId === null) {
+        if (!directPolicyRevision || row.author !== admission.actingSubject) {
+          throw new RealmReplyDenied('Realm policy requires moderator approval');
+        }
+        const latest = (await client.query<{ id: string; outcome: string }>(`
+          SELECT id, outcome FROM content.realm_review_decision
+          WHERE realm = $1 AND revision_id = $2 ORDER BY review_generation DESC LIMIT 1`,
+        [input.realm, input.revisionId])).rows[0];
+        if (latest && latest.outcome !== 'approved') {
+          throw new RealmReplyDenied('A moderator decision prevents direct placement');
+        }
+        reviewDecisionId = latest?.id ?? randomUUID();
+        if (!latest) {
+          const proof = createHash('sha256').update(JSON.stringify({ admission: admission.id,
+            requestDigest: admission.requestDigest, directPolicyRevision })).digest('hex');
+          const policyAdmission = { ...admission, id: `${admission.id}:policy-review`, requestDigest: proof };
+          await this.receipt(client, policyAdmission, 'review.decide', row.variant_id, input.revisionId,
+            'content.realm-review.decided', { realm: input.realm, reply: input.reply,
+              revisionId: input.revisionId, outcome: 'approved' });
+          await client.query(`INSERT INTO content.realm_review_decision
+            (id, realm, variant_id, revision_id, review_generation, outcome, policy, policy_revision,
+             method, method_revision, reviewer, revision_digest, dependency_digest, operation_id)
+            VALUES ($1,$2,$3,$4,1,'approved','https://rezics.com/definition/realm-members-direct-v1',
+              $5,'policy',$5,$6,$7,$8,$9)`, [reviewDecisionId, input.realm, row.variant_id,
+            input.revisionId, directPolicyRevision, admission.actingSubject, input.revisionDigest,
+            proof, policyAdmission.id]);
+        }
+      }
+      const approval = await client.query<{ request_digest: string; method: string; policy_revision: string }>(`SELECT c.request_digest, d.method, d.policy_revision
         FROM content.realm_review_decision d
         JOIN content.receipt c ON c.operation_id = d.operation_id
         WHERE d.id = $1 AND d.realm = $2 AND d.revision_id = $3 AND d.variant_id = $4
           AND d.revision_digest = $5 AND d.outcome = 'approved'
           AND NOT EXISTS (SELECT 1 FROM content.realm_review_decision later
             WHERE later.supersedes = d.id)`,
-      [input.reviewDecisionId, input.realm, input.revisionId, row.variant_id, input.revisionDigest]);
+      [reviewDecisionId, input.realm, input.revisionId, row.variant_id, input.revisionDigest]);
       if (!approval.rowCount) throw new RealmReplyStale('exact current approval is required');
+      const policyRevision = directPolicyRevision ?? (approval.rows[0].method === 'policy'
+        ? approval.rows[0].policy_revision : undefined);
       await client.query(`INSERT INTO content.publication_preparation
         (operation_id, revision_id, request_digest) VALUES ($1, $2, $3)`,
       [admission.id, input.revisionId, admission.requestDigest]);
       await client.query(`INSERT INTO content.realm_placement_preparation
-        (operation_id, realm, variant_id, revision_id, review_decision_id)
-        VALUES ($1, $2, $3, $4, $5)`,
-      [admission.id, input.realm, row.variant_id, input.revisionId, input.reviewDecisionId]);
+        (operation_id, realm, variant_id, revision_id, review_decision_id, direct_policy_revision)
+        VALUES ($1, $2, $3, $4, $5, $6)`,
+      [admission.id, input.realm, row.variant_id, input.revisionId, reviewDecisionId, policyRevision ?? null]);
       await this.receipt(client, admission, 'publication.prepare', row.variant_id,
         input.revisionId, 'content.realm-reply.prepared',
         { realm: input.realm, reply: input.reply, revisionId: input.revisionId,
-          reviewDecisionId: input.reviewDecisionId });
+          reviewDecisionId });
       const position = await client.query<{ data_epoch: string; sequence: string }>(
         'SELECT data_epoch::text, sequence::text FROM content.receipt WHERE operation_id = $1',
         [admission.id]);
-      return { operationId: admission.id, realm: input.realm, reply: input.reply,
+      return { ...(policyRevision ? { directPolicyRevision: policyRevision } : {}),
+        operationId: admission.id, realm: input.realm, reply: input.reply,
         revisionId: input.revisionId, revisionDigest: input.revisionDigest,
-        reviewDecisionId: input.reviewDecisionId, reviewDigest: approval.rows[0].request_digest,
+        reviewDecisionId, reviewDigest: approval.rows[0].request_digest,
         ownerDataEpoch: position.rows[0]!.data_epoch, ownerSequence: position.rows[0]!.sequence,
         author: row.author,
         rootTarget: row.root_target, rootRevision: row.root_revision,
@@ -408,11 +441,11 @@ export class RealmReplyContentStore {
   }
 
   private async placement(client: PoolClient, operationId: string): Promise<Omit<PlacementPreparation, 'replayed'> | null> {
-    const result = await client.query<{ realm: string; revision_id: string; review_decision_id: string;
+    const result = await client.query<{ direct_policy_revision: string | null; realm: string; revision_id: string; review_decision_id: string;
       request_digest: string; data_epoch: string; sequence: string;
       byte_digest: string; id: string; author: string; root_target: string; root_revision: string;
       parent_reply: string | null; parent_revision: string | null; context_revision: string | null }>(`
-      SELECT p.realm, p.revision_id::text, p.review_decision_id::text, c.request_digest, r.byte_digest,
+      SELECT p.direct_policy_revision, p.realm, p.revision_id::text, p.review_decision_id::text, c.request_digest, r.byte_digest,
         prep.data_epoch::text, prep.sequence::text,
         i.id, i.author, i.root_target, i.root_revision, i.parent_reply,
         i.parent_revision::text, i.context_revision
@@ -425,7 +458,8 @@ export class RealmReplyContentStore {
       WHERE p.operation_id = $1`, [operationId]);
     const row = result.rows[0];
     if (!row) return null;
-    return { operationId, realm: row.realm, reply: row.id, revisionId: row.revision_id,
+    return { ...(row.direct_policy_revision ? { directPolicyRevision: row.direct_policy_revision } : {}),
+      operationId, realm: row.realm, reply: row.id, revisionId: row.revision_id,
       revisionDigest: row.byte_digest, reviewDecisionId: row.review_decision_id,
       reviewDigest: row.request_digest,
       ownerDataEpoch: row.data_epoch, ownerSequence: row.sequence,

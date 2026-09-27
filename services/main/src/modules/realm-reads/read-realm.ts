@@ -61,13 +61,18 @@ export async function readRealmHeader(session: WorkReadSession, realm: string) {
     }
     return { id: rule.id, title: selected(rule.title), body: selected(rule.body), governanceRule };
   })) : null;
+  if (profile?.count.kind === 'exact' && !session.deps.access.publicRealmCount) {
+    throw new WorkReadUnavailable('Realm count owner is unavailable');
+  }
+  const count = profile?.count.kind === 'exact'
+    ? await session.deps.access.publicRealmCount!(realm) : profile?.count ?? { kind: 'unknown' as const, value: null };
   await readRealmBasis(session, realm);
   return { profile: 'realm-read-v1' as const, ...basis,
     name: profile ? selected(profile.name) : summary.name, icon,
     profileRevision: published?.revision ?? null,
     description: profile ? selected(profile.description) : null,
     banner, rules,
-    membership: { count: profile?.count ?? { kind: 'unknown' as const, value: null },
+    membership: { count,
       publicMembers: null },
     moderators: { kind: profile ? 'known' as const : 'unknown' as const,
       items: profile ? profile.moderators.filter(agent => moderators.includes(agent)) : [] },

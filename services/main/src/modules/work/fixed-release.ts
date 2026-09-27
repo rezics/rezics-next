@@ -281,7 +281,8 @@ async function currentState(env: WorkActivationEnvironment, input: FixedReleaseI
     GRAPH ${iri(GRAPHS.current)} {
       ${iri(input.work)} rv:mainVersion ${iri(input.mainVersion)} .
       ${iri(input.mainVersion)} a rv:MainVersion ; rv:work ${iri(input.work)} ; rv:head ?head .
-      OPTIONAL { ${iri(input.mainVersion)} rv:selectionHead ?selection }
+      OPTIONAL { ${iri(input.mainVersion)} rv:selectionHead ?selection .
+        FILTER(?selection = ${iri(input.expectedSelection)}) }
     }
   } LIMIT 2`);
   const rows = result.results?.bindings ?? [];

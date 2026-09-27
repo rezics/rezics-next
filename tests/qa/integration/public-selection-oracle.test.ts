@@ -138,7 +138,7 @@ test('CTX02/CTX03/WORK03/SEARCH07/SEARCH19: joined decisions and Realm selection
     expect(actual.sourcePosition.sequence).toMatch(/^[0-9]+$/);
     const rows = actual.results.map(({ score, ...row }) => row)
       .sort((a, b) => a.work.localeCompare(b.work));
-    expect(rows).toEqual(expected);
+    expect(rows).toEqual(expected.map(row => ({ ...row, types: [] })));
     return rows;
   }
 

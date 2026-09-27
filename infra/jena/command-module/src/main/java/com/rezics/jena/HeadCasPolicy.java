@@ -5,6 +5,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Locale;
 import java.util.Set;
 import org.apache.jena.graph.Node;
 import org.apache.jena.graph.NodeFactory;
@@ -25,7 +26,8 @@ final class HeadCasPolicy {
     private static final Node CONTEXT = rv("SemanticContext");
 
     private record Key(Node subject, Node predicate) {}
-    private record Transition(Key key, Node before, Node next, Node ownerType) {}
+    private record Transition(Key key, Node before, Node next, Node ownerType,
+                              List<Node> preserved, String language) {}
     record Snapshot(List<Transition> transitions, String error) {}
 
     static Snapshot capture(DatasetGraph data, CommandPolicy.Plan plan, String receipt) {
@@ -45,8 +47,36 @@ final class HeadCasPolicy {
             if (!transition) continue; // A fresh component's first head is covered by its canonical shape.
             List<Node> nextValues = inserted.getOrDefault(key, List.of());
             List<Node> oldTemplate = deleted.getOrDefault(key, List.of());
-            if (beforeValues.size() > 1 || nextValues.size() != 1 || !nextValues.getFirst().isURI()
+            if (nextValues.size() != 1 || !nextValues.getFirst().isURI()
                 || oldTemplate.size() != 1 || !key.subject().isURI())
+                return new Snapshot(List.of(), "head transition template or prestate is ambiguous");
+            List<Node> preserved = List.of();
+            String language = null;
+            if (SELECTION_HEAD.equals(key.predicate())
+                && inserted.containsKey(new Key(key.subject(), HEAD))) {
+                Node tag = null;
+                for (Quad quad : modify.getInsertQuads()) {
+                    if (REVISIONS.equals(quad.getGraph()) && nextValues.getFirst().equals(quad.getSubject())
+                        && rv("language").equals(quad.getPredicate())) {
+                        if (tag != null) return new Snapshot(List.of(), "Main selection language is ambiguous");
+                        tag = quad.getObject();
+                    }
+                }
+                language = language(tag);
+                if (language == null || beforeValues.size() > 64)
+                    return new Snapshot(List.of(), "Main selection language is invalid");
+                Map<String, Node> heads = new HashMap<>();
+                for (Node prior : beforeValues) {
+                    String priorLanguage = language(one(data, REVISIONS, prior, rv("language")));
+                    if (priorLanguage == null || heads.put(priorLanguage, prior) != null)
+                        return new Snapshot(List.of(), "Main language heads are ambiguous");
+                }
+                Node selected = heads.remove(language);
+                preserved = List.copyOf(heads.values());
+                if (preserved.size() >= 64) return new Snapshot(List.of(), "Main language head limit exceeded");
+                beforeValues = selected == null ? List.of() : List.of(selected);
+            }
+            if (beforeValues.size() > 1)
                 return new Snapshot(List.of(), "head transition template or prestate is ambiguous");
             Node before = beforeValues.isEmpty() ? null : beforeValues.getFirst();
             Node deletedValue = oldTemplate.getFirst();
@@ -58,7 +88,7 @@ final class HeadCasPolicy {
             boolean context = data.contains(CURRENT, key.subject(), RDF.type.asNode(), CONTEXT);
             if (statement && context) return new Snapshot(List.of(), "head target has ambiguous owner profile");
             transitions.add(new Transition(key, before, nextValues.getFirst(),
-                statement ? STATEMENT : context ? CONTEXT : null));
+                statement ? STATEMENT : context ? CONTEXT : null, preserved, language));
         }
         if (transitions.size() > 2) return new Snapshot(List.of(), "one head transition required");
         Transition expected = transitions.isEmpty() ? null : transitions.getFirst();
@@ -185,8 +215,13 @@ final class HeadCasPolicy {
         Node main = head.key().subject();
         for (Transition change : transitions) {
             List<Node> actual = values(data, CURRENT, main, change.key().predicate());
-            if (actual.size() != 1 || !actual.getFirst().equals(change.next()))
+            Set<Node> wanted = new HashSet<>(change.preserved());
+            wanted.add(change.next());
+            if (actual.size() != wanted.size() || !wanted.equals(new HashSet<>(actual)))
                 return "head poststate differs from exact successor";
+            if (change.language() != null && !change.language().equals(
+                language(one(data, REVISIONS, change.next(), rv("language")))))
+                return "Main selection language changed";
             if (!revisionMatches(data, change))
                 return "head successor revision differs from prestate or component";
         }
@@ -214,6 +249,12 @@ final class HeadCasPolicy {
             || !same(data, REVISIONS, selection.next(), "mainRevision", head.next()))
             return "Main selection paired heads differ from their receipt";
         return null;
+    }
+
+    private static String language(Node tag) {
+        if (tag == null || !tag.isLiteral()
+            || !tag.getLiteralLexicalForm().matches("[a-z]{2,3}(-[A-Za-z0-9]{2,8})*")) return null;
+        return tag.getLiteralLexicalForm().toLowerCase(Locale.ROOT);
     }
 
     private static boolean revisionMatches(DatasetGraph data, Transition transition) {

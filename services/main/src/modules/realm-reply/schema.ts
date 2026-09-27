@@ -18,5 +18,5 @@ export const realmReplyColumns = {
     revision_digest: 'text', dependency_digest: 'text', reason_reference: 'text?',
     operation_id: 'text', created_at: 'timestamptz' },
   realm_placement_preparation: { operation_id: 'text', realm: 'text', variant_id: 'text',
-    revision_id: 'uuid', review_decision_id: 'uuid', created_at: 'timestamptz' },
+    revision_id: 'uuid', review_decision_id: 'uuid', direct_policy_revision: 'text?', created_at: 'timestamptz' },
 } as const satisfies OwnerColumns;

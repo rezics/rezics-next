@@ -1,3 +1,4 @@
+import { fallbackLanguage, realmLanguage } from './selection-heads.ts';
 import { RATING_ACCOUNT_POPULATION, RATING_LATEST_MEAN_POLICY, RATING_STANDING_CADENCE }
   from '../rating/context.ts';
 import { STANDING_RATING_OBSERVATION_PROFILE } from '../rating/observation.ts';
@@ -135,10 +136,13 @@ export async function queryPublicGroupedRatedCore(env: WorkActivationEnvironment
         GRAPH ${iri(GRAPHS.current)} {
           ?work a schema:CreativeWork ; rv:mainVersion ?main .
           ?main a rv:MainVersion ; rv:work ?work .
-          OPTIONAL { ?slot a rv:RealmPublicationSlot ; rv:realm ${iri(input.realm)} ;
-            rv:mainVersion ?main ; rv:selectionHead ?localSelection }
-          OPTIONAL { ?main rv:selectionHead ?fallbackSelection }
         }
+        OPTIONAL { GRAPH ${iri(GRAPHS.current)} {
+          ?slot a rv:RealmPublicationSlot ; rv:realm ${iri(input.realm)} ;
+            rv:mainVersion ?main ; rv:selectionHead ?localSelection . }
+          ${realmLanguage('?localSelection', '?language')} }
+        OPTIONAL { GRAPH ${iri(GRAPHS.current)} { ?main rv:selectionHead ?fallbackSelection }
+          ${fallbackLanguage('?fallbackSelection', '?language')} }
         BIND(COALESCE(?localSelection, ?fallbackSelection) AS ?effectiveSelection)
         BIND(IF(BOUND(?localSelection), ${iri(input.realm)}, ?main) AS ?effectiveContext)
         BIND(IF(BOUND(?localSelection), "realm-adoption", "main-fallback") AS ?reason)
