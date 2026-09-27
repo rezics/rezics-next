@@ -4,7 +4,7 @@ import { dirname, resolve } from 'node:path';
 import { expect, test } from 'bun:test';
 import { Pool } from 'pg';
 import { MAIN_SITE_SCOPE } from '../../../apps/web/features/auth/scopes.ts';
-import { bootstrapWebAuth } from '../../../scripts/dev/web-auth-bootstrap.ts';
+import { assertWebInstallationReady, bootstrapWebAuth } from '../../../scripts/dev/web-auth-bootstrap.ts';
 import { grantQaWorkRead } from '../../../scripts/dev/qa-work-read.ts';
 import { readEnv } from '../../../scripts/dev/config.ts';
 import { createAccountAuth } from '../../../services/account/src/auth.ts';
@@ -53,6 +53,18 @@ test('IAM01/WORK01: authenticated metadata-only Work has an empty Main Version',
     operatorUserIds: new Set([privateConfig.operator.id]),
   }), accountPool).listen({ hostname: '127.0.0.1', port: Number(runtime.ACCOUNT_PORT) });
   try {
+    const firstParty = await accountPool.query(`SELECT 1 FROM rezics_oauth_first_party_client
+      WHERE client_id = $1`, [publicConfig.clientId]);
+    expect(firstParty.rowCount).toBe(1);
+    await assertWebInstallationReady(runtime, result.publicConfigPath);
+    await accountPool.query(`UPDATE rezics_oauth_installation SET scopes = scopes - 'follow:read'
+      WHERE client_id = $1 AND state = 'active'`, [publicConfig.clientId]);
+    try {
+      await expect(assertWebInstallationReady(runtime, result.publicConfigPath)).rejects.toThrow('follow:read');
+    } finally {
+      await accountPool.query(`UPDATE rezics_oauth_installation SET scopes = scopes || '["follow:read"]'::jsonb
+        WHERE client_id = $1 AND state = 'active'`, [publicConfig.clientId]);
+    }
     const base = runtime.ACCOUNT_BASE_URL!;
     const verified = await accountPool.query<{ id: string; emailVerified: boolean }>(
       'SELECT id, "emailVerified" FROM "user" WHERE id = ANY($1::text[])',

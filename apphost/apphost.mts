@@ -16,7 +16,7 @@
 // Aspire secret parameters, and service addresses flow through endpoint
 // references so ports can be fixed or random.
 import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { join, resolve } from 'node:path';
 import { mainSpec, relaySpec } from '../services/main/src/config.ts';
 import { accountSpec } from '../services/account/src/config.ts';
 import { webSpec } from '../apps/web/features/config/env.ts';
@@ -104,9 +104,11 @@ accountsSpec, ['ACCOUNT_SERVICE_ORIGIN', 'WEB_ORIGIN'])
   .waitFor(backend);
 const accountsUrl = accounts.getEndpoint('http');
 
+const webAuthPublicPath = join(resolve(envFile, '..'), 'web-auth', 'public.json');
 const webApp = configure(builder.addExecutable('web', 'sh', web,
-  ['-c', 'exec ../../node_modules/.bin/vinext dev --hostname 127.0.0.1 --port "$PORT"']),
-webSpec, ['MAIN_ORIGIN', 'ACCOUNT_ORIGIN'])
+  ['-c', 'set -e; WEB_OAUTH_CLIENT_ID="$(node -e \'const id = JSON.parse(require("node:fs").readFileSync(process.env.REZICS_WEB_AUTH_PUBLIC_PATH, "utf8")).clientId; if (!id) process.exit(1); process.stdout.write(id)\')"; export WEB_OAUTH_CLIENT_ID; exec ../../node_modules/.bin/vinext dev --hostname 127.0.0.1 --port "$PORT"']),
+webSpec, ['MAIN_ORIGIN', 'ACCOUNT_ORIGIN', 'WEB_OAUTH_CLIENT_ID'])
+  .withEnvironment('REZICS_WEB_AUTH_PUBLIC_PATH', webAuthPublicPath)
   .withEnvironment('MAIN_ORIGIN', mainUrl)
   // Account accepts browser-originated writes only from its public base URL (the
   // Accounts app); Aspire's endpoint says localhost where that URL says 127.0.0.1.

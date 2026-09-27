@@ -33,6 +33,7 @@ export function fakeAccountClient(fake: FakeAccount = {}): AccountClient {
     renamePasskey: () => ok(undefined), removePasskey: () => ok(undefined), enableTotp: () => ok(totpEnrollment),
     confirmTotp: () => ok(undefined), renameTotp: () => ok(undefined), disableTotp: () => ok(undefined),
     regenerateBackupCodes: () => ok(totpEnrollment.backupCodes), revokeSession: () => ok(undefined),
+    revokeSessions: () => ok(undefined),
     revokeOtherSessions: () => ok(undefined), revokeApp: () => ok(undefined), deleteAccount: () => ok(undefined),
     ...fake.api,
   };

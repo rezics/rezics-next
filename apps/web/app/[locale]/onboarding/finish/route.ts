@@ -24,5 +24,5 @@ export async function POST(request: Request, { params }: { params: Promise<{ loc
   const changed = await changeHandle(token, outcome.person.agent, String(form.get('handle') ?? ''),
     null, String(form.get('key') ?? ''));
   if (changed !== 'changed') return NextResponse.redirect(back(changed), 303);
-  return NextResponse.redirect(new URL(localizedPath('/', requested), request.url), 303);
+  return NextResponse.redirect(new URL(next, request.url), 303);
 }

@@ -19,6 +19,14 @@ export function authorizationAfterCreate(oauthQuery: string | undefined): string
   const query = new URLSearchParams(oauthQuery);
   const prompts = (query.get('prompt') ?? '').split(' ').filter(Boolean);
   if (!prompts.includes('create')) return undefined;
+  return authorizationAfterVerification(oauthQuery);
+}
+
+/** Resume the browser's original authorization after its email is verified. */
+export function authorizationAfterVerification(oauthQuery: string | undefined): string | undefined {
+  if (!oauthQuery) return undefined;
+  const query = new URLSearchParams(oauthQuery);
+  const prompts = (query.get('prompt') ?? '').split(' ').filter(Boolean);
   const remaining = prompts.filter(prompt => prompt !== 'create');
   if (remaining.length) query.set('prompt', remaining.join(' '));
   else query.delete('prompt');

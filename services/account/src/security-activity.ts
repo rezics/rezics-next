@@ -2,6 +2,7 @@ import { isIP } from 'node:net';
 import { Elysia, t } from 'elysia';
 import { parseCookies } from 'better-call';
 import { createHMAC } from '@better-auth/utils/hmac';
+import { createHmac } from 'node:crypto';
 import type { Pool } from 'pg';
 import { accountFailure, accountJson, accountSession, type AccountAuth } from './http.ts';
 import { decodeCursor, encodeCursor, pageQuery } from './pagination.ts';
@@ -61,15 +62,21 @@ export async function readSessions(pool: Pool, secret: string, userId: string, c
   const cursor = decodeCursor(secret, scope, query.cursor);
   const limit = query.limit ?? 25;
   const result = await pool.query<{ id: string; createdAt: Date; updatedAt: Date; expiresAt: Date;
-    userAgent: string | null; ipAddress: string | null; cursorKey: string }>(`SELECT id, "createdAt", "updatedAt", "expiresAt", "userAgent", "ipAddress", "createdAt"::text AS "cursorKey"
-    FROM "session" WHERE "userId" = $1 AND "expiresAt" > now()
-      AND ($2::timestamptz IS NULL OR ("createdAt", id) < ($2, $3))
-    ORDER BY "createdAt" DESC, id DESC LIMIT $4`, [userId, cursor?.key ?? null, cursor?.id ?? null, limit + 1]);
+    userAgent: string | null; ipAddress: string | null; clientId: string | null;
+    clientName: string | null; cursorKey: string }>(`SELECT s.id, s."createdAt", s."updatedAt", s."expiresAt",
+      s."userAgent", s."ipAddress", s.rezics_client_id AS "clientId", c.name AS "clientName",
+      s."createdAt"::text AS "cursorKey"
+    FROM "session" s LEFT JOIN "oauthClient" c ON c."clientId" = s.rezics_client_id
+    WHERE s."userId" = $1 AND s."expiresAt" > now()
+      AND ($2::timestamptz IS NULL OR (s."createdAt", s.id) < ($2, $3))
+    ORDER BY s."createdAt" DESC, s.id DESC LIMIT $4`, [userId, cursor?.key ?? null, cursor?.id ?? null, limit + 1]);
   const rows = result.rows.slice(0, limit);
   const last = rows.at(-1);
   return { items: rows.map(row => ({ id: row.id, createdAt: row.createdAt.toISOString(),
     lastActiveAt: row.updatedAt.toISOString(), expiresAt: row.expiresAt.toISOString(),
-    device: deviceLabel(row.userAgent), network: coarseNetwork(row.ipAddress), thisDevice: row.id === currentId })),
+    device: deviceLabel(row.userAgent), network: coarseNetwork(row.ipAddress), thisDevice: row.id === currentId,
+    clientName: row.clientName,
+    groupKey: createHmac('sha256', secret).update(`${row.clientId ?? ''}\0${row.userAgent ?? ''}`).digest('hex') })),
   nextCursor: result.rows.length > limit && last ? encodeCursor(secret, scope, last.cursorKey, last.id) : null };
 }
 
@@ -88,6 +95,7 @@ export function securityActivityApi(auth: AccountAuth, pool: Pool) {
     })
     .post('/api/account/sessions/revoke', { response: accountResponses(t.Object({ revoked: t.Integer() })), body: t.Union([
       t.Object({ sessionId: t.String({ minLength: 1, maxLength: 128 }) }),
+      t.Object({ sessionIds: t.Array(t.String({ minLength: 1, maxLength: 128 }), { minItems: 1, maxItems: 100 }) }),
       t.Object({ others: t.Literal(true) }),
     ]) }, async ({ request, body }) => {
       try {
@@ -95,6 +103,9 @@ export function securityActivityApi(auth: AccountAuth, pool: Pool) {
         await requireStepUp(pool, session);
         const result = 'sessionId' in body
           ? await pool.query('DELETE FROM "session" WHERE "userId" = $1 AND id = $2', [session.user.id, body.sessionId])
+          : 'sessionIds' in body
+            ? await pool.query('DELETE FROM "session" WHERE "userId" = $1 AND id <> $2 AND id = ANY($3::text[])',
+              [session.user.id, session.session.id, body.sessionIds])
           : await pool.query('DELETE FROM "session" WHERE "userId" = $1 AND id <> $2', [session.user.id, session.session.id]);
         return accountJson({ revoked: result.rowCount ?? 0 });
       } catch (error) { return accountFailure(error); }
@@ -109,7 +120,8 @@ export async function observeAuthentication(auth: AccountAuth, pool: Pool, reque
   const signingIn = ['/api/auth/sign-in/email', '/api/auth/passkey/verify-authentication',
     '/api/auth/two-factor/verify-totp', '/api/auth/two-factor/verify-backup-code'].includes(path);
   const signingOut = path === '/api/auth/sign-out';
-  if (!signingIn && !signingOut) return handle();
+  const verifying = path === '/api/auth/verify-email' && request.method === 'GET';
+  if (!signingIn && !signingOut && !verifying) return handle();
   const input = await request.clone().json().catch(() => ({})) as { email?: string; response?: { id?: string } };
   const before = await auth.api.getSession({ headers: request.headers });
   let challengeUser: string | undefined;
@@ -127,6 +139,18 @@ export async function observeAuthentication(auth: AccountAuth, pool: Pool, reque
     } catch { console.error('Account authentication activity unavailable'); }
   }
   const response = await handle();
+  if (verifying && response.status === 302) {
+    const cookie = response.headers.getSetCookie().map(value => value.split(';')[0]).join('; ');
+    if (cookie) {
+      const after = await auth.api.getSession({ headers: new Headers({ cookie }) });
+      if (after && after.session.id !== before?.session.id) {
+        await securityEvent(pool, after.user.id, 'sign_in', { method: 'verified-email',
+          device: deviceLabel(request.headers.get('user-agent')),
+          network: coarseNetwork(request.headers.get('x-rezics-client-ip')) });
+      }
+    }
+    return response;
+  }
   const output = await response.clone().json().catch(() => null) as {
     user?: { id: string }; token?: string; session?: { id: string }; twoFactorRedirect?: boolean;
   } | null;

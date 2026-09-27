@@ -47,6 +47,7 @@ export interface AccountApi {
   disableTotp(password?: string): Promise<Result<void>>;
   regenerateBackupCodes(password?: string): Promise<Result<string[]>>;
   revokeSession(sessionId: string): Promise<Result<void>>;
+  revokeSessions(sessionIds: string[]): Promise<Result<void>>;
   revokeOtherSessions(): Promise<Result<void>>;
   revokeApp(clientId: string): Promise<Result<void>>;
   deleteAccount(password: string): Promise<Result<void>>;
@@ -226,6 +227,7 @@ export const browserAccountApi: AccountApi = {
       ? { ok: true, data: result.data.backupCodes.map(String) } : failed('failed');
   },
   async revokeSession(sessionId) { return done(await account('/sessions/revoke', { sessionId })); },
+  async revokeSessions(sessionIds) { return done(await account('/sessions/revoke', { sessionIds })); },
   async revokeOtherSessions() { return done(await account('/sessions/revoke', { others: true })); },
   async revokeApp(clientId) {
     return done(await account(`/connected-apps/${encodeURIComponent(clientId)}/revoke`, {}));

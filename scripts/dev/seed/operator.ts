@@ -14,24 +14,43 @@ function loopback(value: string) {
   }
 }
 
-/** Register a short-lived local OAuth client with the existing fixture operator. */
+/** Reuse the newest seed client whose installation, callback and scopes still match. */
+export async function reusableSeedClient(pool: Pool, ownerId: string, redirectUri: string,
+  scope: string): Promise<string | undefined> {
+  const reused = await pool.query<{ clientId: string }>(`SELECT c."clientId" FROM "oauthClient" c
+    JOIN rezics_oauth_installation i ON i.client_id = c."clientId" AND i.state = 'active'
+    WHERE c.name = 'Local official Zone seed' AND c."userId" = $1 AND c.disabled IS NOT TRUE
+      AND c."redirectUris" @> jsonb_build_array($2::text)
+      AND c.scopes @> $3::jsonb AND i.scopes @> $3::jsonb
+      AND c."grantTypes" @> '["authorization_code"]'::jsonb
+    ORDER BY c."createdAt" DESC LIMIT 1`,
+  [ownerId, redirectUri, JSON.stringify(scope.split(' '))]);
+  return reused.rows[0]?.clientId;
+}
+
+/** Reuse the fixture operator's installed seed client across repeated seed runs. */
 export async function operatorSeedSession(input: LocalOperatorInput) {
   for (const value of [input.accountDatabaseUrl, input.accessDatabaseUrl]) loopback(value);
   const signed = await new SeedApi(input.endpoints).signInOrUp(input.credentials);
   if (signed.id !== input.accountSubject) throw new Error('Seed fixture operator identity changed');
   const pool = new Pool({ connectionString: input.accountDatabaseUrl });
   try {
-    const auth = createAccountAuth({ baseURL: input.endpoints.account,
-      secret: input.accountSecret, resource: input.endpoints.resource,
-      pool, operatorUserIds: new Set([signed.id]) });
-    const client = await auth.api.adminCreateOAuthClient({
-      headers: new Headers({ cookie: signed.cookie, origin: input.endpoints.account }),
-      body: { client_name: 'Local official Zone seed', application_type: 'native',
-        redirect_uris: [input.endpoints.redirectUri], token_endpoint_auth_method: 'none',
-        grant_types: ['authorization_code'], skip_consent: true, require_pkce: true,
-        scope: 'openid owner:operate zone:edit' } });
-    if (!client.client_id) throw new Error('Account did not register the seed operator client');
-    const api = new SeedApi({ ...input.endpoints, clientId: client.client_id,
+    const scope = 'openid owner:operate zone:edit';
+    let clientId = await reusableSeedClient(pool, signed.id, input.endpoints.redirectUri, scope);
+    if (!clientId) {
+      const auth = createAccountAuth({ baseURL: input.endpoints.account,
+        secret: input.accountSecret, resource: input.endpoints.resource,
+        pool, operatorUserIds: new Set([signed.id]) });
+      const client = await auth.api.adminCreateOAuthClient({
+        headers: new Headers({ cookie: signed.cookie, origin: input.endpoints.account }),
+        body: { client_name: 'Local official Zone seed', application_type: 'native',
+          redirect_uris: [input.endpoints.redirectUri], token_endpoint_auth_method: 'none',
+          grant_types: ['authorization_code'], skip_consent: true, require_pkce: true,
+          scope } });
+      clientId = client.client_id;
+    }
+    if (!clientId) throw new Error('Account did not register the seed operator client');
+    const api = new SeedApi({ ...input.endpoints, clientId,
       scope: 'openid owner:operate zone:edit' });
     return { api, token: await api.token(signed.cookie) };
   } finally { await pool.end(); }

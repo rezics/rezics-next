@@ -15,13 +15,15 @@ export async function readConnectedApps(pool: Pool, secret: string, userId: stri
   const limit = query.limit ?? 25;
   const result = await pool.query<{ clientId: string; name: string; uri: string | null; icon: string | null;
     scopes: string[]; grantedAt: Date; lastUsedAt: Date | null; installationId: string | null;
-    installationState: string | null; trusted: boolean | null; cursorKey: string }>(`SELECT g.client_id AS "clientId", coalesce(c.name, g.client_id) AS name, c.uri, c.icon,
+    installationState: string | null; trusted: boolean | null; firstParty: boolean; cursorKey: string }>(`SELECT g.client_id AS "clientId", coalesce(c.name, g.client_id) AS name, c.uri, c.icon,
       g.scopes, g.granted_at AS "grantedAt", g.last_used_at AS "lastUsedAt", c."skipConsent" AS trusted,
+      fp.client_id IS NOT NULL AS "firstParty",
       g.granted_at::text AS "cursorKey",
       i.id AS "installationId", i.state AS "installationState"
     FROM rezics_account_grant g JOIN "oauthClient" c ON c."clientId" = g.client_id
     LEFT JOIN LATERAL (SELECT id, state FROM rezics_oauth_installation WHERE client_id = g.client_id
       ORDER BY installed_at DESC, id DESC LIMIT 1) i ON true
+    LEFT JOIN rezics_oauth_first_party_client fp ON fp.client_id = g.client_id
     WHERE g.user_id = $1 AND g.revoked_at IS NULL
       AND ($2::timestamptz IS NULL OR (g.granted_at, g.client_id) < ($2, $3))
     ORDER BY g.granted_at DESC, g.client_id DESC LIMIT $4`,

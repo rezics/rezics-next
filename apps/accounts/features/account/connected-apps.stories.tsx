@@ -6,12 +6,15 @@ import { chinese, dark, phone } from '../../.storybook/variants.ts';
 import { ReadStatePanel } from '../shell/state-panel.tsx';
 
 const apps: ConnectedAppView[] = [
-  { clientId: 'reader', name: 'Reader', icon: null, uri: 'https://reader.example', trusted: false, withdrawn: false,
+  { clientId: 'reader', name: 'Reader', icon: null, uri: 'https://reader.example', trusted: false, firstParty: false,
+    permissionGroups: [], withdrawn: false,
     granted: 'Sep 27, 2026', lastUsed: '3 hours ago',
     permissions: ['Identify your REZICS account', 'Read works', 'Keep access while you are signed out, until you revoke it'] },
-  { clientId: 'rezics-web', name: 'REZICS', icon: null, uri: null, trusted: true, withdrawn: false,
+  { clientId: 'rezics-web', name: 'REZICS', icon: null, uri: null, trusted: true, firstParty: true,
+    permissionGroups: ['account', 'read', 'create', 'participate', 'manage'], withdrawn: false,
     granted: 'Aug 2, 2026', lastUsed: null, permissions: ['Identify your REZICS account', 'Create works'] },
-  { clientId: 'old-tool', name: 'Old tool', icon: null, uri: null, trusted: false, withdrawn: true,
+  { clientId: 'old-tool', name: 'Old tool', icon: null, uri: null, trusted: false, firstParty: false,
+    permissionGroups: [], withdrawn: true,
     granted: 'Jan 5, 2026', lastUsed: '8 months ago', permissions: ['Read works'] },
 ];
 
@@ -34,6 +37,8 @@ export const Apps: Story = {
     await expect(canvas.getByText('Reader can:')).toBeVisible();
     await expect(canvas.getByText('Keep access while you are signed out, until you revoke it')).toBeVisible();
     await expect(canvas.getByText('REZICS app')).toBeVisible();
+    await expect(canvas.getByText('Create and edit works, sources and collections')).toBeVisible();
+    await expect(canvas.getByText('Create works')).not.toBeVisible();
     await expect(canvas.getByText(/REZICS apps don’t ask first/)).toBeVisible();
     await expect(canvas.getByText('No longer available')).toBeVisible();
     await userEvent.click(canvas.getAllByRole('button', { name: 'Remove access' })[0]!);
@@ -54,11 +59,15 @@ export const TrustedApp: Story = {
   args: { apps: apps.slice(1, 2) },
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
+    await userEvent.click(await canvas.findByText('See all permissions'));
+    await expect(canvas.getByText('Create works')).toBeVisible();
     await userEvent.click((await canvas.findAllByRole('button', { name: 'Remove access' }))[0]!);
     const dialog = await screen.findByRole('alertdialog');
     await waitFor(() => expect(within(dialog).getByText(/gets access again the next time you sign in to it/)).toBeVisible());
   },
 };
+
+export const FirstPartySummary: Story = { args: { apps: apps.slice(1, 2) } };
 
 export const Empty: Story = {
   args: { apps: [] },

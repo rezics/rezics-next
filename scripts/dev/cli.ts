@@ -10,7 +10,7 @@ import { initializeFreshGraph, GRAPHS, DATASET, RV } from '../../services/main/s
 import { appEnvironment, assertSavedStackRawUpdate, assertSavedStackStorage,
   composeProcessEnvironment, devPorts, ensureSecrets, hostsAccountsApp, parseOptions, projectName,
   readEnv, replacePrivate, savePrivate, stackDirectory, type StackOptions } from './config.ts';
-import { bootstrapWebAuth, upgradeWebClient } from './web-auth-bootstrap.ts';
+import { assertWebInstallationReady, bootstrapWebAuth, upgradeWebClient } from './web-auth-bootstrap.ts';
 import { compatibleLoadStorage, loadCompatibility,
   type LoadCompatibility } from '../load/compatibility.ts';
 import { fusekiImageFromCompose } from '../load/image.ts';
@@ -407,6 +407,7 @@ async function prepareDev(options: StackOptions): Promise<Record<string, string>
         ? ['http://localhost:3000/auth/callback', 'http://127.0.0.1:3000/auth/callback']
         : ['http://localhost:3000/auth/callback', 'http://127.0.0.1:3003/auth/callback'] });
   } else await upgradeWebClient({ profile: options.profile, runId: options.runId ?? 'dev' });
+  await assertWebInstallationReady(apps, publicPath);
   const issued = readEnv(runtimePath);
   const publicConfig = JSON.parse(readFileSync(publicPath, 'utf8')) as { clientId: string };
   const overrides = existsSync(overridesFile) ? parseEnv(readFileSync(overridesFile, 'utf8')) : {};
@@ -492,6 +493,7 @@ async function devStart(args: string[]): Promise<void> {
     const ready = shared && await fetch(`http://127.0.0.1:${shared.MAIN_PORT}/health/ready`,
       { signal: AbortSignal.timeout(2_000) }).then(response => response.ok, () => false);
     if (!ready) throw new Error(`The shared backend is not running; start it with \`task dev\` in ${mainRoot}`);
+    await assertWebInstallationReady(shared, join(mainRoot, '.temp', 'stack', 'rezics-dev', 'web-auth', 'public.json'));
   } else {
     if (options!.rawUpdate) throw new Error('--raw-update cannot run with task dev');
     envFile = join(stackDirectory(root, options!), 'dev.env');

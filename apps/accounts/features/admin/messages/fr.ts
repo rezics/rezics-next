@@ -2,6 +2,7 @@ import { insert, plural } from 'native-i18n';
 
 export default {
   productName: 'Administration REZICS',
+  brandLabel: 'Administration',
   panelHome: 'Accueil de l’administration REZICS',
   sectionsLabel: 'Rubriques d’administration',
   overview: 'Vue d’ensemble',

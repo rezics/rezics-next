@@ -11,6 +11,7 @@ import { consentApi } from './consent.ts';
 import { methodsApi, requireStepUp, sensitiveAuthPaths } from './methods.ts';
 import { accountFailure, accountSession } from './http.ts';
 import { observeAuthentication, securityActivityApi } from './security-activity.ts';
+import { recordSessionClient } from './sessions.ts';
 import { connectedAppsApi } from './connected-apps.ts';
 import { adminApi } from './admin.ts';
 import { accountSettingsApi } from './account-settings.ts';
@@ -264,7 +265,10 @@ export function createAccountApp(auth: ReturnType<typeof createAccountAuth>, poo
           if (known.rowCount) return Response.json({ error: 'unauthorized_client' }, { status: 400 });
         }
       }
-      return auth.handler(request);
+      const response = await auth.handler(request);
+      await recordSessionClient(auth, pool, request, response, clientIds.length === 1 ? clientIds[0]! : null)
+        .catch(() => console.error('Account session client label unavailable'));
+      return response;
     })
     .get('/api/account/installations/:clientId', {
       params: t.Object({ clientId: t.String({ minLength: 1, maxLength: 256 }) }),

@@ -17,12 +17,13 @@ export const methodsView = t.Object({ password: t.Boolean(), passwordChangedAt: 
   })), totp: t.Nullable(t.Object({ id: t.String(), name: t.String(), verified: t.Boolean() })) });
 export const sessionView = t.Object({ id: t.String(), createdAt: t.String(), lastActiveAt: t.String(), expiresAt: t.String(),
   device: t.Object({ browser: t.String(), platform: t.Nullable(t.String()), label: t.String() }),
-  network: t.Nullable(t.String()), thisDevice: t.Boolean() });
+  network: t.Nullable(t.String()), thisDevice: t.Boolean(), clientName: t.Optional(t.Nullable(t.String())),
+  groupKey: t.Optional(t.String()) });
 export const eventView = t.Object({ id: t.String(), action: t.String(), detail: t.Record(t.String(), t.Unknown()), occurredAt: t.String() });
 export const activityView = t.Object({ ...pageView(eventView).properties,
   failedAttemptsLast24Hours: t.Object({ count: t.Integer(), capped: t.Boolean() }) });
 export const connectedAppView = t.Object({ clientId: t.String(), name: t.String(), uri: t.Nullable(t.String()),
-  icon: t.Nullable(t.String()), trusted: t.Boolean(), scopes: t.Array(descriptionView), grantedAt: t.String(),
+  icon: t.Nullable(t.String()), trusted: t.Boolean(), firstParty: t.Optional(t.Boolean()), scopes: t.Array(descriptionView), grantedAt: t.String(),
   lastUsedAt: t.Nullable(t.String()), installationId: t.Nullable(t.String()), installationState: t.Nullable(t.String()) });
 export const profileView = t.Object({ id: t.String(), name: t.String(), email: t.String(), image: t.Nullable(t.String()),
   emailVerified: t.Boolean(), twoFactorEnabled: t.Boolean(), createdAt: t.String(), updatedAt: t.String(),

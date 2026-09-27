@@ -1,5 +1,6 @@
 export default {
   productName: 'Cuenta de REZICS',
+  brandLabel: 'Cuenta',
   homeLink: 'Inicio de la cuenta de REZICS',
   goToRezics: 'Ir a REZICS',
   language: 'Idioma',

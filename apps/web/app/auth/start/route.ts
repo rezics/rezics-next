@@ -29,7 +29,8 @@ export async function GET(request: Request) {
   }
   if (input.searchParams.get('create') === '1') authorize.searchParams.set('prompt', 'create');
   const response = NextResponse.redirect(authorize);
-  const options = cookieOptions(request.url, 600);
+  // Account's verification link lasts 30 minutes; the PKCE state must last as long.
+  const options = cookieOptions(request.url, 1800);
   response.cookies.set(OAUTH_STATE_COOKIE, state, options);
   response.cookies.set(OAUTH_VERIFIER_COOKIE, verifier, options);
   response.cookies.set(OAUTH_NEXT_COOKIE, next, options);

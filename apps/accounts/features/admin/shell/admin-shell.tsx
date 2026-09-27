@@ -88,7 +88,7 @@ function Frame({ user, section, children }: { user: AvatarUser; section?: AdminS
   return <div data-density={density} className="group/admin min-h-dvh bg-background lg:grid lg:grid-cols-[15rem_minmax(0,1fr)]">
     <SkipNavLink>{t.skipToContent}</SkipNavLink>
     <aside className="sticky top-0 flex h-dvh flex-col gap-6 border-r border-border/60 bg-card/50 px-3 py-5 max-lg:hidden">
-      <div className="px-2"><Brand label={t.panelHome} product={t.productName} href={adminPaths.overview} /></div>
+      <div className="px-2"><Brand label={t.panelHome} product={t.brandLabel} href={adminPaths.overview} /></div>
       <Navigation section={section} />
       <div className="mt-auto flex flex-col gap-3 px-2">
         {me.role ? <span className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
@@ -103,7 +103,7 @@ function Frame({ user, section, children }: { user: AvatarUser; section?: AdminS
           <SheetTrigger asChild><Button variant="ghost" size="icon-md" aria-label={t.openMenu} className="lg:hidden">
             <MenuIcon aria-hidden="true" /></Button></SheetTrigger>
           <SheetContent placement="left" className="w-72" aria-label={t.sectionsLabel}>
-            <SheetHeader><Brand label={t.panelHome} product={t.productName} href={adminPaths.overview} /></SheetHeader>
+            <SheetHeader><Brand label={t.panelHome} product={t.brandLabel} href={adminPaths.overview} /></SheetHeader>
             <SheetBody className="flex flex-col gap-6">
               <Navigation section={section} onNavigate={() => setMenuOpen(false)} />
               <a href="/" className="inline-flex items-center gap-2 px-3 text-sm text-muted-foreground">

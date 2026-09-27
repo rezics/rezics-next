@@ -15,7 +15,7 @@ export function AdminGate({ status, next }: { status: GateStatus; next: string }
   const { refresh } = useAccountClient();
   return <div className="flex min-h-dvh flex-col bg-background">
     <header className="flex h-16 items-center border-b border-border/60 px-4 sm:px-6">
-      <Brand label={t.panelHome} product={t.productName} href="/admin" /></header>
+      <Brand label={t.panelHome} product={t.brandLabel} href="/admin" /></header>
     <main className="grid flex-1 place-items-center px-4 py-10">
       {status === 'signed-out' ? <StatePanel icon="signedOut" headingLevel={1} className="w-full max-w-lg"
         title={common.signedOutTitle} body={common.signedOutBody}

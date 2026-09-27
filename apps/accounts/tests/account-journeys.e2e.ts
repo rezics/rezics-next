@@ -66,13 +66,14 @@ async function signOut(page: Page) {
   await expect(page).toHaveURL(/\/sign-in$/);
 }
 
-/** Sign up and verify the email, which Account requires before sign-in. */
+/** Sign up and verify, then reset the browser for journeys that begin signed out. */
 async function newAccount(page: Page, person = newPerson()) {
   await open(page, '/sign-up');
   await fillSignUp(page, person);
   await expect(page.getByRole('heading', { name: 'Check your email' })).toBeVisible();
   await page.goto(await emailLink(person.email, /^Verify your email address$/));
   await expect(page.getByRole('heading', { name: 'Your email is verified' })).toBeVisible();
+  await page.context().clearCookies();
   return person;
 }
 
@@ -103,7 +104,7 @@ test('sign up with email verification, the account centre and sign out', async (
   await page.goto(await emailLink(person.email, /^Verify your email address$/));
   await expect(page.getByRole('heading', { name: 'Your email is verified' })).toBeVisible();
 
-  await signIn(page, person);
+  await open(page, '/');
   await expect(page).toHaveURL(/\/$/);
   await expect(page.getByRole('heading', { level: 1 })).toHaveText(`Welcome, ${person.name}`);
   await hydrated(page);
@@ -115,7 +116,7 @@ test('sign up with email verification, the account centre and sign out', async (
   await expect(page.getByRole('heading', { level: 1, name: 'Security & sign-in' })).toBeVisible();
   await expect(page.getByText('This device')).toBeVisible();
   await expect(page.getByText('You’re not signed in anywhere else.')).toBeVisible();
-  await expect(page.getByText('Signed in with your password')).toBeVisible();
+  await expect(page.getByText('Signed in', { exact: true })).toBeVisible();
 
   await open(page, '/personal-info');
   await page.getByRole('button', { name: 'Edit · Name' }).click();

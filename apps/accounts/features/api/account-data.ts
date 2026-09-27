@@ -15,14 +15,15 @@ export interface SignInMethods { password: boolean; passwordChangedAt: string | 
   /** The authenticator app; `verified` is false while setup is unfinished. */
   totp: { name: string; verified: boolean } | null }
 export interface DeviceSession { id: string; createdAt: string; lastActiveAt: string;
-  browser: string | null; platform: string | null; network: string | null; thisDevice: boolean }
+  browser: string | null; platform: string | null; network: string | null; thisDevice: boolean;
+  clientName?: string | null; groupKey?: string }
 export interface SecurityEvent { id: string; action: string; occurredAt: string; method: string | null;
   browser: string | null; platform: string | null; network: string | null; clientId: string | null }
 export interface SecurityActivity { items: SecurityEvent[]; nextCursor: string | null;
   failedLast24Hours: { count: number; capped: boolean } }
 interface ScopeDescription { scope: string; description: { en: string; 'zh-CN': string } }
 export interface ConnectedApp { clientId: string; name: string; uri: string | null; icon: string | null;
-  trusted: boolean; scopes: ScopeDescription[]; grantedAt: string; lastUsedAt: string | null;
+  trusted: boolean; firstParty?: boolean; scopes: ScopeDescription[]; grantedAt: string; lastUsedAt: string | null;
   /** The App was withdrawn from REZICS; its access can still be removed. */
   withdrawn: boolean }
 export interface PublicClient { clientId: string; name: string | null; uri: string | null;
@@ -105,7 +106,9 @@ function parseDevice(value: unknown): DeviceSession | null {
   // The service names a browser it can't recognise "Unknown browser".
   const browser = text(device?.browser);
   return { id, createdAt, lastActiveAt, browser: browser === 'Unknown browser' ? null : browser,
-    platform: text(device?.platform), network: text(item?.network), thisDevice: item?.thisDevice === true };
+    platform: text(device?.platform), network: text(item?.network), thisDevice: item?.thisDevice === true,
+    ...(item?.clientName !== undefined ? { clientName: text(item.clientName) } : {}),
+    ...(text(item?.groupKey) ? { groupKey: text(item?.groupKey)! } : {}) };
 }
 
 export const parseSessions = (value: unknown) => page(value, parseDevice);
@@ -147,7 +150,9 @@ function parseConnectedApp(value: unknown): ConnectedApp | null {
   const scopes = list(item?.scopes, parseScope);
   if (!clientId || !grantedAt || !scopes) return null;
   return { clientId, grantedAt, scopes, name: text(item?.name)?.trim() || clientId, uri: webLink(item?.uri),
-    icon: webLink(item?.icon), trusted: item?.trusted === true, lastUsedAt: date(item?.lastUsedAt),
+    icon: webLink(item?.icon), trusted: item?.trusted === true,
+    ...(item?.firstParty !== undefined ? { firstParty: item.firstParty === true } : {}),
+    lastUsedAt: date(item?.lastUsedAt),
     withdrawn: item?.installationState === 'revoked' };
 }
 

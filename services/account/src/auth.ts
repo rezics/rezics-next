@@ -69,7 +69,7 @@ export function accountAuthOptions(config: AccountConfig) {
           .catch(() => console.error('Account email intent unavailable'));
       },
     },
-    emailVerification: { sendOnSignUp: true, expiresIn: 1800,
+    emailVerification: { sendOnSignUp: true, autoSignInAfterVerification: true, expiresIn: 1800,
       sendVerificationEmail: async ({ user, url }: { user: EmailUser; url: string }, request?: Request) => {
         if (!config.email && !requireEmailVerification) return;
         if (!config.email) throw new Error('Account email delivery is not configured');

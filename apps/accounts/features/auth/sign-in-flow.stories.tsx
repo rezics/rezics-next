@@ -78,6 +78,14 @@ export const ForAnApp: Story = {
   },
 };
 
+export const ForRezics: Story = {
+  args: { appName: 'REZICS', oauthQuery: 'client_id=rezics&sig=abc&ba_param=client_id',
+    carry: 'client_id=rezics&sig=abc&ba_param=client_id' },
+  async play({ canvasElement }) {
+    await expect(await within(canvasElement).findByText('to continue to REZICS')).toBeVisible();
+  },
+};
+
 const verified = fn(async (): Promise<{ ok: true; data: object } | { ok: false; kind: 'invalid-code'; status: number }> =>
   verified.mock.calls.length === 1 ? { ok: false, kind: 'invalid-code', status: 401 } : { ok: true, data: {} });
 const afterCode = fn();

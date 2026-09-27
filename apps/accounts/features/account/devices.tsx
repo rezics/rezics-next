@@ -11,7 +11,10 @@ import { useTranslation } from '../../i18n/client.ts';
 
 export interface DeviceView {
   id: string;
+  ids: string[];
+  count: number;
   thisDevice: boolean;
+  clientName: string | null;
   browser: string | null;
   platform: string | null;
   /** The coarse network the session signed in from, such as 192.0.2.0/24. */
@@ -19,6 +22,7 @@ export interface DeviceView {
   /** Relative times, already localized on the server. */
   signedIn: string;
   lastActive: string;
+  lastActiveAt: string;
 }
 
 export type DevicesView = { status: 'ok'; items: DeviceView[] } | { status: 'unavailable' };
@@ -62,12 +66,14 @@ export function Devices({ devices }: { devices: DevicesView }) {
       <Button variant="outline" onClick={refresh}>{common.retry}</Button>
     </div>;
   }
-  const others = devices.items.filter(item => !item.thisDevice);
+  const others = devices.items.filter(item => item.ids.length > 0);
   return <>
     <ul className="divide-y divide-border/60">
       {devices.items.map(item => {
         const Icon = icons[kind(item.platform)];
-        const title = name(item);
+        const title = item.clientName ? t.appDevice({ app: item.clientName,
+          device: item.browser && item.platform ? `${item.browser} · ${item.platform}`
+            : item.browser ?? item.platform ?? t.unknownDevice }) : name(item);
         return <li key={item.id} className="flex items-center gap-4 px-5 py-4 sm:px-6">
           <span className="grid size-10 shrink-0 place-items-center rounded-full bg-accent text-accent-foreground">
             <Icon className="size-5" aria-hidden="true" /></span>
@@ -79,10 +85,11 @@ export function Devices({ devices }: { devices: DevicesView }) {
               : t.lastActive({ time: item.lastActive })}</p>
             <p className="text-sm text-muted-foreground">{t.signedInAt({ time: item.signedIn })}
               {item.network ? <> · <span className="tabular-nums">{t.network({ network: item.network })}</span></> : null}</p>
+            {item.count > 1 ? <p className="text-sm text-muted-foreground">{t.sessionsInGroup({ value: item.count })}</p> : null}
           </div>
-          {item.thisDevice ? null : <Button variant="outline" size="sm" isLoading={busy === item.id}
+          {!item.ids.length ? null : <Button variant="outline" size="sm" isLoading={busy === item.id}
             disabled={!!busy} aria-label={`${t.signOutDevice} · ${title}`}
-            onClick={() => void run(item.id, () => api.revokeSession(item.id))}>{t.signOutDevice}</Button>}
+            onClick={() => void run(item.id, () => api.revokeSessions(item.ids))}>{t.signOutDevice}</Button>}
         </li>;
       })}
     </ul>

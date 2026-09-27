@@ -1,5 +1,6 @@
 export default {
   productName: 'REZICS 帳戶',
+  brandLabel: '帳戶',
   homeLink: 'REZICS 帳戶首頁',
   goToRezics: '前往 REZICS',
   language: '語言',

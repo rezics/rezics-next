@@ -7,7 +7,7 @@ import { createAccountAuth } from '../../services/account/src/auth.ts';
 import { createAccountApp } from '../../services/account/src/app.ts';
 import { operatorRole, rolePermits } from '../../services/account/src/operators.ts';
 import { FusekiClient } from '../../services/main/src/infrastructure/fuseki.ts';
-import { MAIN_SITE_SCOPE } from '../../apps/web/features/auth/scopes.ts';
+import { MAIN_SITE_SCOPE, MAIN_SITE_SCOPES } from '../../apps/web/features/auth/scopes.ts';
 import { appEnvironment, readEnv, savePrivate, stackDirectory } from './config.ts';
 
 const root = resolve(import.meta.dir, '../..');
@@ -18,7 +18,7 @@ const scope = MAIN_SITE_SCOPE;
 const webGrantTypes = ['authorization_code', 'refresh_token'];
 
 export function webClientRegistration(redirectUris: string[]) {
-  return { client_name: 'QA-only loopback PKCE', application_type: 'native' as const,
+  return { client_name: 'REZICS', application_type: 'native' as const,
     redirect_uris: redirectUris, token_endpoint_auth_method: 'none' as const,
     grant_types: webGrantTypes, scope, skip_consent: true, require_pkce: true };
 }
@@ -254,6 +254,8 @@ export async function bootstrapWebAuth(options: WebAuthOptions): Promise<WebAuth
     if (!mainClient.client_secret) throw new Error('Account did not issue a Main client secret');
     const webClient = await auth.api.adminCreateOAuthClient({ headers,
       body: webClientRegistration(redirectUris) });
+    await accountPool.query('INSERT INTO rezics_oauth_first_party_client (client_id) VALUES ($1) ON CONFLICT DO NOTHING',
+      [webClient.client_id]);
     const member = await signUp(app, apps.ACCOUNT_BASE_URL!, 'member');
     // The running Account requires a verified email to sign in; the fixture's own people are verified.
     await accountPool.query('UPDATE "user" SET "emailVerified" = true WHERE id = ANY($1::text[])',
@@ -302,8 +304,38 @@ export async function bootstrapWebAuth(options: WebAuthOptions): Promise<WebAuth
 }
 
 /** Whether a stack's registered web client already has today's scopes and grants. */
-export function webClientCurrent(registered: { scope: string; grantTypes?: string[] }): boolean {
-  return registered.scope === scope && webGrantTypes.every(grant => registered.grantTypes?.includes(grant));
+export function webClientCurrent(registered: { scope: string; grantTypes?: string[]; name?: string;
+  installationScopes?: string[]; installationState?: string; firstParty?: boolean }): boolean {
+  const requested = new Set(scope.split(' '));
+  const declared = new Set(registered.scope.split(' '));
+  return declared.size === requested.size && [...requested].every(grant => declared.has(grant))
+    && registered.name === 'REZICS' && registered.firstParty === true
+    && registered.installationState === 'active'
+    && requested.size === registered.installationScopes?.length
+    && registered.installationScopes.every(grant => requested.has(grant))
+    && webGrantTypes.every(grant => registered.grantTypes?.includes(grant));
+}
+
+/** A missing or stale installation stops local startup before a browser sees invalid_scope. */
+export async function assertWebInstallationReady(apps: Record<string, string>, publicPath: string): Promise<void> {
+  const saved = JSON.parse(readFileSync(publicPath, 'utf8')) as { clientId?: string };
+  if (!saved.clientId) throw new Error('Web auth public.json has no client ID; run task dev:prepare');
+  const account = new Pool({ connectionString: apps.ACCOUNT_DATABASE_URL });
+  try {
+    const installation = await account.query<{ installationScopes: string[]; registeredScopes: string[];
+      grantTypes: string[] }>(`SELECT i.scopes AS "installationScopes", c.scopes AS "registeredScopes",
+      c."grantTypes" AS "grantTypes" FROM rezics_oauth_installation i
+      JOIN "oauthClient" c ON c."clientId" = i.client_id
+      WHERE i.client_id = $1 AND i.state = 'active' AND c.disabled IS NOT TRUE`, [saved.clientId]);
+    const installed = installation.rows[0];
+    const admitted = new Set(installed?.installationScopes ?? []);
+    const registered = new Set(installed?.registeredScopes ?? []);
+    const missing = MAIN_SITE_SCOPES.filter(scope => !admitted.has(scope) || !registered.has(scope));
+    if (!installed || missing.length || !webGrantTypes.every(grant => installed.grantTypes?.includes(grant))) {
+      throw new Error(`Web OAuth client registration or installation does not cover the site's scopes and grants${missing.length
+        ? `: ${missing.join(', ')}` : ''}; run task dev:prepare`);
+    }
+  } finally { await account.end(); }
 }
 
 /** A stack prepared before the main site's current scopes or refresh grant
@@ -316,13 +348,24 @@ export async function upgradeWebClient(options: { runId: string; profile?: 'dev'
   const publicPath = join(stackDir, 'web-auth', 'public.json');
   const current = JSON.parse(readFileSync(publicPath, 'utf8')) as {
     clientId: string; redirectUris: string[]; scope: string; grantTypes?: string[] };
-  if (webClientCurrent(current)) return false;
   const { operator } = JSON.parse(readFileSync(join(stackDir, 'web-auth', 'private.json'), 'utf8')) as {
     operator: { id: string; email: string; password: string } };
   const apps = readEnv(join(stackDir, 'apps.env'));
   requireLocalApps(apps);
   const pool = new Pool({ connectionString: apps.ACCOUNT_DATABASE_URL });
   try {
+    const registered = await pool.query<{ name: string; scopes: string[]; grantTypes: string[];
+      installationScopes: string[] | null; installationState: string | null; firstParty: boolean }>(`
+      SELECT c.name, c.scopes, c."grantTypes", i.scopes AS "installationScopes",
+        i.state AS "installationState", fp.client_id IS NOT NULL AS "firstParty"
+      FROM "oauthClient" c
+      LEFT JOIN rezics_oauth_installation i ON i.client_id = c."clientId" AND i.state = 'active'
+      LEFT JOIN rezics_oauth_first_party_client fp ON fp.client_id = c."clientId"
+      WHERE c."clientId" = $1`, [current.clientId]);
+    const installed = registered.rows[0];
+    if (installed && webClientCurrent({ scope: installed.scopes.join(' '), name: installed.name,
+      grantTypes: installed.grantTypes, installationScopes: installed.installationScopes ?? undefined,
+      installationState: installed.installationState ?? undefined, firstParty: installed.firstParty })) return false;
     const auth = createAccountAuth({ baseURL: apps.ACCOUNT_BASE_URL!, secret: apps.ACCOUNT_SECRET!,
       resource: apps.ACCOUNT_MAIN_RESOURCE!, pool, operatorUserIds: new Set([operator.id]) });
     const signIn = await createAccountApp(auth, pool).handle(new Request(
@@ -335,6 +378,12 @@ export async function upgradeWebClient(options: { runId: string; profile?: 'dev'
     const webClient = await auth.api.adminCreateOAuthClient({
       headers: new Headers({ cookie, origin: apps.ACCOUNT_BASE_URL! }),
       body: webClientRegistration(current.redirectUris) });
+    await pool.query('INSERT INTO rezics_oauth_first_party_client (client_id) VALUES ($1)', [webClient.client_id]);
+    if (installed?.name === 'QA-only loopback PKCE') {
+      await pool.query('UPDATE "oauthClient" SET name = $1 WHERE "clientId" = $2', ['REZICS', current.clientId]);
+      await pool.query('INSERT INTO rezics_oauth_first_party_client (client_id) VALUES ($1) ON CONFLICT DO NOTHING',
+        [current.clientId]);
+    }
     writeFileSync(publicPath, JSON.stringify({ ...current, clientId: webClient.client_id, scope,
       grantTypes: webGrantTypes }, null, 2) + '\n', { mode: 0o600 });
     return true;

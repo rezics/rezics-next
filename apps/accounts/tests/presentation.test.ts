@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { presentActivity, securityCheckup } from '../features/account/activity.ts';
 import { calendarDate, relativeTime } from '../features/account/format.ts';
 import { manualKey } from '../features/account/two-step.tsx';
-import { activityPage, connectedAppViews, deviceViews } from '../features/account/views.ts';
+import { activityPage, connectedAppViews, deviceViews, firstPartyPermissionGroups } from '../features/account/views.ts';
 import type { SecurityEvent, SignInMethods } from '../features/api/account-data.ts';
 import { groupScopes } from '../features/consent/scopes.ts';
 
@@ -65,12 +65,14 @@ describe('security checkup', () => {
 });
 
 describe('view models', () => {
-  test('pin this device first, then the most recently active', () => {
-    const device = (id: string, lastActive: number, thisDevice = false) => ({ id, createdAt: at(86_400),
-      lastActiveAt: at(lastActive), browser: 'Firefox', platform: 'Linux', network: null, thisDevice });
-    expect(deviceViews([device('old', 7_200), device('me', 10_800, true), device('new', 60)], now, 'en')
-      .map(view => [view.id, view.lastActive])).toEqual([['me', '3 hours ago'], ['new', '1 minute ago'],
-      ['old', '2 hours ago']]);
+  test('group repeated sign-ins by client and user agent, keeping every revoke target', () => {
+    const device = (id: string, lastActive: number, groupKey: string, thisDevice = false) => ({
+      id, createdAt: at(86_400), lastActiveAt: at(lastActive), browser: 'Firefox', platform: 'Linux',
+      network: null, clientName: 'REZICS', groupKey, thisDevice });
+    expect(deviceViews([device('old', 7_200, 'web-firefox'), device('me', 10_800, 'web-firefox', true),
+      device('new', 60, 'other-firefox')], now, 'en').map(view =>
+      [view.count, view.thisDevice, view.ids, view.lastActive])).toEqual([
+      [2, true, ['old'], '2 hours ago'], [1, false, ['new'], '1 minute ago']]);
   });
 
   test('describe an app’s permissions in the page’s language', () => {
@@ -80,6 +82,8 @@ describe('view models', () => {
       scopes: [scope('openid', 'Identify your REZICS account', '识别你的 REZICS 账号'),
         scope('work:read', 'Read works', '读取作品')] }], now, 'zh-Hans');
     expect(app).toMatchObject({ permissions: ['识别你的 REZICS 账号', '读取作品'], lastUsed: '1小时前' });
+    expect(firstPartyPermissionGroups(['openid', 'work:read', 'work:create', 'follow:write', 'access:manage']))
+      .toEqual(['account', 'read', 'create', 'participate', 'manage']);
   });
 
   test('an authenticator key is grouped for typing', () => {

@@ -12,6 +12,7 @@ import { failureText } from './failure-text.ts';
 import { useStepUp } from './step-up.tsx';
 import { useAccountClient } from '../api/account-client.tsx';
 import { useTranslation } from '../../i18n/client.ts';
+import type { FirstPartyPermissionGroup } from './views.ts';
 
 export interface ConnectedAppView {
   clientId: string;
@@ -20,10 +21,12 @@ export interface ConnectedAppView {
   icon: string | null;
   /** A REZICS app, trusted without a consent screen. */
   trusted: boolean;
+  firstParty: boolean;
   /** REZICS withdrew the App; it can no longer be used, and its access can still be removed. */
   withdrawn: boolean;
   /** What it may do, in the page's language. */
   permissions: string[];
+  permissionGroups: FirstPartyPermissionGroup[];
   /** Dates already localized on the server. */
   granted: string;
   lastUsed: string | null;
@@ -79,7 +82,7 @@ export function ConnectedApps({ apps }: { apps: ConnectedAppView[] }) {
                 <h2 className="truncate text-lg font-semibold">{app.uri
                   ? <a href={app.uri} target="_blank" rel="noreferrer" className="hover:underline">{app.name}</a>
                   : app.name}</h2>
-                {app.trusted ? <Badge variant="info" className="text-info-foreground">
+                {app.firstParty ? <Badge variant="info" className="text-info-foreground">
                   <BadgeCheckIcon aria-hidden="true" />{t.rezicsApp}</Badge> : null}
                 {app.withdrawn ? <Badge variant="secondary">{t.appWithdrawn}</Badge> : null}
               </div>
@@ -87,9 +90,16 @@ export function ConnectedApps({ apps }: { apps: ConnectedAppView[] }) {
                 ? t.appLastUsed({ time: app.lastUsed }) : t.appNotUsed}</p>
               <p className="mt-3 text-sm font-medium">{t.hasAccessTo({ app: app.name })}</p>
               <ul className="mt-1.5 flex flex-col gap-1 text-sm">
-                {app.permissions.map(permission => <li key={permission} className="flex gap-2">
+                {(app.firstParty ? app.permissionGroups.map(group => t.firstPartyPermissions[group])
+                  : app.permissions).map(permission => <li key={permission} className="flex gap-2">
                   <CheckIcon className="mt-0.5 size-4 shrink-0 text-primary" aria-hidden="true" />{permission}</li>)}
               </ul>
+              {app.firstParty ? <details className="mt-3 text-sm">
+                <summary className="cursor-pointer font-medium text-primary">{t.allPermissions}</summary>
+                <ul className="mt-2 list-disc space-y-1 ps-5 text-muted-foreground">
+                  {app.permissions.map(permission => <li key={permission}>{permission}</li>)}
+                </ul>
+              </details> : null}
               {app.trusted ? <p className="mt-3 text-sm text-muted-foreground">{t.trustedAppNote}</p> : null}
             </div>
             <Button variant="outline" className="shrink-0 max-sm:hidden" onClick={() => ask(app)}>

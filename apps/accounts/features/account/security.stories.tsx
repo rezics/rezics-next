@@ -7,12 +7,12 @@ import { AccountFrame } from '../../.storybook/account-frame.tsx';
 import { chinese, dark, phone } from '../../.storybook/variants.ts';
 
 const devices: DeviceView[] = [
-  { id: 's1', thisDevice: true, browser: 'Chrome', platform: 'macOS', network: '192.0.2.0/24', signedIn: '2 days ago',
-    lastActive: 'this minute' },
-  { id: 's2', thisDevice: false, browser: 'Safari', platform: 'iOS', network: '198.51.100.0/24', signedIn: '1 week ago',
-    lastActive: '3 hours ago' },
-  { id: 's3', thisDevice: false, browser: null, platform: null, network: null, signedIn: '2 weeks ago',
-    lastActive: '2 weeks ago' },
+  { id: 's1', ids: [], count: 1, thisDevice: true, clientName: 'REZICS', browser: 'Chrome', platform: 'macOS',
+    network: '192.0.2.0/24', signedIn: '2 days ago', lastActive: 'this minute', lastActiveAt: '2026-09-27T12:00:00Z' },
+  { id: 's2', ids: ['s2', 's4'], count: 2, thisDevice: false, clientName: 'REZICS', browser: 'Safari', platform: 'iOS',
+    network: null, signedIn: '1 week ago', lastActive: '3 hours ago', lastActiveAt: '2026-09-27T09:00:00Z' },
+  { id: 's3', ids: ['s3'], count: 1, thisDevice: false, clientName: null, browser: null, platform: null,
+    network: null, signedIn: '2 weeks ago', lastActive: '2 weeks ago', lastActiveAt: '2026-09-13T12:00:00Z' },
 ];
 const entry = (id: string, kind: ActivityView['kind'], when: string, extra: Partial<ActivityView> = {}): ActivityView =>
   ({ id, kind, when, occurredAt: '2026-09-27T09:00:00Z', count: 1, method: null, clientId: null, browser: null, platform: null,
@@ -42,7 +42,8 @@ export const Overview: Story = {
     await expect(canvas.getByRole('link', { name: /2-Step Verification is on/ }))
       .toHaveAttribute('href', '/security/two-step-verification');
     await expect(canvas.getByText('This device')).toBeVisible();
-    await expect(canvas.getByText('Chrome on macOS')).toBeVisible();
+    await expect(canvas.getByText('REZICS on Chrome · macOS')).toBeVisible();
+    await expect(canvas.getByText('2 sign-ins')).toBeVisible();
     await expect(canvas.getByText('Unknown device')).toBeVisible();
     await expect(canvas.getByText('Signed in with a passkey')).toBeVisible();
     await expect(canvas.getByText('2 failed sign-in attempts')).toBeVisible();
@@ -57,17 +58,17 @@ const revoke = fn(async (): Promise<{ ok: true; data: undefined } | { ok: false;
 const reauthenticated = fn(async () => ({ ok: true as const, data: undefined }));
 const refreshed = fn();
 export const SignOutADevice: Story = {
-  parameters: { account: { refresh: refreshed, api: { revokeSession: revoke, reauthenticate: reauthenticated } } },
+  parameters: { account: { refresh: refreshed, api: { revokeSessions: revoke, reauthenticate: reauthenticated } } },
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
-    await userEvent.click(await canvas.findByRole('button', { name: 'Sign out · Safari on iOS' }));
+    await userEvent.click(await canvas.findByRole('button', { name: 'Sign out · REZICS on Safari · iOS' }));
     // The service wants the person to confirm first; the change runs again afterwards.
     const dialog = await screen.findByRole('dialog', { name: 'Confirm it’s you' });
     await userEvent.type(within(dialog).getByLabelText('Enter your password'), 'correct horse battery');
     await userEvent.click(within(dialog).getByRole('button', { name: 'Confirm' }));
     await expect(reauthenticated).toHaveBeenCalledWith({ password: 'correct horse battery', totpCode: undefined });
     await waitFor(() => expect(revoke).toHaveBeenCalledTimes(2));
-    await expect(revoke).toHaveBeenLastCalledWith('s2');
+    await expect(revoke).toHaveBeenLastCalledWith(['s2', 's4']);
     await expect(refreshed).toHaveBeenCalled();
     await expect(await canvas.findByText(/Signed out\. Those devices need/)).toBeVisible();
   },

@@ -77,7 +77,7 @@ export function AccountShell({ section, user, webOrigin, stepUp = defaultStepUp,
   return <div className="min-h-dvh bg-background">
     <header className="sticky top-0 z-20 border-b border-border/60 bg-background/90 backdrop-blur">
       <div className="mx-auto flex h-16 max-w-6xl items-center gap-3 px-4 sm:px-6">
-        <Brand label={common.homeLink} product={common.productName} />
+        <Brand label={common.homeLink} product={common.brandLabel} />
         <div className="flex-1" />
         <Button variant="ghost" asChild className="max-sm:hidden"><a href={webOrigin}>
           {common.goToRezics}<ArrowUpRightIcon aria-hidden="true" /></a></Button>

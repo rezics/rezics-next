@@ -1,5 +1,6 @@
 export default {
   productName: 'REZICS 账号',
+  brandLabel: '账号',
   homeLink: 'REZICS 账号首页',
   goToRezics: '前往 REZICS',
   language: '语言',
