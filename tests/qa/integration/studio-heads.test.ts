@@ -130,12 +130,18 @@ test('STUDIO draft heads and Work title language survive edits and stale retries
           'idempotency-key': chapterKey }, body: JSON.stringify(payload) }));
     const chapter = await f.json<{ work: string; workRevision: string; occurrence: string; compositionRevision: string;
       variantId: string; replayed: boolean }>(await chapterCall(), 200);
-    expect(chapter).toMatchObject({ replayed: false, variantId: expect.stringMatching(/^urn:rezics:variant:/) });
+    expect(chapter.replayed).toBe(false);
+    expect(chapter.variantId).toMatch(/^urn:rezics:variant:/);
     expect((await f.json<typeof chapter>(await chapterCall(), 200))).toMatchObject({
       work: chapter.work, occurrence: chapter.occurrence,
       compositionRevision: chapter.compositionRevision, replayed: true });
     expect((await chapterCall({ ...chapterBody, title: '改題' })).status).toBe(409);
     expect((await chapterCall({ ...chapterBody, direction: 'rtl' })).status).toBe(409);
+    const staleChapter = await studio.handle(new Request(
+      `http://main.local/v1/works/${shortId(created.work)}/chapters`, { method: 'POST',
+        headers: { authorization: `Bearer ${f.account.tokenA}`, 'content-type': 'application/json',
+          'idempotency-key': randomUUID() }, body: JSON.stringify(chapterBody) }));
+    expect(staleChapter.status).toBe(409);
     const chapterResult = chapter as typeof chapter & { receipt: string;
       sourcePosition: { dataEpoch: string; sequence: string } };
     const eventIds = ['structure', 'chapter'].map(suffix =>
@@ -155,5 +161,14 @@ test('STUDIO draft heads and Work title language survive edits and stale retries
     const chapterHead = await f.json<{ title: string; language: string }>(await f.call('GET',
       `/v1/revisions/${shortId(chapter.workRevision)}?actingSubject=${encodeURIComponent(f.actor)}`), 200);
     expect(chapterHead).toMatchObject({ title: '第一章', language: 'ja' });
+    await f.grant(`content:draft:${chapter.work}`, 'content.draft');
+    await f.grant(`content:variants:${chapter.work}`, 'content.variants.read');
+    const chapterDraft = await f.json<{ revisionId: string }>(await contentCall('POST',
+      '/v1/content-drafts', { profile: 'content-text-v1', resourceId: chapter.work,
+        variantId: chapter.variantId, language: { kind: 'tag', tag: 'ja', originalTag: 'ja' },
+        direction: 'ltr', expectedHead: null, body: '第一章の本文', actingSubject: f.actor }), 201);
+    const chapterVariants = `/v1/works/${shortId(chapter.work)}/content-variants?actingSubject=${encodeURIComponent(f.actor)}`;
+    expect(await f.json<{ items: unknown[] }>(await contentCall('GET', chapterVariants), 200))
+      .toMatchObject({ items: [{ variantId: chapter.variantId, draftHead: chapterDraft.revisionId }] });
   } finally { await f.close(); }
 }, 20_000);
