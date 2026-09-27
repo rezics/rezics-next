@@ -16,6 +16,6 @@ the Main bearer token. [BFF tests](../../apps/web/tests/session-bff.test.ts)
 cover forwarding and token separation. Interactive query factories include
 scope, locale, exact selection and acting subject where results depend on them.
 
-Future write flows still need receipt-aware invalidation and stories for stale,
-partial, denied and recoverable errors. The current create-Work flow handles
-pending and denied outcomes; these broader states remain a feature task.
+Studio's writes ([`features/studio`](../../apps/web/features/studio/)) show
+pending, stale, partial, denied, offline and recoverable outcomes in their
+stories; receipt-aware query invalidation remains a feature task.

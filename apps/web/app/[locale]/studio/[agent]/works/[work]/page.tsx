@@ -33,12 +33,13 @@ export async function generateMetadata(props: Params): Promise<Metadata> {
   return { title: context?.loaded.ok ? context.loaded.data.header.title.value : t.studio, robots: { index: false } };
 }
 
-/** Details as the form edits them: one row per language, the original title apart. */
-function detailsOf(metadata: WorkMetadata | null): DetailsState {
+/** Details as the form edits them: one row per language (the Work's own language first), the original title apart. */
+function detailsOf(metadata: WorkMetadata | null, language: string): DetailsState {
+  const entries = metadata?.localized.map(entry => ({ language: entry.language, title: entry.title ?? '',
+    description: entry.description ?? '' })) ?? [];
   return { status: 'idle', head: metadata?.revision ?? null, values: {
     originalTitle: metadata?.originalTitle?.value ?? '', originalLanguage: metadata?.originalTitle?.language ?? '',
-    entries: metadata?.localized.map(entry => ({ language: entry.language, title: entry.title ?? '',
-      description: entry.description ?? '' })) ?? [] } };
+    entries: entries.length ? entries : [{ language, title: '', description: '' }] } };
 }
 
 export default async function StudioWorkPage(props: Params) {
@@ -59,5 +60,6 @@ export default async function StudioWorkPage(props: Params) {
   }
   const { metadata } = loaded.data;
   return <StudioWork agent={agent} work={loaded.data} detailsAction={saveDetails}
-    details={detailsOf(metadata.ok ? metadata.data : null)} locale={locale} messages={messages} />;
+    details={detailsOf(metadata.ok ? metadata.data : null, loaded.data.header.selectedLanguage ?? locale)}
+    locale={locale} messages={messages} />;
 }

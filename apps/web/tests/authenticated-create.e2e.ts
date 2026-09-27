@@ -12,9 +12,23 @@ function fixture<T>(name: string): T {
   return JSON.parse(readFileSync(path, 'utf8')) as T;
 }
 
-async function signIn(page: Page, next = '/en/studio'): Promise<void> {
+/** Studio opens as the session Agent, at that Agent's own address. */
+function sessionStudio(): string {
+  return `/en/studio/@agent-${fixture<PublicFixture>('REZICS_WEB_AUTH_PUBLIC_PATH').actingSubject.slice(-36)}`;
+}
+
+async function signIn(page: Page, next = sessionStudio()): Promise<void> {
   const privateFixture = fixture<PrivateFixture>('REZICS_WEB_AUTH_PRIVATE_PATH');
   await signInAtAccounts(page, next, privateFixture.member);
+}
+
+/** Creates a Work from Studio's new-work form and returns its ID from the editor it opens. */
+async function createWork(page: Page, title: string): Promise<string> {
+  await page.goto(`${sessionStudio()}/new`);
+  await page.getByRole('textbox', { name: 'Title' }).fill(title);
+  await page.getByRole('button', { name: /^Create as / }).click();
+  await page.waitForURL(new RegExp(`^[^?]*${sessionStudio()}/works/[0-9a-f-]{36}/write\\?language=en$`));
+  return /\/works\/([0-9a-f-]{36})\//.exec(page.url())![1]!;
 }
 
 /** Opens the shell's account menu; a click that lands before hydration does nothing, so retry. */
@@ -45,7 +59,7 @@ test('IAM01: a web session outlives its access token, keeps its Agent and signs 
   const publicFixture = fixture<PublicFixture>('REZICS_WEB_AUTH_PUBLIC_PATH');
   await signIn(page);
   // The member may act as exactly one Agent, so the new session starts with it.
-  await expect(page).toHaveURL('/en/studio');
+  await expect(page).toHaveURL(sessionStudio());
   const sessionKey = (await cookie(context, 'rezics_session_key'))?.value;
   expect(sessionKey).toMatch(/^[0-9a-f-]{36}$/);
   expect(await cookie(context, 'rezics_subject')).toBeUndefined();
@@ -63,7 +77,7 @@ test('IAM01: a web session outlives its access token, keeps its Agent and signs 
   const refresh = (await cookie(context, 'rezics_refresh'))?.value;
   await context.clearCookies({ name: 'rezics_access' });
   await page.reload();
-  await expect(page).toHaveURL('/en/studio');
+  await expect(page).toHaveURL(sessionStudio());
   expect(await cookie(context, 'rezics_access')).toBeDefined();
   expect((await cookie(context, 'rezics_refresh'))?.value).not.toBe(refresh);
 
@@ -87,7 +101,7 @@ test('IAM01: a web session outlives its access token, keeps its Agent and signs 
   await expect(page.getByRole('menu')).toHaveCSS('opacity', '1');
   await page.screenshot({ path: testInfo.outputPath('session-account-menu-desktop.png') });
   await page.getByRole('menuitem', { name: 'Switch Agent' }).click();
-  await expect(page).toHaveURL('/en/identity?next=%2Fen%2Fstudio');
+  await expect(page).toHaveURL(`/en/identity?next=${encodeURIComponent(sessionStudio())}`);
   await expect(page.getByRole('radio', { checked: true })).toHaveValue(publicFixture.actingSubject);
   await page.screenshot({ path: testInfo.outputPath('session-agent-picker-desktop.png') });
   await page.setViewportSize({ width: 390, height: 844 });
@@ -96,7 +110,7 @@ test('IAM01: a web session outlives its access token, keeps its Agent and signs 
   await page.setViewportSize({ width: 1280, height: 720 });
   await page.getByRole('checkbox', { name: /Make this my default/ }).check();
   await page.getByRole('button', { name: 'Use this Agent' }).click();
-  await expect(page).toHaveURL('/en/studio');
+  await expect(page).toHaveURL(sessionStudio());
   const mainAgent = await page.request.get('/api/main/v1/me/main-agent-preference');
   expect(mainAgent.status()).toBe(200);
   expect((await mainAgent.json() as { mainAgent: { actingSubject: string } }).mainAgent.actingSubject)
@@ -117,7 +131,7 @@ test('IAM01: a web session outlives its access token, keeps its Agent and signs 
   await expect(page.getByRole('radio', { checked: true })).toHaveCount(0);
   await page.getByRole('radio', { name: new RegExp(publicFixture.actingSubject) }).check();
   await page.getByRole('button', { name: 'Use this Agent' }).click();
-  await expect(page).toHaveURL('/en/studio');
+  await expect(page).toHaveURL(sessionStudio());
 
   // Signing out revokes this product's refresh token and returns to public Home.
   await openAccountMenu(page);
@@ -135,7 +149,7 @@ test('IAM01: a web session outlives its access token, keeps its Agent and signs 
 test('IAM03: the Agent held by Main is used for Work creation', async ({ page, context }) => {
   const publicFixture = fixture<PublicFixture>('REZICS_WEB_AUTH_PUBLIC_PATH');
   await signIn(page);
-  await expect(page).toHaveURL('/en/studio');
+  await expect(page).toHaveURL(sessionStudio());
   const sessionKey = (await cookie(context, 'rezics_session_key'))?.value;
   expect(sessionKey).toBeDefined();
   const state = await page.request.get('/api/main/v1/me/session-agent', {
@@ -144,12 +158,9 @@ test('IAM03: the Agent held by Main is used for Work creation', async ({ page, c
   const agent = (await state.json() as { sessionAgent: { actingSubject: string } })
     .sessionAgent.actingSubject;
   expect(agent).toBe(publicFixture.actingSubject);
-  const title = `Session Agent Work ${Date.now()}`;
-  await page.getByRole('textbox', { name: 'Work title' }).fill(title);
-  await page.getByRole('button', { name: 'Create Work' }).click();
-  const receipt = page.getByRole('status', { name: 'Work created' });
-  await expect(receipt).toContainText(title);
-  await expect(receipt.locator('dd').first()).toHaveText(/^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/);
+  // Studio's address names the session Agent, and the new Work opens in that Agent's Studio.
+  const work = await createWork(page, `Session Agent Work ${Date.now()}`);
+  expect(work).toMatch(/^[0-9a-f-]{36}$/);
   expect(await cookie(context, 'rezics_subject')).toBeUndefined();
 });
 
@@ -157,30 +168,31 @@ test('WORK01: authenticated member creates a metadata-only Work with an empty Ma
   const browserErrors: string[] = [];
   page.on('pageerror', error => browserErrors.push(error.message));
   await signIn(page);
-  await expect(page).toHaveURL('/en/studio');
+  await expect(page).toHaveURL(sessionStudio());
   const title = `Browser Work ${Date.now()}`;
-  await page.getByRole('textbox', { name: 'Work title' }).fill(title);
-  await page.getByRole('button', { name: 'Create Work' }).click();
-  const receipt = page.getByRole('status', { name: 'Work created' });
-  await expect(receipt).toBeVisible();
-  await expect(receipt).toContainText(title);
-  await expect(receipt).toContainText('Main Version');
-  const work = await receipt.locator('dd').nth(0).innerText();
-  const mainVersion = await receipt.locator('dd').nth(1).innerText();
-  const revision = await receipt.locator('dd').nth(2).innerText();
-  expect(work).toMatch(/^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/);
-  expect(mainVersion).toMatch(/^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/);
-  expect(mainVersion).not.toBe(work);
-  await expect(receipt.locator('dd').nth(3)).toContainText(/^\d+$/);
-  // The BFF serves the same Main paths to the browser as Main does.
-  const selection = await page.request.get(`/api/main/v1/main-versions/${mainVersion.split('/').at(-1)}/selection`);
-  expect(selection.status()).toBe(404);
-  expect((await selection.json() as { code: string }).code).toBe('selection_unavailable');
+  const id = await createWork(page, title);
+  const work = `https://rezics.com/id/${id}`;
   const grant = spawnSync('bun', ['apps/web/tests/grant-read.ts'], { cwd: process.cwd(),
     env: { ...process.env, REZICS_QA_WORK: work }, encoding: 'utf8', timeout: 30_000 });
   if (grant.status !== 0 || grant.error) {
     throw new Error(`QA Work read grant failed: ${grant.stderr || grant.error?.message || grant.status}`);
   }
+  // The fixture Agent reads its new Work through the QA grant; the editor then opens it.
+  const read = await page.request.get(`/api/main/v1/works/${id}?actingSubject=${encodeURIComponent(
+    fixture<PublicFixture>('REZICS_WEB_AUTH_PUBLIC_PATH').actingSubject)}`);
+  expect(read.status()).toBe(200);
+  const header = await read.json() as { mainVersion: string; revision: string; title: { value: string } };
+  expect(header.title.value).toBe(title);
+  expect(header.mainVersion).toMatch(/^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/);
+  expect(header.mainVersion).not.toBe(work);
+  // The BFF serves the same Main paths to the browser as Main does.
+  const selection = await page.request.get(`/api/main/v1/main-versions/${header.mainVersion.split('/').at(-1)}/selection`);
+  expect(selection.status()).toBe(404);
+  // Per-language selection resolves the native variant first, so an empty Main Version reports it missing.
+  expect((await selection.json() as { code: string }).code).toBe('variant_unavailable');
+  const revision = header.revision;
+  await page.reload();
+  await expect(page.getByRole('heading', { level: 1, name: title })).toBeVisible();
   await page.screenshot({ path: testInfo.outputPath('work-created-desktop.png') });
   await page.setViewportSize({ width: 390, height: 844 });
   expect(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)).toBe(false);

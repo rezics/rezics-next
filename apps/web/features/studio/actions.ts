@@ -68,7 +68,7 @@ export async function saveDetails(previous: DetailsState, form: FormData): Promi
   const expected = String(form.get('expectedHead') ?? '');
   const originalTitle = String(form.get('originalTitle') ?? '').trim();
   const originalLanguage = String(form.get('originalLanguage') ?? '').trim();
-  const localized = entries(form).filter(entry => entry.language || entry.title || entry.description);
+  const localized = entries(form).filter(entry => entry.title || entry.description);
   const values = { originalTitle, originalLanguage, entries: localized };
   const base = { head: previous.head, values };
   if (!workId.test(work) || (expected && !/^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/.test(expected))

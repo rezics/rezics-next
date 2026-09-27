@@ -23,6 +23,10 @@ import { languageName, textHref } from './studio-home.tsx';
 import { type Publication, readLatest, saveText } from './text-api.ts';
 import { idOf, type Loaded, type MainClient, type MyText, type RealmChoice } from './types.ts';
 
+/** Same-device announcement of a saved text; the channel is same-origin, and texts are the writer's own. */
+interface TabSave { agent: string; text: string; head: string; body: string }
+const TAB_CHANNEL = 'rezics:studio:saves';
+
 const rtl = new Set(['ar', 'he', 'fa', 'ur', 'ps', 'sd', 'yi', 'dv', 'ug', 'ckb']);
 /** The text direction of a content language (not of the interface). */
 export const directionOf = (language: string): 'ltr' | 'rtl' => rtl.has(language.split('-')[0]!.toLowerCase()) ? 'rtl' : 'ltr';
@@ -96,9 +100,35 @@ export function TextEditor({ agent, work, language, text: initialText, initial, 
     return () => autosave.dispose();
   }, []);
 
-  // A conflict found while saving: read the version that won, to compare.
+  // Other tabs on this device announce their saves of the same text, so a conflict between two tabs
+  // can be compared at once, even where Main cannot say which save is the latest.
+  const elsewhere = useRef<{ head: string; body: string } | null>(null);
+  const channel = useRef<BroadcastChannel | null>(null);
+  useEffect(() => {
+    if (typeof BroadcastChannel === 'undefined') return;
+    const tabs = new BroadcastChannel(TAB_CHANNEL);
+    channel.current = tabs;
+    tabs.onmessage = (event: MessageEvent<TabSave>) => {
+      const save = event.data;
+      if (save?.agent === agent.iri && save.text === text.current && save.head !== autosave.snapshot.head) {
+        elsewhere.current = { head: save.head, body: save.body };
+      }
+    };
+    return () => { tabs.close(); channel.current = null; };
+  }, [agent.iri, autosave]);
+  useEffect(() => {
+    if (!text.current || !snapshot.head || snapshot.state !== 'saved') return;
+    channel.current?.postMessage({ agent: agent.iri, text: text.current, head: snapshot.head, body: snapshot.saved } satisfies TabSave);
+  }, [agent.iri, snapshot.head, snapshot.saved, snapshot.state]);
+
+  // A conflict found while saving: the version that won, from another tab or from Main, to compare.
   useEffect(() => {
     if (snapshot.state !== 'conflict' || conflictHead !== null || !text.current) return;
+    if (elsewhere.current) {
+      setTheirs(elsewhere.current.body);
+      setConflictHead(elsewhere.current.head);
+      return;
+    }
     let active = true;
     setTheirs(undefined);
     void readLatest(agent.iri, text.current, main).catch(() => null).then(latest => {
@@ -143,12 +173,14 @@ export function TextEditor({ agent, work, language, text: initialText, initial, 
     }
   };
   const resolveMine = () => {
+    elsewhere.current = null;
     autosave.keepMine(conflictHead);
     setConflictHead(null);
     setTheirs(undefined);
   };
   const resolveTheirs = () => {
     if (typeof theirs !== 'string') return;
+    elsewhere.current = null;
     autosave.takeTheirs(conflictHead, theirs);
     setValue(theirs);
     setConflictHead(null);

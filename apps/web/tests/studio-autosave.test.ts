@@ -1,8 +1,11 @@
 import { describe, expect, test } from 'bun:test';
+import type { AgentOption } from '../features/auth/acting-identity.ts';
+import { resolveStudioAgent, studioHref } from '../features/studio/agent.ts';
 import { DraftAutosave, type SaveOutcome } from '../features/studio/autosave.ts';
 import { diffParagraphs } from '../features/studio/diff.ts';
 import { type DraftStorage, localDraftKey, readLocalDraft, restoreDecision, writeLocalDraft }
   from '../features/studio/local-draft.ts';
+import { saveOutcomeOf } from '../features/studio/text-api.ts';
 
 const head = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
 const tick = () => new Promise(resolve => setTimeout(resolve, 0));
@@ -165,5 +168,41 @@ describe('Studio paragraph comparison', () => {
     const theirs = Array.from({ length: 2100 }, (_, index) => `t${index}`).join('\n');
     const runs = diffParagraphs(`same\n${mine}`, `same\n${theirs}`);
     expect(runs.map(run => [run.kind, run.lines.length])).toEqual([['both', 1], ['mine', 2100], ['theirs', 2100]]);
+  });
+});
+
+describe('Studio Agent addresses', () => {
+  const agents: AgentOption[] = [
+    { iri: `https://rezics.com/id/${head(1)}`, label: 'Lin Mei', handle: null, kind: 'person', path: 'represented-agent' },
+    { iri: `https://rezics.com/id/${head(2)}`, label: 'Moonlit Scribe', handle: 'moonlit', kind: 'pen-name',
+      path: 'represented-agent' },
+  ];
+
+  test('an Agent is addressed by its handle, or by Main’s agent-<uuid> handle while it has none', () => {
+    expect(studioHref(agents[0]!)).toBe(`/studio/@agent-${head(1)}`);
+    expect(studioHref(agents[1]!, '/new')).toBe('/studio/@moonlit/new');
+  });
+
+  test('the route segment resolves only to this person’s Agents and is never replaced', () => {
+    for (const segment of [`@agent-${head(1)}`, `%40agent-${head(1)}`, `@${head(1)}`, `@AGENT-${head(1).toUpperCase()}`]) {
+      expect(resolveStudioAgent(segment, agents)).toEqual({ kind: 'agent', agent: agents[0] });
+    }
+    expect(resolveStudioAgent('@moonlit', agents)).toEqual({ kind: 'agent', agent: agents[1] });
+    expect(resolveStudioAgent(`@agent-${head(9)}`, agents)).toEqual({ kind: 'foreign', slug: `agent-${head(9)}` });
+    expect(resolveStudioAgent('@someone', [])).toEqual({ kind: 'foreign', slug: 'someone' });
+    for (const segment of ['moonlit', '@', '@../x', '%E0%A4%A', `@${'a'.repeat(90)}`]) {
+      expect(resolveStudioAgent(segment, agents)).toEqual({ kind: 'invalid' });
+    }
+  });
+});
+
+describe('Studio save outcomes', () => {
+  test('Main’s answers map to what autosave does next', () => {
+    expect(saveOutcomeOf({ status: 409, value: { code: 'stale_head' } })).toEqual({ kind: 'conflict' });
+    expect(saveOutcomeOf({ status: 409, value: { code: 'idempotency_conflict' } })).toEqual({ kind: 'failed', retryable: false });
+    expect(saveOutcomeOf({ status: 403, value: { code: 'authority_denied' } })).toEqual({ kind: 'denied' });
+    expect(saveOutcomeOf({ status: 503 })).toEqual({ kind: 'failed', retryable: true });
+    expect(saveOutcomeOf({ status: 400 })).toEqual({ kind: 'failed', retryable: false });
+    expect(saveOutcomeOf({ status: Number.NaN })).toEqual({ kind: 'offline' });
   });
 });

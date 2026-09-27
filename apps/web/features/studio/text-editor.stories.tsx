@@ -132,6 +132,25 @@ export const ConflictUnreadable: Story = {
   },
 };
 
+/** Another tab on this device saved first: its announcement lets this tab compare even where Main cannot list texts. */
+export const ConflictFromAnotherTab: Story = {
+  args: page({ listTexts: false }),
+  async play({ canvasElement, args }) {
+    const canvas = within(canvasElement);
+    const body = `${opening}\n另一个标签页写下的一段。`;
+    args.story!.writeElsewhere(text, body);
+    const tab = new BroadcastChannel('rezics:studio:saves');
+    tab.postMessage({ agent: agents[0]!.iri, text, head: args.story!.head(text), body });
+    tab.close();
+    await new Promise(resolve => setTimeout(resolve, 50));
+    await append(canvas.getByRole('textbox', { name: 'Text' }), '\n这个标签页的一段。');
+    await expect(await canvas.findByText('另一个标签页写下的一段。', {}, { timeout: 3_000 })).toBeInTheDocument();
+    await userEvent.click(canvas.getByRole('button', { name: 'Keep mine' }));
+    await waitFor(() => expect(status(canvasElement)).toHaveTextContent(/^Saved · /));
+    await expect(args.story!.calls).toEqual(['edit', 'edit']);
+  },
+};
+
 export const RestoredFromDevice: Story = {
   args: page(),
   beforeEach() {

@@ -169,10 +169,9 @@ export class DraftAutosave {
     this.#set({ state: 'saved', head: theirHead, saved: theirBody, savedAt: this.#options.now() });
   }
 
-  /** Stops timers; the device copy stays for the next visit. */
+  /** Stops a pending save; the device copy stays for the next visit. Subscribers unsubscribe themselves. */
   dispose() {
     if (this.#timer) clearTimeout(this.#timer);
     this.#timer = null;
-    this.#listeners.clear();
   }
 }
