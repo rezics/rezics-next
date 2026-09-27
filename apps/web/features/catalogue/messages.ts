@@ -24,6 +24,7 @@ export const messages = defineMessages({
     signInToRate: 'Sign in to rate this work',
     saving: 'Saving…',
     saveFailed: 'Couldn’t save. Try again.',
+    ongoing: 'Ongoing', hiatus: 'On hiatus',
   },
   'zh-Hans': {
     untitled: insert('作品 {{id}}', { id: String }),
@@ -43,6 +44,7 @@ export const messages = defineMessages({
     signInToRate: '登录后可评分',
     saving: '正在保存…',
     saveFailed: '未能保存，请重试。',
+    ongoing: '连载中', hiatus: '暂停更新',
   },
 });
 

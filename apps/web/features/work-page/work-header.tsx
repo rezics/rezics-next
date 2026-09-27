@@ -18,7 +18,10 @@ export function WorkHeader({ work, credits, ratingLine, locale, messages }: {
 }) {
   const t = materializeData(messages, { locale });
   const types = typeNames(work.types, t);
-  const facts = [types[0], work.selectedLanguage ? languageName(work.selectedLanguage, locale) : null]
+  // What it is, in words a reader uses: "Book · English · Completed · 24 chapters · 86,400 words".
+  const facts = [types[0], work.selectedLanguage ? languageName(work.selectedLanguage, locale) : null,
+    work.completionStatus ? t[work.completionStatus] : null,
+    work.chapterCount ? t.chapters(work.chapterCount) : null, work.wordCount ? t.words(work.wordCount) : null]
     .filter(fact => fact !== undefined && fact !== null);
   return <header className="grid min-w-0 content-start justify-items-center gap-3 text-center lg:justify-items-start
     lg:text-start">
@@ -26,6 +29,8 @@ export function WorkHeader({ work, credits, ratingLine, locale, messages }: {
       ? <Badge variant="warning" title={t.restrictedHelp}><LockIcon aria-hidden="true" />{t.restricted}</Badge> : null}
     <h1 lang={work.title.language} dir={work.title.direction} className="text-balance font-semibold font-work-title
       text-3xl/tight tracking-tight [overflow-wrap:anywhere] sm:text-[2.75rem]/[1.12]">{work.title.value}</h1>
+    {work.tagline ? <p lang={work.tagline.language} dir={work.tagline.direction}
+      className="max-w-2xl text-pretty font-medium text-foreground/80 text-lg">{work.tagline.value}</p> : null}
     {work.title.basis === 'fallback' ? <p className="text-muted-foreground text-xs">
       {t.titleFallback({ requested: languageName(locale, locale), shown: languageName(work.title.language, locale) })}
     </p> : null}
@@ -35,8 +40,7 @@ export function WorkHeader({ work, credits, ratingLine, locale, messages }: {
           className="font-work-title text-foreground">{work.originalTitle.value}</span></p> : null}
     {credits}
     {ratingLine}
-    {facts.length ? <p className="text-muted-foreground text-sm">
-      {facts.length === 2 ? t.facts({ type: facts[0]!, language: facts[1]! }) : facts[0]}</p> : null}
+    {facts.length ? <p className="text-muted-foreground text-sm">{facts.join(' · ')}</p> : null}
   </header>;
 }
 

@@ -34,6 +34,8 @@ export function WorkRow({ work, headingLevel = 2, avatarQuery, locale, children,
       {work.title?.basis === 'fallback' ? <p className="sr-only">{t.fallbackTitle}</p> : null}
       {work.authors.length ? <p className="text-muted-foreground">{work.authors.join(', ')}</p> : null}
       {work.rating ? <RatingInline rating={work.rating} locale={locale} /> : null}
+      {work.tagline ? <p lang={work.tagline.language} dir={work.tagline.direction}
+        className="line-clamp-2 text-pretty text-muted-foreground">{work.tagline.value}</p> : null}
       {children ? <div className="mt-1.5 text-muted-foreground text-sm">{children}</div> : null}
     </div>
     <div className="col-start-2 mt-3 self-start sm:col-start-3 sm:mt-0">

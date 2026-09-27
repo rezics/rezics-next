@@ -20,7 +20,8 @@ export async function RecentShelf({ locale }: { locale: UiLocale }) {
   const signInHref = signInPath(localizedPath('/', locale));
   const shelves = page.shelves.filter(shelf => shelf.spec.type === 'book' && !shelf.spec.term).slice(0, 2);
   return <Providers>
-    <ReaderActionsProvider signedIn={page.signedIn} signInHref={signInHref}>
+    <ReaderActionsProvider signedIn={page.signedIn} signInHref={signInHref} actingSubject={page.actingSubject}
+      seed={page.readerSeed}>
       <div className="grid gap-10">
         {shelves.map(shelf => <DiscoverShelf key={shelf.spec.key} mode="row" scope={{ kind: 'global' }}
           heading={{ title: shelfTitle(shelf, t), seeAll: { href: discoverHref({ scope: { kind: 'global' }, context: null,

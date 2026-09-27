@@ -26,7 +26,9 @@ export const messages = defineMessages({
     originalTitle: 'Original title', about: 'About this Work',
     showMore: 'Show more', showLess: 'Show less',
     translatedBy: 'Translated by', editedBy: 'Edited by',
-    facts: insert('{{type}} · {{language}}', { type: String, language: String }),
+    ongoing: 'Ongoing', completed: 'Completed', hiatus: 'On hiatus',
+    chapters: plural({ one: insert('{{count}} chapter'), other: insert('{{count}} chapters') }, { count: asValue(number()) }),
+    words: plural({ one: insert('{{count}} word'), other: insert('{{count}} words') }, { count: asValue(number()) }),
     moreCredits: 'More credits exist than are shown here.',
 
     sections: 'Work sections', overview: 'Overview', contents: 'Contents', versions: 'Versions',
@@ -172,7 +174,9 @@ export const messages = defineMessages({
     originalTitle: '原标题', about: '作品简介',
     showMore: '展开', showLess: '收起',
     translatedBy: '译者', editedBy: '编辑',
-    facts: insert('{{type}} · {{language}}', { type: String, language: String }),
+    ongoing: '连载中', completed: '已完结', hiatus: '暂停更新',
+    chapters: plural({ other: insert('{{count}} 章') }, { count: asValue(number()) }),
+    words: plural({ other: insert('{{count}} 字') }, { count: asValue(number()) }),
     moreCredits: '还有更多署名未在此显示。',
 
     sections: '作品栏目', overview: '概览', contents: '目录', versions: '版本',

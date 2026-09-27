@@ -68,7 +68,8 @@ export function DiscoverShelf(props: DiscoverShelfProps) {
       avatarQuery={avatarQuery} locale={locale} />;
   }
   return <section aria-labelledby={headingId} className="grid min-w-0 grid-cols-1 gap-4">
-    <ShelfHeader id={headingId} heading={mode === 'row' ? heading : { ...heading, seeAll: undefined }} locale={locale} />
+    {/* A full list of a shelf that could not load, or of the list already shown, would lead nowhere new. */}
+    <ShelfHeader id={headingId} heading={{ ...heading, seeAll: undefined }} locale={locale} />
     {initial.ok ? <Pages first={initial.data} {...props} />
       : <Failure failure={initial.failure} shelf={heading.title} messages={props.messages} locale={locale}
         onRetry={() => router.refresh()} onStartOver={() => router.refresh()} neighbour={props.neighbour}

@@ -30,13 +30,16 @@ export const work: WorkHeader = {
   description: { value: 'A surveyor maps a delta that redraws itself with every tide.\nWhat she records, the river '
     + 'undoes, until the map and the city begin to argue about which of them is true.', language: 'en',
   direction: 'ltr', basis: 'requested' },
+  tagline: name('A novel of rivers, maps and the stories a city tells about itself.'),
+  completionStatus: 'completed', chapterCount: 24, wordCount: 86_400, lastUpdatedAt: '2026-09-20T08:00:00.000Z',
   mainVersionRevision: iri('d3f5b7a9-1c2e-4d4f-8a6b-9c1e3f5a7b9d'), mainVersionLabel: null, selectedLanguage: 'en',
   sourcePosition, links: { versions: '', classifications: '', adoptions: '', ratings: '', history: '', credits: '',
     metadata: '', editions: '' },
 };
 
 /** A Work recorded without text: private to its creator so far, no types, no cover. */
-export const metadataOnlyWork: WorkHeader = { ...work, title: name('Untitled field notes'), types: [],
+export const metadataOnlyWork: WorkHeader = { ...work, title: name('Untitled field notes'), types: [], tagline: null,
+  completionStatus: null, chapterCount: null, wordCount: null,
   disclosure: 'restricted', selectedLanguage: null, originalTitle: null, description: null, metadataRevision: null,
   cover: { kind: 'fallback', policy: 'avatar-fallback-v1', key: 'b81f0e6a2c4d9e7f3a5b1c8d0e2f4a6b', resourceType: 'work' } };
 

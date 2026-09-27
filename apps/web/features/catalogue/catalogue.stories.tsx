@@ -38,6 +38,8 @@ export const ReadersFavorites: Story = {
     await expect(within(shelf).getAllByText('Jane Austen').at(-1)).toBeVisible();
     await expect(within(shelf).getByText('Average rating 4.29 out of 5, 4,391,220 ratings')).toBeInTheDocument();
     await expect(within(shelf).getAllByText('· 4.4M')[0]).toBeVisible();
+    // A tagline sits under the title, as KadoKado sets one.
+    await expect(within(shelf).getByText('A wry comedy of manners, first impressions and second thoughts.')).toBeVisible();
     await expect(canvas.getByRole('link', { name: 'See all' })).toHaveAttribute('href', '/en/discover?type=book');
     // Signed out, the cover's shelf control leads to sign-in.
     await expect(within(shelf).getAllByRole('link', { name: 'Sign in to keep a reading list' })[0])
@@ -157,6 +159,10 @@ export const RateInline: Story = {
 export const ChineseDark: Story = {
   args: { heading: { title: '经典小说' }, works: chinese, locale: 'zh-Hans' },
   globals: { locale: 'zh-Hans', theme: 'dark' },
+  async play({ canvasElement }) {
+    // An unfinished serial is marked on its cover; finished works are not.
+    await expect(within(canvasElement).getAllByText('连载中')).toHaveLength(1);
+  },
 };
 
 export const Phone: Story = {

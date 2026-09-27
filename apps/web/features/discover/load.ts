@@ -2,6 +2,7 @@ import type { UiLocale } from '../../i18n/define.ts';
 import { localizedPath } from '../../i18n/locale.ts';
 import { getMessages } from '../../i18n/server.ts';
 import { signInPath } from '../auth/paths.ts';
+import { readReaderSeed } from '../catalogue/reader-store.ts';
 import type { DiscoverPageProps, LoadedShelf } from './discover-view.tsx';
 import { readDiscovery, readRealm, readStandingContext } from './read.ts';
 import type { SearchParams } from './scope.ts';
@@ -76,10 +77,18 @@ export async function loadDiscoverState(state: DiscoverState | null, locale: UiL
   const limit = overview ? ROW_PAGE : GRID_PAGE;
   const first = await Promise.all(shelvesFor(state, context !== null)
     .map(spec => readShelf(reader, state, spec, context, limit, locale)));
-  if (!overview || !genres) return { state, realm: realmView, shelves: first, ...common };
-  const genre = await genreShelves(reader, state, first, context, locale);
+  const genre = overview && genres ? await genreShelves(reader, state, first, context, locale) : [];
   // Genres follow the favorites they grew from, ahead of what is merely recent.
   const favorites = first.filter(shelf => shelf.spec.topic.kind === 'favorites');
-  return { state, realm: realmView, shelves: [...favorites, ...genre, ...first.filter(shelf => !favorites.includes(shelf))],
-    ...common };
+  const shelves = genre.length
+    ? [...favorites, ...genre, ...first.filter(shelf => !favorites.includes(shelf))] : first;
+  return { state, realm: realmView, shelves, ...common, ...await readerState(reader, shelves) };
+}
+
+/** The signed-in reader's shelf and rating state for every Work on the page's first pages, in Main's batches. */
+async function readerState(reader: Reader, shelves: readonly LoadedShelf[]) {
+  if (!reader.actingSubject) return {};
+  const works = shelves.flatMap(shelf => shelf.initial.ok ? shelf.initial.data.items.map(item => item.id) : []);
+  return { actingSubject: reader.actingSubject,
+    readerSeed: works.length ? await readReaderSeed(reader.personal, reader.actingSubject, works) : {} };
 }

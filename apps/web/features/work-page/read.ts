@@ -5,6 +5,7 @@ import { mainApiWithToken } from '../api/main.ts';
 import { ACCESS_COOKIE } from '../auth/cookies.ts';
 import { sessionAgentState } from '../auth/session.ts';
 import type { UiLocale } from '../../i18n/define.ts';
+import { type ReaderSeed, readerEntry } from '../catalogue/reader-store.ts';
 import { localizedPath } from '../../i18n/locale.ts';
 import { type ContentsQuery, iriOf, mainScope, parseWorkRef, type VersionQuery, type WorkRef, type WorkScope, workHref } from './route.ts';
 import type { AdoptionPage, AgentCreditPage, AgentWorksPage, ChapterRead, ClassificationPage, ContentsPage, CreditPage,
@@ -198,6 +199,14 @@ export const readAgentWorks = cache(async (agent: string, locale: UiLocale): Pro
   const { main, actingSubject } = await reader();
   return settle(() => main.v1.agents({ id: agent.slice(-36) }).works.get({ query: { language: locale, actingSubject,
     limit: 12 } }));
+});
+
+/** The reader's shelf status and own ratings for this Work, when they act as an Agent; null otherwise. */
+export const readReaderState = cache(async (id: string): Promise<ReaderSeed | null> => {
+  const { main, actingSubject } = await reader();
+  if (!actingSubject) return null;
+  const state = await settle(() => main.v1.works({ id })['reader-state'].get({ query: { actingSubject } }));
+  return state.ok ? { [state.data.work]: readerEntry(state.data) } : {};
 });
 
 export const readAgentCredits = cache(async (id: string): Promise<Loaded<AgentCreditPage>> => {

@@ -227,7 +227,7 @@ function grantRead(work: string) {
   if (grant.status !== 0 || grant.error) throw new Error(`QA Work read grant failed: ${grant.stderr || grant.status}`);
 }
 
-test('a signed-in reader sees their own rating in Mine and keeps reading progress where Main allows it', async ({ page }) => {
+test('a signed-in reader shelves and rates a Work, sees their rating in Mine and keeps reading progress where Main allows it', async ({ page }) => {
   const path = process.env.REZICS_WEB_AUTH_PRIVATE_PATH;
   if (!path) throw new Error('REZICS_WEB_AUTH_PRIVATE_PATH must point to the isolated QA web-auth fixture');
   const { member } = JSON.parse(readFileSync(path, 'utf8')) as PrivateFixture;
@@ -239,6 +239,21 @@ test('a signed-in reader sees their own rating in Mine and keeps reading progres
   await expect(ratings.getByRole('link', { name: 'See everyone' })).toHaveAttribute('href', `/en/w/${id}`);
   await expect(ratings.getByRole('navigation', { name: 'Community' }).getByRole('link', { name: 'You' }))
     .toHaveAttribute('aria-current', 'true');
+
+  // The shelf action under the cover writes Main's reader status and survives a reload; the menu changes and clears it.
+  await page.getByRole('button', { name: 'Want to read', exact: true }).click();
+  const shelved = (status: string) => page.getByRole('button', { name: new RegExp(`^${status} — Shelve`) });
+  await expect(shelved('Want to read')).toBeVisible();
+  await page.reload();
+  await expect(shelved('Want to read')).toBeVisible();
+  await shelved('Want to read').click();
+  await page.getByRole('menuitemradio', { name: 'Currently reading' }).click();
+  await expect(shelved('Currently reading')).toBeVisible();
+  await page.reload();
+  await expect(shelved('Currently reading')).toBeVisible();
+  await shelved('Currently reading').click();
+  await page.getByRole('menuitem', { name: 'Remove from my shelves' }).click();
+  await expect(page.getByRole('button', { name: 'Want to read', exact: true })).toBeVisible();
 
   // Main keeps progress only where the reader holds work.read on the Work and the chapter's target.
   const [first, second] = seed.chapters.map(uuid);
@@ -255,4 +270,14 @@ test('a signed-in reader sees their own rating in Mine and keeps reading progres
   await expect(page.getByRole('button', { name: 'Mark chapter as read' })).toBeVisible();
   await page.goto(`/en/w/${id}/read/${second}`);
   await expect(page.getByText('Progress isn’t kept for this Work yet.')).toBeVisible();
+
+  // Last, since it adds to the counts earlier cases assert: the stars write the reader's own rating.
+  await page.goto(`/en/w/${id}`);
+  await page.getByRole('radio').nth(3).click();
+  await expect(page.getByText('Your rating', { exact: true })).toBeVisible();
+  await expect(page.getByText('Couldn’t save. Try again.')).toHaveCount(0);
+  await expect(async () => {
+    await page.reload();
+    await expect(page.getByRole('radio', { checked: true })).toHaveCount(1, { timeout: 2_000 });
+  }).toPass({ timeout: 60_000 });
 });

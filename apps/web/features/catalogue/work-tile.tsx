@@ -56,6 +56,10 @@ export function WorkTile({ work, slot = 2 / 3, headingLevel = 3, avatarQuery, lo
   return <article className={cn('group/tile relative flex min-w-0 flex-col', className)}>
     <div className="flex items-end" style={{ aspectRatio: String(slot) }}>
       <CoverLink work={work} avatarQuery={avatarQuery} className="w-full">
+        {work.completion === 'ongoing' || work.completion === 'hiatus'
+          ? <span className="absolute start-2 bottom-2 z-20 rounded-full bg-background/92 px-2 py-0.5 font-medium
+            text-[0.6875rem] text-foreground shadow-[0_1px_4px_rgb(0_0_0/0.18)] backdrop-blur">
+            {work.completion === 'ongoing' ? t.ongoing : t.hiatus}</span> : null}
         <ShelfMark work={work.id} title={title} locale={locale} />
       </CoverLink>
     </div>
@@ -68,5 +72,7 @@ export function WorkTile({ work, slot = 2 / 3, headingLevel = 3, avatarQuery, lo
     {work.authors.length ? <p className="mt-0.5 truncate text-muted-foreground text-sm">{work.authors.join(', ')}</p>
       : null}
     {work.rating ? <RatingInline rating={work.rating} locale={locale} className="mt-1" /> : null}
+    {work.tagline ? <p lang={work.tagline.language} dir={work.tagline.direction}
+      className="mt-1.5 line-clamp-2 text-pretty text-muted-foreground text-sm/snug">{work.tagline.value}</p> : null}
   </article>;
 }

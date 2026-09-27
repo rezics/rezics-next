@@ -80,7 +80,8 @@ export const Global: Story = {
     await expect(canvas.getAllByText('Maren Osei')[0]).toBeVisible();
     await expect(canvas.getByText(/Translated by/)).toHaveTextContent('Translated by 林晓');
     await expect(canvas.getAllByText('La Cartographe des marées')[0]).toHaveAttribute('lang', 'fr');
-    await expect(canvas.getByText('Book · English')).toBeVisible();
+    await expect(canvas.getByText('Book · English · Completed · 24 chapters · 86,400 words')).toBeVisible();
+    await expect(canvas.getByText('A novel of rivers, maps and the stories a city tells about itself.')).toBeVisible();
     await expect(canvas.getByRole('region', { name: 'About this Work' })).toHaveTextContent('A surveyor maps a delta');
     // The summary under the title leads down to the full ratings.
     await expect(canvas.getByRole('link', { name: '1,287 ratings' })).toHaveAttribute('href', '#work-ratings');

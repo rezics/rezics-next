@@ -9,10 +9,12 @@ const recipe = 'https://schema.org/Recipe';
 const document = 'https://schema.org/DigitalDocument';
 
 function item(n: number, title: string, language: string, types: string[],
-  rating: { mean: number; count: number; max?: 5 | 10 } | null = null): DiscoveryItem {
+  rating: { mean: number; count: number; max?: 5 | 10 } | null = null,
+  summary: Partial<Pick<DiscoveryItem, 'tagline' | 'completionStatus' | 'chapterCount' | 'wordCount'>> = {}): DiscoveryItem {
   const max = rating?.max ?? 5;
   return { id: id(n), revision: id(n + 100), mainVersion: id(n + 200), types,
     primaryCredits: [], classifications: [],
+    tagline: null, completionStatus: null, chapterCount: null, wordCount: null, lastUpdatedAt: null, ...summary,
     title: { value: title, language, direction: 'ltr', basis: 'requested' },
     cover: { kind: 'fallback', policy: 'avatar-fallback-v1', key: `work-${n}`, resourceType: 'work' },
     rating: rating ? { context: id(900), count: rating.count, sum: Math.round(rating.mean * rating.count),
@@ -21,7 +23,9 @@ function item(n: number, title: string, language: string, types: string[],
 }
 
 export const works = {
-  pride: item(1, 'Pride and Prejudice', 'en', [book], { mean: 4.4, count: 12 }),
+  pride: item(1, 'Pride and Prejudice', 'en', [book], { mean: 4.4, count: 12 }, { completionStatus: 'completed',
+    chapterCount: 61, tagline: { value: 'A wry comedy of manners, first impressions and second thoughts.', language: 'en',
+      direction: 'ltr', basis: 'requested' } }),
   journey: item(2, '西游记', 'zh-Hans', [book], { mean: 4.8, count: 31 }),
   jane: item(3, 'Jane Eyre', 'en', [book], { mean: 4.1, count: 7 }),
   dumplings: item(4, '韭菜鸡蛋饺子', 'zh-Hans', [recipe], { mean: 4.6, count: 5 }),
@@ -30,7 +34,8 @@ export const works = {
   chamber: item(7, '红楼梦', 'zh-Hans', [book], { mean: 4.9, count: 40 }),
   pancakes: item(8, 'Weekend buttermilk pancakes', 'en', [recipe], { mean: 4.2, count: 4 }),
   serial: item(9, '雨夜书店 · 连载小说：一部关于深夜书店、未寄出的信和最后一班车的长篇连载', 'zh-Hans', [book],
-    { mean: 3.7, count: 2 }),
+    { mean: 3.7, count: 2 }, { completionStatus: 'ongoing', chapterCount: 3,
+      tagline: { value: '深夜书店里，未寄出的信都在等一个人。', language: 'zh-Hans', direction: 'ltr', basis: 'requested' } }),
   fallback: { ...item(10, 'Alice’s Adventures in Wonderland', 'en', [book]),
     title: { value: 'Alice’s Adventures in Wonderland', language: 'en', direction: 'ltr', basis: 'fallback' } },
   tea: item(11, 'Ginger lemon tea', 'en', [recipe]),

@@ -12,5 +12,6 @@ export function discoveryWork(item: DiscoveryItem, scope: BrowseScope): Catalogu
     kind: coverKindOf(item.types),
     authors: item.primaryCredits.flatMap(credit => credit.displayName ? [credit.displayName] : []),
     rating: item.rating ? { mean: item.rating.mean, count: item.rating.count, max: item.rating.scale.max,
-      own: scope.kind === 'mine' } : null };
+      own: scope.kind === 'mine' } : null,
+    tagline: item.tagline, completion: item.completionStatus };
 }

@@ -6,6 +6,7 @@ import { BookOpenIcon, CircleAlertIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
 import type { UiLocale } from '../../i18n/define.ts';
 import { RateWork, type ReaderActions, ReaderActionsProvider, ShelfButton } from '../catalogue/reader-actions.tsx';
+import type { RatingTarget, ReaderSeed } from '../catalogue/reader-store.ts';
 import { coverImage, coverKindOf } from '../catalogue/work.ts';
 import Link from '../shell/localized-link.tsx';
 import { PageContainer } from '../shell/page.tsx';
@@ -22,20 +23,23 @@ import { WorkTabs } from './work-tabs.tsx';
  * beside it. On a phone the cover leads, centred, and the actions follow the
  * title. The left column stays in view while the page scrolls.
  */
-export function WorkFrame({ workRef, work, credits, ratingLine, signedIn = false, signInHref, readerActions,
-  avatarQuery, locale, messages, children }: {
+export function WorkFrame({ workRef, work, credits, ratingLine, signedIn = false, signInHref, actingSubject,
+  readerSeed, ratingTarget, readerActions, avatarQuery, locale, messages, children }: {
   workRef: string; work: Header; credits: ReactNode;
   /** The rating summary under the title, streamed on its own. */
   ratingLine?: ReactNode;
   signedIn?: boolean;
   /** Where the shelf and rating controls send a signed-out reader; sign-in returns here. */
   signInHref?: string;
+  /** The Agent a signed-in reader acts as, their state for this Work, and what the stars rate. */
+  actingSubject?: string | null; readerSeed?: ReaderSeed; ratingTarget?: RatingTarget | null;
   /** Stories supply reader actions; pages derive them from the session. */
   readerActions?: ReaderActions;
   avatarQuery?: string;
   locale: UiLocale; messages: WorkPageMessages; children: ReactNode;
 }) {
-  return <ReaderActionsProvider signedIn={signedIn} signInHref={signInHref ?? '/auth/start'} actions={readerActions}>
+  return <ReaderActionsProvider signedIn={signedIn} signInHref={signInHref ?? '/auth/start'} actingSubject={actingSubject}
+    seed={readerSeed} ratingTarget={ratingTarget} actions={readerActions}>
     {/* CJK text spaces itself from inserted Latin names and digits ("来自 Tidewater Readers"). */}
     <PageContainer className="grid gap-x-12 gap-y-6 [text-autospace:normal] lg:grid-cols-[15rem_minmax(0,1fr)]
       lg:grid-rows-[auto_1fr] xl:grid-cols-[17rem_minmax(0,1fr)] xl:gap-x-16">

@@ -128,8 +128,9 @@ export function SearchPage({ parsed, realm, initial, signedIn, actingSubject, av
     : { phrase: parsed.phrase, scope: { kind: 'global' }, language: null, term: null };
   const scopeLabel = state.scope.kind === 'realm' && realm ? realm.label : t.global;
   const searching = parsed.ok && phraseStatus(state.phrase) === 'ok';
+  // Result cards read the reader's shelf state in the browser, one batch per page of results.
   return <ReaderActionsProvider signedIn={signedIn} signInHref={signInPath(localizedPath(searchHref(state), locale))}
-    actions={readerActions}><PageContainer className="grid gap-6">
+    actingSubject={actingSubject} actions={readerActions}><PageContainer className="grid gap-6">
     <header className="grid gap-4">
       <h1 className="font-semibold text-3xl tracking-tight sm:text-4xl">{t.title}</h1>
       <SearchForm state={state} realm={realm} locale={locale} messages={messages} />

@@ -7,10 +7,11 @@ import { Rating, RatingLabel } from '@rezics/ui/rating';
 import { cn } from '@rezics/ui/utils';
 import { BookmarkCheckIcon, BookmarkPlusIcon, CheckIcon, ChevronDownIcon, StarIcon } from 'lucide-react';
 import { materializeData } from 'native-i18n';
-import { createContext, type ReactNode, useContext, useState } from 'react';
+import { createContext, type ReactNode, useContext, useState, useSyncExternalStore } from 'react';
 import type { UiLocale } from '../../i18n/define.ts';
 import Link from '../shell/localized-link.tsx';
 import { messages } from './messages.ts';
+import { createReaderStore, type RatingTarget, type ReaderSeed } from './reader-store.ts';
 
 /** A status shelf: a Work is on at most one of them (Main's reader status, G-285). */
 export const readingStatuses = ['want-to-read', 'reading', 'read'] as const;
@@ -21,11 +22,10 @@ export interface ReaderWorkState { status: ReadingStatus | null; rating: number 
 
 /**
  * What a page can do for its reader, the seam between catalogue controls and
- * Main. Pages provide `signed-out` (controls lead to sign-in) or `unavailable`
- * (no control is drawn, rather than one that does nothing); a `ready` adapter
- * reads and writes the reader's status shelves and rating. Main's reading
- * shelves and batch reader state are in progress (G-285); until they land,
- * only stories supply a `ready` adapter.
+ * Main. Signed out, controls lead to sign-in; signed in without an Agent to
+ * act as, none is drawn rather than one that cannot act; a `ready` adapter
+ * reads and writes the reader's status shelves and rating (`reader-store.ts`
+ * over Main's reader library, or an in-memory one in stories).
  */
 export type ReaderActions =
   | { kind: 'unavailable' }
@@ -38,36 +38,55 @@ export type ReaderActions =
     /** Null while the rating write is not wired; the stars are then not drawn. */
     rate: ((work: string, value: number | null) => Promise<boolean>) | null;
     ratingMax: number;
+    /** Tells controls when state read later (a "Show more" page) arrives. */
+    subscribe?: (listener: () => void) => () => void;
+    snapshot?: () => number;
   };
 
 const ReaderActionsContext = createContext<ReaderActions>({ kind: 'unavailable' });
 
 /**
  * Supplies reader actions below it. Server pages pass whether the reader is
- * signed in and where sign-in returns; `actions` overrides both (stories).
+ * signed in, the Agent they act as, where sign-in returns, and the reader
+ * state they read for the Works on the page (plus, on a Work page, what its
+ * stars rate); `actions` overrides all of it (stories).
  */
-export function ReaderActionsProvider({ signedIn, signInHref, actions, children }: {
-  signedIn: boolean; signInHref: string; actions?: ReaderActions; children: ReactNode;
+export function ReaderActionsProvider({ signedIn, signInHref, actingSubject, seed, ratingTarget, actions, children }: {
+  signedIn: boolean; signInHref: string; actingSubject?: string | null; seed?: ReaderSeed;
+  ratingTarget?: RatingTarget | null; actions?: ReaderActions; children: ReactNode;
 }) {
-  const value: ReaderActions = actions ?? (signedIn ? { kind: 'unavailable' } : { kind: 'signed-out', signInHref });
+  const [store] = useState(() => signedIn && actingSubject && !actions
+    ? createReaderStore({ actingSubject, seed, ratingTarget }) : null);
+  const value: ReaderActions = actions ?? store
+    ?? (signedIn ? { kind: 'unavailable' } : { kind: 'signed-out', signInHref });
   return <ReaderActionsContext value={value}>{children}</ReaderActionsContext>;
 }
 
-export const useReaderActions = () => useContext(ReaderActionsContext);
+const unsubscribed = () => () => {};
+const still = () => 0;
+
+/** The page's reader actions, re-rendering when state read in the browser arrives. */
+export function useReaderActions(): ReaderActions {
+  const actions = useContext(ReaderActionsContext);
+  const ready = actions.kind === 'ready' ? actions : null;
+  useSyncExternalStore(ready?.subscribe ?? unsubscribed, ready?.snapshot ?? still, still);
+  return actions;
+}
 
 /** The reader's status with an optimistic update: shown at once, reverted with a note when Main refuses. */
 function useStatus(work: string) {
   const actions = useReaderActions();
-  const initial = actions.kind === 'ready' ? actions.stateOf(work).status : null;
-  const [status, setLocal] = useState<ReadingStatus | null>(initial);
+  const known = actions.kind === 'ready' ? actions.stateOf(work).status : null;
+  const [pending, setPending] = useState<{ status: ReadingStatus | null } | null>(null);
   const [state, setState] = useState<'idle' | 'saving' | 'failed'>('idle');
+  const status = pending ? pending.status : known;
   async function choose(next: ReadingStatus | null) {
     if (actions.kind !== 'ready' || next === status) return;
-    const before = status;
-    setLocal(next);
+    setPending({ status: next });
     setState('saving');
     const saved = await actions.setStatus(work, next).catch(() => false);
-    if (!saved) setLocal(before);
+    // Saved, the store now holds the new status; refused, the known one shows again.
+    setPending(null);
     setState(saved ? 'idle' : 'failed');
   }
   return { actions, status, state, choose };
@@ -171,9 +190,10 @@ export function ShelfButton({ work, title, locale, size = 'lg', variant = 'defau
 export function RateWork({ work, locale, className }: { work: string; locale: UiLocale; className?: string }) {
   const t = materializeData(messages[locale], { locale });
   const actions = useReaderActions();
-  const initial = actions.kind === 'ready' ? actions.stateOf(work).rating : null;
-  const [value, setValue] = useState<number | null>(initial);
+  const known = actions.kind === 'ready' ? actions.stateOf(work).rating : null;
+  const [pending, setPending] = useState<{ value: number | null } | null>(null);
   const [failed, setFailed] = useState(false);
+  const value = pending ? pending.value : known;
   if (actions.kind === 'unavailable' || (actions.kind === 'ready' && !actions.rate)) return null;
   if (actions.kind === 'signed-out') {
     return <Link href={actions.signInHref} className={cn('group/rate grid justify-items-center gap-1 rounded-xl px-3 py-2',
@@ -185,11 +205,11 @@ export function RateWork({ work, locale, className }: { work: string; locale: Ui
   }
   const rate = actions.rate!;
   async function save(next: number) {
-    const before = value;
-    setValue(next);
+    setPending({ value: next });
     setFailed(false);
     const saved = await rate(work, next).catch(() => false);
-    if (!saved) { setValue(before); setFailed(true); }
+    // A 202 carries no revision, so keep showing the value Access admitted until Main applies it.
+    if (!saved) { setPending(null); setFailed(true); }
   }
   return <div className={cn('grid justify-items-center gap-1', className)}>
     <Rating size="lg" count={actions.ratingMax === 10 ? 10 : 5} value={value ?? 0} className="items-center"

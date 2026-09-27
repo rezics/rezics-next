@@ -4,6 +4,7 @@ import { CircleSlashIcon, LibraryBigIcon, LinkIcon, StarIcon, XIcon } from 'luci
 import { type ContractOf, materializeData } from 'native-i18n';
 import type { UiLocale } from '../../i18n/define.ts';
 import { type ReaderActions, ReaderActionsProvider } from '../catalogue/reader-actions.tsx';
+import type { ReaderSeed } from '../catalogue/reader-store.ts';
 import Link from '../shell/localized-link.tsx';
 import { PageContainer } from '../shell/page.tsx';
 import type { DiscoverMessages } from './messages.ts';
@@ -31,6 +32,9 @@ export interface DiscoverPageProps {
   signInHref: string;
   avatarQuery?: string;
   load?: DiscoveryLoader;
+  /** The Agent a signed-in reader acts as, and their state for the Works on the page. */
+  actingSubject?: string;
+  readerSeed?: ReaderSeed;
   /** Stories supply reader actions; pages derive them from the session. */
   readerActions?: ReaderActions;
   locale: UiLocale;
@@ -91,7 +95,7 @@ function CommunitySwitch({ state, realm, t }: { state: DiscoverState; realm: Sco
  * appears only once the reader picks a community or their own ratings.
  */
 export function DiscoverView({ state, realm, realmMissing, shelves, signedIn, signInHref, avatarQuery, load,
-  readerActions, locale, messages }: DiscoverPageProps) {
+  actingSubject, readerSeed, readerActions, locale, messages }: DiscoverPageProps) {
   const t = materializeData(messages, { locale });
   if (!state) {
     return <PageContainer className="grid gap-8">
@@ -115,7 +119,8 @@ export function DiscoverView({ state, realm, realmMissing, shelves, signedIn, si
     if (!overview || topic.kind === 'mine') return undefined;
     return { href: discoverHref('term' in topic ? { ...state, term: topic.term } : { ...state, type: topic.type }) };
   };
-  return <ReaderActionsProvider signedIn={signedIn} signInHref={signInHref} actions={readerActions}>
+  return <ReaderActionsProvider signedIn={signedIn} signInHref={signInHref} actingSubject={actingSubject}
+    seed={readerSeed} actions={readerActions}>
     <PageContainer className="grid gap-10 sm:gap-12">
       <header className="grid gap-5">
         <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-4">

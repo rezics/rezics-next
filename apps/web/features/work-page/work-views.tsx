@@ -14,7 +14,7 @@ import { RatingLine, RatingSummaryRegion } from './ratings.tsx';
 import { ContentsRegion } from './contents.tsx';
 import { DiscussionRegion } from './discussion.tsx';
 import { readAdoptions, readAgentCredits, readAgentWorks, readClassifications, readContents, readCredits,
-  readDiscussion, readHistory, readingAgent, readRatings, readRealm, readVersions } from './read.ts';
+  readDiscussion, readHistory, readingAgent, readRatings, readReaderState, readRealm, readVersions } from './read.ts';
 import { RegionSkeleton } from './region.tsx';
 import { WorkRecord } from './record.tsx';
 import { type ContentsQuery, type HistoryFilter, idOf, type VersionQuery, type WorkScope, workHref } from './route.ts';
@@ -58,8 +58,14 @@ async function RatingLineSlot({ id, locale, messages }: Common & { id: string })
 export async function WorkFrameView({ workRef, id, work, locale, messages, children }: Common & {
   workRef: string; id: string; work: Header; children: ReactNode;
 }) {
-  const [{ signedIn }, { avatarQuery }] = await Promise.all([readingAgent(), browseReader()]);
+  const [{ signedIn, actingSubject }, { avatarQuery }, seed, ratings] = await Promise.all([readingAgent(), browseReader(),
+    readReaderState(id), readRatings(id, { kind: 'global' }, undefined)]);
+  // The stars answer everyone's first rating question for the Main Version shown, as the summary above them does.
+  const context = ratings.ok ? ratings.data.context : null;
+  const ratingTarget = context ? { work: work.id, context: context.context, mainVersion: work.mainVersion,
+    max: context.scale.max } : null;
   return <WorkFrame workRef={workRef} work={work} locale={locale} messages={messages} signedIn={signedIn}
+    actingSubject={actingSubject} readerSeed={seed ?? undefined} ratingTarget={ratingTarget}
     signInHref={signInPath(localizedPath(workHref(workRef), locale))} avatarQuery={avatarQuery}
     credits={<Suspense fallback={<WorkCreditsSkeleton label={messages.loadingRegion} />}>
       <Credits id={id} locale={locale} messages={messages} /></Suspense>}

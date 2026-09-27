@@ -15,7 +15,9 @@ function work(n: number, title: string, language: string, kind: CatalogueWork['k
 }
 
 export const classics: CatalogueWork[] = [
-  work(1, 'Pride and Prejudice', 'en', 'book', ['Jane Austen'], [4.29, 4_391_220]),
+  { ...work(1, 'Pride and Prejudice', 'en', 'book', ['Jane Austen'], [4.29, 4_391_220]),
+    tagline: { value: 'A wry comedy of manners, first impressions and second thoughts.', language: 'en', direction: 'ltr',
+      basis: 'requested' } },
   work(2, 'Jane Eyre', 'en', 'book', ['Charlotte Brontë'], [4.15, 2_072_310]),
   work(3, 'Frankenstein; or, The Modern Prometheus', 'en', 'book', ['Mary Shelley'], [3.89, 1_784_002]),
   work(4, 'Middlemarch', 'en', 'book', ['George Eliot'], [4.02, 180_455]),
@@ -30,7 +32,9 @@ export const chinese: CatalogueWork[] = [
   work(22, '红楼梦', 'zh-Hans', 'book', ['曹雪芹'], [4.6, 40]),
   work(23, '聊斋志异', 'zh-Hans', 'book', ['蒲松龄'], [4.4, 18]),
   work(24, '三国演义', 'zh-Hans', 'book', ['罗贯中'], [4.3, 22]),
-  work(25, '雨夜书店 · 连载小说：一部关于深夜书店、未寄出的信和最后一班车的长篇连载', 'zh-Hans', 'book', ['林夜'], [3.7, 2]),
+  { ...work(25, '雨夜书店 · 连载小说：一部关于深夜书店、未寄出的信和最后一班车的长篇连载', 'zh-Hans', 'book', ['林夜'], [3.7, 2]),
+    completion: 'ongoing', tagline: { value: '深夜书店里，未寄出的信都在等一个人。', language: 'zh-Hans', direction: 'ltr',
+      basis: 'requested' } },
   work(26, '水浒传', 'zh-Hans', 'book', [], null),
 ];
 
