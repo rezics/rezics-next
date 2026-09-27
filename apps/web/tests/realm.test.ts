@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { bannerImage, liveBanners, mainExecution, zoneDecision, zoneImage, zoneText, zoneWork }
   from '../features/realm/adapt.ts';
+import { chartMetric } from '../features/realm/modules.ts';
 import { decisionAnchor, decisionHref, idOf, parseCursor, parseRealmRef, realmHref, realmWorkHref, tabOf }
   from '../features/realm/route.ts';
 import type { RealmDecision, WorkCard, ZonePresentationRead } from '../features/realm/types.ts';
@@ -44,6 +45,13 @@ describe('Realm addresses', () => {
 
   test('a Work opened from a Realm stays in that Realm’s scope', () => {
     expect(realmWorkHref(iri(work), realm)).toBe(`/w/${work}?scope=realm&realm=${realm}`);
+  });
+
+  test('a chart of views reads Main’s read rankings; shelved and rated charts wait for a read', () => {
+    expect(chartMetric('views')).toBe('reads');
+    expect(chartMetric(undefined)).toBe('reads');
+    expect(chartMetric('shelved')).toBeNull();
+    expect(chartMetric('rating')).toBeNull();
   });
 
   test('cursors come from the URL only when well formed', () => {

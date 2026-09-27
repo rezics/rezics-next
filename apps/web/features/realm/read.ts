@@ -2,7 +2,8 @@ import { cache } from 'react';
 import type { UiLocale } from '../../i18n/define.ts';
 import { mainApiWithToken } from '../api/main.ts';
 import { idOf, parseRealmRef } from './route.ts';
-import { failureOf, type Loaded, type OfficialZone, type RealmDecisionsPage, type RealmDirectoryPage, type RealmHeader,
+import { failureOf, type Loaded, type OfficialZone, type RankingMetric, type RankingPage, type RealmDecisionsPage,
+  type RealmDirectoryPage, type RealmHeader,
   type RealmWorksPage, type ZoneChapterPage, type ZoneDecisionPage, type ZonePresentationRead,
   type ZoneWorkPage } from './types.ts';
 
@@ -85,6 +86,16 @@ export const readRecentlyCompleted = cache(async (realm: string, locale: UiLocal
 
 export const readLatestChapters = cache(async (realm: string, locale: UiLocale): Promise<Loaded<ZoneChapterPage>> =>
   settle(() => main().v1.realms({ realm }).modules['latest-chapters'].get({ query: { language: locale } })));
+
+/** One page of the Realm's chart for an interval: the most-read Works first. */
+export const readRankings = cache(async (realm: string, locale: UiLocale, interval: 'day' | 'week' | 'month',
+  metric: RankingMetric): Promise<Loaded<RankingPage>> =>
+  settle(() => main().v1.realms({ realm }).rankings.get({ query: { metric, interval, language: locale, limit: 10 } })));
+
+/** Works gaining readers fastest against the previous interval. */
+export const readRising = cache(async (realm: string, locale: UiLocale): Promise<Loaded<RankingPage>> =>
+  settle(() => main().v1.realms({ realm }).modules.rising.get({ query: { interval: 'week', language: locale,
+    limit: 8 } })));
 
 export const readRecentDecisions = cache(async (realm: string): Promise<Loaded<ZoneDecisionPage>> =>
   settle(() => main().v1.realms({ realm }).modules['recent-decisions'].get({ query: {} })));

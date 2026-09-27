@@ -94,7 +94,8 @@ export interface DefaultTitles {
 /**
  * The layout a Zone gets until its moderators choose one, and every Realm
  * without a Zone: picks up top, what is new, what readers read and what the
- * Realm decided. Modules whose read Main does not serve yet stay off the page.
+ * Realm decided. Charts and rising read Main's rankings by module type; reader
+ * quotes have no read yet and stay off the page.
  */
 export function defaultPresentation(titles: DefaultTitles, preset: ZonePreset = 'clean'): ZonePresentation {
   return {

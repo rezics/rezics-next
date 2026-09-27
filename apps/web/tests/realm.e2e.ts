@@ -116,12 +116,13 @@ test('a Realm renders as its Zone: modules from Main, Decisions behind every pic
     await expect(page.getByText('Showing this community’s standard layout')).toBeVisible();
     await expect(page.getByRole('link', { name: 'Show the full design' })).toHaveAttribute('href', `/en/r/${realm}`);
 
-    // The shell follows the page's locale; an unknown Realm is a 404 in words.
+    // The shell follows the page's locale; an unknown Realm says so.
     await page.goto(`/zh-Hans/r/${realm}`);
     await expect(page.getByRole('navigation', { name: '社区版块' }).getByRole('link', { name: '作品' })).toBeVisible();
-    const missing = await page.goto('/en/r/no-such-zone');
-    expect(missing?.status()).toBe(404);
+    // As on the Work page, the streamed shell means a view's notFound() answers 200 with noindex.
+    await page.goto('/en/r/no-such-zone');
     await expect(page.getByRole('heading', { level: 1, name: 'This community isn’t here' })).toBeVisible();
+    await expect(page.locator('head meta[name="robots"]')).toHaveAttribute('content', 'noindex');
 
     await shoot(page, context, `/en/r/${realm}`, 'realm-home', info);
     await shoot(page, context, `/zh-Hans/r/${realm}`, 'realm-home-zh', info);

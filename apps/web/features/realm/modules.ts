@@ -4,15 +4,15 @@ import { feedOf, placedModule, type PresentationModule, type RealmFeed, type Zon
   from '../zones/presentation.ts';
 import type { ModuleState, PlacedModule } from '../zones/zone-home.tsx';
 import { type AdaptContext, bannerImage, liveBanners, zoneDecision, zoneWork } from './adapt.ts';
-import { readLatestChapters, readNewAdoptions, readRealmWorks, readRecentDecisions, readRecentlyCompleted }
-  from './read.ts';
+import { readLatestChapters, readNewAdoptions, readRankings, readRealmWorks, readRecentDecisions,
+  readRecentlyCompleted, readRising } from './read.ts';
 import { idOf, realmHref } from './route.ts';
-import type { Loaded } from './types.ts';
+import type { Loaded, RankingMetric } from './types.ts';
 
 // Loads each module of a Zone's presentation from Main's Realm module reads.
-// A module whose source has no read yet (rankings, rising, reader quotes,
-// Collections, Context chips) is `unsupported` and stays off the page; it is
-// never assembled from other reads in the browser or here.
+// A module whose source has no read yet (reader quotes, Collections, Context
+// chips, shelved or rated charts) is `unsupported` and stays off the page; it
+// is never assembled from other reads in the browser or here.
 
 const failed = { state: 'failed' } as const;
 const empty = { state: 'empty' } as const;
@@ -79,6 +79,38 @@ async function shelf(module: PresentationModule, context: AdaptContext): Promise
   return loaded.some(({ works }) => !works.ok) ? failed : empty;
 }
 
+/**
+ * The chart metric Main computes for a presentation's metric. Main ranks by
+ * reads and finished chapters; a chart of shelving or ratings has no read yet.
+ */
+export function chartMetric(metric: 'views' | 'shelved' | 'rating' = 'views'): RankingMetric | null {
+  return metric === 'views' ? 'reads' : null;
+}
+
+const intervals = ['day', 'week', 'month'] as const;
+
+async function rankings(module: PresentationModule, context: AdaptContext): Promise<ModuleState<'ranking'>> {
+  const metric = chartMetric(module.options?.metric);
+  if (!metric) return unsupported;
+  const [placed, ...pages] = await Promise.all([adoptions(context),
+    ...intervals.map(interval => readRankings(context.realm, context.locale, interval, metric))]);
+  if (pages.every(page => !page.ok)) return failed;
+  const tabs = intervals.flatMap((interval, index) => {
+    const page = pages[index]!;
+    return page.ok && page.data.items.length ? [{ interval, items: page.data.items.map((item, rank) => ({
+      rank: rank + 1, work: zoneWork(item, context, placed.get(item.id) ?? null) })) }] : [];
+  });
+  return tabs.length ? { state: 'ready', data: { metric: module.options?.metric ?? 'views', tabs } } : empty;
+}
+
+async function rising(module: PresentationModule, context: AdaptContext): Promise<ModuleState<'rising'>> {
+  const [page, placed] = await Promise.all([readRising(context.realm, context.locale), adoptions(context)]);
+  if (!page.ok) return failed;
+  const items = page.data.items.slice(0, module.options?.limit ?? 6)
+    .map(item => zoneWork(item, context, placed.get(item.id) ?? null));
+  return items.length ? { state: 'ready', data: { items } } : empty;
+}
+
 async function decisions(module: PresentationModule, context: AdaptContext): Promise<ModuleState<'decision-log'>> {
   const [page, works] = await Promise.all([readRecentDecisions(context.realm), readRealmWorks(context.realm,
     context.locale)]);
@@ -94,6 +126,8 @@ async function load(module: PresentationModule, presentation: ZonePresentation, 
     case 'hero-carousel': return hero(module, presentation, context);
     case 'shelf': return shelf(module, context);
     case 'decision-log': return decisions(module, context);
+    case 'ranking': return rankings(module, context);
+    case 'rising': return rising(module, context);
     case 'announcement': return { state: 'ready',
       data: { text: { value: module.title, lang: '', dir: 'ltr' }, href: null } satisfies ZoneModuleData['announcement'] };
     default: return unsupported;
