@@ -2,7 +2,7 @@
 
 - [Ownership and placement](ownership-and-placement.md): authoritative writers and cross-store protocols.
 - [Jena binding](jena.md): Fuseki + TDB2 + jena-text/Lucene, guarded writes and application history.
-- [PostgreSQL](postgresql.md): Content bodies/history, account, access and operational integrity.
+- [Content PostgreSQL owner](../../services/content/src/core.ts): exact bodies/history and publication pins; [owner placement](ownership-and-placement.md) maps the separate Account, Access and operational state.
 - [Immutable-object adapter](../../services/main/src/infrastructure/immutable-objects.ts): conditional writes, digest verification and owner namespaces.
 - [Workload policy](workload-budgets.md): cost contracts, reusable/bulk preparation and the current 500M-entity capacity baseline.
 - [Schema evolution](schema-evolution.md): model, storage, API and index generations.

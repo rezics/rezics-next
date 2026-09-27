@@ -16,7 +16,7 @@
 | Domain | Owners |
 | --- | --- |
 | Account and authority | [Identity/access](../contracts/identity-and-access.md), [connected applications](../contracts/connected-apps.md), [Account service](../services/account.md). |
-| Space and community context | [Space](../contracts/space.md), [Context](../contracts/context.md), [classification](../contracts/classification.md), [ratings](../contracts/ratings.md). |
+| Space and community context | [Space](../contracts/space.md), [Context](../contracts/context.md), [classification](../contracts/classification.md), [Rating owner](../../services/main/src/modules/rating/README.md), [deferred rating query requirements](../contracts/ratings.md). |
 | Content spine | [Main version](../contracts/main-version.md), [Work/release](../contracts/work-and-release.md), [composition](../contracts/composition.md), [structure history](../contracts/structure-history.md). |
 | Indexing domains | [Work and release](../contracts/work-and-release.md), [recipe profile](../../model/definitions/recipe-structure-v1.ts), [package management](../contracts/package-management.md), [Hub schema](../../services/main/src/modules/hub/schema.ts). |
 | Sources and knowledge | [Source lifecycle](../contracts/source-lifecycle.md), [standards](../contracts/standards.md), [information verification](../contracts/information-verification.md). |

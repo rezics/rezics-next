@@ -57,7 +57,7 @@ uses private PostgreSQL state; cached allowances need qualified freshness.
 
 Implemented `work.create` profiles live in `services/main/src/modules/access/`
 types, schema, routes and IAM tests. Discovery and preflight cannot authorize
-later commands. The [placement study](../research/access-and-interaction-placement.md)
+later commands. The [placement study](../research/access-storage-and-policy.md)
 explains Access's placement inside Main.
 
 ## Pending profiles and qualification

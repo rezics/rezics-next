@@ -1,6 +1,6 @@
 # Service implementation designs
 
-[Account](account.md), [Access](../contracts/identity-and-access.md), [Main](main.md)
+[Account](account.md), [Access](../contracts/identity-and-access.md), [Main application](../../services/main/src/app.ts)
 and [workers](workers.md) have explicit ownership boundaries. Package resolution
 and [controlled installation](../../services/main/src/modules/package/install.ts)
 run in Main. Access initially runs inside Main through an in-process

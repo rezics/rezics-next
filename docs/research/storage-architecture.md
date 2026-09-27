@@ -4,7 +4,7 @@ Selected 2026-09-24: **PostgreSQL for Content and operations;
 Apache Jena/Fuseki/TDB2 for semantic authority and joint graph/text queries;
 embedded jena-text/Lucene for the first search binding.** This is the startup
 choice. The [architecture overview](../architecture/overview.md),
-[Content owner](../storage/postgresql.md), [Jena owner](../storage/jena.md) and
+[Content owner](../../services/content/src/core.ts), [owner placement](../storage/ownership-and-placement.md), [Jena owner](../storage/jena.md) and
 [search contract](../contracts/search.md) own current behavior. The
 [qualification record](../plan/qualification.md) records backend phase 1;
 its passing acceptance run does not establish production capacity or the

@@ -69,7 +69,7 @@ pending. Access revocation and erasure retain their stronger fences.
 The installed Main publication and eligibility routes bind an exact Content
 revision, digest, owner epoch, resource, variant, expected graph head and current
 Account/Access admission. Eligibility separately checks original-author proof.
-Their schemas, receipts and tests define the wire result. [Content storage](../storage/postgresql.md#publication-preparation-and-retention)
+Their schemas, receipts and tests define the wire result. The [Content owner](../../services/content/src/core.ts)
 and [search projection](search.md#postgresql-body-projection) own retention and
 derived visibility.
 
