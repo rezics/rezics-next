@@ -770,7 +770,16 @@ async function mergeTask(id: string, flags: Set<string>): Promise<void> {
     if (git(root, ['symbolic-ref', '--short', 'HEAD']) !== 'main') throw new Error('Main checkout is not on main');
     const { committed, dirty, ahead } = changedFiles(task);
     if (dirty.length) throw new Error(`${task.id} worktree has uncommitted files:\n  ${dirty.join('\n  ')}`);
-    if (!ahead) throw new Error(`${task.id} has no commits to merge`);
+    if (!ahead) {
+      // A resumed task whose earlier commits already landed may hand off with nothing new.
+      if (spawnSync('git', ['merge-base', '--is-ancestor', task.branch, 'main'], { cwd: root }).status === 0
+        && task.mergedCommit) {
+        task.state = 'merged';
+        console.log(`${task.id} has nothing new; its branch is already in main`);
+        return;
+      }
+      throw new Error(`${task.id} has no commits to merge`);
+    }
     // Files merged with git's union driver take concurrent appends (route registrations), so any task may add to them.
     const union = new Set(committed.filter(file =>
       git(root, ['check-attr', 'merge', '--', file], true).endsWith(': merge: union')));
