@@ -1,11 +1,11 @@
 'use client';
 
+import { useFieldContext } from '@ark-ui/react/field';
 import {
   TagsInput as ArkTagsInput,
   useTagsInput as useArkTagsInput,
   useTagsInputContext as useArkTagsInputContext,
 } from '@ark-ui/react/tags-input';
-import { useFieldContext } from '@ark-ui/react/field';
 import { XIcon } from 'lucide-react';
 import type React from 'react';
 import { cn } from '../utils.ts';

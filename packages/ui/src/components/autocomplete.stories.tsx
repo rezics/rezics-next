@@ -55,7 +55,6 @@ const SearchBox = ({
     groupBy: (item) => item.kind,
   });
   // Filtering runs on input changes, so apply a preset input value once.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: run once with the initial text
   useEffect(() => filter(defaultInputValue ?? ''), []);
 
   return (
