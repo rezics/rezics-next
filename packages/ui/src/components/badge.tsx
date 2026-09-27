@@ -20,12 +20,12 @@ export const badgeVariants = tv({
   variants: {
     variant: {
       default: [
-        'bg-foreground',
-        'text-background',
-        'focus-visible:border-foreground focus-visible:ring-foreground/20',
-        'dark:focus-visible:ring-foreground/40',
-        '[a&]:hover:bg-foreground/90',
+        'bg-primary',
+        'text-primary-foreground',
+        'focus-visible:border-primary focus-visible:ring-ring/32',
+        '[a&]:hover:bg-primary/90',
       ],
+      soft: ['bg-primary/10', 'text-primary', '[a&]:hover:bg-primary/20'],
       secondary: [
         'bg-secondary',
         'text-secondary-foreground',
@@ -41,21 +41,21 @@ export const badgeVariants = tv({
       ],
       success: [
         'bg-success/10',
-        'text-success',
+        'text-success-foreground',
         'border-success/20',
         'focus-visible:border-success focus-visible:ring-success/20',
         '[a&]:hover:bg-success/20',
       ],
       info: [
         'bg-info/10',
-        'text-info',
+        'text-info-foreground',
         'border-info/20',
         'focus-visible:border-info focus-visible:ring-info/50',
         '[a&]:hover:bg-info/20',
       ],
       warning: [
         'bg-warning/10',
-        'text-warning',
+        'text-warning-foreground',
         'border-warning/20',
         'focus-visible:border-warning focus-visible:ring-warning/20',
         'dark:focus-visible:ring-warning/40',
@@ -71,9 +71,9 @@ export const badgeVariants = tv({
       ],
     },
     size: {
-      sm: ['h-5 min-w-5', 'px-1'],
-      md: ['h-5.5 min-w-5.5', 'px-1.5'],
-      lg: ['h-6.5 min-w-6.5', 'px-2', 'text-sm'],
+      sm: ['h-5 min-w-5', 'px-2'],
+      md: ['h-6 min-w-6', 'px-3'],
+      lg: ['h-7 min-w-7', 'px-4', 'text-sm'],
     },
     pill: {
       true: [

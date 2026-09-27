@@ -1201,6 +1201,27 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@fontsource-variable/geist-mono@npm:5.3.0":
+  version: 5.3.0
+  resolution: "@fontsource-variable/geist-mono@npm:5.3.0"
+  checksum: 10c0/21a4097b3ccce08cbc181199f68a9193adc17d997ef8d883eab7565c6d79a82b2f8d7656f32f97b66f1f0b4ebba78a1a822c6318d55e0c5f572d74683ab036ee
+  languageName: node
+  linkType: hard
+
+"@fontsource-variable/manrope@npm:5.3.0":
+  version: 5.3.0
+  resolution: "@fontsource-variable/manrope@npm:5.3.0"
+  checksum: 10c0/8b760dff605c6d43c64e39243568c89f7806e59e86ac80e83a0dab42dfadfb1498d8f1816c78c24875e2f743b5340653c8bdd33cd75d051a1af56ed3802bfd0d
+  languageName: node
+  linkType: hard
+
+"@fontsource-variable/source-serif-4@npm:5.3.0":
+  version: 5.3.0
+  resolution: "@fontsource-variable/source-serif-4@npm:5.3.0"
+  checksum: 10c0/1cdc56fc7ba96b701c4f74d814825b346eafb9064c565d09fbdd8f319e68c64e80a3b66a324684bdef2d343429e1fd38a075382f38d946b187381b34205b427b
+  languageName: node
+  linkType: hard
+
 "@formatjs/fast-memoize@npm:3.1.7":
   version: 3.1.7
   resolution: "@formatjs/fast-memoize@npm:3.1.7"
@@ -2715,6 +2736,9 @@ __metadata:
   dependencies:
     "@cloudflare/vite-plugin": "npm:1.58.0"
     "@elysia/eden": "npm:2.0.0-beta.5"
+    "@fontsource-variable/geist-mono": "npm:5.3.0"
+    "@fontsource-variable/manrope": "npm:5.3.0"
+    "@fontsource-variable/source-serif-4": "npm:5.3.0"
     "@rezics/main": "workspace:*"
     "@rezics/ui": "workspace:*"
     "@storybook/addon-a11y": "npm:11.0.0-alpha.1"
@@ -2732,6 +2756,7 @@ __metadata:
     "@vitest/browser-playwright": "npm:5.0.2"
     elysia: "npm:2.0.0-beta.16"
     envalid: "npm:8.2.0"
+    lucide-react: "npm:1.47.0"
     native-i18n: "npm:0.2.0"
     next: "npm:16.3.6"
     nuqs: "npm:2.10.1"

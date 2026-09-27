@@ -1,25 +1,21 @@
 import { defineResources } from 'native-i18n';
+import { catalogs } from './catalogs.ts';
+import type { UiLocale } from './define.ts';
+
+export type { UiLocale } from './define.ts';
+
+type Catalogs = typeof catalogs;
+type LocaleLoaders<Locale extends UiLocale> = {
+  [Namespace in keyof Catalogs]: () => Promise<Awaited<ReturnType<Catalogs[Namespace]>>[Locale]>;
+};
+
+/** Splits the per-feature catalogs into native-i18n's locale × namespace loaders. */
+function localeLoaders<Locale extends UiLocale>(locale: Locale): LocaleLoaders<Locale> {
+  return Object.fromEntries(Object.entries(catalogs).map(([namespace, load]) =>
+    [namespace, () => load().then(catalog => catalog[locale])])) as LocaleLoaders<Locale>;
+}
 
 export const resources = defineResources({
   fallbackLocale: 'en',
-  loaders: {
-    en: {
-      shell: () => import('./en.ts').then(module => module.shell),
-      home: () => import('./en.ts').then(module => module.home),
-      search: () => import('./en.ts').then(module => module.search),
-      auth: () => import('./en.ts').then(module => module.auth),
-      work: () => import('./en.ts').then(module => module.work),
-      studio: () => import('./en.ts').then(module => module.studio),
-    },
-    'zh-CN': {
-      shell: () => import('./zh-CN.ts').then(module => module.shell),
-      home: () => import('./zh-CN.ts').then(module => module.home),
-      search: () => import('./zh-CN.ts').then(module => module.search),
-      auth: () => import('./zh-CN.ts').then(module => module.auth),
-      work: () => import('./zh-CN.ts').then(module => module.work),
-      studio: () => import('./zh-CN.ts').then(module => module.studio),
-    },
-  },
+  loaders: { en: localeLoaders('en'), 'zh-CN': localeLoaders('zh-CN') },
 });
-
-export type UiLocale = 'en' | 'zh-CN';

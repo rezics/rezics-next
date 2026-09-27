@@ -6,12 +6,30 @@
 
 @source "./";
 
-@custom-variant dark (&:is(.dark *));
+/*
+ * Theme selection lives on <html>: `.dark` or `.light` is an explicit choice,
+ * no class follows the system preference. Both branches need no script, so a
+ * server-rendered page starts in the right theme.
+ */
+@custom-variant dark {
+  &:where(.dark, .dark *) {
+    @slot;
+  }
+  @media (prefers-color-scheme: dark) {
+    &:where(:root:not(.light), :root:not(.light) *) {
+      @slot;
+    }
+  }
+}
 
 @theme inline {
-  --font-sans: "Manrope", ui-sans-serif, system-ui, sans-serif;
-  --font-heading: "Iowan Old Style", "Source Serif 4", Georgia, serif;
-  --font-mono: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  /* Stacks are set per locale on :root below. SharkUI titles use font-heading;
+     Rezics headings are interface text, so it maps to the sans stack. */
+  --font-sans: var(--font-interface);
+  --font-heading: var(--font-interface);
+  /* Work titles only: Iowan Old Style where installed, else Source Serif 4. */
+  --font-work-title: var(--font-work-serif);
+  --font-mono: var(--font-code);
 
   --color-background: var(--background);
   --color-foreground: var(--foreground);
@@ -268,6 +286,13 @@
  */
 :root {
   --radius: 1rem;
+  color-scheme: light;
+
+  /* The app self-hosts the variable faces; the plain names match local installs. */
+  --font-interface: "Manrope Variable", "Manrope", ui-sans-serif, system-ui, sans-serif;
+  --font-work-serif:
+    "Iowan Old Style", "Source Serif 4 Variable", "Source Serif 4", Georgia, serif;
+  --font-code: "Geist Mono Variable", "Geist Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
 
   --background: #f9f6f2;
   --foreground: #2b343d;
@@ -336,56 +361,71 @@
     0 2px 4px -1px color-mix(in oklab, var(--foreground) 8%, transparent),
     0 12px 24px -4px color-mix(in oklab, var(--foreground) 12%, transparent),
     0 32px 64px -12px color-mix(in oklab, var(--foreground) 16%, transparent);
+
+  /* Dark mode overrides, applied by .dark or by the system preference. */
+  @variant dark {
+    color-scheme: dark;
+
+    --background: #0d1218;
+    --foreground: #e7e4df;
+    --card: #151b21;
+    --card-foreground: #e7e4df;
+    --popover: #151b21;
+    --popover-foreground: #e7e4df;
+
+    --primary: #86aee8;
+    --primary-foreground: #0b1626;
+    --secondary: #232a30;
+    --secondary-foreground: #e7e4df;
+    --muted: #232a30;
+    --muted-foreground: #928f88;
+    --accent: #1b2a3f;
+    --accent-foreground: #c9dbf5;
+
+    --brand: #f0524c;
+    --rating: #e9a93a;
+    --vote-down: #a99cf0;
+
+    --destructive: #d63a50;
+    --destructive-foreground: #f0617a;
+    --info: #3bacda;
+    --info-foreground: #8fd0ee;
+    --success: #3a9742;
+    --success-foreground: #7fcf86;
+    --warning: #dca331;
+    --warning-foreground: #f0c46a;
+
+    --border: #2a2e33;
+    --input: #2a2e33;
+    --ring: #86aee8;
+
+    --sidebar: #11171d;
+    --sidebar-foreground: #e7e4df;
+    --sidebar-primary: #86aee8;
+    --sidebar-primary-foreground: #0b1626;
+    --sidebar-accent: #1b2a3f;
+    --sidebar-accent-foreground: #c9dbf5;
+    --sidebar-border: #2a2e33;
+    --sidebar-ring: #86aee8;
+
+    --chart-1: #86aee8;
+    --chart-2: #4fc1ad;
+    --chart-3: #e9a93a;
+    --chart-4: #f0524c;
+    --chart-5: #a99cf0;
+  }
 }
 
-.dark {
-  --background: #0d1218;
-  --foreground: #e7e4df;
-  --card: #151b21;
-  --card-foreground: #e7e4df;
-  --popover: #151b21;
-  --popover-foreground: #e7e4df;
-
-  --primary: #86aee8;
-  --primary-foreground: #0b1626;
-  --secondary: #232a30;
-  --secondary-foreground: #e7e4df;
-  --muted: #232a30;
-  --muted-foreground: #928f88;
-  --accent: #1b2a3f;
-  --accent-foreground: #c9dbf5;
-
-  --brand: #f0524c;
-  --rating: #e9a93a;
-  --vote-down: #a99cf0;
-
-  --destructive: #d63a50;
-  --destructive-foreground: #f0617a;
-  --info: #3bacda;
-  --info-foreground: #8fd0ee;
-  --success: #3a9742;
-  --success-foreground: #7fcf86;
-  --warning: #dca331;
-  --warning-foreground: #f0c46a;
-
-  --border: #2a2e33;
-  --input: #2a2e33;
-  --ring: #86aee8;
-
-  --sidebar: #11171d;
-  --sidebar-foreground: #e7e4df;
-  --sidebar-primary: #86aee8;
-  --sidebar-primary-foreground: #0b1626;
-  --sidebar-accent: #1b2a3f;
-  --sidebar-accent-foreground: #c9dbf5;
-  --sidebar-border: #2a2e33;
-  --sidebar-ring: #86aee8;
-
-  --chart-1: #86aee8;
-  --chart-2: #4fc1ad;
-  --chart-3: #e9a93a;
-  --chart-4: #f0524c;
-  --chart-5: #a99cf0;
+/* Simplified Chinese interface: Latin keeps Manrope and Source Serif; Han falls
+   back to the platform's SC faces instead of the browser's default CJK font. */
+:root:lang(zh-CN) {
+  --font-interface:
+    "Manrope Variable", "Manrope", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei UI",
+    "Microsoft YaHei", "Noto Sans CJK SC", "Noto Sans SC", "Source Han Sans SC", ui-sans-serif,
+    system-ui, sans-serif;
+  --font-work-serif:
+    "Iowan Old Style", "Source Serif 4 Variable", "Source Serif 4", "Songti SC", "STSong",
+    "Noto Serif CJK SC", "Noto Serif SC", "Source Han Serif SC", "SimSun", Georgia, serif;
 }
 
 @layer base {

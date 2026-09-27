@@ -11,7 +11,7 @@ export const buttonVariants = tv({
     'whitespace-nowrap font-medium text-sm',
     'rounded-xl',
     'transition-all',
-    'outline-none focus-visible:ring-[3px] focus-visible:ring-ring/32',
+    'outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background',
     'disabled:pointer-events-none disabled:opacity-64',
     'data-disabled:pointer-events-none data-disabled:opacity-64',
     'aria-disabled:pointer-events-none aria-disabled:opacity-64',

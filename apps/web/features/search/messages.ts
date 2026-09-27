@@ -1,0 +1,52 @@
+import { asValue, insert, number, plural } from 'native-i18n';
+import { defineMessages } from '../../i18n/define.ts';
+
+export const messages = defineMessages({
+  en: {
+    title: 'Search works', resultsFor: insert('Results for “{{phrase}}”', { phrase: String }),
+    emptyPhrase: 'Enter a search above to find published works.',
+    perspectiveLabel: 'View results from a perspective',
+    globalPerspective: 'Global perspective', realmPerspective: 'Realm perspective', realmId: 'Realm ID',
+    perspectiveHelp: 'The perspective sets the context for how works are selected.',
+    filters: 'Search filters', filterResults: 'Filter results', language: 'Language',
+    anyLanguage: 'Any language', english: 'English', spanish: 'Spanish', japanese: 'Japanese',
+    languageHelp: 'Searches published contribution text in the selected language.',
+    invalidRealm: 'Enter a full Realm ID to search this perspective.',
+    resultsRegion: 'Search results', results: 'Results',
+    resultCount: plural({ one: insert('Showing {{count}} result'), other: insert('Showing {{count}} results') },
+      { count: asValue(number()) }),
+    sequence: insert('Complete at sequence {{sequence}}', { sequence: String }),
+    idleTitle: 'Search published works', idle: 'Enter at least two characters to search.',
+    loading: 'Searching…', errorTitle: 'Search is unavailable', errorFallback: 'Try again shortly.',
+    retry: 'Try again', empty: 'No works matched this search.',
+    emptyHelp: 'Try another phrase, another language or the global perspective.',
+    workFallback: insert('Work {{id}}', { id: String }), mainVersion: 'Main Version',
+    revision: insert('Revision {{id}}', { id: String }), workId: 'Work ID',
+    realmRelation: 'Realm relation', textMatch: 'Text match',
+    defaultReason: 'Matched the phrase in a published contribution.',
+  },
+  'zh-CN': {
+    title: '搜索作品', resultsFor: insert('“{{phrase}}”的搜索结果', { phrase: String }),
+    emptyPhrase: '在上方输入搜索内容，查找已发布的作品。',
+    perspectiveLabel: '选择查看结果的视角',
+    globalPerspective: '全局视角', realmPerspective: '领域视角', realmId: '领域 ID',
+    perspectiveHelp: '视角决定如何选取作品。',
+    filters: '搜索筛选', filterResults: '筛选结果', language: '作品语言',
+    anyLanguage: '不限语言', english: '英语', spanish: '西班牙语', japanese: '日语',
+    languageHelp: '按所选语言搜索已发布的贡献文本。',
+    invalidRealm: '请输入完整的领域 ID，以便在此视角中搜索。',
+    resultsRegion: '搜索结果', results: '结果',
+    resultCount: plural({ other: insert('显示 {{count}} 条结果') }, { count: asValue(number()) }),
+    sequence: insert('完整结果截至序列 {{sequence}}', { sequence: String }),
+    idleTitle: '搜索已发布的作品', idle: '请至少输入两个字符。',
+    loading: '正在搜索…', errorTitle: '搜索暂不可用', errorFallback: '请稍后重试。',
+    retry: '重试', empty: '没有找到匹配的作品。',
+    emptyHelp: '试试换个搜索词、换一种语言，或使用全局视角。',
+    workFallback: insert('作品 {{id}}', { id: String }), mainVersion: '主版本',
+    revision: insert('修订 {{id}}', { id: String }), workId: '作品 ID',
+    realmRelation: '领域关系', textMatch: '文本匹配',
+    defaultReason: '已发布的贡献中包含该搜索词。',
+  },
+});
+
+export type SearchMessages = typeof messages.en;

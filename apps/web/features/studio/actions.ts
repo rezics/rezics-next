@@ -4,17 +4,9 @@ import { treaty } from '@elysia/eden';
 import type { MainApp } from '@rezics/main/app';
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
-import { serviceOrigin } from '../../features/api/origins.ts';
 import { getTranslation, requestLocale } from '../../i18n/server.ts';
-
-export type CreateState =
-  | { status: 'idle'; message: '' }
-  | { status: 'error'; message: string }
-  | { status: 'pending'; message: string; operationId: string }
-  | { status: 'created'; title: string; receipt: {
-      work: string; mainVersion: string; workRevision: string; mainRevision: string;
-      sourcePosition: { datasetId: string; dataEpoch: string; sequence: string };
-    } };
+import { serviceOrigin } from '../api/origins.ts';
+import type { CreateState } from './create-work-form.tsx';
 
 export async function createWork(_previous: CreateState, form: FormData): Promise<CreateState> {
   const { data: messages } = await getTranslation('studio', [await requestLocale()]);

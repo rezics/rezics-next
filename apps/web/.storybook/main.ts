@@ -1,5 +1,8 @@
+import { fileURLToPath } from 'node:url';
 import type { StorybookConfig } from '@storybook/react-vite';
 import tailwindcss from '@tailwindcss/vite';
+
+const local = (path: string) => fileURLToPath(new URL(path, import.meta.url));
 
 const config: StorybookConfig = {
   framework: '@storybook/react-vite',
@@ -11,6 +14,14 @@ const config: StorybookConfig = {
   async viteFinal(config) {
     config.plugins ??= [];
     config.plugins.push(tailwindcss());
+    // vinext supplies next/navigation and next/link in the app; stories get stand-ins.
+    config.resolve ??= {};
+    config.resolve.alias = [
+      ...(Array.isArray(config.resolve.alias) ? config.resolve.alias
+        : Object.entries(config.resolve.alias ?? {}).map(([find, replacement]) => ({ find, replacement }))),
+      { find: /^next\/navigation$/, replacement: local('./next-navigation.ts') },
+      { find: /^next\/link$/, replacement: local('./next-link.tsx') },
+    ];
     config.optimizeDeps ??= {};
     config.optimizeDeps.include = [...new Set([...(config.optimizeDeps.include ?? []),
       '@ark-ui/react/factory', 'clsx', 'tailwind-merge', 'tailwind-variants',
