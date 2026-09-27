@@ -8,6 +8,7 @@ import { checkedDateRange, checkedInstantRange, eventEndpointBounds, Unsupported
   type EventTimePrecision } from './time.ts';
 
 const PROFILE = 'event-interval-v1';
+/** Synchronous admission and response ceilings. They do not measure Jena or SQL engine work. */
 export const EVENT_QUERY_COST_CONTRACT = {
   maxEventTimeSlots: 2000,
   maxPageSize: 50,

@@ -5,12 +5,16 @@ time slots; each slot points to one revision head. Topic aliases remain
 `rdf:Statement` records whose `rv:denotesEvent` target is resolved through the
 G-049 acceptance decision reader. Their names never create a second date slot.
 
+Participants and roles belong to that same occurrence. Event-category Concepts
+describe a class of occurrences; they do not themselves carry one Event date.
+
 Known time points use the G-048 `time:GeneralDateTimeDescription` representation
 from `value-exact-v1`, including its exact lexical and temporal precision. The
 event profile adds only endpoint state and a link to that shared value. Unknown
 and open endpoints keep their supplied lexical without converting them to a
 calendar limit. The shape follows the W3C Time Ontology's general date/time
 description vocabulary: <https://www.w3.org/TR/owl-time/>.
+Recorded, observed, publication and occurrence times keep separate meanings.
 
 ## Operations and fences
 
@@ -47,8 +51,12 @@ separate fault fixture
 closes the Access recovery fence, removes an exact event manifest and restores
 its retained bytes. Unit and model checks cover month precision, open endpoints
 and profile reuse. These tests do not meter remote owner attempts and bytes,
-Jena scan work or SQL row-plan costs. RATE08 remains partial until an accepted
-G-049 topic Statement can be recorded and decided through its owner path; that
-path is currently blocked by the G-049 receipt-family registration and
-decision-writer IRI validation. Production throughput and large-corpus cost
-remain unmeasured.
+Jena scan work or SQL row-plan costs. The RATE08 integration creates, accepts
+and queries two G-049 aliases for one Event through the real owner path.
+Production throughput and large-corpus cost remain unmeasured. Source-driven
+index invalidation and expensive exact distribution jobs require separate work.
+The current query profile supports overlap, possible/definite matching and
+bounded calendar conversion. Temporal uncertainty, start-in ordering, and
+queries joining participant/role conditions to the same occurrence still need
+an admitted profile and owner tests. Their meaning cannot be inferred from the
+available interval index.
