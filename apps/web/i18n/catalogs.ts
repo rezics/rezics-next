@@ -32,6 +32,7 @@ export const catalogs = {
   }),
   realm: splitCatalog(() => import('../features/realm/messages.ts').then(module => module.messages), {
     'zh-Hans': () => import('../features/realm/messages/zh-Hans.ts').then(module => module.default),
+  }),
   manage: splitCatalog(() => import('../features/manage/messages.ts').then(module => module.messages), {
     'zh-Hant': () => import('../features/manage/messages/zh-Hant.ts').then(module => module.default),
     'zh-Hans': () => import('../features/manage/messages/zh-Hans.ts').then(module => module.default),
