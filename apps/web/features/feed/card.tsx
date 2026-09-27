@@ -99,7 +99,7 @@ function Byline({ item }: { item: FeedItem }) {
   return <div className="flex min-w-0 items-center gap-2 text-[13px]">
     {item.realm
       ? <CommunityIcon icon={item.realm.icon} name={item.realm.name.value} avatarQuery={avatarQuery} />
-      : <CommunityIcon icon={null} name={item.actor.name} />}
+      : <CommunityIcon icon={null} name={item.actor.name} person />}
     <p className="flex min-w-0 flex-1 flex-wrap items-center gap-x-1.5 gap-y-0.5 text-muted-foreground">
       {item.realm ? <>
         <Link href={localizedPath(`/r/${uuidOf(item.realm.id)}`, locale)} lang={item.realm.name.language}

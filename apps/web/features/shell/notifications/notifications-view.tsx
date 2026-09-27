@@ -71,7 +71,7 @@ function NotificationRow({ item, grouped, now, avatarQuery, onRead }: { item: St
   return <li className={cn('relative flex gap-3 px-4 py-3.5 transition-colors hover:bg-accent/30',
     !item.read && 'bg-primary/4')}>
     <span className="relative mt-0.5 shrink-0">
-      {display?.actor ? <CommunityIcon name={display.actor.name} size="md" avatarQuery={avatarQuery}
+      {display?.actor ? <CommunityIcon name={display.actor.name} size="md" avatarQuery={avatarQuery} person
         icon={display.actor.avatar ? { kind: 'image', url: display.actor.avatar } : null} />
         : <span className="grid size-9 place-items-center rounded-full bg-muted text-muted-foreground">
           <Icon aria-hidden="true" className="size-4.5" /></span>}

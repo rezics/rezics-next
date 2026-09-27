@@ -1,5 +1,6 @@
 import { Alert, AlertDescription } from '@rezics/ui/alert';
 import { Avatar, AvatarFallback, AvatarImage } from '@rezics/ui/avatar';
+import { initials } from '@rezics/ui/avatar-initials';
 import { Card, CardContent } from '@rezics/ui/card';
 import { agentName, type AgentOption } from '../auth/acting-identity.ts';
 import type { PublicAgentProfile } from '../auth/agent-profile.ts';
@@ -42,7 +43,7 @@ export function ProfileSettings({ agent, profile, locale, error, updated }: {
         <div className="flex min-w-0 items-center gap-3">
           <Avatar size="lg">
             {profile?.avatarUrl ? <AvatarImage src={`${BFF_PREFIX}${profile.avatarUrl}`} alt="" /> : null}
-            <AvatarFallback>{name.slice(0, 2).toUpperCase()}</AvatarFallback>
+            <AvatarFallback>{initials(name)}</AvatarFallback>
           </Avatar>
           <div className="min-w-0"><strong className="block truncate">{name}</strong>
             <span className="text-muted-foreground text-sm">@{agent.handle}</span></div>

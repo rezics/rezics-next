@@ -40,11 +40,3 @@ export function readableCode(code: string): string {
   return words ? words[0]!.toUpperCase() + words.slice(1) : code;
 }
 
-/** First letters for an avatar stand-in: Latin initials, or the first character for CJK names. */
-export function initials(name: string): string {
-  const parts = name.trim().split(/\s+/u).filter(Boolean);
-  const first = [...(parts[0] ?? '?')][0] ?? '?';
-  if (/\p{Script=Han}|\p{Script=Hiragana}|\p{Script=Katakana}|\p{Script=Hangul}/u.test(first)) return first;
-  const second = parts.length > 1 ? [...parts[1]!][0] ?? '' : '';
-  return (first + (/\p{Script=Latin}/u.test(second) ? second : '')).toUpperCase();
-}

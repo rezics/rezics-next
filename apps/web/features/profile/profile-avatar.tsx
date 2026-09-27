@@ -1,21 +1,10 @@
+import { initials } from '@rezics/ui/avatar-initials';
 import { cn } from '@rezics/ui/utils';
 import { BFF_PREFIX } from '../api/browser.ts';
 import type { AgentKind } from './types.ts';
 
-// Han, Hiragana, Katakana and Hangul: a name that starts in one of these scripts is marked by its first character.
-const cjk = /^[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]/u;
-
-/**
- * The letters a profile without a photo shows: the first character of a CJK
- * name ("月下书生" → 月), otherwise the first letters of its first two words
- * ("North Star Editions" → NS).
- */
-export function initials(name: string): string {
-  const words = name.split(/[\s·・,，/|]+/u).filter(word => /\p{L}/u.test(word));
-  const first = words[0] ?? name;
-  if (cjk.test(first)) return [...first][0]!;
-  return words.slice(0, 2).map(word => [...word.replace(/^\P{L}+/u, '')][0] ?? '').join('').toLocaleUpperCase();
-}
+/** The letters a profile without a photo shows: the site-wide rule, so a person reads the same everywhere. */
+export { initials };
 
 const sizes = {
   sm: 'size-10 text-base',

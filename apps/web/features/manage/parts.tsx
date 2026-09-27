@@ -1,4 +1,5 @@
 import { buttonVariants } from '@rezics/ui/button';
+import { initials } from '@rezics/ui/avatar-initials';
 import { cn } from '@rezics/ui/utils';
 import { CloudOffIcon, LockIcon, LogInIcon, type LucideIcon, RefreshCwIcon, SearchXIcon, ShieldAlertIcon } from 'lucide-react';
 import { materializeData } from 'native-i18n';
@@ -7,7 +8,6 @@ import type { UiLocale } from '../../i18n/define.ts';
 import { BFF_PREFIX } from '../api/browser.ts';
 import { EmptyState } from '../shell/empty-state.tsx';
 import LocalizedLink from '../shell/localized-link.tsx';
-import { initials } from './format.ts';
 import type { ManageMessages } from './messages.ts';
 import type { Avatar, LocalizedName, ReadFailure } from './types.ts';
 

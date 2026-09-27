@@ -1,6 +1,7 @@
 'use client';
 
 import { Avatar, AvatarFallback, AvatarImage } from '@rezics/ui/avatar';
+import { initials } from '@rezics/ui/avatar-initials';
 import { Button } from '@rezics/ui/button';
 import { Menu, MenuContent, MenuGroup, MenuItem, MenuRadioGroup, MenuRadioItem, MenuSeparator,
   MenuSub, MenuSubContent, MenuSubTrigger, MenuTrigger } from '@rezics/ui/menu';
@@ -18,12 +19,6 @@ import { agentName, type SessionAgent } from './acting-identity.ts';
 import type { AuthMessages } from './messages.ts';
 import type { Session } from './session.ts';
 
-function initials(name: string, email: string): string {
-  if (!name && !email) return 'R';
-  const words = (name || email).trim().split(/\s+/).filter(Boolean);
-  const letters = words.length > 1 ? [words[0]!, words.at(-1)!].map(word => [...word][0]) : [...(words[0] ?? '?')].slice(0, 2);
-  return letters.join('').toUpperCase();
-}
 
 /** What the menu says about the session Agent. */
 export function agentSummary(agent: SessionAgent, messages: AuthMessages): {
@@ -61,7 +56,7 @@ function AccountIdentity({ session, messages, compact = false }: {
       {session.agent.status === 'selected' && session.agent.agent.avatarUrl
         ? <AvatarImage src={`${BFF_PREFIX}${session.agent.agent.avatarUrl}`} alt="" /> : null}
       <AvatarFallback className="bg-accent font-semibold text-accent-foreground text-sm">
-        {initials(avatarName, user.email)}</AvatarFallback>
+        {initials(avatarName || user.email, 'R')}</AvatarFallback>
     </Avatar>
     <span className={compact ? 'sr-only' : 'hidden min-w-0 flex-col leading-tight sm:flex'}>
       <span className="truncate font-medium text-sm">{agent.text}</span>

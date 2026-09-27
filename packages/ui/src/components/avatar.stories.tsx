@@ -10,6 +10,7 @@ import {
   AvatarGroupCount,
   AvatarImage,
 } from './avatar.tsx';
+import { initials } from './avatar-initials.tsx';
 
 const surface: Decorator = (Story, { parameters }) => (
   <div className={cn('bg-background p-6 font-sans text-foreground')}>
@@ -31,7 +32,7 @@ const meta = {
     docs: {
       description: {
         component:
-          'A member, Realm or acting-identity picture with a fallback of initials or an icon on the accent surface. Use it in post bylines, member lists, the top-bar identity switcher and moderation queues. The image needs `alt` text naming the person; a status dot (`AvatarBadge`) is hidden from assistive technology, so state its meaning in nearby text. Group overlapping avatars for participants in a read-along or reviewers of a Work.',
+          'A member, Realm or acting-identity picture with a fallback of initials or an icon on the accent surface. Use it in post bylines, member lists, the top-bar identity switcher and moderation queues. The image needs `alt` text naming the person; a status dot (`AvatarBadge`) is hidden from assistive technology, so state its meaning in nearby text. Group overlapping avatars for participants in a read-along or reviewers of a Work. Fallback letters come from `initials()` in `@rezics/ui/avatar-initials`, so a person reads the same in the header, their profile and every list.',
       },
     },
   },
@@ -73,6 +74,27 @@ export const Fallback: Story = {
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     await waitFor(() => expect(canvas.getByText('MO')).toBeVisible());
+  },
+};
+
+/** One rule for every fallback: a Han, Kana or Hangul name shows its first character; others show two letters from one alphabet. */
+export const Initials: Story = {
+  render: () => (
+    <ul className="grid gap-3 text-sm">
+      {['Daniel Chen 陈丹尼', 'Lin Mei 林梅', '陈丹尼', '月下书生 · Moonlit Scribe', '김민지', 'élodie', 'Daniel 陈丹尼',
+        'Анна Петрова'].map((name) => (
+        <li className="flex items-center gap-3" key={name}>
+          <Avatar>
+            <AvatarFallback>{initials(name)}</AvatarFallback>
+          </Avatar>
+          <span>{name}</span>
+        </li>
+      ))}
+    </ul>
+  ),
+  async play({ canvasElement }) {
+    const shown = [...canvasElement.querySelectorAll('[data-slot=avatar-fallback]')].map((node) => node.textContent);
+    await expect(shown).toEqual(['DC', 'LM', '陈', '月', '김', 'É', 'D', 'АП']);
   },
 };
 
