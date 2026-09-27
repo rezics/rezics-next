@@ -79,11 +79,11 @@ export const ToastItem = (props: ToastItemProps) => {
         'z-(--z-index) translate-x-(--x) translate-y-(--y)',
         'relative',
         'w-[calc(100%-var(--viewport-offset-left))] sm:w-(--width)',
-        'px-3.5 py-3',
-        'flex items-start justify-between gap-1.5',
+        'px-4 py-3.5',
+        'flex items-start justify-between gap-2',
         'bg-popover',
-        'select-none text-card-foreground text-sm',
-        'rounded-xl border shadow-lg/5',
+        'select-none text-popover-foreground text-sm',
+        'rounded-2xl border border-border/60 shadow-(--aura-shadow-float)',
         'scale-(--scale) opacity-(--opacity)',
         'transition-all duration-250 will-change-[translate,opacity,scale]',
         'ease-[cubic-bezier(0.21,1.02,0.73,1)]',
@@ -96,13 +96,14 @@ export const ToastItem = (props: ToastItemProps) => {
       data-slot="toast"
       {...rest}
     >
-      <div className="flex items-start gap-1.5">
+      <div className="flex items-start gap-2">
+        {/* Icons use the text-safe tones: the info and warning fills fall below 3:1 on cards. */}
         <div
           className={cn(
-            'in-data-[type=warning]:text-warning',
-            'in-data-[type=success]:text-success',
-            'in-data-[type=error]:text-destructive',
-            'in-data-[type=info]:text-info',
+            'in-data-[type=warning]:text-warning-foreground',
+            'in-data-[type=success]:text-success-foreground',
+            'in-data-[type=error]:text-destructive-foreground',
+            'in-data-[type=info]:text-info-foreground',
             '[&_svg]:pointer-events-none [&_svg]:h-lh [&_svg]:w-4 [&_svg]:shrink-0',
           )}
           data-slot="toast-icon"

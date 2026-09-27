@@ -56,7 +56,7 @@ export const BreadcrumbLink = (props: React.ComponentProps<typeof ark.a>) => {
     <ark.a
       className={cn(
         'text-nowrap',
-        'rounded-md border border-transparent',
+        'rounded-lg border border-transparent',
         'transition-colors',
         'hover:text-foreground',
         'outline-none focus-visible:border-primary focus-visible:ring-[3px] focus-visible:ring-ring/32 focus-visible:ring-offset-2 focus-visible:ring-offset-background',
@@ -75,7 +75,7 @@ export const BreadcrumbPage = (props: React.ComponentProps<typeof ark.span>) => 
   return (
     <ark.span
       aria-current="page"
-      className={cn('font-normal text-foreground', className)}
+      className={cn('font-medium text-foreground', className)}
       data-slot="breadcrumb-page"
       {...rest}
     />

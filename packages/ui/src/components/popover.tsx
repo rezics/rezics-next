@@ -4,11 +4,35 @@ import { ark } from '@ark-ui/react/factory';
 import { Popover as ArkPopover, usePopoverContext } from '@ark-ui/react/popover';
 import { Portal } from '@ark-ui/react/portal';
 import { XIcon } from 'lucide-react';
+import React from 'react';
 import { cn } from '../utils.ts';
 import { Button } from './button.tsx';
 import { ScrollArea } from './scroll-area.tsx';
 
 export const usePopover = usePopoverContext;
+
+/**
+ * Names and describes popover content from its rendered title and description.
+ * Zag looks for them once, when the machine starts, which is before `lazyMount`
+ * renders the content, so a lazily mounted popover would be an unnamed dialog.
+ */
+export const usePopoverLabelling = (content: React.RefObject<HTMLElement | null>) => {
+  const popover = usePopoverContext();
+  const [hasTitle, setHasTitle] = React.useState(false);
+  const [hasDescription, setHasDescription] = React.useState(false);
+
+  React.useLayoutEffect(() => {
+    setHasTitle(!!content.current?.querySelector('[data-scope=popover][data-part=title]'));
+    setHasDescription(
+      !!content.current?.querySelector('[data-scope=popover][data-part=description]'),
+    );
+  });
+
+  return {
+    'aria-labelledby': hasTitle ? popover.getTitleProps().id : undefined,
+    'aria-describedby': hasDescription ? popover.getDescriptionProps().id : undefined,
+  };
+};
 
 export const Popover = (props: React.ComponentProps<typeof ArkPopover.Root>) => {
   const { lazyMount = true, unmountOnExit = true, modal = true, ...rest } = props;
@@ -48,10 +72,15 @@ interface PopoverContentProps extends React.ComponentProps<typeof ArkPopover.Con
 export const PopoverContent = (props: PopoverContentProps) => {
   const { showCloseButton = false, className, children, ...rest } = props;
 
+  const content = React.useRef<HTMLDivElement>(null);
+  const labelling = usePopoverLabelling(content);
+
   return (
     <Portal>
       <PopoverPositioner>
         <ArkPopover.Content
+          {...labelling}
+          ref={content}
           className={cn(
             'relative',
             'z-[calc(50+var(--layer-index,0))]',
@@ -60,7 +89,7 @@ export const PopoverContent = (props: PopoverContentProps) => {
             'flex flex-col',
             'bg-popover',
             'text-popover-foreground',
-            'rounded-2xl border shadow-lg/5',
+            'rounded-2xl border border-border/60 shadow-(--aura-shadow-float)',
             'outline-hidden',
             'origin-(--transform-origin)',
             'data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0',
@@ -179,7 +208,7 @@ export const PopoverFooter = (props: React.ComponentProps<typeof ark.div>) => {
     <ark.div
       className={cn(
         'flex flex-col-reverse gap-2 sm:flex-row sm:justify-end',
-        'sm:rounded-b-[calc(var(--radius-lg)-1px)]',
+        'sm:rounded-b-[calc(var(--radius-2xl)-1px)]',
         'px-(--space) py-4',
         'bg-muted/64',
         'border-t',

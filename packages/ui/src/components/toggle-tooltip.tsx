@@ -2,9 +2,9 @@
 
 import { Popover as ArkPopover } from '@ark-ui/react/popover';
 import { Portal } from '@ark-ui/react/portal';
-import type React from 'react';
+import React from 'react';
 import { cn } from '../utils.ts';
-import { Popover, PopoverTrigger } from './popover.tsx';
+import { Popover, PopoverTrigger, usePopoverLabelling } from './popover.tsx';
 
 export const ToggleTooltip = (props: React.ComponentProps<typeof ArkPopover.Root>) => {
   const {
@@ -12,7 +12,6 @@ export const ToggleTooltip = (props: React.ComponentProps<typeof ArkPopover.Root
     lazyMount = true,
     unmountOnExit = true,
     modal = false,
-    open: controlledOpen,
     ...rest
   } = props;
 
@@ -35,16 +34,21 @@ export const ToggleTooltipTrigger = (props: React.ComponentProps<typeof ArkPopov
 export const ToggleTooltipContent = (props: React.ComponentProps<typeof ArkPopover.Content>) => {
   const { className, children, ...rest } = props;
 
+  const content = React.useRef<HTMLDivElement>(null);
+  const labelling = usePopoverLabelling(content);
+
   return (
     <Portal>
       <ArkPopover.Positioner data-slot="toggle-tooltip-positioner">
         <ArkPopover.Content
+          {...labelling}
+          ref={content}
           className={cn(
             'z-50 w-fit',
             'px-3 py-1.5',
             'bg-foreground',
             'text-background text-xs',
-            'rounded-xl shadow-lg/5',
+            'rounded-xl shadow-(--aura-shadow-float)',
             'origin-(--transform-origin) animate-in',
             'fade-in-0 zoom-in-[98%]',
             'data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-[98%]',
@@ -59,7 +63,10 @@ export const ToggleTooltipContent = (props: React.ComponentProps<typeof ArkPopov
           data-slot="toggle-tooltip-content"
           {...rest}
         >
-          {children}
+          {/* The popover is a dialog; its hint text doubles as the dialog's accessible name. */}
+          <ArkPopover.Title asChild>
+            <div>{children}</div>
+          </ArkPopover.Title>
           <ToggleTooltipArrow />
         </ArkPopover.Content>
       </ArkPopover.Positioner>

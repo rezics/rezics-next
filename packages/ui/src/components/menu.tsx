@@ -48,11 +48,11 @@ export const MenuPositioner = (props: React.ComponentProps<typeof ArkMenu.Positi
 export const menuContentVariants = tv({
   base: [
     'z-[calc(50+var(--nested-layer-count,0))]',
-    "max-h-(--available-height) not-[class*='w-']:min-w-32",
-    'p-1',
+    "max-h-(--available-height) not-[class*='w-']:min-w-40",
+    'p-1.5',
     'bg-popover',
     'text-popover-foreground',
-    'rounded-2xl border shadow-lg/5',
+    'rounded-2xl border border-border/60 shadow-(--aura-shadow-float)',
     'origin-(--transform-origin)',
     'outline-none',
     'overflow-y-auto',
@@ -110,7 +110,7 @@ export const MenuSeparator = (props: React.ComponentProps<typeof ArkMenu.Separat
 
   return (
     <ArkMenu.Separator
-      className={cn('my-1 h-px bg-border', className)}
+      className={cn('-mx-1.5 my-1.5 h-px bg-border/60', className)}
       data-slot="menu-separator"
       {...rest}
     />
@@ -122,22 +122,23 @@ const menuItemVariants = tv({
     'group/menu-item',
     'relative',
     'w-full',
-    'px-2.5 py-1.5',
-    'flex items-center gap-2',
+    'px-3 py-2',
+    'flex items-center gap-2.5',
     'select-none text-sm',
     'rounded-xl',
     'outline-hidden',
-    'group-data-[date=open]/trigger-item:bg-accent group-data-[date=open]/trigger-item:text-accent-foreground',
+    'data-[state=open]:bg-accent/60 data-[state=open]:text-accent-foreground',
     'data-disabled:pointer-events-none data-disabled:opacity-64',
-    "[&_svg:not([class*='size-'])]:size-3.5 [&_svg]:pointer-events-none [&_svg]:shrink-0",
+    "[&_svg:not([class*='size-'])]:size-4 [&_svg]:pointer-events-none [&_svg]:shrink-0",
   ],
   variants: {
     variant: {
       default: ['data-highlighted:bg-accent data-highlighted:text-accent-foreground'],
+      // -foreground is the text-safe red; the --destructive fill is too light for small text.
       destructive: [
-        'text-destructive dark:text-destructive-foreground',
-        'data-highlighted:bg-destructive/10 dark:data-highlighted:bg-destructive-foreground/10',
-        '**:[svg]:text-destructive! dark:**:[svg]:text-destructive-foreground!',
+        'text-destructive-foreground',
+        'data-highlighted:bg-destructive/10',
+        '**:[svg]:text-destructive-foreground!',
       ],
     },
   },
@@ -156,6 +157,7 @@ export const MenuItem = (props: MenuItemProps) => {
   return (
     <ArkMenu.Item
       className={cn(menuItemVariants({ variant }), className)}
+      data-slot="menu-item"
       data-variant={variant}
       {...rest}
     />
@@ -183,13 +185,14 @@ export const MenuCheckboxItem = (props: React.ComponentProps<typeof ArkMenu.Chec
 
   return (
     <ArkMenu.CheckboxItem
-      className={cn(menuItemVariants({ variant: 'default' }), 'ps-8', className)}
+      className={cn(menuItemVariants({ variant: 'default' }), 'ps-9', className)}
+      data-slot="menu-checkbox-item"
       {...rest}
     >
       <ArkMenu.ItemIndicator
         className={cn(
-          'absolute inset-s-2',
-          'size-3.5',
+          'absolute inset-s-3',
+          'size-4',
           'flex items-center justify-center',
           'pointer-events-none',
         )}
@@ -227,8 +230,8 @@ export const MenuGroupLabel = (props: React.ComponentProps<typeof ArkMenu.ItemGr
   return (
     <ArkMenu.ItemGroupLabel
       className={cn(
-        'px-2 py-1.5',
-        'font-medium text-muted-foreground text-sm',
+        'px-3 py-1.5',
+        'font-medium text-muted-foreground text-xs',
         'pointer-events-none',
         className,
       )}
@@ -243,11 +246,11 @@ export const MenuRadioItem = (props: React.ComponentProps<typeof ArkMenu.RadioIt
 
   return (
     <ArkMenu.RadioItem
-      className={cn(menuItemVariants({ variant: 'default' }), 'ps-8', className)}
+      className={cn(menuItemVariants({ variant: 'default' }), 'ps-9', className)}
       data-slot="menu-radio-item"
       {...rest}
     >
-      <ArkMenu.ItemIndicator className="pointer-events-none absolute inset-s-2 flex size-3.5 items-center justify-center">
+      <ArkMenu.ItemIndicator className="pointer-events-none absolute inset-s-3 flex size-4 items-center justify-center">
         <CheckIcon />
       </ArkMenu.ItemIndicator>
 
@@ -302,7 +305,7 @@ export const MenuShortcut = (props: React.ComponentProps<typeof ark.span>) => {
       className={cn(
         'ms-auto rtl:me-auto',
         'text-muted-foreground text-xs tracking-widest',
-        'group-data-highlighted/menu-item:group-data-[variant=destructive]/menu-item:text-destructive dark:group-data-highlighted/menu-item:group-data-[variant=destructive]/menu-item:text-destructive-foreground',
+        'group-data-[variant=destructive]/menu-item:text-destructive-foreground',
         className,
       )}
       data-slot="menu-shortcut"

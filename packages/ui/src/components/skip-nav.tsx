@@ -27,7 +27,9 @@ export const SkipNavLink = (props: SkipNavLinkProps) => {
         'focus:text-primary-foreground focus:text-sm',
         'sr-only focus:not-sr-only',
         'focus:rounded-xl',
-        'focus:outline-none focus:ring-2 focus:ring-ring',
+        'focus:shadow-(--aura-shadow-float)',
+        // The offset keeps the ink-blue ring visible against the ink-blue fill.
+        'focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-background',
         className,
       )}
       data-slot="skip-nav-link"

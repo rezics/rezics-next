@@ -22,25 +22,34 @@ export const Pagination = (props: PaginationProps) => {
   );
 };
 
+// Children replace the English label, for example with 上一页 in zh-CN.
 export const PaginationPrevious = (
   props: React.ComponentProps<typeof ArkPagination.PrevTrigger>,
-) => (
-  <ArkPagination.PrevTrigger asChild data-slot="pagination-previous" {...props}>
-    <Button variant="ghost">
-      <ChevronLeft />
-      Previous
-    </Button>
-  </ArkPagination.PrevTrigger>
-);
+) => {
+  const { children = 'Previous', ...rest } = props;
 
-export const PaginationNext = (props: React.ComponentProps<typeof ArkPagination.NextTrigger>) => (
-  <ArkPagination.NextTrigger asChild data-slot="pagination-next" {...props}>
-    <Button variant="ghost">
-      Next
-      <ChevronRight />
-    </Button>
-  </ArkPagination.NextTrigger>
-);
+  return (
+    <ArkPagination.PrevTrigger asChild data-slot="pagination-previous" {...rest}>
+      <Button className="rounded-full" variant="ghost">
+        <ChevronLeft className="rtl:rotate-180" />
+        {children}
+      </Button>
+    </ArkPagination.PrevTrigger>
+  );
+};
+
+export const PaginationNext = (props: React.ComponentProps<typeof ArkPagination.NextTrigger>) => {
+  const { children = 'Next', ...rest } = props;
+
+  return (
+    <ArkPagination.NextTrigger asChild data-slot="pagination-next" {...rest}>
+      <Button className="rounded-full" variant="ghost">
+        {children}
+        <ChevronRight className="rtl:rotate-180" />
+      </Button>
+    </ArkPagination.NextTrigger>
+  );
+};
 
 export const PaginationItem = (props: React.ComponentProps<typeof ArkPagination.Item>) => {
   const { className, children, ...rest } = props;
@@ -50,9 +59,9 @@ export const PaginationItem = (props: React.ComponentProps<typeof ArkPagination.
       <Button
         className={cn(
           'tabular-nums',
-          'data-selected:not-[hover]:bg-transparent dark:data-selected:not-[hover]:bg-input/30',
-          'data-selected:not-[hover]:text-foreground',
-          'data-selected:not-[hover]:border-input',
+          'rounded-full',
+          'text-muted-foreground hover:text-foreground',
+          'data-selected:bg-primary/10 data-selected:text-primary',
           className,
         )}
         size="icon-md"
@@ -67,7 +76,7 @@ export const PaginationItem = (props: React.ComponentProps<typeof ArkPagination.
 export const PaginationItems = (
   props: Omit<React.ComponentProps<typeof ArkPagination.Context>, 'children'>,
 ) => (
-  <ArkPagination.Context data-slot="pagination-item s" {...props}>
+  <ArkPagination.Context {...props}>
     {({ pages }) =>
       pages.map((page, index) =>
         page.type === 'page' ? (

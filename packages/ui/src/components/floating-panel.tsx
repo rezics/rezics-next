@@ -58,7 +58,7 @@ export const FloatingPanelContent = (props: FloatingPanelContentProps) => {
             'h-(--height) min-h-0 w-(--width)',
             'bg-popover',
             'text-popover-foreground',
-            'rounded-3xl border shadow-lg/5',
+            'rounded-3xl border border-border/60 shadow-(--aura-shadow-float)',
             'transition-[scale,opacity,translate] duration-200 ease-in-out will-change-transform',
             'data-[state=open]:fade-in-0 data-[state=open]:zoom-in-[98%] data-[state=open]:animate-in',
             'motion-reduce:animate-none! motion-reduce:transition-none!',
@@ -237,7 +237,7 @@ export const FloatingPanelFooter = (props: React.ComponentProps<typeof ark.div>)
     <ark.div
       className={cn(
         'flex flex-col-reverse gap-2 sm:flex-row sm:justify-end',
-        'sm:rounded-b-[calc(var(--radius-2xl)-1px)]',
+        'sm:rounded-b-[calc(var(--radius-3xl)-1px)]',
         'px-(--space) py-4',
         'bg-muted/48',
         'border-t',

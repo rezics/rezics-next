@@ -48,7 +48,7 @@ export const TooltipContent = (props: React.ComponentProps<typeof ArkTooltip.Con
             'px-3 py-1.5',
             'bg-foreground',
             'text-background text-xs',
-            'rounded-xl shadow-lg/5',
+            'rounded-xl shadow-(--aura-shadow-float)',
             'origin-(--transform-origin) animate-in',
             'fade-in-0 zoom-in-[98%]',
             'data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-[98%]',

@@ -40,7 +40,7 @@ export const DialogTrigger = (props: React.ComponentProps<typeof ArkDialog.Trigg
 export const dialogOverlayVariants = tv({
   base: [
     'fixed inset-0 z-50',
-    'bg-black/32 backdrop-blur-xs',
+    'bg-black/40 backdrop-blur-sm',
     'duration-200',
     'peer peer-data-[slot=dialog-overlay]:hidden',
     'data-[state=open]:fade-in-0 data-[state=open]:animate-in',
@@ -95,7 +95,7 @@ export const dialogContentVariants = tv({
     'flex flex-col overflow-hidden',
     'bg-popover',
     'text-popover-foreground',
-    'rounded-3xl border shadow-lg/5',
+    'rounded-3xl border border-border/60 shadow-(--aura-shadow-card)',
     'outline-none',
     'translate-y-[calc(-1.25rem*var(--nested-layer-count))]',
     'transition-[scale,opacity,translate] duration-200 ease-in-out will-change-transform',
@@ -261,7 +261,8 @@ export const DialogTitle = (props: React.ComponentProps<typeof ArkDialog.Title>)
 
   return (
     <ArkDialog.Title
-      className={cn('font-heading font-semibold text-lg leading-none', className)}
+      // Sans, not font-heading: the serif face is reserved for Work titles.
+      className={cn('font-semibold text-lg leading-tight tracking-tight', className)}
       data-slot="dialog-title"
       {...rest}
     />
@@ -292,7 +293,7 @@ export const DialogFooter = (props: React.ComponentProps<typeof ark.div>) => {
       className={cn(
         'shrink-0',
         'flex flex-col-reverse gap-2 sm:flex-row sm:justify-end',
-        'sm:rounded-b-[calc(var(--radius-2xl)-1px)]',
+        'sm:rounded-b-[calc(var(--radius-3xl)-1px)]',
         'px-(--space) py-4',
         'bg-muted/48',
         'border-t',

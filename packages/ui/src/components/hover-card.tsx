@@ -50,7 +50,7 @@ export const HoverCardContent = (props: React.ComponentProps<typeof ArkHoverCard
             'bg-popover',
             'text-popover-foreground',
             'origin-(--transform-origin)',
-            'rounded-2xl border shadow-lg/5',
+            'rounded-2xl border border-border/60 shadow-(--aura-shadow-float)',
             'outline-hidden',
             'data-[state=closed]:zoom-out-[98%] data-[state=open]:zoom-in-[98%]',
             'data-[state=open]:fade-in-0 data-[state=closed]:fade-out-0',

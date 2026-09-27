@@ -22,7 +22,7 @@ export const BottomNavigation = (props: React.ComponentProps<typeof ArkTabs.Root
 };
 
 export const BottomNavigationList = (props: React.ComponentProps<typeof ArkTabs.List>) => {
-  const { 'aria-label': ariaLabel, className, ...rest } = props;
+  const { className, ...rest } = props;
 
   return (
     <ArkTabs.List
@@ -58,7 +58,6 @@ export const BottomNavigationItem = (props: React.ComponentProps<typeof ArkTabs.
         'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background',
         'data-disabled:pointer-events-none data-disabled:opacity-64',
         "[&_svg:not([class*='size-'])]:size-5 [&_svg]:pointer-events-none [&_svg]:shrink-0",
-        'has-[data-slot=bottom-navigation-item-label]:size-4',
         'pointer-coarse:after:absolute pointer-coarse:after:size-full pointer-coarse:after:min-h-11 pointer-coarse:after:min-w-11',
         'motion-reduce:transition-none!',
         className,

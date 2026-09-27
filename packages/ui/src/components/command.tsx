@@ -96,7 +96,7 @@ export const Command: ArkCombobox.RootComponent = (props) => {
         'p-2',
         'bg-popover',
         'text-popover-foreground',
-        'rounded-3xl border',
+        'rounded-3xl border border-border/60',
         className,
       )}
       closeOnSelect={false}
@@ -226,7 +226,7 @@ export const CommandFooter = (props: React.ComponentProps<'div'>) => {
         '-m-2 mt-2 px-4 py-3',
         'bg-muted/48',
         'text-muted-foreground text-xs',
-        'rounded-b-[calc(var(--radius-2xl,1rem)-1px)] border-t',
+        'rounded-b-[calc(var(--radius-3xl)-1px)] border-t',
         className,
       )}
       data-slot="command-footer"

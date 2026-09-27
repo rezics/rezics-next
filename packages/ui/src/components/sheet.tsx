@@ -88,7 +88,8 @@ const sheetContentVariants = tv({
     'flex flex-col',
     'bg-popover',
     'text-popover-foreground',
-    'shadow-lg/5',
+    'border-border/60 shadow-(--aura-shadow-card)',
+    'overflow-hidden',
     'transition-[opacity,translate] duration-200 ease-in-out will-change-transform',
     'data-[state=closed]:fade-out-0 data-[state=closed]:animate-out',
     'data-[state=open]:fade-in-0 data-[state=open]:animate-in',
@@ -97,23 +98,24 @@ const sheetContentVariants = tv({
   variants: {
     placement: {
       bottom: [
-        'row-start-2 border-t',
-        'data-[state=closed]:slide-in-from-bottom-10 data-[state=open]:slide-in-from-bottom-10',
+        'row-start-2 rounded-t-3xl border-t',
+        'data-[state=closed]:slide-out-to-bottom-10 data-[state=open]:slide-in-from-bottom-10',
       ],
       top: [
-        'border-b',
+        'rounded-b-3xl border-b',
         'data-[state=closed]:slide-out-to-top-10 data-[state=open]:slide-in-from-top-10',
       ],
       left: [
         'w-[calc(100%-(--spacing(12)))] max-w-md',
         'col-start-2',
-        'border-e',
+        // Aura rounds the edge that faces the page.
+        'rounded-e-3xl border-e',
         'data-[state=closed]:slide-out-to-start-10 data-[state=open]:slide-in-from-start-10',
       ],
       right: [
         'w-[calc(100%-(--spacing(12)))] max-w-md',
         'col-start-2',
-        'border-s',
+        'rounded-s-3xl border-s',
         'data-[state=closed]:slide-out-to-end-10 data-[state=open]:slide-in-from-end-10',
       ],
     },
@@ -121,7 +123,7 @@ const sheetContentVariants = tv({
       default: '',
       inset: [
         'sm:rounded-3xl sm:border',
-        'sm:**:data-[slot=sheet-footer]:rounded-b-[calc(var(--radius-2xl)-1px)]',
+        'sm:**:data-[slot=sheet-footer]:rounded-b-[calc(var(--radius-3xl)-1px)]',
       ],
     },
   },

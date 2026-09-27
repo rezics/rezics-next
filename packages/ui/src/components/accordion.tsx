@@ -42,7 +42,7 @@ export const AccordionTrigger = (props: React.ComponentProps<typeof ArkAccordion
         'flex flex-1 items-center justify-between gap-3',
         'py-4',
         'text-left font-medium text-sm',
-        'rounded-md border border-transparent',
+        'rounded-lg border border-transparent',
         'outline-none',
         'transition-all',
         'disabled:pointer-events-none disabled:opacity-64 disabled:grayscale',
@@ -79,7 +79,7 @@ export const AccordionContent = (props: React.ComponentProps<typeof ArkAccordion
   return (
     <ArkAccordion.ItemContent
       className={cn(
-        'overflow-hidden rounded-md text-sm',
+        'overflow-hidden text-sm',
         'data-[state=open]:animate-slide-down',
         'data-[state=closed]:animate-slide-up',
         'motion-reduce:animate-none!',

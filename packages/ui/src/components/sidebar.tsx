@@ -249,14 +249,14 @@ export const Sidebar = (props: SidebarProps) => {
           className,
         )}
         data-slot="sidebar-container"
-        {...props}
+        {...rest}
       >
         <ark.div
           className={cn(
             'size-full',
             'flex flex-col',
             'bg-sidebar',
-            'group-data-[variant=floating]:rounded-xl group-data-[variant=floating]:border group-data-[variant=floating]:border-sidebar-border group-data-[variant=floating]:shadow-sm',
+            'group-data-[variant=floating]:rounded-2xl group-data-[variant=floating]:border group-data-[variant=floating]:border-sidebar-border group-data-[variant=floating]:shadow-(--aura-shadow-card)',
           )}
           data-sidebar="sidebar"
           data-slot="sidebar-inner"
@@ -336,7 +336,7 @@ export const SidebarInset = (props: React.ComponentProps<typeof ark.main>) => {
         'relative flex w-full flex-1 flex-col bg-background',
         'md:peer-data-[variant=inset]:peer-data-[state=collapsed]:ms-2',
         'md:peer-data-[variant=inset]:m-2 md:peer-data-[variant=inset]:ms-0',
-        'md:peer-data-[variant=inset]:rounded-2xl md:peer-data-[variant=inset]:shadow-sm',
+        'md:peer-data-[variant=inset]:rounded-2xl md:peer-data-[variant=inset]:border md:peer-data-[variant=inset]:border-border/60 md:peer-data-[variant=inset]:shadow-(--aura-shadow-card)',
         className,
       )}
       data-slot="sidebar-inset"
@@ -452,7 +452,7 @@ export const SidebarGroupLabel = (props: React.ComponentProps<typeof ark.div>) =
         'px-2',
         'flex shrink-0 items-center',
         'font-medium text-sidebar-foreground/70 text-xs',
-        'rounded-md',
+        'rounded-lg',
         'transition-[margin,opacity] duration-200 ease-linear',
         'outline-hidden ring-sidebar-ring focus-visible:ring-2',
         '[&_svg]:size-4 [&_svg]:shrink-0',
@@ -568,7 +568,7 @@ export const SidebarMenuButton = ({ tooltip, ...props }: SidebarMenuButtonProps)
         'group-data-[collapsible=icon]:size-8! group-data-[collapsible=icon]:p-2!',
         'data-[size=lg]:group-data-[collapsible=icon]:p-0!',
         'hover:bg-sidebar-accent hover:text-sidebar-accent-foreground',
-        'focus-visible:sidebar-ring-[3px] outline-none focus-visible:ring-sidebar-ring/32',
+        'outline-none focus-visible:ring-[3px] focus-visible:ring-sidebar-ring/32',
         'active:bg-sidebar-accent active:text-sidebar-accent-foreground',
         'data-[active=true]:bg-sidebar-accent data-[active=true]:font-medium data-[active=true]:text-sidebar-accent-foreground',
         'group-has-data-[sidebar=menu-action]/menu-item:pe-8',
@@ -652,7 +652,7 @@ export const SidebarMenuBadge = (props: React.ComponentProps<typeof ark.div>) =>
         'flex items-center justify-center',
         'px-1',
         'h-5 min-w-5',
-        'rounded-md',
+        'rounded-full',
         'select-none font-medium text-sidebar-foreground text-xs tabular-nums',
         'pointer-events-none',
         'peer-hover/menu-button:text-sidebar-accent-foreground',
@@ -681,12 +681,12 @@ export const SidebarMenuSkeleton = (props: SidebarMenuSkeletonProps) => {
 
   return (
     <ark.div
-      className={cn('flex h-8 items-center gap-2 rounded-md px-2', className)}
+      className={cn('flex h-8 items-center gap-2 rounded-xl px-2', className)}
       data-sidebar="menu-skeleton"
       data-slot="sidebar-menu-skeleton"
       {...rest}
     >
-      {!!showIcon && <Skeleton className="size-4 rounded-md" data-sidebar="menu-skeleton-icon" />}
+      {!!showIcon && <Skeleton className="size-4 rounded-sm" data-sidebar="menu-skeleton-icon" />}
       <Skeleton
         className="h-4 max-w-(--skeleton-width) flex-1"
         data-sidebar="menu-skeleton-text"
@@ -752,7 +752,7 @@ export const SidebarMenuSubButton = (props: SidebarMenuSubButtonProps) => {
         'hover:bg-sidebar-accent hover:text-sidebar-accent-foreground',
         'active:bg-sidebar-accent active:text-sidebar-accent-foreground',
         'data-[active=true]:bg-sidebar-accent data-[active=true]:text-sidebar-accent-foreground',
-        'focus-visible:sidebar-ring-[3px] outline-none focus-visible:ring-sidebar-ring/32',
+        'outline-none focus-visible:ring-[3px] focus-visible:ring-sidebar-ring/32',
         '[&>span:last-child]:truncate',
         '[&_svg]:text-sidebar-accent-foreground',
         className,

@@ -31,7 +31,7 @@ const tabsListVariants = tv({
       'data-[orientation=vertical]:flex-col',
     ],
     indicator: [
-      'absolute inset-s-0 bottom-0',
+      'absolute',
       'h-(--height) w-(--width)',
       'transition-[width,translate] duration-200 ease-in-out',
       'motion-reduce:transition-none!',
@@ -39,9 +39,14 @@ const tabsListVariants = tv({
   },
   variants: {
     variant: {
+      // Aura segmented list: a card-toned track with a tinted pill behind the selected tab.
       default: {
-        base: ['rounded-xl'],
-        indicator: ['-z-1 rounded-xl bg-accent'],
+        base: [
+          'p-1',
+          'bg-card/80',
+          'rounded-2xl border border-border/60 shadow-(--aura-shadow-card)',
+        ],
+        indicator: ['-z-1 start-(--left) top-(--top) rounded-xl bg-primary/10'],
       },
       underline: {
         base: [
@@ -51,7 +56,7 @@ const tabsListVariants = tv({
         ],
         indicator: [
           'z-10',
-          'absolute bottom-0',
+          'bottom-0 start-0',
           'bg-primary',
           'data-[orientation=horizontal]:h-0.5',
           'data-[orientation=vertical]:w-0.5',
@@ -96,8 +101,8 @@ export const TabsTrigger = (props: React.ComponentProps<typeof ArkTabs.Trigger>)
         'cursor-pointer',
         'transition-[color,background-color,box-shadow]',
         'data-[orientation=vertical]:w-full data-[orientation=vertical]:justify-start',
-        'hover:text-foreground/72',
-        'aria-selected:text-foreground',
+        'hover:text-foreground',
+        'aria-selected:text-primary',
         'outline-none focus-visible:border-primary focus-visible:ring-[3px] focus-visible:ring-ring/32',
         'data-disabled:pointer-events-none data-disabled:opacity-64',
         "[&_svg:not([class*='size-'])]:size-4.5 sm:[&_svg:not([class*='size-'])]:size-4 [&_svg]:pointer-events-none [&_svg]:-mx-0.5 [&_svg]:shrink-0",
