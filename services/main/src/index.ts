@@ -14,6 +14,8 @@ import { DiscoveryRefreshStore } from './modules/discovery/refresh-store.ts';
 import { FusekiClient } from './infrastructure/fuseki.ts';
 import { S3ImmutableObjects } from './infrastructure/immutable-objects.ts';
 import { StructureProgressStore } from './modules/progress/store.ts';
+import { SerialStatisticsProjection } from './modules/work/serial-projection.ts';
+import { ReadRankingProjection } from './modules/rankings/projection.ts';
 import { ReadingSettingsStore } from './modules/reading-settings/store.ts';
 import { StructureStageStore } from './modules/structure/stage.ts';
 import { SemanticStageStore } from './modules/semantic/staging.ts';
@@ -150,6 +152,10 @@ const recommendationRelayPool = recommendationRelayUrl ? new Pool({ connectionSt
 const contentPool = new Pool({ connectionString: config.CONTENT_DATABASE_URL });
 await migrateContent(contentPool);
 const content = new ContentCore(contentPool);
+const readRankings = new ReadRankingProjection(pool, content, contentPool, {
+  fuseki, lineage: { dataEpoch: config.MAIN_DATA_EPOCH, routingEpoch: config.MAIN_ROUTING_EPOCH },
+  objectDirectory: config.MAIN_OBJECT_DIRECTORY,
+});
 const sourceIntake = new SourceIntakeStore(contentPool);
 const rightsStore = new RightsStore(contentPool, pool);
 sourceIntake.setRawRetentionGate((provider, namespace) => rightsStore.rawRetentionPermitted(provider, namespace));
@@ -171,6 +177,8 @@ const environment = {
   objectDirectory: config.MAIN_OBJECT_DIRECTORY,
   ...(workObjects ? { workObjects } : {}),
 };
+const serialStats = recommendationRelayPool
+  ? new SerialStatisticsProjection(pool, recommendationRelayPool, contentPool, environment) : undefined;
 const partitionRoutes = new OwnerPartitionRoutes(pool);
 const graphRouteLease = await partitionRoutes.initialize({ owner: 'graph', datasetId: DATASET,
   location: fusekiUrl, routingEpoch: environment.lineage.routingEpoch });
@@ -279,6 +287,8 @@ const actingContextDiscovery = new AccessActingContexts(pool, environment);
 const app = createMainApp(fuseki, {
   follows: new FollowsStore(pool),
   feed: new FeedStore(pool),
+  serialStats,
+  readRankings,
   discovery: new DiscoveryProjection(pool),
   profiles: new ProfilesAccess(pool),
   agentHandles: new AgentVanityHandles(pool),
@@ -403,12 +413,16 @@ feedWorker?.start();
 worker.start();
 discoveryWorker?.start();
 recommendationWorker?.start();
+serialStats?.start();
+readRankings.start();
 correctionWorker.start();
 notificationProducerWorker.start();
 notificationDeliveryWorker?.start();
 
 let stopping = false;
 async function stop(): Promise<void> {
+  await serialStats?.stop();
+  await readRankings.stop();
   if (stopping) return;
   stopping = true;
   await app.stop();

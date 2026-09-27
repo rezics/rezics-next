@@ -25,6 +25,7 @@ import { pageCompleteContentRelation } from '../modules/content-publication/sear
 import { checkJudgmentProtection } from '../modules/judgment/protection.ts';
 import { PublicQueryBudgetExceeded, PublicQueryUnavailable } from '../modules/work/search-budget.ts';
 import { decoratePhraseRelation } from '../modules/work/search-facets.ts';
+import { enrichSerialSearch } from '../modules/work/summary-serial.ts';
 import { problemResult, publicPhrasePageRequest, publicPhrasePageResult, publicQueryResult,
   unsupportedPublicSearchSelectors, workTypeFilters } from '../api-contract.ts';
 import type { MainWorkDependencies } from './dependencies.ts';
@@ -367,7 +368,7 @@ export function searchRoutes(fuseki: FusekiClient, work: SearchRouteDependencies
                   await queryPublicMainClassifiedPhrase(work.environment, body));
           return decoratePhraseRelation(work.environment, await present(selection, relation), body);
         }, undefined, diagnostics);
-        return Response.json(result, {
+        return Response.json(await enrichSerialSearch(result, work.serialStats), {
           headers: { 'cache-control': 'no-store' },
         });
       } catch (error) {
@@ -436,7 +437,8 @@ export function searchRoutes(fuseki: FusekiClient, work: SearchRouteDependencies
             ratingCriterion: relation.ratingCriterion,
             ratingPopulation: relation.ratingPopulation };
         }, undefined, diagnostics);
-        return Response.json(page, { headers: { 'cache-control': 'no-store' } });
+        return Response.json(await enrichSerialSearch(page, work.serialStats),
+          { headers: { 'cache-control': 'no-store' } });
       } catch (error) {
         if (error instanceof SearchContinuationRestart) {
           return problem(409, 'search_restart_required', 'Public search changed; restart at page one');

@@ -2,12 +2,11 @@ import { GRAPHS, iri } from './activate.ts';
 import { readMetadataHeader, selectedMetadata } from './metadata-read.ts';
 import { WorkReadUnavailable, type WorkReadSession } from './read-session.ts';
 
-/** Metadata is editor-owned. Chapter and word totals need a publication projection;
- * unknown is represented as null rather than inferred from private or stale bytes. */
+/** Metadata is editor-owned; numeric facts are from the durable relay projection. */
 export async function readSerialSummaries(session: WorkReadSession, works: readonly string[]) {
   const result = new Map<string, { tagline: ReturnType<typeof selectedMetadata>['tagline'];
     completionStatus: 'ongoing' | 'completed' | 'hiatus' | null;
-    chapterCount: null; wordCount: null; lastUpdatedAt: null }>();
+    chapterCount: number | null; wordCount: number | null; lastUpdatedAt: string | null }>();
   if (!works.length) return result;
   if (works.length > 20 || new Set(works).size !== works.length) {
     throw new WorkReadUnavailable('Serial summary batch is out of bounds');
@@ -20,12 +19,36 @@ export async function readSerialSummaries(session: WorkReadSession, works: reado
     || rows.some(row => !row.work || !works.includes(row.work.value))) {
     throw new WorkReadUnavailable('Serial summary heads are ambiguous');
   }
+  const stats = await session.deps?.serialStats?.batch(works, session.position.sequence);
   for (const row of rows) {
     const header = await readMetadataHeader(session, row.work!.value, row.head?.value ?? null);
     const selected = selectedMetadata(header, session.options.language);
     result.set(row.work!.value, { tagline: selected.tagline,
-      completionStatus: header.completionStatus, chapterCount: null,
-      wordCount: null, lastUpdatedAt: null });
+      completionStatus: header.completionStatus,
+      chapterCount: stats?.get(row.work!.value)?.chapterCount ?? null,
+      wordCount: stats?.get(row.work!.value)?.wordCount ?? null,
+      lastUpdatedAt: stats?.get(row.work!.value)?.lastUpdatedAt ?? null });
   }
   return result;
+}
+
+/** Public search has a larger, fixed 512-Work relation than card reads. */
+export async function enrichSerialSearch<T>(relation: T,
+  stats: WorkReadSession['deps']['serialStats']): Promise<T> {
+  if (!relation || typeof relation !== 'object') return relation;
+  const value = relation as Record<string, unknown>;
+  if (value.resultGrain !== 'mainVersion' || !Array.isArray(value.results)
+    || !value.sourcePosition || typeof value.sourcePosition !== 'object') return relation;
+  const matches = value.results as Array<{ work: string } & Record<string, unknown>>;
+  if (matches.length > 512 || matches.some(match => typeof match.work !== 'string')) {
+    throw new WorkReadUnavailable('Search serial relation exceeds its bound');
+  }
+  const ids = [...new Set(matches.map(match => match.work))];
+  const graphSequence = (value.sourcePosition as { sequence?: unknown }).sequence;
+  const projected = stats && typeof graphSequence === 'string'
+    ? await stats.batch(ids, graphSequence) : null;
+  return { ...value, results: matches.map(match => ({ ...match,
+    chapterCount: projected?.get(match.work)?.chapterCount ?? null,
+    wordCount: projected?.get(match.work)?.wordCount ?? null,
+    lastUpdatedAt: projected?.get(match.work)?.lastUpdatedAt ?? null })) } as T;
 }

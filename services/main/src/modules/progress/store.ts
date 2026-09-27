@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import type { Pool } from 'pg';
 import type { VerifiedPrincipal } from '../access/admission.ts';
 
@@ -97,6 +97,19 @@ export class StructureProgressStore {
         return { ...state(identity, { completed: row.result_completed,
           position: row.result_position, version: row.result_version }), replayed: true };
       }
+      // Serialize selections for one chapter so each reader contributes at most
+      // one read and one finish, even with concurrent revision-specific writes.
+      await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))',
+        [JSON.stringify(['structure-progress-chapter', input.principal.issuer,
+          input.principal.subject, input.structure, input.occurrence])]);
+      const first = await client.query<{ read: boolean; finished: boolean }>(
+        `SELECT NOT EXISTS (SELECT 1 FROM structure.progress_command
+          WHERE principal_issuer = $1 AND principal_subject = $2 AND structure = $3 AND occurrence = $4)
+            AS read,
+          NOT EXISTS (SELECT 1 FROM structure.progress_command
+          WHERE principal_issuer = $1 AND principal_subject = $2 AND structure = $3 AND occurrence = $4
+            AND result_completed) AS finished`,
+        [input.principal.issuer, input.principal.subject, input.structure, input.occurrence]);
       const current = await client.query<{ version: string }>(
         `SELECT version::text AS version FROM structure.progress
          WHERE principal_issuer = $1 AND principal_subject = $2 AND structure = $3
@@ -105,6 +118,8 @@ export class StructureProgressStore {
       const version = Number(current.rows[0]?.version ?? 0);
       if (version !== input.expectedVersion) throw new StaleStructureProgress('progress version changed');
       const next = version + 1;
+      const operation = `structure.progress:${createHash('sha256').update(JSON.stringify([
+        input.principal.issuer, input.principal.subject, input.idempotencyKey])).digest('hex')}`;
       if (version === 0) {
         await client.query(`INSERT INTO structure.progress
           (principal_issuer, principal_subject, structure, occurrence, selection_key,
@@ -120,10 +135,26 @@ export class StructureProgressStore {
       }
       await client.query(`INSERT INTO structure.progress_command
         (principal_issuer, principal_subject, idempotency_key, request_digest,
-          structure, occurrence, selection_key, result_version, result_completed, result_position)
-        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+          structure, occurrence, selection_key, result_version, result_completed, result_position,
+          content_operation, first_read, first_finish)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
       [input.principal.issuer, input.principal.subject, input.idempotencyKey, digest,
-        input.structure, input.occurrence, selectionKey, next, input.completed, input.position]);
+        input.structure, input.occurrence, selectionKey, next, input.completed, input.position,
+        operation, first.rows[0]!.read, input.completed && first.rows[0]!.finished]);
+      const owner = await client.query<{ data_epoch: string; sequence: string }>(
+        `UPDATE content.owner_control SET sequence = sequence + 1 WHERE singleton
+         RETURNING data_epoch, sequence::text AS sequence`);
+      if (owner.rowCount !== 1) throw new Error('Content owner position unavailable');
+      await client.query(`INSERT INTO content.receipt
+        (operation_id, request_digest, action, outcome, data_epoch, sequence)
+        VALUES ($1,$2,'structure.progress','succeeded',$3,$4)`,
+      [operation, digest, owner.rows[0]!.data_epoch, owner.rows[0]!.sequence]);
+      await client.query(`INSERT INTO content.outbox
+        (id, data_epoch, sequence, operation_id, event_type, recipe, payload)
+        VALUES ($1,$2,$3,$4,'structure.progress.written','structure-progress-v1',$5::jsonb)`,
+      [randomUUID(), owner.rows[0]!.data_epoch, owner.rows[0]!.sequence, operation,
+        JSON.stringify({ structure: input.structure, occurrence: input.occurrence,
+          read: first.rows[0]!.read, finished: input.completed && first.rows[0]!.finished })]);
       await client.query('COMMIT');
       return { ...state(identity, { completed: input.completed,
         position: input.position, version: next }), replayed: false };

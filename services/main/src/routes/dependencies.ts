@@ -93,6 +93,8 @@ import type { ReaderLibraryStatusStore } from '../modules/library/status.ts';
 import type { ReaderLibraryRatings } from '../modules/library/ratings.ts';
 
 export interface MainWorkDependencies {
+  serialStats?: import('../modules/work/serial-projection.ts').SerialStatisticsProjection;
+  readRankings?: import('../modules/rankings/projection.ts').ReadRankingProjection;
   realmAdmin?: import('../modules/access/realm-management.ts').AccessRealmManagement;
   media?: import('../modules/media/commands.ts').MediaDependencies;
   follows?: import('../modules/follows/store.ts').FollowsStore;

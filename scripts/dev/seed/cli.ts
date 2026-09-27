@@ -8,6 +8,7 @@ import { people, realms, seedKey, semanticTypes, works } from './plan.ts';
 import { seedReply } from './replies.ts';
 import { seedRealmManagement } from './realm-management.ts';
 import { seedFeed } from './feed.ts';
+import { seedChapterProgress } from './progress.ts';
 
 interface Options { dryRun: boolean; resetOwn: boolean }
 interface WorkReceipt { work: string; mainVersion: string; workRevision: string; mainRevision: string;
@@ -212,6 +213,8 @@ async function run(options: Options): Promise<boolean> {
         startedOn: choice.startedOn, finishedOn: choice.finishedOn },
       person.token, seedKey('reading-status', `${person.id}:${choice.id}`)));
   }
+
+  await optional('Chapter reading progress', () => seedChapterProgress(api, owner, sessions, created));
 
   const managed = createdRealms.find(realm => realm.id === 'classics');
   if (managed) await optional('Realm moderation team and queue', () => seedRealmManagement(api,

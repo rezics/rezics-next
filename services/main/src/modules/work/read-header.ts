@@ -39,10 +39,12 @@ export async function readWorkBasis(session: WorkReadSession, work: string): Pro
   if (summary?.status !== 'available' || summary.type !== 'work') throw new WorkReadMissing('Work is unavailable');
   const metadata = await readMetadataHeader(session, work, row.metadataHead?.value ?? null);
   const selectedMetadataValue = selectedMetadata(metadata, session.options.language);
+  const stats = (await session.deps?.serialStats?.batch([work], session.position.sequence))?.get(work);
   return { card: { id: work, revision: row.head.value, mainVersion: row.main.value,
     title: summary.name, cover: summary.avatar, types: [...new Set(rows.flatMap(item => item.type ? [item.type.value] : []))].sort(),
     tagline: selectedMetadataValue.tagline, completionStatus: metadata.completionStatus,
-    chapterCount: null, wordCount: null, lastUpdatedAt: null },
+    chapterCount: stats?.chapterCount ?? null, wordCount: stats?.wordCount ?? null,
+    lastUpdatedAt: stats?.lastUpdatedAt ?? null },
   mainRevision: row.mainHead.value, metadataRevision: row.metadataHead?.value ?? null, metadata,
   selectedLanguage: selected?.language ?? null,
   disclosure: isPublic ? 'public' : 'restricted' };
