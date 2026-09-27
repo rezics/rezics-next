@@ -39,6 +39,9 @@ const identity: Record<string, Description> = {
   profile: { en: 'Read your name and profile image', 'zh-CN': '读取你的姓名和头像' },
   email: { en: 'Read your email address and verification status', 'zh-CN': '读取你的邮箱地址与验证状态' },
   offline_access: { en: 'Keep access while you are signed out, until you revoke it', 'zh-CN': '在你退出登录后继续访问，直到你撤销授权' },
+  // Scopes whose meaning is not "<action> <owner noun>" get an exact description.
+  'realm:profile': { en: "Publish the public profile of communities you manage", 'zh-CN': '发布你管理的社区的公开资料' },
+  'realm:public-role': { en: 'Show or hide your public moderator role in communities', 'zh-CN': '公开或隐藏你在社区中的版主身份' },
 };
 
 /** No silent untranslated fallback: a new scope must define what the person
