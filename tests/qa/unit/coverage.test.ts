@@ -1,11 +1,39 @@
 import { expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { acceptanceStatuses, caseInventory, type TestResult } from '../../../scripts/qa/acceptance.ts';
+import { acceptanceStatuses, caseInventory, testArgs, type TestResult } from '../../../scripts/qa/acceptance.ts';
+import { selectBackendCases } from '../../../scripts/qa/backend-scope.ts';
+import { backendTiers, expandTestPaths, splitTestArgs, type Tier } from '../../../scripts/qa/core.ts';
 import { declaredCaseCoverage, missingCaseDeclarations, renderQualification }
   from '../../../scripts/qa/coverage.ts';
 
-const cases = caseInventory(resolve(import.meta.dir, '../../..'));
+const root = resolve(import.meta.dir, '../../..');
+const cases = caseInventory(root);
+
+test('QA08: every backend declaration names an executable title in its full-run tier', () => {
+  const declared = declaredCaseCoverage(selectBackendCases(cases).cases, 'backend');
+  const selected = new Map<Tier, ReadonlySet<string>>();
+  for (const tier of ['unit', 'integration', 'model', 'fault/recovery', 'load'] as const) {
+    selected.set(tier, new Set(expandTestPaths(root, splitTestArgs(testArgs(tier)).paths)));
+  }
+  const titles = new Map<string, ReadonlySet<string>>();
+  const errors: string[] = [];
+  for (const identity of new Set([...declared.values()].flat())) {
+    const [tier, file, ...parts] = identity.split(':');
+    const name = parts.join(':');
+    if (!backendTiers.includes(tier as Tier) || !selected.get(tier as Tier)?.has(file!)) {
+      errors.push(`Absent from full backend tier: ${identity}`);
+    }
+    if (!titles.has(file!)) {
+      const source = readFileSync(resolve(root, file!), 'utf8');
+      const found = new Set([...source.matchAll(/^\s*(?:test|it)\s*\(\s*(['"`])(.+?)\1\s*,/gm)]
+        .map(match => match[2]!));
+      titles.set(file!, found);
+    }
+    if (!titles.get(file!)!.has(name)) errors.push(`Test title does not exist: ${identity}`);
+  }
+  expect(errors).toEqual([]);
+});
 
 test('QA08: MODEL02 requires six-state real API, held-graph recovery and native shape evidence', () => {
   const coverage = declaredCaseCoverage(cases, 'backend');

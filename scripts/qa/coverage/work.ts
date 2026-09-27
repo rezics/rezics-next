@@ -39,7 +39,7 @@ export const workCases: CaseDeclarations = {
   }, {
     tier: 'fault/recovery',
     file: 'tests/qa/fault-recovery/fixed-release-recovery.test.ts',
-    name: 'MODEL01/WORK05/OPS03: graph loss restores only the admitted fixed release and exact bytes',
+    name: 'MODEL01/WORK05/OPS03/LIVE10: graph loss restores the admitted fixed release, external links and exact bytes',
   }],
   WORK09: [{
     tier: 'integration',

@@ -21,6 +21,6 @@ export const modelSemanticCases: CaseDeclarations = {
   MODEL06: [relation, relationRecovery],
   MODEL08: [semantic],
   MODEL10: [semantic],
-  MODEL14: [semantic, semanticRecovery, { tier: 'unit', file: 'model/compiler/generate.test.ts',
+  MODEL14: [semantic, semanticRecovery, { tier: 'model', file: 'model/compiler/generate.test.ts',
     name: 'MODEL14: compiler closes owner shapes and keeps the shared Resource shape open' }],
 };

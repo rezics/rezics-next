@@ -14,7 +14,7 @@ export const opsErasureCases: CaseDeclarations = {
   ],
   SEARCH08: [
     { tier: 'integration', file: 'tests/qa/integration/public-search-scale.test.ts',
-      name: 'SEARCH01/SEARCH02/SEARCH04/SEARCH07/SEARCH08/SEARCH16/SEARCH18: rated Realm join, bounded paging and author switch' },
+      name: 'IAM18/SEARCH01/SEARCH02/SEARCH04/SEARCH07/SEARCH08/SEARCH16/SEARCH18: rated Realm join, bounded paging, Access mute and author switch' },
     { tier: 'integration', file: 'tests/qa/integration/erasure-published-search.test.ts',
       name: 'WORK10/SEARCH20/SEARCH08/OPS10: published erasure fences replay and replacement search' },
     { tier: 'fault/recovery', file: 'tests/qa/fault-recovery/erasure-search-rebuild.test.ts',

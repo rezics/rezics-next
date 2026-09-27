@@ -138,6 +138,7 @@ export const integrationGateFiles = [
   'services/main/tests/content-publication.integration.test.ts',
   'services/main/tests/content-projection.integration.test.ts',
   'services/main/tests/content-revision-read.integration.test.ts',
+  'services/main/tests/context-schema.integration.test.ts',
   'services/content/tests/core.integration.test.ts',
 ] as const;
 
@@ -150,6 +151,10 @@ export const modelGateFiles = [
   'model/tests/native-equivalence.test.ts',
   'model/tests/daily-rating.test.ts',
   'model/tests/experience-rating.test.ts',
+  'model/tests/source-reification.test.ts',
+  'model/tests/validation-shape-terms.test.ts',
+  'model/tests/reasoning-profile.test.ts',
+  'model/tests/event-time.test.ts',
   'packages/model/tests/generated.test.ts',
 ] as const;
 export function isQaModelPath(path: string): boolean {
@@ -218,7 +223,18 @@ export function testArgs(tier: 'unit' | 'integration' | 'model' | 'fault/recover
       'services/main/tests/content-eligibility.test.ts',
       'services/main/tests/content-projection-runtime.test.ts',
       'services/main/tests/immutable-objects.test.ts',
-      'services/main/tests/api-contract.test.ts'];
+      'services/main/tests/api-contract.test.ts',
+      'services/main/tests/context-schema.test.ts',
+      'services/main/tests/rating-aggregate.test.ts',
+      'services/main/tests/rating-experience.test.ts',
+      'services/main/tests/rating-calendar.test.ts',
+      'services/main/tests/rating-global.test.ts',
+      'services/main/tests/event-time.test.ts',
+      'services/main/tests/vote-schema-commands.test.ts',
+      'services/main/tests/structure-listitem.test.ts',
+      'model/tests/claim-analysis.test.ts',
+      'model/tests/release-rating.test.ts',
+      'scripts/operations/search-state.test.ts'];
   const defaults = [...(base ? [base] : []), ...extraGates];
   if (chosen) {
     const files = chosen.files?.length ? chosen.files : defaults;
