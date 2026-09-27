@@ -91,6 +91,14 @@ test('G282: follows and home feed use real receipts, relay progress, public read
     };
     const first = await stack.publicWork(author, ['en'], 'Public first');
     const second = await stack.publicWork(author, ['zh-Hans'], '公开作品');
+    for (const work of [first.work, second.work]) {
+      await grant(`work:edit:${work}`, 'work.edit');
+      const head = (await stack.fuseki.query(`PREFIX rv: <https://rezics.com/vocab/> SELECT ?head WHERE {
+        GRAPH ${iri(GRAPHS.current)} { ${iri(work)} rv:head ?head } } LIMIT 2`)).results!.bindings[0]!.head!.value;
+      await json(await call('POST', `/v1/works/${work.slice(-36)}/agent-credits`, {
+        profile: 'native-agent-credit-v1', credit: native(), agent: work === first.work ? reader : author,
+        role: 'author', expectedWorkHead: head, actingSubject: author }, a.token), 201);
+    }
     const hidden = await stack.privateWork(author, 'Private must never appear');
     await stack.contribution(hidden.work, author, 'en', 'Unselected publication must never appear');
     const realm = await json<{ realm: string; space: string }>(await call('POST', '/v1/spaces', {
@@ -157,7 +165,15 @@ test('G282: follows and home feed use real receipts, relay progress, public read
     expect(stack.fuseki.queries - before).toBeLessThanOrEqual(160);
     expect(all.projection.status).toBe('current');
     expect(viewerBatches).toBe(0);
-    expect(all.items.map(item => item.kind).sort()).toEqual(['adoption', 'collection', 'work', 'work']);
+    expect(all.items.map(item => item.kind).sort()).toEqual(['adoption', 'collection', 'work']);
+    expect(all.items.filter(item => item.target.work === first.work)).toHaveLength(1);
+    expect(all.items.find(item => item.target.work === first.work)?.reasons).toEqual(expect.arrayContaining([
+      { kind: 'realm-pick', realm: realm.realm, curator: author },
+      { kind: 'added-to-rezics', actor: author },
+    ]));
+    expect(all.items.find(item => item.target.work === first.work)?.authors).toEqual([
+      expect.objectContaining({ agent: reader, displayName: 'Feed reader' }),
+    ]);
     expect(all.items.some(item => item.target.id === hidden.work)).toBe(false);
     expect(all.items.every(item => item.actor.name === 'Feed author' && item.vote === 0)).toBe(true);
     await stack.fuseki.update(`PREFIX schema: <https://schema.org/> INSERT DATA { GRAPH ${iri(GRAPHS.current)} {
@@ -175,7 +191,7 @@ test('G282: follows and home feed use real receipts, relay progress, public read
     }
     await stack.fuseki.update(`PREFIX schema: <https://schema.org/> DELETE DATA { GRAPH ${iri(GRAPHS.current)} {
       ${iri(first.work)} a schema:Book } }`);
-    const firstItem = all.items.find(item => item.target.id === first.work && item.kind === 'work')!;
+    const firstItem = all.items.find(item => item.target.id === first.work)!;
     expect(firstItem.target.excerpt).toBeTruthy();
     const authQuery = `actingSubject=${encodeURIComponent(reader)}`;
     const followed = await json<Page>(await call('GET', `/v1/feed?sort=new&${authQuery}`, undefined, b.token));
@@ -203,8 +219,8 @@ test('G282: follows and home feed use real receipts, relay progress, public read
       `/v1/trending?scope=followed&window=day&actingSubject=${encodeURIComponent(reader)}`, undefined, b.token)))
       .toMatchObject({ items: [{ work: first.work }] });
     expect((await call('GET', '/v1/trending?kind=adoption')).status).toBe(400);
-    expect(firstItem.card.kind).toBe('work');
-    expect(firstItem.primaryAction).toEqual({ kind: 'want-to-read', work: first.work });
+    expect(firstItem.card.kind).toBe('activity');
+    expect(firstItem.primaryAction).toEqual({ kind: 'open', href: expect.stringContaining(first.work.slice(-36)) });
     expect(followed.items.every(item => item.viewerState.status === 'unavailable')).toBe(true);
     const thin = await json<Page>(await call('GET', `/v1/feed?sort=best&${authQuery}`, undefined, b.token));
     expect(thin.items.some(item => item.reason.kind === 'recommended' && item.reason.basis === 'thin-following')).toBe(true);
@@ -274,7 +290,7 @@ test('G282: follows and home feed use real receipts, relay progress, public read
     const mediaInterests = await json<typeof interests>(await call('GET', '/v1/onboarding/interests?locale=en'));
     expect(mediaInterests.kinds.find(item => item.id === 'media')?.available).toBe(true);
     const mediaFeed = await json<Page>(await call('GET', '/v1/feed?interests=media'));
-    expect(mediaFeed.items.find(item => item.target.work === first.work && item.kind === 'work')?.card.kind).toBe('media');
+    expect(mediaFeed.items.find(item => item.target.work === first.work)?.card.kind).toBe('activity');
     await stack.fuseki.update(`PREFIX schema: <https://schema.org/> DELETE DATA { GRAPH ${iri(GRAPHS.current)} {
       ${iri(first.work)} a schema:VideoObject } }`);
     const suggested = await json<{ items: { id: string; realm: string; sampleWorks: { id: string }[] }[] }>(
@@ -385,7 +401,7 @@ test('G282: follows and home feed use real receipts, relay progress, public read
       throw new Error('Feed cursor did not terminate');
     };
     const tagged = await collect(`tags=${encodeURIComponent(tag.sense)}`);
-    expect(tagged.map(item => item.id)).toEqual([firstItem.id]);
+    expect(tagged.map(item => item.target.work)).toEqual([first.work]);
     const decisions = await collect('kinds=decision');
     expect(decisions).toHaveLength(1);
     expect(decisions[0]?.realm?.id).toBe(realm.realm);

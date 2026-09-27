@@ -17,6 +17,7 @@ import type { HomeExclusion } from './personal.ts';
 import { readWorkKindMatches } from '../onboarding-interests/read.ts';
 import { interestKinds, matchingActivityKinds } from '../work/work-kinds.ts';
 import type { HomeInterestKind } from '../onboarding-interests/contract.ts';
+import { feedWorkPresentations, type FeedWorkPresentation } from './presentation.ts';
 
 export interface FeedReader { principal: VerifiedPrincipal; agent: string }
 
@@ -81,14 +82,18 @@ async function comments(session: WorkReadSession, source: FeedSource): Promise<F
 }
 
 export async function hydrateFeedItem(session: WorkReadSession, source: FeedSource, row: FeedRow,
-  summaries?: ReadonlyMap<string, ResourceSummary>): Promise<FeedItem> {
+  summaries?: ReadonlyMap<string, ResourceSummary>, presentation?: FeedWorkPresentation): Promise<FeedItem> {
   const actor = await readAgent(session, source.actor);
   const target = source.work ? await readFollowTarget(session, source.work, 'work', summaries) : null;
   const realm = source.realm ? await readFollowTarget(session, source.realm, 'realm', summaries) : null;
   const body = await replyExcerpt(session, source);
   const href = target?.href ?? `/collections/${source.target.slice(-36)}`;
   const reviewHref = source.readerReview ? `${href}#review-${source.readerReview.id}` : href;
-  const item: FeedItem = { id: source.id, kind: source.kind,
+  const reasons: FeedItem['reasons'] = source.kind === 'work' ? [{ kind: 'new-work', actor: source.actor }]
+    : source.kind === 'added' ? [{ kind: 'added-to-rezics', actor: source.actor }]
+      : source.kind === 'adoption' && source.realm
+        ? [{ kind: 'realm-pick', realm: source.realm, curator: source.actor }] : [];
+  const item: FeedItem = { id: source.id, kind: source.kind, authors: presentation?.authors ?? [], reasons,
     reason: { kind: 'recommended', basis: 'all' }, group: { key: row.group_key, count: 1,
       actors: [{ id: actor.id, name: actor.displayName, handle: actor.handle }] },
     card: { kind: 'activity' }, primaryAction: { kind: 'open', href }, viewerState: { status: 'anonymous' },
@@ -96,7 +101,10 @@ export async function hydrateFeedItem(session: WorkReadSession, source: FeedSour
     target: { id: source.target, work: source.work,
       title: target?.name ?? { value: source.title ?? '', language: 'en', direction: 'ltr', basis: 'fallback' },
       cover: target?.icon ?? { kind: 'fallback', policy: 'avatar-fallback-v1', key: source.target, resourceType: 'collection' },
-      excerpt: body.excerpt, language: body.language },
+      excerpt: source.kind === 'work' || source.kind === 'added' || source.kind === 'adoption'
+        ? presentation?.excerpt ?? body.excerpt : body.excerpt,
+      language: source.kind === 'work' || source.kind === 'added' || source.kind === 'adoption'
+        ? presentation?.language ?? body.language : body.language },
     realm: realm ? { id: realm.id, name: realm.name, icon: realm.icon } : null,
     time: row.occurred_at.toISOString(), timeBasis: row.time_basis, score: row.score,
     vote: row.vote ?? 0, voteRevision: row.vote_revision ?? null, comments: await comments(session, source),
@@ -156,6 +164,28 @@ export function collapseReviewCards(items: FeedItem[]): FeedItem[] {
     groups.push({ index: result.length, works: new Set([item.target.work]) });
     buckets.set(key, groups);
     result.push(item);
+  }
+  return result;
+}
+
+/** A public Work creation and Realm pick share one card when both survived
+ * filters and disclosure on this page. Keep the pick as the visible anchor. */
+export function collapseWorkCards(items: FeedItem[]): FeedItem[] {
+  const byWork = new Map<string, number>();
+  const result: FeedItem[] = [];
+  for (const item of items) {
+    const work = item.target.work;
+    if (!work || !['work', 'added', 'adoption'].includes(item.kind)) { result.push(item); continue; }
+    const prior = byWork.get(work);
+    if (prior === undefined) { byWork.set(work, result.length); result.push(item); continue; }
+    const original = result[prior]!;
+    const lead = item.kind === 'adoption' && original.kind !== 'adoption' ? item : original;
+    const companion = lead === item ? original : item;
+    const reasons = [...lead.reasons, ...companion.reasons];
+    lead.reasons = reasons.filter((reason, index) => reasons.findIndex(other =>
+      JSON.stringify(other) === JSON.stringify(reason)) === index);
+    if (lead.reason.kind !== 'followed' && companion.reason.kind === 'followed') lead.reason = companion.reason;
+    result[prior] = lead;
   }
   return result;
 }
@@ -227,6 +257,7 @@ export async function readFeed(session: WorkReadSession, query: FeedQuery, reade
     .flatMap(source => source.work ? [source.work] : []))]) : new Map();
   const summaryIds = [...new Set(sources.flatMap(source => [source.work, source.realm].filter((id): id is string => !!id)))];
   const summaries = new Map((await session.summaries(summaryIds)).map(summary => [summary.reference, summary]));
+  const presentations = await feedWorkPresentations(session, sources.flatMap(source => source.work ? [source.work] : []));
   const matches = reader && scope === 'following' ? await follows.matches(reader.principal, reader.agent,
     sources.map(source => [source.realm, source.zone, source.work, source.actor].filter((id): id is string => !!id))) : null;
   const items: FeedItem[] = [];
@@ -251,7 +282,8 @@ export async function readFeed(session: WorkReadSession, query: FeedQuery, reade
           || Number.parseInt(digest([source.id, rule.kind, rule.target]).slice(0, 2), 16) % 4 !== 0))) continue;
     }
     try {
-      const item = await hydrateFeedItem(session, source, memberRows.find(row => row.id === source.id)!, summaries);
+      const item = await hydrateFeedItem(session, source, memberRows.find(row => row.id === source.id)!, summaries,
+        source.work ? presentations.get(source.work) : undefined);
       const followed = matches?.reasons[index]?.[0];
       item.reason = followed ? { kind: 'followed', target: followed.target, targetKind: followed.kind }
         : { kind: 'recommended', basis: scope === 'following' ? 'thin-following' : 'all' };
@@ -277,6 +309,7 @@ export async function readFeed(session: WorkReadSession, query: FeedQuery, reade
       .flatMap(source => source.work ? [source.work] : []))]) : new Map();
   const valid = new Set(final.map(source => source.id));
   const fenced = new Map((await session.summaries(summaryIds)).map(summary => [summary.reference, summary]));
+  const finalPresentations = await feedWorkPresentations(session, final.flatMap(source => source.work ? [source.work] : []));
   const disclosed: FeedItem[] = [];
   for (const item of items) {
     if (!valid.has(item.id)) continue;
@@ -289,6 +322,8 @@ export async function readFeed(session: WorkReadSession, query: FeedQuery, reade
         if (JSON.stringify(summaries.get(id)) !== JSON.stringify(fenced.get(id))) throw new WorkReadMoved('Card summary changed');
       }
       const finalSource = final.find(source => source.id === item.id)!;
+      if (item.target.work && JSON.stringify(presentations.get(item.target.work))
+        !== JSON.stringify(finalPresentations.get(item.target.work))) throw new WorkReadMoved('Feed Work presentation changed');
       if (finalSource.kind !== item.kind || finalSource.work !== item.target.work
         || !matchesFeedInterest(finalSource, interests, finalWorkKinds)
         || finalSource.work && matchingActivityKinds(finalSource.kind).length === 0
@@ -328,7 +363,7 @@ export async function readFeed(session: WorkReadSession, query: FeedQuery, reade
         ...(chapters.length === entries.length && new Set(entries.map(item => item.card.kind === 'chapter' ? item.card.parent : null)).size === 1 ? { range: { kind: 'chapters' as const,
           from: Math.min(...chapters), to: Math.max(...chapters) } } : {}) } }];
   });
-  const collapsed = collapseReviewCards(groups);
+  const collapsed = collapseReviewCards(collapseWorkCards(groups));
   const more = rows.length > page.length;
   followedSeen = Math.min(FEED_RANKING.thinFollowing, followedSeen + collapsed.filter(item => item.reason.kind === 'followed').length);
   // A sparse page is not evidence that Following is thin. Prove it by an

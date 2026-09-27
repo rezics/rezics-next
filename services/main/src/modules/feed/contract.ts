@@ -1,8 +1,9 @@
 import { t } from 'elysia';
 import type { Static } from 'typebox';
 import { pageFields, pageQuery, readAvatar, readId, readLanguage, readName, readUuid } from '../work/read-contract.ts';
+import { discoveryCredit } from '../discovery/contract.ts';
 
-export const feedKind = t.Union([t.Literal('work'), t.Literal('contribution'), t.Literal('adoption'),
+export const feedKind = t.Union([t.Literal('work'), t.Literal('added'), t.Literal('contribution'), t.Literal('adoption'),
   t.Literal('decision'), t.Literal('discussion'), t.Literal('reply'), t.Literal('collection'), t.Literal('review')]);
 export type FeedKind = Static<typeof feedKind>;
 export const feedSort = t.Union([t.Literal('best'), t.Literal('new'), t.Literal('top')]);
@@ -15,6 +16,11 @@ export const feedReason = t.Union([
   t.Object({ kind: t.Literal('editorial'), selection: readId }),
 ]);
 const actor = t.Object({ id: readId, name: t.String(), handle: t.String() });
+export const feedActivityReason = t.Union([
+  t.Object({ kind: t.Literal('new-work'), actor: readId }),
+  t.Object({ kind: t.Literal('added-to-rezics'), actor: readId }),
+  t.Object({ kind: t.Literal('realm-pick'), realm: readId, curator: readId }),
+]);
 export const feedCard = t.Union([
   t.Object({ kind: t.Literal('work') }),
   t.Object({ kind: t.Literal('chapter'), occurrence: readId, parent: readId, number: t.Optional(t.Integer({ minimum: 1 })),
@@ -63,7 +69,9 @@ export const feedQuery = t.Object({ ...pageQuery,
 }, { additionalProperties: false });
 export type FeedQuery = Static<typeof feedQuery>;
 export const feedItem = t.Object({ id: readId, kind: feedKind,
-  actor, reason: feedReason, card: feedCard, primaryAction: feedAction, viewerState: feedViewerState,
+  actor, authors: t.Array(discoveryCredit, { maxItems: 3 }),
+  reason: feedReason, reasons: t.Array(feedActivityReason, { maxItems: 8 }),
+  card: feedCard, primaryAction: feedAction, viewerState: feedViewerState,
   group: t.Object({ key: t.String(), count: t.Integer({ minimum: 1, maximum: 4 }),
     actors: t.Array(actor, { minItems: 1, maxItems: 3 }),
     range: t.Optional(t.Object({ kind: t.Literal('chapters'), from: t.Integer(), to: t.Integer() })) }),

@@ -94,7 +94,13 @@ export async function feedSources(session: WorkReadSession, selection: { ids: st
         FILTER NOT EXISTS { ?draft a rv:ErasedRevision }
         BIND(EXISTS { ?id rv:predecessor ?previous } AS ?successor) }
       ${publicWork('?work', '?main')}
-      BIND(IF(?successor, "contribution", "work") AS ?kind)
+      BIND(EXISTS { GRAPH ${iri(GRAPHS.current)} {
+        ?authorCredit a rv:NativeAgentCredit ; rv:work ?work ; rv:agent ?actor ;
+          rv:creditRevision ?authorRevision ; schema:roleName "author" . }
+        GRAPH ${iri(GRAPHS.revisions)} { ?authorRevision a rv:NativeAgentCreditRevision ;
+          rv:component ?authorCredit ; rv:work ?work ; rv:agent ?actor ; schema:roleName "author" .
+          FILTER NOT EXISTS { ?authorRevision a rv:ErasedRevision } } } AS ?authored)
+      BIND(IF(?successor, "contribution", IF(?authored, "work", "added")) AS ?kind)
       BIND(IF(?successor, ?contribution, ?work) AS ?target)
       OPTIONAL { GRAPH ${iri(PUBLIC_SEARCH_GRAPH)} { ?unit rv:selection ?id ; rv:revision ?draft ; rv:searchBody ?body }
         BIND(SUBSTR(STR(?body),1,400) AS ?excerpt) }

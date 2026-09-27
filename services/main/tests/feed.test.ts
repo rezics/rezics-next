@@ -5,8 +5,8 @@ import { activityTime, bestKey, bestScore, FEED_DECAY_MS, FEED_RANKING, rankCand
 import { decodeReadCursor, encodeReadCursor, WorkReadInvalid, WorkReadMoved } from '../src/modules/work/read-session.ts';
 import { describeScope } from '../../account/src/scope-descriptions.ts';
 import { Value } from 'typebox/value';
-import { feedCard } from '../src/modules/feed/contract.ts';
-import { matchesFeedInterest } from '../src/modules/feed/read.ts';
+import { feedCard, type FeedItem } from '../src/modules/feed/contract.ts';
+import { collapseWorkCards, matchesFeedInterest } from '../src/modules/feed/read.ts';
 
 test('G282: best is monotone in votes, decays with time, and its seek key preserves the exact order', () => {
   const time = Date.UTC(2026, 8, 28), now = time + FEED_DECAY_MS;
@@ -124,4 +124,22 @@ test('G324: review cards require a Work interest and keep withheld spoiler text 
     rating: 4, scale: 5, spoiler: true, helpfulCount: 3, opening: null };
   expect(Value.Check(feedCard, card)).toBe(true);
   expect(Value.Check(feedCard, { ...card, opening: 'a'.repeat(401) })).toBe(false);
+});
+
+test('G324: a pick keeps the curator and combines the Work creation reasons once', () => {
+  const work = 'https://rezics.com/id/00000000-0000-4000-8000-000000000001';
+  const realm = 'https://rezics.com/id/00000000-0000-4000-8000-000000000002';
+  const creator = { id: 'creator', name: 'Creator', handle: 'creator' };
+  const curator = { id: 'curator', name: 'Curator', handle: 'curator' };
+  const added = { id: 'added', kind: 'added', actor: creator, target: { work }, realm: null,
+    reason: { kind: 'recommended', basis: 'all' }, reasons: [{ kind: 'added-to-rezics', actor: creator.id }] } as FeedItem;
+  const pick = { id: 'pick', kind: 'adoption', actor: curator, target: { work }, realm: { id: realm },
+    reason: { kind: 'followed', target: realm, targetKind: 'realm' },
+    reasons: [{ kind: 'realm-pick', realm, curator: curator.id }] } as FeedItem;
+  const [card] = collapseWorkCards([added, pick]);
+  expect(card?.id).toBe('pick');
+  expect(card?.actor).toEqual(curator);
+  expect(card?.reasons).toEqual([pick.reasons[0], added.reasons[0]]);
+  expect(card?.reason.kind).toBe('followed');
+  expect(collapseWorkCards([pick, pick])).toHaveLength(1);
 });

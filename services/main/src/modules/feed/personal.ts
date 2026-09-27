@@ -87,7 +87,7 @@ export class HomePersonalStore {
 
   async exclusion(principal: VerifiedPrincipal, input: ExclusionCommand, key: string) {
     commandKey(key);
-    if (input.kind === 'kind' ? !['work', 'contribution', 'adoption', 'decision', 'discussion', 'reply', 'collection'].includes(input.target)
+    if (input.kind === 'kind' ? !['work', 'added', 'contribution', 'adoption', 'decision', 'discussion', 'reply', 'collection', 'review'].includes(input.target)
       : !/^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/.test(input.target)) {
       throw new ControlInvalid('Invalid exclusion target');
     }
