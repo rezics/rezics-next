@@ -158,10 +158,17 @@ const comments = new ContentComments(contentPool);
 const cursor = new ContentProjectionCursor(contentPool);
 const consumer = config.CONTENT_PROJECTION_CONSUMER;
 await cursor.initialize(consumer);
+const workObjects = config.MAIN_S3_ENDPOINT ? new S3ImmutableObjects({
+  endpoint: config.MAIN_S3_ENDPOINT, bucket: config.MAIN_S3_BUCKET,
+  region: config.MAIN_S3_REGION, accessKeyId: config.MAIN_S3_ACCESS_KEY,
+  secretAccessKey: config.MAIN_S3_SECRET_KEY, prefix: 'semantic/work/',
+}) : undefined;
+if (workObjects) await workObjects.initialize();
 const environment = {
   fuseki,
   lineage: { dataEpoch: config.MAIN_DATA_EPOCH, routingEpoch: config.MAIN_ROUTING_EPOCH },
   objectDirectory: config.MAIN_OBJECT_DIRECTORY,
+  ...(workObjects ? { workObjects } : {}),
 };
 const partitionRoutes = new OwnerPartitionRoutes(pool);
 const graphRouteLease = await partitionRoutes.initialize({ owner: 'graph', datasetId: DATASET,
@@ -170,12 +177,6 @@ Object.assign(environment, { partitionLease: { routes: partitionRoutes,
   location: fusekiUrl, leaseEpoch: graphRouteLease.leaseEpoch } });
 const sourceGraph = new OpenLibrarySourceGraph(fuseki, environment.lineage, sourceConversions);
 const sourceProposals = new SourceNativeWorkProposalStore(contentPool, sourceGraph, sourceConversions);
-const workObjects = config.MAIN_S3_ENDPOINT ? new S3ImmutableObjects({
-  endpoint: config.MAIN_S3_ENDPOINT, bucket: config.MAIN_S3_BUCKET,
-  region: config.MAIN_S3_REGION, accessKeyId: config.MAIN_S3_ACCESS_KEY,
-  secretAccessKey: config.MAIN_S3_SECRET_KEY, prefix: 'semantic/work/',
-}) : undefined;
-if (workObjects) await workObjects.initialize();
 const structureObjects = new S3ImmutableObjects({
   endpoint: config.MAIN_S3_ENDPOINT, bucket: config.MAIN_S3_BUCKET,
   region: config.MAIN_S3_REGION, accessKeyId: config.MAIN_S3_ACCESS_KEY,
@@ -282,12 +283,8 @@ const app = createMainApp(fuseki, {
   agentHandles: new AgentVanityHandles(pool),
   libraryStatus: new ReaderLibraryStatusStore(contentPool),
   libraryRatings: new ReaderLibraryRatings(pool),
-  agentProvisioning: new AgentProvisioning(pool,
-    { ...environment, ...(workObjects ? { workObjects } : {}) }),
-  environment: {
-    ...environment,
-    ...(workObjects ? { workObjects } : {}),
-  },
+  agentProvisioning: new AgentProvisioning(pool, environment),
+  environment,
   structureObjects,
   structureStages: new StructureStageStore(contentPool, structureObjects),
   semanticStages: new SemanticStageStore(contentPool, semanticStageObjects),
@@ -373,7 +370,7 @@ const app = createMainApp(fuseki, {
   sourceProposals,
   sourceAdoptions,
   sourceAttachments: new SourceNativeWorkAttachmentStore(contentPool, sourceProposals,
-    sourceAdoptions, { ...environment, ...(workObjects ? { workObjects } : {}) }, access),
+    sourceAdoptions, environment, access),
   readerPreferences: new ReaderVariantPreferenceStore(pool),
   realmRecommendations: new RealmVariantRecommendationStore(pool),
   realmReplies: new RealmReplyStore(new RealmReplyContentStore(contentPool), content, access, environment),

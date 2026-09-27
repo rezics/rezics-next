@@ -45,6 +45,9 @@ async function governanceStack(name: string) {
   const objects = (prefix: string) => new S3ImmutableObjects({ endpoint: Bun.env.MAIN_S3_ENDPOINT!,
     bucket: Bun.env.MAIN_S3_BUCKET!, region: Bun.env.MAIN_S3_REGION!,
     accessKeyId: Bun.env.MAIN_S3_ACCESS_KEY!, secretAccessKey: Bun.env.MAIN_S3_SECRET_KEY!, prefix });
+  const workObjects = objects('semantic/work/');
+  await workObjects.initialize();
+  env.workObjects = workObjects;
   const structureObjects = objects('semantic/structure/');
   await structureObjects.initialize();
   Object.assign(env, { structureObjects });
@@ -366,8 +369,8 @@ test('GOV01: reports anchor exact name, body, Structure and media use with empty
     expect(exactOccurrence.occurrences[0]).toMatchObject({ occurrence, state: 'active', target: s.work.work });
     expect(created.body.evidence[7].revisionDigest).toBe(digest(JSON.stringify([
       structure, populatedStructureRevision, exactOccurrence.occurrences[0]])));
-    // An exact occurrence lookup reads the manifest and one bounded tree path, not every placement.
-    expect(exactOccurrence.cost.pagesRead).toBeLessThanOrEqual(3);
+    // The manifest, record and two order-position lookups stay bounded independently of placement count.
+    expect(exactOccurrence.cost.pagesRead).toBeLessThanOrEqual(4);
 
     // Idempotent intake; a changed body under the same key conflicts; nothing is duplicated.
     const replay = await s.call('POST', '/v1/reports', s.account.tokenA, structureReport);

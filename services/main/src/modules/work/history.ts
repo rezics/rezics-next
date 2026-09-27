@@ -101,8 +101,11 @@ export function readComponentState(
 
 async function storedObjectBytes(objects: ImmutableObjects, digest: string): Promise<Buffer> {
   if (!/^[0-9a-f]{64}$/.test(digest)) throw new RevisionCorrupt('invalid immutable object reference');
-  try { return Buffer.from(await objects.get(digest)); }
-  catch (error) {
+  try {
+    const bytes = Buffer.from(await objects.get(digest));
+    if (hash(bytes) !== digest) throw new RevisionCorrupt('immutable object digest differs');
+    return bytes;
+  } catch (error) {
     if (error instanceof ObjectIntegrityError) throw new RevisionCorrupt(error.message);
     if (error instanceof ObjectUnavailable) throw new RevisionUnavailable(error.message);
     throw error;
