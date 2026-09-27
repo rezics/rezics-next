@@ -56,6 +56,10 @@ export async function agentProvisionHarness() {
   }
   const operator = await signUp('operator');
   operators.add(operator.id);
+  // This QA database outlives each harness; one-time Account bootstrap cannot
+  // promote the next test's operator. Seed its durable fixture role explicitly.
+  await accountPool.query(`INSERT INTO rezics_account_operator (user_id, role)
+    VALUES ($1, 'owner')`, [operator.id]);
   const headers = new Headers({ cookie: operator.cookie, origin: base });
   const verifierClient = await auth.api.adminCreateOAuthClient({ headers, body: {
     client_name: 'Agent provision verifier', scope: 'agent:create work:create',
