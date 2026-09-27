@@ -13,6 +13,7 @@ import { accountFailure, accountSession } from './http.ts';
 import { observeAuthentication, securityActivityApi } from './security-activity.ts';
 import { connectedAppsApi } from './connected-apps.ts';
 import { adminApi } from './admin.ts';
+import { accountSettingsApi } from './account-settings.ts';
 import { bootstrapOperators, requireOperator } from './operators.ts';
 import { AccountRecoveryConflict, AccountRecoveryDenied, AccountRecoveryStale,
   activateAccountRecovery, approveAccountRecovery, enrollAccountRecovery,
@@ -227,6 +228,7 @@ export function createAccountApp(auth: ReturnType<typeof createAccountAuth>, poo
     .use(securityActivityApi(auth, pool))
     .use(connectedAppsApi(auth, pool))
     .use(adminApi(auth, pool))
+    .use(accountSettingsApi(auth, pool))
     .post('/api/auth/oauth2/token', ({ request }) =>
       guardedAuthorizationCodeExchange(guard(), request, () => auth.handler(request)))
     // A product must bind and consume state at its callback. Require the input

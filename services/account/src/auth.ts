@@ -2,7 +2,7 @@ import { betterAuth } from 'better-auth';
 import { createHash } from 'node:crypto';
 import { APIError } from 'better-auth/api';
 import { jwt, openAPI, twoFactor } from 'better-auth/plugins';
-import { passkey } from '@better-auth/passkey';
+import { getAuthenticatorName, passkey } from '@better-auth/passkey';
 import { oauthProvider } from '@better-auth/oauth-provider';
 import { Pool } from 'pg';
 import { AUTH_MODE_CLAIM, CONSENT_CLAIM, CONSENT_GENERATION_CLAIM,
@@ -11,7 +11,9 @@ import { currentInstallationIn, INSTALLATION_CLAIM } from './installations.ts';
 import { signingKeyOptions } from './signing-keys.ts';
 import { providerScopes, resourceScopes } from './oauth-scopes.ts';
 import { currentRecoveryGeneration, RECOVERY_GENERATION_CLAIM } from './recovery-claim.ts';
-import { accountLocale, type AccountEmail } from './email.ts';
+import type { AccountEmail } from './email.ts';
+import { afterPasskeyAssertion, emailLocale, localeField, markEmailChangeStep } from './account-settings.ts';
+import { deviceLabel } from './security-activity.ts';
 import { ACCOUNT_GENERATION_CLAIM, GRANT_GENERATION_CLAIM, currentAccountGenerations } from './account-fence.ts';
 import { bootstrapOperators, operatorRole, rolePermits } from './operators.ts';
 import { operatorAuthHooks } from './operator-auth-hooks.ts';
@@ -27,6 +29,8 @@ export interface AccountConfig {
   requireEmailVerification?: boolean;
   accessDeletionFence?: (accountSubject: string) => Promise<void>;
 }
+
+type EmailUser = { id: string; email: string; locale?: unknown };
 
 export function accountAuthOptions(config: AccountConfig) {
   const requireEmailVerification = config.requireEmailVerification ?? !!config.email;
@@ -57,27 +61,27 @@ export function accountAuthOptions(config: AccountConfig) {
       minPasswordLength: 12,
       resetPasswordTokenExpiresIn: 1800,
       revokeSessionsOnPasswordReset: true,
-      sendResetPassword: async ({ user, url }: { user: { id: string; email: string }; url: string }, request?: Request) => {
+      sendResetPassword: async ({ user, url }: { user: EmailUser; url: string }, request?: Request) => {
         if (!config.email) throw new Error('Account email delivery is not configured');
         await config.email.enqueue({ userId: user.id, to: user.email, url,
-          purpose: 'reset', locale: accountLocale(request) })
+          purpose: 'reset', locale: emailLocale(user, request) })
           .catch(() => console.error('Account email intent unavailable'));
       },
     },
     emailVerification: { sendOnSignUp: true, expiresIn: 1800,
-      sendVerificationEmail: async ({ user, url }: { user: { id: string; email: string }; url: string }, request?: Request) => {
+      sendVerificationEmail: async ({ user, url }: { user: EmailUser; url: string }, request?: Request) => {
         if (!config.email && !requireEmailVerification) return;
         if (!config.email) throw new Error('Account email delivery is not configured');
-        await config.email.enqueue({ userId: user.id, to: user.email, url,
-          purpose: 'verify', locale: accountLocale(request) })
+        await config.email.enqueue({ userId: user.id, to: user.email, url: markEmailChangeStep(url, 'verified'),
+          purpose: 'verify', locale: emailLocale(user, request) })
           .catch(() => console.error('Account email intent unavailable'));
       },
     },
-    user: { changeEmail: { enabled: true,
-      sendChangeEmailConfirmation: async ({ user, url }: { user: { id: string; email: string }; url: string }, request?: Request) => {
+    user: { additionalFields: { locale: localeField }, changeEmail: { enabled: true,
+      sendChangeEmailConfirmation: async ({ user, url }: { user: EmailUser; url: string }, request?: Request) => {
         if (!config.email) throw new Error('Account email delivery is not configured');
-        await config.email.enqueue({ userId: user.id, to: user.email, url,
-          purpose: 'change-email', locale: accountLocale(request) });
+        await config.email.enqueue({ userId: user.id, to: user.email, url: markEmailChangeStep(url, 'requested'),
+          purpose: 'change-email', locale: emailLocale(user, request) });
       },
     }, deleteUser: { enabled: !!config.accessDeletionFence,
       beforeDelete: async (user: { id: string }) => {
@@ -112,24 +116,32 @@ export function accountAuthOptions(config: AccountConfig) {
       passkey({ rpName: 'REZICS', rpID: new URL(config.baseURL).hostname,
         origin: new URL(config.baseURL).origin,
         authenticatorSelection: { residentKey: 'required', userVerification: 'required' },
-        registration: { afterVerification: async ({ verification, user }) => {
+        registration: { afterVerification: async ({ ctx, verification, user }) => {
           if (!verification.registrationInfo?.userVerified) {
             throw new APIError('FORBIDDEN', { code: 'USER_VERIFICATION_REQUIRED', message: 'Verify on your device' });
           }
           const count = await config.pool.query<{ count: number }>(
             'SELECT count(*)::int AS count FROM passkey WHERE "userId" = $1', [user.id]);
           if (count.rows[0]!.count >= 32) throw new APIError('CONFLICT', { message: 'Passkey limit reached' });
+          // Unnamed passkeys are called after their provider, else the device
+          // that created them; a name the person typed always wins.
+          return { name: getAuthenticatorName(verification.registrationInfo.aaguid)
+            ?? deviceLabel(ctx.headers?.get('user-agent')).label };
         } },
-        authentication: { afterVerification: async ({ verification }) => {
+        authentication: { afterVerification: async ({ verification, clientData }) => {
           if (!verification.authenticationInfo.userVerified) {
             throw new APIError('FORBIDDEN', { code: 'USER_VERIFICATION_REQUIRED', message: 'Verify on your device' });
           }
+          await afterPasskeyAssertion(config.pool, clientData.id);
         } },
       }),
       jwt(signingKeyOptions(config.pool)),
       oauthProvider({
         loginPage: '/sign-in',
         consentPage: '/consent',
+        // The signed authorization request lets /sign-in name the App before
+        // anyone signs in; the client's public fields are all it reveals.
+        allowPublicClientPrelogin: true,
         scopes: [...providerScopes],
         resources: [{ identifier: config.resource,
           allowedScopes: [...resourceScopes], accessTokenTtl: 300 }],

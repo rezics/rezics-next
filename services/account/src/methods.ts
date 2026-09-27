@@ -1,5 +1,6 @@
 import { Elysia, t } from 'elysia';
 import type { Pool, PoolClient } from 'pg';
+import { getAuthenticatorName } from '@better-auth/passkey';
 import { accountFailure, accountJson, AccountProblem, accountSession, type AccountAuth } from './http.ts';
 import { consumeAccountLimit } from './rate-limit.ts';
 import { accountResponses, methodsView, statusView } from './views.ts';
@@ -43,16 +44,21 @@ async function mutateMethod<T>(pool: Pool, session: { session: { id: string }; u
 }
 
 /** Bounded by method caps (32 passkeys, one password and one TOTP). Never
- * returns public keys, credential IDs, TOTP secrets or stored backup codes. */
+ * returns public keys, credential IDs, TOTP secrets or stored backup codes;
+ * a passkey's provider is named from its authenticator model (AAGUID). */
 export async function readMethods(pool: Pool, userId: string) {
-  const passwords = await pool.query(`SELECT 1 FROM account WHERE "userId" = $1
+  const passwords = await pool.query<{ updatedAt: Date }>(`SELECT "updatedAt" FROM account WHERE "userId" = $1
     AND "providerId" = 'credential' AND password IS NOT NULL LIMIT 1`, [userId]);
-  const passkeys = await pool.query<{ id: string; name: string | null; createdAt: Date; backedUp: boolean; deviceType: string }>(
-    'SELECT id, name, "createdAt", "backedUp", "deviceType" FROM passkey WHERE "userId" = $1 ORDER BY "createdAt", id LIMIT 32', [userId]);
+  const passkeys = await pool.query<{ id: string; name: string | null; createdAt: Date; backedUp: boolean;
+    deviceType: string; aaguid: string | null; lastUsedAt: Date | null }>(`SELECT id, name, "createdAt", "backedUp",
+    "deviceType", aaguid, "rezicsLastUsedAt" AS "lastUsedAt" FROM passkey WHERE "userId" = $1
+    ORDER BY "createdAt", id LIMIT 32`, [userId]);
   const totp = await pool.query<{ id: string; name: string; verified: boolean }>(
     'SELECT id, name, verified FROM "twoFactor" WHERE "userId" = $1', [userId]);
   return { password: !!passwords.rowCount,
-    passkeys: passkeys.rows.map(row => ({ ...row, createdAt: row.createdAt.toISOString() })),
+    passwordChangedAt: passwords.rows[0]?.updatedAt.toISOString() ?? null,
+    passkeys: passkeys.rows.map(({ aaguid, ...row }) => ({ ...row, createdAt: row.createdAt.toISOString(),
+      provider: getAuthenticatorName(aaguid) ?? null, lastUsedAt: row.lastUsedAt?.toISOString() ?? null })),
     totp: totp.rows[0] ?? null };
 }
 

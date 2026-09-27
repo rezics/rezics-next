@@ -10,9 +10,11 @@ export const consentView = t.Object({ client: t.Object({ id: t.String(), name: t
   uri: t.Nullable(t.String()), icon: t.Nullable(t.String()) }), scopes: t.Array(descriptionView),
 resources: t.Array(t.String()), expiresAt: t.String() });
 export const consentDecisionView = t.Object({ redirect: t.Boolean(), url: t.String() });
-export const methodsView = t.Object({ password: t.Boolean(), passkeys: t.Array(t.Object({
-  id: t.String(), name: t.Nullable(t.String()), createdAt: t.String(), backedUp: t.Boolean(), deviceType: t.String(),
-})), totp: t.Nullable(t.Object({ id: t.String(), name: t.String(), verified: t.Boolean() })) });
+export const methodsView = t.Object({ password: t.Boolean(), passwordChangedAt: t.Nullable(t.String()),
+  passkeys: t.Array(t.Object({
+    id: t.String(), name: t.Nullable(t.String()), createdAt: t.String(), backedUp: t.Boolean(), deviceType: t.String(),
+    provider: t.Nullable(t.String()), lastUsedAt: t.Nullable(t.String()),
+  })), totp: t.Nullable(t.Object({ id: t.String(), name: t.String(), verified: t.Boolean() })) });
 export const sessionView = t.Object({ id: t.String(), createdAt: t.String(), lastActiveAt: t.String(), expiresAt: t.String(),
   device: t.Object({ browser: t.String(), platform: t.Nullable(t.String()), label: t.String() }),
   network: t.Nullable(t.String()), thisDevice: t.Boolean() });
