@@ -1,0 +1,190 @@
+import { readEpochOrder } from '../discovery/lineage.ts';
+import { readRealmDecisions } from '../realm-reads/public-decision-index.ts';
+import { readRealmBasis } from '../realm-reads/read-realm.ts';
+import { GRAPHS, WORK_SEMANTIC_TYPES, iri, lit } from '../work/activate.ts';
+import { decodeReadCursor, encodeReadCursor, pageResult, publicWork,
+  WorkReadInvalid, WorkReadUnavailable, type WorkReadSession } from '../work/read-session.ts';
+import { readSerialSummaries } from '../work/summary-serial.ts';
+import { ZONE_MODULE_COST } from './contract.ts';
+
+type Kind = 'new-adoptions' | 'recently-completed';
+function cursorOrder(value: string) {
+  const parts = value.split(':');
+  if (parts.length !== 2 || !parts.every(part => /^\d+$/.test(part))) {
+    throw new WorkReadInvalid('Zone module cursor ordering is invalid');
+  }
+  return parts;
+}
+
+/** One bounded candidate page, one type batch, two summary batches and ≤20 exact
+ * metadata heads. Native graph sorting may scan D Realm decisions: O(D log D). */
+export async function readZoneWorks(session: WorkReadSession, realm: string, kind: Kind) {
+  await readRealmBasis(session, realm);
+  const limit = session.options.limit ?? ZONE_MODULE_COST.pageSize;
+  const binding = ['zone-module-v1', realm, kind, session.options.language ?? null];
+  const cursor = decodeReadCursor(session.options.cursor, binding, session.position);
+  const order = cursor ? cursorOrder(cursor.order) : null;
+  const epochs = await readEpochOrder(session);
+  const status = kind === 'recently-completed';
+  const rows = await session.query(`SELECT DISTINCT ?work ?head ?main ?evidence ?revisionEpoch
+    ?sequence ?epochOrder WHERE {
+    ${epochs}
+    GRAPH ${iri(GRAPHS.current)} {
+      ?slot a rv:RealmPublicationSlot ; rv:realm ${iri(realm)} ; rv:work ?work ;
+        rv:mainVersion ?main ; rv:selectionHead ?selection .
+      ?work rv:head ?head .
+      ${status ? '?work rv:completionStatus "completed" ; rv:descriptiveMetadataHead ?evidence .'
+        : 'BIND(?selection AS ?evidence)'}
+      ?contribution rv:publicationHead ?decision . }
+    GRAPH ${iri(GRAPHS.revisions)} { ?selection a rv:PublicationSelection ;
+      rv:component ?slot ; rv:context ${iri(realm)} ; rv:work ?work ;
+      rv:mainVersion ?main ; rv:contribution ?contribution ;
+      rv:publicationDecision ?decision ; rv:selectedDraft ?draft .
+      ?decision rv:disclosure rv:Public .
+      FILTER NOT EXISTS { ?draft a rv:ErasedRevision }
+      ?evidence a ${status ? 'rv:WorkMetadataRevision' : 'rv:PublicationSelection'} ;
+        rv:dataEpoch ?revisionEpoch ; rv:sequence ?sequence . }
+    ${publicWork('?work', '?main')}
+    ${order && cursor ? `FILTER(?epochOrder > ${order[0]} || (?epochOrder = ${order[0]}
+      && (?sequence < ${order[1]} || (?sequence = ${order[1]}
+        && STR(?evidence) > ${lit(cursor.after)}))))` : ''}
+  } ORDER BY ?epochOrder DESC(?sequence) STR(?evidence) LIMIT ${limit + 1}`, limit + 1);
+  if (rows.some(row => !row.work || !row.head || !row.main || !row.evidence
+    || !row.revisionEpoch || !/^\d+$/.test(row.sequence?.value ?? '')
+    || !/^\d+$/.test(row.epochOrder?.value ?? ''))
+    || new Set(rows.map(row => row.work!.value)).size !== rows.length) {
+    throw new WorkReadUnavailable('Zone Work candidates are ambiguous');
+  }
+  const page = rows.slice(0, limit), ids = page.map(row => row.work!.value);
+  const summaries = await session.summaries(ids);
+  const serial = await readSerialSummaries(session, ids.filter((id, index) =>
+    summaries[index]?.status === 'available' && summaries[index]?.disclosure === 'public'
+    && summaries[index]?.type === 'work'));
+  const typeRows = ids.length ? await session.query(`SELECT ?work ?type WHERE {
+    VALUES ?work { ${ids.map(iri).join(' ')} }
+    VALUES ?type { ${WORK_SEMANTIC_TYPES.map(type => `<${type}>`).join(' ')} }
+    GRAPH ${iri(GRAPHS.current)} { ?work a ?type }
+  } LIMIT ${ZONE_MODULE_COST.typeRows + 1}`, ZONE_MODULE_COST.typeRows) : [];
+  const fenced = await session.summaries(ids);
+  const types = new Map<string, string[]>();
+  for (const row of typeRows) {
+    if (!row.work || !row.type || !ids.includes(row.work.value)) {
+      throw new WorkReadUnavailable('Zone Work type relation is incomplete');
+    }
+    const list = types.get(row.work.value) ?? [];
+    list.push(row.type.value);
+    types.set(row.work.value, list);
+  }
+  const items = page.flatMap((row, index) => {
+    const summary = summaries[index], again = fenced[index], facts = serial.get(row.work!.value);
+    if (summary?.status !== 'available' || summary.disclosure !== 'public'
+      || again?.status !== 'available' || again.disclosure !== 'public') return [];
+    if (!facts || status && facts.completionStatus !== 'completed') {
+      throw new WorkReadUnavailable('Zone Work status differs from its metadata head');
+    }
+    return [{ id: row.work!.value, revision: row.head!.value, mainVersion: row.main!.value,
+      title: summary.name, cover: summary.avatar, types: (types.get(row.work!.value) ?? []).sort(),
+      ...facts, evidence: row.evidence!.value, dataEpoch: row.revisionEpoch!.value,
+      sequence: row.sequence!.value }];
+  });
+  await readRealmBasis(session, realm);
+  const last = page.at(-1);
+  return { profile: status ? 'zone-recently-completed-v1' as const : 'zone-new-adoptions-v1' as const,
+    realm, ...pageResult(session, items, rows.length > limit && last
+      ? encodeReadCursor(binding, session.position, last.evidence!.value,
+        `${last.epochOrder!.value}:${last.sequence!.value}`) : null) };
+}
+
+export async function readZoneDecisions(session: WorkReadSession, realm: string) {
+  const page = await readRealmDecisions(session, realm);
+  return { ...page, profile: 'zone-recent-decisions-v1' as const, realm,
+    summary: { adoption: page.items.filter(item => item.kind === 'adoption').length,
+      classification: page.items.filter(item => item.kind === 'classification').length,
+      semanticRuleChange: page.items.filter(item => item.kind === 'semantic-rule-change').length,
+      basis: 'exact-page' as const } };
+}
+
+/** Current public chapter publications only. The graph relation may scan D
+ * placements and sort them O(D log D); hydration is bounded to one page. */
+export async function readZoneChapters(session: WorkReadSession, realm: string) {
+  await readRealmBasis(session, realm);
+  const limit = session.options.limit ?? ZONE_MODULE_COST.pageSize;
+  const binding = ['zone-latest-chapters-v1', realm, session.options.language ?? null];
+  const cursor = decodeReadCursor(session.options.cursor, binding, session.position);
+  const order = cursor ? cursorOrder(cursor.order) : null;
+  const epochs = await readEpochOrder(session);
+  const rows = await session.query(`SELECT DISTINCT ?work ?head ?main ?chapter ?publication
+    ?contentRevision ?language ?revisionEpoch ?sequence ?epochOrder WHERE {
+    ${epochs}
+    GRAPH ${iri(GRAPHS.current)} {
+      ?slot a rv:RealmPublicationSlot ; rv:realm ${iri(realm)} ; rv:work ?work ;
+        rv:mainVersion ?main ; rv:selectionHead ?selection .
+      ?work rv:head ?head .
+      ?contribution rv:publicationHead ?workDecision .
+      ?structure a rv:Structure ; rv:structureOf ?main ; rv:selectedGeneration ?generation .
+      ?generation rv:generationState rv:Active .
+      ?placement a rv:OccurrencePlacement ; rv:generation ?generation ;
+        rv:occurrenceRole rv:ChapterRole ; schema:item ?chapter .
+      FILTER NOT EXISTS { ?placement rv:removedBy ?removal }
+      ?variant a rv:ContentVariant ; rv:resource ?chapter ;
+        rv:contentPublicationHead ?publication ; rv:publicSearchEligibilityHead ?eligibility . }
+    GRAPH ${iri(GRAPHS.revisions)} {
+      ?selection a rv:PublicationSelection ; rv:component ?slot ; rv:context ${iri(realm)} ;
+        rv:work ?work ; rv:mainVersion ?main ; rv:contribution ?contribution ;
+        rv:publicationDecision ?workDecision ; rv:selectedDraft ?draft .
+      ?workDecision rv:disclosure rv:Public .
+      FILTER NOT EXISTS { ?draft a rv:ErasedRevision }
+      ?publication a rv:ContentPublicationDecision, rv:RevisionAnchor ;
+        rv:resource ?chapter ; rv:component ?variant ; rv:contentRevision ?contentRevision ;
+        rv:contentLanguage ?language ; rv:dataEpoch ?revisionEpoch ; rv:sequence ?sequence .
+      ?eligibility a rv:ContentSearchEligibilityDecision ;
+        rv:publicationDecision ?publication ; rv:disclosure rv:Public .
+      FILTER NOT EXISTS { ?contentRevision a rv:ErasedRevision } }
+    ${publicWork('?work', '?main')}
+    ${order && cursor ? `FILTER(?epochOrder > ${order[0]} || (?epochOrder = ${order[0]}
+      && (?sequence < ${order[1]} || (?sequence = ${order[1]}
+        && STR(?publication) > ${lit(cursor.after)}))))` : ''}
+  } ORDER BY ?epochOrder DESC(?sequence) STR(?publication) LIMIT ${limit + 1}`, limit + 1);
+  if (rows.some(row => !row.work || !row.head || !row.main || !row.chapter || !row.publication
+    || !row.contentRevision || !row.language || !row.revisionEpoch
+    || !/^\d+$/.test(row.sequence?.value ?? '') || !/^\d+$/.test(row.epochOrder?.value ?? ''))
+    || new Set(rows.map(row => row.publication!.value)).size !== rows.length) {
+    throw new WorkReadUnavailable('Zone chapter candidates are ambiguous');
+  }
+  const page = rows.slice(0, limit), ids = [...new Set(page.map(row => row.work!.value))];
+  const summaries = await session.summaries(ids);
+  const serial = await readSerialSummaries(session, ids.filter((id, index) =>
+    summaries[index]?.status === 'available' && summaries[index]?.disclosure === 'public'
+    && summaries[index]?.type === 'work'));
+  const types = new Map<string, string[]>();
+  const typeRows = ids.length ? await session.query(`SELECT ?work ?type WHERE {
+    VALUES ?work { ${ids.map(iri).join(' ')} }
+    VALUES ?type { ${WORK_SEMANTIC_TYPES.map(type => `<${type}>`).join(' ')} }
+    GRAPH ${iri(GRAPHS.current)} { ?work a ?type }
+  } LIMIT ${ZONE_MODULE_COST.typeRows + 1}`, ZONE_MODULE_COST.typeRows) : [];
+  for (const row of typeRows) {
+    if (!row.work || !row.type || !ids.includes(row.work.value)) {
+      throw new WorkReadUnavailable('Zone chapter type relation is incomplete');
+    }
+    types.set(row.work.value, [...(types.get(row.work.value) ?? []), row.type.value]);
+  }
+  const fenced = await session.summaries(ids);
+  const items = page.flatMap(row => {
+    const index = ids.indexOf(row.work!.value), summary = summaries[index], again = fenced[index];
+    if (summary?.status !== 'available' || summary.disclosure !== 'public'
+      || again?.status !== 'available' || again.disclosure !== 'public') return [];
+    const facts = serial.get(row.work!.value);
+    if (!facts) throw new WorkReadUnavailable('Zone chapter Work metadata is incomplete');
+    return [{ work: { id: row.work!.value, revision: row.head!.value, mainVersion: row.main!.value,
+      title: summary.name, cover: summary.avatar, types: (types.get(row.work!.value) ?? []).sort(), ...facts },
+    chapter: row.chapter!.value, publication: row.publication!.value,
+    contentRevision: row.contentRevision!.value, language: row.language!.value,
+    dataEpoch: row.revisionEpoch!.value, sequence: row.sequence!.value }];
+  });
+  await readRealmBasis(session, realm);
+  const last = page.at(-1);
+  return { profile: 'zone-latest-chapters-v1' as const, realm,
+    ...pageResult(session, items, rows.length > limit && last
+      ? encodeReadCursor(binding, session.position, last.publication!.value,
+        `${last.epochOrder!.value}:${last.sequence!.value}`) : null) };
+}
