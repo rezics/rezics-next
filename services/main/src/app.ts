@@ -125,52 +125,52 @@ function domainRoutes(fuseki: FusekiClient, work: SearchRouteDependencies) {
     .use(workActivityRoutes(work))
     .use(profileRoutes(work))
     .use(realmProfileRoutes(work))
-    .use(workMetadataRoutes(work))
-    .use(discoveryRoutes(work))
-    .use(managementReadRoutes(work));
+    .use(workMetadataRoutes(work));
 }
 
 function extraRoutes1(fuseki: FusekiClient, work: SearchRouteDependencies) {
   return new Elysia()
+    .use(discoveryRoutes(work))
+    .use(managementReadRoutes(work))
     .use(realmSubmissionRoutes(work))
     .use(collectionRoutes(fuseki, work))
     .use(zoneRoutes(fuseki, work))
     .use(hubDependencyRoutes(work))
     .use(packageInstallRequestRoutes(work))
     .use(agentRoutes(work))
-    .use(catalogRoutes(work))
-    .use(erasureRoutes(work))
-    .use(eventRoutes(work));
+    .use(catalogRoutes(work));
 }
 
 function extraRoutes2(fuseki: FusekiClient, work: SearchRouteDependencies) {
   return new Elysia()
+    .use(erasureRoutes(work))
+    .use(eventRoutes(work))
     .use(exportRoutes(work))
     .use(notificationRoutes(work))
     .use(reportRoutes(work))
     .use(rightsRoutes(work))
     .use(recommendationRoutes(work))
     .use(contentPrivateSearchRoutes(work))
-    .use(graphLayoutRoutes(work))
-    .use(graphQueryRoutes(work))
-    .use(workRoutes(fuseki, work));
+    .use(graphLayoutRoutes(work));
 }
 
 function extraRoutes3(fuseki: FusekiClient, work: SearchRouteDependencies) {
   return new Elysia()
+    .use(graphQueryRoutes(work))
+    .use(workRoutes(fuseki, work))
     .use(judgmentRoutes(work))
     .use(proposalRoutes(work))
     .use(recipeRoutes(fuseki, work))
     .use(themeRoutes(work))
     .use(packageNixRoutes(work))
     .use(compositionRoutes(fuseki, work))
-    .use(connectedAppRoutes(work))
-    .use(ownerRoutes(work))
-    .use(packageModRoutes(work));
+    .use(connectedAppRoutes(work));
 }
 
 function extraRoutes4(fuseki: FusekiClient, work: SearchRouteDependencies) {
   return new Elysia()
+    .use(ownerRoutes(work))
+    .use(packageModRoutes(work))
     .use(realmReplyRoutes(work))
     .use(pollRoutes(work))
     .use(semanticRoutes(fuseki, work))

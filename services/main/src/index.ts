@@ -107,6 +107,7 @@ import { graphZeroCandidates, graphZeroSnapshot } from './modules/recommendation
 import { EventTemporalQueries } from './modules/event/queries.ts';
 import { PrivateContextSelections } from './modules/context/private-selection.ts';
 import { mainConfig } from './config.ts';
+import { WorkMaintainers } from './modules/work/maintainers.ts';
 
 const config = mainConfig();
 const fusekiUrl = config.FUSEKI_URL;
@@ -387,4 +388,3 @@ async function stop(): Promise<void> {
 }
 process.once('SIGINT', () => { void stop(); });
 process.once('SIGTERM', () => { void stop(); });
-import { WorkMaintainers } from './modules/work/maintainers.ts';
