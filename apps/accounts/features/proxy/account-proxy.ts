@@ -6,7 +6,8 @@
 const prefixes = ['/api/auth/', '/api/account/', '/oauth2/', '/.well-known/'];
 const segment = /^(?!\.{1,2}$)[A-Za-z0-9._~-]{1,256}$/;
 const requestHeaders = ['accept', 'accept-language', 'authorization', 'content-type', 'cookie',
-  'dpop', 'user-agent', 'sec-fetch-dest', 'sec-fetch-mode', 'sec-fetch-site'];
+  'dpop', 'user-agent'];
+const fetchMetadata = ['sec-fetch-dest', 'sec-fetch-mode', 'sec-fetch-site'];
 const bodyless = new Set(['GET', 'HEAD']);
 
 export interface AccountProxyOptions {
@@ -47,6 +48,20 @@ export async function proxyAccountRequest(request: Request,
   for (const name of requestHeaders) {
     const value = request.headers.get(name);
     if (value) headers.set(name, value);
+  }
+  // Better Auth answers `Sec-Fetch-Mode: cors` with JSON instead of a redirect.
+  // Browsers send Sec-Fetch-Site with every request; a server caller (a product
+  // BFF exchanging a code, or its authorize check) does not, but a Node fetch
+  // underneath it may still add `cors` (undici does, as Wrangler's dev proxy
+  // does when proxy variables are set). Mark server callers as not a browser
+  // fetch so they get the redirects a server expects.
+  if (request.headers.has('sec-fetch-site')) {
+    for (const name of fetchMetadata) {
+      const value = request.headers.get(name);
+      if (value) headers.set(name, value);
+    }
+  } else {
+    headers.set('sec-fetch-mode', 'no-cors');
   }
   // A browser request from this origin is a request from the public Account
   // origin, which Better Auth checks for CSRF. Anything else keeps its origin
