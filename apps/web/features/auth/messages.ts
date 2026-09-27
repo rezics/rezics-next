@@ -1,6 +1,7 @@
+import { defineMessages } from '../../i18n/define.ts';
+
 // Sign-in, acting identity and account menu strings. `{agent}` placeholders
-// are filled with `formatMessage`; messages stay plain strings so server pages
-// can pass them to client components.
+// are filled with `formatMessage`, so the catalog is plain strings.
 
 const en = {
   // Sign in and create account.
@@ -67,7 +68,7 @@ const zhCN: AuthMessages = {
   noAgent: '尚无身份', agentUnverified: '身份未经检查', signOut: '退出登录',
 };
 
-export const authMessages = { en, 'zh-CN': zhCN } as const;
+export const messages = defineMessages({ en, 'zh-CN': zhCN });
 
 export function formatMessage(template: string, values: Readonly<Record<string, string>>): string {
   return template.replace(/\{(\w+)\}/g, (match, name: string) => values[name] ?? match);

@@ -1,23 +1,25 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, userEvent, waitFor, within } from 'storybook/test';
-import { AccountMenu } from './account-menu.tsx';
+import { AccountMenu } from '../auth/account-menu.tsx';
+import { messages as auth } from '../auth/messages.ts';
+import type { Session } from '../auth/session.ts';
+import { SignInLink } from '../auth/sign-in-link.tsx';
 import { AppShell } from './app-shell.tsx';
 import { messages } from './messages.ts';
 import { NotificationsLink } from './notifications-link.tsx';
 import { PageContainer, PageHeader } from './page.tsx';
-import type { ShellSession } from './session.ts';
 
-const signedIn: ShellSession = {
-  name: 'Ada Lovelace', email: 'ada@example.test',
-  agent: { id: 'https://rezics.com/id/57c86232-6db4-4b0d-aa56-e4ad584d07b4', label: '57c86232' },
-};
+const ada = { iri: 'https://rezics.com/id/57c86232-6db4-4b0d-aa56-e4ad584d07b4', label: 'Ada Lovelace',
+  path: 'direct-principal' } as const;
+const signedIn: Session = { user: { id: 'u1', name: 'Ada Lovelace', email: 'ada@example.test', image: null },
+  agent: { status: 'selected', agent: ada }, agents: [ada], expiresAt: '2026-10-27T00:00:00.000Z' };
 
-const longNames: ShellSession = {
-  name: 'Maximiliana Theodora Wilhelmina von Aschenbrenner-Kowalczyk',
-  email: 'maximiliana.theodora.von.aschenbrenner-kowalczyk@example-institution.test',
-  agent: { id: 'https://rezics.com/id/07309b3b-c8f6-4211-bdb3-9aa486c1e4d5',
-    label: 'Riverside Historical Society Translation Collective' },
-};
+const society = { iri: 'https://rezics.com/id/07309b3b-c8f6-4211-bdb3-9aa486c1e4d5',
+  label: 'Riverside Historical Society Translation Collective', path: 'represented-agent' } as const;
+const longNames: Session = { ...signedIn,
+  user: { id: 'u2', name: 'Maximiliana Theodora Wilhelmina von Aschenbrenner-Kowalczyk',
+    email: 'maximiliana.theodora.von.aschenbrenner-kowalczyk@example-institution.test', image: null },
+  agent: { status: 'selected', agent: society }, agents: [society] };
 
 function Placeholder() {
   return <PageContainer className="grid gap-6">
@@ -29,7 +31,7 @@ function Placeholder() {
 const meta = {
   title: 'Shell/App shell', component: AppShell,
   args: { locale: 'en', messages: messages.en, theme: 'light', navCollapsed: false,
-    account: <AccountMenu session={null} />, children: <Placeholder /> },
+    account: <SignInLink label={auth.en.signIn} />, children: <Placeholder /> },
   globals: { viewport: { value: 'desktop' } },
 } satisfies Meta<typeof AppShell>;
 export default meta;
@@ -53,30 +55,31 @@ export const SignedOut: Story = {
 };
 
 export const SignedIn: Story = {
-  args: { account: <AccountMenu session={signedIn} />, notifications: <NotificationsLink /> },
+  args: { account: <AccountMenu session={signedIn} messages={auth.en} />, notifications: <NotificationsLink /> },
   parameters: { route: { pathname: '/studio' } },
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     await expect(canvas.getByRole('link', { name: 'Notifications' })).toHaveAttribute('href', '/inbox');
     await userEvent.click(canvas.getByRole('button', { name: 'Account menu' }));
     const menu = within(await within(document.body).findByRole('menu'));
-    await waitFor(() => expect(menu.getByText('Ada Lovelace')).toBeVisible());
-    await expect(menu.getByRole('menuitem', { name: /Switch identity/ }))
-      .toHaveAttribute('href', '/identity?next=%2Fstudio');
+    await waitFor(() => expect(menu.getByRole('menuitem', { name: 'Switch Agent' })).toBeVisible());
+    await expect(menu.getByRole('group', { name: 'Acting as' })).toHaveTextContent('Ada Lovelace');
+    await expect(menu.getByRole('menuitem', { name: 'Sign out' })).toBeVisible();
     await userEvent.keyboard('{Escape}');
   },
 };
 
 export const LongNames: Story = {
-  args: { account: <AccountMenu session={longNames} />, notifications: <NotificationsLink /> },
+  args: { account: <AccountMenu session={longNames} messages={auth.en} />, notifications: <NotificationsLink /> },
   parameters: { route: { pathname: '/search', search: 'q=A+very+long+search+phrase+about+rivers+and+cities+across+centuries' } },
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     await expect(canvas.getByRole('searchbox', { name: 'Search works' }))
       .toHaveValue('A very long search phrase about rivers and cities across centuries');
     await userEvent.click(canvas.getByRole('button', { name: 'Account menu' }));
-    const agent = await within(document.body).findByText(/Riverside Historical Society/);
-    await waitFor(() => expect(agent).toBeVisible());
+    const menu = within(await within(document.body).findByRole('menu'));
+    await waitFor(() => expect(menu.getByRole('group', { name: 'Acting as' }))
+      .toHaveTextContent('Riverside Historical Society Translation Collective'));
     await userEvent.keyboard('{Escape}');
   },
 };
@@ -96,7 +99,7 @@ export const CollapsedNavigation: Story = {
 };
 
 export const Dark: Story = {
-  args: { theme: 'dark', account: <AccountMenu session={signedIn} />, notifications: <NotificationsLink /> },
+  args: { theme: 'dark', account: <AccountMenu session={signedIn} messages={auth.en} />, notifications: <NotificationsLink /> },
   globals: { theme: 'dark' },
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
@@ -121,7 +124,7 @@ export const ThemeChoice: Story = {
 };
 
 export const Chinese: Story = {
-  args: { locale: 'zh-CN', messages: messages['zh-CN'], account: <AccountMenu session={signedIn} />,
+  args: { locale: 'zh-CN', messages: messages['zh-CN'], account: <AccountMenu session={signedIn} messages={auth['zh-CN']} />,
     notifications: <NotificationsLink /> },
   globals: { locale: 'zh-CN' },
   async play({ canvasElement }) {
@@ -152,7 +155,7 @@ export const Phone: Story = {
 };
 
 export const PhoneSignedInChinese: Story = {
-  args: { locale: 'zh-CN', messages: messages['zh-CN'], account: <AccountMenu session={longNames} />,
+  args: { locale: 'zh-CN', messages: messages['zh-CN'], account: <AccountMenu session={longNames} messages={auth['zh-CN']} />,
     notifications: <NotificationsLink /> },
   globals: { locale: 'zh-CN', viewport: { value: 'phone' } },
   async play({ canvasElement }) {

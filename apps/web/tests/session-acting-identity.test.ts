@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
 import { agentName, agentOptions, initialSessionAgent, resolveSessionAgent } from '../features/auth/acting-identity.ts';
-import { authMessages } from '../features/auth/messages.ts';
+import { messages } from '../features/auth/messages.ts';
 import { decodeSessionRecord, encodeSessionRecord, isAgentIri, tokenSubject } from '../features/auth/session-state.ts';
 
 const A = 'https://rezics.com/id/1e1489d5-6994-402c-99f2-50547eeaef4d';
@@ -41,9 +41,9 @@ test('IAM03: a new session starts from the saved default or the only Agent, othe
 });
 
 test('IAM03: Agents without a label show a short, stable name', () => {
-  expect(agentName({ iri: B, label: null }, authMessages.en)).toBe('Agent b8df6385');
-  expect(agentName({ iri: B, label: null }, authMessages['zh-CN'])).toBe('身份 b8df6385');
-  expect(agentName({ iri: B, label: 'Ada Lovelace' }, authMessages.en)).toBe('Ada Lovelace');
+  expect(agentName({ iri: B, label: null }, messages.en)).toBe('Agent b8df6385');
+  expect(agentName({ iri: B, label: null }, messages['zh-CN'])).toBe('身份 b8df6385');
+  expect(agentName({ iri: B, label: 'Ada Lovelace' }, messages.en)).toBe('Ada Lovelace');
   expect(isAgentIri(B)).toBe(true);
   for (const value of ['https://rezics.com/id/B8DF6385-cec9-4fa0-8b89-71def5fa82b5', 'https://evil.test/id/x', '', null]) {
     expect(isAgentIri(value)).toBe(false);

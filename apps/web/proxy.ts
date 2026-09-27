@@ -26,5 +26,5 @@ export async function proxy(request: NextRequest): Promise<NextResponse> {
 
 export const config = {
   // Static files and the routes that manage tokens themselves.
-  matcher: ['/((?!assets/|_next/|favicon\\.ico|auth/callback|sign-out).*)'],
+  matcher: ['/((?!assets/|_next/|favicon\\.ico|favicon\\.svg|auth/callback|sign-out).*)'],
 };

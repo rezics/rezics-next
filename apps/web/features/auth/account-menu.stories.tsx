@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, userEvent, waitFor, within } from 'storybook/test';
 import { AccountMenu } from './account-menu.tsx';
-import { authMessages } from './messages.ts';
+import { messages } from './messages.ts';
 import type { Session } from './session.ts';
 
 const ada = 'https://rezics.com/id/b8df6385-cec9-4fa0-8b89-71def5fa82b5';
@@ -12,7 +12,7 @@ const session: Session = { user: { id: 'u1', name: 'Ada Lovelace', email: 'ada@e
   agent: { status: 'selected', agent: agents[0]! }, agents, expiresAt: '2026-10-27T00:00:00.000Z' };
 
 const meta = { title: 'Auth/Account menu', component: AccountMenu,
-  args: { session, messages: authMessages.en },
+  args: { session, messages: messages.en },
   decorators: [Story => <div className="flex justify-end p-4"><Story /></div>],
 } satisfies Meta<typeof AccountMenu>;
 export default meta;
@@ -63,7 +63,7 @@ export const LongName: Story = {
 };
 
 export const Chinese: Story = {
-  args: { messages: authMessages['zh-CN'], session: { ...session, agent: { status: 'unselected' } } },
+  args: { messages: messages['zh-CN'], session: { ...session, agent: { status: 'unselected' } } },
   async play({ canvasElement }) {
     const trigger = within(canvasElement).getByRole('button', { name: '账户菜单' });
     await expect(trigger).toHaveTextContent('选择身份');

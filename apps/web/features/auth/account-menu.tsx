@@ -35,8 +35,8 @@ function currentPath(): string {
   return `${window.location.pathname}${window.location.search}`;
 }
 
-/** The signed-in account and session Agent, with switching and sign-out. The
- * shell renders it in its account slot with the result of `readSession()`. */
+/** The signed-in account and session Agent, with switching and sign-out: the
+ * shell's account slot when `readSession()` returns a session (see app/layout.tsx). */
 export function AccountMenu({ session, messages }: { session: Session; messages: AuthMessages }) {
   const signOutForm = useRef<HTMLFormElement>(null);
   const returnField = useRef<HTMLInputElement>(null);
@@ -54,11 +54,12 @@ export function AccountMenu({ session, messages }: { session: Session; messages:
       }
     }}>
       <MenuTrigger aria-label={messages.accountMenu} className="inline-flex max-w-64 items-center gap-2
-        rounded-full py-1 ps-1 pe-2 text-start outline-none hover:bg-accent focus-visible:ring-[3px]
-        focus-visible:ring-ring/32">
-        <Avatar size="md">
+        rounded-full p-1 text-start outline-none hover:bg-accent/60 focus-visible:ring-2
+        focus-visible:ring-ring sm:pe-3">
+        <Avatar size="lg">
           {user.image ? <AvatarImage src={user.image} alt="" /> : null}
-          <AvatarFallback>{initials(user.name, user.email)}</AvatarFallback>
+          <AvatarFallback className="bg-accent font-semibold text-accent-foreground text-sm">
+            {initials(user.name, user.email)}</AvatarFallback>
         </Avatar>
         <span className="hidden min-w-0 flex-col leading-tight sm:flex">
           <span className="truncate font-medium text-sm">{displayName}</span>

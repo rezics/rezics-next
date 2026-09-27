@@ -1,6 +1,9 @@
 import type { Metadata } from 'next';
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
+import { AGENT_COOKIE } from '../../features/auth/cookies.ts';
+import { signInPath } from '../../features/auth/paths.ts';
+import { readSession } from '../../features/auth/session.ts';
 import { PageContainer, PageHeader } from '../../features/shell/page.tsx';
 import { createWork } from '../../features/studio/actions.ts';
 import { CreateWorkForm } from '../../features/studio/create-work-form.tsx';
@@ -12,9 +15,8 @@ export async function generateMetadata(): Promise<Metadata> {
 }
 
 export default async function StudioPage() {
-  const jar = await cookies();
-  if (!jar.get('rezics_access')?.value) redirect('/sign-in?next=%2Fstudio');
-  if (!jar.get('rezics_subject')?.value) redirect('/identity?next=%2Fstudio');
+  if (!await readSession()) redirect(signInPath('/studio'));
+  if (!(await cookies()).get(AGENT_COOKIE)?.value) redirect('/identity?next=%2Fstudio');
   const messages = await getMessages('studio', await requestLocale());
   return <PageContainer className="grid max-w-2xl gap-6">
     <PageHeader title={messages.createHeading} description={messages.createHelp} />

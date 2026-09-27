@@ -1,10 +1,11 @@
-import { treaty } from '@elysia/eden';
-import type { MainApp } from '@rezics/main/app';
 import type { Metadata } from 'next';
 import { cookies } from 'next/headers';
 import { notFound, redirect } from 'next/navigation';
 import { cache } from 'react';
-import { serviceOrigin } from '../../../features/api/origins.ts';
+import { mainApi } from '../../../features/api/main.ts';
+import { AGENT_COOKIE } from '../../../features/auth/cookies.ts';
+import { signInPath } from '../../../features/auth/paths.ts';
+import { readSession } from '../../../features/auth/session.ts';
 import { WorkDetail, WorkUnavailable } from '../../../features/work/work-detail.tsx';
 import { getMessages, getTranslation, requestLocale } from '../../../i18n/server.ts';
 
@@ -14,13 +15,11 @@ const revisionId = /^[0-9a-f-]{36}$/;
 
 // Metadata and the page share one Main read per request.
 const readRevision = cache(async (revision: string) => {
-  const jar = await cookies();
-  const token = jar.get('rezics_access')?.value;
-  const subject = jar.get('rezics_subject')?.value;
-  if (!token || !subject) redirect(`/sign-in?next=${encodeURIComponent(`/works/${revision}`)}`);
-  const main = treaty<MainApp>(serviceOrigin('MAIN_ORIGIN'));
-  return main.v1.revisions({ revision }).get({ query: { actingSubject: subject },
-    headers: { authorization: `Bearer ${token}` }, fetch: { cache: 'no-store' } });
+  const here = `/works/${revision}`;
+  if (!await readSession()) redirect(signInPath(here));
+  const subject = (await cookies()).get(AGENT_COOKIE)?.value;
+  if (!subject) redirect(`/identity?next=${encodeURIComponent(here)}`);
+  return (await mainApi()).v1.revisions({ revision }).get({ query: { actingSubject: subject } });
 });
 
 export async function generateMetadata({ params }: Params): Promise<Metadata> {

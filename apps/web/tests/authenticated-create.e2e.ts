@@ -15,6 +15,7 @@ async function signIn(page: Page, next = '/studio'): Promise<void> {
   const privateFixture = fixture<PrivateFixture>('REZICS_WEB_AUTH_PRIVATE_PATH');
   await page.goto(next);
   await expect(page).toHaveURL(`/sign-in?next=${encodeURIComponent(next)}`);
+  await expect(page.getByRole('banner').getByRole('link', { name: 'Sign in' })).toBeVisible();
   await page.getByRole('textbox', { name: 'Email' }).fill(privateFixture.member.email);
   await page.getByLabel('Password').fill(privateFixture.member.password);
   await page.getByRole('button', { name: 'Sign in', exact: true }).click();
@@ -54,16 +55,24 @@ test('IAM01: a web session outlives its access token, keeps its Agent and signs 
     form: { agent: 'https://rezics.com/id/00000000-0000-4000-8000-000000000001', next: '/studio' } });
   expect(forged.headers().location).toContain('/identity?error=invalid');
   expect(decodeURIComponent((await cookie(context, 'rezics_subject'))?.value ?? '')).toBe(publicFixture.actingSubject);
-  await page.goto('/identity?next=/studio');
+  // The shell's account menu shows the session Agent and switches it explicitly.
+  await page.goto('/studio');
+  const account = page.getByRole('banner').getByRole('button', { name: 'Account menu' });
+  await expect(account).toContainText(`Agent ${publicFixture.actingSubject.split('/').at(-1)!.slice(0, 8)}`);
+  await account.click();
+  await page.getByRole('menuitem', { name: 'Switch Agent' }).click();
+  await expect(page).toHaveURL('/identity?next=%2Fstudio');
   await expect(page.getByRole('radio', { checked: true })).toHaveValue(publicFixture.actingSubject);
 
-  const signedOut = await page.request.post('/sign-out', { maxRedirects: 0, form: { next: '/studio' } });
-  expect(signedOut.status()).toBe(303);
+  // Signing out from the menu ends the session and returns to the page, which asks to sign in.
+  await page.goto('/studio');
+  await account.click();
+  await page.getByRole('menuitem', { name: 'Sign out' }).click();
+  await expect(page).toHaveURL('/sign-in?next=%2Fstudio');
   for (const name of ['rezics_access', 'rezics_refresh', 'rezics_session', 'rezics_subject']) {
     expect(await cookie(context, name), name).toBeUndefined();
   }
-  await page.goto('/studio');
-  await expect(page).toHaveURL('/sign-in?next=%2Fstudio');
+  await expect(page.getByRole('banner').getByRole('link', { name: 'Sign in' })).toBeVisible();
 });
 
 test('WORK01: authenticated member creates a metadata-only Work with an empty Main Version', async ({ page }, testInfo) => {

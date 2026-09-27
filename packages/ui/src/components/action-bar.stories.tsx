@@ -137,7 +137,8 @@ export const Selection: Story = {
     await userEvent.click(canvas.getByRole('checkbox', { name: /Harassment/ }));
     await userEvent.click(canvas.getByRole('checkbox', { name: /Off-topic/ }));
     const toolbar = await page.findByRole('toolbar', { name: 'Bulk moderation actions' });
-    await expect(within(toolbar).getByText('2 selected')).toBeVisible();
+    // The bar slides in; wait for the animation before asserting visibility.
+    await waitFor(() => expect(within(toolbar).getByText('2 selected')).toBeVisible());
 
     await userEvent.click(within(toolbar).getByRole('button', { name: 'Hide reviews' }));
     await expect(onHide).toHaveBeenCalledWith(['r3', 'r2']);

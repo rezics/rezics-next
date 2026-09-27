@@ -287,13 +287,18 @@
  */
 :root {
   --radius: 1rem;
-  color-scheme: light;
 
   /* The app self-hosts the variable faces; the plain names match local installs. */
   --font-interface: "Manrope Variable", "Manrope", ui-sans-serif, system-ui, sans-serif;
   --font-work-serif:
     "Iowan Old Style", "Source Serif 4 Variable", "Source Serif 4", Georgia, serif;
   --font-code: "Geist Mono Variable", "Geist Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+/* Colors switch on <html>, and also inside any .dark element (a dark story or panel). */
+:root,
+.dark {
+  color-scheme: light;
 
   --background: #f9f6f2;
   --foreground: #2b343d;

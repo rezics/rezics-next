@@ -1,8 +1,16 @@
+import { readdirSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import type { StorybookConfig } from '@storybook/react-vite';
 import tailwindcss from '@tailwindcss/vite';
 
 const local = (path: string) => fileURLToPath(new URL(path, import.meta.url));
+
+// Every Ark UI entry Rezics UI imports, pre-bundled before the first story loads:
+// an entry Vite discovers mid-run reloads the page, which fails that Vitest run.
+const components = local('../../../packages/ui/src/components');
+const arkEntries = [...new Set(readdirSync(components).filter(file => file.endsWith('.tsx'))
+  .flatMap(file => [...readFileSync(`${components}/${file}`, 'utf8')
+    .matchAll(/from '(@ark-ui\/react(?:\/[\w-]+)?)'/g)].map(match => match[1]!)))].sort();
 
 const config: StorybookConfig = {
   framework: { name: '@storybook/react-vite', options: { builder: { viteConfigPath: local('./vite.config.ts') } } },
@@ -23,9 +31,9 @@ const config: StorybookConfig = {
       { find: /^next\/link$/, replacement: local('./next-link.tsx') },
     ];
     config.optimizeDeps ??= {};
-    config.optimizeDeps.include = [...new Set([...(config.optimizeDeps.include ?? []),
-      '@ark-ui/react/factory', 'clsx', 'tailwind-merge', 'tailwind-variants',
-      '@storybook/react-dom-shim'])];
+    config.optimizeDeps.include = [...new Set([...(config.optimizeDeps.include ?? []), ...arkEntries,
+      'clsx', 'tailwind-merge', 'tailwind-variants', 'lucide-react', 'native-i18n',
+      '@tanstack/react-query', '@storybook/react-dom-shim'])];
     return config;
   },
 };
