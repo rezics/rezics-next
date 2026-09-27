@@ -1,8 +1,9 @@
 import { describe, expect, test } from 'bun:test';
 import type { MainClient } from '../features/discover/types.ts';
 import { readSearchPage, readSummaries, searchRequest } from '../features/search/read.ts';
+import { searchPagesOptions } from '../features/search/query.ts';
 import { normalizeLanguage, parseSearchState, phraseStatus, searchHref } from '../features/search/state.ts';
-import { searchFailureOf } from '../features/search/types.ts';
+import { searchFailureOf, type SearchResultPage } from '../features/search/types.ts';
 
 const realm = '3f0e1c2d-4b5a-4c6d-8e7f-9a0b1c2d3e4f';
 const term = '0b1c2d3e-4f5a-4b6c-8d7e-8f9a0b1c2d3e';
@@ -48,6 +49,15 @@ describe('search URL state', () => {
 });
 
 describe('search requests', () => {
+  test('the page cache separates acting readers on the same index basis', () => {
+    const first = { indexGeneration: 'g1', sequence: '47' } as SearchResultPage;
+    const load = async () => ({ ok: true as const, page: first });
+    const anonymous = searchPagesOptions(global, 'en', undefined, first, load).queryKey;
+    const alice = searchPagesOptions(global, 'en', 'agent:alice', first, load).queryKey;
+    const bob = searchPagesOptions(global, 'en', 'agent:bob', first, load).queryKey;
+    expect(new Set([JSON.stringify(anonymous), JSON.stringify(alice), JSON.stringify(bob)]).size).toBe(3);
+  });
+
   test('each scope and term selects its Main phrase profile', () => {
     expect(searchRequest(global)).toEqual({ profile: 'public-main-phrase-page-v1', phrase: 'Pride', language: null,
       pageSize: 10 });

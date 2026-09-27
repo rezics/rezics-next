@@ -108,7 +108,7 @@ function Widen({ state, t }: { state: SearchState; t: Text }) {
 function Pages({ first, props, t }: { first: SearchResultPage; props: SearchResultsProps; t: Text }) {
   const { state, scopeLabel, signedIn, avatarQuery, locale, discoverMessages } = props;
   const client = useQueryClient();
-  const options = searchPagesOptions(state, locale, first,
+  const options = searchPagesOptions(state, locale, props.actingSubject, first,
     props.load ?? bffSearch(state, locale, props.actingSubject));
   const pages = useInfiniteQuery(options);
   const list = useRef<HTMLOListElement>(null);

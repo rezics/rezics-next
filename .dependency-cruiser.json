@@ -21,6 +21,16 @@
       }
     },
     {
+      "name": "web-eden-clients-live-at-api-boundary",
+      "comment": "Feature views use typed adapters; only the server and browser API adapters construct Eden clients.",
+      "severity": "error",
+      "from": {
+        "path": "(^|/)apps/web/features/",
+        "pathNot": "(^|/)apps/web/features/(api/(main|browser)|discover/types)[.]ts$"
+      },
+      "to": { "path": "(^|/)node_modules/@elysia/eden/" }
+    },
+    {
       "name": "accounts-reaches-account-over-http",
       "comment": "The Accounts site talks to the Account service only through its HTTP API and proxy.",
       "severity": "error",

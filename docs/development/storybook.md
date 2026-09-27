@@ -1,32 +1,12 @@
-# Component review and frontend acceptance
+# Component review
 
-Changed visible components require scoped Storybook browser tests and actual
-screenshot review at verification. Stories cover ordinary, advanced, empty,
-loading, denied, stale, partial and error states with typed fixtures. Review
-layout, typography, contrast, focus/keyboard, long/multilingual text and material
-context/authority information; repair issues within the changed scope.
+Start the worktree frontend with `task dev`; `task urls` prints Storybook's
+address. Its `/mcp` endpoint lists components and stories. The manifest covers
+components with adjacent stories in `packages/ui/src` and feature stories in
+`apps/web/features`.
 
-Use the owning workspace's documented Storybook tooling and shared components.
-Affected deterministic/TypeScript checks qualify contract integrity separately
-from rendered checks. Temporary screenshots remain task-owned artifacts unless
-retention is requested. Never present source inspection as rendered verification.
-
-Full-application browser, screenshot, responsive or interaction QA requires the
-user's explicit request for that task. Component review does not activate a
-whole application server or establish human usability/performance acceptance.
-
-## Agent access through MCP
-
-Storybook 11's `@storybook/addon-mcp` serves an MCP endpoint at `/mcp` on the
-Storybook port, with the components manifest enabled: `http://localhost:6006/mcp`
-under the main checkout's `task dev`, and the random port `task urls` reports in
-a worktree. Its tools list and show component documentation
-(`docs-list`, `docs-show`, `docs-show-story`), give story-writing instructions,
-find stories by component file or change, return preview URLs and run story tests
-with accessibility checks (`test-run`). Agents building UI connect to it, for
-Claude Code with `claude mcp add --transport http storybook <storybook-url>/mcp`,
-and check a component's documented props before using it.
-
-The manifest only covers components that have stories. Write stories for
-[Rezics UI](design-system.md) components next to them in `packages/ui/src`, which
-Storybook also loads, so agents can discover the shared library.
+Run scoped story browser tests with `task storybook:test -- <story files>`.
+Select relevant states, theme, locale and viewport from the changed surface;
+inspect actual screenshots and fix issues within the task. The
+[Storybook review skill](../../.agents/skills/storybook-ui-review/SKILL.md)
+has the review procedure. Keep temporary screenshots in `.temp/`.

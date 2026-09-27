@@ -1,57 +1,21 @@
 # Web feature organization
 
-Framework routes/adapters stay thin. Feature owners contain task flows, typed
-API/query adapters, locale resources and component stories. Infrastructure owns
-transport, sessions, routing primitives and shared runtime concerns. Reusable UI
-comes from [Rezics UI](design-system.md) in `packages/ui`, a project-maintained
-fork of SharkUI styled with the Rezics Aura theme. Change or extend its components
-in place; do not add another UI library.
-
-Use generated service contracts at external boundaries and runtime validation
-where data crosses trust boundaries. Client selectors reflect authority but never
-replace server enforcement. Exact content/context selection is shared between
-SSR and browser navigation. Cache/query keys include relevant selection and scope.
-
-## Adding a feature
-
-Parallel feature slices touch no shared file beyond one registration line each;
-the registries merge with git's union driver. The home, search, Work and Studio
-features are worked examples.
-
-- `features/<name>/messages.ts` holds the feature's strings for every locale
-  (`defineMessages` in `i18n/define.ts`), registered by one line in
-  `i18n/catalogs.ts`. Routes pass `getMessages()` output to components, which
-  materialize recipes with the request locale; server code that only needs text,
-  such as metadata, uses `getTranslation()`.
-- A navigation entry is one line in `features/shell/navigation.ts`; an entry
-  marked `planned` shows a coming-soon page until its route exists.
-- Routes render inside the shell's `<main>` with `PageContainer`, and cover
-  loading, empty, error and not-found states with the shell's `EmptyState`
-  and route boundaries.
+Group code by user capability so a task flow, its locale text, typed API adapter
+and stories can change together. Routes stay thin; shared controls belong in
+[Rezics UI](design-system.md). The [import rules](../../.dependency-cruiser.json)
+keep service implementation and Eden client construction behind web adapters.
+Validate external data at its trust boundary; client selectors cannot grant
+authority, and exact selection must survive server and browser navigation.
 
 ## Data fetching
 
-Eden is the typed transport; TanStack Query is only the client-side cache.
+The [server Eden client](../../apps/web/features/api/main.ts) reads with the
+request session; the [browser client](../../apps/web/features/api/browser.ts)
+goes through the [BFF](../../apps/web/features/api/bff.ts), which alone attaches
+the Main bearer token. [BFF tests](../../apps/web/tests/session-bff.test.ts)
+cover forwarding and token separation. Interactive query factories include
+scope, locale, exact selection and acting subject where results depend on them.
 
-- **Server reads.** Server Components call Main through the Eden client with the
-  request's server-side session token. They do not use TanStack Query.
-- **Writes.** Server Actions call Main commands, then `revalidatePath` or
-  `revalidateTag`. Show pending, stale and partial outcomes from the returned
-  receipt.
-- **Client reads.** `"use client"` components use TanStack Query only for
-  interactive data: search-as-you-type, infinite lists, polling pending receipts
-  or partial states, and optimistic ratings or votes.
-- **Query factories.** Each feature exports `queryOptions` factories wrapping Eden
-  calls that throw on `error`. Keys include context, Realm, locale and exact
-  selection.
-- **BFF proxy.** Browser calls go through the Workers BFF proxy at `/api/main/*`,
-  which keeps Main's paths and attaches the bearer token from the server session.
-  One Eden type therefore serves server and browser, and the browser never holds
-  the Main token.
-
-## Capability grouping
-
-Group implementation by user capability rather than one screen per table. Keep
-advanced state through ordinary edits, and preserve pending/conflict/partial/
-unavailable outcomes. Feature-level deterministic tests and stories exercise
-loading, empty, denied, stale, error and populated states before integration.
+Future write flows still need receipt-aware invalidation and stories for stale,
+partial, denied and recoverable errors. The current create-Work flow handles
+pending and denied outcomes; these broader states remain a feature task.

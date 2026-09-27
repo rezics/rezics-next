@@ -19,14 +19,14 @@ export function bffSearch(state: SearchState, language: string, actingSubject?: 
 }
 
 /**
- * A search's pages. The key holds the exact selection and page one's index
- * position; Main binds each continuation to that basis and asks for a restart
- * when it moves.
+ * A search's pages. The key holds the exact selection, acting reader and page
+ * one's index position; Main binds each continuation to that basis and asks
+ * for a restart when it moves.
  */
-export function searchPagesOptions(state: SearchState, language: string, first: SearchResultPage,
-  load: SearchLoader) {
+export function searchPagesOptions(state: SearchState, language: string, actingSubject: string | undefined,
+  first: SearchResultPage, load: SearchLoader) {
   return infiniteQueryOptions({
-    queryKey: ['public-search', state, language, first.indexGeneration, first.sequence],
+    queryKey: ['public-search', state, language, actingSubject ?? null, first.indexGeneration, first.sequence],
     queryFn: async ({ pageParam }) => {
       const read = await load(pageParam ?? undefined);
       if (!read.ok) throw new SearchError(read.failure);
