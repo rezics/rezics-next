@@ -1,7 +1,5 @@
 import type { Metadata } from 'next';
-import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
-import { AGENT_COOKIE } from '../../features/auth/cookies.ts';
 import { signInPath } from '../../features/auth/paths.ts';
 import { readSession } from '../../features/auth/session.ts';
 import { PageContainer, PageHeader } from '../../features/shell/page.tsx';
@@ -15,8 +13,9 @@ export async function generateMetadata(): Promise<Metadata> {
 }
 
 export default async function StudioPage() {
-  if (!await readSession()) redirect(signInPath('/studio'));
-  if (!(await cookies()).get(AGENT_COOKIE)?.value) redirect('/identity?next=%2Fstudio');
+  const session = await readSession();
+  if (!session) redirect(signInPath('/studio'));
+  if (session.agent.status !== 'selected') redirect('/identity?next=%2Fstudio');
   const messages = await getMessages('studio', await requestLocale());
   return <PageContainer className="grid max-w-2xl gap-6">
     <PageHeader title={messages.createHeading} description={messages.createHelp} />

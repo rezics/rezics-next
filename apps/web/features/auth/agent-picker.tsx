@@ -6,7 +6,8 @@ import { type AuthMessages, formatMessage } from './messages.ts';
 
 export type AgentPickerNotice =
   | { kind: 'ineligible'; previous: string }
-  | { kind: 'invalid' | 'stale-default' | 'default-not-saved' | 'unavailable' };
+  | { kind: 'ineligible-default'; previous: string }
+  | { kind: 'invalid' | 'stale-session' | 'stale-default' | 'default-not-saved' | 'unavailable' };
 
 export interface AgentPickerProps {
   /** Eligible Agents, or null when Main could not list them. */
@@ -16,6 +17,7 @@ export interface AgentPickerProps {
   /** The saved default and its compare-and-set revision. */
   preferred: string | null;
   preferenceRevision: string | null;
+  sessionRevision: string | null;
   next: string;
   notice: AgentPickerNotice | null;
   messages: AuthMessages;
@@ -25,19 +27,32 @@ function noticeText(notice: AgentPickerNotice, messages: AuthMessages): string {
   switch (notice.kind) {
     case 'ineligible': return formatMessage(messages.ineligibleAgent,
       { agent: agentName({ iri: notice.previous, label: null }, messages) });
+    case 'ineligible-default': return formatMessage(messages.ineligibleDefault,
+      { agent: agentName({ iri: notice.previous, label: null }, messages) });
     case 'invalid': return messages.invalidAgent;
+    case 'stale-session': return messages.staleSession;
     case 'stale-default': return messages.staleDefault;
     case 'default-not-saved': return messages.defaultNotSaved;
     case 'unavailable': return messages.agentsUnavailable;
   }
 }
 
-/** Explicit choice of the session Agent. Choosing changes this session only;
- * "make this my default" also saves the `work.create` preference, which starts
- * new sign-ins and proposes the Agent for new Works. */
-export function AgentPicker({ options, current, preferred, preferenceRevision, next, notice,
+function kindText(kind: AgentOption['kind'], messages: AuthMessages): string | null {
+  switch (kind) {
+    case 'person': return messages.personAgent;
+    case 'pen-name': return messages.penNameAgent;
+    case 'organization': return messages.organizationAgent;
+    case 'service': return messages.serviceAgent;
+    case null: return null;
+  }
+}
+
+/** Explicit choice of the session Agent. The optional account-wide main-Agent
+ * preference initializes later sessions; Main admits both choices. */
+export function AgentPicker({ options, current, preferred, preferenceRevision, sessionRevision, next, notice,
   messages }: AgentPickerProps) {
-  const checked = current ?? (options?.length === 1 ? options[0]!.iri : null);
+  const checked = current ?? (sessionRevision === null
+    ? preferred ?? (options?.length === 1 ? options[0]!.iri : null) : null);
   return <section className="flex flex-col gap-5">
     <header className="flex flex-col gap-2">
       <h1 className="font-semibold text-2xl">{messages.chooseAgentHeading}</h1>
@@ -49,6 +64,7 @@ export function AgentPicker({ options, current, preferred, preferenceRevision, n
     {options?.length ? <form method="post" action="/identity/select" className="flex flex-col gap-4">
       <input type="hidden" name="next" value={next} />
       <input type="hidden" name="preferenceRevision" value={preferenceRevision ?? ''} />
+      <input type="hidden" name="sessionRevision" value={sessionRevision ?? ''} />
       {/* min-w-0: a fieldset is min-content wide by default, and a long IRI would widen the page. */}
       <fieldset className="flex min-w-0 flex-col gap-2">
         <legend className="mb-2 font-medium text-sm">{messages.agentsLegend}</legend>
@@ -60,11 +76,13 @@ export function AgentPicker({ options, current, preferred, preferenceRevision, n
           <span className="flex min-w-0 flex-1 flex-col gap-1">
             <span className="flex flex-wrap items-center gap-2">
               <span className="font-medium">{agentName(option, messages)}</span>
+              {option.handle ? <span className="text-muted-foreground text-sm">@{option.handle}</span> : null}
               {option.iri === current ? <Badge variant="secondary">{messages.currentAgent}</Badge> : null}
               {option.iri === preferred ? <Badge variant="outline">{messages.defaultAgent}</Badge> : null}
             </span>
-            <span className="text-muted-foreground text-sm">{option.path === 'direct-principal'
-              ? messages.directPath : messages.representedPath}</span>
+            <span className="text-muted-foreground text-sm">{[
+              kindText(option.kind, messages), option.path === 'direct-principal'
+                ? messages.directPath : messages.representedPath].filter(Boolean).join(' · ')}</span>
             <code className="truncate font-mono text-muted-foreground text-xs">{option.iri}</code>
           </span>
         </label>)}

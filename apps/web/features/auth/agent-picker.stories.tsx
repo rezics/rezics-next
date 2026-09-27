@@ -10,9 +10,12 @@ const pen = 'https://rezics.com/id/1e1489d5-6994-402c-99f2-50547eeaef4d';
 const gone = 'https://rezics.com/id/00000000-0000-4000-8000-000000000001';
 
 const meta = { title: 'Auth/Agent picker', component: AgentPicker,
-  args: { options: [{ iri: pen, label: null, path: 'represented-agent' },
-    { iri: ada, label: null, path: 'direct-principal' }], current: null, preferred: null,
-  preferenceRevision: null, next: '/studio', notice: null, messages: messages.en },
+  args: { options: [{ iri: pen, label: 'Aster', handle: 'aster', kind: 'pen-name',
+    path: 'represented-agent' },
+    { iri: ada, label: 'Ada Lovelace', handle: 'ada', kind: 'person',
+      path: 'direct-principal' }], current: null, preferred: null,
+  preferenceRevision: null, sessionRevision: null, next: '/studio', notice: null,
+  messages: messages.en },
   decorators: [Story => <PageContainer className="max-w-xl sm:py-12"><Card><CardContent><Story /></CardContent></Card></PageContainer>],
 } satisfies Meta<typeof AgentPicker>;
 export default meta;
@@ -24,7 +27,7 @@ export const ChooseAnAgent: Story = {
     const radios = canvas.getAllByRole('radio');
     await expect(radios).toHaveLength(2);
     for (const radio of radios) await expect(radio).not.toBeChecked();
-    await expect(canvas.getByRole('radio', { name: /Agent 1e1489d5/ })).toBeInTheDocument();
+    await expect(canvas.getByRole('radio', { name: /Aster @aster/ })).toBeInTheDocument();
     await expect(canvas.getByRole('button', { name: 'Use this Agent' })).toBeInTheDocument();
   },
 };
@@ -33,9 +36,9 @@ export const CurrentAndDefault: Story = {
   args: { current: pen, preferred: ada, preferenceRevision: 'b1e8a1d0-1c1e-4b8a-9f3e-2a1b3c4d5e6f' },
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
-    await expect(canvas.getByRole('radio', { name: /Agent 1e1489d5/ })).toBeChecked();
-    await expect(canvas.getByRole('radio', { name: /Agent 1e1489d5/ })).toHaveAccessibleName(/Current/);
-    await expect(canvas.getByRole('radio', { name: /Agent b8df6385/ })).toHaveAccessibleName(/Default/);
+    await expect(canvas.getByRole('radio', { name: /Aster @aster/ })).toBeChecked();
+    await expect(canvas.getByRole('radio', { name: /Aster @aster/ })).toHaveAccessibleName(/Current/);
+    await expect(canvas.getByRole('radio', { name: /Ada Lovelace @ada/ })).toHaveAccessibleName(/Default/);
   },
 };
 
@@ -50,6 +53,25 @@ export const AgentNoLongerAvailable: Story = {
 
 export const StaleDefault: Story = {
   args: { current: ada, notice: { kind: 'stale-default' } },
+};
+
+export const IneligibleDefault: Story = {
+  args: { notice: { kind: 'ineligible-default', previous: gone } },
+};
+
+export const ExplicitlyCleared: Story = {
+  args: { sessionRevision: 'b1e8a1d0-1c1e-4b8a-9f3e-2a1b3c4d5e6f', preferred: ada },
+  async play({ canvasElement }) {
+    for (const radio of within(canvasElement).getAllByRole('radio')) await expect(radio).not.toBeChecked();
+  },
+};
+
+export const MissingPublicLabel: Story = {
+  args: { options: [{ iri: pen, label: null, handle: null, kind: null,
+    path: 'represented-agent' }] },
+  async play({ canvasElement }) {
+    await expect(within(canvasElement).getByRole('radio', { name: /Agent 1e1489d5/ })).toBeInTheDocument();
+  },
 };
 
 export const NoAgents: Story = {

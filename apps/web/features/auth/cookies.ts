@@ -8,14 +8,17 @@ export const ACCESS_COOKIE = 'rezics_access';
 export const REFRESH_COOKIE = 'rezics_refresh';
 /** Signed-in user shown by the site and the session's expiry; display only, never authority. */
 export const SESSION_COOKIE = 'rezics_session';
-/** The session Agent IRI. Studio reads this name; the value is re-checked for every command. */
+/** Legacy session Agent cookie, cleared on sign-in and sign-out. */
 export const AGENT_COOKIE = 'rezics_subject';
+/** Opaque key for Main's per-session Agent selection. */
+export const SESSION_KEY_COOKIE = 'rezics_session_key';
 
 export const OAUTH_STATE_COOKIE = 'rezics_oauth_state';
 export const OAUTH_VERIFIER_COOKIE = 'rezics_oauth_verifier';
 export const OAUTH_NEXT_COOKIE = 'rezics_oauth_next';
 
-export const SESSION_COOKIES = [ACCESS_COOKIE, REFRESH_COOKIE, SESSION_COOKIE, AGENT_COOKIE] as const;
+export const SESSION_COOKIES = [ACCESS_COOKIE, REFRESH_COOKIE, SESSION_COOKIE,
+  SESSION_KEY_COOKIE, AGENT_COOKIE] as const;
 export const OAUTH_COOKIES = [OAUTH_STATE_COOKIE, OAUTH_VERIFIER_COOKIE, OAUTH_NEXT_COOKIE] as const;
 
 /** Account's refresh-token lifetime (the provider default); each rotation restarts it. */
@@ -35,6 +38,11 @@ export interface CookieWriter {
 export function cookieOptions(requestUrl: string, maxAge?: number): CookieOptions {
   return { httpOnly: true, sameSite: 'lax', secure: new URL(requestUrl).protocol === 'https:',
     path: '/', ...(maxAge === undefined ? {} : { maxAge }) };
+}
+
+const sessionKeyPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+export function isSessionKey(value: unknown): value is string {
+  return typeof value === 'string' && sessionKeyPattern.test(value);
 }
 
 /** Deletes with the same attributes the cookie was set with, so the browser matches it. */

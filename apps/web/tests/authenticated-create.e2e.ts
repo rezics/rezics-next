@@ -41,15 +41,22 @@ test('IAM02: invalid OAuth state is rejected at the web callback', async ({ page
   await expect(page.getByText('Authorization state is invalid or expired')).toBeVisible();
 });
 
-test('IAM01: a web session outlives its access token, keeps its Agent and signs out', async ({ page, context }) => {
+test('IAM01: a web session outlives its access token, keeps its Agent and signs out', async ({ page, context }, testInfo) => {
   const publicFixture = fixture<PublicFixture>('REZICS_WEB_AUTH_PUBLIC_PATH');
   await signIn(page);
   // The member may act as exactly one Agent, so the new session starts with it.
   await expect(page).toHaveURL('/studio');
-  expect(decodeURIComponent((await cookie(context, 'rezics_subject'))?.value ?? '')).toBe(publicFixture.actingSubject);
-  for (const name of ['rezics_access', 'rezics_refresh', 'rezics_session']) {
+  const sessionKey = (await cookie(context, 'rezics_session_key'))?.value;
+  expect(sessionKey).toMatch(/^[0-9a-f-]{36}$/);
+  expect(await cookie(context, 'rezics_subject')).toBeUndefined();
+  for (const name of ['rezics_access', 'rezics_refresh', 'rezics_session', 'rezics_session_key']) {
     expect((await cookie(context, name))?.httpOnly, name).toBe(true);
   }
+  const selected = await page.request.get('/api/main/v1/me/session-agent', {
+    headers: { 'x-session-key': sessionKey! } });
+  expect(selected.status()).toBe(200);
+  expect((await selected.json() as { sessionAgent: { actingSubject: string } }).sessionAgent.actingSubject)
+    .toBe(publicFixture.actingSubject);
   expect(await page.evaluate(() => document.cookie)).not.toContain('rezics_');
 
   // Forced expiry: the next request refreshes and rotates, and the person stays signed in.
@@ -64,25 +71,84 @@ test('IAM01: a web session outlives its access token, keeps its Agent and signs 
   const forged = await page.request.post('/identity/select', { maxRedirects: 0,
     form: { agent: 'https://rezics.com/id/00000000-0000-4000-8000-000000000001', next: '/studio' } });
   expect(forged.headers().location).toContain('/identity?error=invalid');
-  expect(decodeURIComponent((await cookie(context, 'rezics_subject'))?.value ?? '')).toBe(publicFixture.actingSubject);
+  expect((await cookie(context, 'rezics_session_key'))?.value).toBe(sessionKey);
   // The shell's account menu shows the session Agent and switches it explicitly.
   await page.goto('/studio');
   const account = page.getByRole('banner').getByRole('button', { name: 'Account menu' });
-  await expect(account).toContainText(`Agent ${publicFixture.actingSubject.split('/').at(-1)!.slice(0, 8)}`);
+  const discovery = await page.request.get('/api/main/v1/me/acting-contexts?task=work.create');
+  expect(discovery.status()).toBe(200);
+  const body = await discovery.json() as { contexts: Array<{ actingSubject: string;
+    displayName: string | null }> };
+  const displayName = body.contexts.find(option => option.actingSubject === publicFixture.actingSubject)
+    ?.displayName;
+  await expect(account).toContainText(displayName
+    ?? `Agent ${publicFixture.actingSubject.split('/').at(-1)!.slice(0, 8)}`);
   await openAccountMenu(page);
+  await expect(page.getByRole('menu')).toHaveCSS('opacity', '1');
+  await page.screenshot({ path: testInfo.outputPath('session-account-menu-desktop.png') });
   await page.getByRole('menuitem', { name: 'Switch Agent' }).click();
   await expect(page).toHaveURL('/identity?next=%2Fstudio');
   await expect(page.getByRole('radio', { checked: true })).toHaveValue(publicFixture.actingSubject);
+  await page.screenshot({ path: testInfo.outputPath('session-agent-picker-desktop.png') });
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)).toBe(false);
+  await page.screenshot({ path: testInfo.outputPath('session-agent-picker-mobile.png') });
+  await page.setViewportSize({ width: 1280, height: 720 });
+  await page.getByRole('checkbox', { name: /Make this my default/ }).check();
+  await page.getByRole('button', { name: 'Use this Agent' }).click();
+  await expect(page).toHaveURL('/studio');
+  const mainAgent = await page.request.get('/api/main/v1/me/main-agent-preference');
+  expect(mainAgent.status()).toBe(200);
+  expect((await mainAgent.json() as { mainAgent: { actingSubject: string } }).mainAgent.actingSubject)
+    .toBe(publicFixture.actingSubject);
+  expect(await cookie(context, 'rezics_subject')).toBeUndefined();
+
+  // A clear written directly to Main must take effect without changing a web cookie.
+  const beforeClear = await page.request.get('/api/main/v1/me/session-agent', {
+    headers: { 'x-session-key': sessionKey! } });
+  const revision = (await beforeClear.json() as { sessionAgent: { revision: string } }).sessionAgent.revision;
+  const clear = await page.request.put('/api/main/v1/me/session-agent', {
+    headers: { 'x-session-key': sessionKey!, 'idempotency-key': crypto.randomUUID() },
+    data: { actingSubject: null, expectedRevision: revision } });
+  expect(clear.status()).toBe(200);
+  await page.goto('/studio');
+  await expect(page).toHaveURL('/identity?next=%2Fstudio');
+  await expect(account).toContainText('Choose an Agent');
+  await expect(page.getByRole('radio', { checked: true })).toHaveCount(0);
+  await page.getByRole('radio', { name: new RegExp(publicFixture.actingSubject) }).check();
+  await page.getByRole('button', { name: 'Use this Agent' }).click();
+  await expect(page).toHaveURL('/studio');
 
   // Signing out from the menu ends the session and returns to the page, which asks to sign in.
-  await page.goto('/studio');
   await openAccountMenu(page);
   await page.getByRole('menuitem', { name: 'Sign out' }).click();
   await expect(page).toHaveURL('/sign-in?next=%2Fstudio');
-  for (const name of ['rezics_access', 'rezics_refresh', 'rezics_session', 'rezics_subject']) {
+  for (const name of ['rezics_access', 'rezics_refresh', 'rezics_session',
+    'rezics_session_key', 'rezics_subject']) {
     expect(await cookie(context, name), name).toBeUndefined();
   }
   await expect(page.getByRole('banner').getByRole('link', { name: 'Sign in' })).toBeVisible();
+});
+
+test('IAM03: the Agent held by Main is used for Work creation', async ({ page, context }) => {
+  const publicFixture = fixture<PublicFixture>('REZICS_WEB_AUTH_PUBLIC_PATH');
+  await signIn(page);
+  await expect(page).toHaveURL('/studio');
+  const sessionKey = (await cookie(context, 'rezics_session_key'))?.value;
+  expect(sessionKey).toBeDefined();
+  const state = await page.request.get('/api/main/v1/me/session-agent', {
+    headers: { 'x-session-key': sessionKey! } });
+  expect(state.status()).toBe(200);
+  const agent = (await state.json() as { sessionAgent: { actingSubject: string } })
+    .sessionAgent.actingSubject;
+  expect(agent).toBe(publicFixture.actingSubject);
+  const title = `Session Agent Work ${Date.now()}`;
+  await page.getByRole('textbox', { name: 'Work title' }).fill(title);
+  await page.getByRole('button', { name: 'Create Work' }).click();
+  const receipt = page.getByRole('status', { name: 'Work created' });
+  await expect(receipt).toContainText(title);
+  await expect(receipt.locator('dd').first()).toHaveText(/^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/);
+  expect(await cookie(context, 'rezics_subject')).toBeUndefined();
 });
 
 test('WORK01: authenticated member creates a metadata-only Work with an empty Main Version', async ({ page }, testInfo) => {

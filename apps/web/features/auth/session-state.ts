@@ -1,6 +1,7 @@
 import type { AccountUser, IssuedTokens } from './account.ts';
-import { ACCESS_COOKIE, AGENT_COOKIE, accessMaxAge, type CookieOptions, type CookieWriter,
-  cookieOptions, REFRESH_COOKIE, REFRESH_LIFETIME_SECONDS, SESSION_COOKIE } from './cookies.ts';
+import { ACCESS_COOKIE, accessMaxAge, type CookieOptions, type CookieWriter,
+  cookieOptions, REFRESH_COOKIE, REFRESH_LIFETIME_SECONDS, SESSION_COOKIE,
+  SESSION_KEY_COOKIE } from './cookies.ts';
 
 /** What the site shows about the signed-in person, kept beside the tokens. */
 export interface SessionRecord {
@@ -65,6 +66,6 @@ export function writeCookies(writer: CookieWriter, cookies: readonly SessionCook
   for (const cookie of cookies) writer.set(cookie.name, cookie.value, cookie.options);
 }
 
-export function writeSessionAgent(writer: CookieWriter, requestUrl: string, agent: string): void {
-  writer.set(AGENT_COOKIE, agent, cookieOptions(requestUrl, REFRESH_LIFETIME_SECONDS));
+export function writeSessionKey(writer: CookieWriter, requestUrl: string, key: string): void {
+  writer.set(SESSION_KEY_COOKIE, key, cookieOptions(requestUrl, REFRESH_LIFETIME_SECONDS));
 }

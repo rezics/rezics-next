@@ -1,9 +1,7 @@
 import type { Metadata } from 'next';
-import { cookies } from 'next/headers';
 import { notFound, redirect } from 'next/navigation';
 import { cache } from 'react';
 import { mainApi } from '../../../features/api/main.ts';
-import { AGENT_COOKIE } from '../../../features/auth/cookies.ts';
 import { signInPath } from '../../../features/auth/paths.ts';
 import { readSession } from '../../../features/auth/session.ts';
 import { WorkDetail, WorkUnavailable } from '../../../features/work/work-detail.tsx';
@@ -16,9 +14,10 @@ const revisionId = /^[0-9a-f-]{36}$/;
 // Metadata and the page share one Main read per request.
 const readRevision = cache(async (revision: string) => {
   const here = `/works/${revision}`;
-  if (!await readSession()) redirect(signInPath(here));
-  const subject = (await cookies()).get(AGENT_COOKIE)?.value;
-  if (!subject) redirect(`/identity?next=${encodeURIComponent(here)}`);
+  const session = await readSession();
+  if (!session) redirect(signInPath(here));
+  if (session.agent.status !== 'selected') redirect(`/identity?next=${encodeURIComponent(here)}`);
+  const subject = session.agent.agent.iri;
   return (await mainApi()).v1.revisions({ revision }).get({ query: { actingSubject: subject } });
 });
 

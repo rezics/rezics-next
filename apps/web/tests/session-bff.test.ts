@@ -28,6 +28,8 @@ test('IAM01: the BFF accepts every method and path Main registers', () => {
   }
   expect(mainTarget(['v1', 'me', 'acting-context-preferences', 'work.create'], '', 'http://main.test')?.href)
     .toBe('http://main.test/v1/me/acting-context-preferences/work.create');
+  expect(mainTarget(['v1', 'me', 'session-agent'], '', 'http://main.test')?.href)
+    .toBe('http://main.test/v1/me/session-agent');
 });
 
 test('IAM01: BFF paths cannot leave Main\'s /v1 API', () => {
@@ -88,6 +90,7 @@ test('IAM01: the BFF streams request and response bodies and forwards the Idempo
   const path = 'v1/me/acting-context-preferences/work.create';
   const response = await forwardToMain(bff(path, { method: 'PUT', body, duplex: 'half', headers: {
     'content-type': 'application/json', 'idempotency-key': 'k-1', 'if-match': '"g0"',
+    'x-session-key': 'b1e8a1d0-1c1e-4b8a-9f3e-2a1b3c4d5e6f',
     cookie: 'rezics_access=secret', authorization: 'Bearer forged', origin: 'http://web.test' } }),
   segments(path), { mainOrigin: main, accessToken: 'session-token' });
   expect(response.status).toBe(200);
@@ -97,6 +100,7 @@ test('IAM01: the BFF streams request and response bodies and forwards the Idempo
   expect(request).toMatchObject({ method: 'PUT', path: `/${path}`, body: '{"profile":"x","n":1}' });
   expect(request.headers.get('idempotency-key')).toBe('k-1');
   expect(request.headers.get('if-match')).toBe('"g0"');
+  expect(request.headers.get('x-session-key')).toBe('b1e8a1d0-1c1e-4b8a-9f3e-2a1b3c4d5e6f');
   expect(request.headers.get('authorization')).toBe('Bearer session-token');
   expect(request.headers.get('cookie')).toBeNull();
   expect(request.headers.get('origin')).toBeNull();

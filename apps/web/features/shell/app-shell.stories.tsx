@@ -10,12 +10,13 @@ import { NotificationsLink } from './notifications-link.tsx';
 import { PageContainer, PageHeader } from './page.tsx';
 
 const ada = { iri: 'https://rezics.com/id/57c86232-6db4-4b0d-aa56-e4ad584d07b4', label: 'Ada Lovelace',
-  path: 'direct-principal' } as const;
+  handle: 'ada', kind: 'person', path: 'direct-principal' } as const;
 const signedIn: Session = { user: { id: 'u1', name: 'Ada Lovelace', email: 'ada@example.test', image: null },
   agent: { status: 'selected', agent: ada }, agents: [ada], expiresAt: '2026-10-27T00:00:00.000Z' };
 
 const society = { iri: 'https://rezics.com/id/07309b3b-c8f6-4211-bdb3-9aa486c1e4d5',
-  label: 'Riverside Historical Society Translation Collective', path: 'represented-agent' } as const;
+  label: 'Riverside Historical Society Translation Collective', handle: null,
+  kind: 'organization', path: 'represented-agent' } as const;
 const longNames: Session = { ...signedIn,
   user: { id: 'u2', name: 'Maximiliana Theodora Wilhelmina von Aschenbrenner-Kowalczyk',
     email: 'maximiliana.theodora.von.aschenbrenner-kowalczyk@example-institution.test', image: null },

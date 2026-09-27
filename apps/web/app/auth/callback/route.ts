@@ -1,15 +1,15 @@
 import { cookies } from 'next/headers';
 import { NextResponse } from 'next/server';
+import { mainApiWithToken } from '../../../features/api/main.ts';
 import { serviceOrigin } from '../../../features/api/origins.ts';
 import { exchangeCode, readAccountUser } from '../../../features/auth/account.ts';
-import { initialSessionAgent } from '../../../features/auth/acting-identity.ts';
 import { accountClient } from '../../../features/auth/client.ts';
 import { accountCookieHeader, AGENT_COOKIE, clearCookies, OAUTH_COOKIES, OAUTH_NEXT_COOKIE, OAUTH_STATE_COOKIE,
   OAUTH_VERIFIER_COOKIE } from '../../../features/auth/cookies.ts';
 import { appCallback, safeReturnPath, signInPath } from '../../../features/auth/paths.ts';
-import { discoverActingContexts } from '../../../features/auth/session.ts';
+import { readMainSessionAgent } from '../../../features/auth/session.ts';
 import { sessionCookies, tokenSubject, writeCookies,
-  writeSessionAgent } from '../../../features/auth/session-state.ts';
+  writeSessionKey } from '../../../features/auth/session-state.ts';
 
 export async function GET(request: Request) {
   const url = new URL(request.url);
@@ -44,14 +44,20 @@ export async function GET(request: Request) {
   if (!subject || !user || user.id !== subject) {
     return new Response('Account session does not match the issued token', { status: 503 });
   }
-  // A new session starts with the saved default or the only eligible Agent;
-  // otherwise the person chooses before continuing.
-  const discovery = await discoverActingContexts(issued.tokens.accessToken);
-  const agent = discovery ? initialSessionAgent(discovery) : null;
+  // Main owns this new session's choice. Its account-wide main-Agent preference
+  // supplies the initial candidate, which is saved only if still eligible.
+  const sessionKey = crypto.randomUUID();
+  const agentState = await readMainSessionAgent(issued.tokens.accessToken, sessionKey);
+  const candidate = agentState?.initialActingSubject;
+  const selected = candidate ? await mainApiWithToken(issued.tokens.accessToken)
+    .v1.me['session-agent'].put({ actingSubject: candidate, expectedRevision: null }, {
+      headers: { 'x-session-key': sessionKey, 'idempotency-key': crypto.randomUUID() },
+    }).then(result => !result.error).catch(() => false) : false;
+  const agent = selected ? candidate : null;
   const response = NextResponse.redirect(new URL(agent ? next
     : `/identity?next=${encodeURIComponent(next)}`, url.origin));
-  clearCookies(response.cookies, request.url, [...OAUTH_COOKIES, ...agent ? [] : [AGENT_COOKIE]]);
+  clearCookies(response.cookies, request.url, [...OAUTH_COOKIES, AGENT_COOKIE]);
   writeCookies(response.cookies, sessionCookies(request.url, issued.tokens, user));
-  if (agent) writeSessionAgent(response.cookies, request.url, agent);
+  writeSessionKey(response.cookies, request.url, sessionKey);
   return response;
 }

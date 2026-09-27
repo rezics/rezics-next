@@ -36,7 +36,8 @@ test('IAM01: sign-out revokes the refresh token, ends the Account session and cl
   expect(calls[1]!.headers.get('cookie')).toContain('better-auth.session_token=s');
   expect(calls[1]!.headers.get('origin')).toBe('http://account.test');
   const set = response.headers.getSetCookie();
-  for (const name of ['rezics_access', 'rezics_refresh', 'rezics_session', 'rezics_subject']) {
+  for (const name of ['rezics_access', 'rezics_refresh', 'rezics_session',
+    'rezics_session_key', 'rezics_subject']) {
     const line = set.find(item => item.startsWith(`${name}=`));
     expect(line, name).toMatch(/Max-Age=0/);
     expect(line).toMatch(/Secure/);
@@ -51,7 +52,7 @@ test('IAM01: sign-out stays on this site and signs the browser out even when Acc
     const response = await signOut(input(client, next));
     expect(response.headers.get('location')).toBe('https://web.rezics.test/');
     expect(response.headers.getSetCookie().filter(line => /^rezics_\w+=;/.test(line) || /^rezics_\w+=(;|$)/.test(line)))
-      .toHaveLength(4);
+      .toHaveLength(5);
   }
   expect(calls.length).toBe(6);
 });
