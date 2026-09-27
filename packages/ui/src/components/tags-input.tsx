@@ -5,6 +5,7 @@ import {
   useTagsInput as useArkTagsInput,
   useTagsInputContext as useArkTagsInputContext,
 } from '@ark-ui/react/tags-input';
+import { useFieldContext } from '@ark-ui/react/field';
 import { XIcon } from 'lucide-react';
 import type React from 'react';
 import { cn } from '../utils.ts';
@@ -28,12 +29,17 @@ interface TagsInputProps
    * @default true
    */
   showClear?: boolean;
+  /**
+   * Placeholder for the text input that adds a tag.
+   */
+  placeholder?: string;
 }
 
 export const TagsInput = (props: TagsInputProps) => {
   const {
     size = 'md',
     showClear,
+    placeholder,
     editable = false,
     tabIndex,
     className,
@@ -52,7 +58,7 @@ export const TagsInput = (props: TagsInputProps) => {
       <TagsInputControl showClear={showClear}>
         {children}
 
-        <TagsInputInput placeholder="Add framework" />
+        <TagsInputInput placeholder={placeholder} />
       </TagsInputControl>
 
       <ArkTagsInput.HiddenInput tabIndex={tabIndex} />
@@ -80,7 +86,7 @@ export const TagsInputControl = (props: TagsInputControlProps) => {
     <ArkTagsInput.Control asChild data-slot="tags-input-control">
       <InputGroup
         className={cn(
-          'h-auto in-data-[size=lg]:min-h-9 in-data-[size=sm]:min-h-7 min-h-8',
+          'h-auto in-data-[size=lg]:min-h-10 in-data-[size=sm]:min-h-8 min-h-9',
           'p-1',
           'flex-wrap content-start items-center gap-1',
           'data-disabled:pointer-events-none data-disabled:opacity-64',
@@ -114,12 +120,13 @@ export const TagsInputItem = (props: TagsInputItemProps) => {
     <ArkTagsInput.Item
       className={cn(
         'h-6 in-data-[size=lg]:h-7 in-data-[size=sm]:h-5 max-w-full',
-        'pr-0.5 in-data-[size=lg]:pl-2 in-data-[size=sm]:pl-1 pl-1.5',
+        'pr-0.5 in-data-[size=lg]:pl-3 in-data-[size=sm]:pl-2 pl-2.5',
         'inline-flex shrink-0 items-center gap-1',
         'bg-secondary',
         'in-data-[size=lg]:text-sm text-secondary-foreground text-xs',
-        'rounded-md border outline-none',
-        'data-highlighted:border-primary/30 data-highlighted:bg-primary/10',
+        // Pills, like Badge; a highlighted tag (Backspace or arrows) takes the accent.
+        'rounded-full border border-border/70 outline-none',
+        'data-highlighted:border-primary/40 data-highlighted:bg-accent data-highlighted:text-accent-foreground',
         className,
       )}
       data-slot="tags-input-item"
@@ -172,7 +179,7 @@ export const TagsInputItemDeleteTrigger = (
           'in-data-[size=lg]:size-6 in-data-[size=sm]:size-4 size-5',
           'shrink-0',
           'text-muted-foreground',
-          'rounded-[calc(var(--radius)-5px)]',
+          'rounded-full',
           "[&_svg:not([class*='size-'])]:size-3",
           'hover:text-foreground',
           className,
@@ -194,16 +201,28 @@ export const TagsInputItemInput = (props: React.ComponentProps<typeof ArkTagsInp
   </ArkTagsInput.ItemInput>
 );
 
-export const TagsInputInput = (props: React.ComponentProps<typeof ArkTagsInput.Input>) => (
-  <ArkTagsInput.Input asChild data-slot="tags-input-input" {...props}>
-    <InputGroupInput
-      className={cn(
-        'w-auto min-w-18 max-w-full flex-auto shrink basis-auto',
-        'h-7 in-data-[size=lg]:h-8 in-data-[size=sm]:h-6',
-      )}
-    />
-  </ArkTagsInput.Input>
-);
+// In a Field, Ark points the label at the hidden form input, so name and describe the
+// visible text input from the Field explicitly.
+export const TagsInputInput = (props: React.ComponentProps<typeof ArkTagsInput.Input>) => {
+  const field = useFieldContext();
+
+  return (
+    <ArkTagsInput.Input
+      aria-describedby={field?.ariaDescribedby}
+      aria-labelledby={field ? field.ids.label : undefined}
+      asChild
+      data-slot="tags-input-input"
+      {...props}
+    >
+      <InputGroupInput
+        className={cn(
+          'w-0 min-w-24 max-w-full flex-1 px-2',
+          'h-7 in-data-[size=lg]:h-8 in-data-[size=sm]:h-6',
+        )}
+      />
+    </ArkTagsInput.Input>
+  );
+};
 
 export const TagsInputClearTrigger = (
   props: React.ComponentProps<typeof ArkTagsInput.ClearTrigger>,

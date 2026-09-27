@@ -50,9 +50,11 @@ export interface InputGroupProps
 
 export const InputGroup = (props: InputGroupProps) => {
   const { size = 'md', className, ...rest } = props;
-  // A disabled Field disables the whole frame; aria-disabled also tells checkers that the
-  // dimmed addon text belongs to an inactive control.
-  const disabled = useFieldContext()?.disabled || undefined;
+  // A disabled Field, or an Ark control part marked data-disabled, disables the whole
+  // frame; aria-disabled also tells checkers that dimmed text belongs to an inactive control.
+  const fieldDisabled = useFieldContext()?.disabled;
+  const partDisabled = (rest as Record<string, unknown>)['data-disabled'] !== undefined;
+  const disabled = fieldDisabled || partDisabled || undefined;
 
   return (
     <ark.div
