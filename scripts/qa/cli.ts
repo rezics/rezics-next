@@ -163,7 +163,10 @@ async function runStackTier(tier: StackTier): Promise<void> {
     const projects = planStackProjects(estimates, slots.count, tier);
     const runs = new Array<ShardRun>(projects.length);
     let project = 0;
-    const startInitialStack = concurrencyGate(1);
+    // QA projects have separate ports and stack:up retries an allocation race.
+    // Bound Docker setup pressure while letting short isolated projects start
+    // alongside the shared shards.
+    const startInitialStack = concurrencyGate(Math.min(slots.count, 3));
     await Promise.all(Array.from({ length: Math.min(slots.count, projects.length) }, async () => {
       while (project < projects.length) {
         const index = project++;
@@ -177,7 +180,7 @@ async function runStackTier(tier: StackTier): Promise<void> {
         .map(candidate => ({ run, ...candidate })));
     const reruns: (ShardRun | undefined)[] = [];
     let next = 0;
-    const startRerunStack = concurrencyGate(1);
+    const startRerunStack = concurrencyGate(Math.min(slots.count, 3));
     await Promise.all(Array.from({ length: Math.min(slots.count, candidates.length) }, async () => {
       while (next < candidates.length) {
         const index = next++;

@@ -180,7 +180,11 @@ export async function signingKeyAccepts(client: PoolClient, kid: string,
       COALESCE(verify_until > now(), false) AS verifiable
     FROM public.rezics_signing_key WHERE id = $1`, [kid]);
   const row = key.rows[0];
-  if (!row?.activated || issuedAt < Number(row.activated)) return false;
+  // Better Auth fixes iat before it obtains a signing key. On the first token,
+  // key creation (or an in-flight staged-key activation) can cross a whole
+  // second before the signature is made. Bound that pre-signing interval just
+  // as we bound a signature finishing after supersession.
+  if (!row?.activated || issuedAt < Number(row.activated) - SIGNING_ALLOWANCE_SECONDS) return false;
   if (row.state === 'active') return true;
   return row.state === 'retiring' && row.verifiable && row.superseded !== null
     && issuedAt <= Number(row.superseded) + SIGNING_ALLOWANCE_SECONDS;

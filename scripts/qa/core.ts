@@ -361,9 +361,10 @@ export function planShards(estimates: ReadonlyMap<string, number>, count: number
 export const isolatedIntegrationFiles = new Set([
   'tests/qa/integration/validation-command.test.ts',
   'tests/qa/integration/validation-cross-profile.test.ts',
-  'tests/qa/integration/export-api.test.ts',
-  'tests/qa/integration/context-rule-cases.test.ts',
-  'tests/qa/integration/search-grouped-native.test.ts',
+  // MODEL22 deliberately replaces the dataset's model generation head to
+  // prove an in-flight semantic command is fenced. Later writers require the
+  // bootstrap generation, so this file owns a fresh graph.
+  'tests/qa/integration/semantic-generation.test.ts',
   'tests/qa/integration/search-statement-query.test.ts',
   'tests/qa/integration/event-time.test.ts',
   'tests/qa/integration/access-org-realm-move-api.test.ts',

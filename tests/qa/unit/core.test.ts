@@ -193,10 +193,13 @@ test('QA shards: shard count keeps each project near half its budget and plannin
 });
 
 test('QA shards: graph reset, outbox gap and fresh-graph files get singleton integration projects', () => {
-  for (const file of ['validation-cross-profile', 'export-api', 'context-rule-cases',
-    'search-grouped-native', 'search-statement-query', 'event-time', 'access-org-realm-move-api',
+  for (const file of ['validation-cross-profile', 'semantic-generation',
+    'search-statement-query', 'event-time', 'access-org-realm-move-api',
     'theme-activation-api']) {
     expect(isolatedIntegrationFiles.has(`tests/qa/integration/${file}.test.ts`)).toBe(true);
+  }
+  for (const file of ['export-api', 'context-rule-cases', 'search-grouped-native']) {
+    expect(isolatedIntegrationFiles.has(`tests/qa/integration/${file}.test.ts`)).toBe(false);
   }
   const files = new Map<string, number>([
     ['tests/qa/integration/claim-template.test.ts', 100],

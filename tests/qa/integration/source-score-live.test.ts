@@ -18,14 +18,27 @@ test('LIVE08: current Open Library ratings and reading-log counts remain source-
       'SELECT count(*)::int AS n FROM public."user"')).rows[0]!.n;
     const nativeBefore = await h.fuseki.query(`ASK { GRAPH <${GRAPHS.current}> {
       ?observation a <${RV}RatingObservation> } }`);
-    const key = randomUUID();
     const request = { profile: 'open-library-works-run-v1', workIds: [workId],
       editions: false, ratings: true, bookshelves: true, frontier: false };
-    const response = await h.post('/v1/sources/acquisitions', 'owner', request, key);
-    expect(response.status).toBe(201);
-    const run = await response.json() as { run: { run: string; state: string;
-      surfaces: Array<{ surface: string; outcome: { outcome: string };
+    type Run = { run: { run: string; state: string;
+      surfaces: Array<{ surface: string; outcome: { outcome: string; reason?: string };
         captures: Array<{ observation: string; record: string; byteDigest: string }> }> } };
+    let run: Run | undefined;
+    let key = '';
+    // The live provider has a bounded request timeout. A fresh acquisition may
+    // recover a transient timeout; the assertions below still require both
+    // surfaces to have qualified captures from the same completed run.
+    for (let attempt = 0; attempt < 3; attempt++) {
+      key = randomUUID();
+      const response = await h.post('/v1/sources/acquisitions', 'owner', request, key);
+      expect(response.status).toBe(201);
+      run = await response.json() as Run;
+      const surfaces = run.run.surfaces;
+      if (surfaces.find(surface => surface.surface === 'ratings')?.outcome.outcome === 'qualified'
+        && surfaces.find(surface => surface.surface === 'bookshelves')?.outcome.outcome === 'qualified') break;
+      if (!surfaces.some(surface => surface.outcome.reason === 'timeout')) break;
+    }
+    if (!run) throw new Error('Open Library acquisition did not start');
     expect(run.run.state).toBe('completed');
     const ratings = run.run.surfaces.find(surface => surface.surface === 'ratings')!;
     const bookshelves = run.run.surfaces.find(surface => surface.surface === 'bookshelves')!;

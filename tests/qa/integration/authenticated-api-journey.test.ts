@@ -340,12 +340,15 @@ test('IAM01/IAM10/IAM21/MODEL01/MODEL08/WORK01/WORK05/WORK09/BOOK04/CTX01/CTX02/
     }
     const relayConsumer = `s2-release-${randomUUID()}`;
     await initializeRelayCheckpoint(relayPool, relayConsumer, environment.lineage.dataEpoch);
-    let relayed = '0';
-    while (BigInt(relayed) < BigInt(release.sourcePosition.sequence)) {
-      const batch = await relayMainOutboxOnce(fuseki, relayPool, relayConsumer);
-      if (!batch) throw new Error('release outbox position is unavailable');
-      relayed = batch.sequence;
-    }
+    // Earlier files may retain unrelated graph events, including deliberate
+    // malformed receipts. This consumer proves only the release written here.
+    const beforeRelease = (BigInt(release.sourcePosition.sequence) - 1n).toString();
+    const positioned = await relayPool.query(`UPDATE relay.checkpoint SET sequence = $2
+      WHERE consumer = $1 AND data_epoch = $3`,
+    [relayConsumer, beforeRelease, environment.lineage.dataEpoch]);
+    expect(positioned.rowCount).toBe(1);
+    expect((await relayMainOutboxOnce(fuseki, relayPool, relayConsumer))?.sequence)
+      .toBe(release.sourcePosition.sequence);
     const eventId = `urn:rezics:event:${createHash('sha256')
       .update(`${release.receipt}\0fixed-release`).digest('hex')}`;
     const retainedEvent = await relayPool.query<{ envelope: {
