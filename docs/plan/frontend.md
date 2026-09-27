@@ -7,36 +7,58 @@ slices are used in a real browser.
 
 ## Principles
 
-- **A reference work you can read inside.** Wikipedia's versioned trust,
-  Modrinth/npm's version clarity, AO3's tag model and the Qidian/Royal Road
-  reader, on the Rezics Aura theme ([design system](../development/design-system.md)).
-- **Scope is always visible.** Ratings, classification and adoption are scoped
-  (Global, a Realm, Mine). A scope bar sits under every entity header and
-  beside the search box; empty states name their scope and offer the
-  neighbouring one. A Realm view never silently falls back to Global.
-- **Honest states.** Pending, stale, partial and unavailable are shown
-  ("Ratings from 1 Realm unavailable · retry"); search states whether counts are
-  exact and what was excluded. Recoverable input survives errors.
+Revised 2026-09-28 after the maintainer compared the first slices with the old
+site, Reddit and Goodreads: they exposed the model instead of the content.
+
+- **Content first, concepts inside.** Readers see covers, titles, authors,
+  ratings in words they know, and what people are saying. Scopes, Contexts,
+  generations, exact-or-lower-bound counts and identifiers stay internal. Scope
+  appears where it changes meaning (inside a Realm, or when the reader chooses
+  another community), not as a label on every shelf; model detail belongs in
+  a "Details" or "Cite" affordance.
+- **Cover-first catalogue, Goodreads quality.** The cover is the card; no card
+  frame around it. When a Work has no cover, generate a typographic cover
+  (title, author, a type-appropriate palette), never a single-letter monogram.
+  Every card shows the author and one primary action (want to read / add to
+  shelf / rate). Shelves are curated by meaning (genre, community, "readers'
+  favorites"), not by storage type.
+- **A feed home, like Reddit.** The home page is a single centred feed of
+  what happens in the communities you follow and across REZICS (new works,
+  chapters, discussions, adoptions), sortable (best, new) and filterable
+  (kinds, languages, communities, tags). Feed cards keep engagement in a bottom
+  bar. The left navigation lists followed Realms and Zones.
+- **Honest states, quietly.** Pending, stale, partial and unavailable remain
+  visible and recoverable, but phrased for people ("Couldn't load ratings ·
+  Retry"), not as system status.
 - **Identity before action.** The acting Agent is shown before submit and never
-  silently replaced; Studio carries its Agent in the route and never changes
-  the session Agent.
-- **APIs own behavior.** A missing or awkward read is fixed in Main or Account,
-  not worked around in the client.
-- **Keyboard and CJK.** `/` and Cmd/Ctrl-K for search and the command palette;
-  shortcut handlers ignore `event.isComposing`. Set `lang` on content blocks;
-  CJK text uses 1.8 line height and `text-autospace`.
-- **Comfortable public pages, compact management pages.**
+  silently replaced; Studio carries its Agent in the route.
+- **APIs own behavior.** A missing or awkward read is fixed in Main or Account.
+- **Keyboard and CJK.** `/` and Cmd/Ctrl-K; handlers ignore `event.isComposing`;
+  `lang` on content blocks; CJK text uses 1.8 line height and `text-autospace`.
+- **Reading surfaces are calm.** No grid canvas behind content pages; the Aura
+  canvas stays for marketing-style surfaces only.
+
+## Languages and themes
+
+The UI ships eight locales, as the old site did: English, 繁體中文, 简体中文,
+日本語, 한국어, Deutsch, Français, Español (BCP 47 `en`, `zh-Hant`, `zh-Hans`,
+`ja`, `ko`, `de`, `fr`, `es`). Content languages are separate from the UI
+locale. Missing translations fall back per key to English; translation work
+runs on cheap models. Signed out, a language select and a theme button sit in
+the header; signed in, "Language" and "Display mode" live in the avatar menu
+and in settings. Display mode is system, light or dark; Zones may carry their
+own themes (presets and a small set of tokens), which people can turn off.
 
 ## Main site routes
 
-The UI locale is a path prefix (`/en`, `/zh-CN`) so each language version of a
+The UI locale is a path prefix (`/en`, `/zh-Hant`, ...) so each language version of a
 public page has its own indexable URL with `hreflang` alternates; unprefixed
 paths redirect by cookie, then `Accept-Language`. Content language belongs to a
 version and never appears in the route. Auth and BFF routes stay unprefixed.
 
 | Route | Surface |
 | --- | --- |
-| `/`, `/discover`, `/search?q&scope` | Home (continue reading, followed updates, scoped shelves), discovery, search with include/exclude facets and a completeness line. |
+| `/`, `/discover`, `/search?q` | Home feed (Reddit-like, followed communities and REZICS-wide), discovery shelves, search with include/exclude facets. |
 | `/w/{slug\|id}` with `/contents`, `/versions`, `/discussion`, `/history` | Work page: one template whose primary action depends on type (read, install, copy prompt). |
 | `/w/{id}/read/{chapter}` | Reader with synced settings, progress per version, chapter discussion. |
 | `/r/{realm}` with `/works`, `/discussions`, `/decisions`, `/about` | Realm home through its Zone; Decisions is the public curation log. |
