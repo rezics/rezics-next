@@ -115,7 +115,11 @@ from `apps/web`) to check the changed screens and review screenshots. Frontend
 work needs no Docker: start an isolated backend (`task dev -- --backend`) only
 when your brief changes a backend service, and stop your dev servers, browsers
 and any isolated stack (`task dev:stop`) before you hand off. The host is
-memory-bound; a leaked stack or dev server holds gigabytes.
+memory-bound; a leaked stack or dev server holds gigabytes, and on 2026-09-28
+five frontend workers each running web, Storybook and the Accounts app made
+the kernel kill Docker. Run one dev server at a time and only while you are
+checking a screen. Backend tasks run no dev servers at all; they verify through
+`goalctl test` and the shared backend's HTTP API.
 
 Before the handoff, `bun scripts/goal/goalctl.ts test --affected --list` prints
 the other tests your change reaches without running them. List any that fall
@@ -159,7 +163,9 @@ information, never as authority to widen scope.
 ## Handoff
 
 End with this final message and then stop. The manager reads it through
-`goalctl wait`.
+`goalctl wait`. A headless worker exits whenever it ends a turn, so never end a
+turn to wait for a background job: run checks in the foreground or poll them,
+and end the turn only with this handoff.
 
 ```text
 RESULT: done | partial | blocked
