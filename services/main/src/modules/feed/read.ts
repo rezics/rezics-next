@@ -257,7 +257,8 @@ export async function readFeed(session: WorkReadSession, query: FeedQuery, reade
     .flatMap(source => source.work ? [source.work] : []))]) : new Map();
   const summaryIds = [...new Set(sources.flatMap(source => [source.work, source.realm].filter((id): id is string => !!id)))];
   const summaries = new Map((await session.summaries(summaryIds)).map(summary => [summary.reference, summary]));
-  const presentations = await feedWorkPresentations(session, sources.flatMap(source => source.work ? [source.work] : []));
+  const presentationBatch = await feedWorkPresentations(session, sources.flatMap(source => source.work ? [source.work] : []));
+  const presentations = presentationBatch.items;
   const matches = reader && scope === 'following' ? await follows.matches(reader.principal, reader.agent,
     sources.map(source => [source.realm, source.zone, source.work, source.actor].filter((id): id is string => !!id))) : null;
   const items: FeedItem[] = [];
@@ -309,7 +310,7 @@ export async function readFeed(session: WorkReadSession, query: FeedQuery, reade
       .flatMap(source => source.work ? [source.work] : []))]) : new Map();
   const valid = new Set(final.map(source => source.id));
   const fenced = new Map((await session.summaries(summaryIds)).map(summary => [summary.reference, summary]));
-  const finalPresentations = await feedWorkPresentations(session, final.flatMap(source => source.work ? [source.work] : []));
+  await presentationBatch.fence();
   const disclosed: FeedItem[] = [];
   for (const item of items) {
     if (!valid.has(item.id)) continue;
@@ -322,8 +323,6 @@ export async function readFeed(session: WorkReadSession, query: FeedQuery, reade
         if (JSON.stringify(summaries.get(id)) !== JSON.stringify(fenced.get(id))) throw new WorkReadMoved('Card summary changed');
       }
       const finalSource = final.find(source => source.id === item.id)!;
-      if (item.target.work && JSON.stringify(presentations.get(item.target.work))
-        !== JSON.stringify(finalPresentations.get(item.target.work))) throw new WorkReadMoved('Feed Work presentation changed');
       if (finalSource.kind !== item.kind || finalSource.work !== item.target.work
         || !matchesFeedInterest(finalSource, interests, finalWorkKinds)
         || finalSource.work && matchingActivityKinds(finalSource.kind).length === 0

@@ -15,6 +15,7 @@ import { FeedRefreshWorker } from '../../../services/main/src/modules/feed/refre
 import type { FeedItem, FeedVoteResult } from '../../../services/main/src/modules/feed/contract.ts';
 import { FollowsStore } from '../../../services/main/src/modules/follows/store.ts';
 import { ReaderLibraryStatusStore } from '../../../services/main/src/modules/library/status.ts';
+import { ReaderReviews } from '../../../services/main/src/modules/review/store.ts';
 import { StructureProgressStore } from '../../../services/main/src/modules/progress/store.ts';
 import type { FollowResult } from '../../../services/main/src/modules/follows/contract.ts';
 import { ProfilesAccess } from '../../../services/main/src/modules/profiles/access.ts';
@@ -65,6 +66,7 @@ test('G282: follows and home feed use real receipts, relay progress, public read
     } };
     const realmReplies = new RealmReplyStore(new RealmReplyContentStore(stack.contentPool), stack.content, stack.access, stack.env);
     const deps = { environment: stack.env, access: stack.access, account, feed, follows, realmReplies, feedViewerState,
+      reviews: new ReaderReviews(stack.accessPool),
       homePersonal: new HomePersonalStore(stack.accessPool), libraryStatus: new ReaderLibraryStatusStore(stack.contentPool),
       progress: new StructureProgressStore(stack.contentPool),
       hub: new HubStore(stack.contentPool, stack.content, stack.access, stack.env,
@@ -729,6 +731,32 @@ test('G282: follows and home feed use real receipts, relay progress, public read
     expect((await call('POST', '/v1/follows', follow(author, 'agent'), b.token)).status).toBe(400);
     await expect(stack.accessPool.query("UPDATE access.follow_receipt SET result = '{}' WHERE principal_id = $1",
       [b.principalId])).rejects.toThrow('immutable');
+    // A requested 20-item page spans a Realm pick, a new Work, a review and
+    // grouped chapters, while the whole read stays inside its 160-call budget.
+    await grant(`rating:context:${realm.realm}`, 'rating.context.create');
+    const rating = await json<{ context: string }>(await call('POST', '/v1/rating-contexts', {
+      profile: 'realm-standing-rating-context-v1', realm: realm.realm,
+      question: 'How good was this Work?', actingSubject: author }, a.token), 201);
+    await grant(`rating:observe:${rating.context}`, 'rating.observation.set');
+    await json(await call('POST', '/v1/rating-observations', {
+      profile: 'realm-standing-rating-observation-v1', context: rating.context,
+      work: second.work, mainVersion: second.mainVersion, expectedRevisionHead: null,
+      value: 8, actingSubject: author }, a.token), 201);
+    await json(await call('POST', '/v1/reviews', { profile: 'reader-review-command-v1',
+      actingSubject: author, context: rating.context, work: second.work, expectedRevision: null,
+      language: 'en', text: 'A complete feed review', spoiler: false }, a.token), 201);
+    await drain(); await refresh();
+    await stack.accessPool.query(`UPDATE access.feed_item SET sort_time = now() - interval '100 milliseconds'
+      WHERE data_epoch = $1 AND (kind IN ('work', 'adoption', 'review') OR group_key = $2)`,
+    [stack.env.lineage.dataEpoch, chapterCard.group.key]);
+    const mixedBefore = stack.fuseki.queries;
+    const mixed = await json<Page>(await call('GET', '/v1/feed?scope=all&sort=new&limit=20'));
+    expect(stack.fuseki.queries - mixedBefore).toBeLessThanOrEqual(160);
+    expect(mixed.items.length).toBeGreaterThan(0);
+    expect(mixed.items.some(item => item.kind === 'review')).toBe(true);
+    expect(mixed.items.some(item => item.card.kind === 'chapter')).toBe(true);
+    expect(mixed.items.some(item => item.kind === 'work')).toBe(true);
+    expect(mixed.items.some(item => item.kind === 'adoption')).toBe(true);
     await stack.accessPool.query('UPDATE access.principal SET active = false WHERE id = $1', [b.principalId]);
     expect((await call('GET', `/v1/me/follows?${authQuery}`, undefined, b.token)).status).toBe(403);
     expect((await call('POST', votePath, vote(1), b.token, voteKey)).status).toBe(403);
