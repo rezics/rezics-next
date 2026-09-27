@@ -6,7 +6,7 @@ import { acquireFullLock, acquireQaSlots, artifactRoots, backendTiers, command, 
   junitSuites, LOAD_FIXTURE_ID, LOAD_PREPARATION_BUDGET_MS, loadFixturePlan,
   matchedNoTests, maximumShards, mergeJUnit, newRunId, parseArgs, planStackProjects,
   recordedFileDurations, selfManagedFaultFiles, shardCount,
-  shardResolved, sourceIdentity, splitTestArgs,
+  stackPlanBudgetWarning, shardResolved, sourceIdentity, splitTestArgs,
   tierArtifactName, uncoveredTiers, writeSummary, xmlForCommand, type IsolationRecord, type ShardRecord,
   type Tier } from './core.ts';
 import { caseInventory, e2eArgs, failedSelection, junitResults, parseJUnit, testArgs } from './acceptance.ts';
@@ -161,6 +161,8 @@ async function runStackTier(tier: StackTier): Promise<void> {
   try {
     const prefix = tier === 'integration' ? '' : 'f';
     const projects = planStackProjects(estimates, slots.count, tier);
+    const warning = stackPlanBudgetWarning(estimates, budget, slots.count, maximum, tier);
+    if (warning) console.warn(warning);
     const runs = new Array<ShardRun>(projects.length);
     let project = 0;
     // QA projects have separate ports and stack:up retries an allocation race.

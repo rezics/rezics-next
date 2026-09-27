@@ -261,19 +261,46 @@ export function splitTestArgs(args: string[]): { paths: string[]; flags: string[
   return first < 0 ? { paths: args, flags: [] } : { paths: args.slice(0, first), flags: args.slice(first) };
 }
 
-function logDurations(text: string): Map<string, number> {
+function logResults(text: string): { durations: Map<string, number>; failedFiles: Set<string> } {
   const durations = new Map<string, number>();
+  const failedFiles = new Set<string>();
   let file: string | undefined;
   for (const line of text.split('\n')) {
     const header = line.match(/^(\S+\.(?:test|spec)\.[cm]?[jt]sx?):$/);
     if (header) { file = header[1]!; continue; }
-    const result = line.match(/^\((?:pass|fail|skip|todo)\) .* \[(\d+(?:\.\d+)?)(ms|s)\]$/);
+    const result = line.match(/^\((pass|fail|skip|todo)\) .* \[(\d+(?:\.\d+)?)(ms|s)\]$/);
     if (file && result) {
-      const ms = Number(result[1]) * (result[2] === 's' ? 1000 : 1);
+      const ms = Number(result[2]) * (result[3] === 's' ? 1000 : 1);
       durations.set(file, (durations.get(file) ?? 0) + ms);
+      if (result[1] === 'fail') failedFiles.add(file);
     }
   }
-  return durations;
+  return { durations, failedFiles };
+}
+
+function stackUnavailable(runPath: string, tier: Tier): boolean {
+  if (!['integration', 'model', 'fault/recovery', 'e2e', 'load'].includes(tier)) return false;
+  const artifact = tierArtifactName(tier);
+  const acceptance = join(runPath, 'acceptance.json');
+  if (existsSync(acceptance)) {
+    try {
+      const report = JSON.parse(readFileSync(acceptance, 'utf8')) as {
+        tiers?: { name?: string; shards?: { stage?: string }[] }[] };
+      const record = report.tiers?.find(item => item.name === tier);
+      if (record?.shards?.some(shard => shard.stage === 'stack' || shard.stage === 'bootstrap')) return true;
+    } catch {
+      // Older or interrupted reports may not have usable shard metadata; logs
+      // below still identify a recorded startup or bootstrap failure.
+    }
+  }
+  const logs = join(runPath, 'logs');
+  if (!existsSync(logs)) return false;
+  const names = readdirSync(logs);
+  if (names.some(name => new RegExp(`^${artifact}-.+-(?:startup|bootstrap)\\.log$`).test(name))) return true;
+  if (tier === 'integration' || tier === 'fault/recovery') return false;
+  const setupFailed = [`${artifact}-stack.log`, `${artifact}-bootstrap.log`, `${artifact}-web-auth-bootstrap.log`]
+    .some(name => names.includes(name));
+  return setupFailed && !names.includes(`${artifact}.log`);
 }
 
 // Recorded per-file time for a tier: the largest of the last three observations
@@ -290,10 +317,16 @@ export function recordedFileDurations(artifactRoots: string[], tier: Tier, maxRu
     .sort((a, b) => b.name.localeCompare(a.name)).slice(0, maxRuns);
   const observed = new Map<string, number[]>();
   for (const run of runs) {
+    // Stack startup/bootstrap failures can make every case finish quickly
+    // without measuring test work. Do not let any such run affect history.
+    if (stackUnavailable(run.path, tier)) continue;
     const perRun = new Map<string, number>();
+    const failedFiles = new Set<string>();
+    const junitFileFailures = new Map<string, boolean>();
     const xml = join(run.path, `${artifact}.xml`);
     if (existsSync(xml)) {
       for (const test of parseJUnit(readFileSync(xml, 'utf8'), tier)) {
+        junitFileFailures.set(test.file, (junitFileFailures.get(test.file) ?? false) || test.failed);
         if (test.durationMs !== undefined) perRun.set(test.file, (perRun.get(test.file) ?? 0) + test.durationMs);
       }
     }
@@ -303,11 +336,22 @@ export function recordedFileDurations(artifactRoots: string[], tier: Tier, maxRu
       for (const name of readdirSync(join(run.path, 'logs'))) {
         if (!logName.test(name)) continue;
         // An isolated rerun repeats a shard's file; keep the longer observation.
-        for (const [file, ms] of logDurations(readFileSync(join(run.path, 'logs', name), 'utf8'))) {
+        const log = logResults(readFileSync(join(run.path, 'logs', name), 'utf8'));
+        for (const file of log.failedFiles) failedFiles.add(file);
+        for (const [file, ms] of log.durations) {
           perRun.set(file, Math.max(perRun.get(file) ?? 0, ms));
         }
       }
     }
+    // The merged JUnit is authoritative when a failed shared-project case was
+    // recovered by its isolated rerun. A log-only failure remains disqualifying.
+    for (const [file, failed] of junitFileFailures) {
+      if (failed) failedFiles.add(file);
+      else failedFiles.delete(file);
+    }
+    // Logs only contain result lines for files that started; failed files are
+    // discarded as a whole even if some tests in them passed first.
+    for (const file of failedFiles) perRun.delete(file);
     for (const [file, ms] of perRun) {
       const list = observed.get(file) ?? [];
       if (list.length < observations) observed.set(file, [...list, ms]);
@@ -426,6 +470,39 @@ export function planStackProjects(estimates: ReadonlyMap<string, number>, count:
   }
   const sharedSlots = Math.max(1, count - Number(isolated.length > 0 && shared.size > 0));
   return [...(shared.size ? planShards(shared, sharedSlots) : []), ...isolated.map(file => [file])];
+}
+
+function scheduledPlanDurationMs(projects: string[][], estimates: ReadonlyMap<string, number>, workers: number): number {
+  const finishTimes = Array.from({ length: Math.max(1, workers) }, () => 0);
+  for (const project of projects) {
+    const duration = project.reduce((sum, file) => sum + (estimates.get(file) ?? 0), 0);
+    let worker = 0;
+    for (let index = 1; index < finishTimes.length; index++) {
+      if (finishTimes[index]! < finishTimes[worker]!) worker = index;
+    }
+    finishTimes[worker] += duration;
+  }
+  return Math.max(...finishTimes);
+}
+
+/** Explain when the current bounded plan is estimated to exceed its tier budget. */
+export function stackPlanBudgetWarning(estimates: ReadonlyMap<string, number>, budgetMs: number,
+  shards: number, maximum: number, tier: 'integration' | 'fault/recovery'): string | undefined {
+  if (!estimates.size) return undefined;
+  const workers = Math.max(1, Math.min(shards, estimates.size));
+  const estimatedMs = scheduledPlanDurationMs(planStackProjects(estimates, workers, tier), estimates, workers);
+  if (estimatedMs <= budgetMs) return undefined;
+
+  let fittingShards: number | undefined;
+  for (let count = 1; count <= estimates.size; count++) {
+    const duration = scheduledPlanDurationMs(planStackProjects(estimates, count, tier), estimates, count);
+    if (duration <= budgetMs) { fittingShards = count; break; }
+  }
+  const seconds = (ms: number) => `${(ms / 1000).toFixed(1)}s`;
+  const fit = fittingShards === undefined ? 'no shard count up to the file count is estimated to fit'
+    : `${fittingShards} shards are estimated to fit`;
+  return `Warning: ${tier} is estimated at ${seconds(estimatedMs)} with ${workers} available shard(s), `
+    + `over its ${seconds(budgetMs)} budget; ${fit}. REZICS_QA_SHARDS cap: ${maximum}.`;
 }
 
 export function maximumShards(env: NodeJS.ProcessEnv, tier: 'integration' | 'fault/recovery'): number {

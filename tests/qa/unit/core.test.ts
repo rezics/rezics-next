@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { acquireFullLock, acquireQaSlots, concurrencyGate, estimatedDurations, expandTestPaths, expectedFusekiModuleVersion,
   isolatedFaultFiles, isolatedIntegrationFiles, isolationCandidates, junitSuites, matchedNoTests, maximumShards,
   mergeJUnit, parseArgs, planShards, planStackProjects,
-  recordedFileDurations, selfManagedFaultFiles, shardCount, shardResolved, splitTestArgs,
+  recordedFileDurations, selfManagedFaultFiles, shardCount, stackPlanBudgetWarning, shardResolved, splitTestArgs,
   testLogEnvironment, writeSummary,
   implementedTiers, tierArtifactName,
   xmlForCommand, type Tier } from '../../../scripts/qa/core.ts';
@@ -154,14 +154,29 @@ test('QA shards: recorded durations use the latest merged JUnit, killed-run logs
     // A killed shard leaves no JUnit; its log still lists finished files.
     run('20260905t000000-eeeeee', { 'logs/integration-2.log': 'bun test\n\nc.test.ts:\n(pass) C01: c [1500.50ms]\n'
       + '(fail) C02: d [2.5s]\n\nd.test.ts:\nspawnSync bun ETIMEDOUT\n',
-    'logs/integration-2-stack.log': 'c.test.ts:\n(pass) x [99999ms]\n', 'logs/fault-recovery-f1.log': 'c.test.ts:\n(pass) x [99999ms]\n' });
+    'logs/integration-2-stack.log': 'c.test.ts:\n(pass) x [99999ms]\n', 'logs/fault-recovery-f1.log': 'c.test.ts:\n(pass) x [99999ms]\n',
+    'logs/fault-recovery-f2.log': 'failed-fault.test.ts:\n(fail) F01: failure [800ms]\n' });
+    run('20260906t000000-abcdef', { 'integration.xml': junit(suite('stack-only.test.ts',
+      '<testcase name="STACK01: started" time="500" file="stack-only.test.ts" />')),
+    'acceptance.json': JSON.stringify({ tiers: [{ name: 'integration', status: 'failed', shards: [
+      { project: 'integration-2', status: 'failed', stage: 'stack' },
+    ] }] }) });
     run('20260906t000000-ffffff', { 'unit.xml': junit(suite('unrelated.test.ts',
-      '<testcase name="unit" time="1" file="unrelated.test.ts" />')) });
+      '<testcase name="unit" time="1" file="unrelated.test.ts" />'),
+      suite('failed-unit.test.ts', '<testcase name="failed" time="50" file="failed-unit.test.ts"><failure /></testcase>')),
+    'logs/unit.log': 'failed-unit.test.ts:\n(fail) U01: failure [50000ms]\n' });
+    run('20260906t000000-fedcba', { 'model.xml': junit(suite('stack-model.test.ts',
+      '<testcase name="STACK02: started" time="120" file="stack-model.test.ts" />')),
+    'logs/model-stack.log': 'Docker unavailable before model tests started\n' });
     const durations = recordedFileDurations([dir, join(dir, 'absent')], 'integration');
-    // a.test.ts: newest three observations are 7000, 4000 and 3000 ms; the oldest 9000 ms is ignored.
-    expect(Object.fromEntries(durations)).toEqual({ 'a.test.ts': 7000, 'b.test.ts': 250, 'c.test.ts': 4001 });
+    // Failed files, unavailable-stack runs and unstarted files never enter history.
+    // a.test.ts: newest three usable observations are 7000, 4000 and 3000 ms.
+    expect(Object.fromEntries(durations)).toEqual({ 'a.test.ts': 7000, 'b.test.ts': 250 });
     expect(Object.fromEntries(recordedFileDurations([dir], 'fault/recovery'))).toEqual({ 'c.test.ts': 99999 });
-    expect(Object.fromEntries(recordedFileDurations([dir], 'integration', 1))).toEqual({ 'c.test.ts': 4001 });
+    expect(Object.fromEntries(recordedFileDurations([dir], 'integration', 1))).toEqual({});
+    expect(Object.fromEntries(recordedFileDurations([dir], 'unit'))).toEqual({ 'unrelated.test.ts': 1000 });
+    expect(Object.fromEntries(recordedFileDurations([dir], 'model'))).toEqual({});
+    expect(recordedFileDurations([dir], 'integration').has('d.test.ts')).toBe(false);
     expect(Object.fromEntries(estimatedDurations(['a.test.ts', 'new.test.ts', 'b.test.ts'], durations)))
       .toEqual({ 'a.test.ts': 7000, 'new.test.ts': 7000, 'b.test.ts': 250 });
     expect(Object.fromEntries(estimatedDurations(['new.test.ts'], new Map()))).toEqual({ 'new.test.ts': 30_000 });
@@ -190,6 +205,20 @@ test('QA shards: shard count keeps each project near half its budget and plannin
   expect(maximumShards({ REZICS_QA_SHARDS: '6' }, 'fault/recovery')).toBe(6);
   expect(() => maximumShards({ REZICS_QA_SHARDS: '0' }, 'integration')).toThrow('1 to 8');
   expect(() => maximumShards({ REZICS_QA_SHARDS: '9' }, 'fault/recovery')).toThrow('1 to 8');
+});
+
+test('QA shards: bounded stack plans warn with their estimate and the fitting shard count', () => {
+  const estimates = new Map<string, number>([
+    ['tests/qa/integration/validation-command.test.ts', 20_000],
+    ['tests/qa/integration/shared-a.test.ts', 200_000],
+    ['tests/qa/integration/shared-b.test.ts', 200_000],
+    ['tests/qa/integration/shared-c.test.ts', 200_000],
+  ]);
+  expect(stackPlanBudgetWarning(estimates, 480_000, 2, 2, 'integration'))
+    .toBe('Warning: integration is estimated at 600.0s with 2 available shard(s), over its 480.0s budget; '
+      + '3 shards are estimated to fit. REZICS_QA_SHARDS cap: 2.');
+  expect(stackPlanBudgetWarning(estimates, 480_000, 3, 3, 'integration')).toBeUndefined();
+  expect(stackPlanBudgetWarning(new Map(), 480_000, 1, 1, 'integration')).toBeUndefined();
 });
 
 test('QA shards: graph reset, outbox gap and fresh-graph files get singleton integration projects', () => {
