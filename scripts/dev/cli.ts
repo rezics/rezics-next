@@ -273,10 +273,24 @@ async function stackUp(options: StackOptions): Promise<{ apps: Record<string, st
     throw new Error(`QA raw-update Compose topology is missing: ${qaRawUpdateComposeFile}`);
   }
   const env = runtimeEnv();
-  const config = await stackConfig(options);
-  compose(options, ['up', '-d', '--wait'], env);
-  printEndpoints(options, config.composeEnv, config.dir);
-  return config;
+  const freshQa = options.profile === 'qa' && !existsSync(join(stackDirectory(root, options), 'compose.env'));
+  for (let attempt = 0; ; attempt++) {
+    const config = await stackConfig(options);
+    try {
+      compose(options, ['up', '-d', '--wait'], env);
+      printEndpoints(options, config.composeEnv, config.dir);
+      return config;
+    } catch (error) {
+      if (!freshQa || attempt > 0 || !/port is already allocated|address already in use/i.test(String(error))) {
+        throw error;
+      }
+      // A concurrent QA project can take a released ephemeral port before
+      // Compose binds it. This project has no data yet: remove its partial
+      // containers and configuration, then allocate a new set of ports once.
+      compose(options, ['down', '--volumes', '--remove-orphans'], env);
+      rmSync(config.dir, { recursive: true, force: true });
+    }
+  }
 }
 
 async function install(): Promise<void> {
