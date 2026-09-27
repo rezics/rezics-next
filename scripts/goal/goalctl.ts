@@ -316,6 +316,8 @@ function workerPrompt(task: Task, manager: string, engine: Engine = engineOf(tas
     `Edit, create and delete files only under ${task.worktree} (and /tmp). The main checkout ${root} and every`
       + ' other worktree are read-only for you, even when a brief or handoff cites an absolute path there;'
       + ` translate such paths to ${task.worktree}.`,
+    'goalctl commands you run (test, owner, slot) may write their own bookkeeping under the main checkout\'s'
+      + ' .temp/goal-orchestration; that is allowed. Use `bun scripts/goal/goalctl.ts test` for QA.',
     'Read docs/goals/worker.md there, then your brief at .temp/goal/brief.md, and follow both.',
     `The manager session is "${manager}". End with the handoff that the worker protocol specifies.`,
   ].join('\n');
