@@ -1,132 +1,64 @@
 # Committed events and recoverable jobs
 
-## Ownership and transport
+Owner transactions remain authoritative. Events report committed facts; tasks
+request work and have separate consumption and retention. External effects begin
+only after the owner commit. Initial delivery polls durable owner outboxes;
+NATS JetStream remains a later transport choice when fan-out or isolation needs
+it. A broker cannot make business effects exactly once.
 
-Start with bounded polling and direct dispatch from durable owner outboxes.
-NATS JetStream is the selected later distributed transport when fan-out or process
-isolation warrants it; it is not a startup dependency. Authority remains in owner
-transactions. PostgreSQL owners relay committed outbox entries through an admitted
-CDC/relay path. Main Content stores its revision/head/receipt/event in PostgreSQL;
-Main's semantic owner stores each event intent with its mutation and receipt
-in the same TDB2 transaction, submitted through Fuseki's wrapped dataset. Main's
-relay polls that RDF outbox through bounded SPARQL reads; it does not depend on
-native change streams, transaction-log access or a database notification feature.
-External side effects never run before the authoritative domain commit.
+## Source positions and relay
 
-The initial Content-to-search consumer polls both owner outboxes with separate
-durable positions. Events reference exact revisions and recipes; batch fetching
-and extraction occur outside graph transactions. Projection commits cannot emit
-an indistinguishable new Content event and trigger an ingestion loop. Deduplicate
-delivery, reject superseded publication generations, retain erasure fences and
-advance progress only after the effect or durable continuation commits. A maximum
-observed sequence is not proof of contiguous processing or index readiness.
-See [body projection](search.md#postgresql-body-projection).
+Main's graph transaction commits its receipt, event intent and application
+`{datasetId, dataEpoch, sequence}` position together through wrapped Fuseki.
+Content and private PostgreSQL owners use their own transactional outboxes.
+Sequence is a decimal string in transport and comparable only inside one
+dataset and epoch. Each sequenced RDF mutation has one bounded batch header,
+including zero-event batches. Stable event IDs and ordinals identify members;
+independent owners have no shared total order.
 
-Events say what happened; tasks request work. Keep separate subjects and retention
-semantics. Event consumers independently track progress; competing workers share
-task consumption for one purpose. Envelopes contain event/operation ID, schema,
-owner/target reference, aggregate revision, application source position, routing/
-fence epoch, causation/correlation and bounded data or a manifest pointer. Private
-principal and credential material does not enter public events. Internal receipt
-or maintenance progress records are not automatically public notifications.
+An event envelope carries event/operation ID, versioned type, owner and target,
+aggregate revision, source position, routing fence and causation/correlation,
+with bounded data or a manifest pointer. Private principal or credential data
+must not enter public events. Internal receipt and maintenance events are not
+automatically public notifications. CloudEvent source plus ID is the dedupe
+identity; occurrence time, source commit position and transport time differ.
 
-## RDF outbox and source position
+The [Main relay](../../services/main/src/modules/outbox/relay.ts) reads a bounded
+contiguous batch, verifies its exact members, ordinals, terminal receipts and
+domain references, then retains private CloudEvents 1.0 envelopes before
+advancing the consumer checkpoint. Its retained handoff is not an authoritative
+journal of later consumer effects. A crash after delivery repeats the batch;
+stable event IDs and consumer idempotency handle the duplicate. Missing members,
+retention gaps, changed epochs and recovery holds stop advancement. The
+[SYS04/05/12 recovery cases](../testing/backend-integration.md) exercise these
+boundaries. An offline coverage head compares the acknowledged position with
+retained batch and envelope digests before restored graph writes resume.
 
-The application owns `{datasetId, dataEpoch, sequence}`; sequence is a decimal
-string in transport and is comparable only within that dataset and epoch. Every
-sequenced RDF mutation inserts exactly one outbox batch header with the same
-position, bounded event count and exact event references. Zero-event batches
-explicitly record progress. Domain events within a batch have stable IDs and
-ordinals; no downstream consumer infers a total order between independent owners.
-The counter is neither a TDB2 transaction ID nor an engine commit hash.
+Relay pages use numeric sequence and event ID ordering, even though transport
+encodes sequence as text. Retention cleanup may prune only through the admitted
+recovery floor after required handoff and retention obligations. Source records
+do not grant public distribution or native adoption merely by being relayed.
 
-The relay requests bounded batches above its last acknowledged position, ordered
-by numeric sequence, and verifies batch completeness before dispatch. Initially,
-each consumer acknowledges only its durable effect or continuation, after which
-its source checkpoint advances. When a broker is enabled, the relay instead waits
-for JetStream acknowledgements for every event in the batch before advancing its
-handoff checkpoint; broker consumers still acknowledge their own durable effects.
-A relay checkpoint can live in its operational PostgreSQL owner. A crash between
-acknowledgement and checkpoint commit repeats the batch, which consumer idempotency
-handles. There is no cross-store/transport transaction. A timer can wake the relay;
-polling retained source and checkpoints suffices for recovery.
+## Consumer and job contracts still to qualify
 
-The first Main implementation uses a private PostgreSQL durable handoff and one
-explicitly initialized checkpoint per relay consumer. It verifies a contiguous
-RDF batch, exact member count and ordinals, typed event objects, terminal receipts and revision
-manifest references, then writes internal CloudEvents 1.0 Work outcome envelopes
-by stable event ID, retains every batch header, then advances the checkpoint. The private envelopes retain
-the admitted scope, request digest, terminal outcome and exact result references.
-Zero-event batches retain their headers and advance without envelopes. Source gaps, changed epochs and
-recovery holds stop advancement. This is a first transport boundary, not a
-complete authoritative journal: relay lag, later authority/erasure facts,
-downstream consumer effects and retention/reconciliation remain to be qualified.
-The private Open Library source graph command emits
-`com.rezics.source.projected.v1` with source record, observation, conversion,
-digest, mapping revision and receipt identities. The relay verifies those links
-against the staged source graph before retaining the envelope. The event carries
-no source title, description, author list or subject terms; it does not authorize
-public distribution or native adoption.
-[Executed evidence](../../services/main/tests/evidence/2026-09-24-relay-recovery-coverage.xml)
-covers duplicate handoff after a crash, four Work outcome kinds and stop conditions.
-An offline relay coverage scan records its acknowledged source position and
-digests of retained batch headers and durable envelopes through that position.
-It requires contiguous headers and matching event counts. It rejects headers or events written
-after a crash before checkpoint advancement. Graph recovery compares that record
-with its restored cut; a later handed-off event keeps the graph held until its
-missing effect can be reconciled.
-Retained pages use numeric source sequence and event ID order; the decimal text
-encoding used in API results must not change that order. Content's owner outbox
-uses the same numeric position rule when serving bounded projection windows.
+Consumers advance their own checkpoints only after a durable effect or
+continuation. Broker handoff would wait for each event ACK before advancing its
+relay checkpoint; broker consumers still own their effects. Retention expiry
+requires reconciliation or rebuild, never a silent jump to the newest sequence.
+Restore fences the old writer, starts a new epoch, and reconciles old receipts,
+relay positions, external effects and erasure before replay. Missing old receipts
+are not proof that old effects did not happen.
 
-Keep the source retention floor and epoch visible to the relay. An unexplained
-sequence gap, missing event object, expired retained range or unexpected epoch
-stops normal advancement and enters explicit reconciliation. Cleanup may prune
-only through the admitted recovery floor after required relay progress and
-retention rules are satisfied. It cannot delete intents simply because a process
-attempted to publish them. The outbox records bounded maintenance transactions too;
-compaction of TDB2 storage does not itself change application sequence.
+Jobs retain input snapshot, owner, admission basis, target, generation, lease,
+fence, checkpoint, retry policy, cancellation and terminal outcome. Every page
+and activation rechecks current authority and erasure. Large fan-out creates
+bounded continuations. Capacity limits cover bytes, age, batch size, in-flight
+ACKs and retry/dead-letter retention. Exhausted capacity delays or rejects
+admission; poison messages keep a reason and replay disposition. External
+deliveries need provider idempotency or uncertain-result reconciliation.
 
-## Delivery, retries and fencing
-
-Consumers commit their effect/continuation and receipt before ACK. Duplicates and
-out-of-order delivery are expected; apply expected revisions and idempotent effects.
-Detect expired retention and reconcile/rebuild explicitly. Broker dedupe windows
-are not permanent exactly-once business guarantees.
-
-Jobs record input manifest/snapshot, owner, authorization basis, expected target,
-generation, lease/fence, checkpoint, retry policy, cancellation and terminal
-outcome. Every page and activation checks the fence. A resumed expired worker
-cannot overwrite the new worker or reactivate erased content. Fan-out creates
-bounded continuations instead of keeping one huge transaction open.
-
-Restore or destructive reload fences the old writer and starts a new data epoch
-before new writes. Retained old receipts/events preserve their original positions.
-Reconcile restored source state against relay/consumer receipts and any external
-effects before replay. Never compare sequence values across epochs or reinterpret
-a missing old receipt as proof that an earlier side effect did not occur. Current
-readiness, index generation and erasure fences govern whether replay can activate
-new derived state.
-
-## Backpressure and failures
-
-Bound bytes, age, batch size, in-flight ACKs, retry time and dead-letter retention.
-Reject or delay admission when durable intent capacity is exhausted; do not
-silently discard unhandled work. Persist poison-message reason and replay
-disposition before terminal handling. Permanent errors do not retry forever.
-External deliveries use provider idempotency or explicit uncertain-result
-reconciliation.
-
-Scheduling stores intent and due state durably; timers only wake eligible work.
-Pause/rebind/cancel races recheck owner state at application. Recovery restores
-source checkpoints, receipts, fences and erasure frontier before replaying effects.
-Metrics distinguish application ingest, relay, consumer and active-generation lag.
-Lucene rebuild state is independent of successful delivery of a content event.
-
-Qualification: commit-before-publish crash, lost ACK, duplicate/reordered events,
-zero-event batches, missing batch members, source retention gap, queue saturation,
-stale worker, cancellation during activation, restored old-lineage receipts and
-replay reconciliation. Basis: [JetStream consumers](https://docs.nats.io/learn/jetstream/pull-consumers)
-and [PostgreSQL outbox routing](https://debezium.io/documentation/reference/stable/transformations/outbox-event-router.html).
-The [Jena binding](../storage/jena.md#application-source-positions) owns the RDF
-transaction/position mechanism; these sources do not provide native TDB2 CDC.
+Timers only wake durably scheduled work. Recovery restores checkpoints, receipts
+and fences before effects resume. Metrics distinguish ingest, relay, consumer
+and active-generation lag. A successful event delivery alone does not prove
+Lucene projection readiness. [Worker practice](../services/workers.md) records
+the remaining deployment and recovery decisions.

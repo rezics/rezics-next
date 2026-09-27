@@ -1,158 +1,88 @@
-# Commands, transactions and cross-service consistency
+# Commands and cross-owner consistency
 
-## Command envelope
+## Local command boundary
 
-Commands carry an operation ID, idempotency key, canonical request digest,
-verified principal/context, target reference, expected revision, contract version
-and bounded input. The server supplies trusted identity, admission and deadlines.
-Reusing a key with another digest is a conflict, not another operation.
+Each owner commits its domain change, exact revision or selection anchor,
+terminal receipt and outbox batch in one local transaction. Main graph commands
+use one guarded update through Fuseki's text-wrapped TDB2 dataset; Content and
+private owners use their PostgreSQL transactions. An Access or relay receipt
+cannot prove that another owner's mutation committed. Object bytes are verified
+and retained before graph activation, outside the graph writer transaction.
 
-## Local atomic boundary
+The command binds a verified actor and scope, target, expected state, canonical
+request digest, idempotency key and bounded input. A changed digest for the same
+key conflicts. A graph guard covers exact target, expected head, create-only
+condition, data/routing epoch and mutable validation dependencies, including
+selected model heads and explicitly absent protection heads. A preflight read
+or SHACL report does not lock those dependencies. If a read set cannot fit the
+guard budget, stage an immutable generation or reject that write profile.
 
-The authoritative transaction commits domain changes, revision/selection anchor
-metadata, an OperationReceipt and outbox batch together. TDB2-backed commands use
-one guarded SPARQL Update request through Fuseki's jena-text dataset wrapper;
-Content/private/operational PostgreSQL owners use their own local transaction. A receipt written only
-to another database cannot prove that the domain mutation occurred atomically.
-Immutable object payloads/manifests are verified and retained before activation;
-their upload is separate from the RDF transaction.
+The guarded transaction advances its own application source position and writes
+one receipt and outbox batch, including an explicit zero-event batch. Unrelated
+dataset sequence progress never proves this command succeeded. A Fuseki HTTP
+success can mean an unmatched update; a timeout can hide a committed effect.
+Resolve the command's own receipt before retry or reply. A matching digest
+reuses its outcome. An absent receipt leaves the result pending while the
+original update might still commit. Seal stale, rejected, no-op and cancelled
+outcomes against receipt absence and the observed decision state, then reread
+the winning receipt. [Jena's command endpoint](../storage/jena.md#transactional-command-endpoint)
+and the [SYS fault cases](../testing/backend-integration.md) qualify this rule.
 
-The guard constrains the exact target, expected component head, create-only or
-uniqueness predicates, admitted data/routing epoch and every mutable local
-validation dependency, including selected model/shape heads. A remote preflight
-read or SHACL report does not lock those facts. Separate HTTP read, validation and
-update requests are never treated as one server transaction. If the read set
-cannot be guarded within budget, stage an immutable generation or reject that
-write profile until its invariant can be enforced.
-
-A matching guard writes one application source position
-`{datasetId, dataEpoch, sequence}` with the receipt/outbox. The transaction reads
-and increments sequence internally; callers do not use the dataset counter as a
-global expected head for unrelated resources. TDB2's one-writer execution is an
-engine boundary, not a reason to hold it during network I/O or external validation.
-
-An unmatched update may return HTTP success. Resolve the command's own receipt
-after success or timeout: matching digest returns the saved outcome/result;
-a different digest conflicts. With no receipt and guards still valid, the result
-is pending/unknown and may retry identically. When finalizing a stale, rejected,
-no-op or cancelled outcome, write that terminal receipt in a transaction guarded
-by receipt absence and any observed state used for the decision. It races with
-the original update on the same receipt identity; the winner fixes the outcome.
-Read it again before replying. A larger dataset sequence is not proof of success.
-The [Jena protocol](../storage/jena.md#transactional-command-endpoint) gives the
-concrete update and reconciliation rules.
-
-Receipts have a declared retention/replay horizon. After expiry, retries cannot
-silently become new side effects: reject expired keys or retain an appropriate
-operation identity tombstone. A new restored data epoch does not reset idempotency.
-An old-lineage request with a preserved receipt can resolve that outcome; a
-missing receipt after rollback requires recovery reconciliation, not fresh
-admission of the same logical effect. Broker dedupe windows and old backups are
-not the application guarantee.
+Receipt retention has an explicit replay horizon. Expired keys need rejection
+or an identity tombstone; a restored epoch never silently resets idempotency.
+A retained old-lineage receipt may resolve an old command, while a missing one
+after rollback needs recovery reconciliation before any replay of external
+effects. Broker dedupe windows do not supply this guarantee.
 
 ## Protected editorial effects
 
-[Editorial protection](editorial-protection.md) adds exact content, protection,
-control and decision/rule dependencies to each applicable owner's transition.
-Check those dependencies and the actual mutation footprint within the same
-transaction as the effect, including an explicitly absent protection head.
-An old ordinary-edit admission is insufficient after protection changes. A
-correction-family label is insufficient without its exact approved candidate,
-target/context, basis and unique application identity.
-
-Bounded approval/application creates the decision, new content/acceptance and
-receipt/outbox in one local commit while protection remains effective. Larger
-or cross-owner workflows retain explicit pending states and qualified activation;
-they cannot borrow this local-atomic guarantee. Saving a Content candidate and
-changing its graph adoption are distinct operations.
-
-Receipt replay precedes reapplying an effect, with current authorization governing
-disclosure. If a protected command must terminate after a state conflict, seal its
-typed rejection against receipt absence and the state used for that decision,
-just as for other commands. Unknown effects remain pending. New idempotency keys
-also cannot apply one correction proposal revision more than once.
+[Editorial protection](editorial-protection.md) adds exact candidate, approval,
+control and decision dependencies to a guarded transition. Approval and bounded
+application commit together only within one owner; cross-owner work remains
+pending until each owner confirms its effect. A new key cannot apply one proposal
+revision twice. Current authorization governs replay disclosure, and a state
+conflict is terminal only after its typed rejection receipt wins the same race.
 
 ## Cross-service workflows
 
-Use explicit durable states: planned, staging, ready, activating, active,
-cancelling, failed and completed as applicable. Each step records prerequisites,
-owner receipts, lease/fence and compensation. Compensation is a new authorized
-operation and cannot erase independent human edits or external effects.
-
-These are domain workflow phases/states. The common API operation status and
-terminal result are defined separately in [the transport blueprint](../implementation/api-and-events.md#operation-representation-and-errors).
-
-Examples include Agent provisioning plus representation, Realm admission plus
-effective membership, media upload plus publication, and package installation
-plus cataloged result. Expose pending state until required owners are ready.
-Do not mark a workflow complete from message enqueue alone.
+Use durable planned, staging, ready, activating, active, cancelling, failed and
+completed phases as applicable. Record prerequisites, exact owner receipts,
+lease/fence and compensation per step. Compensation is a new authorized effect;
+it cannot erase independent edits or reverse an unknown external outcome.
+Expose pending state until all required owners are ready. Domain phase is
+separate from the [API operation status](../implementation/api-and-events.md#operation-representation-and-errors).
 
 ## Content publication and delayed visibility
 
-Ordinary social content accepts asynchronous completion and discovery propagation.
-Keep durable acceptance, owner commit, semantic publication and index visibility
-distinct. A Content edit may be committed while adoption or search remains pending;
-the operation names its completed step and exact result rather than claiming all
-projections are current. Strong Access revocation and erasure are not weakened by
-this content-freshness policy.
+Content acceptance, owner commit, graph publication and search visibility have
+different completion points. Content saves exact variant revisions and receipts
+in PostgreSQL, pins immutable bytes for publication, then an admitted graph
+command commits the exact reference, semantic revision, receipt and outbox in
+TDB2. No body fetch runs inside the graph writer. The graph result is reconciled
+into Content preparation: ambiguous activation keeps the pin, a rejected one
+retains the saved revision, and duplicate delivery reuses the result. Pin release
+needs proof that late activation cannot succeed. Search consumes committed
+events and activates a complete qualified projection independently. Exact
+read-after-write requests carry their dependency and deadline; they may remain
+pending. Access revocation and erasure retain their stronger fences.
 
-1. Content commits the exact language-variant revision, local head CAS, receipt
-   and outbox in PostgreSQL. Prepare and durably pin its immutable reference for
-   the publication operation before graph activation.
-2. The admitted graph command validates local dependencies and expected selection,
-   then commits the exact Content reference, semantic revision, receipt and outbox
-   in one TDB2 transaction. No remote body fetch occurs inside the writer.
-3. Reconcile the graph outcome into the Content preparation. Duplicate delivery
-   repeats the same outcome; an ambiguous activation keeps its pin. A rejected
-   publication leaves the saved Content revision intact and does not manufacture
-   a successful adoption. Releasing an abandoned pin requires proof that the
-   operation cannot later activate, not a timeout alone.
-4. The search worker consumes committed source events and activates a complete
-   qualified projection. A caller requesting read-after-write supplies the exact
-   dependency and deadline; the response can remain pending/unavailable.
+The installed Main publication and eligibility routes bind an exact Content
+revision, digest, owner epoch, resource, variant, expected graph head and current
+Account/Access admission. Eligibility separately checks original-author proof.
+Their schemas, receipts and tests define the wire result. [Content storage](../storage/postgresql.md#publication-preparation-and-retention)
+and [search projection](search.md#postgresql-body-projection) own retention and
+derived visibility.
 
-The public Main command surface exposes the middle steps as
-`POST /v1/content-publications` and `POST /v1/content-search-eligibility`.
-Both require an Account `work:edit` assertion, an exact Access scope grant and
-an `Idempotency-Key`. Publication binds the Content revision ID, byte digest,
-owner data epoch, resource, variant and expected graph head before a graph
-activation can succeed. It returns `active`, `rejected` or `pending` with the
-receipt and graph position when terminal. Search eligibility is a separate
-admitted original-author decision over that publication; it checks the sealed
-Content draft proof in Access before public projection. Repeating the same
-key and request reuses the recorded outcome.
+## Reads and bounded work
 
-Publication selection and Content retention remain separate authorities with a
-recoverable workflow. Content deletion/erasure must fence publication and stale
-workers; cross-store foreign keys and distributed atomic commits are not assumed.
-[Content storage](../storage/postgresql.md#publication-preparation-and-retention)
-and [search projection](search.md#postgresql-body-projection) own the bindings.
+Local read-after-write verifies the same owner/dataset/epoch/sequence fence with
+the read and a deadline. Historical reads verify immutable bytes and current
+disclosure. Derived reads report generation and freshness. Cross-owner snapshots
+seal and validate their specified dependencies. Revocation stops later Access
+admission; stronger no-old-authority guarantees also drain or cancel admitted
+work before acknowledging the scope fence. Domain CAS still guards resource state.
 
-## Reads and authority
-
-| Request | Required boundary |
-| --- | --- |
-| Read after local write | Carry owner/dataset/dataEpoch/sequence fence; verify it with the data read and a deadline. |
-| Exact historical read | Resolve immutable component manifest/payload and current disclosure; unavailable stays unavailable. |
-| Ordinary derived query | Report generation and freshness; no false exactness. |
-| Cross-owner snapshot | Seal exact dependencies and validate the specified consistency contract. |
-| Protected write | Bind authorization to subject, operation, target, expected state and admitted validity. |
-
-Access admission has a defined linearization point. Revocation prevents later
-admissions; already admitted work follows an explicit finite validity contract.
-Operations requiring no old-authority effects after completion use a scope fence:
-stop admission, drain/cancel admitted work, then acknowledge effective revocation.
-Expiry alone is not that stronger guarantee. Domain CAS still protects resource
-state while authorization remains valid.
-
-## Bounded execution and failure
-
-Bound batch size, bytes, affected entities, traversals, lock duration and retries.
-Large topology/import/rebuild operations stage pages, reconcile intervening head
-changes and activate one validated generation. Stale workers fail at every page/activation.
-Failed staging never replaces the active generation. Cancellation distinguishes
-stopping future work from reversing already committed effects.
-
-Qualification must cover competing expected-head edits, same-key retries,
-lost responses, zero-match conditional writes, stale workers, grant revocation,
-cross-service partial completion and restore/replay. See [invariants](system-invariants.md).
+Bound batch size, bytes, affected entities, traversal, lock time and retries.
+Large topology or rebuild jobs stage bounded pages, recheck fences at every
+page and activate one validated generation. Failed staging leaves the active
+generation intact. Cancellation must state whether an effect already committed.

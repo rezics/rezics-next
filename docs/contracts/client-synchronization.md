@@ -1,5 +1,9 @@
 # Client synchronization and offline editing
 
+This is a prospective client flow. The web app has no qualified offline command
+queue or reconnect/merge protocol yet; keep these requirements until a frontend
+delivery implements and tests them.
+
 ## Local state and authority
 
 Clients may keep private drafts, pending commands and explicitly cached readable

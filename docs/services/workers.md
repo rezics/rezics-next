@@ -1,58 +1,42 @@
 # Source, media and delivery workers
 
-## Execution contract
+The installed Main relay polls committed, bounded owner outbox batches and
+retains a private handoff. [Event and job contracts](../contracts/events-and-jobs.md)
+describe the source position and the remaining consumer obligations. General
+source, media and external delivery workers are prospective; their complete
+lease, capacity and recovery contracts still need owner code and fault tests.
 
-Workers consume committed bounded intents and invoke the authoritative owner.
-They carry scoped service identities, exact input snapshots, graph/authority/
-erasure epochs, leases, deadlines, cancellation and durable checkpoints. They
-cannot directly rewrite Main's RDF, open live TDB2/Lucene files or bypass the
-caller's delegated ceiling.
+## Worker intent
 
-Source workers fetch current official contracts/data under provider rate/size/
-redirect limits, preserve observations and propose mappings. Media workers verify
-quarantined bytes and transform exact inputs. Delivery workers recheck recipients,
-preferences and disclosure before external effects. Product projection workers
-coalesce affected roots and submit owner commands; ordinary jena-text index
-maintenance occurs inside Fuseki's text dataset wrapper.
+Workers consume committed intents with scoped service identity, exact input
+snapshots, data/routing/authority/erasure fences, leases, deadlines and durable
+checkpoints. They submit commands to the authoritative owner. They do not write
+Main RDF directly, open live TDB2/Lucene files or exceed delegated ceilings.
 
-Content projection consumes exact PostgreSQL revisions and semantic publication
-events with separate checkpoints. Fetch bounded batches and extract language-aware
-text outside graph transactions; guarded commands materialize derived RDF units
-and their source identities through the wrapper. Stale workers cannot activate a
-superseded selection or erased revision. Publication and search readiness are
-separate progress states. [Search binding](../contracts/search.md#postgresql-body-projection)
-owns staging, activation and reconstruction; draft saves need not rewrite Jena.
+Source workers limit provider rates, sizes and redirects, preserve observations
+and propose mappings. Media workers verify quarantined bytes before transforming
+exact inputs. Delivery workers recheck recipients, preferences and disclosure
+before external effects. Product projection coalesces affected roots and submits
+owner commands. Fuseki's wrapper maintains the ordinary jena-text index.
 
-## Bootstrap scheduling and backpressure
+Content projection consumes exact PostgreSQL revisions and semantic events with
+separate checkpoints. It fetches bounded batches and extracts text outside graph
+transactions, then materializes derived units with guarded commands. A stale
+worker cannot activate superseded or erased content. Publication and search
+readiness remain separate; [search binding](../contracts/search.md#postgresql-body-projection)
+owns staging and reconstruction.
 
-Start with a bounded poller over committed owner outbox records and persistent
-consumer progress. Main's graph outbox is written in the same guarded TDB2 update
-as its corresponding command/receipt; Content and private SQL owners use their own SQL outbox.
-The polling loop can initially live in the participating owner process. No Redis,
-NATS/JetStream or independent worker fleet is required before the first journey.
+## Activation and recovery
 
-Each consumer records its delivered frontier, uses bounded batches/bytes and
-retries with finite backoff and terminal disposition. Limit retained undelivered
-work and expose oldest-item age; do not move an unbounded queue into the database.
-Choose a broker later when fan-out or isolation needs justify it; the relay still
-uses owner receipts, idempotency and durable checkpoints. Broker delivery does
-not make an external side effect exactly once.
+The first scheduler can be a bounded poller inside an owner process. Add a
+broker or independent worker fleet only when fan-out or isolation needs it.
+Bound undelivered work and expose its oldest age. Separate expensive imports
+from latency-sensitive work and budget CPU, memory, disk and downstream load.
+Large Lucene reconstruction is stopped-Fuseki maintenance.
 
-Separate high-cost imports/builds from latency-sensitive product work when they
-are activated. Concurrency budgets consider CPU, resident memory, disk I/O and
-downstream capacity. Large text index reconstruction is controlled maintenance
-with Fuseki stopped, not a worker opening the active files in another JVM.
-
-## Recovery and activation
-
-Advance a checkpoint only after the effect or durable continuation commits.
-Detect expired source/outbox frontiers and rebuild/reconcile rather than silently
-skip. Every page/activation checks current `dataEpoch`, generation, authority and
-erasure fences. Unknown external outcomes reconcile with provider receipts;
-replaying an intent without those checks can resurrect removed content or repeat
-an irreversible effect.
-
-Observe queue age, throughput, retries, terminal items and projection lag. Test
-crash/restart at each durable boundary when the worker is implemented. Historical
-source replay and a current Lucene rebuild use different inputs and acceptance;
-index existence alone does not establish a valid projection generation.
+Advance progress only after the effect or durable continuation commits. Detect
+expired frontiers and reconcile or rebuild. Every page and activation rechecks
+the current generation and fences. Resolve uncertain external outcomes from
+provider receipts before replay. Observe queue age, throughput, retries,
+terminal items and projection lag; test restart at each implemented durable
+boundary. An index's existence does not prove its generation is valid.

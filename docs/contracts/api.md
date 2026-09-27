@@ -1,80 +1,41 @@
-# API, SDK and MCP contracts
+# API, SDK and MCP direction
 
-## Shared capability interface
+Domain operations are shared capabilities for the web, SDK, CLI and MCP. They
+expose resources and commands rather than tables or arbitrary graph writes.
+Aggregate reads can reduce round trips only while preserving partial results
+and execution budgets. The first-party web uses Main's exported app type through
+a type-only Eden import; browser code does not import service implementation.
 
-Expose domain resources and commands rather than tables or arbitrary graph writes.
-Web/BFF, SDK, CLI and MCP invoke the same operation and authority contracts.
-Internal operations need not be public endpoints. Aggregate reads reduce client
-round trips while preserving partial/unavailable results and execution budgets.
+## Installed HTTP contract
 
-Each operation defines actor/authority context, inputs, preconditions, state
-transition, atomicity, idempotency, output, failure states and observability.
-Use OpenAPI as the published HTTP contract for external clients. Qualify Elysia
-2's schema-based OpenAPI plugin against the chosen profile, including lossless
-numbers, nullable/omitted fields, status-specific responses and Problem Details.
-Keep executable schemas authoritative at the transport boundary; TypeScript-only
-types and typed clients do not replace runtime validation. The first-party web
-uses Eden over Main's exported app type through a type-only import. This does not
-replace the published contract or permit browser imports of service code.
+The authored route schemas and [generated Main OpenAPI](../../generated/openapi/main/public.json)
+define installed paths, validation and status-specific envelopes. The
+[API extension procedure](../implementation/api-and-events.md#add-an-operation)
+explains how to add an owner operation. Runtime schemas remain authoritative at
+the transport boundary. [Problem Details](../implementation/api-and-events.md#operation-representation-and-errors)
+use stable safe codes; unknown or undisclosed resources share the appropriate
+response rather than disclosing hidden existence. Exact Content revision reads
+are covered by the route schema and owner tests, including current disclosure,
+verified historical bytes and private uncached responses.
 
-[API and event surfaces](../implementation/api-and-events.md) defines command
-families, common operation status and versioned transport envelopes.
+## Contracts still requiring profiles and tests
 
-## Wire semantics
-
-Preserve omitted/null/empty, exact numbers, language, units, typed references and
-selection context. Serialize large integers/decimals losslessly. Errors have a
-stable code, safe message, request/operation ID and typed details. Distinguish
-unauthenticated, denied, not found under disclosure policy, stale revision,
-unsupported profile, partial source, budget exhaustion and dependency unavailable.
-
-Main's `GET /v1/content-revisions/{revision}?actingSubject={subject}` is an
-exact retained Content read. The path names the Content revision UUID; it does
-not select a variant head or public projection. The bearer token needs Account
-`work:read`. Main resolves the revision's owning Work internally, checks the
-current Access `work.read` grant at `work:read:{Work URI}` for the acting
-subject, and requires that Work in the current graph. The 200 response carries
-`reference` (including Content owner, resource/variant/revision IDs, format,
-model, SHA-256 byte digest and length, language, direction, source revision and
-provenance), the exact UTF-8 JSON serialization as `serializedJson`, and its
-parsed object as `body`. Historical bytes are read and verified by Content.
-Unknown, erased, or currently undisclosed revisions share a 404 response;
-unavailable or corrupt committed bytes return 503 only after disclosure is
-admitted. Responses are private and uncached. Malformed inputs return 400;
-invalid Account assertions return 401; unavailable authorities return 503.
-
-Commands use expected revisions and idempotency keys. Asynchronous commands
-return an operation resource with progress, cancellation and terminal outcome;
-HTTP acceptance is not successful publication or installation. Bulk operations
-declare per-item versus whole-batch atomicity and report every item.
-
-## Queries and pagination
-
-Ordinary clients submit typed Filter/Search descriptors. Trusted compilation
-binds datasets, context, authority and resource limits. Developer graph queries
-use an admitted read-only profile with the same budgets and disclosure checks;
-there is no unrestricted public Jena admin/write surface.
-
-Cursors bind query/policy revisions, ordering, context, generation and disclosure
-domain. Use deterministic tie breakers. Initial Fuseki queries have no reusable remote
-transaction token: exact continuation uses a bounded materialized result, or a
-generation check that returns restart-required after relevant changes. The
-check and page data must share one SPARQL request, with fixed temporal inputs and
-qualified index-reader pairing for text. When that cannot be guaranteed, use a
-materialized result or require restart. Keyset ordering alone does not preserve
-a snapshot.
-Invalid/expired cursors return restartable outcomes. Counts and facets declare
-their population and exact/estimated/partial status independently of page size.
-Streaming responses preserve cancellation, deadlines and reconnect semantics.
-
-## Events and protocol evolution
-
-Version event envelopes and incompatible HTTP contracts explicitly. Generated
-clients preserve discriminated unions and unknown/unsupported outcomes. Introduce
-breaking target contracts directly in this redesign; do not add compatibility
-layers for an obsolete runtime. Within a released new contract, support its
-declared deprecation policy and update consumers together.
-
-MCP tool descriptions mirror command consequences and scopes. Tool input,
-retrieved documents and package text are data, never authority to use secrets or
-execute unrelated actions. [Connected apps](connected-apps.md) owns delegation.
+- Preserve omitted, null and empty values separately, plus exact numeric strings,
+  language, units, typed references and selection context in new profiles.
+  Qualify generated clients for lossless numbers, discriminated unions and
+  unknown or unsupported outcomes.
+- Typed Filter/Search queries must bind context, authority and budgets. Any
+  developer graph query needs an admitted read-only profile; it must never
+  expose Jena admin or write access.
+- Continuation cursors need a stable query, policy, context, generation and
+  disclosure domain with deterministic tie breakers. A reusable snapshot across
+  Fuseki HTTP requests is not assumed. A page and its generation check must
+  share a read snapshot, or use a bounded materialized result; otherwise return
+  restart-required. Counts and facets state their own exactness and population.
+- Streaming and asynchronous operations require explicit deadline, cancellation,
+  reconnect and per-item versus whole-batch atomicity contracts. HTTP acceptance
+  alone does not establish successful publication or installation.
+- External client and MCP adapters must preserve owner authority and operation
+  semantics. MCP input, retrieved text and package text are data, not authority
+  to use secrets or perform unrelated actions. [Connected apps](connected-apps.md)
+  owns delegated ceilings.

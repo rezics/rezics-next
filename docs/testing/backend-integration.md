@@ -1,41 +1,15 @@
 # Cross-service acceptance
 
-These are prospective tests, not executed results. Run at the applicable
-[verification phase](../plan/execution-workflow.md), preserving actual owner
-boundaries, source snapshots and positive/denied/partial outcomes.
+The [typed SYS01–SYS14 inventory](../../scripts/qa/cases/backend-integration.ts)
+defines the scenarios and required results. This page remains the stable case
+identity in recorded qualification evidence. The [qualification record](../plan/qualification.md)
+links each case to its actual unit, integration, model or fault/recovery tests;
+the case title alone does not prove every assertion.
 
-| ID | Scenario | Required result |
-| --- | --- | --- |
-| SYS01 | Agent provisioning succeeds only in one owner | Pending explicit state; retry/compensate without authority leak. |
-| SYS02 | Jena commit succeeds but response is lost | Receipt lookup/retry returns same effective result. |
-| SYS03 | Unrelated transaction advances the dataset sequence | Cannot falsely report own failed CAS as successful. |
-| SYS04 | Outbox publishes and consumer crashes before ACK | Duplicate delivery produces one durable effect. |
-| SYS05 | Broker retention expires before consumer checkpoint | Gap detected and reconciled/rebuilt. |
-| SYS06 | Revoke principal during import/export/install | Current fences constrain activation/delivery. |
-| SYS07 | Erase then restore older stores and replay events | Erasure frontier prevents resurrection. |
-| SYS08 | Move owner partition with old workers | Routing and lease epochs reject old writes. |
-| SYS09 | Object upload succeeds but graph activation fails | Safe staged orphan cleanup; no broken published reference. |
-| SYS10 | Conditional Fuseki Update returns 200/204 with no matching guard | Own receipt determines outcome; unrelated sequence progress cannot produce success. |
-| SYS11 | Delayed update races terminal cancellation/rejection | Same receipt identity admits one winner; strong revocation waits for durable sealing/reconciliation. |
-| SYS12 | Outbox contains zero-event batches or retention gaps | Batch counts and contiguous epoch/sequence prove coverage; missing retained work requires recovery. |
-| SYS13 | Restore loses a later receipt while a client retries its old command | New data epoch rejects unproved old intent; external effects reconcile before replay. |
-| SYS14 | Two requests use the same idempotency key with different digests | One recorded outcome; the conflicting digest never rewrites or replays another request. |
+Run cross-owner fault cases in the applicable isolated QA tier. Capture owner
+receipts, exact profiles and builds, failed boundaries and recovery results.
+Mock-only results do not qualify storage or cross-service behavior.
 
-Record inputs, operation receipts, exact profiles/builds and failures. A mock-only
-pass cannot qualify storage, cross-service behavior or capacity.
-
-Apply SYS02/SYS10/SYS11/SYS13/SYS14 to
-[protected correction effects](../../scripts/qa/cases/editorial-protection.ts): lost responses,
-zero-match updates, cancellation, old-backup retries and same-key conflicts must
-preserve exact approvals, one-use application and active protection. Saving a
-Content candidate is not successful adoption across the two owners.
-
-The isolated `authenticated-api-journey.test.ts` fixture is the S2 API boundary
-case. It obtains a real Account OAuth token, provisions scoped Access grants,
-and uses Main HTTP commands for Work, native Contribution publication, two Realm
-classification contexts, Realm adoption/rejection of distinct Contributions,
-PostgreSQL Content draft/publication/eligibility, search, edit, exact
-prior-revision reads and a paragraph comment anchored to the retained old
-Content revision. API recovery remains. Its live QA result is pending the
-coordinator's merged integration batch; provisioning grants in the disposable
-Access database does not substitute for command admission or receipts.
+The [authenticated API journey](../../tests/qa/integration/authenticated-api-journey.test.ts)
+exercises Account tokens, Access grants, Main commands, Content revisions and
+public search through real owner APIs. Its result is qualified by its own run.
