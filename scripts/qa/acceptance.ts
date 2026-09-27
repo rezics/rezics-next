@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import type { Tier } from './core.ts';
 import { declaredCases } from './cases/index.ts';
 import type { Case } from './cases/types.ts';
+import { integrationGateFiles } from './integration-gate-files.ts';
 
 export type { Case } from './cases/types.ts';
 export interface TestResult {
@@ -122,24 +123,7 @@ function isRetiredQaTest(test: TestResult): boolean {
     && legacyHostJenaGateFiles.some(file => file === test.file);
 }
 
-export const integrationGateFiles = [
-  'services/account/tests/account.integration.test.ts',
-  'services/account/tests/consent-revocation.integration.test.ts',
-  'services/account/tests/oidc-authorization.integration.test.ts',
-  'services/main/tests/access.integration.test.ts',
-  'services/main/tests/account-assertion.integration.test.ts',
-  'services/main/tests/acting-context.integration.test.ts',
-  'services/main/tests/represented-work-proof.integration.test.ts',
-  'services/main/tests/immutable-objects.integration.test.ts',
-  'services/main/tests/search-read-lease.integration.test.ts',
-  'services/main/tests/content-publication.integration.test.ts',
-  'services/main/tests/content-projection.integration.test.ts',
-  'services/main/tests/content-revision-read.integration.test.ts',
-  'services/main/tests/context-schema.integration.test.ts',
-  'services/main/tests/work-read.integration.test.ts',
-  'services/main/tests/realm-read.integration.test.ts',
-  'services/content/tests/core.integration.test.ts',
-] as const;
+export { integrationGateFiles };
 
 export function isQaIntegrationPath(path: string): boolean {
   return path.startsWith('tests/qa/integration/') || integrationGateFiles.some(file => file === path);
