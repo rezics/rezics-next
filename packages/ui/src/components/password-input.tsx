@@ -43,7 +43,7 @@ export const PasswordInputGroup = (
     <ArkPasswordInput.Control asChild data-slot="password-input-control">
       <InputGroup
         className={cn(
-          'in-data-[size=lg]:h-9 in-data-[size=sm]:h-7',
+          'in-data-[size=lg]:h-10 in-data-[size=sm]:h-8 in-data-[size=sm]:rounded-lg',
           'data-disabled:pointer-events-none data-disabled:opacity-64',
           className,
         )}
