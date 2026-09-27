@@ -8,6 +8,13 @@ a complete executable gate. Extend the harness alongside each affected operation
 
 ## Inventory and coverage
 
+First-phase scope (maintainer direction 2026-09-27): the backend Goal qualifies
+the main performance paths by measured checks (OPS05, SEARCH18, REC02 and the
+multi-scale growth checks cited on this page), and the remaining entry points
+rely on their written cost contracts and derivations. The executable inventory
+described below, full performance verification and the 500 million entity
+scale are later-phase work.
+
 Map API route profiles and registered jobs/import/rebuild/recovery entry points
 to their owning acceptance cases and cost contracts. Add coverage for new entries
 and for alternate execution branches, including no-match, denial, stale state,

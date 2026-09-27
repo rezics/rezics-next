@@ -218,6 +218,12 @@ Mark the Goal complete only when all of the following are true:
   have reviewed complexity bounds and applicable counterexample checks. Planning
   arithmetic and small tests do not certify capacity for the current 500 million
   entities; qualify actual rollout capacity separately before claiming it.
+  Maintainer direction (2026-09-27): this first-phase Goal qualifies the main
+  performance paths by measured checks (the named host workload OPS05, search
+  capacity SEARCH18, hot-target recommendation REC02 and the multi-scale growth
+  checks); the remaining paths need a sound written complexity derivation. Full
+  performance verification, an executable inventory of every entry point's cost
+  contract, and the 500 million entity scale are later-phase work.
 - Maintained docs describe the delivered behavior, commands and remaining explicit
   rollout boundaries. Required checks pass, and the final report links to evidence
   and states the precise qualified scope.
