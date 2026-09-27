@@ -3,6 +3,7 @@ import type { Pool } from 'pg';
 import { AUTH_MODE_CLAIM, consentBasisActive, tokenScopes } from './consent-fence.ts';
 import { installationBasisActive } from './installations.ts';
 import { recoveryBasisActive } from './recovery-claim.ts';
+import { accountBasisActive } from './account-fence.ts';
 import { ACCESS_TOKEN_SECONDS, SIGNING_ALLOWANCE_SECONDS, signingKeyAccepts } from './signing-keys.ts';
 
 /** The provider authenticates the introspection caller and verifies the token
@@ -45,7 +46,8 @@ export async function currentIntrospection(pool: Pool, presented: string | null,
         && await installationBasisActive(client, payload, clientId, tokenScopes(payload))
         && await consentBasisActive(client, payload, clientId)
         && (payload[AUTH_MODE_CLAIM] === 'workload'
-          || await recoveryBasisActive(client, payload));
+          || (await recoveryBasisActive(client, payload) && await accountBasisActive(client, payload, clientId)));
+      await client.query('COMMIT');
       return active ? provider : inactive();
     } finally {
       try { await client.query('ROLLBACK'); } finally { client.release(); }

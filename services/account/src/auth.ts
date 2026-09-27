@@ -1,4 +1,5 @@
 import { betterAuth } from 'better-auth';
+import { createHash } from 'node:crypto';
 import { APIError } from 'better-auth/api';
 import { jwt, twoFactor } from 'better-auth/plugins';
 import { passkey } from '@better-auth/passkey';
@@ -11,6 +12,7 @@ import { signingKeyOptions } from './signing-keys.ts';
 import { providerScopes, resourceScopes } from './oauth-scopes.ts';
 import { currentRecoveryGeneration, RECOVERY_GENERATION_CLAIM } from './recovery-claim.ts';
 import { accountLocale, type AccountEmail } from './email.ts';
+import { ACCOUNT_GENERATION_CLAIM, GRANT_GENERATION_CLAIM, currentAccountGenerations } from './account-fence.ts';
 
 export interface AccountConfig {
   baseURL: string;
@@ -119,6 +121,12 @@ export function accountAuthOptions(config: AccountConfig) {
             return { [AUTH_MODE_CLAIM]: 'workload',
               ...await installationClaim(config.pool, client.clientId, scopes, grantType) };
           }
+          const security = await currentAccountGenerations(config.pool, user.id, client.clientId);
+          if (!security && grantType) throw new APIError('BAD_REQUEST', {
+            error: 'invalid_grant', error_description: 'account authorization is unavailable',
+          });
+          const securityClaims = { [ACCOUNT_GENERATION_CLAIM]: security?.account ?? '0',
+            [GRANT_GENERATION_CLAIM]: security?.grant ?? '0' };
           // The provider rewrites pairwise sub only when presenting the
           // introspection response. This profile needs sub to be the durable
           // Account user ID so it can bind the current consent row.
@@ -149,12 +157,19 @@ export function accountAuthOptions(config: AccountConfig) {
                 error: 'invalid_grant', error_description: 'authorization code basis is stale',
               });
             }
+            const version = await config.pool.query<{ account: string; grant: string }>(`SELECT
+              account_generation::text AS account, grant_generation::text AS grant
+              FROM rezics_oauth_code_basis WHERE id = $1`,
+            [createHash('sha256').update(code).digest('base64url')]);
+            if (!security || version.rows[0]?.account !== security.account || version.rows[0]?.grant !== security.grant) {
+              throw new APIError('BAD_REQUEST', { error: 'invalid_grant', error_description: 'account authorization is stale' });
+            }
             const installation = { [INSTALLATION_CLAIM]: basis.installationId };
             const recovery = { [RECOVERY_GENERATION_CLAIM]: basis.recoveryGeneration };
             return basis.mode === 'trusted' ? { [AUTH_MODE_CLAIM]: 'trusted',
-              ...installation, ...recovery }
+              ...installation, ...recovery, ...securityClaims }
               : { [AUTH_MODE_CLAIM]: 'consent', [CONSENT_CLAIM]: basis.consentId,
-                [CONSENT_GENERATION_CLAIM]: basis.generation, ...installation, ...recovery };
+                [CONSENT_GENERATION_CLAIM]: basis.generation, ...installation, ...recovery, ...securityClaims };
           }
           // A refresh binds the current installation; the refresh-token write
           // in the same exchange fails unless it is still the family's own.
@@ -162,7 +177,7 @@ export function accountAuthOptions(config: AccountConfig) {
           const recovery = { [RECOVERY_GENERATION_CLAIM]:
             await currentRecoveryGeneration(config.pool, user.id) };
           if (client.skipConsent) return { [AUTH_MODE_CLAIM]: 'trusted',
-            ...installation, ...recovery };
+            ...installation, ...recovery, ...securityClaims };
           const consent = await config.pool.query<{ id: string; generation: string }>(
             `SELECT id, "rezicsGeneration"::text AS generation FROM "oauthConsent"
             WHERE "userId" = $1 AND "clientId" = $2
@@ -179,7 +194,7 @@ export function accountAuthOptions(config: AccountConfig) {
           }
           return { [AUTH_MODE_CLAIM]: 'consent', [CONSENT_CLAIM]: consent.rows[0].id,
             [CONSENT_GENERATION_CLAIM]: consent.rows[0].generation,
-            ...installation, ...recovery };
+            ...installation, ...recovery, ...securityClaims };
         } } }],
       }),
     ],
