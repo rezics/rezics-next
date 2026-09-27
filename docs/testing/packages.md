@@ -34,9 +34,9 @@ response metadata and acquisition time in ignored `.temp/goal/` evidence. The
 real Account/Access/Main/Content API preserved a Modrinth version's qualified
 embedded project/version dependency in its immutable request and omitted its
 captured embedded child from independent downloads. CurseForge returned an
-unauthenticated access gap; `REZICS_CURSEFORGE_API_KEY` was absent, so PKG09
-remains partial until a live authenticated file with dependencies passes the
-same receipt path. Nexus public v2 GraphQL returned game IDs, while its
+unauthenticated access gap; `REZICS_CURSEFORGE_API_KEY` was absent, so that
+earlier run left PKG09 partial under its then-current live-capture gate. Nexus
+public v2 GraphQL returned game IDs, while its
 unauthenticated v3 file-version range returned denial. The receipt records both
 surfaces and `incomplete-source-data` without assuming an empty range; this
 closes the bounded PKG10 scenario. Steam's keyless Collection endpoint returned
@@ -62,6 +62,20 @@ advanced users; only their live tests are skipped for now. The keyless
 live Modrinth, Nexus and Steam Collection captures above stay as recorded
 evidence. Live acquisition for these providers is an explicit rollout boundary
 until the acquisition design is agreed.
+
+G-138's selected relation-modeling API run `20260927t035118-1ca44e` passed
+authored CurseForge file responses with all six documented relation types and
+authored Steam published-file children and Collection responses through real
+Account/Access/Main/Content receipts, private reads and replay. CurseForge
+`embedded` and `include` retained distinct kinds while both bundled files were
+excluded from independent downloads; the changed `include` interpretation uses
+`mod-native-capture-v2` so stored v1 receipts keep their original meaning. Steam
+item children stayed advisory and Collection members stayed collection relations;
+neither created a hard installation constraint. The keyless live Modrinth, Nexus
+and Steam Collection captures remain in the selected fixture. PKG09 and PKG11
+now meet the relation-modeling scenarios defined above, subject to merged QA;
+live authenticated acquisition remains unqualified and the optional API-key
+capture paths remain available.
 
 Controlled installation/plan tests need not compile every upstream project.
 Do not claim runtime/build success from a resolver-only pass. Preserve rejected
