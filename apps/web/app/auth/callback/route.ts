@@ -7,9 +7,11 @@ import { accountClient } from '../../../features/auth/client.ts';
 import { AGENT_COOKIE, clearCookies, OAUTH_COOKIES, OAUTH_NEXT_COOKIE, OAUTH_STATE_COOKIE,
   OAUTH_VERIFIER_COOKIE } from '../../../features/auth/cookies.ts';
 import { appCallback, safeReturnPath } from '../../../features/auth/paths.ts';
+import { ensureOnboarding, onboardingDestination } from '../../../features/onboarding/ensure.ts';
 import { readMainSessionAgent } from '../../../features/auth/session.ts';
 import { sessionCookies, tokenSubject, writeCookies,
   writeSessionKey } from '../../../features/auth/session-state.ts';
+import { LOCALE_COOKIE, pathLocale, resolveLocale } from '../../../i18n/locale.ts';
 
 export async function GET(request: Request) {
   const url = new URL(request.url);
@@ -25,8 +27,11 @@ export async function GET(request: Request) {
     return new Response('Authorization state is invalid or expired', { status: 400 });
   }
   const next = safeReturnPath(jar.get(OAUTH_NEXT_COOKIE)?.value);
+  const locale = pathLocale(next) ?? resolveLocale(jar.get(LOCALE_COOKIE)?.value,
+    request.headers.get('accept-language'));
   if (!code) {
-    const declined = new NextResponse('Authorization was declined', { status: 400 });
+    const declined = NextResponse.redirect(new URL(`/${locale}/identity/consent?next=${encodeURIComponent(next)}`,
+      request.url));
     clearCookies(declined.cookies, request.url, OAUTH_COOKIES);
     return declined;
   }
@@ -53,9 +58,10 @@ export async function GET(request: Request) {
     .v1.me['session-agent'].put({ actingSubject: candidate, expectedRevision: null }, {
       headers: { 'x-session-key': sessionKey, 'idempotency-key': crypto.randomUUID() },
     }).then(result => !result.error).catch(() => false) : false;
-  const agent = selected ? candidate : null;
-  const response = NextResponse.redirect(new URL(agent ? next
-    : `/identity?next=${encodeURIComponent(next)}`, url.origin));
+  const onboarding = await ensureOnboarding(issued.tokens.accessToken, sessionKey);
+  const destination = onboarding.kind === 'unavailable' && selected ? next
+    : onboardingDestination(onboarding, selected, next, locale);
+  const response = NextResponse.redirect(new URL(destination, url.origin));
   clearCookies(response.cookies, request.url, [...OAUTH_COOKIES, AGENT_COOKIE]);
   writeCookies(response.cookies, sessionCookies(request.url, issued.tokens, user));
   writeSessionKey(response.cookies, request.url, sessionKey);

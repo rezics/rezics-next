@@ -29,14 +29,23 @@ export const SignedIn: Story = {
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     const trigger = canvas.getByRole('button', { name: 'Account menu' });
-    await expect(trigger).toHaveTextContent('Ada Lovelace');
     await expect(trigger).toHaveTextContent('Aster');
+    await expect(trigger).toHaveTextContent('@aster');
     await userEvent.click(trigger);
+    if (window.matchMedia('(max-width: 639px)').matches) {
+      const dialog = await within(canvasElement.ownerDocument.body).findByRole('dialog', { name: 'Account menu' });
+      await expect(within(dialog).getByRole('button', { name: 'Switch Agent' })).toBeVisible();
+      await expect(within(dialog).getByRole('link', { name: 'Profile settings' }))
+        .toHaveAttribute('href', '/en/settings');
+      return;
+    }
     const menu = await within(canvasElement.ownerDocument.body).findByRole('menu');
     await expect(menu).toHaveTextContent('ada@example.test');
     await expect(within(menu).getByRole('group', { name: 'Acting as' })).toHaveTextContent('Aster');
     // The menu opens with a short fade and zoom.
     await waitFor(() => expect(within(menu).getByRole('menuitem', { name: 'Switch Agent' })).toBeVisible());
+    await expect(within(menu).getByRole('menuitem', { name: 'Profile settings' }))
+      .toHaveAttribute('href', '/en/settings');
     await expect(within(menu).getByRole('menuitem', { name: 'Sign out' })).toBeVisible();
     await expect(within(menu).getByRole('menuitem', { name: 'Manage your REZICS Account' }))
       .toHaveAttribute('href', 'https://account.rezics.test');
@@ -70,8 +79,8 @@ export const AgentNoLongerAvailable: Story = {
 };
 
 export const LongName: Story = {
-  args: { session: { ...session, user: { ...session.user,
-    name: 'Augusta Ada King, Countess of Lovelace and Honorary Member of Several Learned Societies' } } },
+  args: { session: { ...session, agent: { status: 'selected', agent: { ...agents[0]!,
+    label: 'Augusta Ada King, Countess of Lovelace and Honorary Member of Several Learned Societies' } } } },
 };
 
 export const Chinese: Story = {
@@ -81,6 +90,11 @@ export const Chinese: Story = {
     const trigger = within(canvasElement).getByRole('button', { name: '账户菜单' });
     await expect(trigger).toHaveTextContent('选择身份');
     await userEvent.click(trigger);
+    if (window.matchMedia('(max-width: 639px)').matches) {
+      const dialog = await within(canvasElement.ownerDocument.body).findByRole('dialog', { name: '账户菜单' });
+      await expect(within(dialog).getByRole('button', { name: '退出登录' })).toBeVisible();
+      return;
+    }
     const menu = await within(canvasElement.ownerDocument.body).findByRole('menu');
     await waitFor(() => expect(within(menu).getByRole('menuitem', { name: '退出登录' })).toBeVisible());
   },

@@ -55,6 +55,15 @@ export const StaleDefault: Story = {
   args: { current: ada, notice: { kind: 'stale-default' } },
 };
 
+export const OtherTabChangedAgent: Story = {
+  args: { current: ada, notice: { kind: 'stale-session' } },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByRole('alert')).toHaveTextContent('another tab');
+    await expect(canvas.getByRole('radio', { name: /Ada Lovelace/ })).toBeChecked();
+  },
+};
+
 export const IneligibleDefault: Story = {
   args: { notice: { kind: 'ineligible-default', previous: gone } },
 };
@@ -78,7 +87,9 @@ export const NoAgents: Story = {
   args: { options: [] },
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
-    await expect(canvas.getByRole('status')).toHaveTextContent('cannot act as any Agent');
+    await expect(canvas.getByRole('status')).toHaveTextContent('do not have a profile');
+    await expect(canvas.getByRole('link', { name: 'Set up your profile' }))
+      .toHaveAttribute('href', '/en/onboarding?next=%2Fen%2Fstudio');
     await expect(canvas.queryByRole('button')).toBeNull();
   },
 };

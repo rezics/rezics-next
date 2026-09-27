@@ -1,6 +1,6 @@
 'use client';
 
-import { Avatar, AvatarFallback, AvatarImage } from '@rezics/ui/avatar';
+import { Avatar, AvatarFallback } from '@rezics/ui/avatar';
 import { Button } from '@rezics/ui/button';
 import { Menu, MenuContent, MenuGroup, MenuItem, MenuRadioGroup, MenuRadioItem, MenuSeparator,
   MenuSub, MenuSubContent, MenuSubTrigger, MenuTrigger } from '@rezics/ui/menu';
@@ -9,6 +9,7 @@ import { XIcon } from 'lucide-react';
 import { useId, useRef, useState } from 'react';
 import { localeNames, uiLocales, type UiLocale } from '../../i18n/define.ts';
 import { localizedPath } from '../../i18n/locale.ts';
+import LocalizedLink from '../shell/localized-link.tsx';
 import { themes, type Theme } from '../shell/preferences.ts';
 import { useShell } from '../shell/shell-provider.tsx';
 import { agentName, type SessionAgent } from './acting-identity.ts';
@@ -50,18 +51,19 @@ function AccountIdentity({ session, messages, compact = false }: {
   const { user } = session;
   const agent = agentSummary(session.agent, messages);
   const displayName = user.name || user.email || messages.accountMenu;
+  const avatarName = session.agent.status === 'selected' ? agent.text : user.name;
   return <>
     <Avatar size="lg">
-      {user.image ? <AvatarImage src={user.image} alt="" /> : null}
       <AvatarFallback className="bg-accent font-semibold text-accent-foreground text-sm">
-        {initials(user.name, user.email)}</AvatarFallback>
+        {initials(avatarName, user.email)}</AvatarFallback>
     </Avatar>
     <span className={compact ? 'sr-only' : 'hidden min-w-0 flex-col leading-tight sm:flex'}>
-      <span className="truncate font-medium text-sm">{displayName}</span>
+      <span className="truncate font-medium text-sm">{agent.text}</span>
       <span className={`flex items-center gap-1 truncate text-xs ${agent.attention
         ? 'text-warning-foreground' : 'text-muted-foreground'}`}>
         {agent.attention ? <AttentionDot /> : null}
-        <span className="truncate">{agent.text}</span></span>
+        <span className="truncate">{session.agent.status === 'selected' && session.agent.agent.handle
+          ? `@${session.agent.agent.handle}` : displayName}</span></span>
     </span>
   </>;
 }
@@ -112,8 +114,12 @@ export function AccountMenu({ session, messages, accountOrigin }: {
           <MenuGroup heading={messages.actingAs}>
             <p className={`flex items-center gap-1.5 px-2.5 pb-1.5 text-sm ${agent.attention
               ? 'text-warning-foreground' : ''}`}>
-              {agent.attention ? <AttentionDot /> : null}<span className="truncate">{agent.text}</span></p>
+              {agent.attention ? <AttentionDot /> : null}<span className="truncate">{agent.text}
+                {session.agent.status === 'selected' && session.agent.agent.handle
+                  ? ` · @${session.agent.agent.handle}` : ''}</span></p>
             <MenuItem value="switch-agent">{messages.switchAgent}</MenuItem>
+            <MenuItem value="profile-settings" asChild><LocalizedLink
+              href={localizedPath('/settings', locale)}>{messages.profileSettings}</LocalizedLink></MenuItem>
           </MenuGroup>
           <MenuSeparator />
           <MenuSub>
@@ -157,8 +163,12 @@ export function AccountMenu({ session, messages, accountOrigin }: {
         </div>
         <div className="grid gap-5 overflow-y-auto px-5 py-4">
           <div><p className="font-medium">{displayName}</p>
-            <p className="text-muted-foreground text-sm">{agent.text}</p></div>
+            <p className="text-muted-foreground text-sm">{agent.text}
+              {session.agent.status === 'selected' && session.agent.agent.handle
+                ? ` · @${session.agent.agent.handle}` : ''}</p></div>
           <button type="button" onClick={switchAgent} className="text-start text-sm">{messages.switchAgent}</button>
+          <LocalizedLink href={localizedPath('/settings', locale)} className="text-sm">
+            {messages.profileSettings}</LocalizedLink>
           <fieldset className="grid gap-2"><legend className="mb-1 font-semibold text-sm">{t.language}</legend>
             {uiLocales.map(choice => <label key={choice} className="flex min-h-10 items-center gap-3 text-sm"
               lang={choice}><input type="radio" name="account-language" checked={locale === choice}

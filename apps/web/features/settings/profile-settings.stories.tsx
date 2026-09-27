@@ -1,0 +1,59 @@
+import type { Meta, StoryObj } from '@storybook/react-vite';
+import { expect, within } from 'storybook/test';
+import type { AgentOption } from '../auth/acting-identity.ts';
+import { ProfileSettings } from './profile-settings.tsx';
+
+const person: AgentOption = { iri: 'https://rezics.com/id/00000000-0000-4000-8000-000000000001',
+  label: 'Ada Lovelace', handle: 'ada', kind: 'person', path: 'direct-principal' };
+const meta = { title: 'Settings/Profile', component: ProfileSettings,
+  args: { agent: person, locale: 'en', error: null, updated: false },
+} satisfies Meta<typeof ProfileSettings>;
+export default meta;
+type Story = StoryObj<typeof meta>;
+
+export const Person: Story = {
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByRole('heading', { name: 'Profile settings' })).toBeVisible();
+    await expect(canvas.getByText('@ada')).toBeVisible();
+    await expect(canvas.getByText(/This public name started with your Account name/)).toBeVisible();
+    await expect(canvas.getByText(/30 days/)).toBeVisible();
+    await expect(canvas.getByRole('status')).toHaveTextContent('current handle');
+    await expect(canvas.getByRole('button', { name: 'Change handle' })).toBeDisabled();
+  },
+};
+
+export const PenName: Story = {
+  args: { agent: { ...person, label: 'Aster', handle: 'aster', kind: 'pen-name',
+    path: 'represented-agent' } },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByText('Aster')).toBeVisible();
+    await expect(canvas.getByText(/Editing this Agent’s name and avatar/)).toBeVisible();
+  },
+};
+
+export const Cooldown: Story = {
+  args: { error: 'cooldown' },
+  async play({ canvasElement }) {
+    await expect(within(canvasElement).getByText(/You can change your handle again 30 days/)).toBeVisible();
+  },
+};
+
+export const NoEligibleAgent: Story = {
+  args: { agent: null },
+  async play({ canvasElement }) {
+    await expect(within(canvasElement).getByRole('link', { name: 'Choose a profile' }))
+      .toHaveAttribute('href', '/en/identity');
+  },
+};
+
+export const ChinesePhone: Story = {
+  args: { locale: 'zh-Hans' },
+  globals: { locale: 'zh-Hans', viewport: { value: 'phone' } },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByRole('heading', { name: '个人资料设置' })).toBeVisible();
+    await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
+  },
+};

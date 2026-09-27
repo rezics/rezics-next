@@ -4,6 +4,8 @@ import { Button } from '@rezics/ui/button';
 import { type AgentOption, agentName } from './acting-identity.ts';
 import { type AuthMessages, formatMessage } from './messages.ts';
 import type { UiLocale } from '../../i18n/define.ts';
+import { localizedPath } from '../../i18n/locale.ts';
+import LocalizedLink from '../shell/localized-link.tsx';
 
 export type AgentPickerNotice =
   | { kind: 'ineligible'; previous: string }
@@ -62,7 +64,11 @@ export function AgentPicker({ options, current, preferred, preferenceRevision, s
     </header>
     {notice ? <Alert variant={notice.kind === 'default-not-saved' ? 'info' : 'warning'}>
       <AlertDescription role="alert">{noticeText(notice, messages)}</AlertDescription></Alert> : null}
-    {options && options.length === 0 ? <p role="status">{messages.noAgents}</p> : null}
+    {options && options.length === 0 ? <div className="grid justify-items-start gap-3">
+      <p role="status">{messages.noAgents}</p>
+      <LocalizedLink href={`${localizedPath('/onboarding', locale)}?next=${encodeURIComponent(next)}`}
+        className="font-medium text-primary underline underline-offset-4">{messages.setUpProfile}</LocalizedLink>
+    </div> : null}
     {options?.length ? <form method="post" action="/identity/select" className="flex flex-col gap-4">
       <input type="hidden" name="next" value={next} />
       <input type="hidden" name="locale" value={locale} />

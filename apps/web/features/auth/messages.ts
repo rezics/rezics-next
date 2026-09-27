@@ -14,6 +14,7 @@ const en = {
   newHere: 'New to REZICS?', alreadyHaveAccount: 'Already have an account?',
   createAccountLink: 'Create an account',
   consentDeclined: 'REZICS was not given access to your account. Sign in again to continue.',
+  consentHeading: 'Sign-in was not completed', signInAgain: 'Try signing in again',
   // Choosing the session Agent.
   chooseAgentHeading: 'Choose who you act as',
   chooseAgentHelp: 'Your account can act as these Agents. The one you choose is shown as signed in across REZICS and proposed for what you do there. Each action is still checked when you take it.',
@@ -28,7 +29,8 @@ const en = {
   useAgent: 'Use this Agent',
   ineligibleAgent: 'You were acting as {agent}, which you can no longer use. Nothing was switched for you: choose an Agent to continue.',
   ineligibleDefault: 'Your saved default {agent} is no longer available. Choose a new default when you are ready.',
-  noAgents: 'Your account cannot act as any Agent yet.',
+  noAgents: 'You do not have a profile to use yet.',
+  setUpProfile: 'Set up your profile',
   agentsUnavailable: 'Your Agents cannot be listed right now. Try again in a moment.',
   invalidAgent: 'That Agent is not available to you. Choose one from the list.',
   staleDefault: 'Your default was changed somewhere else. Review the list and try again.',
@@ -39,6 +41,7 @@ const en = {
   chooseAgent: 'Choose an Agent', agentNotEligible: 'Agent no longer available',
   noAgent: 'No Agent yet', agentUnverified: 'Agent not checked', signOut: 'Sign out',
   manageAccount: 'Manage your REZICS Account',
+  profileSettings: 'Profile settings',
 };
 
 export type AuthMessages = typeof en;
@@ -53,6 +56,7 @@ const zhCN: AuthMessages = {
   newHere: '初次使用 REZICS？', alreadyHaveAccount: '已有账户？',
   createAccountLink: '创建账户',
   consentDeclined: '您未授予 REZICS 访问账户的权限。请重新登录以继续。',
+  consentHeading: '登录未完成', signInAgain: '重新登录',
   chooseAgentHeading: '选择您的操作身份',
   chooseAgentHelp: '您的账户可以代表以下身份操作。所选身份会在 REZICS 各处显示为当前登录身份，并预填到您的操作中。每项操作在执行时仍会单独检查权限。',
   agentsLegend: '可用的操作身份',
@@ -66,7 +70,8 @@ const zhCN: AuthMessages = {
   useAgent: '使用此身份',
   ineligibleAgent: '您之前使用的身份 {agent} 已不可用。系统没有替您更换身份，请选择一个身份后继续。',
   ineligibleDefault: '您保存的默认身份 {agent} 已不可用。如有需要，请选择新的默认身份。',
-  noAgents: '您的账户目前还不能代表任何身份操作。',
+  noAgents: '您还没有可用的个人资料。',
+  setUpProfile: '设置个人资料',
   agentsUnavailable: '暂时无法列出您的操作身份，请稍后再试。',
   invalidAgent: '您不能使用该身份，请从列表中选择。',
   staleDefault: '您的默认身份已在别处更改。请检查列表后重试。',
@@ -76,6 +81,7 @@ const zhCN: AuthMessages = {
   chooseAgent: '选择身份', agentNotEligible: '身份已不可用',
   noAgent: '尚无身份', agentUnverified: '身份未经检查', signOut: '退出登录',
   manageAccount: '管理您的 REZICS 账户',
+  profileSettings: '个人资料设置',
 };
 
 export const messages = defineMessages({ en, 'zh-Hans': zhCN });
