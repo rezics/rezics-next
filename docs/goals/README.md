@@ -39,14 +39,16 @@ The Claude program starts when the maintainer runs the [Goal prompt](#goal-promp
 | Worker (complex) | Opus 5.5, `high` | Non-trivial semantics after a template exists, cross-module consumers, failed-wave repairs, merge conflicts. |
 | Worker (hardest) | Opus 5.5, `xhigh` | Owner schemas, the first template of each operation family, authority/IAM, transactions, erasure, recovery and owner reconciliation. |
 | Scout | Opus 5.5, `medium`, no path claims | Read-only closure-map and audit tasks. |
-| Worker (Luna or Grok, simpler tasks) | `codex exec -m gpt-6-luna` or `grok -m grok-4.7`, bypass mode | Maintainer direction 2026-09-26: repairs, test and declaration completion, template-following bundles and other bounded tasks. Both quotas run until exhausted, so the manager paces them; GPT-6 Sol keeps schemas, first templates, authority, erasure, recovery and enablers. |
+| Worker (Luna or Grok, simpler tasks) | `codex exec -m gpt-6-luna` at `max` or `grok -m grok-4.7`, bypass mode | Maintainer direction 2026-09-26: repairs, test and declaration completion, template-following bundles and other bounded tasks. Both quotas run until exhausted, so the manager paces them; GPT-6 Sol keeps schemas, first templates, authority, erasure, recovery and enablers. |
 | Worker (Codex, default since 2026-09-26) | `codex exec`, GPT-6 Sol (`gpt-6-sol`), `high` or `xhigh`, bypass approvals and sandbox | All new briefs and continuations from G-081. The manager picks `high` for template-following bundles and repairs, `xhigh` for owner schemas, first templates, authority, transactions, erasure and recovery. |
 
 On 2026-09-26 the maintainer directed that new work go to Codex CLI with GPT-6
 Sol, the manager choosing `high` or `xhigh` per task. Briefs default to
 `engine: codex`; Opus workers already running finish on their own engine, and a
 task switched to Codex starts a fresh session on its existing worktree
-(`goalctl resume <id> --engine codex`). Never use `max` effort. A worker whose
+(`goalctl resume <id> --engine codex`). Efforts are pinned per model: GPT-6 Sol
+`high` or `xhigh`, GPT-6 Luna `max` (maintainer direction 2026-09-27), Grok 4.7
+`low` to `high`, Opus workers `medium` to `xhigh`. A worker whose
 model or effort cannot be pinned is not dispatched. Escalate by resuming the same worker at a higher effort when it
 reports a design ambiguity or blocker, or after a second failed attempt.
 
@@ -148,7 +150,7 @@ about 40 lines. The frontmatter is machine-checked:
 ---
 id: G-041
 title: Poll ballot owner schema
-effort: xhigh                         # medium | high | xhigh
+effort: xhigh                         # per engine: see the roles table
 cases: [GOV11, GOV12]
 paths: [services/main/src/modules/poll/**, tests/qa/integration/poll-*.test.ts]
 migrations: [main/access:040-044]    # <directory>:<first>-<last>

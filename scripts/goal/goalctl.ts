@@ -41,6 +41,8 @@ export const CODEX_EFFORTS = ['high', 'xhigh'];
 // Maintainer direction 2026-09-26: simpler tasks may run on GPT-6 Luna (Codex) or Grok 4.7; both are
 // quota-until-exhausted, so the manager paces them and keeps GPT-6 Sol for complex work.
 export const LUNA_MODEL = 'gpt-6-luna';
+// Maintainer direction 2026-09-27: efforts are constrained per model, and GPT-6 Luna runs at max.
+export const LUNA_EFFORTS = ['max'];
 export const GROK_MODEL = 'grok-4.7';
 const ENGINES: Engine[] = ['claude', 'codex', 'luna', 'grok'];
 export const DEFAULT_ENGINE: Engine = process.env.GOAL_ENGINE === 'claude' ? 'claude' : 'codex';
@@ -48,7 +50,7 @@ const engineOf = (item: { engine?: Engine }): Engine => item.engine ?? 'claude';
 const modelOf = (engine: Engine): string =>
   engine === 'codex' ? CODEX_MODEL : engine === 'luna' ? LUNA_MODEL : engine === 'grok' ? GROK_MODEL : MODEL;
 const effortsOf = (engine: Engine): string[] => engine === 'codex' ? CODEX_EFFORTS
-  : engine === 'luna' ? ['medium', 'high', 'xhigh'] : engine === 'grok' ? ['low', 'medium', 'high'] : EFFORTS;
+  : engine === 'luna' ? LUNA_EFFORTS : engine === 'grok' ? ['low', 'medium', 'high'] : EFFORTS;
 // Process name that /proc/<pid>/cmdline carries for a live worker of each engine.
 const programOf = (engine: Engine): string => engine === 'luna' ? 'codex' : engine;
 const HOLDING: State[] = ['running', 'exited', 'conflict', 'merged', 'stopped'];
