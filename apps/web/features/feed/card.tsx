@@ -2,8 +2,8 @@
 
 import { cn } from '@rezics/ui/utils';
 import { WorkCover, type WorkCoverKind } from '@rezics/ui/work-cover';
-import { BookOpenIcon, EyeOffIcon, FileTextIcon, LibraryBigIcon, MessageSquareQuoteIcon, MessageSquareTextIcon,
-  MessagesSquareIcon, PackageIcon, SparklesIcon, StampIcon, type LucideIcon } from 'lucide-react';
+import { BookOpenIcon, BookPlusIcon, EyeOffIcon, FileTextIcon, LibraryBigIcon, MessageSquareQuoteIcon,
+  MessageSquareTextIcon, MessagesSquareIcon, PackageIcon, SparklesIcon, StampIcon, type LucideIcon } from 'lucide-react';
 import Link from 'next/link';
 import { useId, useState } from 'react';
 import { localizedPath } from '../../i18n/locale.ts';
@@ -37,11 +37,30 @@ function coverKind(item: FeedItem): WorkCoverKind {
     : item.card.kind === 'prompt' || item.card.kind === 'media' ? 'document' : 'book';
 }
 
-/** The small line above a title that says what happened, in words. */
+/** One reason Main gives for a Work's card, in words: a Realm pick names the Realm, never its curator. */
+function reasonText(reason: FeedItem['reasons'][number], item: FeedItem, t: T): string {
+  switch (reason.kind) {
+    case 'new-work': return t.newWork;
+    case 'added-to-rezics': return t.addedToRezics;
+    case 'realm-pick': return item.realm?.id === reason.realm ? t.picked({ realm: item.realm.name.value }) : t.pickedByRealm;
+  }
+}
+
+const reasonIcons = { 'new-work': SparklesIcon, 'added-to-rezics': BookPlusIcon, 'realm-pick': StampIcon } as const;
+
+/**
+ * The small line above a title that says what happened, in words. A Work
+ * created and picked on the same page arrives as one card with every reason
+ * ("Picked by Fiction · New work"); other kinds say what they are.
+ */
 function kicker(item: FeedItem, t: T): { icon: LucideIcon; text: string } {
-  const { card, group } = item;
+  const { card, group, reasons } = item;
+  if (reasons.length) {
+    return { icon: reasonIcons[reasons[0]!.kind], text: reasons.map(reason => reasonText(reason, item, t)).join(' · ') };
+  }
   switch (item.kind) {
     case 'work': return { icon: SparklesIcon, text: t.newWork };
+    case 'added': return { icon: BookPlusIcon, text: t.addedToRezics };
     case 'contribution':
       if (card.kind === 'release') return { icon: PackageIcon, text: t.newRelease };
       if (card.kind !== 'chapter') return { icon: FileTextIcon, text: t.update };
@@ -102,7 +121,8 @@ function Byline({ item }: { item: FeedItem }) {
   const why = item.reason.kind === 'recommended'
     ? item.reason.basis === 'thin-following' ? t.suggestedThin : t.suggestedAll : undefined;
   // A pick is the Realm's act. Naming its curator here would read as the Work's author.
-  const people = item.kind === 'adoption' && item.realm ? null : names;
+  const people = item.reasons.some(reason => reason.kind === 'realm-pick') || item.kind === 'adoption' && item.realm
+    ? null : names;
   return <div className="flex min-w-0 items-center gap-2 text-[13px]">
     {item.realm
       ? <CommunityIcon icon={item.realm.icon} name={item.realm.name.value} avatarQuery={avatarQuery} />
@@ -125,6 +145,29 @@ function Byline({ item }: { item: FeedItem }) {
     </p>
     {item.realm ? <JoinButton realm={item.realm} /> : null}
   </div>;
+}
+
+/**
+ * The Work's credited authors, under its title where readers look for them.
+ * Authors on REZICS link to their profiles; the poster or the curator is
+ * never named here.
+ */
+function Authors({ authors }: { authors: FeedItem['authors'] }) {
+  const { t, locale } = useFeed();
+  const named = authors.filter((author): author is typeof author & { displayName: string } => author.displayName !== null);
+  if (!named.length) return null;
+  const marker = '\u2063';
+  const [before = '', after = ''] = t.writtenBy({ names: marker }).split(marker);
+  let index = 0;
+  return <p className="truncate text-muted-foreground text-sm">{before}
+    {new Intl.ListFormat(locale, { type: 'conjunction' }).formatToParts(named.map(author => author.displayName))
+      .map((part, position) => {
+        if (part.type !== 'element') return <span key={position}>{part.value}</span>;
+        const author = named[index++]!;
+        return author.handle ? <LocalizedLink key={position} href={`/@${author.handle}`} className="relative z-10
+          font-medium text-foreground outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring">
+          {part.value}</LocalizedLink> : <span key={position} className="font-medium text-foreground">{part.value}</span>;
+      })}{after}</p>;
 }
 
 /**
@@ -184,6 +227,7 @@ export function FeedCard({ item, position, total }: { item: FeedItem; position?:
           {href ? <LocalizedLink href={href} className="outline-none decoration-1 underline-offset-2 hover:underline
             focus-visible:ring-2 focus-visible:ring-ring">{title}</LocalizedLink> : title}
         </h3>
+        <Authors authors={item.authors} />
         {facts.length ? <p className="flex flex-wrap gap-x-1.5 text-muted-foreground text-sm">
           {facts.map((fact, index) => <span key={fact} lang={index === 1 && item.card.kind === 'chapter' ? lang : undefined}>
             {index ? <span aria-hidden="true" className="me-1.5">·</span> : null}{fact}</span>)}

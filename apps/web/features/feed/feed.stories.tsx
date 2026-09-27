@@ -92,10 +92,22 @@ export const EveryKind: Story = {
       .toBeVisible();
     await expect(within(novel).getByRole('button', { name: 'Want to read' })).toBeVisible();
 
-    // A pick is the Realm's act: the curator is not named where the Work's author would be.
+    // A pick is the Realm's act: the curator is not named where the Work's author would be; the author is,
+    // and a pick of a new Work says both.
     const pick = article(canvas, 'Jane Eyre');
-    await expect(pick).toHaveTextContent('Picked by Classic Literature');
+    await expect(pick).toHaveTextContent('Picked by Classic Literature · New work');
     await expect(within(pick).queryByText('Daniel Chen')).toBeNull();
+    await expect(pick).toHaveTextContent('by Charlotte Brontë');
+    await expect(article(canvas, 'Middlemarch: A Study of Provincial Life')).toHaveTextContent('by George Eliot');
+
+    // An import is added to REZICS, not a new work by whoever added it.
+    const alice = article(canvas, 'Alice’s Adventures in Wonderland');
+    await expect(alice).toHaveTextContent('Added to REZICS');
+    await expect(alice).toHaveTextContent('by Lewis Carroll');
+    await expect(alice).not.toHaveTextContent('New work');
+    // An author on REZICS links to their profile.
+    await expect(within(article(canvas, '雨夜书店 · 番外')).getByRole('link', { name: 'Lin Mei 林梅' }))
+      .toHaveAttribute('href', '/en/@lin_mei');
 
     // A review: the reader's stars and opening lines, leading to the review on the Work page.
     const review = article(canvas, 'Persuasion');

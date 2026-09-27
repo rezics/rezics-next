@@ -26,13 +26,24 @@ const people = {
 };
 
 type Overrides = Partial<Omit<FeedItem, 'target'>> & { target?: Partial<FeedItem['target']> };
+type Credit = FeedItem['authors'][number];
+
+/** A credited author from Open Library, named but not on REZICS. */
+const openLibrary = (n: number, displayName: string): Credit => ({ id: storyId(n, '0a0a'), role: 'author',
+  participantKind: 'external-reference', provider: 'open-library', key: `OL${n}A`, ordinal: 0, agent: null, displayName,
+  handle: null });
+/** A credited author with a REZICS profile. */
+const onRezics = (person: { id: string; name: string; handle: string }): Credit => ({ id: storyId(990, '0b0b'), role: 'author',
+  participantKind: 'agent', provider: null, key: null, ordinal: null, agent: person.id, displayName: person.name,
+  handle: person.handle });
 
 /** One post; `n` keys its IDs so every story item is distinct and stable. */
 export function post(n: number, overrides: Overrides = {}): FeedItem {
   const work = storyId(n, 'cccc');
   const actor = overrides.actor ?? people.mei;
   const base: FeedItem = {
-    id: storyId(n), kind: 'work', actor, reason: { kind: 'followed', target: realms.fiction.id, targetKind: 'realm' },
+    id: storyId(n), kind: 'work', actor, authors: [], reasons: [],
+    reason: { kind: 'followed', target: realms.fiction.id, targetKind: 'realm' },
     card: { kind: 'work' }, primaryAction: { kind: 'want-to-read', work }, viewerState: { status: 'anonymous' },
     group: { key: `group-${n}`, count: 1, actors: [actor] },
     target: { id: work, work, title: name(`Work ${n}`), cover: fallbackCover(`work-${n}`), excerpt: null, language: 'en' },
@@ -63,6 +74,7 @@ export const everyKind: FeedItem[] = [
       progress: { composition: storyId(2, 'eeee'), occurrence: storyId(21, 'dddd'), selectedRevision: 'urn:rezics:content:revision:2', completed: false,
         position: null }, spoiler: { policy: 'hide-unread', hidden: true } } }),
   post(3, { realm: realms.classics, actor: people.daniel, score: 1830, comments: { value: 64, kind: 'lower-bound' },
+    authors: [openLibrary(3, 'George Eliot')],
     target: { title: name('Middlemarch: A Study of Provincial Life'),
       excerpt: 'A new annotated translation of George Eliot’s novel, with notes on the reform era and the provincial press.' } }),
   post(4, { kind: 'contribution', realm: realms.mods, actor: people.leo, card: { kind: 'release', version: '2.4.0', level: 'Minor',
@@ -80,12 +92,23 @@ export const everyKind: FeedItem[] = [
   post(7, { kind: 'discussion', realm: realms.classics, actor: people.leo, primaryAction: { kind: 'open', href: '/w/x' },
     card: { kind: 'activity' }, target: { title: name('Pride and Prejudice'),
       excerpt: 'Is Mr. Bennet a good father? Chapter 2 makes me think he enjoys his family’s confusion more than he should.' } }),
+  // A pick and the Work's own post on one page arrive as one card with both reasons.
   post(8, { kind: 'adoption', realm: realms.classics, actor: people.daniel, card: { kind: 'work' },
+    authors: [openLibrary(8, 'Charlotte Brontë')],
+    reasons: [{ kind: 'realm-pick', realm: realms.classics.id, curator: people.daniel.id },
+      { kind: 'new-work', actor: people.mei.id }],
     target: { title: name('Jane Eyre'), excerpt: 'Now in Classic Literature’s Gothic shelf.' } }),
   post(9, { kind: 'collection', realm: null, actor: people.aria, card: { kind: 'activity' },
     primaryAction: { kind: 'open', href: '/collections/9' },
     target: { id: storyId(9, 'ffff'), work: null, title: name('Autumn reading: slow novels'), excerpt: null },
     links: { target: '/collections/9', actor: '/@aria_wang', comments: '/collections/9', vote: '/v1/feed/9/vote' } }),
+  // An import is added to REZICS by someone who did not write it.
+  post(12, { kind: 'added', realm: null, actor: people.mei, authors: [openLibrary(12, 'Lewis Carroll')],
+    reasons: [{ kind: 'added-to-rezics', actor: people.mei.id }], target: { title: name('Alice’s Adventures in Wonderland'),
+      excerpt: 'Alice follows a white rabbit down a hole and into a world that argues with her at every turn.' } }),
+  post(13, { kind: 'work', realm: realms.fiction, actor: people.mei, authors: [onRezics(people.mei)],
+    reasons: [{ kind: 'new-work', actor: people.mei.id }], target: { title: name('雨夜书店 · 番外', 'zh-Hans'),
+      language: 'zh-Hans', excerpt: '雨停之后，书店的灯还亮着。' } }),
   review(10, { actor: people.leo, realm: null, title: name('Persuasion'), card: { rating: 4, scale: 5, spoiler: false,
     helpfulCount: 12, opening: 'Austen’s quietest novel and her most grown-up: Anne Elliot has already lost once, and the book '
       + 'lets her be right about it without ever saying so.' } }),

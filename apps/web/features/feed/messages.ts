@@ -23,6 +23,7 @@ export const messages = {
   // A post
   by: insert('by {{name}}', { name: String }),
   newWork: 'New work', newChapter: 'New chapter', newRelease: 'New release', update: 'Update',
+  addedToRezics: 'Added to REZICS', writtenBy: insert('by {{names}}', { names: String }),
   chapterRange: insert('Chapters {{from}}–{{to}}', { from: String, to: String }),
   chapterNumber: insert('Chapter {{number}}', { number: String }),
   moreUpdates: plural({ one: insert('+{{count}} more update'), other: insert('+{{count}} more updates') },

@@ -21,6 +21,7 @@ export default {
 
   by: insert('{{name}} 发布', { name: String }),
   newWork: '新作品', newChapter: '新章节', newRelease: '新版本', update: '更新',
+  addedToRezics: '收录到 REZICS', writtenBy: insert('作者：{{names}}', { names: String }),
   chapterRange: insert('第 {{from}}–{{to}} 章', { from: String, to: String }),
   chapterNumber: insert('第 {{number}} 章', { number: String }),
   moreUpdates: plural({ other: insert('另有 {{count}} 条更新') }, { count: asValue(number()) }),
