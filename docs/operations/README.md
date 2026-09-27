@@ -11,8 +11,7 @@ for Fuseki/TDB2 and jena-text/Lucene restart and restore checks. The product
 - [Observability](observability.md): graph/text readiness, progress and diagnosis.
 - [Security](security.md): private service access, admission and disclosure.
 - [Erasure](erasure.md): current RDF, revision payloads, indexes and retained copies.
-- [Executable theme access](custom-theme-external-live-access.md) and
-  [incident response](custom-theme-review-and-incident-response.md).
+- [Executable theme review and incident response](custom-theme-review-and-incident-response.md).
 
 The local stack and scoped drills have executed; their evidence and remaining
 acceptance gaps are in the [plan](../plan/README.md). They do not qualify a
