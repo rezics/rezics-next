@@ -9,4 +9,5 @@ export const catalogs = {
   shell: () => import('../features/shell/messages.ts').then(module => module.messages),
   studio: () => import('../features/studio/messages.ts').then(module => module.messages),
   work: () => import('../features/work/messages.ts').then(module => module.messages),
+  workPage: () => import('../features/work-page/messages.ts').then(module => module.messages),
 };
