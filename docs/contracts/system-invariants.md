@@ -54,6 +54,9 @@ schema declaration or generated SDK alone never establishes a business success.
 
 ## Qualification
 
-[Testing](../testing/README.md) maps prospective scenarios to these invariants.
-The initial gate targets correctness and bounded behavior on available machines;
-large-volume estimates remain separate from executed performance evidence.
+[Typed acceptance cases](../../scripts/qa/cases/) and owner transition tests
+exercise these cross-domain invariants; the IDs here remain stable references
+until each owner can attach them to its case metadata and behavioral proof.
+The [recorded gate](../plan/qualification.md) targets correctness and bounded
+behavior on available machines. Large-volume estimates remain separate from
+executed performance evidence.

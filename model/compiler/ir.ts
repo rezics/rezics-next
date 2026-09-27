@@ -74,6 +74,26 @@ export interface ProfileDefinition {
   binding?: BindingRequirement;
 }
 
+// Resource IRIs and vocabulary IRIs have different referents. A context may use
+// either compact prefix, but it must not turn a resource ID into a predicate (or
+// silently switch newly authored Schema.org terms to the HTTP alias).
+export const reservedNamespaces = {
+  rezics: 'https://rezics.com/id/',
+  rv: 'https://rezics.com/vocab/',
+  'rezics-vocab': 'https://rezics.com/vocab/',
+  schema: 'https://schema.org/',
+  sh: 'http://www.w3.org/ns/shacl#',
+  rdf: 'http://www.w3.org/1999/02/22-rdf-syntax-ns#',
+  rdfs: 'http://www.w3.org/2000/01/rdf-schema#',
+  skos: 'http://www.w3.org/2004/02/skos/core#',
+  skosxl: 'http://www.w3.org/2008/05/skos-xl#',
+  xsd: 'http://www.w3.org/2001/XMLSchema#',
+  owl: 'http://www.w3.org/2002/07/owl#',
+  prov: 'http://www.w3.org/ns/prov#',
+  oa: 'http://www.w3.org/ns/oa#',
+  time: 'http://www.w3.org/2006/time#',
+} as const;
+
 function propertyClauses(property: PropertyDefinition): string[] {
   const clauses = [`sh:path ${property.path}`];
   if (property.minCount !== undefined) clauses.push(`sh:minCount ${property.minCount}`);
@@ -167,7 +187,12 @@ export function renderProfile(profile: ProfileDefinition): string {
     throw new Error(`${profile.id} must declare distinct named NodeShapes`);
   }
   const prefixNames = new Set(profile.prefixes.map(([name]) => name));
+  if (prefixNames.size !== profile.prefixes.length) throw new Error(`${profile.id} has duplicate prefixes`);
   if (!prefixNames.has('sh')) throw new Error(`${profile.id} must declare the sh prefix`);
+  for (const [name, iri] of profile.prefixes) {
+    const reserved = reservedNamespaces[name as keyof typeof reservedNamespaces];
+    if (reserved && iri !== reserved) throw new Error(`${profile.id} binds ${name} to ${iri}, expected ${reserved}`);
+  }
   for (const shape of profile.shapes) {
     knownFields(shape, ['iri', 'properties', 'closed', 'or', 'canonical'], shape.iri);
     if (shape.canonical) {

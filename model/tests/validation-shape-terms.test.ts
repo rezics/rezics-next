@@ -18,3 +18,19 @@ test('MODEL17: compiler rejects unsupported executable and unreviewed shape term
     script: 'https://example.org/unreviewed-validator' }))
     .toThrow('Unsupported profile field script');
 });
+
+test('MODEL13: authored profiles cannot confuse resource, vocabulary or Schema.org namespaces', () => {
+  const prefixes = workMetadataProfile.prefixes;
+  expect(() => renderProfile({ ...workMetadataProfile,
+    prefixes: [...prefixes, ['rv', 'https://rezics.com/id/']],
+  })).toThrow('duplicate prefixes');
+  expect(() => renderProfile({ ...workMetadataProfile,
+    prefixes: prefixes.map(([name, iri]) => [name, name === 'rv' ? 'https://rezics.com/id/' : iri]),
+  })).toThrow('binds rv');
+  expect(() => renderProfile({ ...workMetadataProfile,
+    prefixes: prefixes.map(([name, iri]) => [name, name === 'schema' ? 'http://schema.org/' : iri]),
+  })).toThrow('binds schema');
+  expect(() => renderProfile({ ...workMetadataProfile,
+    prefixes: [...prefixes, ['rezics', 'https://rezics.com/vocab/']],
+  })).toThrow('binds rezics');
+});

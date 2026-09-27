@@ -1,62 +1,37 @@
 # Standards and semantic profiles
 
-## Adoption contract
+REZICS uses RDF/JSON-LD for native semantic data and exchange, Fuseki/TDB2 for
+storage, and trusted ARQ queries. The authored
+[model definitions](../../model/definitions/) choose admitted vocabulary terms;
+the [compiler IR](../../model/compiler/ir.ts) pins their namespace bindings.
+Vocabulary reuse, source preservation, native operations, query support,
+validation, exchange and workflows are separate qualifications. A term in a
+graph does not prove the others.
 
-Semantic Web is the native modeling/storage direction, with Fuseki/TDB2 selected for RDF persistence and ARQ/jena-text for
-graph and full-text queries. A standard's vocabulary, preserved source representation, native
-operations, query semantics, validation, exchange and workflow support are separate
-qualification dimensions. Importing a vocabulary does not implement all of them.
+Reuse RDF Statement for an identified binary claim, SKOS/SKOS-XL for concepts
+and labels, PROV-O for genuine lineage, Web Annotation for exact targets and
+selectors, and Schema.org where the referent fits. Role-qualified or repeated
+relations retain occurrence identity. Source Wikibase statements retain their
+qualifiers and ranks; a truthy edge alone is insufficient. BIBFRAME and music
+source mappings compare Work, publication, recording, release and occurrence
+grains before adoption. Package coordinates, BCP 47 language tags and OAuth
+descriptions keep their own owner contracts. These mapping choices require
+owner fixtures before broader native admission.
 
-## Foundation profiles
+Do not infer native identity from `skos:exactMatch`, subclass from
+`skos:broader`, a base fact from `rdf:Statement`, or authority from RDF type,
+graph name or ontology axiom. The [reasoning tests](../../model/tests/reasoning-profile.test.ts)
+and [source reification tests](../../model/tests/source-reification.test.ts)
+exercise selected counterexamples. Preserve lexicals, units, calendars,
+directions and source uncertainty when normalization loses them; the
+[exact-value profile](../../model/definitions/value-exact-v1.ts) covers its
+admitted subset. Unsupported native operations have explicit outcomes, while
+source bytes may remain available separately.
 
-| Area | Selected use |
-| --- | --- |
-| RDF 1.1 / JSON-LD 1.1 | Stable IRIs, language/typed literals, datasets and exchange; parser/context behavior qualified. |
-| RDF statements / qualified relations | Identified binary claims reuse reification vocabulary; repeated or role-qualified domain relations retain occurrence identities. Reification alone does not assert a base edge. |
-| SPARQL 1.1 Query/Update | Trusted ARQ query templates and one-request guarded updates; `text:query` is a Jena extension, not portable SPARQL. |
-| SKOS / SKOS-XL where useful | Concepts, schemes, labels, definitions/scope notes and cross-vocabulary mappings; REZICS owns shared Context selection, scoped interpretation and separate acceptance. |
-| RDFS / selected OWL rules | Explicit bounded type/property inference, separate from capabilities and authorization. |
-| SHACL | Qualified staged shape constraints; domain commands own concurrency and cross-service rules. |
-| PROV-O | Evidence/entity/activity/agent lineage and dependency-aware source interpretation. |
-| Web Annotation / media selectors | Exact revision-qualified text/block/time/region references. |
-| Schema.org | Reviewed mappings for books, media, software, recipes and public structured data. |
-| Wikibase | Full statements/qualifiers/references/ranks for admitted source profiles, not truthy-edge substitution. |
-| BIBFRAME / music source models | Grain-aware Work/publication/recording/release/occurrence mappings. |
-| BCP 47 / Unicode | Content-language identity and reversible lexical/derived-normalization policy. |
-| OAuth/OIDC / HTTP / OpenAPI | Authentication/delegation and shared typed client contracts. |
-| Package ecosystems / PURL | Native version/dependency semantics and portable package coordinates. |
-
-## Meaning and exceptions
-
-The [model profile contract](model-profiles.md) selects native standard terms,
-exchange-only mappings and local residuals. Reuse matching terms directly;
-do not import every axiom of every related ontology into native reasoning.
-Shapes, selected entailment rules and domain operations have independent artifact
-and authority boundaries. The [implementation binding](../implementation/model-profile-validation.md)
-defines unsupported-feature rejection, affected validation scope and model activation.
-
-Do not collapse Class, Concept and Capability. SKOS broader is not subclass;
-exactMatch is not permission or native identity merge; a graph name is not a
-universal trust/context boundary. Preserve original lexicals, units, calendars,
-directions and source uncertainty when an engine normalizes or cannot interpret
-them. Unsupported native operations return explicit outcomes while source data
-can remain preserved.
-
-RDF 1.2/SHACL extensions, geo/observation/dataset profiles and full-corpus
-Schema.org/Wikidata indexing are admitted with exact capability/evidence boundaries.
-They need not block first-stage Space/classification and the five indexing domains.
-External contexts/imports use bounded controlled acquisition; ordinary requests
-cannot force arbitrary ontology downloads or executable validators.
-
-## Definition releases
-
-Pin normative artifacts, parser/model versions and generated contexts/shapes in
-release manifests. Live provider checks fetch current external contracts/data on
-each run and retain their own snapshot. Treat those two version policies separately.
-Definition meaning changes preserve old referenced interpretation through a new
-identity/revision or explicit conversion with losses.
-
-Sources: [RDF](https://www.w3.org/TR/rdf11-concepts/),
-[JSON-LD](https://www.w3.org/TR/json-ld11/), [SKOS](https://www.w3.org/TR/skos-reference/),
-[SHACL](https://www.w3.org/TR/shacl/), [PROV-O](https://www.w3.org/TR/prov-o/),
-[Web Annotation](https://www.w3.org/TR/annotation-model/).
+New syntax, ontology axioms, geospatial/observation profiles, and large
+Schema.org or Wikidata indexing need their own bounded engine and source
+qualification. External contexts and imports use controlled acquisition;
+ordinary requests cannot fetch arbitrary ontologies or validators. A release
+pins normative artifact and parser versions, while live provider checks capture
+their current input independently. Changed definition meaning keeps old exact
+references or uses an explicit conversion with declared losses.
