@@ -6,15 +6,18 @@ import { WorkCredits, WorkCreditsSkeleton } from './credits.tsx';
 import { HistoryRegion } from './history.tsx';
 import type { WorkPageMessages } from './messages.ts';
 import { RatingSummaryRegion } from './ratings.tsx';
-import { readAdoptions, readClassifications, readCredits, readHistory, readRatings, readRealm,
-  readVersions } from './read.ts';
+import { ContentsRegion } from './contents.tsx';
+import { DiscussionRegion } from './discussion.tsx';
+import { readAdoptions, readAgentCredits, readClassifications, readContents, readCredits, readDiscussion,
+  readHistory, readRatings, readRealm, readVersions } from './read.ts';
 import { RegionSkeleton } from './region.tsx';
 import { WorkRecord } from './record.tsx';
-import { idOf, type VersionQuery, type WorkScope } from './route.ts';
+import { type ContentsQuery, type HistoryFilter, idOf, type VersionQuery, type WorkScope } from './route.ts';
 import { ScopeBar, ScopeBarSkeleton, type ScopeRealm, type ScopeView } from './scope-bar.tsx';
 import type { WorkHeader as Header } from './types.ts';
 import { VersionsRegion } from './versions.tsx';
-import { OverviewLayout, WorkFrame } from './work-frame.tsx';
+import { InvalidScope, OverviewLayout, WorkFrame } from './work-frame.tsx';
+import { WorkAbout } from './work-header.tsx';
 
 // Server compositions for the `/w/[ref]` routes: each region reads Main on its
 // own under Suspense, so the page streams as answers arrive and one failure
@@ -37,7 +40,8 @@ async function scopeRealms(id: string, scope: WorkScope | null, locale: UiLocale
 }
 
 async function Credits({ id, locale, messages }: Common & { id: string }) {
-  return <WorkCredits credits={await readCredits(id)} locale={locale} messages={messages} />;
+  const [agentCredits, credits] = await Promise.all([readAgentCredits(id), readCredits(id)]);
+  return <WorkCredits agentCredits={agentCredits} credits={credits} locale={locale} messages={messages} />;
 }
 
 /** Header and tabs around every Work view; credits stream in on their own. */
@@ -50,10 +54,10 @@ export function WorkFrameView({ workRef, id, work, locale, messages, children }:
     {children}</WorkFrame>;
 }
 
-async function ScopeBarSlot({ workRef, id, scope, locale, messages }: Common & {
-  workRef: string; id: string; scope: WorkScope | null;
+async function ScopeBarSlot({ workRef, id, scope, tab = 'overview', locale, messages }: Common & {
+  workRef: string; id: string; scope: WorkScope | null; tab?: 'overview' | 'discussion';
 }) {
-  return <ScopeBar workRef={workRef} scope={scope} realms={await scopeRealms(id, scope, locale)}
+  return <ScopeBar workRef={workRef} scope={scope} realms={await scopeRealms(id, scope, locale)} tab={tab}
     locale={locale} messages={messages} />;
 }
 
@@ -86,7 +90,7 @@ export function WorkOverview({ workRef, id, work, scope, context, locale, messag
 }) {
   const t = messages;
   const loading = t.loadingRegion;
-  return <OverviewLayout messages={messages}
+  return <OverviewLayout messages={messages} about={<WorkAbout work={work} messages={messages} />}
     scopeBar={<Suspense fallback={<ScopeBarSkeleton label={loading} />}>
       <ScopeBarSlot workRef={workRef} id={id} scope={scope} locale={locale} messages={messages} />
     </Suspense>}
@@ -112,9 +116,49 @@ export async function WorkVersions({ workRef, id, query, locale, messages }: Com
   return <VersionsRegion versions={versions} workRef={workRef} query={query ?? {}} locale={locale} messages={messages} />;
 }
 
-export async function WorkHistory({ workRef, id, cursor, locale, messages }: Common & {
-  workRef: string; id: string; cursor: string | undefined;
+export async function WorkHistory({ workRef, id, query, locale, messages }: Common & {
+  workRef: string; id: string; query: { kind?: HistoryFilter; cursor?: string } | null;
 }) {
-  return <HistoryRegion history={await readHistory(id, cursor)} workRef={workRef} cursor={cursor} locale={locale}
+  const history = query ? await readHistory(id, query.kind, query.cursor) : { ok: false as const, failure: 'invalid' as const };
+  return <HistoryRegion history={history} workRef={workRef} kind={query?.kind} cursor={query?.cursor} locale={locale}
     messages={messages} />;
+}
+
+async function Discussion(props: ScopedProps & { cursor: string | undefined }) {
+  const { id, scope, cursor } = props;
+  const [scopeView, discussion] = await Promise.all([view(props), scope.kind === 'mine' ? null
+    : readDiscussion(id, scope.kind === 'realm' ? scope.realm : undefined, cursor)]);
+  // Replies from Realms the adoption page did not name are named by their own public read.
+  const unnamed = discussion?.ok ? [...new Set(discussion.data.items.flatMap(item => {
+    const realm = idOf(item.realm);
+    return realm && !scopeView.realms.some(entry => entry.id === realm) ? [realm] : [];
+  }))] : [];
+  const named = await Promise.all(unnamed.map(async realm => {
+    const header = await readRealm(realm, props.locale);
+    return { id: realm, name: header.ok ? header.data.name : null };
+  }));
+  return <DiscussionRegion discussion={discussion} view={{ ...scopeView, realms: [...scopeView.realms, ...named] }}
+    cursor={cursor} locale={props.locale} messages={props.messages} />;
+}
+
+/** Discussion: the scope bar, then reviewed replies from every public Realm or the chosen one. */
+export function WorkDiscussion({ workRef, id, scope, cursor, locale, messages }: Common & {
+  workRef: string; id: string; scope: WorkScope | null; cursor: string | undefined;
+}) {
+  return <>
+    <Suspense fallback={<ScopeBarSkeleton label={messages.loadingRegion} />}>
+      <ScopeBarSlot workRef={workRef} id={id} scope={scope} tab="discussion" locale={locale} messages={messages} />
+    </Suspense>
+    {scope ? <Suspense fallback={<RegionSkeleton id="work-discussion-loading" title={messages.discussion}
+      label={messages.loadingRegion} lines={6} />}>
+      <Discussion workRef={workRef} id={id} scope={scope} cursor={cursor} locale={locale} messages={messages} />
+    </Suspense> : <InvalidScope messages={messages} />}
+  </>;
+}
+
+export async function WorkContents({ workRef, id, query, locale, messages }: Common & {
+  workRef: string; id: string; query: ContentsQuery | null;
+}) {
+  const contents = query ? await readContents(id, query) : { ok: false as const, failure: 'invalid' as const };
+  return <ContentsRegion contents={contents} workRef={workRef} query={query ?? {}} locale={locale} messages={messages} />;
 }

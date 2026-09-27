@@ -61,3 +61,15 @@ export function WorkSkeleton({ label }: { label: string }) {
     </div>
   </PageContainer>;
 }
+
+/** A chapter's shape while Main answers: the way back, a title and paragraphs. */
+export function ChapterSkeleton({ label }: { label: string }) {
+  return <div role="status" aria-label={label} aria-busy="true" className="mx-auto grid w-full max-w-5xl gap-6 px-4
+    py-6 sm:px-6 lg:py-10">
+    <div className="flex justify-between"><Skeleton className="h-8 w-48 rounded-xl" /><Skeleton className="h-8 w-28 rounded-xl" /></div>
+    <div className="mx-auto grid w-full max-w-[40rem] gap-4">
+      <Skeleton className="h-9 w-2/3 rounded-xl" />
+      <SkeletonText lines={4} /><SkeletonText lines={5} /><SkeletonText lines={3} />
+    </div>
+  </div>;
+}

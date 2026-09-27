@@ -22,8 +22,9 @@ export function WorkRecord({ work, locale, messages }: { work: WorkHeader; local
     <dl className="grid gap-3">
       <Identifier term={t.workId} value={work.id} />
       <Identifier term={t.mainVersionId} value={work.mainVersion} />
-      <Identifier term={t.metadataRevision} value={work.revision}
+      <Identifier term={t.headRevision} value={work.revision}
         href={revision ? `/works/${revision}` : undefined} />
+      {work.metadataRevision ? <Identifier term={t.metadataRevision} value={work.metadataRevision} /> : null}
     </dl>
     <p className="text-muted-foreground text-xs">{t.asOf({ sequence: work.sourcePosition.sequence })}</p>
   </Region>;

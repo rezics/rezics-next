@@ -2,8 +2,11 @@ import { describe, expect, test } from 'bun:test';
 import { messages } from '../features/work-page/messages.ts';
 import { openLibraryAuthorKey } from '../features/work-page/credits.tsx';
 import { failureOf } from '../features/work-page/read.ts';
-import { idOf, mainScope, neighbourScope, parseScope, parseVersionQuery, parseWorkRef, shortId, tabOf, workHref }
-  from '../features/work-page/route.ts';
+import { paragraphs } from '../features/work-page/format.ts';
+import { defaultReaderSettings, parsePosition, parseReaderSettings, serializeReaderSettings }
+  from '../features/work-page/reader-settings.ts';
+import { chapterHref, idOf, mainScope, neighbourScope, parseContentsQuery, parseHistoryQuery, parseReaderLanguage,
+  parseScope, parseVersionQuery, parseWorkRef, shortId, tabOf, workHref } from '../features/work-page/route.ts';
 import { scopeName } from '../features/work-page/scope-bar.tsx';
 
 const work = '5f7a2c1e-8d3b-4c6a-9e2f-1b4d6a8c0e3f';
@@ -94,5 +97,46 @@ describe('Work page reads', () => {
   test('Open Library author paths show and link their ID', () => {
     expect(openLibraryAuthorKey('/authors/OL2162284A')).toBe('OL2162284A');
     expect(openLibraryAuthorKey('OL1A')).toBe('OL1A');
+  });
+});
+
+describe('Work page contents, history and reader', () => {
+  const part = 'b5c7d9e1-f3a5-4b7c-9d1e-000000000001';
+
+  test('contents levels, history kinds and reader languages are refused when malformed, never widened', () => {
+    expect(parseContentsQuery({ parent: part, language: 'ZH-Hans', cursor: 'c' }))
+      .toEqual({ parent: part, language: 'zh-Hans', cursor: 'c' });
+    expect(parseContentsQuery({})).toEqual({ parent: undefined, language: undefined, cursor: undefined });
+    for (const params of [{ parent: 'nope' }, { language: 'not a tag' }, { parent: [part, part] }]) {
+      expect(parseContentsQuery(params)).toBeNull();
+    }
+    expect(parseHistoryQuery({ kind: 'reply-placement' })).toEqual({ kind: 'reply-placement', cursor: undefined });
+    expect(parseHistoryQuery({ kind: 'everything' })).toBeNull();
+    expect(parseHistoryQuery({ kind: ['metadata-revision'] })).toBeNull();
+    expect(parseReaderLanguage({})).toBeUndefined();
+    expect(parseReaderLanguage({ language: 'JA' })).toBe('ja');
+    expect(parseReaderLanguage({ language: '../x' })).toBeNull();
+  });
+
+  test('a chapter address names the chapter and keeps an explicit content language', () => {
+    expect(chapterHref('slug', part)).toBe(`/w/slug/read/${part}`);
+    expect(chapterHref(work, part, 'ja')).toBe(`/w/${work}/read/${part}?language=ja`);
+  });
+
+  test('reading settings survive a round trip and fall back per field', () => {
+    const settings = { size: 3, width: 'wide' as const, face: 'sans' as const };
+    expect(parseReaderSettings(serializeReaderSettings(settings))).toEqual(settings);
+    expect(parseReaderSettings(undefined)).toEqual(defaultReaderSettings);
+    expect(parseReaderSettings('size=99&width=huge&face=comic')).toEqual(defaultReaderSettings);
+    expect(parseReaderSettings('size=0')).toEqual({ ...defaultReaderSettings, size: 0 });
+  });
+
+  test('a stored position is a paragraph index; anything else is ignored', () => {
+    expect(parsePosition('p:12')).toBe(12);
+    for (const value of [null, undefined, '', 'p:', 'p:-1', 'scroll:0.4', 'p:1234567']) expect(parsePosition(value)).toBeNull();
+  });
+
+  test('Content text is one paragraph per line', () => {
+    expect(paragraphs('One.\n\nTwo.\n  \nThree.')).toEqual(['One.', 'Two.', 'Three.']);
   });
 });

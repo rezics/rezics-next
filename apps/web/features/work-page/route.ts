@@ -102,6 +102,15 @@ const languageTag = /^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$/;
 /** The Versions tab's filters and page, as the URL gives them. */
 export interface VersionQuery { kind?: 'text-variant' | 'release'; language?: string; cursor?: string }
 
+/** A content language from the URL with its primary subtag lower-cased (`EN` → `en`), or null when malformed. */
+function contentLanguage(raw: string | undefined): string | undefined | null {
+  const value = raw?.trim();
+  if (!value) return undefined;
+  const [primary = '', ...rest] = value.split('-');
+  const tag = [primary.toLowerCase(), ...rest].join('-');
+  return tag.length <= 35 && languageTag.test(tag) ? tag : null;
+}
+
 /**
  * Filters from the URL, or null when one is malformed. A language's primary
  * subtag is lower-cased (`EN` → `en`) as Main expects; anything else that is
@@ -111,11 +120,50 @@ export function parseVersionQuery(params: SearchParams): VersionQuery | null {
   if ([params.kind, params.language, params.cursor].some(Array.isArray)) return null;
   const kind = single(params.kind) || undefined;
   const cursor = single(params.cursor) || undefined;
-  const raw = single(params.language)?.trim() || undefined;
-  const [primary = '', ...rest] = raw?.split('-') ?? [];
-  const language = raw ? [primary.toLowerCase(), ...rest].join('-') : undefined;
+  const language = contentLanguage(single(params.language));
   if (kind !== undefined && kind !== 'text-variant' && kind !== 'release') return null;
-  if (language !== undefined && (language.length > 35 || !languageTag.test(language))) return null;
+  if (language === null) return null;
   if (cursor !== undefined && cursor.length > 2048) return null;
   return { kind, language, cursor };
+}
+
+/** History's `kind` filter; anything else is refused rather than widened to all activity. */
+export const historyKinds = ['metadata-revision', 'publication-decision', 'reply-placement'] as const;
+export type HistoryFilter = (typeof historyKinds)[number];
+
+export function parseHistoryQuery(params: SearchParams): { kind?: HistoryFilter; cursor?: string } | null {
+  if (Array.isArray(params.kind) || Array.isArray(params.cursor)) return null;
+  const kind = single(params.kind) || undefined;
+  const cursor = single(params.cursor) || undefined;
+  if (kind !== undefined && !historyKinds.includes(kind as HistoryFilter)) return null;
+  if (cursor !== undefined && cursor.length > 2048) return null;
+  return { kind: kind as HistoryFilter | undefined, cursor };
+}
+
+/** A Main cursor from the URL, or undefined when absent or malformed. */
+export function parseCursor(params: SearchParams): string | undefined {
+  const cursor = single(params.cursor);
+  return cursor && cursor.length <= 2048 ? cursor : undefined;
+}
+
+/** A chapter's reader address. The chapter is its table-of-contents occurrence. */
+export const chapterHref = (ref: string, chapter: string, language?: string) =>
+  withQuery(`/w/${encodeURIComponent(ref)}/read/${chapter}`, { language });
+
+/** The Contents tab's level, language and page. */
+export interface ContentsQuery { parent?: string; language?: string; cursor?: string }
+
+export function parseContentsQuery(params: SearchParams): ContentsQuery | null {
+  if ([params.parent, params.language, params.cursor].some(Array.isArray)) return null;
+  const parent = single(params.parent) || undefined;
+  const language = contentLanguage(single(params.language));
+  const cursor = single(params.cursor) || undefined;
+  if ((parent !== undefined && !uuid.test(parent)) || language === null
+    || (cursor !== undefined && cursor.length > 2048)) return null;
+  return { parent, language, cursor };
+}
+
+/** The reader's optional content language; a malformed one is refused. */
+export function parseReaderLanguage(params: SearchParams): string | undefined | null {
+  return Array.isArray(params.language) ? null : contentLanguage(params.language);
 }

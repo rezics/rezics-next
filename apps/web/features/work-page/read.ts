@@ -2,12 +2,13 @@ import { cookies } from 'next/headers';
 import { notFound, permanentRedirect } from 'next/navigation';
 import { cache } from 'react';
 import { mainApiWithToken } from '../api/main.ts';
-import { ACCESS_COOKIE, AGENT_COOKIE } from '../auth/cookies.ts';
-import { isAgentIri } from '../auth/session-state.ts';
+import { ACCESS_COOKIE } from '../auth/cookies.ts';
+import { sessionAgentState } from '../auth/session.ts';
 import type { UiLocale } from '../../i18n/define.ts';
-import { iriOf, mainScope, parseWorkRef, type VersionQuery, type WorkRef, type WorkScope, workHref } from './route.ts';
-import type { AdoptionPage, ClassificationPage, CreditPage, HistoryPage, Loaded, RatingContextPage, RatingRead,
-  ReadFailure, RealmHeader, VersionPage, WorkHeader } from './types.ts';
+import { type ContentsQuery, iriOf, mainScope, parseWorkRef, type VersionQuery, type WorkRef, type WorkScope, workHref } from './route.ts';
+import type { AdoptionPage, AgentCreditPage, ChapterRead, ClassificationPage, ContentsPage, CreditPage,
+  DiscussionPage, HistoryKind, HistoryPage, Loaded, Progress, RatingContextPage, RatingRead, ReadFailure,
+  RealmHeader, VersionPage, WorkHeader } from './types.ts';
 
 // Server reads for the Work page. Each returns a `Loaded` result instead of
 // throwing, so one region's failure never takes down another. Reads are
@@ -15,18 +16,24 @@ import type { AdoptionPage, ClassificationPage, CreditPage, HistoryPage, Loaded,
 // Main call.
 
 /**
- * Who reads. A signed-in person with a session Agent reads as that Agent, so
- * their private Works and Mine resolve; anyone else reads the public view.
- * Main requires `actingSubject` with a bearer token, so a person who has not
- * chosen an Agent reads publicly and Mine asks them to choose one.
+ * Who reads. A signed-in person whose session Agent (kept by Main for this
+ * web session) is eligible reads as that Agent, so their private Works, Mine
+ * and progress resolve; anyone else reads the public view. Main requires
+ * `actingSubject` with a bearer token, so a person without an eligible Agent
+ * reads publicly and Mine asks them to choose one.
  */
 const reader = cache(async () => {
-  const jar = await cookies();
-  const token = jar.get(ACCESS_COOKIE)?.value;
-  const subject = jar.get(AGENT_COOKIE)?.value;
-  const acting = token && isAgentIri(subject) ? subject : undefined;
+  const token = (await cookies()).get(ACCESS_COOKIE)?.value;
+  const state = token ? await sessionAgentState() : null;
+  const acting = state?.sessionAgent.eligible ? state.sessionAgent.actingSubject ?? undefined : undefined;
   return { main: mainApiWithToken(acting ? token : undefined), actingSubject: acting, signedIn: Boolean(token) };
 });
+
+/** The session Agent the page reads as, for client components that write as it (reading progress). */
+export async function readingAgent(): Promise<{ signedIn: boolean; actingSubject: string | null }> {
+  const { signedIn, actingSubject } = await reader();
+  return { signedIn, actingSubject: actingSubject ?? null };
+}
 
 export function failureOf(status: number): ReadFailure {
   if (status === 404 || status === 410) return 'missing';
@@ -164,7 +171,48 @@ export async function readVersions(id: string, locale: UiLocale, filter: Version
     kind: filter.kind, contentLanguage: filter.language, cursor: filter.cursor } }));
 }
 
-export async function readHistory(id: string, cursor: string | undefined): Promise<Loaded<HistoryPage>> {
+/** The Work's public activity, newest first: metadata revisions, publications and placed replies. */
+export async function readHistory(id: string, kind: HistoryKind | undefined, cursor: string | undefined):
+  Promise<Loaded<HistoryPage>> {
   const { main, actingSubject } = await reader();
-  return settle(() => main.v1.works({ id }).history.get({ query: { actingSubject, cursor } }));
+  return settle(() => main.v1.works({ id }).history.get({ query: { actingSubject, kind, cursor } }));
+}
+
+/** Reviewed replies placed in public Realms, newest first; one Realm when the scope names it. */
+export async function readDiscussion(id: string, realm: string | undefined, cursor: string | undefined):
+  Promise<Loaded<DiscussionPage>> {
+  const { main, actingSubject } = await reader();
+  return settle(() => main.v1.works({ id }).discussion.get({ query: { actingSubject,
+    realm: realm ? iriOf(realm) : undefined, cursor } }));
+}
+
+export const readAgentCredits = cache(async (id: string): Promise<Loaded<AgentCreditPage>> => {
+  const { main, actingSubject } = await reader();
+  return settle(() => main.v1.works({ id })['agent-credits'].get({ query: { actingSubject } }));
+});
+
+/** One level of the Main Version's table of contents: a group's children, or the top level. */
+export async function readContents(id: string, query: ContentsQuery): Promise<Loaded<ContentsPage>> {
+  const { main, actingSubject } = await reader();
+  return settle(() => main.v1.works({ id }).contents.get({ query: { actingSubject,
+    parent: query.parent ? iriOf(query.parent) : undefined, language: query.language, cursor: query.cursor } }));
+}
+
+/** One chapter's exact body with its neighbours, in the Work's selected language unless one is named. */
+export const readChapter = cache(async (chapter: string, language: string | undefined):
+  Promise<Loaded<ChapterRead>> => {
+  const { main, actingSubject } = await reader();
+  return settle(() => main.v1.chapters({ id: chapter }).get({ query: { actingSubject, language } }));
+});
+
+/**
+ * The reader's own progress in a chapter. Main keeps it per Account for Works
+ * the reader may read; `missing` means Main keeps none for this reader here.
+ */
+export async function readProgress(target: ChapterRead['progress']): Promise<Loaded<Progress>> {
+  const { main, actingSubject, signedIn } = await reader();
+  if (!actingSubject) return { ok: false, failure: signedIn ? 'identity' : 'sign-in' };
+  return settle(() => main.v1.compositions({ id: target.composition.slice(-36) })
+    .occurrences({ occurrence: target.occurrence.slice(-36) }).progress
+    .get({ query: { actingSubject, selectedRevision: target.selectedRevision } }));
 }

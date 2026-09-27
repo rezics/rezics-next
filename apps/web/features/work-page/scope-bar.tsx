@@ -30,13 +30,15 @@ export function scopeName(view: ScopeView, messages: WorkPageMessages, locale: U
 }
 
 /** The neighbouring scope an empty state offers, as a link; none when there is nowhere else to look. */
-export function ScopeOffer({ view, locale, messages }: { view: ScopeView; locale: UiLocale; messages: WorkPageMessages }) {
+export function ScopeOffer({ view, locale, messages, tab = 'overview' }: {
+  view: ScopeView; locale: UiLocale; messages: WorkPageMessages; tab?: WorkTab;
+}) {
   const next = neighbourScope(view.scope, view.realms.map(realm => realm.id));
   if (!next) return null;
   const t = materializeData(messages, { locale });
   const label = next.kind === 'global' ? t.seeGlobal
     : t.seeRealm({ realm: scopeName({ ...view, scope: next }, messages, locale) });
-  return <Link href={workHref(view.workRef, 'overview', next)} className={buttonVariants({ variant: 'outline', size: 'sm' })}>
+  return <Link href={workHref(view.workRef, tab, next)} className={buttonVariants({ variant: 'outline', size: 'sm' })}>
     {label}</Link>;
 }
 
@@ -53,7 +55,7 @@ function ScopeLink({ href, current, icon: Icon, children }: {
 }
 
 /**
- * Whose ratings, classification and adoption the view shows: Global, a Realm
+ * Whose ratings, classification, adoption and discussion the view shows: Global, a Realm
  * or Mine. Realms offered are those that adopted the Work plus the one in the
  * URL. The line under it names the scope in words, so it is never implicit.
  */
@@ -63,8 +65,12 @@ export function ScopeBar({ workRef, scope, realms, locale, messages, tab = 'over
 }) {
   const t = materializeData(messages, { locale });
   const current = scope?.kind === 'realm' ? realms.find(realm => realm.id === scope.realm) : undefined;
-  const description = !scope ? null : scope.kind === 'global' ? t.scopeGlobal : scope.kind === 'mine' ? t.scopeMine
-    : t.scopeRealm({ realm: realmLabel(current ?? { id: scope.realm, name: null }, messages, locale) });
+  const realm = scope?.kind === 'realm' ? realmLabel(current ?? { id: scope.realm, name: null }, messages, locale) : '';
+  const discussion = tab === 'discussion';
+  const description = !scope ? null
+    : scope.kind === 'global' ? (discussion ? t.scopeDiscussionGlobal : t.scopeGlobal)
+      : scope.kind === 'mine' ? (discussion ? t.scopeDiscussionMine : t.scopeMine)
+        : discussion ? t.scopeDiscussionRealm({ realm }) : t.scopeRealm({ realm });
   return <nav aria-label={t.scope} className="grid min-w-0 gap-2">
     <div className="flex">
       <ul className="flex min-w-0 flex-wrap gap-1 rounded-2xl border border-border/60 bg-card/80 p-1

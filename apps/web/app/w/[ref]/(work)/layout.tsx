@@ -1,9 +1,9 @@
 import type { Metadata } from 'next';
 import type { ReactNode } from 'react';
-import { resolveWork } from '../../../features/work-page/read.ts';
-import { WorkFrameView } from '../../../features/work-page/work-views.tsx';
-import { WorkUnavailable } from '../../../features/work-page/work-states.tsx';
-import { getMessages, getTranslation, requestLocale } from '../../../i18n/server.ts';
+import { resolveWork } from '../../../../features/work-page/read.ts';
+import { WorkFrameView } from '../../../../features/work-page/work-views.tsx';
+import { WorkUnavailable } from '../../../../features/work-page/work-states.tsx';
+import { getMessages, getTranslation, requestLocale } from '../../../../i18n/server.ts';
 
 type Params = { params: Promise<{ ref: string }> };
 

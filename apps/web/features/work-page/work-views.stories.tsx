@@ -6,7 +6,9 @@ import { WorkCredits } from './credits.tsx';
 import * as fixture from './fixtures.ts';
 import { HistoryRegion } from './history.tsx';
 import { messages } from './messages.ts';
-import { PendingView } from './pending-view.tsx';
+import { ContentsRegion } from './contents.tsx';
+import { DiscussionRegion } from './discussion.tsx';
+import { ScopeBar } from './scope-bar.tsx';
 import type { WorkTab } from './route.ts';
 import type { WorkHeader } from './types.ts';
 import { VersionsRegion } from './versions.tsx';
@@ -18,7 +20,8 @@ function Framed({ work = fixture.work, locale = 'en', children }: {
   work?: WorkHeader; locale?: UiLocale; children: ReactNode;
 }) {
   return <WorkFrame workRef={fixture.workRef} work={work} locale={locale} messages={messages[locale]}
-    credits={<WorkCredits credits={fixture.credits} locale={locale} messages={messages[locale]} />}>
+    credits={<WorkCredits agentCredits={fixture.agentCredits} credits={fixture.credits} locale={locale}
+      messages={messages[locale]} />}>
     {children}</WorkFrame>;
 }
 
@@ -111,22 +114,40 @@ export const VersionsChinesePhone: Story = {
 
 export const History: Story = {
   parameters: at('history'),
-  render: () => <Framed><HistoryRegion history={fixture.history} workRef={fixture.workRef} cursor={undefined}
-    locale="en" messages={messages.en} /></Framed>,
+  render: () => <Framed><HistoryRegion history={fixture.history} workRef={fixture.workRef} kind={undefined}
+    cursor={undefined} locale="en" messages={messages.en} /></Framed>,
   async play({ canvasElement }) {
     const region = within(canvasElement).getByRole('region', { name: 'History' });
-    await expect(region).toHaveTextContent('A chronological history is on its way.');
-    await expect(within(region).getAllByRole('listitem')).toHaveLength(3);
-    await expect(within(region).getByText('Current')).toBeVisible();
+    await expect(region).toHaveTextContent('Newest first.');
+    const items = within(region).getAllByRole('listitem');
+    await expect(items.map(item => item.querySelector('p')?.textContent)).toEqual(['Reply placed in a Realm',
+      'Metadata revised', 'Version published', 'Metadata revised']);
     await expect(within(region).getAllByRole('link', { name: 'View revision' })[0])
       .toHaveAttribute('href', `/works/${fixture.work.revision.slice(-36)}`);
+    const filter = within(region).getByRole('navigation', { name: 'Show activity' });
+    await expect(within(filter).getByRole('link', { name: 'All' })).toHaveAttribute('aria-current', 'true');
+    await expect(within(filter).getByRole('link', { name: 'Publications' }))
+      .toHaveAttribute('href', `/w/${fixture.workRef}/history?kind=publication-decision`);
+    await expect(within(region).getByRole('link', { name: 'Next page' }))
+      .toHaveAttribute('href', `/w/${fixture.workRef}/history?cursor=history-next-cursor`);
+  },
+};
+
+export const HistoryFilteredEmpty: Story = {
+  parameters: at('history', 'kind=reply-placement'),
+  render: () => <Framed><HistoryRegion history={fixture.noHistory} workRef={fixture.workRef} kind="reply-placement"
+    cursor={undefined} locale="en" messages={messages.en} /></Framed>,
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByRole('heading', { name: 'No activity of this kind yet' })).toBeVisible();
+    await expect(canvas.getByRole('link', { name: 'Replies' })).toHaveAttribute('aria-current', 'true');
   },
 };
 
 export const HistoryUnavailable: Story = {
   parameters: at('history'),
   render: () => <Framed><HistoryRegion history={{ ok: false, failure: 'unavailable' }} workRef={fixture.workRef}
-    cursor={undefined} locale="en" messages={messages.en} /></Framed>,
+    kind={undefined} cursor={undefined} locale="en" messages={messages.en} /></Framed>,
   async play({ canvasElement }) {
     await expect(within(canvasElement).getByRole('alert')).toHaveTextContent('History unavailable');
   },
@@ -134,21 +155,94 @@ export const HistoryUnavailable: Story = {
 
 export const Contents: Story = {
   parameters: at('contents'),
-  render: () => <Framed><PendingView view="contents" workRef={fixture.workRef} messages={messages.en} /></Framed>,
+  render: () => <Framed><ContentsRegion contents={fixture.contents} workRef={fixture.workRef} query={{}}
+    locale="en" messages={messages.en} /></Framed>,
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     await expect(canvas.getByRole('link', { name: 'Contents' })).toHaveAttribute('aria-current', 'page');
-    await expect(canvas.getByRole('heading', { name: 'Contents aren’t available yet' })).toBeVisible();
-    await expect(canvas.getAllByRole('link', { name: 'Versions' })[1]).toHaveAttribute('href', `/w/${fixture.workRef}/versions`);
+    const region = canvas.getByRole('region', { name: 'Contents' });
+    await expect(region).toHaveTextContent('Contents in English');
+    await expect(within(region).getByRole('link', { name: 'Start reading' }))
+      .toHaveAttribute('href', `/w/${fixture.workRef}/read/b5c7d9e1-f3a5-4b7c-9d1e-000000000002`);
+    await expect(within(region).getByRole('link', { name: /Part One: The Delta/ }))
+      .toHaveAttribute('href', `/w/${fixture.workRef}/contents?parent=b5c7d9e1-f3a5-4b7c-9d1e-000000000001`);
+    await expect(within(region).getByRole('link', { name: /Untitled chapter/ })).toBeVisible();
+    // A chapter with no publication in this language is listed, not linked.
+    await expect(within(region).queryByRole('link', { name: /Neap Tide/ })).toBeNull();
+    await expect(region).toHaveTextContent('Not available in this language');
   },
 };
 
+export const ContentsPart: Story = {
+  parameters: at('contents', 'parent=b5c7d9e1-f3a5-4b7c-9d1e-000000000001'),
+  render: () => <Framed><ContentsRegion contents={fixture.contents} workRef={fixture.workRef}
+    query={{ parent: 'b5c7d9e1-f3a5-4b7c-9d1e-000000000001' }} locale="en" messages={messages.en} /></Framed>,
+  async play({ canvasElement }) {
+    const region = within(canvasElement).getByRole('region', { name: 'Contents' });
+    await expect(within(region).getByRole('link', { name: 'Back to all contents' }))
+      .toHaveAttribute('href', `/w/${fixture.workRef}/contents`);
+    await expect(within(region).queryByRole('link', { name: 'Start reading' })).toBeNull();
+  },
+};
+
+export const ContentsEmpty: Story = {
+  parameters: at('contents'),
+  render: () => <Framed work={fixture.metadataOnlyWork}><ContentsRegion contents={fixture.noContents}
+    workRef={fixture.workRef} query={{}} locale="en" messages={messages.en} /></Framed>,
+  async play({ canvasElement }) {
+    await expect(within(canvasElement).getByRole('heading', { name: 'No contents yet' })).toBeVisible();
+  },
+};
+
+export const ContentsUnavailable: Story = {
+  parameters: at('contents'),
+  render: () => <Framed><ContentsRegion contents={{ ok: false, failure: 'unavailable' }} workRef={fixture.workRef}
+    query={{}} locale="en" messages={messages.en} /></Framed>,
+  async play({ canvasElement }) {
+    await expect(within(canvasElement).getByRole('alert')).toHaveTextContent('Contents unavailable');
+  },
+};
+
+const discussionView = (scope = fixture.globalScope) => <>
+  <ScopeBar workRef={fixture.workRef} scope={scope} realms={fixture.realms} tab="discussion" locale="en"
+    messages={messages.en} />
+  <DiscussionRegion discussion={scope.kind === 'mine' ? null : scope.kind === 'realm' ? fixture.noDiscussion
+    : fixture.discussion} view={fixture.scopeView(scope)} cursor={undefined} locale="en" messages={messages.en} />
+</>;
+
 export const Discussion: Story = {
   parameters: at('discussion'),
-  globals: { theme: 'dark' },
-  render: () => <Framed><PendingView view="discussion" workRef={fixture.workRef} messages={messages.en} /></Framed>,
+  render: () => <Framed>{discussionView()}</Framed>,
   async play({ canvasElement }) {
-    await expect(within(canvasElement).getByRole('heading', { name: 'Discussion isn’t available yet' })).toBeVisible();
+    const canvas = within(canvasElement);
+    await expect(canvas.getByRole('navigation', { name: 'Scope' }))
+      .toHaveTextContent('Showing reviewed replies from every public Realm.');
+    const region = canvas.getByRole('region', { name: 'Discussion' });
+    const replies = within(region).getAllByRole('article');
+    await expect(replies).toHaveLength(3);
+    await expect(within(replies[0]!).getByRole('link', { name: 'In Tidewater Readers' }))
+      .toHaveAttribute('href', `/w/${fixture.workRef}/discussion?scope=realm&realm=${fixture.realms[0]!.id}`);
+    await expect(replies[1]).toHaveTextContent('In 海洋文学研究会');
+    await expect(within(region).getByRole('link', { name: 'Next page' })).toBeVisible();
+  },
+};
+
+export const DiscussionEmptyRealm: Story = {
+  parameters: at('discussion', `scope=realm&realm=${fixture.realms[0]!.id}`),
+  render: () => <Framed>{discussionView(fixture.realmScope)}</Framed>,
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByRole('heading', { name: 'No reviewed replies in Tidewater Readers yet' })).toBeVisible();
+    await expect(canvas.getByRole('link', { name: 'See Global' })).toHaveAttribute('href', `/w/${fixture.workRef}/discussion`);
+  },
+};
+
+export const DiscussionMine: Story = {
+  parameters: at('discussion', 'scope=mine'),
+  globals: { theme: 'dark' },
+  render: () => <Framed>{discussionView(fixture.mineScope)}</Framed>,
+  async play({ canvasElement }) {
+    await expect(within(canvasElement).getByRole('heading', { name: 'Discussion isn’t personal' })).toBeVisible();
   },
 };
 

@@ -10,22 +10,26 @@ import { RatingSummaryRegion } from './ratings.tsx';
 import { WorkRecord } from './record.tsx';
 import { type WorkScope, workHref } from './route.ts';
 import { ScopeBar, type ScopeRealm } from './scope-bar.tsx';
-import type { AdoptionPage, ClassificationPage, CreditPage, Loaded, RatingRead, WorkHeader } from './types.ts';
+import type { AdoptionPage, AgentCreditPage, ClassificationPage, CreditPage, Loaded, RatingRead,
+  WorkHeader } from './types.ts';
 import { OverviewLayout, WorkFrame } from './work-frame.tsx';
+import { WorkAbout } from './work-header.tsx';
 
 interface OverviewArgs {
-  work: WorkHeader; credits: Loaded<CreditPage>; scope: WorkScope | null; realms: ScopeRealm[];
+  work: WorkHeader; agentCredits: Loaded<AgentCreditPage>; credits: Loaded<CreditPage>; scope: WorkScope | null;
+  realms: ScopeRealm[];
   ratings: Loaded<RatingRead>; classifications: Loaded<ClassificationPage> | null; adoptions: Loaded<AdoptionPage>;
   locale: UiLocale;
 }
 
 /** The Overview as the route composes it, with each region's Main answer given directly. */
-function Overview({ work, credits, scope, realms, ratings, classifications, adoptions, locale }: OverviewArgs) {
+function Overview({ work, agentCredits, credits, scope, realms, ratings, classifications, adoptions,
+  locale }: OverviewArgs) {
   const t = messages[locale];
   const view = scope ? fixture.scopeView(scope, realms) : null;
   return <WorkFrame workRef={fixture.workRef} work={work} locale={locale} messages={t}
-    credits={<WorkCredits credits={credits} locale={locale} messages={t} />}>
-    <OverviewLayout messages={t}
+    credits={<WorkCredits agentCredits={agentCredits} credits={credits} locale={locale} messages={t} />}>
+    <OverviewLayout messages={t} about={<WorkAbout work={work} messages={t} />}
       scopeBar={<ScopeBar workRef={fixture.workRef} scope={scope} realms={realms} locale={locale} messages={t} />}
       ratings={view ? <RatingSummaryRegion ratings={ratings} view={view} locale={locale} messages={t} /> : null}
       classification={view ? <ClassificationRegion classifications={classifications} view={view} locale={locale}
@@ -43,7 +47,7 @@ const route = (scope: WorkScope | null = fixture.globalScope) => {
 const meta = {
   title: 'Work page/Overview',
   component: Overview,
-  args: { work: fixture.work, credits: fixture.credits, scope: fixture.globalScope, realms: fixture.realms,
+  args: { work: fixture.work, agentCredits: fixture.agentCredits, credits: fixture.credits, scope: fixture.globalScope, realms: fixture.realms,
     ratings: fixture.globalRatings, classifications: fixture.globalClassifications, adoptions: fixture.adoptions,
     locale: 'en' },
   parameters: route(),
@@ -63,6 +67,10 @@ export const Global: Story = {
     await expect(canvas.getByRole('link', { name: 'Read' })).toHaveAttribute('href', `/w/${fixture.workRef}/contents`);
     await expect(canvas.getByRole('link', { name: /Open Library author OL2162284A/ }))
       .toHaveAttribute('href', 'https://openlibrary.org/authors/OL2162284A');
+    await expect(canvas.getByText('Maren Osei')).toBeVisible();
+    await expect(canvas.getByText('Translator')).toBeVisible();
+    await expect(canvas.getByText('La Cartographe des marées')).toHaveAttribute('lang', 'fr');
+    await expect(canvas.getByRole('region', { name: 'About this Work' })).toHaveTextContent('A surveyor maps a delta');
     const scope = canvas.getByRole('navigation', { name: 'Scope' });
     await expect(within(scope).getByRole('link', { name: 'Global' })).toHaveAttribute('aria-current', 'true');
     await expect(scope).toHaveTextContent('Showing ratings and classification from everyone on REZICS.');
@@ -72,7 +80,10 @@ export const Global: Story = {
     await expect(within(ratings).getByRole('list', { name: 'Rating distribution' }).children).toHaveLength(5);
     await expect(within(ratings).getByRole('link', { name: 'How good is this Work overall?' }))
       .toHaveAttribute('aria-current', 'true');
-    await expect(within(canvas.getByRole('region', { name: 'Classification' })).getAllByRole('listitem')).toHaveLength(5);
+    const chips = within(canvas.getByRole('region', { name: 'Classification' })).getAllByRole('listitem');
+    // Recorded relevance orders the chips, most central first; unrecorded ones keep Main's order after them.
+    await expect(chips.map(chip => chip.textContent)).toEqual(['Maritime fictionRelevance: Central',
+      'AdventureRelevance: Substantial', 'Coming of ageRelevance: Incidental', 'Maps and cartography', '海洋']);
     await expect(within(canvas.getByRole('region', { name: 'Realm adoption' })).getByRole('link', { name: /Tidewater Readers/ }))
       .toHaveAttribute('href', `/w/${fixture.workRef}?scope=realm&realm=${fixture.realms[0]!.id}`);
   },
@@ -158,7 +169,8 @@ export const NoRatingQuestion: Story = {
 };
 
 export const PartialFailure: Story = {
-  args: { credits: { ok: false, failure: 'unavailable' }, ratings: { ok: false, failure: 'unavailable' },
+  args: { agentCredits: { ok: false, failure: 'unavailable' }, credits: { ok: false, failure: 'unavailable' },
+    ratings: { ok: false, failure: 'unavailable' },
     adoptions: { ok: false, failure: 'unavailable' } },
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
@@ -186,7 +198,8 @@ export const InvalidScope: Story = {
 };
 
 export const MetadataOnly: Story = {
-  args: { work: fixture.metadataOnlyWork, credits: fixture.noCredits, realms: [], ratings: fixture.noQuestion,
+  args: { work: fixture.metadataOnlyWork, agentCredits: fixture.noAgentCredits, credits: fixture.noCredits, realms: [],
+    ratings: fixture.noQuestion,
     classifications: fixture.noClassifications, adoptions: fixture.noAdoptions },
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
@@ -241,4 +254,13 @@ export const PhoneDarkRealm: Story = {
   parameters: route(fixture.realmScope),
   globals: { theme: 'dark', viewport: { value: 'phone' } },
   play: noOverflow,
+};
+
+export const SomeCreditsUnavailable: Story = {
+  args: { agentCredits: { ok: false, failure: 'unavailable' } },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByRole('alert')).toHaveTextContent('Some credits could not load.');
+    await expect(canvas.getByRole('link', { name: /Open Library author OL2162284A/ })).toBeVisible();
+  },
 };

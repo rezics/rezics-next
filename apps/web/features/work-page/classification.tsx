@@ -1,4 +1,5 @@
 import { Badge } from '@rezics/ui/badge';
+import { cn } from '@rezics/ui/utils';
 import { GlobeIcon, UsersRoundIcon } from 'lucide-react';
 import { materializeData } from 'native-i18n';
 import type { UiLocale } from '../../i18n/define.ts';
@@ -9,12 +10,31 @@ import type { Classification, ClassificationPage, Loaded } from './types.ts';
 
 export const CLASSIFICATION_REGION = 'work-classification';
 
-function Chips({ items, label }: { items: readonly Classification[]; label?: string }) {
+type Translation = ReturnType<typeof materializeData<WorkPageMessages>>;
+
+const levels = { central: 3, substantial: 2, incidental: 1 } as const;
+
+/** A chip's recorded relevance, or null while unrecorded, stale or withdrawn. */
+const levelOf = (item: Classification) => item.relevanceStatus === 'recorded' ? item.relevance?.level ?? null : null;
+
+function Chips({ items, label, t }: { items: readonly Classification[]; label?: string; t: Translation }) {
+  // Most relevant first within the page, as AniList orders tags; Main's order breaks ties.
+  const rank = (item: Classification) => { const level = levelOf(item); return level ? levels[level] : 0; };
+  const ordered = [...items].sort((a, b) => rank(b) - rank(a));
   return <ul aria-label={label} className="flex flex-wrap gap-2">
-    {items.map(item => <li key={item.sense}>
-      <Badge variant="outline" size="lg" className="bg-card font-normal">
-        <span lang={item.name.language} dir={item.name.direction}>{item.name.value}</span></Badge>
-    </li>)}
+    {ordered.map(item => {
+      const level = levelOf(item);
+      return <li key={item.sense}>
+        <Badge variant="outline" size="lg" className="gap-2 bg-card font-normal">
+          <span lang={item.name.language} dir={item.name.direction}>{item.name.value}</span>
+          {level ? <span title={t.relevance({ level: t[level] })} className="flex gap-0.5">
+            <span className="sr-only">{t.relevance({ level: t[level] })}</span>
+            {[1, 2, 3].map(dot => <span key={dot} aria-hidden="true" className={cn('size-1.5 rounded-full',
+              dot <= levels[level] ? 'bg-primary' : 'bg-border')} />)}
+          </span> : null}
+        </Badge>
+      </li>;
+    })}
   </ul>;
 }
 
@@ -59,14 +79,14 @@ export function ClassificationRegion({ classifications, view, locale, messages }
       {local.length ? <div className="grid gap-2">
         <p className="flex items-center gap-1.5 text-muted-foreground text-xs">
           <UsersRoundIcon aria-hidden="true" className="size-3.5" />{t.decidedIn({ realm: name })}</p>
-        <Chips items={local} label={t.decidedIn({ realm: name })} />
+        <Chips items={local} label={t.decidedIn({ realm: name })} t={t} />
       </div> : null}
       {inherited.length ? <div className="grid gap-2">
         <p className="flex items-center gap-1.5 text-muted-foreground text-xs">
           <GlobeIcon aria-hidden="true" className="size-3.5" />{t.fromGlobal}</p>
-        <Chips items={inherited} label={t.fromGlobal} />
+        <Chips items={inherited} label={t.fromGlobal} t={t} />
       </div> : null}
-    </div> : <Chips items={items} />}
+    </div> : <Chips items={items} t={t} />}
     {nextCursor ? <p className="text-muted-foreground text-xs">{t.moreClassifications}</p> : null}
   </Region>;
 }

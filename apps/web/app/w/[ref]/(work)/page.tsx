@@ -1,7 +1,7 @@
-import { loadWork } from '../../../features/work-page/read.ts';
-import { idOf, iriOf, parseScope } from '../../../features/work-page/route.ts';
-import { WorkOverview } from '../../../features/work-page/work-views.tsx';
-import { getMessages, requestLocale } from '../../../i18n/server.ts';
+import { loadWork } from '../../../../features/work-page/read.ts';
+import { idOf, iriOf, parseScope } from '../../../../features/work-page/route.ts';
+import { WorkOverview } from '../../../../features/work-page/work-views.tsx';
+import { getMessages, requestLocale } from '../../../../i18n/server.ts';
 
 type Props = { params: Promise<{ ref: string }>; searchParams: Promise<Record<string, string | string[] | undefined>> };
 

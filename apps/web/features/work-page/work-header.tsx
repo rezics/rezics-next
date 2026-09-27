@@ -7,7 +7,7 @@ import Link from 'next/link';
 import type { CSSProperties, ReactNode } from 'react';
 import { BFF_PREFIX } from '../api/browser.ts';
 import type { UiLocale } from '../../i18n/define.ts';
-import { languageName, localeLanguage, typeNames } from './format.ts';
+import { languageName, localeLanguage, paragraphs, typeNames } from './format.ts';
 import type { WorkPageMessages } from './messages.ts';
 import type { WorkCover as Cover, WorkHeader as Header } from './types.ts';
 
@@ -68,6 +68,10 @@ export function WorkHeader({ work, credits, readHref, locale, messages }: {
         {t.titleFallback({ requested: languageName(localeLanguage(locale), locale),
           shown: languageName(work.title.language, locale) })}
       </p> : null}
+      {work.originalTitle && work.originalTitle.value !== work.title.value
+        ? <p className="text-muted-foreground text-sm">{t.originalTitle}{': '}
+          <span lang={work.originalTitle.language} dir={work.originalTitle.direction}
+            className="font-work-title text-foreground">{work.originalTitle.value}</span></p> : null}
       {credits}
       <p className="flex flex-wrap items-baseline gap-x-2 text-muted-foreground text-sm">
         <span>{work.selectedLanguage
@@ -81,4 +85,16 @@ export function WorkHeader({ work, credits, readHref, locale, messages }: {
         <BookOpenIcon aria-hidden="true" />{t.read}</Link>
     </div>
   </header>;
+}
+
+/** The Work's recorded description, in the reader's language when Main has one. */
+export function WorkAbout({ work, messages }: { work: Header; messages: WorkPageMessages }) {
+  if (!work.description) return null;
+  return <section aria-labelledby="work-about" className="grid max-w-3xl gap-2">
+    <h2 id="work-about" className="font-semibold text-lg/7">{messages.about}</h2>
+    <div lang={work.description.language} dir={work.description.direction}
+      className="grid gap-3 text-pretty text-[15px]/7 text-foreground/90">
+      {paragraphs(work.description.value).map((line, index) => <p key={index}>{line}</p>)}
+    </div>
+  </section>;
 }

@@ -24,25 +24,32 @@ export function WorkFrame({ workRef, work, credits, locale, messages, children }
 }
 
 /**
- * The Overview's arrangement: the scope bar, then ratings and classification
+ * The Overview's arrangement: the description, the scope bar, then ratings and classification
  * in the chosen scope beside Realm adoption and the record. An unknown scope
  * is reported in place of the scoped regions, never replaced by Global.
  */
-export function OverviewLayout({ scopeBar, ratings, classification, adoption, record, messages }: {
-  scopeBar: ReactNode;
+export function OverviewLayout({ about, scopeBar, ratings, classification, adoption, record, messages }: {
+  /** The Work's description; it does not change with scope, so it comes first. */
+  about?: ReactNode; scopeBar: ReactNode;
   /** Null when the URL names no known scope. */
   ratings: ReactNode | null; classification: ReactNode; adoption: ReactNode; record: ReactNode;
   messages: WorkPageMessages;
 }) {
   return <>
+    {about}
     {scopeBar}
-    {ratings === null ? <Alert variant="warning" role="alert">
-      <CircleAlertIcon aria-hidden="true" />
-      <AlertTitle>{messages.invalidScopeTitle}</AlertTitle>
-      <AlertDescription>{messages.invalidScopeBody}</AlertDescription>
-    </Alert> : <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_20rem] lg:items-start">
+    {ratings === null ? <InvalidScope messages={messages} /> : <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_20rem] lg:items-start">
       <div className="grid min-w-0 gap-6">{ratings}{classification}</div>
       <div className="grid min-w-0 gap-6">{adoption}{record}</div>
     </div>}
   </>;
+}
+
+/** The URL names no scope this page can show; it says so instead of showing Global. */
+export function InvalidScope({ messages }: { messages: WorkPageMessages }) {
+  return <Alert variant="warning" role="alert">
+    <CircleAlertIcon aria-hidden="true" />
+    <AlertTitle>{messages.invalidScopeTitle}</AlertTitle>
+    <AlertDescription>{messages.invalidScopeBody}</AlertDescription>
+  </Alert>;
 }
