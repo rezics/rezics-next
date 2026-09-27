@@ -43,9 +43,22 @@ closes the bounded PKG10 scenario. Steam's keyless Collection endpoint returned
 member IDs, which stayed `collection` relations with zero hard comparisons.
 Its public item-details response omitted children despite an item with Workshop
 required items, so the soft dependency remained an inaccessible surface, with
-no invented mandatory edge. PKG11 remains partial until a live item child
-relation is captured through a permitted surface. The selected API run is not
-full backend qualification.
+no invented mandatory edge. The selected API run is not full backend
+qualification.
+
+Maintainer direction (2026-09-27): users must not be asked to supply provider
+API keys, and how provider records are acquired (a crawler or another permitted
+surface) is still to be decided. Live authenticated capture for PKG09
+(CurseForge) and PKG11 (Steam item children) is therefore skipped, not failed.
+These two cases qualify that the relations are modeled correctly: records
+authored in the providers' documented response shapes (CurseForge
+required/optional/tool/embedded/include/incompatible file dependencies; Steam
+Workshop required-item children and Collection membership) pass through the real
+Account/Access/Main/Content receipt path with no duplicate download, no lost
+dependency grain and no invented mandatory installation constraint. The keyless
+live Modrinth, Nexus and Steam Collection captures above stay as recorded
+evidence. Live acquisition for these providers is an explicit rollout boundary
+until the acquisition design is agreed.
 
 Controlled installation/plan tests need not compile every upstream project.
 Do not claim runtime/build success from a resolver-only pass. Preserve rejected
