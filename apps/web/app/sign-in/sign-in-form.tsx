@@ -6,11 +6,13 @@ import { Button } from '@rezics/ui/button';
 import { Input } from '@rezics/ui/input';
 import type { AuthMessages } from '../../features/auth/messages.ts';
 
-export function SignInForm({ next, messages, failed = false }: { next: string; messages: AuthMessages;
-  /** A sign-in posted without JavaScript failed. */
-  failed?: boolean }) {
+export function SignInForm({ next, messages, notice = null }: { next: string; messages: AuthMessages;
+  /** Why the person is back here: a sign-in posted without JavaScript failed,
+   * or Account granted nothing. */
+  notice?: 'failed' | 'declined' | null }) {
   const [mode, setMode] = useState<'sign-in' | 'sign-up'>('sign-in');
-  const [error, setError] = useState(failed ? messages.accountFailed : '');
+  const [error, setError] = useState(notice === 'failed' ? messages.accountFailed
+    : notice === 'declined' ? messages.consentDeclined : '');
   const [busy, setBusy] = useState(false);
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();

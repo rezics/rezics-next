@@ -13,5 +13,6 @@ export default async function SignInPage({ searchParams }: {
   if (await readSession()) redirect(next);
   return <main className="mx-auto w-full max-w-md px-4 py-12">
     <SignInForm next={next} messages={authMessages[await requestLocale()]}
-      failed={query.error === 'sign-in' || query.error === 'sign-up'} /></main>;
+      notice={query.error === 'declined' ? 'declined'
+        : query.error === 'sign-in' || query.error === 'sign-up' ? 'failed' : null} /></main>;
 }

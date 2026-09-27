@@ -12,6 +12,7 @@ const en = {
   createAccount: 'Create account', signIn: 'Sign in',
   newHere: 'New to REZICS?', alreadyHaveAccount: 'Already have an account?',
   createAccountLink: 'Create an account',
+  consentDeclined: 'REZICS was not given access to your account. Sign in again to continue.',
   // Choosing the session Agent.
   chooseAgentHeading: 'Choose who you act as',
   chooseAgentHelp: 'Your account can act as these Agents. The one you choose is shown as signed in across REZICS and proposed for what you do there. Each action is still checked when you take it.',
@@ -45,6 +46,7 @@ const zhCN: AuthMessages = {
   createAccount: '创建账户', signIn: '登录',
   newHere: '初次使用 REZICS？', alreadyHaveAccount: '已有账户？',
   createAccountLink: '创建账户',
+  consentDeclined: '您未授予 REZICS 访问账户的权限。请重新登录以继续。',
   chooseAgentHeading: '选择您的操作身份',
   chooseAgentHelp: '您的账户可以代表以下身份操作。所选身份会在 REZICS 各处显示为当前登录身份，并预填到您的操作中。每项操作在执行时仍会单独检查权限。',
   agentsLegend: '可用的操作身份',

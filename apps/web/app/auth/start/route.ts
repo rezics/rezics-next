@@ -3,7 +3,7 @@ import { NextResponse } from 'next/server';
 import { serviceOrigin } from '../../../features/api/origins.ts';
 import { readAccountUser } from '../../../features/auth/account.ts';
 import { accountClient } from '../../../features/auth/client.ts';
-import { cookieOptions, OAUTH_NEXT_COOKIE, OAUTH_STATE_COOKIE,
+import { accountCookieHeader, cookieOptions, OAUTH_NEXT_COOKIE, OAUTH_STATE_COOKIE,
   OAUTH_VERIFIER_COOKIE } from '../../../features/auth/cookies.ts';
 import { appCallback, safeReturnPath, signInPath } from '../../../features/auth/paths.ts';
 import { MAIN_SITE_SCOPE } from '../../../features/auth/scopes.ts';
@@ -16,7 +16,7 @@ export async function GET(request: Request) {
   const client = accountClient();
   if (!client) return new Response('Web OAuth client is not configured', { status: 503 });
   const accountOrigin = serviceOrigin('ACCOUNT_ORIGIN');
-  const cookie = request.headers.get('cookie') ?? '';
+  const cookie = accountCookieHeader(request.headers.get('cookie'));
   if (!await readAccountUser(accountOrigin, cookie)) {
     return NextResponse.redirect(new URL(signInPath(next), input));
   }

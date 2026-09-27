@@ -1,5 +1,6 @@
 import { expect, test } from 'bun:test';
 import type { AccountClient } from '../features/auth/account.ts';
+import { accountCookieHeader } from '../features/auth/cookies.ts';
 import { signOut } from '../features/auth/sign-out.ts';
 
 function account(options: { down?: boolean } = {}) {
@@ -53,4 +54,10 @@ test('IAM01: sign-out stays on this site and signs the browser out even when Acc
       .toHaveLength(4);
   }
   expect(calls.length).toBe(6);
+});
+
+test('IAM01: requests to Account carry its own session cookie, never this site\'s tokens', () => {
+  expect(accountCookieHeader('rezics_access=a; better-auth.session_token=s; rezics_refresh=r; rezics_locale=en'))
+    .toBe('better-auth.session_token=s');
+  expect(accountCookieHeader(null)).toBe('');
 });

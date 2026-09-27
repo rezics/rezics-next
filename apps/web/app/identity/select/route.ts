@@ -3,7 +3,7 @@ import { mainApi } from '../../../features/api/main.ts';
 import { sameOriginWrite } from '../../../features/api/origins.ts';
 import { agentOptions } from '../../../features/auth/acting-identity.ts';
 import { safeReturnPath, signInPath } from '../../../features/auth/paths.ts';
-import { discoverActingContexts, readSession } from '../../../features/auth/session.ts';
+import { readSession, sessionDiscovery } from '../../../features/auth/session.ts';
 import { writeSessionAgent } from '../../../features/auth/session-state.ts';
 
 /** Switches the session Agent to an Agent Main lists as eligible now, and
@@ -19,7 +19,7 @@ export async function POST(request: Request) {
     return NextResponse.redirect(new URL(signInPath(`/identity?next=${encodeURIComponent(next)}`),
       request.url), 303);
   }
-  const discovery = await discoverActingContexts();
+  const discovery = await sessionDiscovery();
   if (!discovery) return NextResponse.redirect(back('unavailable'), 303);
   if (!agentOptions(discovery).some(option => option.iri === agent)) {
     return NextResponse.redirect(back('invalid'), 303);
