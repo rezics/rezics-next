@@ -50,8 +50,9 @@ export const Slider = (props: SliderProps) => {
     if (Array.isArray(defaultValue)) {
       return defaultValue;
     }
-    return [min, max];
-  }, [value, defaultValue, min, max]);
+    // One thumb unless a value says otherwise; SharkUI rendered two by default.
+    return [min];
+  }, [value, defaultValue, min]);
 
   return (
     <ArkSlider.Root
@@ -84,7 +85,7 @@ export const Slider = (props: SliderProps) => {
         <ArkSlider.Track
           className={cn(
             'grow',
-            'bg-input/64',
+            'bg-input',
             'rounded-full',
             'select-none overflow-hidden',
             'data-[orientation=horizontal]:h-2 data-[orientation=horizontal]:w-full',
@@ -109,16 +110,18 @@ export const Slider = (props: SliderProps) => {
 
           return (
             <ArkSlider.Thumb
+              // Aura's thumb: page-colored with a 2px primary ring and a soft halo on focus.
               className={cn(
                 'relative',
                 'shrink-0',
-                'size-4.5',
-                'bg-white',
-                'rounded-full border border-input shadow-xs/5',
+                'size-5',
+                'bg-background',
+                'rounded-full border-2 border-primary shadow-md',
                 'cursor-grab select-none',
                 'transition-[color,box-shadow,transform]',
-                'focus-visible:border-primary focus-visible:outline-hidden focus-visible:ring-[3px] focus-visible:ring-ring/32',
-                'origin-left data-dragging:scale-110 data-dragging:cursor-grabbing data-dragging:border-primary data-dragging:ring-[3px] data-dragging:ring-ring/32',
+                'hover:ring-4 hover:ring-primary/20',
+                'focus-visible:outline-hidden focus-visible:ring-4 focus-visible:ring-primary/30',
+                'data-dragging:scale-110 data-dragging:cursor-grabbing data-dragging:ring-4 data-dragging:ring-primary/30',
                 'pointer-coarse:after:absolute pointer-coarse:after:h-full pointer-coarse:after:min-h-11',
                 'motion-reduce:transition-none!',
               )}
@@ -144,7 +147,7 @@ export const Slider = (props: SliderProps) => {
             'pointer-events-none',
           )}
         >
-          {Array.from({ length: max + 1 }, (_, index) => (
+          {Array.from({ length: Math.floor(max - min) + 1 }, (_, index) => (
             <ArkSlider.Marker
               className={cn(
                 'group/marker',
@@ -154,7 +157,7 @@ export const Slider = (props: SliderProps) => {
               data-interval={index % markerInterval === 0 ? undefined : ''}
               data-slot="slider-marker"
               key={String(index)}
-              value={index}
+              value={min + index}
             >
               <span
                 className={cn(
@@ -165,7 +168,7 @@ export const Slider = (props: SliderProps) => {
               />
 
               <span className={cn('group-data-interval/marker:opacity-0')}>
-                {markerLabels?.[index] ?? index}
+                {markerLabels?.[index] ?? min + index}
               </span>
             </ArkSlider.Marker>
           ))}
@@ -175,26 +178,27 @@ export const Slider = (props: SliderProps) => {
   );
 };
 
-export const SliderLabel = (props: React.ComponentProps<typeof FieldLabel>) => {
-  const { children, ...rest } = props;
-
-  return (
-    <FieldLabel {...rest}>
-      <ArkSlider.Label data-slot="slider-label">{children}</ArkSlider.Label>
-    </FieldLabel>
-  );
-};
+// FieldLabel is a <label>; wrapping Ark's label in it nested two labels.
+export const SliderLabel = (props: React.ComponentProps<typeof ArkSlider.Label>) => (
+  <FieldLabel asChild>
+    <ArkSlider.Label data-slot="slider-label" {...props} />
+  </FieldLabel>
+);
 
 export const SliderValue = (props: React.ComponentProps<typeof ArkSlider.ValueText>) => {
-  const { className, ...rest } = props;
+  const { className, children, ...rest } = props;
+  const { value } = useSliderContext();
 
   return (
     <FieldLabel asChild>
       <ArkSlider.ValueText
         className={cn('ms-auto tabular-nums', className)}
-        data-slot="progress-value"
+        data-slot="slider-value"
         {...rest}
-      />
+      >
+        {/* Ark joins range values with a comma; a dash reads as a range. */}
+        {children ?? value.join(' – ')}
+      </ArkSlider.ValueText>
     </FieldLabel>
   );
 };
