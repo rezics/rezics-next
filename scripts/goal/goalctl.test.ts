@@ -54,6 +54,10 @@ describe('goalctl claims', () => {
       migrations: ['main/access:045-049', 'content:040-044'] })])).toEqual([]);
     expect(pathsOverlap('tests/qa/integration/poll-*', 'tests/qa/integration/pkg-*')).toBe(false);
     expect(pathsOverlap('services/**/poll.ts', 'services/main/src/app.ts')).toBe(false);
+    expect(pathsOverlap('apps/web/app/identity/**', 'apps/web/app/[[]locale]/studio/**')).toBe(false);
+    expect(pathsOverlap('apps/web/app/\\[locale\\]/studio/**', 'apps/web/app/[[]locale]/studio/page.tsx')).toBe(true);
+    expect(pathsOverlap('apps/web/app/[[]locale]/w/**', 'apps/web/app/[[]locale]/studio/**')).toBe(false);
+    expect(pathsOverlap('apps/web/app/[a-z]*/**', 'apps/web/app/identity/**')).toBe(true);
     expect(pathsOverlap('services/**/poll.ts', 'services/main/src/poll.ts')).toBe(true);
     expect(pathsOverlap('services/main/src/modules/*/outbox-event*.ts',
       'services/main/src/modules/content-publication/comment.ts')).toBe(false);

@@ -143,10 +143,19 @@ function segmentRegex(segment: string): RegExp {
   return new RegExp(`^${body}$`);
 }
 
+// Route folders such as `[locale]` are claimed as `[[]locale]` or `\\[locale\\]`;
+// map those escaped brackets to stand-in characters so they compare as literals.
+function literalBrackets(segment: string): string {
+  const escaped = segment.replace(/\[\[\]|\\\[/g, '\u0001').replace(/\[\]\]|\\\]/g, '\u0002');
+  return escaped.includes('[') ? escaped : escaped.replaceAll(']', '\u0002');
+}
+
 // Two single path segments can match a common name. Exact for literals and for a
 // literal against `*`/`?`; for two wildcard segments only the literal prefix and
 // suffix are compared, which may report overlap where none exists (safe side).
-function segmentsIntersect(a: string, b: string): boolean {
+function segmentsIntersect(rawA: string, rawB: string): boolean {
+  const a = literalBrackets(rawA);
+  const b = literalBrackets(rawB);
   const wildA = /[*?[{]/.test(a);
   const wildB = /[*?[{]/.test(b);
   if (!wildA && !wildB) return a === b;
