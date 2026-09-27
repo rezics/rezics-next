@@ -3,13 +3,13 @@ import type { AgentOption } from '../auth/acting-identity.ts';
 // Studio carries its Agent in the route, `/studio/@{agent}/…`: a workspace
 // layer (docs/contracts/identity-and-access.md#acting-identity-layers) that
 // starts from the session Agent and may differ from it, per tab. The segment
-// is the Agent's public handle, which Main mints as `agent-<uuid>`, so a
-// Studio address and a profile address (`/@agent-<uuid>`) name an Agent alike.
+// is the Agent's public handle, or the `agent-<uuid>` form Main mints when it
+// has none, so a Studio address and a profile address name an Agent alike.
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
 /** The route segment for an Agent, without the `@`. */
-export function agentSlug(agent: Pick<AgentOption, 'iri' | 'handle'>): string {
+function agentSlug(agent: Pick<AgentOption, 'iri' | 'handle'>): string {
   return agent.handle ?? `agent-${agent.iri.slice(-36)}`;
 }
 

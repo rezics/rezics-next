@@ -5,7 +5,7 @@ import type { MainClient } from './types.ts';
 const tag = /^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$/i;
 
 /** Rows a save sends: those with a title or description, trimmed. */
-export function detailsToSave(values: DetailsValues): DetailsValues {
+function detailsToSave(values: DetailsValues): DetailsValues {
   return { originalTitle: values.originalTitle.trim(), originalLanguage: values.originalLanguage.trim(),
     entries: values.entries.map(entry => ({ language: entry.language.trim(), title: entry.title.trim(),
       description: entry.description.trim() })).filter(entry => entry.title || entry.description) };

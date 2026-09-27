@@ -15,7 +15,7 @@ export function studioAgentName(agent: Pick<AgentOption, 'iri' | 'label'>, messa
   return agent.label ?? messages.agentFallback.replace('{agent}', agent.iri.slice(-36, -28));
 }
 
-export function agentKind(kind: AgentOption['kind'], t: Pick<StudioMessages, 'person' | 'penName' | 'organization' | 'service'>):
+function agentKind(kind: AgentOption['kind'], t: Pick<StudioMessages, 'person' | 'penName' | 'organization' | 'service'>):
   string | null {
   switch (kind) {
     case 'person': return t.person;

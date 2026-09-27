@@ -30,9 +30,6 @@ const types: Array<{ value: WorkType; icon: typeof BookOpenIcon; label: 'typeBoo
   { value: 'recipe', icon: CookingPotIcon, label: 'typeRecipe', help: 'typeRecipeHelp' },
 ];
 
-/** The language a person writing in this interface most likely writes in. */
-export const defaultWritingLanguage = (locale: UiLocale) => locale;
-
 /**
  * Starts a Work: a title, what kind of Work it is and the language of its text.
  * The Studio Agent is shown on the button itself, so nobody creates as someone else by accident.
@@ -44,7 +41,8 @@ export function NewWorkForm({ agent, action: create, initialState, locale, messa
   const t = materializeData(messages, { locale });
   const [state, action, pending] = useActionState(create, initialState);
   const errorId = useId();
-  const values = state.values ?? { title: '', type: 'book', language: defaultWritingLanguage(locale) };
+  // A person writing in this interface most likely writes in its language.
+  const values = state.values ?? { title: '', type: 'book', language: locale };
   const languages: readonly string[] = writingLanguages.includes(values.language as never)
     ? writingLanguages : [values.language, ...writingLanguages];
   return <form action={action} className="grid gap-7" aria-describedby={state.status === 'idle' ? undefined : errorId}>

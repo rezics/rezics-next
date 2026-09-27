@@ -29,7 +29,7 @@ const TAB_CHANNEL = 'rezics:studio:saves';
 
 const rtl = new Set(['ar', 'he', 'fa', 'ur', 'ps', 'sd', 'yi', 'dv', 'ug', 'ckb']);
 /** The text direction of a content language (not of the interface). */
-export const directionOf = (language: string): 'ltr' | 'rtl' => rtl.has(language.split('-')[0]!.toLowerCase()) ? 'rtl' : 'ltr';
+const directionOf = (language: string): 'ltr' | 'rtl' => rtl.has(language.split('-')[0]!.toLowerCase()) ? 'rtl' : 'ltr';
 
 export interface TextEditorProps {
   agent: AgentOption;

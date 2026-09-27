@@ -13,7 +13,7 @@ export type SubmissionPage = Ok<Main['v1']['my']['submissions']['get']>;
 export type Submission = Omit<SubmissionPage['items'][number], 'state'> & { state: SubmissionState };
 // Main builds this union from a mapped array (services/main/src/modules/realm-submission/schema.ts),
 // which the typed client cannot see through, so Studio names the states itself.
-export const submissionStates = ['pending', 'deciding', 'accepted', 'rejected', 'changes-requested', 'withdrawn',
+const submissionStates = ['pending', 'deciding', 'accepted', 'rejected', 'changes-requested', 'withdrawn',
   'stale'] as const;
 export type SubmissionState = (typeof submissionStates)[number];
 export type RealmDirectory = Ok<Main['v1']['realms']['get']>;
