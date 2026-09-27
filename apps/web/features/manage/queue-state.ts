@@ -42,13 +42,25 @@ export const isReport = (item: Pick<ModerationItem, 'kind'>) =>
   item.kind === 'content_report' || item.kind === 'rights_complaint';
 
 /**
+ * A report someone already kept or removed. Main keeps a decided case open,
+ * so the decision can still be reversed, and lists it among open items with
+ * its decision head; it no longer waits for anyone.
+ */
+export const isDecidedReport = (item: Pick<ModerationItem, 'kind' | 'decisionHead'>) =>
+  isReport(item) && item.decisionHead !== null;
+
+/** The items a view lists: waiting leaves out reports that were already decided. */
+export const itemsFor = (items: readonly ModerationItem[], state: 'open' | 'closed') =>
+  state === 'open' ? items.filter(item => !isDecidedReport(item)) : [...items];
+
+/**
  * What a moderator can do with an item now. A report is kept or removed
  * (citing its decision basis) and stays decidable after it was escalated.
  * Rights complaints only escalate: Main's decision route does not take their
  * interim or final restrictions yet.
  */
 export function actionsFor(item: ModerationItem, authority: QueueAuthority = fullAuthority): ReadonlySet<QueueAction> {
-  if (item.state === 'closed') return new Set();
+  if (item.state === 'closed' || isDecidedReport(item)) return new Set();
   const escalate: QueueAction[] = item.escalation || !authority.escalate ? [] : ['escalate'];
   if (item.kind === 'content_report') {
     return new Set<QueueAction>([...authority.decideReports ? ['keep', 'remove'] as const : [], ...escalate]);

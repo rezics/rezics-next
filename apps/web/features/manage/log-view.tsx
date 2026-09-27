@@ -9,7 +9,7 @@ import type { UiLocale } from '../../i18n/define.ts';
 import { browserMainApi } from '../api/browser.ts';
 import { EmptyState } from '../shell/empty-state.tsx';
 import LocalizedLink from '../shell/localized-link.tsx';
-import { agentLabel, dateTime, relativeTime, shownHandle } from './format.ts';
+import { agentLabel, dateTime, isoTime, relativeTime, shownHandle } from './format.ts';
 import { auditKindLabel, auditOutcome, auditRuns, publicDecisionLabel } from './labels.ts';
 import type { ManageMessages } from './messages.ts';
 import { AgentMark, Named, Pill } from './parts.tsx';
@@ -116,7 +116,7 @@ export function LogView({ realm, address = realm, actingSubject, view, first, ag
               <div className="flex flex-wrap items-baseline justify-between gap-x-3">
                 <p className="font-medium">{auditOutcome(item, t)}
                   {count > 1 ? <span className="font-normal text-muted-foreground"> · {t.auditRepeated(count)}</span> : null}</p>
-                <time dateTime={latest} title={dateTime(latest, locale)}
+                <time dateTime={isoTime(latest)} title={dateTime(latest, locale)} suppressHydrationWarning
                   className="text-muted-foreground text-xs">{relativeTime(latest, now, locale)}</time>
               </div>
               <p className="text-muted-foreground text-sm">{t.byAgent({ agent: name })}{handle ? ` ${handle}` : ''}</p>

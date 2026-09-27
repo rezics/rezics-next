@@ -3,7 +3,7 @@ import { commandFailure, reportDecision } from '../features/manage/commands.ts';
 import { basisFor } from '../features/manage/fixtures.ts';
 import { auditRuns, shortcutActions } from '../features/manage/labels.ts';
 import { impactLines, positionOf, removesOwnRoleManagement, sortPermissions } from '../features/manage/permissions.ts';
-import { actionsFor, authorityFrom, commonActions, initialTriage, needsReason, targetIds, triage, type TriageState,
+import { actionsFor, authorityFrom, commonActions, initialTriage, itemsFor, needsReason, targetIds, triage, type TriageState,
   UNDO_WINDOW_MS, visibleIds } from '../features/manage/queue-state.ts';
 import { logHref, parseLogView, parseQueueView, queueHref, realmHref } from '../features/manage/routes.ts';
 import type { AuditItem, ModerationItem } from '../features/manage/types.ts';
@@ -37,6 +37,15 @@ describe('what a moderator can decide', () => {
     expect([...actionsFor(report(5, { kind: 'rights_complaint' }))]).toEqual(['escalate']);
     expect(needsReason('keep')).toBe(false);
     expect(needsReason('remove')).toBe(true);
+  });
+
+  test('G330 a report someone already kept or removed no longer waits, though Main keeps its case open', () => {
+    const decided = report(6, { decisionHead: uuid(600) });
+    expect(actionsFor(decided).size).toBe(0);
+    expect(itemsFor([report(5), decided, submission(7)], 'open').map(item => item.id)).toEqual([uuid(5), uuid(7)]);
+    expect(itemsFor([decided], 'closed')).toHaveLength(1);
+    // A submission's decision head is its reviewed revision; it waits until Main moves its state on.
+    expect([...actionsFor(submission(8, { decisionHead: uuid(800) }))]).toContain('approve');
   });
 
   test('G330 the owner is who escalations reach, so an owner is never offered Escalate', () => {

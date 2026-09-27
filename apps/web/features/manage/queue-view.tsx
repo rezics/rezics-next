@@ -12,13 +12,13 @@ import type { UiLocale } from '../../i18n/define.ts';
 import LocalizedLink from '../shell/localized-link.tsx';
 import { EmptyState } from '../shell/empty-state.tsx';
 import type { Outcome } from './commands.ts';
-import { agentLabel, relativeTime } from './format.ts';
+import { agentLabel, isoTime, relativeTime } from './format.ts';
 import { actionLabel, decidedText, kindLabel, reasonText, shortcutActions, shortcutKeys, stateLabel } from './labels.ts';
 import type { ManageMessages } from './messages.ts';
 import { Pill, Thumb } from './parts.tsx';
 import { bffQueueApi, type QueueApi, reporters } from './queue-api.ts';
 import { actionOrder, QueueDetail, type RulesState } from './queue-detail.tsx';
-import { actionsFor, commonActions, type Decision, fullAuthority, initialTriage, needsReason, type PendingDecision,
+import { actionsFor, commonActions, type Decision, fullAuthority, initialTriage, itemsFor, needsReason, type PendingDecision,
   type QueueAction, type QueueAuthority, type Settled, targetIds, triage, UNDO_WINDOW_MS, visibleIds } from './queue-state.ts';
 import { ReasonDialog } from './reason-dialog.tsx';
 import { mergeAgents } from './read.ts';
@@ -86,7 +86,7 @@ export function QueueView({ realm, address = realm, actingSubject, authority = f
   const t = useMemo(() => materializeData(messages, { locale }), [messages, locale]);
   const api = useMemo(() => givenApi ?? bffQueueApi(realm, actingSubject, locale),
     [givenApi, realm, actingSubject, locale]);
-  const [state, dispatch] = useReducer(triage, initial.items, initialTriage);
+  const [state, dispatch] = useReducer(triage, itemsFor(initial.items, view.state), initialTriage);
   const [names, setNames] = useState({ agents: initialAgents, works: initialWorks });
   const [cursor, setCursor] = useState(initial.nextCursor);
   const [paging, setPaging] = useState<'idle' | 'loading' | 'moved' | 'failed'>('idle');
@@ -124,7 +124,7 @@ export function QueueView({ realm, address = realm, actingSubject, authority = f
   const reload = useCallback(async () => {
     const read = await api.page(view, null);
     if (!read.ok) return;
-    dispatch({ type: 'load', items: read.data.items });
+    dispatch({ type: 'load', items: itemsFor(read.data.items, view.state) });
     setCursor(read.data.nextCursor);
     setPaging('idle');
     await learn(read.data.items);
@@ -253,7 +253,7 @@ export function QueueView({ realm, address = realm, actingSubject, authority = f
     setPaging('loading');
     const read = await api.page(view, cursor);
     if (!read.ok) { setPaging(read.failure === 'moved' ? 'moved' : 'failed'); return; }
-    dispatch({ type: 'load', items: read.data.items, append: true });
+    dispatch({ type: 'load', items: itemsFor(read.data.items, view.state), append: true });
     setCursor(read.data.nextCursor);
     setPaging('idle');
     await learn(read.data.items);
@@ -298,7 +298,7 @@ export function QueueView({ realm, address = realm, actingSubject, authority = f
           <span className="truncate text-muted-foreground text-sm">
             {[kindLabel(item.kind, t), reason, author].filter(Boolean).join(' · ')}</span>
           <span className="text-muted-foreground text-xs">
-            {waiting ? <time dateTime={item.openedAt}>{relativeTime(item.openedAt, now, locale)}</time>
+            {waiting ? <time dateTime={isoTime(item.openedAt)}>{relativeTime(item.openedAt, now, locale)}</time>
               : stateLabel(item, t)}</span>
         </span>
       </button>

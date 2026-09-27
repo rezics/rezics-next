@@ -14,6 +14,13 @@ export function relativeTime(iso: string, now: number, locale: UiLocale): string
   return format.format(0, 'second');
 }
 
+/**
+ * A time for `<time dateTime>`. Eden hands Main's timestamps over as Date
+ * objects, whose text differs between the server's time zone and the
+ * reader's; an ISO string reads the same on both sides.
+ */
+export const isoTime = (value: string | Date) => new Date(value).toISOString();
+
 export const dateTime = (iso: string, locale: UiLocale) =>
   new Intl.DateTimeFormat(locale, { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(iso));
 

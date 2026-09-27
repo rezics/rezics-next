@@ -10,7 +10,7 @@ import { ArrowUpRightIcon, CircleAlertIcon, InfoIcon, SirenIcon } from 'lucide-r
 import { materializeData } from 'native-i18n';
 import type { UiLocale } from '../../i18n/define.ts';
 import LocalizedLink from '../shell/localized-link.tsx';
-import { agentLabel, dateTime, relativeTime, shownHandle } from './format.ts';
+import { agentLabel, dateTime, isoTime, relativeTime, shownHandle } from './format.ts';
 import { actionLabel, componentLabel, kindLabel, reasonText, shortcutKeys, stateLabel } from './labels.ts';
 import type { ManageMessages } from './messages.ts';
 import { AgentMark, Named, Thumb } from './parts.tsx';
@@ -58,8 +58,8 @@ function Reports({ basis, agents, now, locale, messages }: { basis: Loaded<Decis
     <ul className="grid gap-2">
       {reports.map(report => <li key={report.id} className="grid gap-1 rounded-xl bg-muted/40 px-3 py-2.5 text-sm">
         <p className="text-muted-foreground text-xs">{t.reporterWrote({ agent: agentLabel(agents[report.actingSubject],
-          report.actingSubject, id => t.agentFallback({ id })) })} · <time dateTime={report.receivedAt}
-          title={dateTime(report.receivedAt, locale)}>{relativeTime(report.receivedAt, now, locale)}</time></p>
+          report.actingSubject, id => t.agentFallback({ id })) })} · <time dateTime={isoTime(report.receivedAt)}
+          title={dateTime(report.receivedAt, locale)} suppressHydrationWarning>{relativeTime(report.receivedAt, now, locale)}</time></p>
         {report.statement ? <p dir="auto" className="whitespace-pre-line">{report.statement}</p>
           : <p className="text-muted-foreground">{t.noStatement}</p>}
       </li>)}
@@ -79,7 +79,8 @@ function Person({ iri, agents, label, now, locale, messages, time }: {
     <p className="min-w-0">
       <span>{label(name)}</span>
       {handle ? <span className="ms-1.5 text-muted-foreground">{handle}</span> : null}
-      <span className="block text-muted-foreground text-xs"><time dateTime={time} title={dateTime(time, locale)}>
+      <span className="block text-muted-foreground text-xs"><time dateTime={isoTime(time)} title={dateTime(time, locale)}
+        suppressHydrationWarning>
         {relativeTime(time, now, locale)}</time></span>
     </p>
   </div>;
