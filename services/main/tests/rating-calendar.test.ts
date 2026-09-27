@@ -31,4 +31,8 @@ test('RATE03: daily slots count the private principal and civil day independentl
   expect(first).not.toContain(principal);
   expect(first).not.toBe(dailyRatingSlotIri(principal, context, main, '2026-03-09'));
   expect(first).not.toBe(dailyRatingSlotIri('00000000-0000-4000-8000-000000000004', context, main, '2026-03-08'));
+  expect(first).not.toBe(dailyRatingSlotIri(principal,
+    'https://rezics.com/id/00000000-0000-4000-8000-000000000005', main, '2026-03-08'));
+  expect(first).not.toBe(dailyRatingSlotIri(principal, context,
+    'https://rezics.com/id/00000000-0000-4000-8000-000000000006', '2026-03-08'));
 });
