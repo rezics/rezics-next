@@ -4,6 +4,7 @@ import { createAccountApp } from './app.ts';
 import { accountConfig } from './config.ts';
 import { accountEmailQueue, smtpSender } from './email.ts';
 import { bootstrapOperators } from './operators.ts';
+import { reconcileResourceScopes } from './resource-scopes.ts';
 import { AccessAdmissionRegistry } from '../../main/src/modules/access/admission.ts';
 import { mirrorAccountDeletionIntent } from '../../main/src/modules/outbox/account-deletion-journal.ts';
 import { retainAccountSubjectDeletion } from '../../main/src/modules/outbox/account-subject-deletion.ts';
@@ -22,6 +23,7 @@ const relayPool = relayDatabaseURL ? new Pool({ connectionString: relayDatabaseU
 const access = accessPool ? new AccessAdmissionRegistry(accessPool, config.FUSEKI_TITLE_ADMISSION_KEY) : null;
 const operatorUserIds = new Set(config.ACCOUNT_OPERATOR_USER_IDS.split(',').map(s => s.trim()).filter(Boolean));
 await bootstrapOperators(pool, operatorUserIds);
+if (await reconcileResourceScopes(pool, resource)) console.info('Account: Main resource scopes updated to the installed set');
 const email = accountEmailQueue(pool, secret, smtpSender({ host: config.ACCOUNT_SMTP_HOST,
   port: config.ACCOUNT_SMTP_PORT, secure: config.ACCOUNT_SMTP_SECURE,
   requireTLS: config.ACCOUNT_SMTP_REQUIRE_TLS, user: config.ACCOUNT_SMTP_USER,
