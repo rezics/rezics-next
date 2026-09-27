@@ -10,7 +10,7 @@ import { Input } from './input.tsx';
 import { Textarea } from './textarea.tsx';
 
 // Same chrome as Input (Aura's tinted field with an inset shadow) so a group and a bare
-// input line up; the ring shows only while the group's own control has focus.
+// input line up; the ring shows only while the group's text control has focus, not a button.
 export const inputGroupVariants = tv({
   base: [
     'group/input-group',
@@ -27,7 +27,9 @@ export const inputGroupVariants = tv({
     'has-[>[data-align=block-end]]:h-auto has-[>[data-align=block-end]]:flex-col has-[>[data-align=block-end]]:[&>input]:pt-3',
     'outline-none',
     'data-disabled:pointer-events-none data-disabled:opacity-64',
-    'has-[[data-slot=input-group-control]:focus-visible]:border-ring/50 has-[[data-slot=input-group-control]:focus-visible]:ring-2 has-[[data-slot=input-group-control]:focus-visible]:ring-ring/20',
+    'has-[input:disabled,textarea:disabled]:opacity-64',
+    // Keyed to the element, not data-slot: Ark parts such as Combobox.Input replace the slot.
+    'has-[input:focus-visible,textarea:focus-visible]:border-ring/50 has-[input:focus-visible,textarea:focus-visible]:ring-2 has-[input:focus-visible,textarea:focus-visible]:ring-ring/20',
     'has-[[data-slot][aria-invalid=true]]:border-destructive has-[[data-slot][aria-invalid=true]]:ring-[3px] has-[[data-slot][aria-invalid=true]]:ring-destructive/24',
     'dark:has-[[data-slot][aria-invalid=true]]:border-destructive-foreground dark:has-[[data-slot][aria-invalid=true]]:ring-destructive-foreground/40',
     'motion-reduce:transition-none!',

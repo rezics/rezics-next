@@ -7,16 +7,23 @@ import type React from 'react';
 import { cn } from '../utils.ts';
 import { Button } from './button.tsx';
 import { Calendar, CalendarPresetTrigger } from './calendar.tsx';
+import { FieldLabel } from './field.tsx';
 import type { Input, InputProps } from './input.tsx';
 import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from './input-group.tsx';
 
 export const useDatePicker = useDatePickerContext;
 
 export const DatePicker = (props: React.ComponentProps<typeof Calendar>) => {
-  const { positioning = { placement: 'top' }, ...rest } = props;
+  const { positioning = { placement: 'bottom-start' }, ...rest } = props;
 
   return <Calendar data-slot="date-picker" inline={false} positioning={positioning} {...rest} />;
 };
+
+export const DatePickerLabel = (props: React.ComponentProps<typeof ArkDatePicker.Label>) => (
+  <FieldLabel asChild>
+    <ArkDatePicker.Label data-slot="date-picker-label" {...props} />
+  </FieldLabel>
+);
 
 export const DatePickerTrigger = (props: React.ComponentProps<typeof ArkDatePicker.Trigger>) => {
   const { className, children, ...rest } = props;
@@ -105,7 +112,7 @@ export const DatePickerContent = (props: React.ComponentProps<typeof ArkDatePick
             'p-3',
             'bg-popover',
             'text-popover-foreground',
-            'rounded-2xl border shadow-lg/5',
+            'rounded-2xl border border-border/60 shadow-(--aura-shadow-float)',
             'outline-none',
             'origin-(--transform-origin)',
             'data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0',
