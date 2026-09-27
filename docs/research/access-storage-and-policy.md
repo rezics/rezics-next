@@ -32,6 +32,17 @@ moved to Jena. None of those alternatives removes the need to define object
 representation, grant mutation, exclusions and current disclosure in the
 application.
 
+Main hosts Access because the principal protected workflows already run there:
+in-process evaluation avoids a decision RPC while retaining an independently
+owned interface and private schema. It does not eliminate PostgreSQL reads or
+provide a sandbox against compromised Main code. A sidecar would add IPC and a
+second lifecycle; a remote service would add decision-path latency and freshness
+coordination. Extract only for a measured consumer, isolation or scaling need.
+The historical [Zanzibar](https://storage.googleapis.com/gweb-research2023-media/pubtools/5068.pdf),
+[OPA](https://www.openpolicyagent.org/docs/deploy) and
+[SpiceDB](https://authzed.com/docs/spicedb/concepts/consistency) sources inform
+placement and freshness tradeoffs, not REZICS latency or revocation acceptance.
+
 ## What the comparison measured
 
 The [reproducible four-backend lab](../../scripts/research/access_backend_comparison/README.md)
