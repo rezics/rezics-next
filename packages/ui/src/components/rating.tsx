@@ -4,10 +4,17 @@ import { RatingGroup as ArkRatingGroup, useRatingGroupContext } from '@ark-ui/re
 import { StarIcon } from 'lucide-react';
 import React from 'react';
 import { cn } from '../utils.ts';
+import { FieldLabel } from './field.tsx';
 
 export const useRating = useRatingGroupContext;
 
 interface RatingProps extends React.ComponentProps<typeof ArkRatingGroup.Root> {
+  /**
+   * The star size: sm 16px for Work cards, md 24px, lg 32px for rating dialogs.
+   *
+   * @default "md"
+   */
+  size?: 'sm' | 'md' | 'lg';
   /**
    * The icon to use for the rating.
    *
@@ -17,22 +24,40 @@ interface RatingProps extends React.ComponentProps<typeof ArkRatingGroup.Root> {
 }
 
 export const Rating = (props: RatingProps) => {
-  const { icon = <StarIcon />, allowHalf = false, count = 5, className, ...rest } = props;
+  const {
+    icon = <StarIcon />,
+    size = 'md',
+    allowHalf = false,
+    count = 5,
+    className,
+    children,
+    ...rest
+  } = props;
 
   return (
     <ArkRatingGroup.Root
       allowHalf={allowHalf}
       className={cn(
-        '**:data-[slot=rating-item-indicator]:size-6',
-        'text-warning',
+        'flex flex-col gap-2',
+        size === 'sm' && '**:data-[slot=rating-item-indicator]:size-4',
+        size === 'md' && '**:data-[slot=rating-item-indicator]:size-6',
+        size === 'lg' && '**:data-[slot=rating-item-indicator]:size-8',
+        // --rating is the Rezics star color (3:1 on page and card); stars are marks, not text.
+        '**:data-[slot=rating-control]:text-rating',
         'data-readonly:pointer-events-none',
         className,
       )}
       count={count}
+      data-size={size}
       data-slot="rating"
       {...rest}
     >
-      <ArkRatingGroup.Control className="inline-flex items-center gap-1" data-slot="rating-control">
+      {/* Children render above the stars, for a RatingLabel. */}
+      {children}
+      <ArkRatingGroup.Control
+        className={cn('inline-flex w-fit items-center gap-1', size === 'sm' && 'gap-0.5')}
+        data-slot="rating-control"
+      >
         <ArkRatingGroup.Context>
           {({ items }) =>
             items.map((item) => (
@@ -79,6 +104,12 @@ export const Rating = (props: RatingProps) => {
   );
 };
 
+export const RatingLabel = (props: React.ComponentProps<typeof ArkRatingGroup.Label>) => (
+  <FieldLabel asChild>
+    <ArkRatingGroup.Label data-slot="rating-label" {...props} />
+  </FieldLabel>
+);
+
 export const RatingItem = (props: React.ComponentProps<typeof ArkRatingGroup.Item>) => {
   const { className, ...rest } = props;
 
@@ -86,7 +117,7 @@ export const RatingItem = (props: React.ComponentProps<typeof ArkRatingGroup.Ite
     <ArkRatingGroup.Item
       className={cn(
         'inline-flex items-center justify-center',
-        'rounded-md',
+        'rounded-lg',
         'not-[[data-disabled],[data-readonly]]:cursor-pointer',
         'data-disabled:opacity-64 data-disabled:grayscale',
         'outline-none focus-visible:ring-current not-data-readonly:focus-visible:ring-[3px] focus-visible:ring-offset-1 focus-visible:ring-offset-background',
