@@ -38,7 +38,7 @@ describe('Accounts message catalogs', () => {
       i18n.getTranslation(namespaces, ['zh-Hans']), i18n.getTranslation(namespaces, ['ja'])]);
     expect(english.t.account.greeting({ name: 'Ada' })).toBe('Welcome, Ada');
     expect(chinese.t.account.greeting({ name: 'Ada' })).toBe('欢迎，Ada');
-    expect(japanese.t.account.greeting({ name: 'Ada' })).toBe('Welcome, Ada');
+    expect(japanese.t.account.greeting({ name: 'Ada' })).toBe('ようこそ、Ada さん');
     expect(english.t.account.appsCardBody(0)).toBe('No apps can use your account');
     expect(english.t.account.appsCardBody(2)).toBe('2 apps can use your account');
     expect(chinese.t.account.deviceOn({ browser: 'Chrome', os: 'macOS' })).toBe('macOS 上的 Chrome');
