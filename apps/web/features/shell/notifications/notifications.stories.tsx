@@ -1,6 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, userEvent, waitFor, within } from 'storybook/test';
-import { inbox, inboxWindow, memoryInbox, NOW } from './fixtures.ts';
+import { inbox, inboxWindow, invitations, memoryInbox, memoryInvitations, NOW, reviews } from './fixtures.ts';
+import { RealmInvitations } from './invitations.tsx';
 import { NotificationsUnavailable, NotificationsView } from './notifications-view.tsx';
 
 // The notifications page, newest first, over an in-memory stream: sentences
@@ -37,8 +38,10 @@ export const Latest: Story = {
     await expect(canvas.getByRole('link', { name: 'Your submission “Middlemarch: A Study of Provincial Life” was accepted' }))
       .toHaveAttribute('href', `/en/w/${'00000703-5555-4a6f-8c2d-3e7b5c1a9f40'}`);
     await expect(canvas.getByText('Moderators reached a decision on a report')).toBeVisible();
-    await expect(canvas.getByRole('link', { name: 'Your role in a Realm changed' }))
-      .toHaveAttribute('href', `/en/r/${'00000902-5555-4a6f-8c2d-3e7b5c1a9f40'}`);
+    // A role change says where and which role, and opens the Realm by its Zone's address.
+    await expect(canvas.getByRole('link', { name: 'Daniel Chen changed your role in Fiction · 小说: Community moderators' }))
+      .toHaveAttribute('href', '/en/r/fiction');
+    await expect(rows[0]).toHaveTextContent('in Fiction · 小说');
     await expect(canvas.getByText('Aria Wang 王雅 followed you')).toBeVisible();
     await expect(canvas.getByText('This notification is no longer available.')).toBeVisible();
     await expect(canvas.getAllByText('Unread')).toHaveLength(3);
@@ -69,6 +72,36 @@ export const MarkAllRefused: Story = {
     await userEvent.click(canvas.getByRole('button', { name: 'Mark all as read' }));
     await expect(await canvas.findByRole('alert')).toHaveTextContent('Couldn’t mark them as read');
     await expect(canvas.getAllByText('Unread')).toHaveLength(3);
+  },
+};
+
+/** Reviews of the reader's Work, and their own review helping others. */
+export const Reviews: Story = {
+  args: { ...args(), initial: inboxWindow(reviews, '0', '112') },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByText('Aria Wang 王雅 reviewed “雨夜书店”')).toBeVisible();
+    await expect(canvas.getByText('Quiet, rainy and exactly as sad as it should be.')).toBeVisible();
+    await expect(canvas.getByText('Readers are finding your review of “Middlemarch: A Study of Provincial Life” helpful'))
+      .toBeVisible();
+    await expect(canvas.getByText('in Classic Literature')).toBeVisible();
+  },
+};
+
+const answering = memoryInvitations();
+/** An invitation to join a Realm is answered here, above the notifications, with the choice to be listed. */
+export const Invitation: Story = {
+  args: { ...args(), invitations: <RealmInvitations invitations={invitations}
+    actingSubject="https://rezics.com/id/00000801-5555-4a6f-8c2d-3e7b5c1a9f40" main={answering.main} /> },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    const region = canvas.getByRole('region', { name: 'Invitations' });
+    await expect(within(region).getByRole('link', { name: 'Daniel Chen invited you to join Fiction · 小说' }))
+      .toHaveAttribute('href', '/en/r/fiction');
+    await userEvent.click(within(region).getByRole('checkbox', { name: 'Show me on its public member list' }));
+    await userEvent.click(within(region).getByRole('button', { name: 'Join' }));
+    await expect(await within(region).findByRole('status')).toHaveTextContent('You joined Fiction · 小说.');
+    await expect(answering.calls).toEqual(['accept:00000901:00000501:true']);
   },
 };
 

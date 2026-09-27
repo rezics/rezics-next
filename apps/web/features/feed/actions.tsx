@@ -4,7 +4,8 @@ import { Button, buttonVariants } from '@rezics/ui/button';
 import { Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger } from '@rezics/ui/menu';
 import { cn } from '@rezics/ui/utils';
 import { ArrowBigDownIcon, ArrowBigUpIcon, BellOffIcon, BookOpenIcon, CheckIcon, CopyIcon, DownloadIcon,
-  EllipsisIcon, EyeOffIcon, MessageCircleIcon, Share2Icon, ThumbsDownIcon, Undo2Icon, VolumeXIcon } from 'lucide-react';
+  EllipsisIcon, EyeOffIcon, MessageCircleIcon, MessageSquareQuoteIcon, Share2Icon, ThumbsDownIcon, Undo2Icon,
+  VolumeXIcon } from 'lucide-react';
 import { useState } from 'react';
 import { ShelfButton } from '../catalogue/reader-actions.tsx';
 import LocalizedLink from '../shell/localized-link.tsx';
@@ -93,6 +94,7 @@ function PrimaryAction({ item, title }: { item: FeedItem; title: string }) {
     case 'copy-prompt': return link(action.href, CopyIcon, t.usePrompt);
     case 'want-to-read': return <ShelfButton work={action.work} title={title} locale={locale} size="sm" variant="outline"
       className="w-auto" />;
+    case 'read-review': return link(action.href, MessageSquareQuoteIcon, t.readReview);
     case 'open': return null;
   }
 }

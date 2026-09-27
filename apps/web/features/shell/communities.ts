@@ -2,6 +2,8 @@
 export interface Community {
   id: string;
   kind: 'realm' | 'zone';
+  /** The Realm itself, or the one behind a Zone, when known: following either follows the same community. */
+  realm?: string;
   name: string;
   language: string;
   icon: { kind: 'fallback'; key: string } | { kind: 'image'; url: string } | null;
@@ -12,8 +14,13 @@ export interface Community {
   count?: { value: number; kind: 'exact' | 'lower-bound' };
 }
 
-/** A Realm whose moderation queue the reader can open. */
-export interface Moderated { realm: string; name: string; open: number; more: boolean }
+/**
+ * A Realm the reader manages (Main's `GET /v1/me/managed-realms`), with its
+ * open queue. `href` opens it in Manage, by its Zone's address when it has one.
+ */
+export interface Managed { realm: string; open: number; more: boolean; href: string }
+/** A managed Realm with its name, for lists that show it. */
+export interface Moderated extends Managed { name: string; language?: string }
 
 export interface CommunityNavigation {
   signedIn: boolean;
@@ -21,8 +28,22 @@ export interface CommunityNavigation {
   /** Null signed out, or when Main could not list the follows. */
   followed: { realms: Community[]; zones: Community[] } | null;
   official: Community[];
-  moderated: Moderated[];
+  moderated: Managed[];
 }
 
 /** How many of each list the navigation shows before "See all". */
 export const NAV_COMMUNITIES = 8;
+
+/** The Realm a community stands for: a followed Zone counts as following its Realm. */
+export const realmOf = (community: Community): string | undefined =>
+  community.realm ?? (community.kind === 'realm' ? community.id : undefined);
+
+/** Every Realm the reader follows, directly or through its Zone. */
+export function followedRealmIds(followed: { realms: readonly Community[]; zones: readonly Community[] }): string[] {
+  return [...new Set([...followed.realms, ...followed.zones].map(realmOf).filter(id => id !== undefined))];
+}
+
+/** Where Manage opens: the one Realm the reader manages directly, or the list of them. */
+export function manageHref(moderated: readonly Pick<Moderated, 'href'>[]): string {
+  return moderated.length === 1 ? moderated[0]!.href : '/manage';
+}

@@ -2,7 +2,9 @@ import type { Metadata } from 'next';
 import { mainApi } from '../../../features/api/main.ts';
 import { signInPath } from '../../../features/auth/paths.ts';
 import { readSession } from '../../../features/auth/session.ts';
-import { shellReader } from '../../../features/shell/communities-read.ts';
+import { readOfficialZones, shellReader } from '../../../features/shell/communities-read.ts';
+import { RealmInvitations } from '../../../features/shell/notifications/invitations.tsx';
+import { readInvitations } from '../../../features/shell/notifications/invitations-read.ts';
 import { NotificationsUnavailable, NotificationsView }
   from '../../../features/shell/notifications/notifications-view.tsx';
 import { readLatest } from '../../../features/shell/notifications/window.ts';
@@ -23,7 +25,13 @@ export default async function NotificationsPage({ params }: { params: Promise<{ 
   const signInHref = signInPath(localizedPath('/notifications', locale));
   if (!await readSession()) return <NotificationsUnavailable reason="signed-out" signInHref={signInHref} />;
   // Notifications belong to the person, not an Agent, so they read with the session's token alone.
-  const [latest, reader] = await Promise.all([readLatest(await mainApi()), shellReader()]);
+  // Invitations are to an Agent, so they read as the session's Agent.
+  const [latest, reader, official] = await Promise.all([readLatest(await mainApi()), shellReader(),
+    readOfficialZones(locale)]);
   if (!latest.ok) return <NotificationsUnavailable reason="failed" signInHref={signInHref} />;
-  return <NotificationsView initial={latest.data} now={Date.now()} avatarQuery={reader.avatarQuery} />;
+  const invitations = reader.actingSubject
+    ? await readInvitations(reader.main, reader.anonymous, reader.actingSubject, locale, official) : [];
+  return <NotificationsView initial={latest.data} now={Date.now()} avatarQuery={reader.avatarQuery}
+    invitations={reader.actingSubject && invitations.length
+      ? <RealmInvitations invitations={invitations} actingSubject={reader.actingSubject} /> : null} />;
 }

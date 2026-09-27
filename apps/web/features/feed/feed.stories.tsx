@@ -92,6 +92,23 @@ export const EveryKind: Story = {
       .toBeVisible();
     await expect(within(novel).getByRole('button', { name: 'Want to read' })).toBeVisible();
 
+    // A pick is the Realm's act: the curator is not named where the Work's author would be.
+    const pick = article(canvas, 'Jane Eyre');
+    await expect(pick).toHaveTextContent('Picked by Classic Literature');
+    await expect(within(pick).queryByText('Daniel Chen')).toBeNull();
+
+    // A review: the reader's stars and opening lines, leading to the review on the Work page.
+    const review = article(canvas, 'Persuasion');
+    await expect(review).toHaveTextContent('Rated 4 out of 5');
+    await expect(review).toHaveTextContent('Anne Elliot has already lost once');
+    await expect(review).toHaveTextContent('12 found this helpful');
+    await expect(within(review).getByRole('link', { name: 'Read review' })).toHaveAttribute('href',
+      expect.stringMatching(/^\/en\/w\/.+#review-/));
+    const spoiler = article(canvas, '长夜将明');
+    await expect(spoiler).toHaveTextContent('This review discusses the plot');
+    await expect(spoiler).toHaveTextContent('+2 more reviews');
+    await expect(spoiler).toHaveTextContent('9/10');
+
     // A list has no page yet, so its title is text, and it has no comments.
     const list = article(canvas, 'Autumn reading: slow novels');
     await expect(within(list).queryByRole('link', { name: 'Autumn reading: slow novels' })).toBeNull();
@@ -246,7 +263,7 @@ export const Failed: Story = {
 export const NewPosts: Story = {
   args: { headInterval: 50, api: memoryFeed({ head: { profile: 'home-feed-head-v1', scope: 'following',
     afterSequence: '40', newPosts: { value: 3, kind: 'exact' }, state: 'current',
-    projection: { sequence: '43', dataEpoch: 'story' } } }) },
+    projection: { sequence: '43', reviewSequence: '7', dataEpoch: 'story' } } }) },
   async play({ canvasElement }) {
     await expect(await within(canvasElement).findByRole('button', { name: '3 new posts' })).toBeVisible();
     await expect(within(canvasElement).getAllByRole('article')).toHaveLength(everyKind.length);

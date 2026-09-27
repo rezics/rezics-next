@@ -8,7 +8,7 @@ import { localizedPath } from '../../i18n/locale.ts';
 import { coverImage } from '../catalogue/work.ts';
 import type { SuggestedFollow } from '../feed/types.ts';
 import type { FeedPage } from '../feed/types.ts';
-import type { Moderated } from '../shell/communities.ts';
+import { manageHref, type Moderated } from '../shell/communities.ts';
 import { CommunityIcon } from '../shell/community-icon.tsx';
 import LocalizedLink from '../shell/localized-link.tsx';
 import { FollowButton } from './follow-button.tsx';
@@ -65,12 +65,13 @@ export function Rail({ data, signedIn, locale, messages, kinds, avatarQuery = ''
       <ul className="grid gap-1.5">
         {data.moderated.map(item => <li key={item.realm} className="flex items-center gap-2 text-sm">
           <ShieldCheckIcon aria-hidden="true" className="size-4 shrink-0 text-primary" />
-          <span className="min-w-0 flex-1 truncate">{item.name}</span>
+          <LocalizedLink href={localizedPath(item.href, locale)} lang={item.language}
+            className="min-w-0 flex-1 truncate hover:underline">{item.name}</LocalizedLink>
           <span className="shrink-0 text-muted-foreground">{item.open
             ? t.queueWaiting({ count: `${item.open}${item.more ? '+' : ''}` }) : t.queueClear}</span>
         </li>)}
       </ul>
-      <LocalizedLink href={localizedPath('/manage', locale)} className="font-medium text-primary text-sm
+      <LocalizedLink href={localizedPath(manageHref(data.moderated), locale)} className="font-medium text-primary text-sm
         underline-offset-4 hover:underline">{t.openManage}{open ? ` · ${t.queueWaiting({ count: String(open) })}` : ''}
       </LocalizedLink>
     </Module> : null}
@@ -103,7 +104,8 @@ export function Rail({ data, signedIn, locale, messages, kinds, avatarQuery = ''
               <span className="truncate text-muted-foreground text-xs">
                 {[reasonLabel(item, t, kinds), members].filter(Boolean).join(' · ')}</span>
             </span>
-            <FollowButton target={item.id} kind={item.kind} label={t.followRealm({ realm: item.name.value })}
+            <FollowButton target={item.id} kind={item.kind} realm={item.realm}
+              label={t.followRealm({ realm: item.name.value })}
               followLabel={t.follow} followedLabel={t.followed} failedLabel={t.followOneFailed} />
           </li>;
         })}

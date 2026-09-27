@@ -49,9 +49,10 @@ describe('navigation', () => {
     expect(isCurrent(discover!, '/discovery')).toBe(false);
   });
 
-  test('a planned route shows its coming-soon item; unknown routes stay not found', () => {
-    expect(plannedItem('/library')?.label.en).toBe('Library');
-    expect(plannedItem('/zh-Hans/library/want-to-read')?.label['zh-Hans']).toBe('书架');
+  test('only a planned route shows a coming-soon page; built and unknown routes do not', () => {
+    for (const item of navigation.filter(entry => entry.planned)) expect(plannedItem(item.href)).toBe(item);
+    // Library opens the reader's shelves, so it is no longer "Soon".
+    expect(plannedItem('/library')).toBeUndefined();
     expect(plannedItem('/notifications')).toBeUndefined();
     expect(plannedItem('/nowhere')).toBeUndefined();
     expect(plannedItem('/search')).toBeUndefined();

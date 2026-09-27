@@ -35,10 +35,15 @@ const communities: CommunityNavigation = { signedIn: true, avatarQuery: '',
       icon: { kind: 'fallback', key: 'fiction' }, href: `/r/${realm(1).slice(-36)}`, activity: 'new' },
     { id: realm(2), kind: 'realm', name: 'Classic Literature', language: 'en', icon: { kind: 'fallback', key: 'classics' },
       href: `/r/${realm(2).slice(-36)}`, activity: 'none' },
+    // An official Zone's Realm, followed directly: it opens at the Zone's address and is not listed twice.
+    { id: realm(4), kind: 'realm', name: 'Books · 图书', language: 'en', icon: { kind: 'fallback', key: 'b' },
+      href: '/r/books', activity: 'none' },
   ] },
-  official: [{ id: realm(3), kind: 'zone', name: 'Fiction · 小说', language: 'en', icon: { kind: 'fallback', key: 'f' },
-    href: '/r/fiction', activity: 'unknown' }],
-  moderated: [{ realm: realm(2), name: 'Classic Literature', open: 8, more: false }] };
+  official: [{ id: realm(3), kind: 'zone', realm: realm(13), name: 'Fiction · 小说', language: 'en',
+    icon: { kind: 'fallback', key: 'f' }, href: '/r/fiction', activity: 'unknown' },
+  { id: realm(5), kind: 'zone', realm: realm(4), name: 'Books · 图书', language: 'en', icon: { kind: 'fallback', key: 'b' },
+    href: '/r/books', activity: 'unknown' }],
+  moderated: [{ realm: realm(2), open: 8, more: false, href: `/manage/r/${realm(2).slice(-36)}` }] };
 
 function Placeholder() {
   return <PageContainer className="grid gap-6">
@@ -208,9 +213,10 @@ export const PhoneDark: Story = {
 };
 
 /**
- * Signed in: the Realms the reader follows with a dot where there is activity
- * they have not seen, the official Zones, and Manage with the queue for a
- * moderator; the bell and the navigation carry the unread count.
+ * Signed in: Manage first with the queue for a moderator, the Realms the
+ * reader follows with a dot where there is activity they have not seen, and
+ * the official Zones they do not follow yet; the bell and the navigation
+ * carry the unread count.
  */
 export const Communities: Story = {
   args: { signedIn: true, communities: <CommunityNav data={communities} />, notifications: <NotificationsLink />,
@@ -224,9 +230,16 @@ export const Communities: Story = {
     await expect(within(realms).getByRole('link', { name: /^中文网络小说 · Chinese Web Fiction\s*, new posts$/ }))
       .toHaveAttribute('href', `/en/r/${realm(1).slice(-36)}`);
     await expect(within(realms).getByRole('link', { name: 'Classic Literature' })).toBeVisible();
-    await expect(within(within(nav).getByRole('region', { name: 'Official Zones' })).getByRole('link',
-      { name: 'Fiction · 小说' })).toHaveAttribute('href', '/en/r/fiction');
-    await expect(within(nav).getByRole('link', { name: /^Manage/ })).toHaveTextContent('8 waiting');
+    const official = within(nav).getByRole('region', { name: 'Official Zones' });
+    await expect(within(official).getByRole('link', { name: 'Fiction · 小说' })).toHaveAttribute('href', '/en/r/fiction');
+    // Books is followed, so it appears once, under Your Realms.
+    await expect(within(official).queryByRole('link', { name: 'Books · 图书' })).toBeNull();
+    await expect(within(realms).getByRole('link', { name: 'Books · 图书' })).toHaveAttribute('href', '/en/r/books');
+    // Manage sits above the Realm lists, so it stays in view on a short screen, and opens the one Realm managed.
+    const manage = within(nav).getByRole('link', { name: /^Manage/ });
+    await expect(manage).toHaveTextContent('8 waiting');
+    await expect(manage).toHaveAttribute('href', `/en/manage/r/${realm(2).slice(-36)}`);
+    await expect(manage.compareDocumentPosition(realms) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     await expect(within(canvasElement.querySelector('header')!).getByRole('link', { name: 'Notifications, 3 unread' }))
       .toHaveAttribute('href', '/en/notifications');
     await expect(within(nav).getByRole('link', { name: /^Notifications/ })).toHaveTextContent('3');

@@ -86,7 +86,26 @@ export const everyKind: FeedItem[] = [
     primaryAction: { kind: 'open', href: '/collections/9' },
     target: { id: storyId(9, 'ffff'), work: null, title: name('Autumn reading: slow novels'), excerpt: null },
     links: { target: '/collections/9', actor: '/@aria_wang', comments: '/collections/9', vote: '/v1/feed/9/vote' } }),
+  review(10, { actor: people.leo, realm: null, title: name('Persuasion'), card: { rating: 4, scale: 5, spoiler: false,
+    helpfulCount: 12, opening: 'Austen’s quietest novel and her most grown-up: Anne Elliot has already lost once, and the book '
+      + 'lets her be right about it without ever saying so.' } }),
+  // A Realm review uses its ten-point scale; one that discusses the plot keeps its opening back.
+  review(11, { actor: people.aria, realm: realms.fiction, title: name('长夜将明', 'zh-Hans'), count: 3,
+    card: { rating: 9, scale: 10, spoiler: true, helpfulCount: 0, opening: null } }),
 ];
+
+/** A reader's review, linking to it on the Work page; `count` groups one person's reviews of several Works. */
+function review(n: number, options: { actor: FeedItem['actor']; realm: FeedItem['realm']; title: FeedItem['target']['title'];
+  count?: number; card: Omit<Extract<FeedItem['card'], { kind: 'review' }>, 'kind' | 'review'> }): FeedItem {
+  const id = storyId(n, 'abcd').slice(-36);
+  const href = `/w/${storyId(n, 'cccc').slice(-36)}#review-${id}`;
+  return post(n, { kind: 'review', actor: options.actor, realm: options.realm,
+    card: { kind: 'review', review: id, ...options.card }, primaryAction: { kind: 'read-review', review: id, href },
+    group: { key: `review-${n}`, count: options.count ?? 1, actors: [options.actor] },
+    target: { title: options.title, language: options.title.language },
+    links: { target: href, actor: `/@${options.actor.handle}`, comments: `/w/${storyId(n, 'cccc').slice(-36)}/discussion`,
+      vote: `/v1/feed/${storyId(n).slice(-36)}/vote` } });
+}
 
 /** A recommendation inside Following: the one place a reason is worth showing. */
 export const suggestion = post(20, { reason: { kind: 'recommended', basis: 'thin-following' }, realm: realms.kitchen,
@@ -99,7 +118,7 @@ export function page(items: FeedItem[], options: Partial<Pick<FeedPage, 'caughtU
     caughtUp: options.caughtUp ?? null, items, nextCursor: options.nextCursor ?? null,
     sourcePosition: { dataEpoch: 'story', sequence: '40' },
     count: { value: items.length, kind: 'exact-page', total: null },
-    projection: { sequence: '40', status: 'current' } };
+    projection: { sequence: '40', reviewSequence: '7', status: 'current' } };
 }
 
 export interface MemoryFeed extends FeedApi { calls: string[] }

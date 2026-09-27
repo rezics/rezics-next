@@ -17,28 +17,6 @@ export const NotFound: Story = {
   },
 };
 
-export const ComingSoon: Story = {
-  parameters: { route: { pathname: '/en/library' } },
-  async play({ canvasElement }) {
-    const canvas = within(canvasElement);
-    await expect(canvas.getByRole('heading', { level: 1, name: 'Library is on its way' })).toBeVisible();
-    await expect(canvas.getByText(/Keep the works you are reading/)).toBeVisible();
-  },
-};
-
-export const ComingSoonChinese: Story = {
-  globals: { locale: 'zh-Hans' },
-  parameters: { route: { pathname: '/zh-Hans/library' } },
-  async play({ canvasElement }) {
-    await expect(within(canvasElement).getByRole('heading', { level: 1, name: '书架即将推出' })).toBeVisible();
-  },
-};
-
-export const ComingSoonDark: Story = {
-  globals: { theme: 'dark' },
-  parameters: { route: { pathname: '/en/library' } },
-};
-
 export const Failed: Story = {
   render: () => <RouteError digest="3348219744" onRetry={retry} />,
   async play({ canvasElement }) {

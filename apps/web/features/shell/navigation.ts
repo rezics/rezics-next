@@ -21,7 +21,8 @@ export const navigation: readonly NavigationItem[] = [
   { href: '/discover', icon: Compass, bottom: true, label: localeText({ en: 'Discover', 'zh-Hans': '发现' }) },
   { href: '/studio', icon: Plus, bottom: true, emphasized: true, label: localeText({ en: 'Create', 'zh-Hans': '创作' }) },
   { href: '/notifications', icon: Bell, bottom: true, label: localeText({ en: 'Notifications', 'zh-Hant': '通知', 'zh-Hans': '通知', ja: '通知', ko: '알림', de: 'Benachrichtigungen', fr: 'Notifications', es: 'Notificaciones' }) },
-  { href: '/library', icon: LibraryBig, bottom: true, label: localeText({ en: 'Library', 'zh-Hans': '书架' }), planned: localeText({ en: 'Keep the works you are reading, want to read and have finished on your shelves.', 'zh-Hans': '把正在读、想读和读过的作品放在书架上。' }) },
+  // Opens the reader's shelves on their profile until Library has a page of its own (app/[locale]/library).
+  { href: '/library', icon: LibraryBig, bottom: true, label: localeText({ en: 'Library', 'zh-Hans': '书架' }) },
 ];
 
 /** Whether `pathname` is at or below the item's route. Home matches only itself. */

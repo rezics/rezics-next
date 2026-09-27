@@ -4,9 +4,7 @@ import { mainApiWithToken } from '../api/main.ts';
 import { ACCESS_COOKIE } from '../auth/cookies.ts';
 import { sessionAgentState } from '../auth/session.ts';
 import { type FollowEntry, type FollowKind, settle, uuidOf } from '../feed/types.ts';
-import type { Community, CommunityNavigation, Moderated } from './communities.ts';
-
-type ModerationProbe = Omit<Moderated, 'name'>;
+import { type Community, type CommunityNavigation, type Managed, type Moderated, realmOf } from './communities.ts';
 
 /**
  * Who is reading, once per request. A signed-in person whose session Agent
@@ -27,8 +25,8 @@ type Followed = Extract<FollowEntry, { available: true }>;
 function community(item: Followed): Community {
   const activity = item.newSince?.state === 'new' || item.newSince?.state === 'more-unverified' ? 'new'
     : item.newSince ? 'none' : 'unknown';
-  return { id: item.id, kind: item.kind === 'zone' ? 'zone' : 'realm', name: item.name.value,
-    language: item.name.language, icon: item.icon, href: item.href, activity,
+  return { id: item.id, kind: item.kind === 'zone' ? 'zone' : 'realm', ...item.realm ? { realm: item.realm } : {},
+    name: item.name.value, language: item.name.language, icon: item.icon, href: item.href, activity,
     ...(item.newSince?.count ? { count: item.newSince.count } : {}) };
 }
 
@@ -54,38 +52,63 @@ export const readOfficialZones = cache(async (language: string): Promise<Communi
   if (!list.ok) return [];
   const named = await Promise.all(list.data.items.slice(0, 6).map(async zone => {
     const realm = await settle(() => reader.anonymous.v1.realms({ realm: uuidOf(zone.realm) }).get({ query: { language } }));
-    return realm.ok ? { id: zone.zone, kind: 'zone' as const, name: realm.data.name.value,
+    return realm.ok ? { id: zone.zone, kind: 'zone' as const, realm: zone.realm, name: realm.data.name.value,
       language: realm.data.name.language, icon: realm.data.icon, href: `/r/${zone.routeSegment}`,
       activity: 'unknown' as const } : null;
   }));
   return named.filter(item => item !== null);
 });
 
+/** The Manage address of a Realm: its official Zone's segment when it has one, as `/r/{segment}` uses. */
+function manageRef(realm: string, official: readonly Community[]): string {
+  const zone = official.find(item => item.realm === realm);
+  return `/manage/r/${zone ? zone.href.replace(/^\/r\//, '') : uuidOf(realm)}`;
+}
+
 /**
- * The Realms among `realms` whose moderation queue the reader can open, with
- * its open items. Main has no "Realms I moderate" read yet, so this asks each
- * followed Realm's queue (a bounded handful, in parallel); a refusal means the
- * reader does not moderate it.
+ * The Realms the reader manages, with their open queues, from Main's one
+ * read of the reader's role assignments. Counts cover only what the reader
+ * may decide; a refused or failed read shows no Manage entry.
  */
-export const readModerated = cache(async (realms: string): Promise<ModerationProbe[]> => {
+export const readManaged = cache(async (language: string): Promise<Managed[]> => {
   const reader = await shellReader();
-  if (!reader.actingSubject || !realms) return [];
-  const results = await Promise.all(realms.split(',').slice(0, 8).map(async realm => {
-    const queue = await settle(() => reader.main.v1.realms({ realm: uuidOf(realm) }).moderation.get({ query: {
-      actingSubject: reader.actingSubject!, state: 'open', limit: 20 } }));
-    return queue.ok ? { realm, open: queue.data.items.length, more: queue.data.nextCursor !== null } : null;
-  }));
-  return results.filter(item => item !== null);
+  if (!reader.actingSubject) return [];
+  const [page, official] = await Promise.all([settle(() => reader.main.v1.me['managed-realms'].get({ query: {
+    actingSubject: reader.actingSubject! } })), readOfficialZones(language)]);
+  if (!page.ok) return [];
+  return page.data.items.map(item => ({ realm: item.realm, open: item.openCount.value,
+    more: item.openCount.kind !== 'exact', href: manageRef(item.realm, official) }));
 });
+
+/** Managed Realms with names: from the follows and official Zones already read, otherwise one Realm read each. */
+export const readModerated = cache(async (language: string): Promise<Moderated[]> => {
+  const reader = await shellReader();
+  const [managed, realms, zones, official] = await Promise.all([readManaged(language), readFollowed('realm'),
+    readFollowed('zone'), readOfficialZones(language)]);
+  const known = [...realms?.items ?? [], ...zones?.items ?? [], ...official];
+  return Promise.all(managed.slice(0, 8).map(async item => {
+    const named = known.find(community => realmOf(community) === item.realm);
+    if (named) return { ...item, name: named.name, language: named.language };
+    const read = await settle(() => reader.anonymous.v1.realms({ realm: uuidOf(item.realm) }).get({ query: { language } }));
+    return read.ok ? { ...item, name: read.data.name.value, language: read.data.name.language }
+      : { ...item, name: uuidOf(item.realm).slice(0, 8) };
+  }));
+});
+
+/** A followed Realm that is an official Zone's opens at the Zone's address, as the official list links it. */
+function withZoneAddress(realms: Community[], official: readonly Community[]): Community[] {
+  return realms.map(realm => {
+    const zone = official.find(item => item.realm === realm.id);
+    return zone ? { ...realm, href: zone.href } : realm;
+  });
+}
 
 /** Everything the side navigation lists below its main items. */
 export async function readCommunityNavigation(language: string): Promise<CommunityNavigation> {
   const reader = await shellReader();
-  const [realms, zones, official] = await Promise.all([readFollowed('realm'), readFollowed('zone'),
-    readOfficialZones(language)]);
-  const moderated = realms ? await readModerated(realms.items.map(item => item.id).join(',')) : [];
+  const [realms, zones, official, moderated] = await Promise.all([readFollowed('realm'), readFollowed('zone'),
+    readOfficialZones(language), readManaged(language)]);
   return { signedIn: reader.signedIn, avatarQuery: reader.avatarQuery,
-    followed: realms && zones ? { realms: realms.items, zones: zones.items } : null,
-    official, moderated: moderated.map(item => ({ ...item,
-      name: realms?.items.find(realm => realm.id === item.realm)?.name ?? '' })) };
+    followed: realms && zones ? { realms: withZoneAddress(realms.items, official), zones: zones.items } : null,
+    official, moderated };
 }

@@ -6,7 +6,8 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useState } from 'react';
 import { localizedPath, withoutLocale } from '../../i18n/locale.ts';
-import { type Community, type CommunityNavigation, NAV_COMMUNITIES } from './communities.ts';
+import { type Community, type CommunityNavigation, followedRealmIds, manageHref, NAV_COMMUNITIES,
+  realmOf } from './communities.ts';
 import { CommunityIcon } from './community-icon.tsx';
 import { useShell } from './shell-provider.tsx';
 import { useSideNav } from './side-nav.tsx';
@@ -59,9 +60,10 @@ function CommunityList({ items, collapsed, avatarQuery, onNavigate }: {
 }
 
 /**
- * The side navigation below its main items, in Reddit's order: the Zones and
- * Realms the reader follows, with a dot where there is activity they have not
- * seen, the official Zones for everyone, and Manage for moderators.
+ * The side navigation below its main items: Manage first for moderators, so
+ * it never falls below the fold, then in Reddit's order the Zones and Realms
+ * the reader follows, with a dot where there is activity they have not seen,
+ * and the official Zones they do not follow yet.
  */
 export function CommunityNav({ data }: { data: CommunityNavigation }) {
   const { locale, t } = useShell();
@@ -70,7 +72,20 @@ export function CommunityNav({ data }: { data: CommunityNavigation }) {
   const open = data.moderated.reduce((total, item) => total + item.open, 0);
   const more = data.moderated.some(item => item.more);
   const followed = data.followed;
+  const joined = new Set(followed ? followedRealmIds(followed) : []);
+  const official = data.official.filter(zone => !joined.has(realmOf(zone) ?? '') && !joined.has(zone.id));
   return <div className="grid min-w-0 gap-3">
+    {data.moderated.length ? <Section title={t.moderation} collapsed={collapsed}>
+      <Link href={localizedPath(manageHref(data.moderated), locale)} onClick={onNavigate}
+        title={collapsed ? t.manage : undefined}
+        aria-current={pathname === '/manage' || pathname.startsWith('/manage/') ? 'page' : undefined}
+        className={cn(row, collapsed && 'justify-center px-0')}>
+        <ShieldCheckIcon aria-hidden="true" className="size-5 shrink-0" />
+        <span className={collapsed ? 'sr-only' : 'min-w-0 flex-1 truncate'}>{t.manage}</span>
+        {open ? <span className={cn('rounded-full bg-primary/10 px-2 py-0.5 font-semibold text-[11px] text-primary',
+          collapsed && 'sr-only')}>{t.queueWaiting({ count: `${open}${more ? '+' : ''}` })}</span> : null}
+      </Link>
+    </Section> : null}
     {followed && followed.zones.length ? <Section title={t.yourZones} collapsed={collapsed}>
       <CommunityList items={followed.zones} collapsed={collapsed} avatarQuery={data.avatarQuery} onNavigate={onNavigate} />
     </Section> : null}
@@ -83,18 +98,8 @@ export function CommunityNav({ data }: { data: CommunityNavigation }) {
         <Link href={localizedPath('/discover', locale)} onClick={onNavigate} className={cn(row, 'mt-1')}>
           <CompassIcon aria-hidden="true" className="size-5" />{t.findCommunities}</Link>
       </Section> : null}
-    {data.official.length ? <Section title={t.officialZones} collapsed={collapsed}>
-      <CommunityList items={data.official} collapsed={collapsed} avatarQuery="" onNavigate={onNavigate} />
-    </Section> : null}
-    {data.moderated.length ? <Section title={t.moderation} collapsed={collapsed}>
-      <Link href={localizedPath('/manage', locale)} onClick={onNavigate} title={collapsed ? t.manage : undefined}
-        aria-current={pathname === '/manage' || pathname.startsWith('/manage/') ? 'page' : undefined}
-        className={cn(row, collapsed && 'justify-center px-0')}>
-        <ShieldCheckIcon aria-hidden="true" className="size-5 shrink-0" />
-        <span className={collapsed ? 'sr-only' : 'min-w-0 flex-1 truncate'}>{t.manage}</span>
-        {open ? <span className={cn('rounded-full bg-primary/10 px-2 py-0.5 font-semibold text-[11px] text-primary',
-          collapsed && 'sr-only')}>{t.queueWaiting({ count: `${open}${more ? '+' : ''}` })}</span> : null}
-      </Link>
+    {official.length ? <Section title={t.officialZones} collapsed={collapsed}>
+      <CommunityList items={official} collapsed={collapsed} avatarQuery="" onNavigate={onNavigate} />
     </Section> : null}
   </div>;
 }

@@ -7,6 +7,7 @@ import { localizedPath } from '../../i18n/locale.ts';
 import { getMessages } from '../../i18n/server.ts';
 import { signInPath } from '../auth/paths.ts';
 import { feedSearch, interestKinds } from '../feed/state.ts';
+import { followedRealmIds } from '../shell/communities.ts';
 import { HomePage } from './home-page.tsx';
 import { PICKER_COOKIE, WELCOME_COOKIE } from './cookies.ts';
 import type { HomeMessages } from './messages.ts';
@@ -14,17 +15,16 @@ import { Rail } from './rail.tsx';
 import { readContinue, readHomeFeed, readInterests, readModerated, readOfficialZones, readSuggestions,
   readTrending } from './server.ts';
 
-async function HomeRail({ locale, messages, kinds, followedRealms, ranking, signedIn, avatarQuery }: {
+async function HomeRail({ locale, messages, kinds, followed, ranking, signedIn, avatarQuery }: {
   locale: UiLocale; messages: HomeMessages; kinds: Record<string, string>;
-  followedRealms: readonly { id: string; name: string }[];
+  /** The Realms and Zones the reader follows, by their own IDs and their Realms'. */
+  followed: ReadonlySet<string>;
   ranking: Parameters<typeof Rail>[0]['data']['ranking']; signedIn: boolean; avatarQuery: string;
 }) {
   const [trending, suggestions, moderated] = await Promise.all([readTrending(), readSuggestions(locale),
-    readModerated(followedRealms.map(realm => realm.id).join(','))]);
-  const followed = new Set(followedRealms.map(realm => realm.id));
+    readModerated(locale)]);
   return <Rail locale={locale} messages={messages} kinds={kinds} signedIn={signedIn} avatarQuery={avatarQuery}
-    data={{ trending, ranking, moderated: moderated.map(item => ({ ...item,
-      name: followedRealms.find(realm => realm.id === item.realm)?.name ?? '' })),
+    data={{ trending, ranking, moderated,
       suggestions: suggestions.filter(item => !followed.has(item.id) && !followed.has(item.realm)) }} />;
 }
 
@@ -45,7 +45,8 @@ export async function HomeRoute({ locale, searchParams }: { locale: UiLocale;
     feed.newPerson ? readInterests(locale) : { kinds: [], languages: [locale] }]);
   // Sign-in returns to this view, with its filters.
   const signInHref = signInPath(localizedPath(`/${feedSearch(feed.state, feed.defaults)}`, locale));
-  const followedRealms = feed.followed?.realms.map(realm => ({ id: realm.id, name: realm.name })) ?? [];
+  const followed = new Set(feed.followed ? [...followedRealmIds(feed.followed),
+    ...[...feed.followed.realms, ...feed.followed.zones].map(item => item.id)] : []);
   const feedText = materializeData(feedMessages, { locale });
   const kinds = Object.fromEntries(interestKinds.map(kind => [kind, feedText[kind]]));
   return <HomePage locale={locale} messages={{ home, feed: feedMessages }} now={Date.now()}
@@ -57,7 +58,7 @@ export async function HomeRoute({ locale, searchParams }: { locale: UiLocale;
     signInHref={signInHref} signUpHref={`${signInHref}&create=1`} readerSeed={feed.readerSeed}
     personalRefused={feed.personalRefused}
     rail={<Suspense fallback={<RailSkeleton />}>
-      <HomeRail locale={locale} messages={home} kinds={kinds} followedRealms={followedRealms} signedIn={feed.signedIn}
+      <HomeRail locale={locale} messages={home} kinds={kinds} followed={followed} signedIn={feed.signedIn}
         avatarQuery={feed.avatarQuery} ranking={feed.page.ok ? feed.page.data.ranking : null} />
     </Suspense>} />;
 }

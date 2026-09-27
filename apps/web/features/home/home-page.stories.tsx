@@ -2,7 +2,7 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, userEvent, waitFor, within } from 'storybook/test';
 import type { UiLocale } from '../../i18n/define.ts';
 import { memoryReaderActions } from '../catalogue/fixtures.ts';
-import { everyKind, memoryFeed, NOW, page, realms, storyId, suggestion } from '../feed/fixtures.ts';
+import { everyKind, memoryFeed, NOW, page, post, realms, storyId, suggestion } from '../feed/fixtures.ts';
 import { messages as feed } from '../feed/messages.ts';
 import feedZhHans from '../feed/messages/zh-Hans.ts';
 import { type FeedDefaults, type FeedState, feedQuery } from '../feed/state.ts';
@@ -21,6 +21,7 @@ import { Rail } from './rail.tsx';
 const kinds = { books: 'Books & web novels', software: 'Mods & software', ai: 'AI skills & prompts',
   recipes: 'Recipes', media: 'Film & media', discussions: 'Discussions' };
 const reader = storyId(801, 'bbbb');
+const name = (value: string) => ({ value, language: 'en', direction: 'ltr' as const, basis: 'requested' as const });
 const signInHref = '/auth/start?next=%2Fen';
 const following: FeedDefaults = { tab: 'following', sort: 'best' };
 const state = (change: Partial<FeedState> = {}): FeedState =>
@@ -114,6 +115,32 @@ export const ReturningReader: Story = {
     await userEvent.click(canvas.getByText('How Home works'));
     await expect(canvas.getByText(/fading over about 24 hours/)).toBeVisible();
     await expect(canvas.getByText('No Realm fills more than 3 of any 10 posts in a row.')).toBeVisible();
+  },
+};
+
+/**
+ * Follow state is one fact wherever it shows: a Realm followed through its
+ * Zone offers no Join on its posts, and following from the rail takes Join
+ * off that Realm's posts at once, without a reload.
+ */
+export const FollowStateEverywhere: Story = {
+  args: props({ state: state({ tab: 'all' }),
+    followed: { realms: [], complete: true, zones: [{ id: storyId(957, 'aaaa'), kind: 'zone', realm: realms.kitchen.id,
+      name: 'Kitchen · 厨房', language: 'en', icon: null, href: '/r/kitchen', activity: 'none' }] },
+    page: { ok: true, data: page([
+      post(40, { realm: realms.kitchen, reason: { kind: 'recommended', basis: 'all' }, target: { title: name('Ginger lemon tea') } }),
+      post(41, { realm: realms.mods, reason: { kind: 'recommended', basis: 'all' }, target: { title: name('Fence planner') } }),
+    ], { scope: 'all' }) } }),
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    const tea = canvas.getByRole('article', { name: 'Ginger lemon tea' });
+    const fences = canvas.getByRole('article', { name: 'Fence planner' });
+    await expect(within(tea).queryByRole('button', { name: /^Join/ })).toBeNull();
+    await expect(within(fences).getByRole('button', { name: 'Join Stardew Mods' })).toBeVisible();
+    const rail = canvas.getByRole('region', { name: 'Realms to follow' });
+    await userEvent.click(within(rail).getByRole('button', { name: 'Follow Stardew Mods' }));
+    await waitFor(() => expect(within(fences).queryByRole('button', { name: /^Join/ })).toBeNull());
+    await expect(within(rail).getAllByText('Following')).toHaveLength(1);
   },
 };
 

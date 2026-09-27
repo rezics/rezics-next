@@ -2,8 +2,10 @@
 
 import { Button, buttonVariants } from '@rezics/ui/button';
 import { cn } from '@rezics/ui/utils';
-import { BellIcon, CheckCheckIcon, CircleCheckIcon, FileCheckIcon, MessageSquareReplyIcon, RotateCwIcon,
-  ShieldIcon, TriangleAlertIcon, UserPlusIcon, UserRoundCogIcon, type LucideIcon } from 'lucide-react';
+import { BellIcon, CheckCheckIcon, CircleCheckIcon, FileCheckIcon, MessageSquareQuoteIcon, MessageSquareReplyIcon,
+  RotateCwIcon, ShieldIcon, ThumbsUpIcon, TriangleAlertIcon, UserPlusIcon, UserRoundCogIcon, type LucideIcon }
+  from 'lucide-react';
+import type { ReactNode } from 'react';
 import Link from 'next/link';
 import { useState } from 'react';
 import { localizedPath } from '../../../i18n/locale.ts';
@@ -22,16 +24,20 @@ type Kind = NonNullable<StreamItem['display']>['kind'];
 
 const icons: Record<Kind, LucideIcon> = { reply: MessageSquareReplyIcon, submission_decision: FileCheckIcon,
   moderation_outcome: ShieldIcon, realm_role_change: UserRoundCogIcon, follow: UserPlusIcon,
-  claim_correction: CircleCheckIcon };
+  claim_correction: CircleCheckIcon, review: MessageSquareQuoteIcon, review_helpful: ThumbsUpIcon };
 
 const uuid = (iri: string | null) => iri?.match(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/)?.[0];
 
-/** What happened, in a sentence. Main sends facts (kind, actor, title), never rendered copy. */
+/**
+ * What happened, in a sentence that says where: Main sends facts (kind,
+ * actor, title, Realm and role names), never rendered copy.
+ */
 function sentence(item: StreamItem, t: T): string {
   const display = item.display;
   if (!display || item.state !== 'active') return t.notificationUnavailable;
   const name = display.actor?.name ?? t.someone;
   const title = display.target.title;
+  const realm = display.realmName;
   switch (display.kind) {
     case 'reply': return title ? t.repliedOn({ name, title }) : t.replied({ name });
     case 'submission_decision': {
@@ -42,10 +48,20 @@ function sentence(item: StreamItem, t: T): string {
           : t.submissionDecided;
     }
     case 'moderation_outcome': return title ? t.moderationOn({ title }) : t.moderationDecided;
-    case 'realm_role_change': return t.roleChanged;
+    case 'realm_role_change': return realm && display.roleName ? t.roleChangedIn({ name, realm, role: display.roleName })
+      : realm ? t.roleChangedInRealm({ name, realm }) : t.roleChanged;
     case 'follow': return t.followedYou({ name });
     case 'claim_correction': return title ? t.correctionOn({ title }) : t.correctionMade;
+    case 'review': return title ? t.reviewedWork({ name, title }) : t.reviewedYourWork({ name });
+    case 'review_helpful': return title ? t.reviewHelpful({ title }) : t.reviewHelpfulAny;
   }
+}
+
+/** Where it happened, for the kinds whose sentence does not already name the Realm. */
+function place(item: StreamItem, t: T): string | null {
+  const display = item.display;
+  if (!display?.realmName || item.state !== 'active' || display.kind === 'realm_role_change') return null;
+  return t.inRealm({ realm: display.realmName });
 }
 
 /** Where a notification leads, when its subject has a page: the Work decided on, or the Realm. */
@@ -56,7 +72,8 @@ function destination(item: StreamItem): string | null {
     const work = uuid(display.target.linkTarget);
     return work ? `/w/${work}` : null;
   }
-  const realm = uuid(display.realm);
+  // The Realm by its Zone's address when it has one, as the navigation links it.
+  const realm = display.realmRouteSegment ?? uuid(display.realm);
   return realm && (display.kind === 'realm_role_change' || display.kind === 'reply') ? `/r/${realm}` : null;
 }
 
@@ -67,7 +84,8 @@ function NotificationRow({ item, grouped, now, avatarQuery, onRead }: { item: St
   const Icon = display ? icons[display.kind] : BellIcon;
   const href = destination(item);
   const text = sentence(item, t);
-  const excerpt = display?.kind === 'reply' ? display.target.excerpt : null;
+  const where = place(item, t);
+  const excerpt = display?.kind === 'reply' || display?.kind === 'review' ? display.target.excerpt : null;
   return <li className={cn('relative flex gap-3 px-4 py-3.5 transition-colors hover:bg-accent/30',
     !item.read && 'bg-primary/4')}>
     <span className="relative mt-0.5 shrink-0">
@@ -88,8 +106,10 @@ function NotificationRow({ item, grouped, now, avatarQuery, onRead }: { item: St
       </p>
       {excerpt ? <p lang={display?.target.language ?? undefined} className="line-clamp-2 text-muted-foreground text-sm">
         {excerpt}</p> : null}
-      <time dateTime={item.createdAt} suppressHydrationWarning className="text-muted-foreground text-xs">
-        {relativeTime(item.createdAt, now, locale, 'long')}</time>
+      <p className="text-muted-foreground text-xs">
+        {where ? <><span>{where}</span><span aria-hidden="true"> · </span></> : null}
+        <time dateTime={item.createdAt} suppressHydrationWarning>{relativeTime(item.createdAt, now, locale, 'long')}</time>
+      </p>
     </div>
     {!item.read ? <span className="mt-2 flex shrink-0 items-center gap-1">
       <span aria-hidden="true" className="size-2 rounded-full bg-brand" />
@@ -117,8 +137,10 @@ function collapse(window: Pick<NotificationWindow, 'items' | 'groups'>): { item:
  * read; opening one marks it read. Older windows load on request. `main` is
  * the browser client (stories pass an in-memory one).
  */
-export function NotificationsView({ initial, now, avatarQuery, main }: {
-  initial: NotificationWindow; now: number; avatarQuery: string; main?: MainClient;
+export function NotificationsView({ initial, now, avatarQuery, invitations, main }: {
+  initial: NotificationWindow; now: number; avatarQuery: string;
+  /** Open invitations to join a Realm, answered here before the notifications. */
+  invitations?: ReactNode; main?: MainClient;
 }) {
   const { t } = useShell();
   const client = () => main ?? browserMainApi();
@@ -162,6 +184,7 @@ export function NotificationsView({ initial, now, avatarQuery, main }: {
     {state === 'marked' ? <p role="status" className="sr-only">{t.markedAllRead}</p> : null}
     {state === 'mark-failed' ? <p role="alert" className="text-destructive-foreground text-sm">{t.markReadFailed}</p>
       : null}
+    {invitations}
     {rows.length ? <ul className="divide-y divide-border/60 overflow-hidden rounded-2xl border border-border/60
       bg-card shadow-(--aura-shadow-card)">
       {rows.map(({ item, grouped }) => <NotificationRow key={item.id} item={{ ...item, read: isRead(item) }}

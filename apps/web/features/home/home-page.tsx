@@ -15,7 +15,7 @@ import type { FeedMessages } from '../feed/messages.ts';
 import type { ContinueItem, InterestsResult } from '../feed/types.ts';
 import { type FeedDefaults, feedSearch, type FeedState, interestKinds, withChange } from '../feed/state.ts';
 import type { FeedPage, FeedQuery, Loaded } from '../feed/types.ts';
-import type { Community } from '../shell/communities.ts';
+import { type Community, followedRealmIds } from '../shell/communities.ts';
 import { EmptyState } from '../shell/empty-state.tsx';
 import { ContinueStrip } from './continue-strip.tsx';
 import { InterestPicker } from './interest-picker.tsx';
@@ -99,7 +99,7 @@ export function HomePage(props: HomePageProps) {
   const allHref = localizedPath(`/${feedSearch(withChange(state, { tab: 'all' }), defaults)}`, locale);
   return <FeedProvider locale={locale} messages={messages.feed} now={props.now} signedIn={signedIn}
     actingSubject={actingSubject} signInHref={props.signInHref} avatarQuery={props.avatarQuery} tab={props.personalRefused ? 'all' : state.tab}
-    followedRealms={props.followed?.complete ? props.followed.realms.map(realm => realm.id) : null} api={props.api}>
+    followedRealms={props.followed?.complete ? followedRealmIds(props.followed) : null} api={props.api}>
     <ReaderActionsProvider signedIn={signedIn} signInHref={props.signInHref} actingSubject={actingSubject}
       seed={props.readerSeed ?? undefined} actions={props.readerActions}>
       <div className="mx-auto grid w-full max-w-[72rem] items-start gap-6 py-4 sm:px-6 sm:py-6 lg:px-8

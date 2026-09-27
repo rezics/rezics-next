@@ -2,11 +2,12 @@
 
 import { cn } from '@rezics/ui/utils';
 import { WorkCover, type WorkCoverKind } from '@rezics/ui/work-cover';
-import { BookOpenIcon, EyeOffIcon, FileTextIcon, LibraryBigIcon, MessageSquareTextIcon, MessagesSquareIcon,
-  PackageIcon, SparklesIcon, StampIcon, type LucideIcon } from 'lucide-react';
+import { BookOpenIcon, EyeOffIcon, FileTextIcon, LibraryBigIcon, MessageSquareQuoteIcon, MessageSquareTextIcon,
+  MessagesSquareIcon, PackageIcon, SparklesIcon, StampIcon, type LucideIcon } from 'lucide-react';
 import Link from 'next/link';
 import { useId, useState } from 'react';
 import { localizedPath } from '../../i18n/locale.ts';
+import { StarMeter } from '../catalogue/rating.tsx';
 import { coverImage } from '../catalogue/work.ts';
 import { CommunityIcon } from '../shell/community-icon.tsx';
 import LocalizedLink from '../shell/localized-link.tsx';
@@ -51,6 +52,7 @@ function kicker(item: FeedItem, t: T): { icon: LucideIcon; text: string } {
     case 'discussion': return { icon: MessagesSquareIcon, text: t.discussion };
     case 'reply': return { icon: MessageSquareTextIcon, text: t.reply };
     case 'collection': return { icon: LibraryBigIcon, text: t.list };
+    case 'review': return { icon: MessageSquareQuoteIcon, text: t.review };
   }
 }
 
@@ -74,7 +76,10 @@ function details(item: FeedItem, t: T, locale: string): string[] {
   if (card.kind === 'media' && card.durationSeconds !== undefined) {
     facts.push(t.minutes(Math.max(1, Math.round(card.durationSeconds / 60))));
   }
-  if (item.group.count > 1 && !item.group.range) facts.push(t.moreUpdates(item.group.count - 1));
+  if (card.kind === 'review' && card.helpfulCount > 0) facts.push(t.helpful(card.helpfulCount));
+  if (item.group.count > 1 && !item.group.range) {
+    facts.push(card.kind === 'review' ? t.moreReviews(item.group.count - 1) : t.moreUpdates(item.group.count - 1));
+  }
   return facts;
 }
 
@@ -96,6 +101,8 @@ function Byline({ item }: { item: FeedItem }) {
       : item.reason.kind === 'recommended' && tab === 'following' ? t.suggested : null;
   const why = item.reason.kind === 'recommended'
     ? item.reason.basis === 'thin-following' ? t.suggestedThin : t.suggestedAll : undefined;
+  // A pick is the Realm's act. Naming its curator here would read as the Work's author.
+  const people = item.kind === 'adoption' && item.realm ? null : names;
   return <div className="flex min-w-0 items-center gap-2 text-[13px]">
     {item.realm
       ? <CommunityIcon icon={item.realm.icon} name={item.realm.name.value} avatarQuery={avatarQuery} />
@@ -107,14 +114,40 @@ function Byline({ item }: { item: FeedItem }) {
             focus-visible:ring-2 focus-visible:ring-ring">{item.realm.name.value}</Link>
         <span aria-hidden="true">·</span>
       </> : null}
-      <span className={cn('truncate', !item.realm && 'font-semibold text-foreground')}>{names}</span>
-      <span aria-hidden="true">·</span>
+      {people ? <>
+        <span className={cn('truncate', !item.realm && 'font-semibold text-foreground')}>{people}</span>
+        <span aria-hidden="true">·</span>
+      </> : null}
       <time dateTime={item.time} title={absoluteTime(item.time, locale)} suppressHydrationWarning
         className="whitespace-nowrap">{relativeTime(item.time, now, locale)}</time>
       {reason ? <span title={why} className="rounded-full bg-info/10 px-2 py-0.5 font-medium text-[11px]
         text-info-foreground">{reason}</span> : null}
     </p>
     {item.realm ? <JoinButton realm={item.realm} /> : null}
+  </div>;
+}
+
+/**
+ * A reader's review under the Work's title: their stars, then the opening
+ * lines, or a note when the review discusses the plot. Its page has the rest.
+ */
+function ReviewBody({ card, lang }: { card: Extract<FeedItem['card'], { kind: 'review' }>; lang?: string }) {
+  const { t, locale } = useFeed();
+  const rating = new Intl.NumberFormat(locale).format(card.rating);
+  return <div className="grid gap-1.5">
+    <p className="flex items-center gap-2 text-sm">
+      <StarMeter mean={card.rating} max={card.scale} />
+      <span className="sr-only">{t.ratedOutOf({ rating, scale: String(card.scale) })}</span>
+      {card.scale === 5 ? null : <span aria-hidden="true" className="font-semibold tabular-nums">{rating}/{card.scale}</span>}
+    </p>
+    {card.opening ? <blockquote lang={lang} className={cn('line-clamp-4 whitespace-pre-line border-border border-s-2 ps-3',
+      'text-pretty text-sm/relaxed', readableText)}>{card.opening}</blockquote>
+      : card.spoiler ? <div className="flex items-start gap-3 rounded-xl border border-border/70 border-dashed bg-muted/40
+        px-3 py-2.5 text-sm">
+        <EyeOffIcon aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
+        <p><span className="font-medium">{t.reviewSpoilerTitle}</span>
+          <span className="block text-muted-foreground">{t.reviewSpoilerBody}</span></p>
+      </div> : null}
   </div>;
 }
 
@@ -161,7 +194,8 @@ export function FeedCard({ item, position, total }: { item: FeedItem; position?:
           <p><span className="font-medium">{t.spoilerTitle}</span>
             <span className="block text-muted-foreground">{t.spoilerBody}</span></p>
         </div> : null}
-        {item.card.kind === 'prompt' && item.card.preview
+        {item.card.kind === 'review' ? <ReviewBody card={item.card} lang={item.target.language ?? undefined} />
+          : item.card.kind === 'prompt' && item.card.preview
           ? <figure className="mt-1 grid gap-1">
             <figcaption className="sr-only">{t.promptPreview}</figcaption>
             <pre lang={item.target.language ?? undefined} className="line-clamp-4 whitespace-pre-wrap rounded-xl bg-code
