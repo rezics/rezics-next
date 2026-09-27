@@ -8,6 +8,8 @@ import { readAgent, readAgentCollections, readAgentWorks, readHandle } from '../
 import { readMyContributions, readMyRatings } from '../modules/profiles/library.ts';
 import { createNativeCredit, readNativeCredits } from '../modules/profiles/credits.ts';
 import { ControlDenied, ControlUnavailable } from '../modules/access/topology-control.ts';
+import { InvalidLibraryVisibility, LibraryVisibilityConflict, LibraryVisibilityDenied,
+  LibraryVisibilityUnavailable, StaleLibraryVisibility } from '../modules/profiles/visibility.ts';
 import { RevisionReadBudgetExceeded } from '../modules/work/history.ts';
 import { workReadError, workReadProblems } from './work-reads.ts';
 import type { MainWorkDependencies } from './dependencies.ts';
@@ -16,6 +18,9 @@ import { problem } from './problems.ts';
 const params = t.Object({ id: readUuid });
 const detail: { security: Record<string, string[]>[] } = { security: [{}, { bearerAuth: [] }] };
 const headers = { 'cache-control': 'private, no-store' };
+const visibility = t.Union([t.Literal('public'), t.Literal('followers'), t.Literal('private')]);
+const visibilityState = t.Object({ visibility, version: t.Integer({ minimum: 0 }),
+  changedAt: t.Nullable(t.String()), replayed: t.Optional(t.Boolean()) });
 function response(value: unknown, status = 200) {
   const body = JSON.stringify(value);
   if (Buffer.byteLength(body) > PROFILE_READ_COST.responseBytes) throw new WorkReadLimit('Profile response exceeds budget');
@@ -24,7 +29,9 @@ function response(value: unknown, status = 200) {
 function readError(error: unknown) {
   if (error instanceof RevisionReadBudgetExceeded) error = new WorkReadLimit('Rating manifest read exceeds budget');
   const result = error instanceof ControlDenied ? problem(403, 'library_denied', 'Library authority is unavailable')
-    : error instanceof ControlUnavailable ? problem(503, 'profile_owner_unavailable', 'Profile owner is unavailable')
+    : error instanceof LibraryVisibilityDenied ? problem(404, 'agent_unavailable', 'Agent unavailable')
+    : error instanceof ControlUnavailable || error instanceof LibraryVisibilityUnavailable
+      ? problem(503, 'profile_owner_unavailable', 'Profile owner is unavailable')
     : workReadError(error);
   result.headers.set('cache-control', 'private, no-store');
   return result;
@@ -34,6 +41,8 @@ export const openApiOperations = {
   '/v1/handles/{handle}': { get: { bearer: false } },
   '/v1/agents/{id}/works': { get: { bearer: false } },
   '/v1/agents/{id}/collections': { get: { bearer: false } },
+  '/v1/agents/{id}/library-visibility': { get: { bearer: true },
+    put: { bearer: true, idempotencyKey: true } },
   '/v1/me/contributions': { get: { bearer: true } },
   '/v1/me/ratings': { get: { bearer: true } },
   '/v1/works/{id}/agent-credits': { get: { bearer: false }, post: { bearer: true, idempotencyKey: true } },
@@ -66,6 +75,30 @@ export function profileRoutes(work: MainWorkDependencies) {
     }, async ({ request, params: path, query }) => {
       try { return response(await workRead(work, request, query, s => readAgentCollections(s, `https://rezics.com/id/${path.id}`))); }
       catch (error) { return readError(error); }
+    })
+    .get('/v1/agents/:id/library-visibility', { params,
+      response: { 200: visibilityState, ...workReadProblems },
+    }, async ({ request, params: path }) => {
+      if (!work.profiles) return problem(503, 'profile_owner_unavailable', 'Profile owner unavailable');
+      const agent = `https://rezics.com/id/${path.id}`;
+      try {
+        const principal = await work.account.verify(request, ['agent:create']);
+        return response(await work.profiles.visibility.readForOwner(principal, agent));
+      } catch (error) { return visibilityError(error); }
+    })
+    .put('/v1/agents/:id/library-visibility', { params,
+      body: t.Object({ visibility, expectedVersion: t.Integer({ minimum: 0 }) },
+        { additionalProperties: false }),
+      response: { 200: visibilityState, ...workReadProblems },
+    }, async ({ request, params: path, body }) => {
+      if (!work.profiles) return problem(503, 'profile_owner_unavailable', 'Profile owner unavailable');
+      try {
+        const principal = await work.account.verify(request, ['agent:create']);
+        const result = await work.profiles.visibility.write(principal,
+          `https://rezics.com/id/${path.id}`, body.visibility, body.expectedVersion,
+          request.headers.get('idempotency-key') ?? '');
+        return response(result);
+      } catch (error) { return visibilityError(error); }
     })
     .get('/v1/me/contributions', { query: t.Object(pageQuery, { additionalProperties: false }),
       response: { 200: t.Object({ items: t.Array(libraryContribution, { maxItems: 20 }), ...pageFields }), ...workReadProblems },
@@ -100,3 +133,16 @@ export function profileRoutes(work: MainWorkDependencies) {
 }
 const creditResult = t.Object({ profile: t.Literal('native-agent-credit-v1'), credit: readId,
   revision: readId, work: readId, agent: readId, role: creditRole, replayed: t.Boolean(), sourcePosition: readPosition });
+
+function visibilityError(error: unknown): Response {
+  if (error instanceof InvalidLibraryVisibility) return problem(400, 'invalid_library_visibility', error.message);
+  if (error instanceof LibraryVisibilityConflict) return problem(409, 'library_visibility_conflict', error.message);
+  if (error instanceof StaleLibraryVisibility) return problem(409, 'stale_library_visibility', error.message);
+  if (error instanceof LibraryVisibilityDenied || error instanceof ControlDenied) {
+    return problem(403, 'library_visibility_denied', 'Agent control unavailable');
+  }
+  if (error instanceof LibraryVisibilityUnavailable || error instanceof ControlUnavailable) {
+    return problem(503, 'library_visibility_unavailable', 'Profile owner unavailable');
+  }
+  return readError(error);
+}

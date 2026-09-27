@@ -2,11 +2,13 @@ import { Elysia, t } from 'elysia';
 import { problemResult } from '../api-contract.ts';
 import { readMyShelves, readReaderStates, readStatusShelf, READER_LIBRARY_COST }
   from '../modules/library/read.ts';
+import { readPublicShelves, readPublicStatusShelf } from '../modules/library/public.ts';
 import { InvalidLibraryStatus, LibraryStatusConflict, StaleLibraryStatus }
   from '../modules/library/status.ts';
 import { readWorkBasis } from '../modules/work/read-header.ts';
 import { workRead, WorkReadInvalid } from '../modules/work/read-session.ts';
-import { readAvatar, readId, readName, readPosition, readUuid } from '../modules/work/read-contract.ts';
+import { pageQuery, readAvatar, readId, readName, readPosition, readQuery, readUuid } from '../modules/work/read-contract.ts';
+import { shelfWork } from '../modules/profiles/read-contract.ts';
 import { workReadError, workReadProblems } from './work-reads.ts';
 import type { MainWorkDependencies } from './dependencies.ts';
 import { commandError, problem } from './problems.ts';
@@ -45,6 +47,15 @@ const statusShelf = t.Object({ profile: t.Literal('reader-status-shelf-v1'),
     card: t.Nullable(t.Object({ id: readId, title: readName, cover: readAvatar })) }), { maxItems: 20 }),
   nextCursor: t.Nullable(t.String()), sourcePosition: readPosition,
   count: t.Object({ value: t.Integer({ minimum: 0 }), kind: t.Literal('exact-page'), total: t.Null() }) });
+const publicShelves = t.Object({ profile: t.Literal('agent-status-shelves-v1'), agent: readId,
+  statusShelves: t.Array(t.Object({ status: t.Exclude(status, t.Null()),
+    count: t.Integer({ minimum: 0 }), changedAt: t.Nullable(t.String()) }), { maxItems: 3 }),
+  sourcePosition: readPosition });
+const publicStatusShelf = t.Object({ profile: t.Literal('agent-status-shelf-v1'), agent: readId,
+  status: t.Exclude(status, t.Null()), statusCount: t.Integer({ minimum: 0 }),
+  items: t.Array(t.Object({ work: readId, card: shelfWork }), { maxItems: 20 }),
+  nextCursor: t.Nullable(t.String()), sourcePosition: readPosition,
+  count: t.Object({ value: t.Integer({ minimum: 0 }), kind: t.Literal('exact-page'), total: t.Null() }) });
 const errors = { 400: problemResult(400), 401: problemResult(401), 403: problemResult(403),
   404: problemResult(404), 409: problemResult(409), 500: problemResult(500), 503: problemResult(503) };
 const privateHeaders = { 'cache-control': 'private, no-store' };
@@ -56,6 +67,8 @@ export const openApiOperations = {
   '/v1/works/{id}/reader-status': { put: { bearer: true, idempotencyKey: true } },
   '/v1/me/shelves': { get: { bearer: true } },
   '/v1/me/shelves/status/{status}/works': { get: { bearer: true } },
+  '/v1/agents/{id}/shelves': { get: { bearer: false } },
+  '/v1/agents/{id}/shelves/status/{status}/works': { get: { bearer: false } },
 } as const;
 
 function failure(error: unknown) {
@@ -178,6 +191,29 @@ export function libraryRoutes(work: MainWorkDependencies) {
         return Response.json(await workRead(work, request, query,
           session => readStatusShelf(session, query.actingSubject, work.libraryStatus!, params.status)),
         { headers: privateHeaders });
+      } catch (error) { return failure(error); }
+    })
+    .get('/v1/agents/:id/shelves', { params: t.Object({ id: readUuid }),
+      query: t.Object(readQuery, { additionalProperties: false }),
+      response: { 200: publicShelves, ...workReadProblems },
+    }, async ({ request, params, query }) => {
+      if (!work.libraryStatus) return problem(503, 'reader_library_unavailable', 'Reader library unavailable');
+      try {
+        return Response.json(await workRead(work, request, query,
+          session => readPublicShelves(session, `https://rezics.com/id/${params.id}`, work.libraryStatus!)),
+        { headers: privateHeaders });
+      } catch (error) { return failure(error); }
+    })
+    .get('/v1/agents/:id/shelves/status/:status/works', {
+      params: t.Object({ id: readUuid, status: t.Exclude(status, t.Null()) }),
+      query: t.Object(pageQuery, { additionalProperties: false }),
+      response: { 200: publicStatusShelf, ...workReadProblems },
+    }, async ({ request, params, query }) => {
+      if (!work.libraryStatus) return problem(503, 'reader_library_unavailable', 'Reader library unavailable');
+      try {
+        return Response.json(await workRead(work, request, query,
+          session => readPublicStatusShelf(session, `https://rezics.com/id/${params.id}`,
+            work.libraryStatus!, params.status)), { headers: privateHeaders });
       } catch (error) { return failure(error); }
     });
 }

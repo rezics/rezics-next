@@ -9,7 +9,10 @@ export const agentProfile = t.Object({ profile: t.Literal('agent-read-v1'), id: 
   displayName: t.String({ minLength: 1, maxLength: 200 }),
   kind: t.Union([t.Literal('person'), t.Literal('organization'), t.Literal('service')]),
   handle: profileHandle, disclosure: t.Literal('public'), sourcePosition: readPosition,
-  links: t.Object({ profile: t.String(), works: t.String(), collections: t.String() }),
+  library: t.Object({ visibility: t.Union([t.Literal('public'), t.Literal('followers'), t.Literal('private')]),
+    statusShelvesVisible: t.Boolean() }),
+  links: t.Object({ profile: t.String(), works: t.String(), collections: t.String(),
+    statusShelves: t.Optional(t.String()) }),
   resolution: t.Optional(t.Object({ requestedHandle: t.String(),
     state: t.Union([t.Literal('native'), t.Literal('current'), t.Literal('retired')]),
     redirect: t.Boolean(), canonical: t.String() })) });

@@ -4,6 +4,7 @@ import { normalizeControlError, requirePrincipal, requireMandate } from '../acce
 import { fusekiReadBudget } from '../../infrastructure/fuseki.ts';
 import { GLOBAL_RATING_POPULATION_OWNER } from '../rating/global.ts';
 import { WorkReadUnavailable } from '../work/read-session.ts';
+import { AgentLibraryVisibilityStore } from './visibility.ts';
 
 export interface OwnRatingHead { id: string; revision: string; work: string; mainVersion: string;
   context: string; slot: string; principalId: string; admission: string; digest: string;
@@ -12,7 +13,8 @@ export interface OwnRatingHead { id: string; revision: string; work: string; mai
 /** Access-only adapter: private Account/Agent links and counting slots never
  * leave this boundary in an HTTP response. No new authority or SQL schema. */
 export class ProfilesAccess {
-  constructor(private readonly pool: Pool) {}
+  readonly visibility: AgentLibraryVisibilityStore;
+  constructor(private readonly pool: Pool) { this.visibility = new AgentLibraryVisibilityStore(pool); }
 
   private async transaction<T>(operation: (client: PoolClient) => Promise<T>): Promise<T> {
     const signal = fusekiReadBudget.getStore()?.signal ?? AbortSignal.timeout(10_000);

@@ -112,6 +112,82 @@ test('G285: status set, clear, retry, stale and concurrent commands preserve one
     expect(after.status).toBe(200);
     expect(await after.json()).toMatchObject({ status: { status: 'reading', version: 1 } });
 
+    const profilePath = `/v1/agents/${person.agent.slice(-36)}`;
+    const profileBefore = await app.handle(new Request(`http://main.local${profilePath}`));
+    expect(await profileBefore.json()).toMatchObject({ library: {
+      visibility: 'private', statusShelvesVisible: false } });
+    const ownerProfile = await app.handle(new Request(
+      `http://main.local${profilePath}?actingSubject=${encodeURIComponent(person.agent)}`,
+      { headers: { authorization: `Bearer ${a.token}` } }));
+    expect(await ownerProfile.json()).toMatchObject({ library: {
+      visibility: 'private', statusShelvesVisible: true },
+      links: { statusShelves: `/v1/me/shelves?actingSubject=${encodeURIComponent(person.agent)}` } });
+    const publicShelfPath = `${profilePath}/shelves`;
+    expect((await app.handle(new Request(`http://main.local${publicShelfPath}`))).status).toBe(404);
+    const visibilityPath = `${profilePath}/library-visibility`;
+    const ownerVisibility = await app.handle(new Request(`http://main.local${visibilityPath}`,
+      { headers: { authorization: `Bearer ${a.token}` } }));
+    expect(await ownerVisibility.json()).toMatchObject({ visibility: 'private', version: 0 });
+    expect((await app.handle(new Request(`http://main.local${visibilityPath}`,
+      { headers: { authorization: `Bearer ${b.token}` } }))).status).toBe(403);
+    const visibilityBody = { visibility: 'public', expectedVersion: 0 };
+    const visibilityKey = randomUUID();
+    const visibilityRequest = (token: string, body: unknown, key = randomUUID()) => app.handle(new Request(
+      `http://main.local${visibilityPath}`, { method: 'PUT', headers: {
+        authorization: `Bearer ${token}`, 'content-type': 'application/json', 'idempotency-key': key },
+      body: JSON.stringify(body) }));
+    expect((await visibilityRequest(b.token, visibilityBody)).status).toBe(403);
+    expect((await visibilityRequest(a.token, { visibility: 'followers', expectedVersion: 0 })).status).toBe(400);
+    const published = await visibilityRequest(a.token, visibilityBody, visibilityKey);
+    expect(published.status).toBe(200);
+    expect(await published.json()).toMatchObject({ visibility: 'public', version: 1, replayed: false });
+    expect(await (await visibilityRequest(a.token, visibilityBody, visibilityKey)).json())
+      .toMatchObject({ visibility: 'public', version: 1, replayed: true });
+    expect((await visibilityRequest(a.token, { visibility: 'private', expectedVersion: 0 }, visibilityKey)).status).toBe(409);
+    expect((await visibilityRequest(a.token, { visibility: 'private', expectedVersion: 0 })).status).toBe(409);
+    expect(await (await app.handle(new Request(`http://main.local${profilePath}`))).json())
+      .toMatchObject({ library: { visibility: 'public', statusShelvesVisible: true },
+        links: { statusShelves: publicShelfPath } });
+    const hiddenWork = await stack.privateWork(person.agent, 'Hidden shelf Work');
+    await status.write({ agent: person.agent, work: hiddenWork.work, status: 'reading',
+      startedOn: null, finishedOn: null, expectedVersion: 0, idempotencyKey: randomUUID() });
+    const secondPublic = await stack.publicWork(person.agent, ['en'], 'Second shelf Work');
+    await status.write({ agent: person.agent, work: secondPublic.work, status: 'reading',
+      startedOn: null, finishedOn: null, expectedVersion: 0, idempotencyKey: randomUUID() });
+    const publicShelves = await app.handle(new Request(`http://main.local${publicShelfPath}`));
+    expect(publicShelves.status).toBe(200);
+    expect(await publicShelves.json()).toMatchObject({ statusShelves: expect.arrayContaining([
+      expect.objectContaining({ status: 'reading', count: 2 })]) });
+    const publicPagePath = `${publicShelfPath}/status/reading/works?limit=1`;
+    const firstPublic = await app.handle(new Request(`http://main.local${publicPagePath}`));
+    expect(firstPublic.status).toBe(200);
+    const firstPublicBody = await firstPublic.json() as { items: { work: string; card: { title: unknown } }[];
+      nextCursor: string; statusCount: number };
+    expect(firstPublicBody.statusCount).toBe(2);
+    expect(firstPublicBody.items).toHaveLength(1);
+    expect(firstPublicBody.items[0]?.card.title).toBeTruthy();
+    const secondPublicPage = await app.handle(new Request(`http://main.local${publicPagePath}`
+      + `&cursor=${encodeURIComponent(firstPublicBody.nextCursor)}`));
+    expect(secondPublicPage.status).toBe(200);
+    const secondPublicBody = await secondPublicPage.json() as { items: { work: string }[] };
+    expect(new Set([firstPublicBody.items[0]?.work, secondPublicBody.items[0]?.work]))
+      .toEqual(new Set([publicWork.work, secondPublic.work]));
+    await status.write({ agent: person.agent, work: secondPublic.work, status: 'read',
+      startedOn: null, finishedOn: null, expectedVersion: 1, idempotencyKey: randomUUID() });
+    expect((await app.handle(new Request(`http://main.local${publicPagePath}`
+      + `&cursor=${encodeURIComponent(firstPublicBody.nextCursor)}`))).status).toBe(409);
+    expect((await visibilityRequest(a.token, { visibility: 'private', expectedVersion: 1 })).status).toBe(200);
+    expect((await app.handle(new Request(`http://main.local${publicShelfPath}`))).status).toBe(404);
+    const racingVisibility = await Promise.all([
+      visibilityRequest(a.token, { visibility: 'private', expectedVersion: 2 }),
+      visibilityRequest(a.token, { visibility: 'private', expectedVersion: 2 }),
+    ]);
+    expect(racingVisibility.map(result => result.status).sort()).toEqual([200, 409]);
+    await status.write({ agent: person.agent, work: hiddenWork.work, status: null,
+      startedOn: null, finishedOn: null, expectedVersion: 1, idempotencyKey: randomUUID() });
+    await status.write({ agent: person.agent, work: secondPublic.work, status: null,
+      startedOn: null, finishedOn: null, expectedVersion: 2, idempotencyKey: randomUUID() });
+
     const collection = id();
     const olderCollection = id();
     const grant = async (scope: string, action: string) => {
@@ -261,5 +337,14 @@ test('G285: status set, clear, retry, stale and concurrent commands preserve one
     expect(olderPage.status).toBe(200);
     expect(await olderPage.json()).toMatchObject({ items: [{ id: olderCollection, disclosure: 'public' }],
       nextCursor: null });
+    await stack.accessPool.query('UPDATE access.recovery_fence SET open = false WHERE id = true');
+    try {
+      expect((await visibilityRequest(a.token, { visibility: 'public', expectedVersion: 3 })).status).toBe(503);
+    } finally {
+      await stack.accessPool.query('UPDATE access.recovery_fence SET open = true WHERE id = true');
+    }
+    expect(await (await app.handle(new Request(`http://main.local${visibilityPath}`,
+      { headers: { authorization: `Bearer ${a.token}` } }))).json())
+      .toMatchObject({ visibility: 'private', version: 3 });
   } finally { await stack.stop(); }
-});
+}, 120_000);

@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import type { Pool } from 'pg';
 import type { VerifiedPrincipal } from '../access/admission.ts';
+import { WorkReadLimit } from '../work/read-session.ts';
 
 const ID = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
 const KEY = /^[A-Za-z0-9:_./-]{1,128}$/;
@@ -92,6 +93,17 @@ export class ReaderLibraryStatusStore {
       SELECT count(*)::text AS count, coalesce(sum(version), 0)::text AS versions
       FROM reader.library_status WHERE agent = $1`, [agent]);
     return `${rows.rows[0]!.count}:${rows.rows[0]!.versions}`;
+  }
+
+  /** The public projection checks every candidate against current Work disclosure.
+   * Exceeding this ceiling fails closed rather than returning false counts. */
+  async publicCandidates(agent: string, ceiling = 240): Promise<StatusState[]> {
+    if (!ID.test(agent) || ceiling !== 240) throw new InvalidLibraryStatus('invalid public shelf budget');
+    const rows = await this.pool.query<Row>(`SELECT ${columns} FROM reader.library_status
+      WHERE agent = $1 AND status IS NOT NULL
+      ORDER BY changed_at DESC, work DESC LIMIT $2`, [agent, ceiling + 1]);
+    if (rows.rows.length > ceiling) throw new WorkReadLimit('Public shelf exceeds bounded scan');
+    return rows.rows.map(row => state(row.work, row));
   }
 
   async page(agent: string, status: ReadingStatus, limit: number,

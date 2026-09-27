@@ -42,14 +42,25 @@ export async function readAgent(session: WorkReadSession, agent: string) {
   const displayName = field(row, 'displayName');
   if (rows.length !== 1 || !kind || !displayName || displayName.length > 200
     || field(row, 'handle') !== allocateAgentHandle(agent)) throw new WorkReadUnavailable('Agent profile is ambiguous');
-  if (await owner.agentFence(agent) !== before) throw new WorkReadMissing('Agent unavailable');
+  const library = await owner.visibility.read(agent);
   let currentHandle: string;
   try { currentHandle = await session.deps.agentHandles?.current(agent) ?? field(row, 'handle'); }
   catch { throw new WorkReadUnavailable('Agent handle owner is unavailable'); }
   const path = `/v1/agents/${agent.slice(-36)}`;
+  const ownerVisible = library.visibility !== 'public' && !!session.principal
+    && session.options.actingSubject === agent
+    && !!await session.deps.access.canReadAsBaselineMember?.(session.principal, agent);
+  const statusShelves = library.visibility === 'public' ? `${path}/shelves`
+    : ownerVisible ? `/v1/me/shelves?actingSubject=${encodeURIComponent(agent)}` : null;
+  if (await owner.agentFence(agent) !== before
+    || (await owner.visibility.read(agent)).version !== library.version) {
+    throw new WorkReadMoved('Agent profile changed');
+  }
   return { profile: 'agent-read-v1' as const, id: agent, displayName, kind,
     handle: currentHandle, disclosure: 'public' as const, sourcePosition: session.position,
-    links: { profile: `/@${currentHandle}`, works: `${path}/works`, collections: `${path}/collections` } };
+    library: { visibility: library.visibility, statusShelvesVisible: statusShelves !== null },
+    links: { profile: `/@${currentHandle}`, works: `${path}/works`, collections: `${path}/collections`,
+      ...(statusShelves ? { statusShelves } : {}) } };
 }
 
 export async function readHandle(session: WorkReadSession, handle: string) {
