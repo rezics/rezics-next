@@ -96,7 +96,7 @@ export const FieldLegend = (props: FieldLegendProps) => {
     <ArkFieldset.Legend
       className={cn(
         'mb-3 font-medium',
-        'data-[variant=legend]:text-base',
+        'data-[variant=legend]:text-lg data-[variant=legend]:tracking-tight',
         'data-[variant=label]:text-sm',
         className,
       )}
@@ -206,7 +206,6 @@ export const FieldDescription = (props: React.ComponentProps<typeof ark.p>) => {
   return (
     <ark.p
       className={cn(
-        'pointer-events-none',
         'font-normal text-muted-foreground text-sm leading-normal',
         'group-has-data-[orientation=horizontal]/field:text-balance',
         '@md/field-group:group-data-[orientation=responsive]/field:text-balance',
@@ -276,6 +275,7 @@ export const FieldError = (props: React.ComponentProps<typeof ArkField.ErrorText
       className={cn(
         'font-normal text-destructive text-sm',
         'dark:text-destructive-foreground',
+        'fade-in-0 slide-in-from-top-1 animate-in duration-200 motion-reduce:animate-none!',
         className,
       )}
       data-slot="field-error"
