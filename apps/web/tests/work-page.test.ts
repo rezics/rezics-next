@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { messages } from '../features/work-page/messages.ts';
 import { openLibraryAuthorKey } from '../features/work-page/credits.tsx';
 import { failureOf } from '../features/work-page/read.ts';
-import { idOf, mainScope, neighbourScope, parseScope, parseVersionQuery, parseWorkRef, tabOf, workHref }
+import { idOf, mainScope, neighbourScope, parseScope, parseVersionQuery, parseWorkRef, shortId, tabOf, workHref }
   from '../features/work-page/route.ts';
 import { scopeName } from '../features/work-page/scope-bar.tsx';
 
@@ -27,6 +27,11 @@ describe('Work page addresses', () => {
     expect(tabOf(`/w/${work}`)).toBe('overview');
     expect(tabOf(`/w/${work}/discussion`)).toBe('discussion');
     expect(tabOf(`/w/${work}/unknown`)).toBe('overview');
+  });
+
+  test('short IDs use the random tail, since UUIDv7s minted together share their head', () => {
+    expect(shortId('https://rezics.com/id/01a0e3d0-dca8-7736-a626-f53097e68dce')).toBe('97e68dce');
+    expect(shortId('https://rezics.com/id/01a0e3d0-dca8-7737-ac65-b7444eb96b02')).toBe('4eb96b02');
   });
 
   test('IDs come only from native IRIs', () => {
@@ -62,7 +67,7 @@ describe('Work page scope', () => {
 
   test('a Realm Main cannot name is still named, by its short ID', () => {
     const view = { workRef: work, scope: { kind: 'realm' as const, realm }, realms: [] };
-    expect(scopeName(view, messages.en, 'en')).toBe('Realm 7c3e9a1d');
+    expect(scopeName(view, messages.en, 'en')).toBe('Realm 9b1d3c2a');
     expect(scopeName({ ...view, realms: [{ id: realm, name: { value: '潮汐', language: 'zh-Hans',
       direction: 'ltr' as const, basis: 'requested' as const } }] }, messages['zh-CN'], 'zh-CN')).toBe('潮汐');
   });

@@ -7,7 +7,7 @@ import Link from 'next/link';
 import type { CSSProperties, ReactNode } from 'react';
 import { BFF_PREFIX } from '../api/browser.ts';
 import type { UiLocale } from '../../i18n/define.ts';
-import { languageName, typeNames } from './format.ts';
+import { languageName, localeLanguage, typeNames } from './format.ts';
 import type { WorkPageMessages } from './messages.ts';
 import type { WorkCover as Cover, WorkHeader as Header } from './types.ts';
 
@@ -33,7 +33,8 @@ export function WorkCover({ cover, title, language, className }: {
   const style = { '--cover-hue': hue } as CSSProperties;
   return <div aria-hidden="true" style={style} className={cn(frame, 'flex flex-col justify-between p-2.5 sm:p-4',
     'bg-[linear-gradient(165deg,oklch(0.46_0.1_var(--cover-hue)),oklch(0.3_0.08_var(--cover-hue)))]')}>
-    <span lang={language} className="line-clamp-5 break-words font-work-title text-white text-xs/snug sm:text-base/snug">
+    <span lang={language} className="line-clamp-5 hyphens-auto break-words font-work-title text-white text-xs/snug
+      sm:text-base/snug">
       {title}</span>
     <span className="h-px w-1/3 bg-white/50" />
   </div>;
@@ -64,7 +65,8 @@ export function WorkHeader({ work, credits, readHref, locale, messages }: {
       <h1 lang={work.title.language} dir={work.title.direction} className="text-balance break-words font-semibold
         font-work-title text-2xl/tight sm:text-4xl/tight">{work.title.value}</h1>
       {work.title.basis === 'fallback' ? <p className="text-muted-foreground text-xs">
-        {t.titleFallback({ requested: languageName(locale, locale), shown: languageName(work.title.language, locale) })}
+        {t.titleFallback({ requested: languageName(localeLanguage(locale), locale),
+          shown: languageName(work.title.language, locale) })}
       </p> : null}
       {credits}
       <p className="flex flex-wrap items-baseline gap-x-2 text-muted-foreground text-sm">

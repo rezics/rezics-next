@@ -27,8 +27,12 @@ export function idOf(iri: string): string | null {
 
 export const iriOf = (id: string) => `${idPrefix}${id}`;
 
-/** The first eight characters of an IRI's UUID, a readable stand-in while a resource has no name. */
-export const shortId = (iri: string) => (idOf(iri) ?? iri).slice(0, 8);
+/**
+ * The last eight characters of an IRI's UUID, a readable stand-in while a
+ * resource has no name. Main mints time-ordered UUIDv7s, whose leading
+ * characters repeat for resources made in the same minute; the tail is random.
+ */
+export const shortId = (iri: string) => (idOf(iri) ?? iri).slice(-8);
 
 /**
  * Whose view of ratings, classification and adoption a page shows. Global is

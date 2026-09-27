@@ -1,6 +1,9 @@
 import type { UiLocale } from '../../i18n/define.ts';
 import type { WorkPageMessages } from './messages.ts';
 
+/** The content language an interface locale reads: zh-CN readers read Simplified Chinese. */
+export const localeLanguage = (locale: UiLocale) => (locale === 'zh-CN' ? 'zh-Hans' : locale);
+
 /** A BCP 47 tag's name in the interface language ("zh-Hant" → "繁体中文"), or the tag itself. */
 export function languageName(tag: string, locale: UiLocale): string {
   try {
