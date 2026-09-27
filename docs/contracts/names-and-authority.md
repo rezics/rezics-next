@@ -1,5 +1,10 @@
 # Names, identifiers and editorial authority
 
+General `NameRecord` occurrence, selection and protection are prospective. The
+implemented Work title and catalog description slots do not establish this owner;
+source mappings retain provider names as source-only evidence until adoption has
+an explicit native profile.
+
 ## Name and identifier records
 
 Names have stable occurrences, role, language/direction, provenance, validity and
