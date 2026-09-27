@@ -181,9 +181,9 @@ schemas and assertions. QA `20260927t162614-85bc8d` passed native disclosure,
 Global/Realm/Mine, migrated classification protection, concurrent activation,
 lease recovery and first/deep page plans over 20,000 Works/80,000 index entries.
 The Work template now explicitly builds discovery generations; its integration
-passed in `20260927t162237-c0a66b`. The discovery fixture must run alone until the
-manager adds it to `isolatedIntegrationFiles` in `scripts/qa/core.ts` (G-244's
-claim during this implementation). The integration-directory path is already
+passed in `20260927t162237-c0a66b`. The discovery fixture is registered in
+`scripts/qa/isolated-integration-files.ts` because its classification cutover and
+restore-hold probes require a fresh dataset. The integration-directory path is
 discovered by the QA tier; no acceptance case ID was assigned by this brief.
 
 `services/main/tests/work-read.integration.test.ts` is registered in the QA

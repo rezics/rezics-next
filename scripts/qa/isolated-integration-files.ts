@@ -44,4 +44,6 @@ export const isolatedIntegrationFileList = [
   'tests/qa/integration/web-auth-bootstrap.test.ts',
   'tests/qa/integration/work-address-api.test.ts',
   'tests/qa/integration/work-derivation.test.ts',
+  // Discovery probes cut over classification and toggle the dataset restore hold.
+  'tests/qa/integration/discovery-projection.test.ts',
 ] as const;
