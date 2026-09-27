@@ -223,7 +223,11 @@ export class NotificationStore {
       const results: EnqueuedItem[] = [];
       for (const principalId of recipients) {
         const active = await client.query<{ active: boolean }>(
-          'SELECT active FROM access.principal WHERE id = $1 FOR SHARE', [principalId]);
+          `SELECT p.active AND NOT EXISTS (SELECT 1 FROM access.notification_preference n
+             WHERE n.principal_id = p.id AND n.purpose = $2 AND n.topic = $3
+               AND n.channel = 'inbox' AND n.state = 'disabled') AS active
+           FROM access.principal p WHERE p.id = $1 FOR SHARE`,
+        [principalId, event.purpose, event.topic]);
         if (active.rows[0]?.active !== true) continue;
         await client.query(`INSERT INTO access.notification_stream (principal_id, stream)
           VALUES ($1, 'inbox') ON CONFLICT DO NOTHING`, [principalId]);
@@ -439,7 +443,8 @@ export class NotificationStore {
       const resolver = this.readSubjects.get(raw.disclosure_basis) ?? this.defaultReadSubject;
       if (!principalId || raw.state !== 'active' || !resolver) { items.push(base); continue; }
       const resolved = await resolver.resolve({ principalId, owner: raw.subject_owner,
-        ref: raw.subject_ref, revision: raw.subject_revision, disclosureBasis: raw.disclosure_basis })
+        ref: raw.subject_ref, revision: raw.subject_revision, disclosureBasis: raw.disclosure_basis,
+        realm: raw.realm })
         .catch(() => { throw new NotificationUnavailable('subject owner is unavailable'); });
       if (resolved.status !== 'available') { items.push(base); continue; }
       const fields = resolved.subject.fields;
@@ -464,13 +469,14 @@ export class NotificationStore {
       const principalId = await this.reader(client, principal);
       if (!principalId) return { principalId, rows: [] };
       const rows = (await client.query<{ subject_owner: string; subject_ref: string;
-        subject_revision: string | null; disclosure_basis: string }>(`SELECT i.subject_owner, i.subject_ref,
-          i.subject_revision, i.disclosure_basis FROM access.notification_item i
+        subject_revision: string | null; disclosure_basis: string; realm: string | null }>(`SELECT i.subject_owner, i.subject_ref,
+          i.subject_revision, i.disclosure_basis, c.realm FROM access.notification_item i
         JOIN access.notification_stream s ON s.principal_id = i.principal_id AND s.stream = i.stream
           AND s.generation = i.generation
         LEFT JOIN access.notification_read_watermark w ON w.principal_id = i.principal_id
           AND w.stream = i.stream AND w.generation = i.generation
         LEFT JOIN access.notification_item_read r ON r.principal_id = i.principal_id AND r.item_id = i.id
+        LEFT JOIN access.notification_display_context c ON c.item_id = i.id
         WHERE i.principal_id = $1 AND i.stream = 'inbox' AND i.state = 'active'
           AND i.sequence > coalesce(w.read_through, 0) AND r.item_id IS NULL
         ORDER BY i.sequence DESC LIMIT $2`, [principalId, NOTIFICATION_LIMITS.unreadScan + 1])).rows;
@@ -481,7 +487,8 @@ export class NotificationStore {
       const resolver = this.readSubjects.get(row.disclosure_basis) ?? this.defaultReadSubject;
       if (!resolver) continue;
       const resolved = await resolver.resolve({ principalId: principalId!, owner: row.subject_owner,
-        ref: row.subject_ref, revision: row.subject_revision, disclosureBasis: row.disclosure_basis })
+        ref: row.subject_ref, revision: row.subject_revision, disclosureBasis: row.disclosure_basis,
+        realm: row.realm })
         .catch(() => { throw new NotificationUnavailable('subject owner is unavailable'); });
       if (resolved.status === 'available' && ++count >= NOTIFICATION_LIMITS.unreadCap) {
         return { count: 99, overflow: true };

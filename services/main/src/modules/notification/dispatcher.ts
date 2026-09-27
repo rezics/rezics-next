@@ -12,7 +12,7 @@ export type SubjectResolution =
 /** Owner-specific read of the exact subject for one recipient at delivery time. */
 export interface NotificationSubjectReader {
   resolve(input: { principalId: string; owner: string; ref: string; revision: string | null;
-    disclosureBasis: string }): Promise<SubjectResolution>;
+    disclosureBasis: string; realm?: string | null }): Promise<SubjectResolution>;
 }
 
 export interface ProviderSend {
@@ -215,14 +215,16 @@ export class NotificationDispatcher {
     address: string | null; addressDigest: string; payload: Record<string, string>; disclosureDigest: string }> {
     const context = (await this.pool.query<{ subject_owner: string; subject_ref: string;
       subject_revision: string | null; disclosure_basis: string; address: string | null; address_digest: string;
-      lock_screen_disclosure: boolean }>(`SELECT i.subject_owner, i.subject_ref, i.subject_revision,
-        i.disclosure_basis, e.address, e.address_digest, e.lock_screen_disclosure
+      lock_screen_disclosure: boolean; realm: string | null }>(`SELECT i.subject_owner, i.subject_ref, i.subject_revision,
+        i.disclosure_basis, e.address, e.address_digest, e.lock_screen_disclosure, c.realm
       FROM access.notification_delivery d JOIN access.notification_item i ON i.id = d.item_id
-      JOIN access.notification_endpoint e ON e.id = d.endpoint_id WHERE d.id = $1`, [row.id])).rows[0];
+      JOIN access.notification_endpoint e ON e.id = d.endpoint_id
+      LEFT JOIN access.notification_display_context c ON c.item_id = i.id WHERE d.id = $1`, [row.id])).rows[0];
     if (!context) return { kind: 'cancel', reason: 'ineligible' };
     const subjectReader = this.scopedSubjects.get(context.disclosure_basis) ?? this.subjects;
     const resolved = await subjectReader.resolve({ principalId: row.principal_id, owner: context.subject_owner,
-      ref: context.subject_ref, revision: context.subject_revision, disclosureBasis: context.disclosure_basis });
+      ref: context.subject_ref, revision: context.subject_revision, disclosureBasis: context.disclosure_basis,
+      realm: context.realm });
     if (resolved.status === 'erased') return { kind: 'cancel', reason: 'subject_erased' };
     if (resolved.status !== 'available') return { kind: 'cancel', reason: 'undisclosed' };
     // Push without lock-screen disclosure carries no private subject fields.

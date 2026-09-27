@@ -106,6 +106,8 @@ import { currentContentSubjectReader, currentNotificationAgentReader } from './m
 import { NotificationRealtimeHub } from './modules/notification/realtime.ts';
 import { NotificationDispatcher } from './modules/notification/dispatcher.ts';
 import { NotificationDeliveryWorker } from './modules/notification/delivery-worker.ts';
+import { NotificationProducer, NotificationProducerWorker } from './modules/notification-producers/producer.ts';
+import { notificationProducerSubjectReader } from './modules/notification-producers/subjects.ts';
 import { HttpDeliveryProvider } from './modules/notification/http-provider.ts';
 import { RightsStore } from './modules/rights/store.ts';
 import { ThemeStore } from './modules/theme/store.ts';
@@ -231,6 +233,9 @@ notificationStore.setDefaultReadSubjectReader(currentContentSubjectReader(conten
 notificationStore.setReadAgentReader(currentNotificationAgentReader(fuseki, environment.lineage, media.store));
 notificationStore.registerReadSubjectReader('verification-correction-subscription-v1',
   verificationCorrectionSubjectReader(new VerificationStore(contentPool)));
+const notificationSourceReader = notificationProducerSubjectReader(pool, contentPool, environment);
+for (const basis of ['realm-reply-v1', 'submission-decision-v1', 'moderation-outcome-v1',
+  'realm-role-change-v1']) notificationStore.registerReadSubjectReader(basis, notificationSourceReader);
 if (relayPool) await notificationStore.reconcileRetainedErasures(relayPool);
 const notificationProviderConfig = {
   url: config.MAIN_NOTIFICATION_PROVIDER_URL,
@@ -252,6 +257,10 @@ const notificationDispatcher = notificationProvider
     currentContentSubjectReader(content, notificationStore, access)) : undefined;
 notificationDispatcher?.registerSubjectReader('verification-correction-subscription-v1',
   verificationCorrectionSubjectReader(new VerificationStore(contentPool)));
+for (const basis of ['realm-reply-v1', 'submission-decision-v1', 'moderation-outcome-v1',
+  'realm-role-change-v1']) notificationDispatcher?.registerSubjectReader(basis, notificationSourceReader);
+const notificationProducerWorker = new NotificationProducerWorker(new NotificationProducer(
+  pool, relayPool ?? null, contentPool, fuseki, notificationStore, config.MAIN_RELAY_CONSUMER ?? null));
 const notificationRealtime = relayPool ? new NotificationRealtimeHub(pool) : undefined;
 if (notificationRealtime) await notificationRealtime.start();
 const notificationDeliveryWorker = notificationDispatcher
@@ -396,6 +405,7 @@ worker.start();
 discoveryWorker?.start();
 recommendationWorker?.start();
 correctionWorker.start();
+notificationProducerWorker.start();
 notificationDeliveryWorker?.start();
 
 let stopping = false;
@@ -406,6 +416,7 @@ async function stop(): Promise<void> {
   await feedWorker?.stop();
   await discoveryWorker?.stop();
   await correctionWorker.stop();
+  await notificationProducerWorker.stop();
   await notificationDeliveryWorker?.stop();
   await notificationRealtime?.stop();
   try {
