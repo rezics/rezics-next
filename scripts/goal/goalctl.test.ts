@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
-import { claimConflicts, launchCommand, outOfScope, parseBrief, pathsOverlap, rangesOverlap, type Task,
-  usageLevel, validateBrief } from './goalctl.ts';
+import { claimConflicts, launchCommand, outOfScope, parseBrief, parseCodexUsage, pathsOverlap, rangesOverlap,
+  type Task, usageLevel, validateBrief } from './goalctl.ts';
 
 const brief = `---
 id: G-040
@@ -28,8 +28,8 @@ describe('goalctl briefs', () => {
     expect(validateBrief(parsed)).toEqual([]);
   });
 
-  test('rejects max effort, absolute or .temp paths and malformed ranges', () => {
-    const parsed = parseBrief(brief.replace('xhigh', 'max').replace('services/main/src/modules/poll/**', '/etc/**')
+  test('rejects efforts the engine does not accept, absolute or .temp paths and malformed ranges', () => {
+    const parsed = parseBrief(brief.replace('xhigh', 'ultra').replace('services/main/src/modules/poll/**', '/etc/**')
       .replace('040-044', '044-040'));
     expect(validateBrief(parsed)).toHaveLength(3);
     expect(validateBrief({ ...parseBrief(brief), paths: ['.temp/x'] })).toHaveLength(1);
@@ -91,8 +91,38 @@ describe('goalctl runtime policy', () => {
     // 50% after 1h projects 250%: stop early instead of waiting for 80%.
     expect(usageLevel(snap(50, 4 * 3600), now * 1000).level).toBe('restricted');
     expect(usageLevel(snap(96, 60), now * 1000).level).toBe('critical');
-    // The weekly window also bounds dispatch: 90% after 4 days projects about 157%.
+    // The weekly window stops new Claude work only when it would run out before its reset:
+    // 90% after 4 days projects about 157%.
     expect(usageLevel(snap(10, 4 * 3600, 90), now * 1000)).toMatchObject({ level: 'restricted' });
+    expect(usageLevel(snap(10, 4 * 3600, 97), now * 1000)).toMatchObject({ level: 'critical' });
+  });
+
+  test('advises widening Claude work while the week would end unspent', () => {
+    const now = 1_800_000_000;
+    const weekResets = now + 24 * 3600;
+    const snap = (week: number) => ({ at: now, rate_limits: {
+      five_hour: { used_percentage: 10, resets_at: now + 4 * 3600 },
+      seven_day: { used_percentage: week, resets_at: weekResets } } });
+    // 24% after six days lands near 28%: spend more.
+    expect(usageLevel(snap(24), now * 1000)).toMatchObject({ level: 'normal', weekProjected: 28 });
+    expect(usageLevel(snap(24), now * 1000).weekAdvice).toContain('widen');
+    // A recent slope of 3.5%/h over the last two hours lands at 24 + 84 = 108%: stop new Claude work.
+    const history = [{ at: now - 7200, used: 5, resets: now + 4 * 3600, week: 17, weekResets }];
+    expect(usageLevel(snap(24), now * 1000, history)).toMatchObject({ level: 'restricted', weekProjected: 108 });
+  });
+
+  test('reads a Codex account usage from its newest rollout line', () => {
+    const now = 1_790_520_000_000;
+    const line = (used: number, resets: number, reached: string | null = null) => JSON.stringify({
+      timestamp: '2026-09-27T14:36:48.837Z', type: 'event_msg', payload: { type: 'token_count', rate_limits: {
+        primary: { used_percent: used, window_minutes: 10080, resets_at: resets }, secondary: null,
+        plan_type: 'pro', rate_limit_reached_type: reached } } });
+    const text = [line(40, 1_791_053_423), '{"type":"event_msg"}', line(45, 1_791_053_423), '{"partial'].join('\n');
+    expect(parseCodexUsage(text, now)).toMatchObject({ used: 45, windowMinutes: 10080, plan: 'pro', reached: false,
+      resetInHours: 148.2 });
+    expect(parseCodexUsage(line(100, 1_791_053_423), now).reached).toBe(true);
+    expect(parseCodexUsage(line(80, 1_790_000_000), now)).toMatchObject({ used: 0, reached: false });
+    expect(parseCodexUsage('', now)).toEqual({});
   });
 
   test('pins the Opus model, effort and bypass permission mode without inbound session messages', () => {
@@ -115,6 +145,21 @@ describe('goalctl runtime policy', () => {
       .slice(0, 3)).toEqual(['exec', 'resume', 't']);
   });
 
+  test('runs GPT-6 Astra through Codex with the same flags; its account is chosen by environment', () => {
+    const [program, args] = launchCommand({ id: 'G-101', effort: 'max', session: '', prompt: 'p', resume: false,
+      engine: 'astra', worktree: '/w', lastMessage: '/r/a.md' });
+    expect(program).toBe('codex');
+    expect(args).toEqual(expect.arrayContaining(['-m', 'gpt-6-astra', '-c', 'model_reasoning_effort=max', '-C', '/w']));
+  });
+
+  test('runs Grok 4.7 through Cursor Agent with the effort in the model ID', () => {
+    const [program, args] = launchCommand({ id: 'G-102', effort: 'xhigh', session: 'c', prompt: 'p', resume: true,
+      engine: 'cursor', worktree: '/w' });
+    expect(program).toBe('cursor-agent');
+    expect(args).toEqual(expect.arrayContaining(['-p', 'p', '--model', 'grok-4.7-xhigh', '--force', '--trust',
+      '--output-format', 'json', '--workspace', '/w', '--resume', 'c']));
+  });
+
   test('pins GPT-6 Luna through Codex and Grok 4.7 in bypass mode for simpler workers', () => {
     const luna = launchCommand({ id: 'G-094', effort: 'high', session: '', prompt: 'p', resume: false,
       engine: 'luna', worktree: '/w', lastMessage: '/r/l.md' });
@@ -127,9 +172,14 @@ describe('goalctl runtime policy', () => {
       '--no-subagents', '--output-format', 'json', '--cwd', '/w', '-r', 's']));
   });
 
-  test('accepts only high or xhigh for Codex briefs', () => {
-    const brief = (effort: string) => parseBrief(`---\nid: G-081\ntitle: t\neffort: ${effort}\nengine: codex\n---\n`);
-    expect(validateBrief(brief('high'))).toEqual([]);
-    expect(validateBrief(brief('medium')).join()).toContain('codex effort');
+  test('accepts the efforts each engine supports and rejects unknown engines', () => {
+    const brief = (engine: string, effort: string) =>
+      parseBrief(`---\nid: G-081\ntitle: t\neffort: ${effort}\nengine: ${engine}\n---\n`);
+    expect(validateBrief(brief('codex', 'ultra'))).toEqual([]);
+    expect(validateBrief(brief('claude', 'max'))).toEqual([]);
+    expect(validateBrief(brief('cursor', 'xhigh'))).toEqual([]);
+    expect(validateBrief(brief('luna', 'ultra')).join()).toContain('luna effort');
+    expect(validateBrief(brief('grok', 'xhigh')).join()).toContain('grok effort');
+    expect(validateBrief(brief('gemini', 'high')).join()).toContain('engine must be one of');
   });
 });

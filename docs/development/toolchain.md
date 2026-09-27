@@ -1,7 +1,7 @@
 # Toolchain lock
 
-This page is the adopted toolchain for the first delivery. Implementation uses
-only the tools listed here, at these versions, through the root commands below.
+This page records the adopted toolchain: the tools in use, their versions and
+the root commands below. Update it in the same change that adds or replaces a tool.
 Versions were checked on 2026-09-24 against the npm registry, Docker Hub, Maven
 Central and upstream release pages. The [toolchain survey](../research/toolchain-survey.md)
 and [stack review](../research/application-stack.md) remain research inputs; they
@@ -443,17 +443,17 @@ neither dependency-cruiser nor TypeScript typechecking proves asymptotic cost.
 
 ## Agent orchestration
 
-These tools run the backend [Goal program](../goals/README.md). They are
-development tools; no product code depends on them.
+These development tools run [Goal](../goals/README.md) workers and research
+lookups; no product code depends on them. The [manager charter](../goals/manager.md#resources)
+describes when each is useful. Verified on 2026-09-27.
 
-| Tool | Version | Status | Use |
-| --- | --- | --- | --- |
-| Claude Code CLI | 2.1.283 | Adopted for the Goal | Interactive manager in bypass permission mode (`claude -n goal-manager --model claude-opus-5-5 --effort xhigh --dangerously-skip-permissions`) and headless worker processes (`claude -p --model claude-opus-5-5 --effort medium|high|xhigh --dangerously-skip-permissions --session-id <uuid> --output-format json`). `--resume <session-id>` continues a finished worker with its full context. Workers accept no inbound session messages. |
-| Codex CLI | 0.157.1, model `gpt-6-sol` | Adopted for Goal workers (maintainer direction, 2026-09-26) | Default worker engine from G-081: `codex exec -m gpt-6-sol -c model_reasoning_effort=high\|xhigh --dangerously-bypass-approvals-and-sandbox --json -o <last-message> -C <worktree> "<prompt>"`; `codex exec resume <thread-id> ...` continues a finished worker. goalctl reads the thread ID and token usage from the JSON events and the handoff from the last-message file. Effort is `high` or `xhigh`, chosen per brief by the manager. |
-| GPT-6 Luna (Codex CLI) and Grok 4.7 workers | Codex CLI 0.157.1 `gpt-6-luna`; Grok Build CLI 1.0.41 `grok-4.7` | Adopted for simpler Goal tasks (maintainer direction, 2026-09-26) | Engines `luna` (`codex exec -m gpt-6-luna -c model_reasoning_effort=max ...`, otherwise as the Codex row; Luna runs at `max` by maintainer direction 2026-09-27, verified accepted by Codex CLI 0.157.1) and `grok` (efforts `low` to `high`) (`grok -p <prompt> -m grok-4.7 --reasoning-effort <e> --permission-mode bypassPermissions --no-subagents --output-format json --cwd <worktree>`, resumed with `-r <session>`). Both are quota-until-exhausted: the manager paces them and keeps GPT-6 Sol for complex work. |
-| `bun scripts/goal/goalctl.ts` | Repository script | Adopted for the Goal | Only interface for worker lifecycle: claims, dispatch, background wait, resume, stop, scoped merge, close, status, 5-hour usage level and QA slots. State lives in `.temp/goal-orchestration/`; worktrees in `.temp/worktrees/`. Unit tests: `task test -- scripts/goal/goalctl.test.ts`. |
-| Grok Build CLI | 1.0.41, model `grok-4.7` | Adopted for research lookups only | `grok -m grok-4.7 -p "<question>" --output-format json` from an empty temporary directory. It searches X directly (keyword and semantic) and the web. Never pass an auto-approve flag, repository secrets or vault contents; results are leads for Claude to verify. |
-| Cursor Agent CLI | 2026.09.26-dd393fe | Installed, not used by `goalctl` | Invoke as `cursor-agent`; the bare `agent` command resolves to Grok's binary first on `PATH`. Only `grok-4.7-*` models may be selected. It is not one of the program's code-writing workers. |
+| Tool | Version | Use |
+| --- | --- | --- |
+| Claude Code CLI | 2.1.283 | Manager: `claude -n goal-manager --model claude-opus-5-5 --effort xhigh --dangerously-skip-permissions`. Engine `claude`: `claude -p --model claude-opus-5-5 --effort <low…max> --dangerously-skip-permissions --session-id <uuid> --output-format json`, continued with `--resume <session-id>`. The status line writes the 5-hour and 7-day usage to `~/.claude/usage/latest.json`. |
+| Codex CLI | 0.157.1 | Engines `codex` (`gpt-6-sol`, `low`…`ultra`) and `luna` (`gpt-6-luna`, `low`…`max`) on the account in `~/.codex`: `codex exec -m <model> -c model_reasoning_effort=<e> --dangerously-bypass-approvals-and-sandbox --json -o <last-message> -C <worktree> "<prompt>"`, continued with `codex exec resume <thread-id> …`. Engine `astra` (`gpt-6-astra`, `low`…`ultra`) runs the same command with `CODEX_HOME=~/.codex-1`, the Astra account, which the `codex-1` wrapper also selects. Each account's weekly usage is in the `rate_limits` of its newest `sessions/**/rollout-*.jsonl`; interactive `/usage` shows it and the Astra account's usage-limit reset credits. |
+| Grok Build CLI | 1.0.41 | Engine `grok` (`grok-4.7`, `low`…`high`): `grok -p <prompt> -m grok-4.7 --reasoning-effort <e> --permission-mode bypassPermissions --no-subagents --output-format json --cwd <worktree>`, continued with `-r <session>`. Research lookups run `grok -m grok-4.7 -p "<question>" --output-format json` from an empty temporary directory without auto-approval; it searches X and the web, and its answers are leads to verify. |
+| Cursor Agent CLI | 2026.09.26-dd393fe | Engine `cursor` (Grok 4.7 through Cursor's own quota): `cursor-agent -p <prompt> --model grok-4.7-<low…xhigh> --force --trust --sandbox disabled --output-format json --workspace <worktree>`, continued with `--resume <session_id>`. Invoke it as `cursor-agent`; the bare `agent` command resolves to Grok's binary first on `PATH`. |
+| `bun scripts/goal/goalctl.ts` | Repository script | Worker lifecycle: claims, dispatch, background wait, resume, stop, scoped merge, close, status, usage of every account and QA slots. State lives in `.temp/goal-orchestration/`; worktrees in `.temp/worktrees/`. Unit tests: `task test -- scripts/goal/goalctl.test.ts`. |
 
 ## Continuous integration
 

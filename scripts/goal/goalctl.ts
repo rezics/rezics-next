@@ -2,13 +2,14 @@
 // The manager is the only caller of the state-changing commands; see docs/goals/README.md.
 import { spawn, spawnSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { copyFileSync, existsSync, mkdirSync, openSync, readFileSync, renameSync, rmSync, statSync,
+import { closeSync, copyFileSync, existsSync, mkdirSync, openSync, readdirSync, readFileSync, readSync, renameSync,
+  rmSync, statSync,
   writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, isAbsolute, join, resolve } from 'node:path';
 
 export type State = 'running' | 'exited' | 'conflict' | 'merged' | 'stopped' | 'verified' | 'cancelled';
-export type Engine = 'claude' | 'codex' | 'luna' | 'grok';
+export type Engine = 'claude' | 'codex' | 'luna' | 'astra' | 'grok' | 'cursor';
 export interface Brief {
   id: string; title: string; effort: string; engine?: Engine; cases: string[]; paths: string[];
   migrations: string[]; shared: string[]; depends: string[];
@@ -26,33 +27,50 @@ export interface UsageWindow { used_percentage?: number; resets_at?: string | nu
 export interface UsageSnapshot {
   at?: number; rate_limits?: { five_hour?: UsageWindow | null; seven_day?: UsageWindow | null } | null;
 }
-export interface UsageSample { at: number; used: number; resets: number }
+export interface UsageSample { at: number; used: number; resets: number; week?: number; weekResets?: number }
 export type UsageLevel = 'unknown' | 'normal' | 'restricted' | 'critical';
 export interface UsageReport {
   level: UsageLevel; used?: number; ageSeconds?: number; resetInMinutes?: number;
-  ratePerHour?: number; projected?: number; weekUsed?: number; weekProjected?: number; reason?: string;
+  ratePerHour?: number; projected?: number; weekUsed?: number; weekProjected?: number;
+  weekResetInHours?: number; weekAdvice?: string; reason?: string;
+}
+export interface AccountUsage {
+  account: string; home: string; engines: Engine[]; used?: number; windowMinutes?: number;
+  resetInHours?: number; plan?: string; reached?: boolean; ageSeconds?: number;
 }
 
+// Worker engines and the efforts each CLI and model accepts. Which engine and effort a task gets is
+// the manager's decision from the need and the remaining usage (docs/goals/manager.md), not a rule here.
 export const MODEL = 'claude-opus-5-5';
-export const EFFORTS = ['medium', 'high', 'xhigh'];
-// Maintainer direction 2026-09-26: new Goal work runs on Codex CLI with GPT-6 Sol at high or xhigh.
 export const CODEX_MODEL = 'gpt-6-sol';
-export const CODEX_EFFORTS = ['high', 'xhigh'];
-// Maintainer direction 2026-09-26: simpler tasks may run on GPT-6 Luna (Codex) or Grok 4.7; both are
-// quota-until-exhausted, so the manager paces them and keeps GPT-6 Sol for complex work.
 export const LUNA_MODEL = 'gpt-6-luna';
-// Maintainer direction 2026-09-27: efforts are constrained per model, and GPT-6 Luna runs at max.
-export const LUNA_EFFORTS = ['max'];
+export const ASTRA_MODEL = 'gpt-6-astra';
 export const GROK_MODEL = 'grok-4.7';
-const ENGINES: Engine[] = ['claude', 'codex', 'luna', 'grok'];
-export const DEFAULT_ENGINE: Engine = process.env.GOAL_ENGINE === 'claude' ? 'claude' : 'codex';
+const ENGINE_EFFORTS: Record<Engine, string[]> = {
+  claude: ['low', 'medium', 'high', 'xhigh', 'max'],
+  codex: ['low', 'medium', 'high', 'xhigh', 'max', 'ultra'],
+  luna: ['low', 'medium', 'high', 'xhigh', 'max'],
+  astra: ['low', 'medium', 'high', 'xhigh', 'max', 'ultra'],
+  grok: ['low', 'medium', 'high'],
+  // Cursor Agent selects Grok 4.7 through per-effort model IDs (grok-4.7-<effort>).
+  cursor: ['low', 'medium', 'high', 'xhigh'],
+};
+const ENGINES = Object.keys(ENGINE_EFFORTS) as Engine[];
+export const DEFAULT_ENGINE: Engine = (process.env.GOAL_ENGINE as Engine | undefined) ?? 'claude';
+// GPT-6 Sol and Luna use the default Codex account; GPT-6 Astra has its own account in a separate
+// CODEX_HOME (the `codex-1` wrapper sets the same directory).
+export const CODEX_HOME = process.env.GOAL_CODEX_HOME ?? join(homedir(), '.codex');
+export const ASTRA_HOME = process.env.GOAL_ASTRA_CODEX_HOME ?? join(homedir(), '.codex-1');
 const engineOf = (item: { engine?: Engine }): Engine => item.engine ?? 'claude';
-const modelOf = (engine: Engine): string =>
-  engine === 'codex' ? CODEX_MODEL : engine === 'luna' ? LUNA_MODEL : engine === 'grok' ? GROK_MODEL : MODEL;
-const effortsOf = (engine: Engine): string[] => engine === 'codex' ? CODEX_EFFORTS
-  : engine === 'luna' ? LUNA_EFFORTS : engine === 'grok' ? ['low', 'medium', 'high'] : EFFORTS;
+const MODELS: Record<Engine, string> = { claude: MODEL, codex: CODEX_MODEL, luna: LUNA_MODEL, astra: ASTRA_MODEL,
+  grok: GROK_MODEL, cursor: `${GROK_MODEL} (Cursor)` };
+const modelOf = (engine: Engine): string => MODELS[engine];
+const effortsOf = (engine: Engine): string[] => ENGINE_EFFORTS[engine] ?? [];
+const isCodex = (engine: Engine): boolean => engine === 'codex' || engine === 'luna' || engine === 'astra';
 // Process name that /proc/<pid>/cmdline carries for a live worker of each engine.
-const programOf = (engine: Engine): string => engine === 'luna' ? 'codex' : engine;
+const programOf = (engine: Engine): string => isCodex(engine) ? 'codex' : engine === 'cursor' ? 'cursor-agent' : engine;
+const engineEnv = (engine: Engine): Record<string, string> =>
+  engine === 'astra' ? { CODEX_HOME: ASTRA_HOME } : isCodex(engine) ? { CODEX_HOME } : {};
 const HOLDING: State[] = ['running', 'exited', 'conflict', 'merged', 'stopped'];
 
 export function parseBrief(text: string): Brief {
@@ -153,10 +171,16 @@ export function outOfScope(files: string[], patterns: string[]): string[] {
 
 const FIVE_HOURS = 5 * 3600;
 const SEVEN_DAYS = 7 * 24 * 3600;
-// Dispatch stays open while the burn rate would end the window below PROJECTED_LIMIT; only
-// merge and test at CRITICAL_USED, because the manager itself must not hit the hard limit.
+// The 5h window keeps the manager alive: new Claude work stops while the burn rate would end the
+// window at PROJECTED_LIMIT or more, and at CRITICAL_USED only merge and test continue.
 export const PROJECTED_LIMIT = 95;
 export const CRITICAL_USED = 95;
+// The 7d window is a budget to spend, not one to save: below WEEK_TARGET at reset the report advises
+// widening Claude work. New Claude work stops only when the week would run out before its reset or
+// WEEK_CRITICAL_USED is reached, so the rest still carries the manager to the reset.
+export const WEEK_TARGET = 95;
+export const WEEK_PROJECTED_LIMIT = 100;
+export const WEEK_CRITICAL_USED = 97;
 
 function resetSeconds(value: string | number | undefined): number | undefined {
   if (typeof value === 'number') return value > 1e12 ? value / 1000 : value;
@@ -177,6 +201,18 @@ export function burnRate(used: number, now: number, resets: number, windowSecond
   return used / Math.max(900, now - (resets - windowSeconds));
 }
 
+// The same for the 7d window: the slope over goalctl's samples from the last six hours once one is at
+// least an hour old, otherwise the window average over at least six hours.
+export function weekBurnRate(used: number, now: number, resets: number, history: UsageSample[] = []): number {
+  const recent = history.filter(s => s.weekResets === resets && typeof s.week === 'number'
+    && s.at >= now - 6 * 3600 && s.at <= now - 3600);
+  if (recent.length) {
+    const first = recent.reduce((a, b) => (a.at <= b.at ? a : b));
+    return Math.max(0, used - first.week!) / (now - first.at);
+  }
+  return used / Math.max(6 * 3600, now - (resets - SEVEN_DAYS));
+}
+
 export function usageLevel(snapshot: UsageSnapshot | undefined, nowMs: number,
   history: UsageSample[] = []): UsageReport {
   const five = snapshot?.rate_limits?.five_hour;
@@ -185,30 +221,66 @@ export function usageLevel(snapshot: UsageSnapshot | undefined, nowMs: number,
   const now = nowMs / 1000;
   const ageSeconds = Math.round(now - snapshot.at);
   if (ageSeconds > 1800) return { level: 'unknown', used, ageSeconds };
-  if (used >= CRITICAL_USED) return { level: 'critical', used, ageSeconds, reason: `used >= ${CRITICAL_USED}%` };
-  const resets = resetSeconds(five?.resets_at);
-  // Without a reset time the window cannot be paced; fall back to the fixed 80% threshold.
-  if (resets === undefined || resets <= now) {
-    return { level: used >= 80 ? 'restricted' : 'normal', used, ageSeconds, reason: 'no reset time; fixed 80%' };
-  }
-  const rate = burnRate(used, now, resets, FIVE_HOURS, history);
-  const projected = Math.round(used + rate * (resets - now));
-  const report: UsageReport = { level: 'normal', used, ageSeconds, resetInMinutes: Math.round((resets - now) / 60),
-    ratePerHour: Math.round(rate * 36000) / 10, projected };
+  const report: UsageReport = { level: 'normal', used, ageSeconds };
   const week = snapshot.rate_limits?.seven_day;
   const weekResets = resetSeconds(week?.resets_at);
   if (typeof week?.used_percentage === 'number' && weekResets !== undefined && weekResets > now) {
     report.weekUsed = week.used_percentage;
+    report.weekResetInHours = Math.round((weekResets - now) / 360) / 10;
     report.weekProjected = Math.round(week.used_percentage
-      + burnRate(week.used_percentage, now, weekResets, SEVEN_DAYS) * (weekResets - now));
+      + weekBurnRate(week.used_percentage, now, weekResets, history) * (weekResets - now));
+    report.weekAdvice = report.weekProjected < WEEK_TARGET
+      ? `widen: the week lands at ${report.weekProjected}%; add Claude width or effort`
+      : 'on target';
   }
+  if (used >= CRITICAL_USED) return { ...report, level: 'critical', reason: `5h used >= ${CRITICAL_USED}%` };
+  if ((report.weekUsed ?? 0) >= WEEK_CRITICAL_USED) {
+    return { ...report, level: 'critical', reason: `7d used >= ${WEEK_CRITICAL_USED}%; the rest carries the manager` };
+  }
+  const resets = resetSeconds(five?.resets_at);
+  // Without a reset time the window cannot be paced; fall back to the fixed 80% threshold.
+  if (resets === undefined || resets <= now) {
+    return { ...report, level: used >= 80 ? 'restricted' : 'normal', reason: 'no reset time; fixed 80%' };
+  }
+  const rate = burnRate(used, now, resets, FIVE_HOURS, history);
+  const projected = Math.round(used + rate * (resets - now));
+  Object.assign(report, { resetInMinutes: Math.round((resets - now) / 60), ratePerHour: Math.round(rate * 36000) / 10,
+    projected });
   if (projected >= PROJECTED_LIMIT) {
     return { ...report, level: 'restricted', reason: `5h projected ${projected}% at reset` };
   }
-  if ((report.weekProjected ?? 0) >= PROJECTED_LIMIT) {
-    return { ...report, level: 'restricted', reason: `7d projected ${report.weekProjected}% at reset` };
+  if ((report.weekProjected ?? 0) >= WEEK_PROJECTED_LIMIT) {
+    return { ...report, level: 'restricted', reason: `7d projected ${report.weekProjected}% before its reset` };
   }
   return report;
+}
+
+// Codex CLIs record the account's rate limits with each turn in their session rollouts, so the newest
+// rollout line that carries them is the account's current usage.
+export function parseCodexUsage(text: string, nowMs: number): Partial<AccountUsage> {
+  const now = nowMs / 1000;
+  const lines = text.split('\n');
+  for (let i = lines.length - 1; i >= 0; i--) {
+    if (!lines[i]!.includes('"rate_limits"')) continue;
+    try {
+      type Window = { used_percent?: number; window_minutes?: number; resets_at?: number };
+      const event = JSON.parse(lines[i]!) as { timestamp?: string; payload?: { rate_limits?: {
+        primary?: Window | null; secondary?: Window | null; plan_type?: string; rate_limit_reached_type?: string | null } } };
+      const limits = event.payload?.rate_limits;
+      const windows = [limits?.primary, limits?.secondary].filter((w): w is Window => typeof w?.used_percent === 'number');
+      if (!limits || !windows.length) continue;
+      const at = event.timestamp ? Date.parse(event.timestamp) / 1000 : undefined;
+      const ageSeconds = at === undefined ? undefined : Math.round(now - at);
+      // A window whose reset has passed starts empty again.
+      const live = windows.filter(w => (w.resets_at ?? Infinity) > now);
+      if (!live.length) return { used: 0, reached: false, plan: limits.plan_type, ageSeconds };
+      const fullest = live.reduce((a, b) => (b.used_percent! > a.used_percent! ? b : a));
+      return { used: fullest.used_percent, windowMinutes: fullest.window_minutes, plan: limits.plan_type, ageSeconds,
+        resetInHours: fullest.resets_at === undefined ? undefined : Math.round((fullest.resets_at - now) / 360) / 10,
+        reached: fullest.used_percent! >= 100 || !!limits.rate_limit_reached_type };
+    } catch { /* partial line */ }
+  }
+  return {};
 }
 
 // Workers run in bypass permission mode, as the manager does, and accept no inbound session
@@ -216,13 +288,19 @@ export function usageLevel(snapshot: UsageSnapshot | undefined, nowMs: number,
 export function launchCommand(options: { id: string; effort: string; session: string; prompt: string;
   resume: boolean; engine?: Engine; worktree?: string; lastMessage?: string }): [string, string[]] {
   const { id, effort, session, prompt, resume } = options;
-  if (options.engine === 'grok') {
+  const engine = options.engine ?? 'claude';
+  if (engine === 'grok') {
     return ['grok', ['-p', prompt, '-m', GROK_MODEL, '--reasoning-effort', effort,
       '--permission-mode', 'bypassPermissions', '--no-subagents', '--output-format', 'json',
       '--cwd', options.worktree ?? '.', ...(resume ? ['-r', session] : [])]];
   }
-  if (options.engine === 'codex' || options.engine === 'luna') {
-    const common = ['-m', options.engine === 'luna' ? LUNA_MODEL : CODEX_MODEL, '-c', `model_reasoning_effort=${effort}`,
+  if (engine === 'cursor') {
+    return ['cursor-agent', ['-p', prompt, '--model', `${GROK_MODEL}-${effort}`, '--force', '--trust',
+      '--sandbox', 'disabled', '--output-format', 'json', '--workspace', options.worktree ?? '.',
+      ...(resume ? ['--resume', session] : [])]];
+  }
+  if (isCodex(engine)) {
+    const common = ['-m', MODELS[engine], '-c', `model_reasoning_effort=${effort}`,
       '--dangerously-bypass-approvals-and-sandbox', '--json', '-o', options.lastMessage ?? '/dev/null'];
     return ['codex', resume ? ['exec', 'resume', session, ...common, prompt]
       : ['exec', ...common, '-C', options.worktree ?? '.', prompt]];
@@ -308,22 +386,67 @@ function readUsage(): UsageSnapshot | undefined {
   try { return JSON.parse(readFileSync(usagePath, 'utf8')) as UsageSnapshot; } catch { return undefined; }
 }
 
-// The status line keeps only the latest snapshot, so goalctl records its own two-hour history
-// to measure the recent burn rate.
+// The status line keeps only the latest snapshot, so goalctl records its own six-hour history
+// to measure the recent 5h and 7d burn rates.
 function currentUsage(): UsageReport {
   const snapshot = readUsage();
   let history: UsageSample[] = [];
   try { history = JSON.parse(readFileSync(usageHistoryPath, 'utf8')) as UsageSample[]; } catch { /* first sample */ }
   const five = snapshot?.rate_limits?.five_hour;
+  const week = snapshot?.rate_limits?.seven_day;
   const resets = resetSeconds(five?.resets_at);
   if (snapshot?.at && typeof five?.used_percentage === 'number' && resets !== undefined
     && !history.some(s => s.at === snapshot.at)) {
-    history = [...history.filter(s => s.at >= snapshot.at! - 7200),
-      { at: snapshot.at, used: five.used_percentage, resets }];
+    history = [...history.filter(s => s.at >= snapshot.at! - 6 * 3600),
+      { at: snapshot.at, used: five.used_percentage, resets, week: week?.used_percentage,
+        weekResets: resetSeconds(week?.resets_at) }];
     try { mkdirSync(stateDir, { recursive: true }); writeFileSync(usageHistoryPath, JSON.stringify(history)); }
     catch { /* history is an optimisation */ }
   }
   return usageLevel(snapshot, Date.now(), history);
+}
+
+// Rollouts live under sessions/YYYY/MM/DD/; a resumed session keeps appending to its first day's file,
+// so look at the newest few days and take the most recently written rollout.
+function newestRollout(home: string): string | undefined {
+  const children = (dir: string): string[] => {
+    try { return readdirSync(dir).sort().reverse().map(name => join(dir, name)); } catch { return []; }
+  };
+  const days = children(join(home, 'sessions')).flatMap(children).flatMap(children).slice(0, 3);
+  const files = days.flatMap(day => children(day).filter(file => file.endsWith('.jsonl')));
+  return files.map(file => ({ file, at: statSync(file).mtimeMs })).sort((a, b) => b.at - a.at)[0]?.file;
+}
+
+function tail(file: string, bytes: number): string {
+  const fd = openSync(file, 'r');
+  try {
+    const size = statSync(file).size;
+    const buffer = Buffer.alloc(Math.min(bytes, size));
+    readSync(fd, buffer, 0, buffer.length, size - buffer.length);
+    return buffer.toString('utf8');
+  } finally {
+    closeSync(fd);
+  }
+}
+
+function codexAccounts(): AccountUsage[] {
+  const accounts: AccountUsage[] = [
+    { account: 'codex', home: CODEX_HOME, engines: ['codex', 'luna'] },
+    { account: 'codex-1', home: ASTRA_HOME, engines: ['astra'] },
+  ];
+  return accounts.map(account => {
+    const file = newestRollout(account.home);
+    return file ? { ...account, ...parseCodexUsage(tail(file, 512 * 1024), Date.now()) } : account;
+  });
+}
+
+function describeAccount(account: AccountUsage): string {
+  return `${account.account} (${account.engines.join('/')}): `
+    + (account.used === undefined ? 'no usage recorded yet'
+      : `${account.used}% of ${account.windowMinutes ? `${Math.round(account.windowMinutes / 1440)}d` : 'window'}`
+        + `${account.reached ? ' EXHAUSTED' : ''}`
+        + (account.resetInHours !== undefined ? `, resets in ${account.resetInHours}h` : '')
+        + (account.ageSeconds !== undefined ? ` (${Math.round(account.ageSeconds / 60)}m old)` : ''));
 }
 
 function taskOf(ledger: Ledger, id: string): Task {
@@ -348,13 +471,13 @@ function launch(task: Task, effort: string, session: string, prompt: string, res
   const runDir = join(stateDir, 'runs', task.id);
   mkdirSync(runDir, { recursive: true });
   const output = join(runDir, `attempt-${n}.json`);
-  const lastMessage = engine === 'codex' || engine === 'luna' ? join(runDir, `attempt-${n}.last.md`) : undefined;
+  const lastMessage = isCodex(engine) ? join(runDir, `attempt-${n}.last.md`) : undefined;
   const [program, args] = launchCommand({ id: task.id, effort, session, prompt, resume, engine,
     worktree: task.worktree, lastMessage });
   const child = spawn(program, args, {
     cwd: task.worktree, detached: true,
     stdio: ['ignore', openSync(output, 'w'), openSync(join(runDir, `attempt-${n}.err`), 'w')],
-    env: { ...process.env, GOAL_TASK_ID: task.id, GOAL_MANAGER: manager },
+    env: { ...process.env, ...engineEnv(engine), GOAL_TASK_ID: task.id, GOAL_MANAGER: manager },
   });
   child.unref();
   if (!child.pid) throw new Error(`Could not start ${program}`);
@@ -404,7 +527,7 @@ function readCodexResult(attempt: Attempt): { text: string; session?: string; er
 
 function readResult(attempt: Attempt): { text: string; session?: string; error: boolean; cost?: number; tokens?: string } {
   const engine = engineOf(attempt);
-  if (engine === 'codex' || engine === 'luna') return readCodexResult(attempt);
+  if (isCodex(engine)) return readCodexResult(attempt);
   try {
     const data = JSON.parse(readFileSync(attempt.output, 'utf8')) as Record<string, unknown>;
     const text = String(data.result ?? data.text ?? '');
@@ -442,13 +565,21 @@ async function dispatch(briefPath: string, flags: Set<string>): Promise<void> {
     const limit = Number(process.env.GOAL_MAX_WORKERS ?? 25);
     if (live >= limit) throw new Error(`Concurrency limit reached: ${live}/${limit} live workers`);
     const usage = currentUsage();
-    // The usage snapshot is Claude's; Codex workers run until the Codex weekly limit and back off on rate limits.
-    if ((brief.engine ?? DEFAULT_ENGINE) === 'claude' && ['restricted', 'critical'].includes(usage.level)
-      && !flags.has('--force-usage')) {
-      throw new Error(`5h usage is ${usage.used}% (${usage.level}: ${usage.reason}); `
-        + 'let running workers finish or pass --force-usage');
+    const engine = brief.engine ?? DEFAULT_ENGINE;
+    const account = codexAccounts().find(candidate => candidate.engines.includes(engine));
+    if (!flags.has('--force-usage')) {
+      if (engine === 'claude' && ['restricted', 'critical'].includes(usage.level)) {
+        throw new Error(`Claude usage is ${usage.level} (${usage.reason}); let running workers finish, `
+          + 'use another engine or pass --force-usage');
+      }
+      if (account?.reached) {
+        throw new Error(`${describeAccount(account)}; use another engine or pass --force-usage`);
+      }
     }
-    if (flags.has('--dry-run')) { console.log(`${brief.id}: claims ok; ${live}/${limit} live; usage ${usage.level}`); return; }
+    if (flags.has('--dry-run')) {
+      console.log(`${brief.id}: claims ok; ${live}/${limit} live; ${account ? describeAccount(account) : `Claude usage ${usage.level}`}`);
+      return;
+    }
     const worktree = join(root, '.temp', 'worktrees', brief.id.toLowerCase());
     const branch = `goal/${brief.id.toLowerCase()}`;
     if (existsSync(worktree)) throw new Error(`${worktree} already exists; remove it or use another ID`);
@@ -462,7 +593,6 @@ async function dispatch(briefPath: string, flags: Set<string>): Promise<void> {
     const task: Task = { ...brief, brief: absolute, worktree, branch, base: git(root, ['rev-parse', 'main']),
       state: 'running', attempts: [] };
     const manager = ledger.manager ?? process.env.GOAL_MANAGER ?? 'goal-manager';
-    const engine = brief.engine ?? DEFAULT_ENGINE;
     task.attempts.push(launch(task, brief.effort, engine === 'claude' ? randomUUID() : '',
       workerPrompt(task, manager, engine), false, manager, engine));
     ledger.tasks[brief.id] = task;
@@ -656,12 +786,17 @@ async function status(): Promise<void> {
   const live = tasks.filter(running);
   console.log(`program elapsed ${ledger.startedAt ? elapsed(ledger.startedAt) : 'not started'}; `
     + `live ${live.length}/${process.env.GOAL_MAX_WORKERS ?? 25}; `
-    + `5h usage ${usage.used ?? '?'}% ${usage.level}`
+    + `Claude 5h ${usage.used ?? '?'}% ${usage.level}`
     + (usage.projected !== undefined ? `, projected ${usage.projected}% at reset in ${usage.resetInMinutes}m` : '')
     + (usage.ageSeconds !== undefined ? ` (${usage.ageSeconds}s old)` : ''));
+  if (usage.weekUsed !== undefined) {
+    console.log(`Claude 7d ${usage.weekUsed}%, projected ${usage.weekProjected}% at reset in ${usage.weekResetInHours}h: `
+      + `${usage.weekAdvice}`);
+  }
+  for (const account of codexAccounts()) console.log(describeAccount(account));
   for (const task of tasks.filter(t => !['verified', 'cancelled'].includes(t.state))) {
     const attempt = lastAttempt(task);
-    console.log(`${task.id} ${task.state.padEnd(8)} ${attempt.effort} #${attempt.n} `
+    console.log(`${task.id} ${task.state.padEnd(8)} ${engineOf(attempt)}/${attempt.effort} #${attempt.n} `
       + `${elapsed(attempt.startedAt)} [${task.cases.join(' ')}] ${task.title}`);
   }
   const closed = tasks.length - tasks.filter(t => !['verified', 'cancelled'].includes(t.state)).length;
@@ -729,12 +864,15 @@ async function main(argv: string[]): Promise<number> {
       return holders.length ? 1 : 0;
     }
     case 'status': await status(); return 0;
-    case 'usage': console.log(JSON.stringify({ ...currentUsage(), file: usagePath })); return 0;
+    case 'usage':
+      console.log(JSON.stringify({ claude: { ...currentUsage(), file: usagePath }, codex: codexAccounts() }, null, 2));
+      return 0;
     case 'test': return withSlot(['bun', 'scripts/qa/test.ts', ...rest]);
     case 'slot': return withSlot(rest[0] === '--' ? rest.slice(1) : rest);
     default:
       console.error('Usage: goalctl init [--manager <name>] | dispatch <brief.md> [--dry-run] [--force-usage]'
-        + ' | wait <id> | owner <path> | reclaim <id> <brief> | resume <id> (-m <text> | --file <path>) [--effort e] [--engine claude|codex] [--fresh]'
+        + ' | wait <id> | owner <path> | reclaim <id> <brief> | resume <id> (-m <text> | --file <path>) [--effort e]'
+        + ` [--engine ${ENGINES.join('|')}] [--fresh]`
         + ' | stop <id> | scope <id> | merge <id> [--allow-scope] | close <id> verified|cancelled'
         + ' | status | usage | test <task test args> | slot -- <command>');
       return 2;
