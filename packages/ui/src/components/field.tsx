@@ -283,3 +283,33 @@ export const FieldError = (props: React.ComponentProps<typeof ArkField.ErrorText
     />
   );
 };
+
+/** Helper text for a whole FieldSet, such as a Radio Group or Checkbox Group. */
+export const FieldSetHelper = (props: React.ComponentProps<typeof ArkFieldset.HelperText>) => {
+  const { className, ...rest } = props;
+
+  return (
+    <ArkFieldset.HelperText
+      className={cn('text-muted-foreground text-sm', className)}
+      data-slot="field-set-helper"
+      {...rest}
+    />
+  );
+};
+
+/** Error text for a whole FieldSet; shown only while the FieldSet is `invalid`. */
+export const FieldSetError = (props: React.ComponentProps<typeof ArkFieldset.ErrorText>) => {
+  const { className, ...rest } = props;
+
+  return (
+    <ArkFieldset.ErrorText
+      className={cn(
+        'font-normal text-destructive text-sm',
+        'dark:text-destructive-foreground',
+        className,
+      )}
+      data-slot="field-set-error"
+      {...rest}
+    />
+  );
+};

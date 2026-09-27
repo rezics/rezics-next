@@ -30,25 +30,29 @@ export const RadioGroupItem = (props: React.ComponentProps<typeof ArkRadioGroup.
 
   return (
     <ArkRadioGroup.Item
-      className={cn('inline-flex items-center gap-2', 'data-disabled:opacity-64', className)}
+      className={cn('inline-flex items-start gap-2', 'data-disabled:opacity-64', className)}
       data-slot="radio-group-item"
       {...rest}
     >
+      {/* Aura's radio: 20px ring with a primary dot on a primary tint. The unchecked edge
+          uses 75% muted-foreground for WCAG's 3:1 control contrast, as Checkbox does. */}
       <ArkRadioGroup.ItemControl
         className={cn(
           'relative',
           'inline-flex shrink-0 items-center justify-center',
-          'size-4',
-          'border border-input shadow-xs/5',
-          'bg-input/30',
+          'size-5',
+          'border-2 border-muted-foreground/75 shadow-[inset_0_1px_2px_rgba(0,0,0,0.05)]',
+          'bg-primary/5',
           'rounded-full',
-          'before:size-1.5 before:rounded-full',
-          'data-focus-visible:border-primary data-focus-visible:ring-[3px] data-focus-visible:ring-ring/32 data-focus-visible:ring-offset-1 data-focus-visible:ring-offset-background',
-          'data-focus-visible:data-invalid:border-destructive/64 data-focus-visible:data-invalid:ring-destructive/48',
-          'data-invalid:border-destructive data-invalid:text-destructive data-invalid:ring-[3px] data-invalid:ring-destructive/24',
-          'dark:data-invalid:border-destructive-foreground dark:data-invalid:text-destructive dark:data-invalid:ring-[3px] dark:data-invalid:ring-destructive-foreground/20',
-          'data-[state=checked]:bg-primary data-[state=checked]:before:bg-primary-foreground',
-          'data-invalid:data-[state=checked]:bg-transparent data-invalid:data-[state=checked]:before:bg-destructive-foreground',
+          'transition-[border-color,background-color]',
+          'before:size-2.5 before:rounded-full',
+          'hover:border-primary/50 hover:bg-accent/30',
+          'data-focus-visible:ring-2 data-focus-visible:ring-ring data-focus-visible:ring-offset-2 data-focus-visible:ring-offset-background',
+          'data-[state=checked]:border-primary data-[state=checked]:bg-primary/10 data-[state=checked]:before:bg-primary',
+          'data-invalid:border-destructive data-invalid:data-[state=checked]:before:bg-destructive',
+          'dark:data-invalid:border-destructive-foreground',
+          'dark:data-invalid:data-[state=checked]:before:bg-destructive-foreground',
+          'motion-reduce:transition-none!',
         )}
         data-slot="radio-group-item-control"
       />
@@ -64,7 +68,7 @@ export const RadioGroupText = (props: React.ComponentProps<typeof ArkRadioGroup.
   const { className, children, ...rest } = props;
 
   return (
-    <FieldLabel asChild>
+    <FieldLabel asChild className={cn('leading-5', className)}>
       <ArkRadioGroup.ItemText data-slot="radio-group-item-text" {...rest}>
         {children}
       </ArkRadioGroup.ItemText>
