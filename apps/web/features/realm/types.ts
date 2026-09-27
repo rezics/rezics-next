@@ -25,6 +25,8 @@ export type ZonePresentationRead = Ok<Zone['presentation']['get']>;
 export type RealmZoneRead = Ok<Realm['zone']['get']>;
 export type RealmDirectoryPage = Ok<MainClient['v1']['realms']['get']>;
 export type OfficialZone = Ok<ReturnType<MainClient['v1']['zones']['by-segment']>['get']>;
+export type RealmRoster = Ok<Realm['roster']['get']>;
+export type AgentRead = Ok<ReturnType<MainClient['v1']['agents']>['get']>;
 /** The Work card fields every Realm and Zone module read shares. */
 export type WorkCard = Pick<RealmWork, 'id' | 'title' | 'cover' | 'types' | 'tagline' | 'completionStatus'
   | 'chapterCount' | 'wordCount' | 'lastUpdatedAt'>;

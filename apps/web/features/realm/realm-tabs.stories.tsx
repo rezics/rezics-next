@@ -5,9 +5,17 @@ import { decisions, fictionZone, works, zoneMessagesFor } from '../zones/fixture
 import { presetTokens } from '../zones/presentation.ts';
 import { RealmNotFound, RealmUnavailable } from './states.tsx';
 import { RealmPageStory, realmMessagesFor } from './story-page.tsx';
-import { ListFailure, RealmAbout, RealmDecisions, RealmDiscussions, RealmWorks } from './views.tsx';
+import { type AboutPerson, ListFailure, RealmAbout, RealmDecisions, RealmDiscussions, RealmWorks } from './views.tsx';
 
 type Tab = 'works' | 'decisions' | 'discussions' | 'about' | 'works-moved';
+
+const person = (id: string, name: string, handle: string | null, featured = false): AboutPerson => ({
+  id: `https://rezics.com/id/00000000-0000-7000-8000-${id.padStart(12, '0')}`, name,
+  href: handle ? `/@${handle}` : null, kind: 'person', avatarUrl: null, featured });
+const moderators = [person('a1', 'Daniel Chen 陈丹尼', 'daniel_chen'), person('a2', 'Lin Mei 林梅', 'lin_mei'),
+  person('a3', 'An Wu 吴安', 'an_wu')];
+const listed = [person('b1', '北岛听风', null, true), person('b2', 'Sophie Li 李素菲', null), person('b3', '橘子汽水', null),
+  person('b4', 'Maren Osei', null)];
 
 /** A Realm tab inside the Zone frame, under the Serial preset. */
 function TabPage({ tab, locale }: { tab: Tab; locale: UiLocale }) {
@@ -24,7 +32,8 @@ function TabPage({ tab, locale }: { tab: Tab; locale: UiLocale }) {
     discussions: <RealmDiscussions works={works.slice(0, 8)} locale={locale} messages={messages}
       zoneMessages={zoneMessages} />,
     about: <RealmAbout realmName={zone.name.value} description={zone.description} locale={locale} messages={messages}
-      members={locale === 'zh-Hans' ? '12,408 位成员' : '12,408 members'} moderators={4}
+      members={locale === 'zh-Hans' ? '12,408 位成员' : '12,408 members'} moderators={moderators}
+      listed={{ more: true, people: listed }}
       others={[{ href: '/en/r/classics', name: { value: 'Classic Literature · 经典文学', lang: 'en' }, members: '860 members' },
         { href: '/en/r/cooking', name: { value: '家常菜 · Home Cooking', lang: 'zh-Hans' }, members: null }]}
       rules={[{ id: 'tagline', title: 'Every pick gets a one-line hook', lang: 'en', governed: false,
@@ -101,7 +110,11 @@ export const About: Story = {
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     await expect(canvas.getByRole('heading', { level: 3, name: 'Rule 1: Every pick gets a one-line hook' })).toBeVisible();
-    await expect(canvas.getByText('4 moderators')).toBeVisible();
+    const team = canvas.getByRole('region', { name: 'Moderators' });
+    await expect(within(team).getByRole('link', { name: /Lin Mei 林梅/ })).toHaveAttribute('href', '/@lin_mei');
+    const members = canvas.getByRole('region', { name: 'Members' });
+    await expect(within(members).getAllByRole('listitem')[0]).toHaveTextContent('北岛听风Featured');
+    await expect(within(members).getByText('12,408 members')).toBeVisible();
     await expect(canvas.getByRole('link', { name: /Classic Literature/ })).toHaveAttribute('href', '/en/r/classics');
   },
 };

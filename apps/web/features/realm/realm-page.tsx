@@ -18,6 +18,8 @@ import { defaultPresentation, type ZonePresentation } from '../zones/presentatio
 import { zoneTheme } from '../zones/theme.ts';
 import { ExecutionNotice, ZoneFrame, ZoneMasthead } from '../zones/zone-frame.tsx';
 import { type AdaptContext, mainExecution, zoneImage, zoneText } from './adapt.ts';
+import { RealmMembership } from './membership.tsx';
+import { type Membership, readMembership } from './membership-state.ts';
 import type { RealmMessages } from './messages.ts';
 import { readPresentation, type RealmResolution, resolveRealm } from './read.ts';
 import type { ZonePresentationRead } from './types.ts';
@@ -48,6 +50,8 @@ export interface RealmView {
   lookEnabled: boolean;
   /** Who reads: signed in or not, and the Agent their shelf controls act as. */
   reader: { signedIn: boolean; actingSubject: string | null; avatarQuery: string };
+  /** The signed-in reader's membership and follow; null signed out. */
+  membership: Membership | null;
   messages: RealmMessages;
   zoneMessages: ZoneMessages;
 }
@@ -74,7 +78,8 @@ export async function loadRealmView(ref: string, locale: UiLocale, search: Searc
   const [realm, messages, zoneMessages, jar, reader] = await Promise.all([resolveRealm(ref, locale),
     getMessages('realm', locale), getMessages('zones', locale), cookies(), browseReader()]);
   if (realm.kind !== 'realm') return realm;
-  const read = realm.zone ? await readPresentation(realm.zone.id) : null;
+  const [read, membership] = await Promise.all([realm.zone ? readPresentation(realm.zone.id) : null,
+    reader.actingSubject ? readMembership(reader.personal, realm.header.id, reader.actingSubject) : null]);
   // A Zone whose presentation cannot be read still renders its Realm with the default layout.
   const presentation: ZonePresentation = read?.ok ? { ...read.data.presentation,
     modules: read.data.presentation.modules.map(module => ({ ...module,
@@ -97,6 +102,7 @@ export async function loadRealmView(ref: string, locale: UiLocale, search: Searc
   };
   return { kind: 'view', realm, presentation, bannerMedia, execution, pkg, zone, lookEnabled, messages, zoneMessages,
     reader: { signedIn: reader.signedIn, actingSubject: reader.actingSubject ?? null, avatarQuery: reader.avatarQuery },
+    membership,
     context: { locale, ref, realm: realm.realm, avatarQuery: reader.avatarQuery } };
 }
 
@@ -109,9 +115,16 @@ export async function RealmFrame({ view, tab, locale, search, children }: {
   const theme = zoneTheme(presentation.tokens, { reader: parseTheme(jar.get(THEME_COOKIE)?.value),
     enabled: lookEnabled });
   const members = membersText(realm.header.membership.count, locale, messages);
-  const actions = <LookMenu enabled={lookEnabled} labels={{ menu: zoneMessages.lookLabel,
-    zone: zoneMessages.lookZone, standard: zoneMessages.lookStandard, help: zoneMessages.lookHelp,
-    saveFailed: zoneMessages.lookSaveFailed }} />;
+  const here = localizedPath(realmHref(locale, realm.ref, tab), locale);
+  // Join or Follow first, as every community page offers; the page style stays beside it.
+  const actions = <>
+    <RealmMembership realm={realm.header.id} realmName={zone.name.value} initial={view.membership}
+      signedIn={view.reader.signedIn} actingSubject={view.reader.actingSubject} signInHref={signInPath(here)}
+      rulesHref={realmHref(locale, realm.ref, 'about')} locale={locale} messages={messages} />
+    <LookMenu enabled={lookEnabled} labels={{ menu: zoneMessages.lookLabel,
+      zone: zoneMessages.lookZone, standard: zoneMessages.lookStandard, help: zoneMessages.lookHelp,
+      saveFailed: zoneMessages.lookSaveFailed }} />
+  </>;
   const { safe: _, ...rest } = search;
   const showDesign = realmHref(locale, realm.ref, 'home', Object.fromEntries(Object.entries(rest)
     .filter((entry): entry is [string, string] => typeof entry[1] === 'string')));
@@ -124,6 +137,6 @@ export async function RealmFrame({ view, tab, locale, search, children }: {
     notice={<ExecutionNotice execution={execution} showDesignHref={showDesign} messages={zoneMessages} />}>
     {/* Shelf controls on every tile; signing in from one returns to this tab. */}
     <ReaderActionsProvider signedIn={view.reader.signedIn} actingSubject={view.reader.actingSubject}
-      signInHref={signInPath(localizedPath(realmHref(locale, realm.ref, tab), locale))}>{children}</ReaderActionsProvider>
+      signInHref={signInPath(here)}>{children}</ReaderActionsProvider>
   </ZoneFrame>;
 }

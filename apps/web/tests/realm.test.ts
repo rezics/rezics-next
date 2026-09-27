@@ -1,8 +1,9 @@
 import { describe, expect, test } from 'bun:test';
 import { bannerImage, liveBanners, mainExecution, zoneDecision, zoneImage, zoneText, zoneWork }
   from '../features/realm/adapt.ts';
-import { chartMetric } from '../features/realm/modules.ts';
-import { decisionAnchor, decisionHref, idOf, parseCursor, parseRealmRef, realmHref, realmWorkHref, tabOf }
+import { offerOf } from '../features/realm/membership-state.ts';
+import { chartMetric, withRealmCard } from '../features/realm/modules.ts';
+import { decisionAnchor, decisionHref, idOf, parseCursor, parseRealmRef, realmHref, realmWorkHref, repeatsTab, tabOf }
   from '../features/realm/route.ts';
 import type { RealmDecision, WorkCard, ZonePresentationRead } from '../features/realm/types.ts';
 import { isPublicPagePath, localizedPath } from '../i18n/locale.ts';
@@ -45,6 +46,15 @@ describe('Realm addresses', () => {
 
   test('a Work opened from a Realm stays in that Realm’s scope', () => {
     expect(realmWorkHref(iri(work), realm)).toBe(`/w/${work}?scope=realm&realm=${realm}`);
+  });
+
+  test('a Zone link that only repeats a Realm tab stays out of the tab row', () => {
+    expect(repeatsTab('/r/fiction', 'fiction')).toBe(true);
+    expect(repeatsTab('/zh-Hans/r/fiction/about/', 'fiction')).toBe(true);
+    expect(repeatsTab('/en/r/fiction/works?cursor=2', 'fiction')).toBe(true);
+    expect(repeatsTab('/r/fiction#zone-module-charts', 'fiction')).toBe(true);
+    expect(repeatsTab('/r/books', 'fiction')).toBe(false);
+    expect(repeatsTab('/discover?term=1', 'fiction')).toBe(false);
   });
 
   test('chart metrics use Main’s ranking vocabulary', () => {
@@ -125,5 +135,36 @@ describe('Main reads as Zone data', () => {
     expect(bannerImage(banner('b'), [{ id: 'b', image: {
       url: `/v1/media/uses/${work}`, width: 1440, height: 540, mediaType: 'image/webp',
     } }])).toEqual({ url: `/api/main/v1/media/uses/${work}`, width: 1440, height: 540 });
+  });
+});
+
+describe('Joining and following a Realm', () => {
+  const policy = { policyRevision: '1', termsRevision: 't', selfJoin: true, open: true, membershipGeneration: '0',
+    state: 'absent' as const };
+  test('a member has joined; an open Realm asks to Join; any other Realm can be followed', () => {
+    const offer = (overrides: Partial<typeof policy> | null) => offerOf({ following: false, followRevision: null,
+      policy: overrides && { ...policy, ...overrides } });
+    expect(offer({ state: 'joined' })).toBe('joined');
+    expect(offer({ state: 'joined', open: false })).toBe('joined');
+    expect(offer({})).toBe('join');
+    expect(offer({ state: 'left' })).toBe('join');
+    expect(offer({ selfJoin: false })).toBe('follow');
+    expect(offer({ open: false })).toBe('follow');
+    expect(offer(null)).toBe('follow');
+  });
+});
+
+describe('Cards across a Zone', () => {
+  test('a thin module card takes the author, hook, kind and Decision from the Realm’s card', () => {
+    const thin = zoneWork(card({ tagline: null, types: [], completionStatus: null }), context, null);
+    const known = { ...zoneWork(card({ types: ['https://schema.org/DigitalDocument'] }), context, iri(decision)),
+      author: { value: '北岛听风', lang: '', dir: 'ltr' as const } };
+    expect(withRealmCard(thin, known)).toMatchObject({ kind: 'document', author: { value: '北岛听风' },
+      tagline: { value: 'A delta that redraws itself.' }, status: 'ongoing',
+      decision: `/en/r/fiction/decisions?decision=${decision}#decision-${decision}` });
+    expect(withRealmCard(thin, undefined)).toBe(thin);
+    // What the module read already says wins.
+    const own = { ...thin, tagline: { value: 'Its own hook', lang: 'en', dir: 'ltr' as const } };
+    expect(withRealmCard(own, known).tagline?.value).toBe('Its own hook');
   });
 });

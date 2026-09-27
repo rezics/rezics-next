@@ -7,6 +7,7 @@ import { ArrowLeftIcon, ArrowRightIcon, BookOpenTextIcon, GavelIcon, LandmarkIco
 import { materializeData } from 'native-i18n';
 import type { ReactNode } from 'react';
 import type { UiLocale } from '../../i18n/define.ts';
+import { ProfileAvatar } from '../profile/profile-avatar.tsx';
 import { EmptyState } from '../shell/empty-state.tsx';
 import LocalizedLink from '../shell/localized-link.tsx';
 import { PageContainer } from '../shell/page.tsx';
@@ -160,11 +161,36 @@ function discussionHref(work: ZoneWork): string {
 
 export interface AboutRule { id: string; title: string; body: string; governed: boolean; lang: string }
 
-/** The About tab: what the community is, its rules and who moderates it. */
-export function RealmAbout({ realmName, description, rules, moderators, members, others, locale, messages }: {
+/** Someone the About tab names: a moderator, or a member who chose to be listed. */
+export interface AboutPerson {
+  id: string; name: string;
+  /** Their profile, when they have a handle. */
+  href: string | null;
+  kind: 'person' | 'organization' | 'service';
+  avatarUrl: string | null;
+  featured?: boolean;
+}
+
+function PersonRow({ person, note }: { person: AboutPerson; note?: string }) {
+  const body = <>
+    <ProfileAvatar name={person.name} kind={person.kind} avatarUrl={person.avatarUrl} size="sm" className="size-9 text-sm" />
+    <span className="min-w-0">
+      <span className="block truncate font-medium text-sm">{person.name}</span>
+      {note ? <span className="block truncate text-muted-foreground text-xs">{note}</span> : null}
+    </span>
+  </>;
+  return person.href ? <LocalizedLink href={person.href} className="flex items-center gap-3 rounded-lg p-1.5 outline-none
+    hover:bg-accent/60 focus-visible:ring-2 focus-visible:ring-ring">{body}</LocalizedLink>
+    : <div className="flex items-center gap-3 p-1.5">{body}</div>;
+}
+
+/** The About tab: what the community is, its rules and the people who run it. */
+export function RealmAbout({ realmName, description, rules, moderators, members, listed, others, locale, messages }: {
   realmName: string; description: { value: string; lang: string } | null; rules: readonly AboutRule[] | null;
   /** Null when the Realm does not publish its moderators. */
-  moderators: number | null; members: string | null;
+  moderators: readonly AboutPerson[] | null; members: string | null;
+  /** Members who chose to be listed; null when the roster is not public. */
+  listed: { people: readonly AboutPerson[]; more: boolean } | null;
   /** Other communities to look at, from the Realm directory. */
   others: readonly { href: string; name: { value: string; lang: string }; members: string | null }[];
   locale: UiLocale; messages: RealmMessages;
@@ -202,10 +228,23 @@ export function RealmAbout({ realmName, description, rules, moderators, members,
       <section aria-labelledby="realm-moderators" className="grid grid-cols-1 gap-2 rounded-(--zone-radius-card) bg-(--zone-panel)
         p-(--zone-panel-pad)">
         <ModuleHeading id="realm-moderators">{messages.moderators}</ModuleHeading>
-        <p className="flex items-center gap-2 text-muted-foreground text-sm">
-          <ShieldIcon aria-hidden="true" className="size-4" />
-          {moderators === null ? messages.moderatorsHidden : t.moderatorCount(moderators)}</p>
+        {moderators?.length ? <ul className="grid grid-cols-1">
+          {moderators.map(person => <li key={person.id}><PersonRow person={person} /></li>)}
+        </ul> : <p className="flex items-center gap-2 text-muted-foreground text-sm">
+          <ShieldIcon aria-hidden="true" className="size-4 shrink-0" />
+          {moderators === null ? messages.moderatorsHidden : messages.moderatorsNone}</p>}
       </section>
+      {listed ? <section aria-labelledby="realm-members" className="grid grid-cols-1 gap-2 rounded-(--zone-radius-card)
+        bg-(--zone-panel) p-(--zone-panel-pad)">
+        <ModuleHeading id="realm-members">{messages.membersTitle}</ModuleHeading>
+        {listed.people.length ? <>
+          <p className="text-muted-foreground text-xs">{listed.more ? members : t.membersListed(listed.people.length)}</p>
+          <ul className="grid grid-cols-1">
+            {listed.people.map(person => <li key={person.id}>
+              <PersonRow person={person} note={person.featured ? messages.featured : undefined} /></li>)}
+          </ul>
+        </> : <p className="text-muted-foreground text-sm">{messages.membersNone}</p>}
+      </section> : null}
       {others.length ? <nav aria-labelledby="realm-others" className="grid grid-cols-1 gap-2 rounded-(--zone-radius-card)
         bg-(--zone-panel) p-(--zone-panel-pad)">
         <ModuleHeading id="realm-others">{messages.otherCommunities}</ModuleHeading>

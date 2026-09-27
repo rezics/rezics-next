@@ -2,8 +2,9 @@ import { cache } from 'react';
 import type { UiLocale } from '../../i18n/define.ts';
 import { mainApiWithToken } from '../api/main.ts';
 import { idOf, parseRealmRef } from './route.ts';
-import { failureOf, type Loaded, type OfficialZone, type RankingMetric, type RankingPage, type RealmDecisionsPage,
-  type RealmDecisionRead, type RealmDirectoryPage, type RealmHeader, type RealmZoneRead,
+import { type AgentRead, failureOf, type Loaded, type OfficialZone, type RankingMetric, type RankingPage,
+  type RealmDecisionsPage, type RealmDecisionRead, type RealmDirectoryPage, type RealmHeader, type RealmRoster,
+  type RealmZoneRead,
   type RealmWorksPage, type ZoneChapterPage, type ZoneDecisionPage, type ZoneEditorLists,
   type ZoneGenrePage, type ZonePresentationRead, type ZoneReplyPage, type ZoneWorkPage } from './types.ts';
 
@@ -130,3 +131,11 @@ export const readZoneGenres = cache(async (realm: string, context: string, local
 /** A few active public Realms, for "Other communities". */
 export const readRealmDirectory = cache(async (locale: UiLocale): Promise<Loaded<RealmDirectoryPage>> =>
   settle(() => main().v1.realms.get({ query: { language: locale, limit: 6, sort: 'activity' } })));
+
+/** The members who chose to be listed (G-314's public roster), featured first by the moderators' choice. */
+export const readRoster = cache(async (realm: string): Promise<Loaded<RealmRoster>> =>
+  settle(() => main().v1.realms({ realm }).roster.get({ query: { limit: 24 } })));
+
+/** An Agent's public profile, for a moderator's name and profile link. */
+export const readAgent = cache(async (agent: string): Promise<Loaded<AgentRead>> =>
+  settle(() => main().v1.agents({ id: agent }).get({ query: {} })));

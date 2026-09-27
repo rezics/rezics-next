@@ -43,10 +43,31 @@ export const messages = {
   rule: insert('Rule {{number}}', { number: String }),
   moderators: 'Moderators',
   moderatorsHidden: 'This community doesn’t list its moderators publicly.',
-  moderatorCount: plural({ one: insert('{{count}} moderator'), other: insert('{{count}} moderators') },
-    { count: asValue(number()) }),
   governed: 'Linked to a governance rule',
   otherCommunities: 'Other communities',
+  // Joining and following, in the header.
+  join: 'Join', joined: 'Joined', signInToJoin: 'sign in to join',
+  follow: 'Follow', following: 'Following',
+  unfollowRealm: insert('Stop following {{realm}}', { realm: String }),
+  followFailed: 'Couldn’t change your follow. Try again.',
+  showInHome: 'Show its posts in my Home',
+  readRules: 'Read the community rules',
+  joinTitle: insert('Join {{realm}}', { realm: String }),
+  joinBody: 'Members can submit works and take part in the community’s discussions and decisions.',
+  joinAgree: 'By joining, you agree to follow this community’s rules.',
+  joinListed: 'Show me on the public member list',
+  joinListedHelp: 'Anyone can see listed members on the About page. You can join without being listed.',
+  joinStale: 'The community changed how people join while you were reading. Check the details and try again.',
+  joinDenied: 'This community isn’t taking new members right now.',
+  joinFailed: 'Couldn’t join just now. Try again.',
+  cancel: 'Cancel',
+  // The About tab's people.
+  moderatorsNone: 'No moderators are listed yet.',
+  membersTitle: 'Members',
+  membersListed: plural({ one: insert('{{count}} member chose to be listed'),
+    other: insert('{{count}} members chose to be listed') }, { count: asValue(number()) }),
+  membersNone: 'No members have chosen to be listed yet.',
+  featured: 'Featured',
 };
 
 export type RealmMessages = typeof messages;

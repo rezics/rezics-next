@@ -10,6 +10,8 @@ import { zoneMessagesFor } from '../zones/fixtures.ts';
 import { type ReaderTheme, zoneTheme } from '../zones/theme.ts';
 import { ExecutionNotice, ZoneFrame, ZoneMasthead } from '../zones/zone-frame.tsx';
 import { type PlacedModule, ZoneHome } from '../zones/zone-home.tsx';
+import { type MembershipActions, RealmMembership } from './membership.tsx';
+import type { Membership } from './membership-state.ts';
 import { messages as english, type RealmMessages } from './messages.ts';
 import zhHans from './messages/zh-Hans.ts';
 import { RealmTabs } from './realm-tabs.tsx';
@@ -23,18 +25,27 @@ export const realmMessagesFor = (locale: UiLocale): RealmMessages => locale === 
  * the Zone home or a tab's content.
  */
 export function RealmPageStory({ zone, modules = [], pkg = null, execution = { mode: 'fallback', reason: 'none-approved' },
-  look = true, reader = 'light', members = null, navigation = [], locale, children }: {
+  look = true, reader = 'light', members = null, navigation = [], membership = null,
+  membershipActions = { kind: 'signed-out', signInHref: '/auth/start' }, locale, children }: {
   zone: ZoneContext; modules?: readonly PlacedModule[]; pkg?: ZonePackage | null; execution?: Execution;
   look?: boolean; reader?: ReaderTheme; members?: string | null;
-  navigation?: readonly { label: string; href: string }[]; locale: UiLocale; children?: ReactNode;
+  navigation?: readonly { label: string; href: string }[];
+  /** The reader's membership; signed out by default, as a first visit. */
+  membership?: Membership | null; membershipActions?: MembershipActions;
+  locale: UiLocale; children?: ReactNode;
 }) {
   const zoneMessages = zoneMessagesFor(locale);
   const messages = realmMessagesFor(locale);
   const theme = zoneTheme(zone.tokens, { reader, enabled: look });
   const ref = zone.slug ?? 'classics';
-  const actions = <LookMenu enabled={look} labels={{ menu: zoneMessages.lookLabel, zone: zoneMessages.lookZone,
-    standard: zoneMessages.lookStandard, help: zoneMessages.lookHelp,
-    saveFailed: zoneMessages.lookSaveFailed }} />;
+  const actions = <>
+    <RealmMembership realm={zone.realm} realmName={zone.name.value} initial={membership}
+      signedIn={membershipActions.kind !== 'signed-out'} signInHref="/auth/start" rulesHref={zone.links.about}
+      actions={membershipActions} locale={locale} messages={messages} />
+    <LookMenu enabled={look} labels={{ menu: zoneMessages.lookLabel, zone: zoneMessages.lookZone,
+      standard: zoneMessages.lookStandard, help: zoneMessages.lookHelp,
+      saveFailed: zoneMessages.lookSaveFailed }} />
+  </>;
   return <ZoneFrame zone={zone} dataZone={zone.slug ?? 'classics'} theme={theme} pkg={pkg} actions={actions}
     members={members} masthead={<ZoneMasthead zone={zone} members={members} actions={actions} />}
     tabs={<RealmTabs locale={locale} realmRef={ref} label={messages.sections} navigation={navigation}

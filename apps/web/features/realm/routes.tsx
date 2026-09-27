@@ -11,12 +11,14 @@ import { PageContainer } from '../shell/page.tsx';
 import { ZoneHome } from '../zones/zone-home.tsx';
 import { zoneDecision, zoneText, zoneWork } from './adapt.ts';
 import { loadModules } from './modules.ts';
-import { readRealmDecision, readRealmDecisions, readRealmDirectory, readRealmWorks, resolveRealm } from './read.ts';
+import { readAgent, readRealmDecision, readRealmDecisions, readRealmDirectory, readRealmWorks, readRoster,
+  resolveRealm } from './read.ts';
 import { loadRealmView, membersText, RealmFrame, type RealmView } from './realm-page.tsx';
 import { idOf, parseCursor, parseDecision, parseRealmRef, type RealmTab, realmHref } from './route.ts';
 import { RealmUnavailable } from './states.tsx';
 import type { ReadFailure } from './types.ts';
-import { ListFailure, RealmAbout, RealmDecisions, RealmDiscussions, RealmWorks } from './views.tsx';
+import { type AboutPerson, ListFailure, RealmAbout, RealmDecisions, RealmDiscussions, RealmWorks } from './views.tsx';
+import { profileHref } from '../profile/route.ts';
 
 // The `/r/{realm}` routes are thin: each resolves the Realm view, renders the
 // Zone frame and its tab's content. Tabs render the frame themselves (not a
@@ -127,7 +129,14 @@ export function RealmDiscussionsRoute(props: RealmRouteProps) {
 export function RealmAboutRoute(props: RealmRouteProps) {
   return realmRoute(props, 'about', async (view, locale) => {
     const header = view.realm.header;
-    const directory = await readRealmDirectory(locale);
+    const [directory, roster, moderators] = await Promise.all([readRealmDirectory(locale), readRoster(view.context.realm),
+      header.moderators.kind === 'known' ? Promise.all(header.moderators.items.flatMap(agent => {
+        const id = idOf(agent);
+        return id ? [readAgent(id)] : [];
+      })) : null]);
+    const person = (agent: { id: string; displayName: string; handle: string; kind: AboutPerson['kind'];
+      avatarUrl: string | null }): AboutPerson => ({ id: agent.id, name: agent.displayName,
+      href: profileHref(agent.handle), kind: agent.kind, avatarUrl: agent.avatarUrl });
     const others = (directory.ok ? directory.data.items : []).filter(item => item.id !== header.id).slice(0, 5)
       .flatMap(item => {
         const id = idOf(item.id);
@@ -137,7 +146,11 @@ export function RealmAboutRoute(props: RealmRouteProps) {
     return <RealmAbout realmName={view.zone.name.value} locale={locale} messages={view.messages}
       description={view.zone.description} members={membersText(header.membership.count, locale, view.messages)}
       others={others}
-      moderators={header.moderators.kind === 'known' ? header.moderators.items.length : null}
+      moderators={moderators?.flatMap(read => read.ok ? [person(read.data)] : []) ?? null}
+      listed={roster.ok ? { more: roster.data.nextCursor !== null, people: [...roster.data.items]
+        .sort((a, b) => Number(b.featured) - Number(a.featured)).flatMap(item => item.displayName
+          ? [{ id: item.agent, name: item.displayName, href: null, kind: 'person' as const, avatarUrl: null,
+            featured: item.featured }] : []) } : null}
       rules={header.rules?.map(rule => ({ id: rule.id, title: rule.title.value, body: rule.body.value,
         governed: rule.governanceRule !== null, lang: rule.title.language })) ?? null} />;
   });

@@ -4,7 +4,7 @@ import { cn } from '@rezics/ui/utils';
 import { usePathname } from 'next/navigation';
 import type { UiLocale } from '../../i18n/define.ts';
 import LocalizedLink from '../shell/localized-link.tsx';
-import { type RealmTab, realmHref, realmTabs, tabOf } from './route.ts';
+import { type RealmTab, realmHref, realmTabs, repeatsTab, tabOf } from './route.ts';
 
 const link = cn('relative flex h-11 items-center whitespace-nowrap rounded-t-lg px-3 font-medium text-sm',
   'text-muted-foreground outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring');
@@ -20,6 +20,7 @@ export function RealmTabs({ locale, realmRef, labels, label, navigation }: {
   navigation: readonly { label: string; href: string }[];
 }) {
   const current = tabOf(usePathname());
+  const links = navigation.filter(item => !repeatsTab(item.href, realmRef));
   return <nav aria-label={label} className="sticky top-16 z-30 mt-4 border-border/70 border-b bg-(--zone-page)/92
     backdrop-blur-md">
     <div className="mx-auto flex max-w-6xl overflow-x-auto px-2 [scrollbar-width:none] sm:px-4 lg:px-8">
@@ -31,8 +32,8 @@ export function RealmTabs({ locale, realmRef, labels, label, navigation }: {
               'aria-[current=page]:after:rounded-full aria-[current=page]:after:bg-primary')}>{labels[tab]}</LocalizedLink>
         </li>)}
       </ul>
-      {navigation.length ? <ul className="ms-2 flex shrink-0 items-center gap-0.5 border-border/70 border-s ps-2">
-        {navigation.map(item => <li key={item.href}>
+      {links.length ? <ul className="ms-2 flex shrink-0 items-center gap-0.5 border-border/70 border-s ps-2">
+        {links.map(item => <li key={item.href}>
           <LocalizedLink href={item.href} className={link}>{item.label}</LocalizedLink></li>)}
       </ul> : null}
     </div>

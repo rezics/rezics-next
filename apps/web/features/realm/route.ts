@@ -37,6 +37,15 @@ export function realmHref(locale: UiLocale, ref: string, tab: RealmTab = 'home',
   return entries.length ? `${path}?${new URLSearchParams(entries)}` : path;
 }
 
+/**
+ * Whether a Zone navigation link only repeats one of the Realm's own tabs
+ * (`/r/fiction`, `/zh-Hans/r/fiction/about`); the tab row already has it.
+ */
+export function repeatsTab(href: string, ref: string): boolean {
+  const path = withoutLocale(href.split(/[?#]/)[0] ?? '').replace(/\/+$/, '');
+  return realmTabs.some(tab => path === `/r/${ref}${tab === 'home' ? '' : `/${tab}`}`);
+}
+
 /** The in-page anchor of a Decision on the Decisions tab. */
 export const decisionAnchor = (decision: string) => `decision-${idOf(decision) ?? decision.slice(-36)}`;
 

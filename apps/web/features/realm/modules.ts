@@ -1,4 +1,5 @@
-import type { ZoneBanner, ZoneModuleData, ZoneShelfTab, ZoneWork } from '@rezics/zone-sdk';
+import type { RankingMetric as ChartMetric, ZoneBanner, ZoneModuleData, ZoneShelfTab, ZoneWork }
+  from '@rezics/zone-sdk';
 import type { UiLocale } from '../../i18n/define.ts';
 import { discoverHref } from '../discover/state.ts';
 import { feedOf, placedModule, type PresentationModule, type RealmFeed, type ZonePresentation }
@@ -26,10 +27,30 @@ function summaryWork(item: { id: string; title: MainName; cover?: MainAvatar }, 
     wordCount: null, lastUpdatedAt: null }, context, null);
 }
 
-/** Which adoption placed each Work here: the Realm's own list pairs Works with their selection. */
-async function adoptions(context: AdaptContext): Promise<Map<string, string>> {
-  const works = await readRealmWorks(context.realm, context.locale);
-  return new Map(works.ok ? works.data.items.map(item => [item.id, item.selection]) : []);
+/**
+ * The Realm's own cards for its Works, by ID: the Realm's list pairs each
+ * Work with the adoption that placed it, and the new-adoptions read also
+ * names its authors. Charts, editor lists and quotes read thinner cards; they
+ * take the author, hook, kind and "Why here?" from here, so a Work reads the
+ * same in every module. Both reads are cached for the request.
+ */
+async function realmCards(context: AdaptContext): Promise<Map<string, ZoneWork>> {
+  const [works, adopted] = await Promise.all([readRealmWorks(context.realm, context.locale),
+    readNewAdoptions(context.realm, context.locale)]);
+  const cards = new Map(works.ok ? works.data.items.map(item => [item.id, zoneWork(item, context, item.selection)]) : []);
+  for (const item of adopted.ok ? adopted.data.items : []) {
+    const card = zoneWork(item, context, item.evidence);
+    cards.set(item.id, { ...card, decision: cards.get(item.id)?.decision ?? card.decision });
+  }
+  return cards;
+}
+
+/** A module's card, completed from the Realm's card for the same Work. */
+export function withRealmCard(work: ZoneWork, known: ZoneWork | undefined): ZoneWork {
+  if (!known) return work;
+  return { ...work, kind: known.kind, author: work.author ?? known.author, tagline: work.tagline ?? known.tagline,
+    status: work.status ?? known.status, chapters: work.chapters ?? known.chapters,
+    cover: work.cover ?? known.cover, decision: work.decision ?? known.decision };
 }
 
 /** A feed's Works, each with the Decision behind it. */
@@ -40,17 +61,17 @@ async function feedWorks(feed: RealmFeed, context: AdaptContext): Promise<Loaded
     return page.ok ? { ok: true, data: page.data.items.map(item => zoneWork(item, context, item.evidence)) } : page;
   }
   if (feed === 'recently-completed') {
-    const [page, placed] = await Promise.all([readRecentlyCompleted(realm, locale), adoptions(context)]);
+    const [page, cards] = await Promise.all([readRecentlyCompleted(realm, locale), realmCards(context)]);
     return page.ok ? { ok: true, data: page.data.items.map(item =>
-      zoneWork(item, context, placed.get(item.id) ?? null)) } : page;
+      withRealmCard(zoneWork(item, context, null), cards.get(item.id))) } : page;
   }
   if (feed === 'latest-chapters') {
-    const [page, placed] = await Promise.all([readLatestChapters(realm, locale), adoptions(context)]);
+    const [page, cards] = await Promise.all([readLatestChapters(realm, locale), realmCards(context)]);
     if (!page.ok) return page;
     // One card per Work: the newest chapter stands for its Work.
     const seen = new Set<string>();
     return { ok: true, data: page.data.items.filter(item => !seen.has(item.work.id) && seen.add(item.work.id))
-      .map(item => ({ ...zoneWork(item.work, context, placed.get(item.work.id) ?? null),
+      .map(item => ({ ...withRealmCard(zoneWork(item.work, context, null), cards.get(item.work.id)),
         latestChapter: { title: null, at: null,
           href: `/w/${idOf(item.work.id)}/read/${idOf(item.chapter)}` } })) };
   }
@@ -89,8 +110,12 @@ async function shelf(module: PresentationModule, context: AdaptContext): Promise
   return loaded.some(({ works }) => !works.ok) ? failed : empty;
 }
 
-/** The presentation and ranking read use the same metric vocabulary. */
-export function chartMetric(metric: RankingMetric = 'reads'): RankingMetric {
+/**
+ * The metric a Zone chart ranks by, in the presentation's vocabulary. Main
+ * ranks by more metrics than a Zone chart may name (reviews rank Work pages,
+ * not Zones); the intersection type keeps every chart metric one Main reads.
+ */
+export function chartMetric(metric: ChartMetric = 'reads'): ChartMetric & RankingMetric {
   return metric;
 }
 
@@ -98,22 +123,22 @@ const intervals = ['day', 'week', 'month'] as const;
 
 async function rankings(module: PresentationModule, context: AdaptContext): Promise<ModuleState<'ranking'>> {
   const metric = chartMetric(module.options?.metric);
-  const [placed, ...pages] = await Promise.all([adoptions(context),
+  const [cards, ...pages] = await Promise.all([realmCards(context),
     ...intervals.map(interval => readRankings(context.realm, context.locale, interval, metric))]);
   if (pages.every(page => !page.ok)) return failed;
   const tabs = intervals.flatMap((interval, index) => {
     const page = pages[index]!;
     return page.ok && page.data.items.length ? [{ interval, items: page.data.items.map((item, rank) => ({
-      rank: rank + 1, work: zoneWork(item, context, placed.get(item.id) ?? null) })) }] : [];
+      rank: rank + 1, work: withRealmCard(zoneWork(item, context, null), cards.get(item.id)) })) }] : [];
   });
   return tabs.length ? { state: 'ready', data: { metric, tabs } } : empty;
 }
 
 async function rising(module: PresentationModule, context: AdaptContext): Promise<ModuleState<'rising'>> {
-  const [page, placed] = await Promise.all([readRising(context.realm, context.locale), adoptions(context)]);
+  const [page, cards] = await Promise.all([readRising(context.realm, context.locale), realmCards(context)]);
   if (!page.ok) return failed;
   const items = page.data.items.slice(0, module.options?.limit ?? 6)
-    .map(item => zoneWork(item, context, placed.get(item.id) ?? null));
+    .map(item => withRealmCard(zoneWork(item, context, null), cards.get(item.id)));
   return items.length ? { state: 'ready', data: { items } } : empty;
 }
 
@@ -128,11 +153,11 @@ async function decisions(module: PresentationModule, context: AdaptContext): Pro
 
 async function quotes(module: PresentationModule, context: AdaptContext): Promise<ModuleState<'quote-stream'>> {
   if (module.source.kind !== 'query-block' || module.source.block !== 'reader-quotes') return unsupported;
-  const page = await readZoneQuotes(context.realm, context.locale);
+  const [page, cards] = await Promise.all([readZoneQuotes(context.realm, context.locale), realmCards(context)]);
   if (!page.ok) return failed;
   const items = page.data.items.slice(0, module.options?.limit ?? 6).map(item => ({
     id: item.id, body: { value: item.excerpt, lang: '', dir: 'ltr' as const },
-    reader: item.authorName, work: summaryWork(item.work, context),
+    reader: item.authorName, work: withRealmCard(summaryWork(item.work, context), cards.get(item.work.id)),
     href: `${realmWorkHref(item.work.id, context.realm)}#work-discussion`,
   }));
   return items.length ? { state: 'ready', data: { quotes: items } } : empty;
@@ -141,12 +166,12 @@ async function quotes(module: PresentationModule, context: AdaptContext): Promis
 async function discussions(module: PresentationModule, context: AdaptContext):
   Promise<ModuleState<'discussion-list'>> {
   if (module.source.kind !== 'query-block' || module.source.block !== 'discussions') return unsupported;
-  const page = await readZoneDiscussions(context.realm, context.locale);
+  const [page, cards] = await Promise.all([readZoneDiscussions(context.realm, context.locale), realmCards(context)]);
   if (!page.ok) return failed;
   const items = page.data.items.slice(0, module.options?.limit ?? 8).map(item => ({
     id: item.id, title: { value: item.excerpt, lang: '', dir: 'ltr' as const },
     href: `${realmWorkHref(item.work.id, context.realm)}#work-discussion`,
-    replies: null, work: summaryWork(item.work, context),
+    replies: null, work: withRealmCard(summaryWork(item.work, context), cards.get(item.work.id)),
   }));
   return items.length ? { state: 'ready', data: { items } } : empty;
 }
@@ -156,12 +181,13 @@ async function editorLists(module: PresentationModule, context: AdaptContext):
   const collections = [module.source, ...(module.tabs ?? []).map(tab => tab.source)]
     .flatMap(source => source.kind === 'collection' ? [source.collection] : []);
   if (!collections.length) return unsupported;
-  const read = await readZoneEditorLists(context.realm, context.locale);
+  const [read, cards] = await Promise.all([readZoneEditorLists(context.realm, context.locale), realmCards(context)]);
   if (!read.ok) return failed;
-  const lists = read.data.lists.filter(list => collections.includes(list.collection))
+  // A list whose Works are all private has nothing to show yet, like an empty module.
+  const lists = read.data.lists.filter(list => collections.includes(list.collection) && list.items.length)
     .slice(0, module.options?.limit ?? 2).map(list => ({ id: list.collection,
       title: zoneText(list.name), blurb: null, href: null,
-      items: list.items.map(item => summaryWork(item, context)) }));
+      items: list.items.map(item => withRealmCard(summaryWork(item, context), cards.get(item.id))) }));
   return lists.length ? { state: 'ready', data: { lists } } : empty;
 }
 

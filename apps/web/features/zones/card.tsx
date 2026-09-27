@@ -107,7 +107,8 @@ export function ZoneWorkCard({ work, rank, slot = 2 / 3, locale, messages, avata
 /**
  * A Work as a compact row, for rails, charts past the podium and editor
  * lists: a small catalogue cover, the title in the Work-title face, the
- * author and the one-line hook.
+ * author and the one-line hook. Covers stay wide enough (4.5rem) for a
+ * generated cover to set its title, so no row shows a blank block.
  */
 export function ZoneWorkRow({ work, rank, locale, messages, avatarQuery, headingLevel = 3, whyHere = true,
   compact = false }: ZoneCardProps & {
@@ -118,7 +119,7 @@ export function ZoneWorkRow({ work, rank, locale, messages, avatarQuery, heading
   const Heading = `h${headingLevel}` as const;
   const title = workTitle(work, messages);
   return <article className={cn('group/tile relative grid items-start gap-x-3',
-    compact ? 'grid-cols-[2.75rem_minmax(0,1fr)_auto]' : 'grid-cols-[4rem_minmax(0,1fr)_auto]')}>
+    compact ? 'grid-cols-[4.5rem_minmax(0,1fr)_auto]' : 'grid-cols-[5rem_minmax(0,1fr)_auto]')}>
     <CoverLink work={catalogueWork(work)} avatarQuery={avatarQuery}>
       {rank ? <RankBadge rank={rank} label={t.rank({ rank: String(rank) })} className="absolute -start-1.5 -top-1.5 z-20" />
         : null}
