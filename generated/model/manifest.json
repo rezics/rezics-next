@@ -652,6 +652,11 @@
       "file": "shapes/theme-activation-v1.ttl"
     },
     {
+      "id": "theme-first-party-v1",
+      "sha256": "53e664d86fe7620d2c3fa5cf0583e8c551c0abe7ef1cf24c10c691e1a1398a40",
+      "file": "shapes/theme-first-party-v1.ttl"
+    },
+    {
       "id": "translation-link-v1",
       "sha256": "4342e9d51554c176bda308d999f7620eb6b8b0096a1dab54e85a3265085a3f0e",
       "file": "shapes/translation-link-v1.ttl",
@@ -1712,6 +1717,96 @@
       ]
     },
     {
+      "type": "https://rezics.com/vocab/FirstPartyTheme",
+      "routes": [
+        {
+          "profile": "theme-first-party-v1",
+          "shape": "https://rezics.com/definition/theme-first-party-v1/theme-shape",
+          "when": []
+        }
+      ]
+    },
+    {
+      "type": "https://rezics.com/vocab/FirstPartyThemeActivation",
+      "routes": [
+        {
+          "profile": "theme-first-party-v1",
+          "shape": "https://rezics.com/definition/theme-first-party-v1/activation-shape",
+          "when": []
+        }
+      ]
+    },
+    {
+      "type": "https://rezics.com/vocab/FirstPartyThemeControl",
+      "routes": [
+        {
+          "profile": "theme-first-party-v1",
+          "shape": "https://rezics.com/definition/theme-first-party-v1/control-shape",
+          "when": []
+        }
+      ]
+    },
+    {
+      "type": "https://rezics.com/vocab/FirstPartyThemeControlHead",
+      "routes": [
+        {
+          "profile": "theme-first-party-v1",
+          "shape": "https://rezics.com/definition/theme-first-party-v1/control-head-shape",
+          "when": []
+        }
+      ]
+    },
+    {
+      "type": "https://rezics.com/vocab/FirstPartyThemeReview",
+      "routes": [
+        {
+          "profile": "theme-first-party-v1",
+          "shape": "https://rezics.com/definition/theme-first-party-v1/review-shape",
+          "when": []
+        }
+      ]
+    },
+    {
+      "type": "https://rezics.com/vocab/FirstPartyThemeReviewSlot",
+      "routes": [
+        {
+          "profile": "theme-first-party-v1",
+          "shape": "https://rezics.com/definition/theme-first-party-v1/review-slot-shape",
+          "when": []
+        }
+      ]
+    },
+    {
+      "type": "https://rezics.com/vocab/FirstPartyThemeRevision",
+      "routes": [
+        {
+          "profile": "theme-first-party-v1",
+          "shape": "https://rezics.com/definition/theme-first-party-v1/revision-shape",
+          "when": []
+        }
+      ]
+    },
+    {
+      "type": "https://rezics.com/vocab/FirstPartyThemeRevocation",
+      "routes": [
+        {
+          "profile": "theme-first-party-v1",
+          "shape": "https://rezics.com/definition/theme-first-party-v1/revocation-shape",
+          "when": []
+        }
+      ]
+    },
+    {
+      "type": "https://rezics.com/vocab/FirstPartyThemeRevocationSlot",
+      "routes": [
+        {
+          "profile": "theme-first-party-v1",
+          "shape": "https://rezics.com/definition/theme-first-party-v1/revocation-slot-shape",
+          "when": []
+        }
+      ]
+    },
+    {
       "type": "https://rezics.com/vocab/GlobalRatingContext",
       "routes": [
         {
@@ -2599,6 +2694,7 @@
     "contexts/text-contribution-v1.jsonld": "78215401ecbc983cb593884da5d0a66775d5a63507343a1bbe69a218043f8bb9",
     "contexts/text-publication-v1.jsonld": "61f3a20fceb5f8a60a8ae389a537cc92dc3ce9d49c56d7389eac37a69e2a5ad2",
     "contexts/theme-activation-v1.jsonld": "13fd168bf8e9a109ae4a753c1b4aa424e61e22c951d0631d1591933ff7b858b1",
+    "contexts/theme-first-party-v1.jsonld": "4d8ae662a6baaa46963f4d3a144d0d19767252cd0195cdf088b2cec4206ef6a1",
     "contexts/translation-link-v1.jsonld": "c2af63daadff0edc898dda97a222d7c68467ccece55c6d7d253e46881543531f",
     "contexts/value-exact-v1.jsonld": "f745818ad539c64a8962361d0c5f88807b277c830d33520ce7e6c24e4df1aa6f",
     "contexts/work-address-claim-v1.jsonld": "f09bb6241d8dd662c0638bf210591d42227ea4a993e17de4909ce07fee90e86b",
@@ -2684,6 +2780,7 @@
     "shapes/text-contribution-v1.ttl": "4a42b1851eaa3cace3e06c5a142329e7c3c380e756123c3b131dc2584c9d2d8b",
     "shapes/text-publication-v1.ttl": "831355eccb08af104d4dfc8d972cb4b8e4e4c39b40a3d83aab6a13f67af0dd37",
     "shapes/theme-activation-v1.ttl": "a6783b594ea6ff88743128c994707b49dc59da2d234ac3969c0a1bd5f294d8b6",
+    "shapes/theme-first-party-v1.ttl": "53e664d86fe7620d2c3fa5cf0583e8c551c0abe7ef1cf24c10c691e1a1398a40",
     "shapes/translation-link-v1.ttl": "4342e9d51554c176bda308d999f7620eb6b8b0096a1dab54e85a3265085a3f0e",
     "shapes/value-exact-v1.ttl": "839d218f826651e984ec804d15a856d40f9c08126e88cf2f67585656be83c2e4",
     "shapes/work-address-claim-v1.ttl": "0447720e2e33c0f1a71259488f1710c0c837039a1a4f1931c8c1bed92f2848df",
@@ -2699,9 +2796,9 @@
     "shapes/work-title-control-v1.ttl": "100dddad43cac4fd47c3090e987ef9dc9aa272d189fc4240cc08302340c5d42d",
     "shapes/zone-capability-v1.ttl": "c518389e8a7777b2358a5ed98f6016e77a803aa8c9336fefc40201fb38df4f65",
     "shapes/zone-presentation-v1.ttl": "3d63c448965591516514a0323e77500e3a8b0d95da0a2c0abdd2af4110e063e2",
-    "packages/model/src/generated/arbitraries.ts": "5c377a264ce5c18b69fef905fc996505afae130b53e12c62b468f8dfe3288f3a",
-    "packages/model/src/generated/profiles.ts": "3b03b4e6e58a488f22b38495ba00723a55e944e0699c4302d39fbefe32ed8e15",
-    "packages/model/src/generated/schemas.ts": "768d73222b12c9bb7b01d8e47b4154e7503235fedfd1ca4378a0af47ef11d44a",
-    "packages/model/src/generated/vocabulary.ts": "4c1fcc0fbfe4a96ab193376677101a61b9112fea858bfa72d0706a504dbab122"
+    "packages/model/src/generated/arbitraries.ts": "634a5f28591eab0168f7de3d6ab792830c0ff41d609b75b1b5e802287e6164d8",
+    "packages/model/src/generated/profiles.ts": "57e09f40aaea29e7c41c4fb34375d6e0eb2509899f7ad91a1ecdd7dea8ff166f",
+    "packages/model/src/generated/schemas.ts": "76cf7eca5ee1c8621f2dc55afe16716282f6c3274ae34ace609f6f86b4ec24d9",
+    "packages/model/src/generated/vocabulary.ts": "916fde3cd33a6b71a9eee2eda79299cb67ef33eb8a20591fe1627d52e70b944e"
   }
 }

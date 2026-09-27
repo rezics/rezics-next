@@ -1,0 +1,115 @@
+{
+  "@context": {
+    "sh": {
+      "@id": "http://www.w3.org/ns/shacl#",
+      "@prefix": true
+    },
+    "rdf": {
+      "@id": "http://www.w3.org/1999/02/22-rdf-syntax-ns#",
+      "@prefix": true
+    },
+    "xsd": {
+      "@id": "http://www.w3.org/2001/XMLSchema#",
+      "@prefix": true
+    },
+    "rv": {
+      "@id": "https://rezics.com/vocab/",
+      "@prefix": true
+    },
+    "rdf:type": {
+      "@id": "http://www.w3.org/1999/02/22-rdf-syntax-ns#type",
+      "@type": "@id"
+    },
+    "rv:activation": {
+      "@id": "https://rezics.com/vocab/activation",
+      "@type": "@id"
+    },
+    "rv:approvalExpiresAt": {
+      "@id": "https://rezics.com/vocab/approvalExpiresAt",
+      "@type": "xsd:dateTime"
+    },
+    "rv:approvedBy": {
+      "@id": "https://rezics.com/vocab/approvedBy",
+      "@type": "@id"
+    },
+    "rv:bundle": {
+      "@id": "https://rezics.com/vocab/bundle"
+    },
+    "rv:changedBy": {
+      "@id": "https://rezics.com/vocab/changedBy",
+      "@type": "@id"
+    },
+    "rv:component": {
+      "@id": "https://rezics.com/vocab/component",
+      "@type": "@id"
+    },
+    "rv:controlBasis": {
+      "@id": "https://rezics.com/vocab/controlBasis",
+      "@type": "@id"
+    },
+    "rv:controlHead": {
+      "@id": "https://rezics.com/vocab/controlHead",
+      "@type": "@id"
+    },
+    "rv:decision": {
+      "@id": "https://rezics.com/vocab/decision",
+      "@type": "@id"
+    },
+    "rv:dependencyDigest": {
+      "@id": "https://rezics.com/vocab/dependencyDigest"
+    },
+    "rv:hostZone": {
+      "@id": "https://rezics.com/vocab/hostZone",
+      "@type": "@id"
+    },
+    "rv:review": {
+      "@id": "https://rezics.com/vocab/review",
+      "@type": "@id"
+    },
+    "rv:reviewEvidenceDigest": {
+      "@id": "https://rezics.com/vocab/reviewEvidenceDigest"
+    },
+    "rv:reviewHead": {
+      "@id": "https://rezics.com/vocab/reviewHead",
+      "@type": "@id"
+    },
+    "rv:reviewedBy": {
+      "@id": "https://rezics.com/vocab/reviewedBy",
+      "@type": "@id"
+    },
+    "rv:reviewerPrincipal": {
+      "@id": "https://rezics.com/vocab/reviewerPrincipal"
+    },
+    "rv:revision": {
+      "@id": "https://rezics.com/vocab/revision",
+      "@type": "@id"
+    },
+    "rv:revocation": {
+      "@id": "https://rezics.com/vocab/revocation",
+      "@type": "@id"
+    },
+    "rv:revokedBy": {
+      "@id": "https://rezics.com/vocab/revokedBy",
+      "@type": "@id"
+    },
+    "rv:submittedBy": {
+      "@id": "https://rezics.com/vocab/submittedBy",
+      "@type": "@id"
+    },
+    "rv:submittedPrincipal": {
+      "@id": "https://rezics.com/vocab/submittedPrincipal"
+    },
+    "rv:themeActivationHead": {
+      "@id": "https://rezics.com/vocab/themeActivationHead",
+      "@type": "@id"
+    },
+    "rv:themeOwner": {
+      "@id": "https://rezics.com/vocab/themeOwner",
+      "@type": "@id"
+    },
+    "rv:themeRevisionHead": {
+      "@id": "https://rezics.com/vocab/themeRevisionHead",
+      "@type": "@id"
+    }
+  }
+}

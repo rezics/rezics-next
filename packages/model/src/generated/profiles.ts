@@ -936,6 +936,32 @@ export const profileRegistry = {
       "activation"
     ]
   },
+  "theme-first-party-v1": {
+    "sha256": "53e664d86fe7620d2c3fa5cf0583e8c551c0abe7ef1cf24c10c691e1a1398a40",
+    "file": "shapes/theme-first-party-v1.ttl",
+    "shapes": [
+      "https://rezics.com/definition/theme-first-party-v1/theme-shape",
+      "https://rezics.com/definition/theme-first-party-v1/revision-shape",
+      "https://rezics.com/definition/theme-first-party-v1/review-slot-shape",
+      "https://rezics.com/definition/theme-first-party-v1/review-shape",
+      "https://rezics.com/definition/theme-first-party-v1/activation-shape",
+      "https://rezics.com/definition/theme-first-party-v1/revocation-slot-shape",
+      "https://rezics.com/definition/theme-first-party-v1/revocation-shape",
+      "https://rezics.com/definition/theme-first-party-v1/control-head-shape",
+      "https://rezics.com/definition/theme-first-party-v1/control-shape"
+    ],
+    "focusRoles": [
+      "theme",
+      "revision",
+      "review-slot",
+      "review",
+      "activation",
+      "revocation-slot",
+      "revocation",
+      "control-head",
+      "control"
+    ]
+  },
   "translation-link-v1": {
     "sha256": "4342e9d51554c176bda308d999f7620eb6b8b0096a1dab54e85a3265085a3f0e",
     "file": "shapes/translation-link-v1.ttl",
