@@ -26,8 +26,12 @@ export const Collapsible = (props: React.ComponentProps<typeof ArkCollapsible.Ro
 export const CollapsibleTrigger = (props: React.ComponentProps<typeof ArkCollapsible.Trigger>) => {
   const { className, ...rest } = props;
 
+  // Native disabled, so an asChild Button is really disabled; Button overwrites aria-disabled.
+  const { disabled } = useCollapsibleContext();
+
   return (
     <ArkCollapsible.Trigger
+      disabled={disabled || undefined}
       className={cn(
         'cursor-pointer',
         'data-disabled:pointer-events-none data-disabled:opacity-64',

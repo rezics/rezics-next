@@ -1,17 +1,20 @@
 'use client';
 
 import { ark } from '@ark-ui/react/factory';
-import { Tabs as ArkTabs } from '@ark-ui/react/tabs';
 import type React from 'react';
 import { cn } from '../utils.ts';
 
-export const BottomNavigation = (props: React.ComponentProps<typeof ArkTabs.Root>) => {
+// A landmark of links, not Ark Tabs: each destination is its own page, and tabs would point
+// aria-controls at panels that never exist. Mark the current page with `active`.
+
+export const BottomNavigation = (props: React.ComponentProps<typeof ark.nav>) => {
   const { className, ...rest } = props;
 
   return (
-    <ArkTabs.Root
+    <ark.nav
       className={cn(
         'w-full',
+        // Reserves the fixed bar's height so the end of the page is not hidden behind it.
         'min-h-[calc(var(--spacing)*14+env(safe-area-inset-bottom,0))]',
         className,
       )}
@@ -21,16 +24,16 @@ export const BottomNavigation = (props: React.ComponentProps<typeof ArkTabs.Root
   );
 };
 
-export const BottomNavigationList = (props: React.ComponentProps<typeof ArkTabs.List>) => {
+export const BottomNavigationList = (props: React.ComponentProps<typeof ark.div>) => {
   const { className, ...rest } = props;
 
   return (
-    <ArkTabs.List
+    <ark.div
       className={cn(
         'fixed inset-x-0 bottom-0 z-10',
         'flex w-full items-center justify-around',
         'min-h-14 shrink-0',
-        'border-t bg-background/60 backdrop-blur-sm',
+        'border-t border-border/60 bg-background/80 backdrop-blur-sm',
         'pb-[env(safe-area-inset-bottom,0px)]',
         className,
       )}
@@ -40,23 +43,33 @@ export const BottomNavigationList = (props: React.ComponentProps<typeof ArkTabs.
   );
 };
 
-export const BottomNavigationItem = (props: React.ComponentProps<typeof ArkTabs.Trigger>) => {
-  const { className, ...rest } = props;
+interface BottomNavigationItemProps extends React.ComponentProps<typeof ark.a> {
+  /**
+   * Whether the item is the current page; sets `aria-current="page"`.
+   *
+   * @default false
+   */
+  active?: boolean;
+}
+
+export const BottomNavigationItem = (props: BottomNavigationItemProps) => {
+  const { active = false, className, ...rest } = props;
 
   return (
-    <ArkTabs.Trigger
+    <ark.a
+      aria-current={active ? 'page' : undefined}
       className={cn(
         'relative',
         'min-w-0',
         'flex flex-1 flex-col items-center justify-center gap-0.5',
         'p-2',
         'text-muted-foreground',
-        'cursor-pointer',
+        'rounded-xl',
         'transition-colors',
         'hover:text-foreground',
-        'aria-selected:text-primary',
-        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background',
-        'data-disabled:pointer-events-none data-disabled:opacity-64',
+        'aria-[current=page]:text-primary',
+        'outline-none focus-visible:ring-[3px] focus-visible:ring-ring/32',
+        'aria-disabled:pointer-events-none aria-disabled:opacity-64',
         "[&_svg:not([class*='size-'])]:size-5 [&_svg]:pointer-events-none [&_svg]:shrink-0",
         'pointer-coarse:after:absolute pointer-coarse:after:size-full pointer-coarse:after:min-h-11 pointer-coarse:after:min-w-11',
         'motion-reduce:transition-none!',
@@ -74,7 +87,12 @@ export const BottomNavigationItemIcon = (props: React.ComponentProps<typeof ark.
   return (
     <ark.span
       aria-hidden
-      className={cn('flex items-center justify-center', className)}
+      className={cn(
+        'flex h-7 w-12 items-center justify-center rounded-full transition-colors',
+        // The current page also gets a tinted pill, so it does not rely on colour alone.
+        'in-aria-[current=page]:bg-accent',
+        className,
+      )}
       data-slot="bottom-navigation-item-icon"
       {...rest}
     />

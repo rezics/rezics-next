@@ -40,9 +40,11 @@ export const AccordionTrigger = (props: React.ComponentProps<typeof ArkAccordion
     <ArkAccordion.ItemTrigger
       className={cn(
         'flex flex-1 items-center justify-between gap-3',
-        'py-4',
+        'my-1 px-3 py-3',
         'text-left font-medium text-sm',
-        'rounded-lg border border-transparent',
+        // Aura: a padded, rounded trigger so the hover tint and focus ring clear the text.
+        'rounded-xl border border-transparent',
+        'hover:bg-accent/40',
         'outline-none',
         'transition-all',
         'disabled:pointer-events-none disabled:opacity-64 disabled:grayscale',
@@ -88,7 +90,7 @@ export const AccordionContent = (props: React.ComponentProps<typeof ArkAccordion
       data-slot="accordion-content"
       {...rest}
     >
-      <div className="pt-0 pb-4">{children}</div>
+      <div className="px-3 pt-0 pb-4">{children}</div>
     </ArkAccordion.ItemContent>
   );
 };

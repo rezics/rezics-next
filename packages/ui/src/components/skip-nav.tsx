@@ -24,7 +24,9 @@ export const SkipNavLink = (props: SkipNavLinkProps) => {
         'focus:fixed focus:inset-s-4 focus:top-4 focus:z-9999',
         'focus:px-4 focus:py-2',
         'focus:bg-primary',
-        'focus:text-primary-foreground focus:text-sm',
+        // Important: the web app's unlayered legacy `a { color: inherit }` beats utilities,
+        // and inherited body text on the ink-blue fill fails contrast.
+        'focus:text-primary-foreground! focus:text-sm',
         'sr-only focus:not-sr-only',
         'focus:rounded-xl',
         'focus:shadow-(--aura-shadow-float)',
