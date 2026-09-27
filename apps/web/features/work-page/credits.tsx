@@ -40,8 +40,11 @@ export function WorkCredits({ agentCredits, credits, locale, messages }: {
         if (!people.length && !references.length) return null;
         return <div key={role} className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
           <dt className="text-muted-foreground">{t[role]}</dt>
-          {people.map(credit => <dd key={credit.id} className="font-medium">
-            {credit.displayName}<span className="ms-1 font-normal text-muted-foreground">@{credit.handle}</span>
+          {people.map(credit => <dd key={credit.id} className="flex min-w-0 items-baseline gap-1 font-medium">
+            {credit.displayName}
+            {/* Unclaimed handles are long machine names; keep them to one line. */}
+            <span title={`@${credit.handle}`} className="max-w-40 truncate font-normal text-muted-foreground">
+              @{credit.handle}</span>
           </dd>)}
           {references.map(credit => {
             const key = openLibraryAuthorKey(credit.key);

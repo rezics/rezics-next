@@ -76,37 +76,40 @@ export function ChapterReader({ workRef, work, chapter, language, settings, prog
       : <span title={edge} aria-disabled="true" className={cn(buttonVariants({ variant: 'outline' }),
         'pointer-events-none opacity-50', forward && 'ms-auto')}>{content}</span>;
   };
-  return <div className="mx-auto w-full max-w-5xl px-4 py-6 sm:px-6 lg:py-10">
-    <ReaderSurface initial={settings} toolbar={toolbar} labels={{ settings: t.settings, textSize: t.textSize,
-      smallerText: t.smallerText, largerText: t.largerText, lineWidth: t.lineWidth, narrow: t.narrow,
-      medium: t.medium, wide: t.wide, typeface: t.typeface, serif: t.serif, sans: t.sans,
-      settingsLocal: t.settingsLocal }}>
-      <article lang={chapter.language} dir={direction === 'none' ? undefined : direction}
-        className="mx-auto grid w-full max-w-(--reader-width) gap-6">
-        <header className="grid gap-2 border-border/60 border-b pb-4">
-          <h1 lang={work.title.language} className="text-balance font-semibold font-work-title text-2xl/tight
-            sm:text-3xl/tight">{work.title.value}</h1>
-          {resume ? <a href={`#p-${resume}`} className={cn(buttonVariants({ size: 'sm', variant: 'soft' }),
-            'justify-self-start')}>{t.continueReading}</a> : null}
-        </header>
-        {lines ? <div className="grid gap-[0.9em] text-(length:--reader-size) leading-[1.8] text-pretty
-          [text-autospace:ideograph-alpha_ideograph-numeric] group-data-[face=serif]/reader:font-work-title">
-          {lines.map((line, index) => <p key={index} id={`p-${index}`} data-paragraph={index}
-            className="scroll-mt-24">{line}</p>)}
-        </div> : <Alert variant="warning"><CircleAlertIcon aria-hidden="true" />
-          <AlertDescription>{t.chapterFormat}</AlertDescription></Alert>}
-      </article>
-      <div className="mx-auto grid w-full max-w-(--reader-width) gap-6 border-border/60 border-t pt-6">
-        <nav aria-label={t.chapterNavigation} className="flex flex-wrap items-center gap-2">
-          {step(previous, t.previousChapter, t.firstChapter, false)}
-          {step(next, t.nextChapter, t.lastChapter, true)}
-        </nav>
-        <p className="hidden text-muted-foreground text-xs sm:block">{t.keyboardHint}</p>
-        <ProgressPanel progress={progress} chapter={chapter} actingSubject={actingSubject} here={here}
-          messages={messages} />
-      </div>
-    </ReaderSurface>
-    <ChapterKeys previous={previous} next={next} direction={direction} />
+  // A plain reading ground in place of the gridded page canvas; CJK text spaces itself from Latin and digits.
+  return <div className="min-h-dvh bg-background [text-autospace:normal]">
+    <div className="mx-auto w-full max-w-5xl px-4 py-6 sm:px-6 lg:py-10">
+      <ReaderSurface initial={settings} toolbar={toolbar} labels={{ settings: t.settings, textSize: t.textSize,
+        smallerText: t.smallerText, largerText: t.largerText, lineWidth: t.lineWidth, narrow: t.narrow,
+        medium: t.medium, wide: t.wide, typeface: t.typeface, serif: t.serif, sans: t.sans,
+        settingsLocal: t.settingsLocal }}>
+        <article lang={chapter.language} dir={direction === 'none' ? undefined : direction}
+          className="mx-auto grid w-full max-w-(--reader-width) gap-6">
+          <header className="grid gap-2 border-border/60 border-b pb-4">
+            <h1 lang={work.title.language} className="text-balance font-semibold font-work-title text-2xl/tight
+              sm:text-3xl/tight">{work.title.value}</h1>
+            {resume ? <a href={`#p-${resume}`} className={cn(buttonVariants({ size: 'sm', variant: 'soft' }),
+              'justify-self-start')}>{t.continueReading}</a> : null}
+          </header>
+          {lines ? <div className="grid gap-[0.9em] text-(length:--reader-size) leading-[1.8] text-pretty
+            group-data-[face=serif]/reader:font-work-title">
+            {lines.map((line, index) => <p key={index} id={`p-${index}`} data-paragraph={index}
+              className="scroll-mt-24">{line}</p>)}
+          </div> : <Alert variant="warning"><CircleAlertIcon aria-hidden="true" />
+            <AlertDescription>{t.chapterFormat}</AlertDescription></Alert>}
+        </article>
+        <div className="mx-auto grid w-full max-w-(--reader-width) gap-6 border-border/60 border-t pt-6">
+          <nav aria-label={t.chapterNavigation} className="flex flex-wrap items-center gap-2">
+            {step(previous, t.previousChapter, t.firstChapter, false)}
+            {step(next, t.nextChapter, t.lastChapter, true)}
+          </nav>
+          <p className="hidden text-muted-foreground text-xs sm:block">{t.keyboardHint}</p>
+          <ProgressPanel progress={progress} chapter={chapter} actingSubject={actingSubject} here={here}
+            messages={messages} />
+        </div>
+      </ReaderSurface>
+      <ChapterKeys previous={previous} next={next} direction={direction} />
+    </div>
   </div>;
 }
 

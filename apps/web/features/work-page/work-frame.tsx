@@ -13,7 +13,8 @@ import { WorkTabs } from './work-tabs.tsx';
 export function WorkFrame({ workRef, work, credits, locale, messages, children }: {
   workRef: string; work: Header; credits: ReactNode; locale: UiLocale; messages: WorkPageMessages; children: ReactNode;
 }) {
-  return <PageContainer className="grid gap-6">
+  // CJK text spaces itself from inserted Latin names and digits ("来自 Tidewater Readers").
+  return <PageContainer className="grid gap-6 [text-autospace:normal]">
     <WorkHeader work={work} credits={credits} readHref={workHref(workRef, 'contents')} locale={locale}
       messages={messages} />
     <WorkTabs workRef={workRef} label={messages.sections} labels={{ overview: messages.overview,
