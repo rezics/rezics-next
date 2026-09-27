@@ -89,6 +89,7 @@ export async function loadDiscoverState(state: DiscoverState | null, locale: UiL
 async function readerState(reader: Reader, shelves: readonly LoadedShelf[]) {
   if (!reader.actingSubject) return {};
   const works = shelves.flatMap(shelf => shelf.initial.ok ? shelf.initial.data.items.map(item => item.id) : []);
-  return { actingSubject: reader.actingSubject,
-    readerSeed: works.length ? await readReaderSeed(reader.personal, reader.actingSubject, works) : {} };
+  const seed = works.length ? await readReaderSeed(reader.personal, reader.actingSubject, works) : {};
+  // Denied a reader library, the page draws no shelf control rather than one that cannot act.
+  return seed ? { actingSubject: reader.actingSubject, readerSeed: seed } : {};
 }

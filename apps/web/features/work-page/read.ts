@@ -201,12 +201,17 @@ export const readAgentWorks = cache(async (agent: string, locale: UiLocale): Pro
     limit: 12 } }));
 });
 
-/** The reader's shelf status and own ratings for this Work, when they act as an Agent; null otherwise. */
+/**
+ * The reader's shelf status and own ratings for this Work. Null when they act
+ * as no Agent or Main denies that Agent a reader library; empty when Main could
+ * not answer, so the controls read it again in the browser.
+ */
 export const readReaderState = cache(async (id: string): Promise<ReaderSeed | null> => {
   const { main, actingSubject } = await reader();
   if (!actingSubject) return null;
   const state = await settle(() => main.v1.works({ id })['reader-state'].get({ query: { actingSubject } }));
-  return state.ok ? { [state.data.work]: readerEntry(state.data) } : {};
+  if (state.ok) return { [state.data.work]: readerEntry(state.data) };
+  return state.failure === 'sign-in' ? null : {};
 });
 
 export const readAgentCredits = cache(async (id: string): Promise<Loaded<AgentCreditPage>> => {

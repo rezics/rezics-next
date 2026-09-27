@@ -75,6 +75,14 @@ export const SignedInWithoutShelves: Story = {
   },
 };
 
+/** Main denied this Agent a reader library: controls withdraw rather than fail on every press. */
+export const LibraryDenied: Story = {
+  args: { signedIn: true, actions: memoryReaderActions({}, { denied: true }) },
+  async play({ canvasElement }) {
+    await expect(within(canvasElement).queryByRole('button', { name: /Shelve/ })).toBeNull();
+  },
+};
+
 /** A shelf of one kind uses that kind's proportions: posters for documents, square cards for recipes. */
 export const DocumentsAndRecipes: Story = {
   render: ({ actions, signedIn = false, ...args }: Args) =>

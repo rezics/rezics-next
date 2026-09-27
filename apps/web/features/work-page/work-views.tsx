@@ -65,7 +65,7 @@ export async function WorkFrameView({ workRef, id, work, locale, messages, child
   const ratingTarget = context ? { work: work.id, context: context.context, mainVersion: work.mainVersion,
     max: context.scale.max } : null;
   return <WorkFrame workRef={workRef} work={work} locale={locale} messages={messages} signedIn={signedIn}
-    actingSubject={actingSubject} readerSeed={seed ?? undefined} ratingTarget={ratingTarget}
+    actingSubject={seed ? actingSubject : null} readerSeed={seed ?? undefined} ratingTarget={ratingTarget}
     signInHref={signInPath(localizedPath(workHref(workRef), locale))} avatarQuery={avatarQuery}
     credits={<Suspense fallback={<WorkCreditsSkeleton label={messages.loadingRegion} />}>
       <Credits id={id} locale={locale} messages={messages} /></Suspense>}

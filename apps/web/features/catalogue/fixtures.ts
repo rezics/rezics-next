@@ -57,12 +57,12 @@ export const recipes: CatalogueWork[] = [
  * show how a control reports a write Main did not accept.
  */
 export function memoryReaderActions(initial: Record<string, Partial<ReaderWorkState>> = {},
-  options: { fail?: boolean; rate?: boolean } = {}): ReaderActions & { kind: 'ready' } {
+  options: { fail?: boolean; rate?: boolean; denied?: boolean } = {}): ReaderActions & { kind: 'ready' } {
   const states = new Map(Object.entries(initial).map(([work, state]) =>
     [work, { status: null, rating: null, ...state } satisfies ReaderWorkState]));
   const stateOf = (work: string): ReaderWorkState => states.get(work) ?? { status: null, rating: null };
   const settle = () => new Promise<boolean>(done => setTimeout(() => done(!options.fail), 150));
-  return { kind: 'ready', ratingMax: 5, stateOf,
+  return { kind: 'ready', ratingMax: 5, stateOf, available: () => !options.denied,
     async setStatus(work: string, status: ReadingStatus | null) {
       const saved = await settle();
       if (saved) states.set(work, { ...stateOf(work), status });

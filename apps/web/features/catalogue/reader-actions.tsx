@@ -41,6 +41,8 @@ export type ReaderActions =
     /** Tells controls when state read later (a "Show more" page) arrives. */
     subscribe?: (listener: () => void) => () => void;
     snapshot?: () => number;
+    /** False once Main denies this Agent a reader library; controls then withdraw. */
+    available?: () => boolean;
   };
 
 const ReaderActionsContext = createContext<ReaderActions>({ kind: 'unavailable' });
@@ -70,8 +72,10 @@ export function useReaderActions(): ReaderActions {
   const actions = useContext(ReaderActionsContext);
   const ready = actions.kind === 'ready' ? actions : null;
   useSyncExternalStore(ready?.subscribe ?? unsubscribed, ready?.snapshot ?? still, still);
-  return actions;
+  return ready?.available?.() === false ? withdrawn : actions;
 }
+
+const withdrawn: ReaderActions = { kind: 'unavailable' };
 
 /** The reader's status with an optimistic update: shown at once, reverted with a note when Main refuses. */
 function useStatus(work: string) {

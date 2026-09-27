@@ -31,18 +31,25 @@ export function readerEntry(item: Pick<ReaderStateItem, 'status' | 'rating'>): R
     rating: own ? { value: own.availability === 'available' ? own.value : null, revision: own.revision } : null };
 }
 
-/** Reads the reader's state for Works on the server, in batches Main accepts; Works Main could not answer are left out. */
-export async function readReaderSeed(main: MainClient, actingSubject: string, works: readonly string[]): Promise<ReaderSeed> {
+/**
+ * Reads the reader's state for Works, in batches Main accepts; Works Main could
+ * not answer are left out, to be read again when drawn. Null when Main denies
+ * this Agent a reader library, so no control is drawn that could not act.
+ */
+export async function readReaderSeed(main: MainClient, actingSubject: string, works: readonly string[]):
+  Promise<ReaderSeed | null> {
   const unique = [...new Set(works)];
   const seed: ReaderSeed = {};
+  let denied = false;
   await Promise.all(Array.from({ length: Math.ceil(unique.length / READER_BATCH) }, async (_, index) => {
     const batch = unique.slice(index * READER_BATCH, (index + 1) * READER_BATCH);
     try {
-      const { data } = await main.v1.me['work-states'].get({ query: { works: batch.join(','), actingSubject } });
+      const { data, error } = await main.v1.me['work-states'].get({ query: { works: batch.join(','), actingSubject } });
+      if (error?.status === 403) denied = true;
       for (const item of data?.items ?? []) seed[item.work] = readerEntry(item);
     } catch { /* The controls read these Works again in the browser when they are drawn. */ }
   }));
-  return seed;
+  return denied ? null : seed;
 }
 
 /**
@@ -63,9 +70,12 @@ export function createReaderStore({ actingSubject, seed = {}, ratingTarget, main
   const requested = new Set<string>();
   let queued = new Set<string>();
 
+  // Main denied this Agent a reader library: controls withdraw rather than fail on every press.
+  let denied = false;
   async function readAll(works: string[]) {
     const read = await readReaderSeed(main(), actingSubject, works);
-    for (const [work, entry] of Object.entries(read)) entries.set(work, entry);
+    if (read === null) denied = true;
+    for (const [work, entry] of Object.entries(read ?? {})) entries.set(work, entry);
     notify();
   }
   function load(work: string) {
@@ -82,7 +92,8 @@ export function createReaderStore({ actingSubject, seed = {}, ratingTarget, main
     });
   }
   async function refresh(work: string): Promise<ReaderEntry | null> {
-    const { data } = await main().v1.works({ id: work.slice(-36) })['reader-state'].get({ query: { actingSubject } });
+    const { data, error } = await main().v1.works({ id: work.slice(-36) })['reader-state'].get({ query: { actingSubject } });
+    if (error?.status === 403) { denied = true; notify(); }
     if (!data) return null;
     const entry = readerEntry(data);
     entries.set(work, entry);
@@ -103,6 +114,7 @@ export function createReaderStore({ actingSubject, seed = {}, ratingTarget, main
       return () => { listeners.delete(listener); };
     },
     snapshot: () => version,
+    available: () => !denied,
     async setStatus(work: string, status: ReadingStatus | null) {
       const api = main().v1.works({ id: work.slice(-36) })['reader-status'];
       const put = (entry: ReaderEntry) => api.put({ actingSubject, expectedVersion: entry.version, status,
