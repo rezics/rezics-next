@@ -14,8 +14,10 @@ the work is O(revisions + edges) plus one bounded public disclosure query. Every
 dependency must have a current public search eligibility decision for that
 exact published revision. The graph activation command repeats those exact
 eligibility-head predicates, so a disclosure change between planning and the
-head switch cannot activate a private embed. A malformed, missing or over-budget
-dependency fails closed. An ordinary denial happens before a new Content pin.
+head switch cannot activate a private embed. If the head changes during that
+window, a guarded terminal rejection receipt settles and releases the Content
+preparation pin. A malformed, missing or over-budget dependency fails closed.
+An ordinary denial happens before a new Content pin.
 
 The guarded graph command records the exact Content revision, digest, preparation
 ID and Content owner position with the variant publication head, graph receipt and

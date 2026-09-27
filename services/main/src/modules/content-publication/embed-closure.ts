@@ -93,9 +93,9 @@ export async function assertPublicContentEmbeds(env: WorkActivationEnvironment,
   return closure;
 }
 
-/** Rechecks the exact disclosure heads atomically with the publication graph switch. */
-export function publicContentEmbedGuards(dependencies: readonly ExactContentReference[]): string {
-  return dependencies.map(ref => `FILTER EXISTS {
+/** One condition for an exact public disclosure head; usable in positive and denial guards. */
+export function publicContentEmbedConditions(dependencies: readonly ExactContentReference[]): string[] {
+  return dependencies.map(ref => `EXISTS {
     GRAPH ${iri(GRAPHS.current)} { ${iri(ref.variantId)} rv:contentPublicationHead ?embedPublication${ref.revisionId.replaceAll('-', '')} ;
       rv:publicSearchEligibilityHead ?embedEligibility${ref.revisionId.replaceAll('-', '')} . }
     GRAPH ${iri(GRAPHS.revisions)} {
@@ -104,5 +104,10 @@ export function publicContentEmbedGuards(dependencies: readonly ExactContentRefe
       ?embedEligibility${ref.revisionId.replaceAll('-', '')} a rv:ContentSearchEligibilityDecision ;
         rv:publicationDecision ?embedPublication${ref.revisionId.replaceAll('-', '')} ;
         rv:disclosure rv:Public . }
-  }`).join('\n');
+  }`);
+}
+
+/** Rechecks the exact disclosure heads atomically with the publication graph switch. */
+export function publicContentEmbedGuards(dependencies: readonly ExactContentReference[]): string {
+  return publicContentEmbedConditions(dependencies).map(condition => `FILTER ${condition}`).join('\n');
 }

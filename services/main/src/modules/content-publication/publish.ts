@@ -3,7 +3,8 @@ import { profileRegistry } from '../../../../../packages/model/src/generated/pro
 import type { CommandValidation } from '../../infrastructure/fuseki.ts';
 import type { RegisteredAdmission } from '../access/admission.ts';
 import { DATASET, GRAPHS, RV, hash, iri, lit, type WorkActivationEnvironment } from '../work/activate.ts';
-import { assertPublicContentEmbeds, publicContentEmbedGuards }
+import { ContentEmbedDenied, assertPublicContentEmbeds, publicContentEmbedConditions,
+  publicContentEmbedGuards }
   from './embed-closure.ts';
 
 const NONE = 'urn:rezics:none';
@@ -95,6 +96,7 @@ function expectedHeadTerm(input: PublishPinnedContentInput): string {
 
 function receiptFields(env: WorkActivationEnvironment, admission: RegisteredAdmission,
   input: PublishPinnedContentInput, preparation: PublicationPreparation, outcome: 'active' | 'rejected',
+  reason: 'StaleHead' | 'EmbedDenied' = 'StaleHead',
 ): string {
   const base = `rv:requestDigest ${lit(contentPublicationDigest(input))} ;
     rv:admissionId ${lit(admission.id)} ; rv:authorityEpoch ${lit(admission.authorityEpoch)} ;
@@ -108,7 +110,7 @@ function receiptFields(env: WorkActivationEnvironment, admission: RegisteredAdmi
     rv:dataEpoch ${lit(env.lineage.dataEpoch)} ; rv:sequence ?next`;
   return outcome === 'active'
     ? `${base} ; rv:publicationDecision ${iri(contentPublicationDecisionIri(admission.id))} ; rv:outcome rv:Succeeded`
-    : `${base} ; rv:reason rv:StaleHead ; rv:outcome rv:Cancelled`;
+    : `${base} ; rv:reason rv:${reason} ; rv:outcome rv:Cancelled`;
 }
 
 export function buildPinnedContentPublicationUpdate(env: WorkActivationEnvironment, admission: RegisteredAdmission,
@@ -179,19 +181,24 @@ export function buildPinnedContentPublicationUpdate(env: WorkActivationEnvironme
     }`;
 }
 
-function staleUpdate(env: WorkActivationEnvironment, admission: RegisteredAdmission,
-  input: PublishPinnedContentInput, preparation: PublicationPreparation): string {
+function rejectedUpdate(env: WorkActivationEnvironment, admission: RegisteredAdmission,
+  input: PublishPinnedContentInput, preparation: PublicationPreparation,
+  reason: 'StaleHead' | 'EmbedDenied', embedded: readonly ExactContentReference[] = []): string {
   const receipt = contentPublicationReceiptIri(admission.id);
-  const batch = `urn:rezics:outbox:${hash(`${receipt}\0stale-content`)}`;
-  const event = `urn:rezics:event:${hash(`${receipt}\0stale-content`)}`;
+  const batch = `urn:rezics:outbox:${hash(`${receipt}\0rejected-content`)}`;
+  const event = `urn:rezics:event:${hash(`${receipt}\0rejected-content`)}`;
   const targetKind = input.targetProfile === 'catalog-description' ? 'schema:Organization' : 'schema:CreativeWork';
+  const guard = reason === 'StaleHead'
+    ? `FILTER(COALESCE(?prior, ${iri(NONE)}) != ${expectedHeadTerm(input)})`
+    : `FILTER(COALESCE(?prior, ${iri(NONE)}) = ${expectedHeadTerm(input)})
+      FILTER(!(${publicContentEmbedConditions(embedded).join(' && ')}))`;
   return `PREFIX rv: <${RV}> PREFIX schema: <https://schema.org/>
     DELETE { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?n } }
     INSERT {
       GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?next }
       GRAPH ${iri(GRAPHS.receipts)} {
         ${iri(receipt)} a rv:OperationReceipt ;
-          ${receiptFields(env, admission, input, preparation, 'rejected')} .
+          ${receiptFields(env, admission, input, preparation, 'rejected', reason)} .
       }
       GRAPH ${iri(GRAPHS.outbox)} {
         ${iri(batch)} a rv:OutboxBatch ; rv:dataEpoch ${lit(env.lineage.dataEpoch)} ;
@@ -206,10 +213,11 @@ function staleUpdate(env: WorkActivationEnvironment, admission: RegisteredAdmiss
         rv:routingEpoch ${lit(env.lineage.routingEpoch)} ; rv:sequence ?n . }
       GRAPH ${iri(GRAPHS.current)} {
         ${iri(input.resourceId)} a ${targetKind} .
-        ${iri(input.variantId)} rv:resource ${iri(input.resourceId)} .
+        OPTIONAL { ${iri(input.variantId)} rv:resource ?registeredResource }
         OPTIONAL { ${iri(input.variantId)} rv:contentPublicationHead ?prior }
       }
-      FILTER(COALESCE(?prior, ${iri(NONE)}) != ${expectedHeadTerm(input)})
+      FILTER(!BOUND(?registeredResource) || ?registeredResource = ${iri(input.resourceId)})
+      ${guard}
       FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:restoreHold true } }
       FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} ?p ?o } }
       BIND(?n + 1 AS ?next)
@@ -239,7 +247,8 @@ async function readGraphReceipt(env: WorkActivationEnvironment, admissionId: str
   const row = rows[0]!;
   const value = (key: string) => row[key]?.value;
   const outcome = value('outcome') === `${RV}Succeeded` ? 'active'
-    : value('outcome') === `${RV}Cancelled` && value('reason') === `${RV}StaleHead` ? 'rejected' : null;
+    : value('outcome') === `${RV}Cancelled`
+      && [`${RV}StaleHead`, `${RV}EmbedDenied`].includes(value('reason') ?? '') ? 'rejected' : null;
   if (!outcome || !value('digest') || !value('admissionId') || !value('authorityEpoch')
     || !value('scope') || !value('preparation') || !value('revision') || !value('variant')
     || !value('resource') || !value('byteDigest') || !value('contentEpoch')
@@ -401,10 +410,25 @@ export async function publishPinnedContent(env: WorkActivationEnvironment, conte
   let terminal = await reconcile(env, content, admission, input, preparation);
   if (terminal) return terminal;
   if (guardUnmatched) {
-    await assertPublicContentEmbeds(env, content, input.revisionId);
+    let denied = false;
+    try { await assertPublicContentEmbeds(env, content, input.revisionId); }
+    catch (error) {
+      if (!(error instanceof ContentEmbedDenied)) throw error;
+      denied = true;
+    }
+    if (denied) {
+      try {
+        await env.fuseki.commandWithReceipt({ receipt, digest,
+          update: rejectedUpdate(env, admission, input, preparation, 'EmbedDenied',
+            embeds.dependencies), validations: [], deadlineMs: 10_000 });
+      } catch { /* the exact rejection receipt resolves an uncertain response */ }
+      terminal = await reconcile(env, content, admission, input, preparation);
+      if (terminal) return terminal;
+    }
     try {
       await env.fuseki.commandWithReceipt({ receipt, digest,
-        update: staleUpdate(env, admission, input, preparation), validations: [], deadlineMs: 10_000 });
+        update: rejectedUpdate(env, admission, input, preparation, 'StaleHead'),
+        validations: [], deadlineMs: 10_000 });
     } catch { /* a lost stale outcome is resolved from the same receipt */ }
     terminal = await reconcile(env, content, admission, input, preparation);
     if (terminal) return terminal;

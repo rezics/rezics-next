@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { resolve } from 'node:path';
 import { ContentCore } from '../../../services/content/src/core.ts';
 import { createMainApp } from '../../../services/main/src/app.ts';
+import type { CommandEnvelope } from '../../../services/main/src/infrastructure/fuseki.ts';
 import { GRAPHS, iri } from '../../../services/main/src/modules/work/activate.ts';
 import { authorCreditFixture } from '../fixtures/author-credit.ts';
 
@@ -62,11 +63,11 @@ test('BOOK06: publication rejects a private transitive Content embed before acti
         expectedHead, body, embeds, actingSubject: f.actor,
       }), 201);
     const publish = async (item: Item, saved: Awaited<ReturnType<typeof save>>,
-      expectedPublicationHead: string | null) => {
+      expectedPublicationHead: string | null, preparationId = `embed-${randomUUID()}`) => {
       const exact = (await content.readExactBatch([saved.revisionId], async ids => new Set(ids)))[0];
       if (exact?.status !== 'available') throw new Error('exact Content revision unavailable');
       return call('/v1/content-publications', { profile: 'content-publication-v1',
-        preparationId: `embed-${randomUUID()}`, revisionId: saved.revisionId,
+        preparationId, revisionId: saved.revisionId,
         expectedDigest: exact.reference.byteDigest,
         expectedContentEpoch: saved.sourcePosition.dataEpoch,
         resourceId: item.work, variantId: item.variant,
@@ -90,10 +91,37 @@ test('BOOK06: publication rejects a private transitive Content embed before acti
       await publish(middle, middleDraft, null), 201);
     await eligible(middle, middlePublished.decision);
 
-    // A newer leaf publication moves the exact public head. Its old revision is
-    // still retained but its eligibility no longer authorizes new disclosure.
+    // The leaf can lose public eligibility after the outer publication's
+    // precheck. The graph guard then writes a terminal denial and releases its pin.
+    const racingOuter = await makeWork('Racing outer Post');
+    const racingDraft = await save(racingOuter, 'Racing outer embeds middle', null,
+      [middleDraft.revisionId]);
     const leafSecond = await save(leaf, 'Private second leaf', leafFirst.revisionId);
-    await json(await publish(leaf, leafSecond, leafPublished.decision), 201);
+    const racePreparation = `embed-race-${randomUUID()}`;
+    const originalFuseki = f.env.fuseki;
+    let moved = false;
+    f.env.fuseki = new Proxy(originalFuseki, { get(object, property) {
+      if (property === 'commandWithReceipt') return async (envelope: CommandEnvelope) => {
+        if (!moved && envelope.update.includes(iri(racingOuter.variant))) {
+          moved = true;
+          await json(await publish(leaf, leafSecond, leafPublished.decision), 201);
+        }
+        return object.commandWithReceipt(envelope);
+      };
+      const value = Reflect.get(object, property, object);
+      return typeof value === 'function' ? value.bind(object) : value;
+    } });
+    try {
+      const rejected = await json<{ status: string }>(
+        await publish(racingOuter, racingDraft, null, racePreparation), 200);
+      expect(rejected.status).toBe('rejected');
+      expect(moved).toBe(true);
+    } finally { f.env.fuseki = originalFuseki; }
+    expect(await content.readPublicationPreparation(racePreparation))
+      .toMatchObject({ status: 'rejected', pinActive: false });
+
+    // Its old exact revision remains retained, but the current eligibility
+    // no longer authorizes a new outer publication.
     const outerDraft = await save(outer, 'Outer embeds middle', null,
       [middleDraft.revisionId]);
     observed.length = 0;
