@@ -386,6 +386,7 @@ export const isolatedIntegrationFiles = new Set([
   'tests/qa/integration/realm-reply-api.test.ts',
   'tests/qa/integration/source-graph-projection.test.ts',
   'tests/qa/integration/source-authenticated-api.test.ts',
+  'tests/qa/integration/source-field-cost.test.ts',
   'tests/qa/integration/source-field.test.ts',
   'tests/qa/integration/source-support-attach.test.ts',
   'tests/qa/integration/translated-work-links.test.ts',
