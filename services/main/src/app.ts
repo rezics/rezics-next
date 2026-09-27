@@ -82,6 +82,8 @@ import { workMetadataRoutes } from './routes/work-metadata.ts';
 import { discoveryRoutes } from './routes/discovery.ts';
 import { followsRoutes } from './routes/follows.ts';
 import { feedRoutes } from './routes/feed.ts';
+import { continueRoutes } from './routes/continue.ts';
+import { onboardingInterestsRoutes } from './routes/onboarding-interests.ts';
 import { ratingContextReadRoutes } from './routes/rating-contexts.ts';
 import { managementReadRoutes } from './routes/management-reads.ts';
 
@@ -137,6 +139,12 @@ function domainRoutes(fuseki: FusekiClient, work: SearchRouteDependencies) {
     .use(zoneModuleRoutes(work))
     .use(rankingRoutes(work))
     .use(realmDirectoryRoutes(work));
+    .use(realmDirectoryRoutes(work))
+    .use(workContentsRoutes(work));
+    .use(workContentsRoutes(work))
+    .use(continueRoutes(work))
+    .use(onboardingInterestsRoutes(work))
+    .use(workActivityRoutes(work));
 }
 
 function extraRoutes1(fuseki: FusekiClient, work: SearchRouteDependencies) {

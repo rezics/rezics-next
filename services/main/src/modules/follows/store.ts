@@ -3,7 +3,8 @@ import type { Pool } from 'pg';
 import type { VerifiedPrincipal } from '../access/admission.ts';
 import { controlTransaction, ControlConflict, ControlInvalid, ControlStale } from '../access/topology-control.ts';
 import { digest } from '../recommendation/derived-generation.ts';
-import { FOLLOWS_COST, type FollowCommand, type FollowKind, type FollowResult } from './contract.ts';
+import { FOLLOWS_COST, type BatchFollowCommand, type BatchFollowResult,
+  type FollowCommand, type FollowKind, type FollowResult } from './contract.ts';
 import { followPrincipal } from './authority.ts';
 
 export interface FollowRow { target: string; kind: FollowKind; following: boolean; revision: string }
@@ -12,6 +13,61 @@ export function commandKey(key: string) {
 }
 export class FollowsStore {
   constructor(private readonly pool: Pool) {}
+
+  /** One receipt and inventory lock make an onboarding choice all or nothing.
+   * Public target disclosure is repeated for new follows inside the transaction. */
+  async batch(principal: VerifiedPrincipal, input: BatchFollowCommand, key: string,
+    disclose: (target: string, kind: FollowKind) => Promise<void>): Promise<BatchFollowResult> {
+    commandKey(key);
+    if (new Set(input.targets.map(item => item.target)).size !== input.targets.length) {
+      throw new ControlInvalid('Batch follow targets must be unique');
+    }
+    return controlTransaction(this.pool, async client => {
+      const owner = await followPrincipal(client, principal, input.actingSubject);
+      await client.query(`INSERT INTO access.follow_inventory (principal_id, revision) VALUES ($1,$2)
+        ON CONFLICT DO NOTHING`, [owner, randomUUID()]);
+      const inventory = (await client.query<{ active_count: number }>(
+        'SELECT active_count FROM access.follow_inventory WHERE principal_id = $1 FOR UPDATE', [owner])).rows[0]!;
+      const intent = digest(input);
+      const receipt = (await client.query<{ request_digest: string; result: BatchFollowResult }>(
+        'SELECT request_digest, result FROM access.follow_receipt WHERE principal_id = $1 AND idempotency_key = $2',
+        [owner, key])).rows[0];
+      if (receipt) {
+        if (receipt.request_digest !== intent || receipt.result.profile !== 'follow-batch-receipt-v1') {
+          throw new ControlConflict('Idempotency key has another follow intent');
+        }
+        return { ...receipt.result, replayed: true };
+      }
+      const prior = (await client.query<FollowRow>(`SELECT target, kind, following, revision FROM access.follow
+        WHERE principal_id = $1 AND target = ANY($2::text[])`,
+      [owner, input.targets.map(item => item.target)])).rows;
+      const byTarget = new Map(prior.map(row => [row.target, row]));
+      const added = input.targets.filter(item => !byTarget.get(item.target)?.following).length;
+      if (inventory.active_count + added > FOLLOWS_COST.maximumFollowing) {
+        throw new ControlInvalid('Follow limit reached');
+      }
+      const items: BatchFollowResult['items'] = [];
+      for (const item of input.targets) {
+        const existing = byTarget.get(item.target);
+        if (existing && existing.kind !== item.kind) throw new ControlStale('Follow kind changed');
+        if (!existing?.following) await disclose(item.target, item.kind);
+        const revision = existing?.following ? existing.revision : randomUUID();
+        if (!existing?.following) await client.query(`INSERT INTO access.follow
+          (principal_id, target, kind, acting_subject, following, revision) VALUES ($1,$2,$3,$4,true,$5)
+          ON CONFLICT (principal_id, target) DO UPDATE SET following = true,
+            acting_subject = EXCLUDED.acting_subject, revision = EXCLUDED.revision`,
+        [owner, item.target, item.kind, input.actingSubject, revision]);
+        items.push({ target: item.target, kind: item.kind, following: true, revision });
+      }
+      if (added) await client.query(`UPDATE access.follow_inventory SET revision = $2,
+        active_count = active_count + $3 WHERE principal_id = $1`, [owner, randomUUID(), added]);
+      const result: BatchFollowResult = { profile: 'follow-batch-receipt-v1',
+        actingSubject: input.actingSubject, items, replayed: false };
+      await client.query(`INSERT INTO access.follow_receipt (principal_id, idempotency_key, request_digest, result)
+        VALUES ($1,$2,$3,$4)`, [owner, key, intent, result]);
+      return result;
+    });
+  }
 
   async read(principal: VerifiedPrincipal, agent: string, after = '', kind?: FollowKind, limit = 20) {
     if (!Number.isInteger(limit) || limit < 1 || limit > FOLLOWS_COST.pageSize) throw new ControlInvalid('Invalid page size');

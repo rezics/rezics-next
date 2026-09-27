@@ -12,8 +12,25 @@ import { feedSources, type FeedSource } from './source.ts';
 import type { FeedRow } from './store.ts';
 import { feedCardData } from './cards.ts';
 import { diversityAllows, FEED_RANKING, recommendationAllowed } from './ranking.ts';
+import { digest } from '../recommendation/derived-generation.ts';
+import type { HomeExclusion } from './personal.ts';
 
 export interface FeedReader { principal: VerifiedPrincipal; agent: string }
+
+/** A fewer signal keeps one deterministic card in four. Hide and mute remove
+ * every matching card. This is applied before grouping and cursor emission. */
+export function excludedFeedSource(source: FeedSource, exclusions: readonly HomeExclusion[]): boolean {
+  for (const rule of exclusions) {
+    const matches = rule.kind === 'activity' && rule.target === source.id
+      || rule.kind === 'realm' && rule.target === source.realm
+      || rule.kind === 'person' && rule.target === source.actor
+      || rule.kind === 'work' && rule.target === source.work
+      || rule.kind === 'kind' && rule.target === source.kind;
+    if (matches && (rule.strength !== 'fewer'
+      || Number.parseInt(digest([source.id, rule.kind, rule.target]).slice(0, 2), 16) % 4 !== 0)) return true;
+  }
+  return false;
+}
 
 async function replyExcerpt(session: WorkReadSession, source: FeedSource) {
   if (!source.reply) return { excerpt: source.excerpt, language: source.language };
@@ -97,10 +114,18 @@ export async function readFeed(session: WorkReadSession, query: FeedQuery, reade
   const store = session.deps.feed;
   const follows = session.deps.follows;
   if (!store || !follows) throw new WorkReadUnavailable('Feed owner is unavailable');
-  const scope = query.scope ?? (reader ? 'following' : 'all');
+  const personal = reader && session.deps.homePersonal
+    ? await session.deps.homePersonal.read(reader.principal, reader.agent) : null;
+  if (reader && !personal) throw new WorkReadUnavailable('Home preferences are unavailable');
+  if (!query.contentLanguages && personal?.preferences.contentLanguages.length) {
+    query = { ...query, contentLanguages: personal.preferences.contentLanguages };
+  }
+  const scope = query.scope ?? personal?.preferences.tab ?? 'all';
   if (scope === 'following' && !reader) throw new WorkReadInvalid('Following requires authentication');
-  const sort = query.sort ?? 'best', window = query.window ?? 'all';
+  const sort = query.sort ?? personal?.preferences.sort ?? 'best', window = query.window ?? 'all';
   if (scope === 'following' && sort === 'top') throw new WorkReadInvalid('Top is available in All');
+  const watermark = reader && scope === 'following' && sort === 'new'
+    ? await session.deps.homePersonal!.getWatermark(reader.principal, reader.agent, 'following') : null;
   const checkpoint = await store.checkpoint(session.position.dataEpoch);
   const following = reader ? await follows.matches(reader.principal, reader.agent, []) : null;
   const binding = ['home-feed-v1', FEED_RANKING.version, scope, sort, window, normalized(query),
@@ -110,15 +135,18 @@ export async function readFeed(session: WorkReadSession, query: FeedQuery, reade
   let asOf = Date.now(), followedSeen = 0;
   let recentRealms: (string | null)[] = [];
   if (cursor) {
-    let order: { key: string; projection: string; following: string | null; asOf: number; followedSeen: number; recentRealms: (string | null)[] };
+    let order: { key: string; projection: string; following: string | null; personal: string | null;
+      asOf: number; followedSeen: number; recentRealms: (string | null)[] };
     try {
       order = JSON.parse(cursor.order) as typeof order;
       if (!order || typeof order.key !== 'string' || typeof order.projection !== 'string'
+        || (order.personal !== null && typeof order.personal !== 'string')
         || !Number.isSafeInteger(order.asOf) || !Number.isInteger(order.followedSeen)
         || order.followedSeen < 0 || order.followedSeen > FEED_RANKING.thinFollowing || !Array.isArray(order.recentRealms)
         || order.recentRealms.length > 9 || order.recentRealms.some(id => id !== null && typeof id !== 'string')) throw new Error('cursor');
     } catch { throw new WorkReadInvalid('Invalid feed cursor'); }
-    if (order.projection !== checkpoint.revision || (scope === 'following' && order.following !== following?.revision)) {
+    if (order.projection !== checkpoint.revision || order.personal !== (personal?.revision ?? null)
+      || (scope === 'following' && order.following !== following?.revision)) {
       throw new WorkReadMoved('Feed changed');
     }
     after = { id: cursor.after, key: order.key }; asOf = order.asOf; recentRealms = order.recentRealms; followedSeen = order.followedSeen;
@@ -141,9 +169,24 @@ export async function readFeed(session: WorkReadSession, query: FeedQuery, reade
     sources.map(source => [source.realm, source.zone, source.work, source.actor].filter((id): id is string => !!id))) : null;
   const items: FeedItem[] = [];
   const acceptedTags = new Map<string, boolean>();
+  const tagRules = personal?.exclusions.filter(rule => rule.kind === 'tag') ?? [];
+  const tagMatches = new Map<string, string[]>();
   for (const [index, source] of sources.entries()) {
+    if (personal && excludedFeedSource(source, personal.exclusions)) continue;
     if (query.kinds && !query.kinds.includes(source.kind)) continue;
     if (query.realms && (!source.realm || !query.realms.includes(source.realm))) continue;
+    if (source.work && tagRules.length) {
+      const key = JSON.stringify([source.work, source.realm]);
+      if (!tagMatches.has(key)) {
+        const tagSession = new WorkReadSession(session.deps, session.request, { language: query.language,
+          limit: 3, ...(source.realm ? { scope: 'realm', realm: source.realm } : {}) }, session.position);
+        const tags = await readWorkClassifications(tagSession, source.work, tagRules.map(rule => rule.target));
+        tagMatches.set(key, tags.items.map(item => item.sense));
+      }
+      if (tagRules.some(rule => tagMatches.get(key)?.includes(rule.target)
+        && (rule.strength !== 'fewer'
+          || Number.parseInt(digest([source.id, rule.kind, rule.target]).slice(0, 2), 16) % 4 !== 0))) continue;
+    }
     try {
       const item = await hydrateFeedItem(session, source, memberRows.find(row => row.id === source.id)!, summaries);
       const followed = matches?.reasons[index]?.[0];
@@ -215,7 +258,8 @@ export async function readFeed(session: WorkReadSession, query: FeedQuery, reade
   // A sparse page is not evidence that Following is thin. Prove it by an
   // empty follow inventory or by exhausting this view's candidate relation.
   const thinKnown = following?.count === 0 || !more;
-  const allowRecommendations = scope === 'all' || thinKnown && recommendationAllowed(scope, sort, followedSeen);
+  const allowRecommendations = scope === 'all' || personal?.preferences.recommendations !== false
+    && thinKnown && recommendationAllowed(scope, sort, followedSeen);
   const selected = groups.filter(item => {
     if (scope === 'following' && item.reason.kind !== 'followed' && !allowRecommendations) return false;
     if (sort === 'best' && !diversityAllows(item.realm?.id ?? null, recentRealms)) return false;
@@ -224,7 +268,7 @@ export async function readFeed(session: WorkReadSession, query: FeedQuery, reade
   });
   const states = reader && session.deps.feedViewerState ? await session.deps.feedViewerState.read(reader,
     selected.map(item => ({ activity: item.id, work: item.target.work,
-      ...(item.card.kind === 'chapter' ? { occurrence: item.card.occurrence } : {}) })), session.position) : undefined;
+      ...(item.card.kind === 'chapter' ? { occurrence: item.card.occurrence } : {}) })), session) : undefined;
   for (const item of selected) {
     const state = states?.get(item.id) ?? { status: reader ? 'unavailable' : 'anonymous' };
     if (!Value.Check(feedViewerState, state)) throw new WorkReadUnavailable('Viewer state differs');
@@ -246,14 +290,20 @@ export async function readFeed(session: WorkReadSession, query: FeedQuery, reade
   if (reader && (await follows.matches(reader.principal, reader.agent, [])).revision !== following?.revision) {
     throw new WorkReadMoved('Follows changed');
   }
+  if (reader && (await session.deps.homePersonal?.read(reader.principal, reader.agent))?.revision !== personal?.revision) {
+    throw new WorkReadMoved('Home preferences changed');
+  }
   const last = page.at(-1);
   const current = checkpoint.sequence === session.position.sequence && checkpoint.after_id === '\uffff' && !checkpoint.rebuild_epoch;
   return { profile: 'home-feed-v1' as const, scope, sort, window, ranking: FEED_RANKING,
     caughtUp: scope === 'following' && sort === 'new' ? { asOf: new Date(asOf).toISOString(),
+      lastVisitedAt: watermark?.data_epoch === session.position.dataEpoch
+        ? watermark.updated_at.toISOString() : null,
       state: more ? 'more' as const : current ? 'caught-up' as const : 'projecting' as const } : null,
     ...pageResult(session, selected, more && last
       ? encodeReadCursor(binding, session.position, last.id, JSON.stringify({ key: last.order_key,
         projection: checkpoint.revision, following: scope === 'following' ? following?.revision ?? null : null,
+        personal: personal?.revision ?? null,
         asOf, recentRealms, followedSeen })) : null),
     projection: { sequence: checkpoint.sequence, status: current ? 'current' as const : 'catching-up' as const } };
 }

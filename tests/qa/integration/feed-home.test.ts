@@ -1,6 +1,6 @@
 import { HubStore } from '../../../services/main/src/modules/hub/store.ts';
 import { PackageArtifactStore } from '../../../services/main/src/modules/package/lock-artifacts.ts';
-import type { FeedViewerStateReader } from '../../../services/main/src/modules/feed/viewer-state.ts';
+import { FeedViewerStateReader } from '../../../services/main/src/modules/feed/viewer-state.ts';
 import { expect, test } from 'bun:test';
 import { createHash, randomUUID } from 'node:crypto';
 import { Pool } from 'pg';
@@ -8,9 +8,12 @@ import { createMainApp } from '../../../services/main/src/app.ts';
 import { AccountAssertionDenied } from '../../../services/main/src/modules/account/verify-assertion.ts';
 import { AgentProvisioning } from '../../../services/main/src/modules/agent/provision.ts';
 import { FeedStore } from '../../../services/main/src/modules/feed/store.ts';
+import { HomePersonalStore } from '../../../services/main/src/modules/feed/personal.ts';
 import { FeedRefreshWorker } from '../../../services/main/src/modules/feed/refresh.ts';
 import type { FeedItem, FeedVoteResult } from '../../../services/main/src/modules/feed/contract.ts';
 import { FollowsStore } from '../../../services/main/src/modules/follows/store.ts';
+import { ReaderLibraryStatusStore } from '../../../services/main/src/modules/library/status.ts';
+import { StructureProgressStore } from '../../../services/main/src/modules/progress/store.ts';
 import type { FollowResult } from '../../../services/main/src/modules/follows/contract.ts';
 import { ProfilesAccess } from '../../../services/main/src/modules/profiles/access.ts';
 import { RealmReplyContentStore } from '../../../services/main/src/modules/realm-reply/content-store.ts';
@@ -60,6 +63,8 @@ test('G282: follows and home feed use real receipts, relay progress, public read
     } };
     const realmReplies = new RealmReplyStore(new RealmReplyContentStore(stack.contentPool), stack.content, stack.access, stack.env);
     const deps = { environment: stack.env, access: stack.access, account, feed, follows, realmReplies, feedViewerState,
+      homePersonal: new HomePersonalStore(stack.accessPool), libraryStatus: new ReaderLibraryStatusStore(stack.contentPool),
+      progress: new StructureProgressStore(stack.contentPool),
       hub: new HubStore(stack.contentPool, stack.content, stack.access, stack.env,
         new PackageArtifactStore(stack.contentPool, prefix => stack.objects(prefix))),
       content: stack.content, contentAuthoring: stack.content, media: stack.media, structureObjects,
@@ -169,6 +174,59 @@ test('G282: follows and home feed use real receipts, relay progress, public read
     expect(followed.items.every(item => item.viewerState.status === 'unavailable')).toBe(true);
     const thin = await json<Page>(await call('GET', `/v1/feed?sort=best&${authQuery}`, undefined, b.token));
     expect(thin.items.some(item => item.reason.kind === 'recommended' && item.reason.basis === 'thin-following')).toBe(true);
+    const preferencesPath = '/v1/me/feed-preferences';
+    const defaults = await json<{ revision: string | null; preferences: { tab: string; sort: string } }>(
+      await call('GET', `${preferencesPath}?${authQuery}`, undefined, b.token));
+    expect(defaults).toMatchObject({ revision: null, preferences: { tab: 'following', sort: 'best' } });
+    const settings = { actingSubject: reader, expectedRevision: null, preferences: {
+      tab: 'all', sort: 'new', density: 'compact', contentLanguages: [], recommendations: false } };
+    const settingsKey = randomUUID();
+    const savedSettings = await json<{ revision: string }>(await call('PUT', preferencesPath, settings, b.token, settingsKey));
+    expect(await json(await call('PUT', preferencesPath, settings, b.token, settingsKey)))
+      .toMatchObject({ revision: savedSettings.revision, replayed: true });
+    expect((await call('PUT', preferencesPath, settings, b.token)).status).toBe(409);
+    expect(await json(await call('GET', `/v1/feed?${authQuery}`, undefined, b.token)))
+      .toMatchObject({ scope: 'all', sort: 'new' });
+    await json(await call('PUT', preferencesPath, { actingSubject: reader,
+      expectedRevision: savedSettings.revision, preferences: {
+        tab: 'following', sort: 'best', density: 'card', contentLanguages: [], recommendations: true } }, b.token));
+    const headBefore = await json<{ newPosts: { value: number } }>(await call('GET',
+      `/v1/feed/head?scope=all&after=0&${authQuery}`, undefined, b.token));
+    expect(headBefore.newPosts.value).toBeGreaterThan(0);
+    const personalPage = await json<Page>(await call('GET', `/v1/feed?scope=all&sort=new&limit=1&${authQuery}`,
+      undefined, b.token));
+    expect(personalPage.nextCursor).toBeTruthy();
+    const feedback = { actingSubject: reader, kind: 'activity', target: firstItem.id, strength: 'hide' };
+    await json(await call('POST', '/v1/me/feed-feedback', feedback, b.token));
+    expect((await call('GET', `/v1/feed?scope=all&sort=new&limit=1&cursor=${
+      encodeURIComponent(personalPage.nextCursor!)}&${authQuery}`, undefined, b.token)).status).toBe(409);
+    expect((await json<Page>(await call('GET', `/v1/feed?scope=all&sort=new&${authQuery}`,
+      undefined, b.token))).items.some(item => item.id === firstItem.id)).toBe(false);
+    const headAfter = await json<{ newPosts: { value: number } }>(await call('GET',
+      `/v1/feed/head?scope=all&after=0&${authQuery}`, undefined, b.token));
+    expect(headAfter.newPosts.value).toBeLessThan(headBefore.newPosts.value);
+    await json(await call('POST', '/v1/me/feed-feedback', { ...feedback, strength: 'clear' }, b.token));
+    const watermarkScope = `realm:${realm.realm}`;
+    const checkpoint = await feed.checkpoint(stack.env.lineage.dataEpoch);
+    expect((await call('PUT', `/v1/me/feed-watermarks/${encodeURIComponent(watermarkScope)}`, {
+      actingSubject: reader, scope: watermarkScope, dataEpoch: randomUUID(),
+      sequence: checkpoint.sequence }, b.token)).status).toBe(409);
+    await json(await call('PUT', `/v1/me/feed-watermarks/${encodeURIComponent(watermarkScope)}`, {
+      actingSubject: reader, scope: watermarkScope, dataEpoch: stack.env.lineage.dataEpoch,
+      sequence: checkpoint.sequence }, b.token));
+    expect(await json(await call('GET', `/v1/me/feed-watermarks?${authQuery}`, undefined, b.token)))
+      .toMatchObject({ items: [expect.objectContaining({ scope: watermarkScope,
+        sequence: checkpoint.sequence })] });
+    const zoneNav = await json<{ items: { id: string; newSince?: { state: string; count: { value: number } } }[] }>(
+      await call('GET', `/v1/me/follows?${authQuery}&kind=zone&include=newSince`, undefined, b.token));
+    expect(zoneNav.items.find(item => item.id === zone)?.newSince).toMatchObject({ state: 'none', count: { value: 0 } });
+    const interests = await json<{ kinds: { id: string; available: boolean }[];
+      topicsStatus: string; topics: unknown[] }>(await call('GET', '/v1/onboarding/interests?locale=en'));
+    expect(interests.kinds.map(item => item.id)).toEqual(['books', 'software', 'ai', 'recipes', 'media', 'discussions']);
+    expect(interests).toMatchObject({ topicsStatus: 'empty', topics: [] });
+    const suggested = await json<{ items: { id: string; realm: string; sampleWorks: { id: string }[] }[] }>(
+      await call('GET', '/v1/onboarding/suggested-follows?locale=en'));
+    expect(suggested.items.find(item => item.realm === realm.realm)?.sampleWorks.some(item => item.id === first.work)).toBe(true);
     const topWeek = await json<Page>(await call('GET', '/v1/feed?sort=top&window=week'));
     expect(topWeek.window).toBe('week');
     expect(topWeek.caughtUp).toBeNull();
@@ -179,6 +237,13 @@ test('G282: follows and home feed use real receipts, relay progress, public read
     expect(filtered.items.map(item => item.target.id)).toEqual([second.work]);
     const realmOnly = await json<Page>(await call('GET', `/v1/feed?realms=${encodeURIComponent(realm.realm)}`));
     expect(realmOnly.items.map(item => item.kind)).toEqual(['adoption']);
+    const mute = { actingSubject: reader, kind: 'realm', target: realm.realm, strength: 'mute' };
+    await json(await call('PUT', '/v1/me/mutes', mute, b.token));
+    expect(await json(await call('GET', `/v1/me/mutes?${authQuery}`, undefined, b.token)))
+      .toMatchObject({ items: [expect.objectContaining({ kind: 'realm', target: realm.realm })] });
+    expect((await json<Page>(await call('GET', `/v1/feed?scope=all&sort=new&${authQuery}`,
+      undefined, b.token))).items.some(item => item.realm?.id === realm.realm)).toBe(false);
+    await json(await call('PUT', '/v1/me/mutes', { ...mute, strength: 'clear' }, b.token));
     const pageOne = await json<Page>(await call('GET', '/v1/feed?sort=new&limit=1'));
     expect(pageOne.nextCursor).toBeTruthy();
     const pageTwo = await json<Page>(await call('GET', `/v1/feed?sort=new&limit=1&cursor=${pageOne.nextCursor}`));
@@ -384,7 +449,7 @@ test('G282: follows and home feed use real receipts, relay progress, public read
         actingSubject: author, rightsBasis: 'original-contribution', disclosure: 'public' }, a.token), 201);
     }
     // Book order can differ from publication time; Read starts at its first chapter.
-    const placements = await json<{ occurrences: string[] }>(await call('POST',
+    const placements = await json<{ revision: string; occurrences: string[] }>(await call('POST',
       `/v1/compositions/${composition.structure.slice(-36)}/changes`, { profile: 'book-composition',
         expectedHead: composition.revision, actingSubject: author, operations: chapters.toReversed().map((target, index) => ({
           op: 'insert', parent: composition.structure, position: 'last', role: 'chapter', target,
@@ -403,6 +468,66 @@ test('G282: follows and home feed use real receipts, relay progress, public read
       primaryAction: { kind: 'next-unread', work: second.work, occurrence: placements.occurrences[0] },
       target: { excerpt: null } });
     viewerWork = undefined; viewerNextUnread = undefined;
+
+    const batch = { profile: 'follow-batch-v1', actingSubject: reader,
+      targets: [{ target: second.work, kind: 'work' as const }] };
+    const batchKey = randomUUID();
+    const batchResult = await json<{ items: { target: string }[] }>(await call('POST',
+      '/v1/me/follows/batch', batch, b.token, batchKey));
+    expect(batchResult.items.map(item => item.target)).toEqual([second.work]);
+    expect(await json(await call('POST', '/v1/me/follows/batch', batch, b.token, batchKey)))
+      .toMatchObject({ replayed: true });
+    expect((await call('POST', '/v1/me/follows/batch', { ...batch,
+      targets: [batch.targets[0], batch.targets[0]] }, b.token)).status).toBe(400);
+    await json(await call('PUT', `/v1/works/${second.work.slice(-36)}/reader-status`, {
+      actingSubject: reader, expectedVersion: 0, status: 'reading', startedOn: null, finishedOn: null }, b.token));
+    const resume = await json<{ items: { work: string; nextUnread: { occurrence: string } }[] }>(
+      await call('GET', `/v1/me/continue?${authQuery}`, undefined, b.token));
+    expect(resume.items.find(item => item.work === second.work)?.nextUnread.occurrence)
+      .toBe(placements.occurrences[0]);
+    await json(await call('PUT', `/v1/me/continue/${second.work.slice(-36)}/hidden`,
+      { actingSubject: reader, hidden: true }, b.token));
+    expect((await json<{ items: { work: string }[] }>(await call('GET', `/v1/me/continue?${authQuery}`,
+      undefined, b.token))).items.some(item => item.work === second.work)).toBe(false);
+    expect((await json<Page>(await call('GET', `/v1/feed?scope=all&sort=new&${authQuery}`,
+      undefined, b.token))).items.some(item => item.target.work === second.work)).toBe(true);
+    await json(await call('PUT', `/v1/me/continue/${second.work.slice(-36)}/hidden`,
+      { actingSubject: reader, hidden: false }, b.token));
+    deps.feedViewerState = new FeedViewerStateReader();
+    const realViewer = await json<Page>(await call('GET', `/v1/feed?scope=all&sort=new&${authQuery}`,
+      undefined, b.token));
+    expect(realViewer.items.find(item => item.target.work === second.work && item.card.kind === 'chapter'))
+      .toMatchObject({ viewerState: { status: 'available', shelf: { status: 'reading' },
+        spoiler: { policy: 'hide-unread', hidden: true } }, target: { excerpt: null },
+      primaryAction: { kind: 'next-unread', occurrence: placements.occurrences[0] } });
+    const append = async (expectedHead: string, amount: number) => json<{ revision: string; occurrences: string[] }>(
+      await call('POST', `/v1/compositions/${composition.structure.slice(-36)}/changes`, {
+        profile: 'book-composition', expectedHead, actingSubject: author,
+        operations: Array.from({ length: amount }, (_, index) => ({ op: 'insert',
+          parent: composition.structure, position: 'last', role: 'chapter', target: chapters[0],
+          label: { value: `Extra chapter ${index + 1}`, language: 'zh-Hans' } })) }, a.token));
+    const moreChapters = await append(placements.revision, 16);
+    const lastChapters = await append(moreChapters.revision, 3);
+    const pageEdge = moreChapters.occurrences[3]!;
+    await json(await call('PUT', `/v1/compositions/${composition.structure.slice(-36)}/occurrences/${pageEdge.slice(-36)}/progress`,
+      { actingSubject: reader, expectedVersion: 0, completed: true, position: null }, b.token));
+    const edgeFeed = await json<Page>(await call('GET', `/v1/feed?scope=all&sort=new&${authQuery}`,
+      undefined, b.token));
+    expect(edgeFeed.items.find(item => item.target.work === second.work && item.card.kind === 'chapter'))
+      .toMatchObject({ primaryAction: { kind: 'next-unread', occurrence: moreChapters.occurrences[4] } });
+    const distant = lastChapters.occurrences.at(-1)!;
+    await json(await call('PUT', `/v1/compositions/${composition.structure.slice(-36)}/occurrences/${distant.slice(-36)}/progress`,
+      { actingSubject: reader, expectedVersion: 0, completed: false, position: 'paragraph-3' }, b.token));
+    const longResume = await json<{ items: { work: string; nextUnread: { occurrence: string };
+      unreadCount: { kind: string } }[] }>(await call('GET', `/v1/me/continue?${authQuery}`, undefined, b.token));
+    expect(longResume.items.find(item => item.work === second.work)).toMatchObject({
+      nextUnread: { occurrence: distant }, unreadCount: { kind: 'lower-bound' } });
+    const distantFeed = await json<Page>(await call('GET', `/v1/feed?scope=all&sort=new&${authQuery}`,
+      undefined, b.token));
+    expect(distantFeed.items.find(item => item.target.work === second.work && item.card.kind === 'chapter'))
+      .toMatchObject({ primaryAction: { kind: 'next-unread', occurrence: distant },
+        viewerState: { progress: { occurrence: distant } } });
+    expect((await call('GET', '/v1/trending')).status).toBe(503);
 
     // Hub cards expose exact public previews and declared compatibility, never
     // a private draft or guessed version/changelog metadata.

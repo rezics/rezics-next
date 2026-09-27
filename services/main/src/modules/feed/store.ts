@@ -147,6 +147,27 @@ export class FeedStore {
       'SELECT * FROM access.feed_item WHERE data_epoch = $1 AND id = ANY($2::text[])', [epoch, ids])).rows);
   }
 
+  /** Indexed head probe only; disclosure and follows are checked by the reader. */
+  async since(position: ReadPosition, revision: string, afterSequence: string,
+    realm?: string, limit = 20): Promise<{ id: string; realm: string | null; group_key: string }[]> {
+    if (!/^\d{1,30}$/.test(afterSequence) || !Number.isInteger(limit) || limit < 1 || limit > 20) {
+      throw new ControlInvalid('Invalid feed head');
+    }
+    return controlTransaction(this.pool, async client => {
+      const checkpoint = (await client.query<FeedCheckpoint>(
+        'SELECT * FROM access.feed_checkpoint WHERE id FOR SHARE')).rows[0];
+      if (checkpoint?.data_epoch !== position.dataEpoch || checkpoint.revision !== revision) {
+        throw new WorkReadMoved('Feed changed');
+      }
+      return (await client.query<{ id: string; realm: string | null; group_key: string }>(`SELECT id, realm, group_key FROM access.feed_item
+        WHERE data_epoch = $1 AND sequence > $2
+          ${realm ? 'AND realm = $4' : ''}
+        ORDER BY sequence DESC, id DESC LIMIT $3`,
+      realm ? [position.dataEpoch, afterSequence, limit + 1, realm]
+        : [position.dataEpoch, afterSequence, limit + 1])).rows;
+    });
+  }
+
   /** The target is a feed activity, not its Work's quality rating or a ballot.
    * One principal-target PK across all their Agents; a vote flips by its delta.
    * The rank row and receipt share the transaction, including lost-response replay. */

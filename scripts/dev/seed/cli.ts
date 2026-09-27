@@ -13,6 +13,7 @@ import { grantCuratedCollectionSeed, grantOfficialZoneSeed, operatorSeedSession 
   from './operator.ts';
 import { DEFAULT_ZONE_PRESENTATION, ZONE_PRESETS }
   from '../../../services/main/src/modules/zone/presentation-format.ts';
+import { seedHomeV2 } from './home-v2.ts';
 
 interface Options { dryRun: boolean; resetOwn: boolean }
 interface WorkReceipt { work: string; mainVersion: string; workRevision: string; mainRevision: string;
@@ -282,6 +283,7 @@ async function run(options: Options): Promise<boolean> {
 
   const feed = await optional('Home follows and votes', () => seedFeed(api, sessions, createdRealms));
   if (feed) console.log(`Home: ${feed.activities} activities, ${feed.followed} follows, ${feed.votes} votes.`);
+  await optional('Home Continue and new activity', () => seedHomeV2(api, sessions, created, createdRealms));
 
   const search = await optional('Public search', () => fetch(`${endpoints.main}/v1/queries`, { method: 'POST',
     headers: { 'content-type': 'application/json' }, body: JSON.stringify({

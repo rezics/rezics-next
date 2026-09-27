@@ -7,6 +7,7 @@ import type { VerifiedPrincipal } from '../access/admission.ts';
 import type { ResourceSummary } from '../media/summary.ts';
 import { FOLLOWS_COST, type followsPage, type followTarget, type FollowKind } from './contract.ts';
 import type { FollowsStore } from './store.ts';
+import { readNewSince } from '../feed/new-since.ts';
 
 /** Must receive an anonymous session: a bearer never widens follow disclosure. */
 export async function readFollowTarget(session: WorkReadSession, target: string, kind: FollowKind,
@@ -56,7 +57,7 @@ export async function readFollowTarget(session: WorkReadSession, target: string,
 }
 
 export async function readFollows(session: WorkReadSession, store: FollowsStore,
-  principal: VerifiedPrincipal, agent: string, kind?: FollowKind) {
+  principal: VerifiedPrincipal, agent: string, kind?: FollowKind, includeNewSince = false) {
   const identity = await store.matches(principal, agent, []);
   const binding = ['follows-v1', identity.owner, agent, kind ?? null,
     session.options.language ?? null];
@@ -82,6 +83,24 @@ export async function readFollows(session: WorkReadSession, store: FollowsStore,
     catch (error) {
       if (!(error instanceof WorkReadMissing)) throw error;
       items[index] = unavailable({ ...item, target: item.id });
+    }
+  }
+  if (includeNewSince) {
+    if (!session.deps.homePersonal || !session.deps.feed) throw new WorkReadUnavailable('New activity is unavailable');
+    const watermarks = await session.deps.homePersonal.watermarks(principal, agent);
+    for (const [index, item] of items.entries()) {
+      if (!item.available || !['realm', 'zone'].includes(item.kind) || !item.realm) continue;
+      const watermark = watermarks.find(row => row.scope === `realm:${item.realm}`);
+      if (!watermark || watermark.data_epoch !== session.position.dataEpoch) {
+        items[index] = { ...item, newSince: { state: 'unvisited', count: null, updatedAt: null } };
+        continue;
+      }
+      const head = await readNewSince(session, watermark.sequence,
+        `realm:${item.realm}`, { principal, agent });
+      items[index] = { ...item, newSince: { state: head.state === 'projecting' ? 'projecting'
+        : head.newPosts.value > 0 ? 'new'
+          : head.state === 'more' ? 'more-unverified' : 'none',
+      count: head.newPosts, updatedAt: watermark.updated_at.toISOString() } };
     }
   }
   if ((await store.matches(principal, agent, [])).revision !== page.revision) throw new WorkReadMoved('Follows changed');

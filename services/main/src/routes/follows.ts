@@ -1,6 +1,7 @@
 import { Elysia, t } from 'elysia';
 import { ControlConflict, ControlDenied, ControlInvalid, ControlStale, ControlUnavailable } from '../modules/access/topology-control.ts';
-import { followCommand, followKind, followResult, followsPage, followsQuery, followState } from '../modules/follows/contract.ts';
+import { batchFollowCommand, batchFollowResult, followCommand, followKind, followResult,
+  followsPage, followsQuery, followState } from '../modules/follows/contract.ts';
 import { readFollows, readFollowTarget } from '../modules/follows/read.ts';
 import { readId, readLanguage, readUuid } from '../modules/work/read-contract.ts';
 import { workRead, WorkReadUnavailable } from '../modules/work/read-session.ts';
@@ -20,6 +21,7 @@ export function homeError(error: unknown) {
 export const openApiOperations = {
   '/v1/me/follows': { get: { bearer: true } },
   '/v1/follows': { post: { bearer: true, idempotencyKey: true } },
+  '/v1/me/follows/batch': { post: { bearer: true, idempotencyKey: true } },
   '/v1/follows/{id}': { get: { bearer: false } },
 } as const;
 
@@ -31,7 +33,8 @@ export function followsRoutes(work: MainWorkDependencies) {
           if (!work.follows) throw new WorkReadUnavailable('Follows are unavailable');
           const principal = await work.account.verify(request, ['follow:read']);
           return Response.json(await workRead(work, new Request(request.url), { ...query, actingSubject: undefined },
-            session => readFollows(session, work.follows!, principal, query.actingSubject, query.kind)), { headers: homeHeaders });
+            session => readFollows(session, work.follows!, principal, query.actingSubject, query.kind,
+              query.include === 'newSince')), { headers: homeHeaders });
         } catch (error) { return homeError(error); }
       })
     .get('/v1/follows/:id', { params: t.Object({ id: readUuid }),
@@ -62,5 +65,17 @@ export function followsRoutes(work: MainWorkDependencies) {
             }));
           return Response.json(result, { headers: homeHeaders });
         } catch (error) { return homeError(error); }
-      });
+      })
+    .post('/v1/me/follows/batch', { body: batchFollowCommand,
+      response: { 200: batchFollowResult, ...workReadProblems },
+    }, async ({ request, body }) => {
+      try {
+        if (!work.follows) throw new WorkReadUnavailable('Follows are unavailable');
+        const principal = await work.account.verify(request, ['follow:write']);
+        return Response.json(await work.follows.batch(principal, body,
+          request.headers.get('idempotency-key') ?? '', (target, kind) => workRead(work,
+            new Request(request.url), {}, async session => { await readFollowTarget(session, target, kind); })),
+        { headers: homeHeaders });
+      } catch (error) { return homeError(error); }
+    });
 }

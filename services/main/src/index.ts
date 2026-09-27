@@ -8,6 +8,8 @@ import { ContentProjectionWorker } from './content-projection-worker.ts';
 import { DiscoveryProjection } from './modules/discovery/store.ts';
 import { FollowsStore } from './modules/follows/store.ts';
 import { FeedStore } from './modules/feed/store.ts';
+import { FeedViewerStateReader } from './modules/feed/viewer-state.ts';
+import { HomePersonalStore } from './modules/feed/personal.ts';
 import { FeedRefreshWorker } from './modules/feed/refresh.ts';
 import { DiscoveryRefreshWorker } from './modules/discovery/refresh.ts';
 import { DiscoveryRefreshStore } from './modules/discovery/refresh-store.ts';
@@ -290,6 +292,8 @@ const app = createMainApp(fuseki, {
   feed: new FeedStore(pool),
   serialStats,
   readRankings,
+  feedViewerState: new FeedViewerStateReader(),
+  homePersonal: new HomePersonalStore(pool),
   discovery: new DiscoveryProjection(pool),
   profiles: new ProfilesAccess(pool),
   studioAccess: new StudioAccess(pool),

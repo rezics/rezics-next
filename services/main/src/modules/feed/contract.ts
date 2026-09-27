@@ -43,7 +43,7 @@ export const feedViewerState = t.Union([
     nextUnread: t.Optional(t.Object({ work: readId, occurrence: readId, language: t.Optional(readLanguage) })),
     shelf: t.Nullable(t.Object({ id: readId, status: t.String() })),
     progress: t.Nullable(t.Object({ composition: readId, occurrence: readId,
-      selectedRevision: t.String(), completed: t.Boolean(), position: t.Nullable(t.String()) })),
+      selectedRevision: t.Nullable(t.String()), completed: t.Boolean(), position: t.Nullable(t.String()) })),
     spoiler: t.Object({ policy: t.Union([t.Literal('show'), t.Literal('hide-unread')]), hidden: t.Boolean() }) }),
 ]);
 export type FeedViewerState = Static<typeof feedViewerState>;
@@ -74,7 +74,8 @@ export const feedPage = t.Object({ profile: t.Literal('home-feed-v1'),
   scope: t.Union([t.Literal('following'), t.Literal('all')]), sort: feedSort, window: feedWindow,
   ranking: t.Object({ version: t.String(), decayHours: t.Number(), candidatePool: t.Integer(),
     normalization: t.String(), signals: t.Object({ upvote: t.Number(), downvote: t.Number() }), diversityWindow: t.Integer(), realmCap: t.Integer(), thinFollowing: t.Integer() }),
-  caughtUp: t.Nullable(t.Object({ asOf: t.String(), state: t.Union([t.Literal('more'), t.Literal('caught-up'), t.Literal('projecting')]) })),
+  caughtUp: t.Nullable(t.Object({ asOf: t.String(), lastVisitedAt: t.Nullable(t.String()),
+    state: t.Union([t.Literal('more'), t.Literal('caught-up'), t.Literal('projecting')]) })),
   items: t.Array(feedItem, { maxItems: 20 }), ...pageFields,
   projection: t.Object({ sequence: t.String(), status: t.Union([t.Literal('current'), t.Literal('catching-up')]) }) });
 export const feedVoteCommand = t.Object({ profile: t.Literal('feed-vote-command-v1'), actingSubject: readId,
