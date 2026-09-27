@@ -24,7 +24,9 @@ export class SearchIndexUncertain extends SearchIndexUnavailable {}
 export const MAX_SEARCH_REQUEST_MS = 1_500;
 export const MAX_SEARCH_FUSEKI_CALLS = 72;
 export const MAX_SEARCH_FUSEKI_BYTES = 8_388_608;
-const RETRY_DELAYS_MS = [75, 250] as const;
+// A proven movement already fences the old snapshot. Keep the retry pause short
+// so a subsequent native writer and its delta proof fit the same wall deadline.
+const RETRY_DELAYS_MS = [25, 50] as const;
 
 export interface SearchAttemptDiagnostic {
   attempt: number;
@@ -73,7 +75,7 @@ export async function withStableSearchSnapshot<T>(fuseki: FusekiClient | undefin
           if (!(error instanceof SearchSnapshotMoved)) throw error;
           const waitStarted = performance.now();
           try {
-            await delay(RETRY_DELAYS_MS[attempt - 1] ?? 75, undefined, { signal: controller.signal });
+            await delay(RETRY_DELAYS_MS[attempt - 1] ?? 50, undefined, { signal: controller.signal });
             // A long native writer can outlive both fixed waits. Poll only after
             // a proven movement, with the same call and wall budgets as the read.
             while (fuseki && (await serverState(fuseki)).publicSearchWriteActive) {
@@ -279,12 +281,17 @@ export async function assertPublicTextReady(fuseki: FusekiClient,
     }
     return qualifyMembership(fuseki, position, state.publicSearchDeltaAvailable);
   })();
-  // Keep one generation/position only; concurrent requests for it share the proof.
-  entries.clear();
+  // Preserve the last qualified proof while this epoch is pending. If a writer
+  // moves the position again, the next attempt can replay from that proof
+  // instead of scanning the full public corpus inside the request deadline.
   entries.set(key, proof);
   try {
     const membership = await proof;
     await assertSameTextInstance(fuseki, position);
+    if (entries.get(key) === proof) {
+      entries.clear();
+      entries.set(key, Promise.resolve(membership));
+    }
     return { ...position, population: membership.population };
   }
   catch (error) { if (entries.get(key) === proof) entries.delete(key); throw error; }

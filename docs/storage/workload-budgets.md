@@ -473,3 +473,55 @@ after four Fuseki calls and 17,202 response bytes. Main recorded its first
 read attempt consuming the entire 1,500 ms deadline; a second bounded read
 never began. This is a correctness/error-objective failure under the retained
 limit, so SEARCH18 is not declared complete.
+
+### Quiet-host registered load qualification (2026-09-27)
+
+The complete registered load tier passed as `20260927t035602-33bffd`: ten tests,
+zero failures, 162.827 seconds of test execution under the unchanged 180-second
+limit. Its preparation restored three independent writable copies of frozen
+`fx-medium-c9f6e4fdcb52`, one each for OPS05, SEARCH18 and REC02. The restores
+ran concurrently and took 261.007, 260.810 and 259.764 seconds; empty-stack
+startup took 8.899 seconds, bootstrap 1.213 seconds and aggregate preparation
+271.121 seconds under the 600-second ceiling. The fixture was not rebuilt. The
+restore smoke verified owner samples and graph readiness before the test clock.
+
+OPS05 measured 255 public reads and 35 admitted writes over a 20-second mix
+against 100,000 restored Works, 10,000 public MatchUnits and ten fresh command
+Works. Eight read clients produced an 87.9% read share and 50.2% hot-Work read
+share. There were zero HTTP or writer errors. Read p95 was 210.4 ms overall
+(Main 202.5, Realm 176.5, Content 369.4 ms); edit, selection and rating write
+p95 were 1,508.2, 1,254.8 and 549.1 ms, all under their unchanged 1,500 ms
+read and 2,500 ms write objectives. Relay lag peaked at one batch and ended at
+zero. Main process high-water memory was 149,584 KiB; before recovery Fuseki
+and PostgreSQL cgroup peaks were 2,706,743,296 and 140,726,272 bytes. Neither
+container had an explicit cgroup memory limit, so these samples record usage
+rather than proving a host memory ceiling. Persistent storage restart, search
+readiness, exact post-restart reads and relay drain took 25.960 seconds under
+the unchanged 90-second recovery limit.
+
+The earlier OPS05 miss timed a three-command draft, publication and selection
+workflow as one selection write and produced one Content 503 while that workflow
+mutated the public graph. The registered run prepared four published
+Contributions in 4.680 seconds of recorded setup before the mix, then timed the
+admitted selection command itself during the mix. Public search retry pauses
+after proven graph movement were reduced from 75/250 ms to 25/50 ms; the
+1,500 ms deadline and all call and byte bounds stayed fixed. A failed delta
+proof now retains the last qualified membership for a bounded retry instead of
+forcing another 10,000-unit inventory.
+
+SEARCH18 cold-restarted the restored storage in 19.350 seconds and reached
+Main search readiness in 2.101 seconds. The 10,000-unit corpus returned 512
+admitted candidates in 177.0 ms and explicitly rejected 513 with HTTP 422 in
+153.4 ms. Its real selection-movement query returned the newly selected
+Contribution in 698.9 ms, using 14 Main-to-Fuseki calls and 232,582 response
+bytes. One native membership delta was available and no full corpus inventory
+ran during that retry. The probe's 96 metered Fuseki calls are the aggregate
+across readiness and multiple separate queries, not a per-request call count;
+the measured movement request stayed below the 72-call and 8 MiB per-request
+bounds. The same tier passed REC02's 10,000-signal hot-target and sparse ranking
+test in 4.0 seconds.
+
+This qualification covers the named 20-second host mix and 10,000 public
+MatchUnits. It does not claim the older 180-second sustained capacity profile
+or a 20,000-unit search corpus. The manager's clean full backend run remains the
+final acceptance gate.

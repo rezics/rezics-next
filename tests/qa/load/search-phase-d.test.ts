@@ -23,7 +23,8 @@ test('SEARCH18: restored 10k public units meet cold, degree, language, byte, cur
   const evidence = JSON.parse(readFileSync(join(artifacts, 'search-probe-evidence.json'), 'utf8')) as {
     failure?: string; storageColdRestartMs?: number; publicUnitPopulation?: number;
     candidateDegree?: { admitted?: { total?: number }; refused?: { status?: number } };
-    movementRetry?: { additionalFusekiCallsOverStableBaseline?: number };
+    movementRetry?: { additionalFusekiCallsOverStableBaseline?: number;
+      searchProof?: { fullInventories: number; deltaRequests: number; deltaAvailable: number } };
   };
   expect(result.error?.message).toBeUndefined();
   expect(evidence.failure).toBeUndefined();
@@ -33,4 +34,7 @@ test('SEARCH18: restored 10k public units meet cold, degree, language, byte, cur
   expect(evidence.candidateDegree?.admitted?.total).toBe(512);
   expect(evidence.candidateDegree?.refused?.status).toBe(422);
   expect(evidence.movementRetry?.additionalFusekiCallsOverStableBaseline).toBeGreaterThan(0);
+  expect(evidence.movementRetry?.searchProof?.fullInventories).toBe(0);
+  expect(evidence.movementRetry?.searchProof?.deltaRequests).toBeGreaterThan(0);
+  expect(evidence.movementRetry?.searchProof?.deltaAvailable).toBeGreaterThan(0);
 }, 160_000);

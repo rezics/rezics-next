@@ -3,7 +3,8 @@ import { join, resolve } from 'node:path';
 import { acquireFullLock, acquireQaSlots, artifactRoots, backendTiers, command, commandAsync, concurrencyGate, estimatedDurations,
   expandTestPaths, faultRecoveryBaselineDurations, goalSlotDirectory, implementedTiers, isolatedFaultFiles,
   isolatedIntegrationFiles, isolationCandidates,
-  junitSuites, matchedNoTests, maximumShards, mergeJUnit, newRunId, parseArgs, planStackProjects,
+  junitSuites, LOAD_FIXTURE_ID, LOAD_PREPARATION_BUDGET_MS, loadFixturePlan,
+  matchedNoTests, maximumShards, mergeJUnit, newRunId, parseArgs, planStackProjects,
   recordedFileDurations, selfManagedFaultFiles, shardCount,
   shardResolved, sourceIdentity, splitTestArgs,
   tierArtifactName, uncoveredTiers, writeSummary, xmlForCommand, type IsolationRecord, type ShardRecord,
@@ -25,6 +26,7 @@ const tiers: { name: Tier; status: 'passed' | 'failed' | 'uncovered'; elapsedMs?
 const isolation: IsolationRecord[] = [];
 const errors: string[] = [];
 const startedProjects: string[] = [];
+const startedFixtureProjects: string[] = [];
 const inventory = caseInventory(root);
 const backendSelection = options.backend ? selectBackendCases(inventory) : undefined;
 const cases = backendSelection?.cases ?? inventory;
@@ -315,8 +317,15 @@ try {
     if (tier === 'load') {
       const projectRunId = `${runId}-l`;
       const artifact = tierArtifactName(tier);
+      const preparationStarted = Date.now();
+      const remainingPreparation = () => Math.max(1,
+        LOAD_PREPARATION_BUDGET_MS - (Date.now() - preparationStarted));
+      const selectedFiles = expandTestPaths(root,
+        splitTestArgs(testArgs(tier, selection, chosen)).paths);
+      const fixturePlan = loadFixturePlan(runId, selectedFiles, chosen?.id);
       startedProjects.push(projectRunId);
-      const up = command(root, 'corepack', ['yarn', 'stack:up', '--profile', 'qa', '--run-id', projectRunId], 180_000);
+      const up = command(root, 'corepack', ['yarn', 'stack:up', '--profile', 'qa', '--run-id', projectRunId],
+        Math.min(180_000, remainingPreparation()));
       if (!up.ok) { errors.push(`${tier} stack startup failed`); writeFileSync(join(logs, `${artifact}-stack.log`), up.output); tiers.push({ name: tier, status: 'failed' }); writeFileSync(join(directory, `${artifact}.xml`), xmlForCommand(tier, false, up.elapsedMs, up.output)); continue; }
       const stackDir = join(root, '.temp', 'stack', `rezics-qa-${projectRunId}`);
       const apps = readEnv(join(stackDir, 'apps.env'));
@@ -325,14 +334,37 @@ try {
       const composePath = join(stackDir, 'qa-compose.json');
       writeFileSync(appsPath, JSON.stringify(apps), { mode: 0o600 });
       writeFileSync(composePath, JSON.stringify(compose), { mode: 0o600 });
-      const bootstrap = command(root, 'bun', ['scripts/qa/bootstrap.ts', appsPath, composePath], 180_000);
+      const bootstrap = command(root, 'bun', ['scripts/qa/bootstrap.ts', appsPath, composePath],
+        Math.min(180_000, remainingPreparation()));
       if (!bootstrap.ok) { errors.push(`${tier} shared bootstrap failed`); writeFileSync(join(logs, `${artifact}-bootstrap.log`), bootstrap.output); tiers.push({ name: tier, status: 'failed' }); writeFileSync(join(directory, `${artifact}.xml`), xmlForCommand(tier, false, bootstrap.elapsedMs, bootstrap.output)); continue; }
+      const fixtureResults = await Promise.all(fixturePlan.map(async item => {
+        startedFixtureProjects.push(item.runId);
+        const result = await commandAsync(root, 'corepack', ['yarn', 'fixture:restore',
+          '--fixture', LOAD_FIXTURE_ID, '--run-id', item.runId], remainingPreparation());
+        writeFileSync(join(logs, `${artifact}-restore-${item.caseId}.log`), result.output);
+        return { ...item, ok: result.ok, elapsedMs: result.elapsedMs, timedOut: result.timedOut };
+      }));
+      const preparationMs = Date.now() - preparationStarted;
+      writeFileSync(join(directory, `${artifact}-preparation.json`), JSON.stringify({
+        deadlineMs: LOAD_PREPARATION_BUDGET_MS, elapsedMs: preparationMs,
+        stackUpMs: up.elapsedMs, bootstrapMs: bootstrap.elapsedMs,
+        fixture: LOAD_FIXTURE_ID, copies: fixtureResults,
+      }, null, 2));
+      if (preparationMs > LOAD_PREPARATION_BUDGET_MS || fixtureResults.some(item => !item.ok)) {
+        errors.push(`${tier} preparation failed or exceeded ${LOAD_PREPARATION_BUDGET_MS / 1000}s`);
+        tiers.push({ name: tier, status: 'failed' });
+        writeFileSync(join(directory, `${artifact}.xml`), xmlForCommand(tier, false, preparationMs,
+          JSON.stringify(fixtureResults)));
+        continue;
+      }
       const budget = 180_000;
       const result = command(root, 'bun', ['test', ...testArgs(tier, selection, chosen), '--reporter=junit',
         `--reporter-outfile=${join(directory, `${artifact}.xml`)}`], budget,
       { ...process.env, ...apps, REZICS_QA_RUN_ID: projectRunId,
         REZICS_S3_GATE_PROJECT: projectRunId,
         REZICS_QA_ARTIFACT_DIR: directory,
+        ...Object.fromEntries(fixturePlan.map(item =>
+          [`REZICS_QA_FIXTURE_${item.caseId}_RUN_ID`, item.runId])),
         TOXIPROXY_API_URL: `http://127.0.0.1:${compose.TOXIPROXY_API_PORT}`,
         TOXIPROXY_FUSEKI_URL: `http://127.0.0.1:${compose.TOXIPROXY_FUSEKI_PORT}/rezics/` });
       const ok = result.ok && result.elapsedMs <= budget;
@@ -351,6 +383,12 @@ try {
   if (!options.keep) for (const projectRunId of startedProjects) {
     const down = command(root, 'corepack', ['yarn', 'stack:reset', '--profile', 'qa', '--run-id', projectRunId], 120_000);
     if (!down.ok) { errors.push(`QA stack cleanup failed: ${projectRunId}`); writeFileSync(join(logs, `${projectRunId}-cleanup.log`), down.output); }
+  }
+  if (!options.keep) for (const projectRunId of startedFixtureProjects) {
+    const down = command(root, 'corepack', ['yarn', 'stack:reset', '--profile', 'qa',
+      '--run-id', projectRunId, '--persistent'], 120_000);
+    if (!down.ok) { errors.push(`Fixture stack cleanup failed: ${projectRunId}`);
+      writeFileSync(join(logs, `${projectRunId}-cleanup.log`), down.output); }
   }
   try {
     const sourceAfter = sourceIdentity(root);

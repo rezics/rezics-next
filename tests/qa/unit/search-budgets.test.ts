@@ -285,6 +285,27 @@ test('SEARCH07/SEARCH15/SEARCH18: certified affected-unit replay avoids a corpus
   expect(source.counts()).toMatchObject({ inventories: 1, deltaCalls: 3 });
 });
 
+test('SEARCH18: a failed delta proof retains the last qualified membership for retry', async () => {
+  const source = fake(10_000);
+  source.enableDelta();
+  const lineage = { dataEpoch: 'epoch', routingEpoch: 'routing' };
+  await assertPublicTextReady(source.fuseki, lineage);
+  source.commitDelta([{ unit: 'urn:rezics:match:new', before: false, after: true }]);
+  const original = source.fuseki.searchDeltaSince.bind(source.fuseki);
+  let moveOnce = true;
+  source.fuseki.searchDeltaSince = async (since: string) => {
+    if (moveOnce && since !== '-1') {
+      moveOnce = false;
+      throw new FusekiReadBudgetExceeded('journal call exhausted its bounded request');
+    }
+    return original(since);
+  };
+  await expect(assertPublicTextReady(source.fuseki, lineage))
+    .rejects.toBeInstanceOf(FusekiReadBudgetExceeded);
+  expect((await assertPublicTextReady(source.fuseki, lineage)).population).toBe(10_001);
+  expect(source.counts()).toMatchObject({ inventories: 1, deltaCalls: 2 });
+});
+
 test('SEARCH07/SEARCH10: replay work is fixed by affected units across unrelated corpus sizes', async () => {
   const lineage = { dataEpoch: 'epoch', routingEpoch: 'routing' };
   for (const corpus of [100, 1_000, 10_000]) {
@@ -446,7 +467,7 @@ test('SEARCH18: a fourth read can finish after three consecutive native position
   });
   expect(result).toBe('complete');
   expect(attempts).toBe(4);
-  expect(performance.now() - started).toBeGreaterThanOrEqual(375);
+  expect(performance.now() - started).toBeGreaterThanOrEqual(100);
   expect(performance.now() - started).toBeLessThan(1_500);
   await expect(withStableSearchSnapshot(source.fuseki, async () => {
     attempts++;

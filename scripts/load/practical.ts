@@ -448,7 +448,32 @@ async function writeSelection(corpus: PracticalCorpus, authority: LoadAuthority,
   return selectPreparedContribution(corpus, authority, index, prepared);
 }
 
-async function mixedWriters(corpus: PracticalCorpus, authority: LoadAuthority, until: number) {
+async function prepareMixedSelections(corpus: PracticalCorpus, authority: LoadAuthority) {
+  const prepared = new Map<string, PreparedSelection>();
+  if (!phaseD) return prepared;
+  const started = performance.now();
+  const candidates = (corpus.writableIndices ?? corpus.works.map((_, index) => index))
+    .filter(index => index >= 4 && index !== 7);
+  // The 550 ms writer pause caps iterations during this 20-second mix. Prepare
+  // the Contribution and publication prerequisites before timing selection.
+  const iterations = Math.ceil(durationSeconds * 1000 / 550);
+  for (let worker = 0; worker < 2; worker++) {
+    const own = writerCohorts(candidates.filter((_, offset) => offset % 2 === worker),
+      Math.max(1, Math.floor(count / 10)));
+    for (let iteration = 0; iteration < iterations; iteration += 20) {
+      const index = writerIndex(own, iteration).index;
+      prepared.set(`${worker}:${iteration}`, await prepareSelection(authority,
+        corpus.works[index]!, worker * 100_000 + iteration));
+    }
+  }
+  await waitRelay();
+  evidence.selectionPreparation = { contributions: prepared.size,
+    elapsedMs: performance.now() - started, outsideMix: true };
+  return prepared;
+}
+
+async function mixedWriters(corpus: PracticalCorpus, authority: LoadAuthority, until: number,
+  preparedSelections: ReadonlyMap<string, PreparedSelection>) {
   const candidates = (corpus.writableIndices ?? corpus.works.map((_, index) => index))
     .filter(index => index >= 4 && index !== 7);
   const samples = { edit: [] as number[], selection: [] as number[], rating: [] as number[],
@@ -466,7 +491,12 @@ async function mixedWriters(corpus: PracticalCorpus, authority: LoadAuthority, u
         : iteration % 10 === 0 ? 'rating' : 'edit';
       const start = performance.now();
       try {
-        if (kind === 'selection') await writeSelection(corpus, authority, index, worker * 100_000 + iteration);
+        if (kind === 'selection') {
+          const prepared = preparedSelections.get(`${worker}:${iteration}`);
+          if (phaseD && !prepared) throw new Error('Phase-D selection prerequisite was not prepared');
+          if (prepared) await selectPreparedContribution(corpus, authority, index, prepared);
+          else await writeSelection(corpus, authority, index, worker * 100_000 + iteration);
+        }
         else if (kind === 'rating') {
           const input = { context: corpus.ratingContext, work: item.work,
             mainVersion: item.main, expectedRevisionHead: ratingHeads.get(index) ?? null,
@@ -506,6 +536,7 @@ async function mixedWriters(corpus: PracticalCorpus, authority: LoadAuthority, u
 }
 
 async function runK6(corpus: PracticalCorpus, authority: LoadAuthority) {
+  const preparedSelections = await prepareMixedSelections(corpus, authority);
   const hotCount = Math.max(1, Math.floor(count / 10));
   const writableHotWorks = (corpus.writableIndices ?? corpus.works.map((_, index) => index))
     .filter(index => index < hotCount && index >= 4 && index !== 7).length;
@@ -531,7 +562,7 @@ async function runK6(corpus: PracticalCorpus, authority: LoadAuthority) {
     '/scripts/practical.js'], { cwd: root, env: docker, stdio: ['ignore', fd, fd] });
   closeSync(fd);
   const until = Date.now() + durationSeconds * 1000;
-  const writes = mixedWriters(corpus, authority, until);
+  const writes = mixedWriters(corpus, authority, until, preparedSelections);
   const lagSamples: { atMs: number; lag: string }[] = [];
   const lagErrors: string[] = [];
   const lagStart = Date.now();

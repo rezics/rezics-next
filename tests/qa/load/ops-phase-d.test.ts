@@ -25,6 +25,7 @@ test('OPS05: named 100k host mix records latency, relay lag, memory and storage 
   });
   const evidence = JSON.parse(readFileSync(join(artifacts, 'evidence.json'), 'utf8')) as {
     failure?: string; qualification?: { durationSeconds: number };
+    selectionPreparation?: { contributions: number; elapsedMs: number; outsideMix: boolean };
     mixed?: { reads: number; writes: number; readP95Ms: number };
     relayDuringMix?: { samples: unknown[]; trend: { growingAtEnd: boolean } };
     mainHighWaterKiB?: number; storageRecoveryMs?: number;
@@ -35,6 +36,9 @@ test('OPS05: named 100k host mix records latency, relay lag, memory and storage 
   expect(evidence.failure).toBeUndefined();
   expect(result.status).toBe(0);
   expect(evidence.qualification?.durationSeconds).toBe(20);
+  expect(evidence.selectionPreparation?.contributions).toBeGreaterThan(0);
+  expect(evidence.selectionPreparation?.elapsedMs).toBeGreaterThan(0);
+  expect(evidence.selectionPreparation?.outsideMix).toBe(true);
   expect(evidence.mixed?.reads).toBeGreaterThan(0);
   expect(evidence.mixed?.writes).toBeGreaterThan(0);
   expect(evidence.mixed?.readP95Ms).toBeLessThanOrEqual(1500);

@@ -79,6 +79,26 @@ export function newRunId(): string {
   return `${new Date().toISOString().replace(/[-:]/g, '').slice(0, 15).toLowerCase()}-${randomBytes(3).toString('hex')}`;
 }
 
+export const LOAD_FIXTURE_ID = 'fx-medium-c9f6e4fdcb52';
+export const LOAD_PREPARATION_BUDGET_MS = 600_000;
+export const loadFixtureFiles = {
+  OPS05: 'tests/qa/load/ops-phase-d.test.ts',
+  SEARCH18: 'tests/qa/load/search-phase-d.test.ts',
+  REC02: 'tests/qa/load/recommendation-skew.test.ts',
+} as const;
+export type LoadFixtureCase = keyof typeof loadFixtureFiles;
+
+/** Each selected case gets one fresh writable copy, independent of test order. */
+export function loadFixturePlan(runId: string, files: readonly string[], id?: string):
+  { caseId: LoadFixtureCase; runId: string }[] {
+  const suffix = { OPS05: 'o', SEARCH18: 's', REC02: 'r' } as const;
+  return (Object.keys(loadFixtureFiles) as LoadFixtureCase[])
+    .filter(caseId => (files.includes(loadFixtureFiles[caseId])
+      || caseId === 'SEARCH18' && files.includes('tests/qa/load/fixture-restore.test.ts'))
+      && (!id || id === caseId))
+    .map(caseId => ({ caseId, runId: `fixture-${runId.replace('-', '')}-${suffix[caseId]}` }));
+}
+
 export function expectedFusekiModuleVersion(compose: string): string {
   const versions = [...compose.matchAll(/^\s*image:\s*rezics\/fuseki:6\.2\.0-cmd(\d+\.\d+\.\d+)(?:-[a-z0-9]+)?\s*$/gm)]
     .map(match => match[1]!);
