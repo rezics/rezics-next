@@ -6,6 +6,8 @@ import { GRAPHS, RV, iri, lit, type WorkActivationEnvironment } from './activate
 
 const nativeId = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
 const uuid = /^[0-9a-f-]{36}$/;
+// This installed native-text profile uses a simple language-tag syntax.
+// WORK02's broader missing/multiple/nonlinguistic policy remains pending.
 const languageTag = /^[a-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$/;
 const MAX_NATIVE_VARIANTS = 64;
 

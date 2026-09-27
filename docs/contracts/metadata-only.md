@@ -1,21 +1,15 @@
 # Metadata-only resources
 
-## Meaning
+A Work can have a stable Main Version before it hosts a body. Metadata-only is an
+explicit hosting policy, not a fake empty publication or an automatic ban on
+discussion, curation and source evidence. [WORK01](../../scripts/qa/cases/native-work.ts)
+tests source-free creation and the empty Main Version.
 
-A Work/Main Version may describe a creative object before any hosted body exists.
-Metadata-only is an explicit hosting/presentation policy, not a fake empty body,
-external edition or automatic denial of all interactions. Classification, source
-evidence, names, references, discussion and curation remain available under policy.
-
-## Operations
-
-Creating metadata-only content does not require a file or publication event.
-Admitting hosted content later validates authority, rights, applicability and the
-chosen contribution/selection without changing identity. Disabling hosted delivery
-preserves exact revision history and independent external references while stopping
-affected public delivery. Editing metadata and changing hosting policy are separately
-grantable when their consequences differ.
-
-Search/SEO/rendering report what is actually available and do not fabricate text,
-duration or readable languages. Verify transitions with private/published content,
-fixed references, Realm adoption and source-only objects.
+Later hosting and disabling hosted delivery need distinct authorized transitions.
+Admitting content must recheck rights, applicability and the selected
+contribution without changing Work identity. Disabling delivery must keep exact
+history and independent external references while closing affected public
+delivery. Metadata editing and hosting-policy changes may need separate grants.
+Search, SEO and rendering must report available content without inventing text,
+duration or readable languages. These transitions still need executable cases
+with private and published content, fixed references and Realm adoption.

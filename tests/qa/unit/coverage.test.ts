@@ -300,7 +300,7 @@ test('SYS02: declared lost-response coverage needs the real fault result in one 
 });
 
 test('QA08: WORK01 needs both native and browser evidence in one complete run', () => {
-  const workCase = [{ id: 'WORK01', page: 'docs/testing/native-work.md' }];
+  const workCase = [{ id: 'WORK01', page: 'scripts/qa/cases/native-work.ts' }];
   const native = { tier: 'integration' as const,
     file: 'tests/qa/integration/web-auth-bootstrap.test.ts',
     name: 'IAM01/WORK01: authenticated metadata-only Work has an empty Main Version',
@@ -320,7 +320,7 @@ test('QA08: WORK01 needs both native and browser evidence in one complete run', 
 });
 
 test('QA08: backend WORK01 needs the API owner result and cannot borrow browser evidence', () => {
-  const workCase = [{ id: 'WORK01', page: 'docs/testing/native-work.md' }];
+  const workCase = [{ id: 'WORK01', page: 'scripts/qa/cases/native-work.ts' }];
   const native = { tier: 'integration' as const,
     file: 'tests/qa/integration/web-auth-bootstrap.test.ts',
     name: 'IAM01/WORK01: authenticated metadata-only Work has an empty Main Version',

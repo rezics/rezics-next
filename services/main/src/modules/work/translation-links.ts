@@ -10,6 +10,8 @@ import { PendingAdmittedWork } from './create-admitted.ts';
 import { assertGraphAdmissionOpen } from './restore-lineage.ts';
 
 const nativeId = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
+// Translation links currently use the installed native-text tag syntax;
+// WORK02's reviewed BCP 47 and missingness policy remains pending.
 const language = /^[a-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$/;
 const evidenceUrl = /^https:\/\/[^\s<>"{}|\\^`]{1,2040}$/;
 const PROFILE = 'https://rezics.com/definition/translation-link-v1';

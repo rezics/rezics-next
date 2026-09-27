@@ -1,29 +1,16 @@
-# Distribution, editions and contextual media
+# Distribution and editions
 
-## Domain model
+A distribution or release identifies an issuing specification, platform or
+selected publication scope. Work, Main Version, edition, carrier, artifact and
+announcement remain separate. Incomplete external correspondence should remain
+explicit instead of inventing an edition parent or merging equal identifiers.
 
-A distribution/release identifies an issuing specification, platform or selected
-publication scope. It may be an actual external issue or a REZICS fixed release.
-Work/Main Version, edition, carrier, artifact and distribution announcement remain
-separate. Native metadata can describe incomplete or unknown correspondence.
+The [fixed native text release](../../services/main/src/modules/work/fixed-release.ts)
+seals an exact eligible selection. The [Media owner](../../services/main/src/modules/media/)
+retains original Use provenance and role for cover and gallery assets. Repeated
+tracks and chapters need distinct occurrences even when they share one member.
 
-## Operations
-
-Create release metadata, attach exact compatible content/artifacts, record language/
-territory/date/identifier claims, compose ordered members and seal an eligible
-manifest. Repeated tracks/chapters use occurrences. Metadata corrections do not
-rewrite previously sealed content. A source redirect or repeated identifier does
-not merge releases automatically.
-
-Cover/gallery Uses retain release origin, role and source-primary metadata. Work
-representative-art selection points to an eligible original use; it does not copy
-or lose provenance. Relative language applicability is versioned and re-evaluated
-when the release changes.
-
-## Implementation and query
-
-Jena stores identities, exact references and selection heads. Stage large bundles
-and validate all required members before activation. List related releases/media
-through bounded owner/context queries. Availability and download rights are checked
-on the exact selected representation. Validate partial bundles, repeated recordings,
-unknown edition parents, withdrawn assets and concurrent cover/default changes.
+General external distribution creation, partial bundle validation, versioned
+language applicability and release-specific availability/download rights still
+need owner operations and evidence. A Work representative image must point to an
+eligible original Use without losing its release origin or source-primary status.

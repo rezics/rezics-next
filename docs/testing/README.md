@@ -13,7 +13,7 @@ Use [the plan](../plan/README.md#acceptance-gates) for gate definitions and
 | [Model](model-contracts.md) | Identity, values, types, definitions and exact references. |
 | [Identity/access](identity-and-access.md) | SSO, representation, roles/groups, privacy, revocation and recovery. |
 | [Classification](classification.md) | Space/context, SKOS/native meaning, fallback and inference. |
-| [Work](native-work.md), [Book](book-and-creation.md), [composition](../../scripts/qa/cases/content-composition.ts) | Main Version, contributions, occurrences, history and publication. |
+| [Work](../../scripts/qa/cases/native-work.ts), [Book](../../scripts/qa/cases/book-and-creation.ts), [composition](../../scripts/qa/cases/content-composition.ts) | Main Version, contributions, occurrences, history and publication. |
 | [Search](../../scripts/qa/cases/search.ts), [graphs](relationship-graph.md), [ratings/time](ratings-and-event-time.md) | Combined query semantics, populations, exactness and budgets. |
 | [Sources](source-conformance.md), [packages](../../scripts/qa/cases/packages.ts), [Hub cases](../../scripts/qa/cases/ai-hub.ts), [recipe cases](../../scripts/qa/cases/recipes.ts) | Current inputs, native conversion and domain-specific operations. |
 | [Wiki](../../scripts/qa/cases/wiki-composition.ts), [recommendations](recommendations.md) | Composed views and bounded derived generations. |

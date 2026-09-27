@@ -1,5 +1,6 @@
-import { defineCases } from './types.ts';
+import { defineCases, type PendingSubcase } from './types.ts';
 
+// Keep the original page key as a frozen inventory identity for recorded QA runs.
 export const cases = defineCases('docs/testing/book-and-creation.md', [
   {
     id: 'BOOK01',
@@ -53,3 +54,25 @@ export const cases = defineCases('docs/testing/book-and-creation.md', [
       'Preserve input and exact command identity; current authority/CAS controls replay.',
   },
 ]);
+
+/** Prospective creation flows, outside the completed BOOK evidence identities. */
+export const pendingSubcases = [
+  {
+    caseIds: ['BOOK05'],
+    scenario: 'Activate shared draft collaboration with concurrent block edits',
+    requiredResult: 'Use an explicit session or qualified merge protocol, preserve block identity and both inputs on conflict, and validate the merged document before publication.',
+    status: 'pending',
+  },
+  {
+    caseIds: ['BOOK09'],
+    scenario: 'Choose Post card preview, ratio-specific cover and banner media',
+    requiredResult: 'Preserve attachment order, original aspect ratio and source Use provenance; optional preview choices must not create an empty text document.',
+    status: 'pending',
+  },
+  {
+    caseIds: ['BOOK10'],
+    scenario: 'Export a large authored composition while disclosure changes',
+    requiredResult: 'Cancel or resume a bounded job, repeat disclosure checks and report exact missing coverage or mapping loss.',
+    status: 'pending',
+  },
+] as const satisfies readonly PendingSubcase[];

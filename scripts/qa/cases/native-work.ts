@@ -1,5 +1,6 @@
-import { defineCases } from './types.ts';
+import { defineCases, type PendingSubcase } from './types.ts';
 
+// Keep the original page key as a frozen inventory identity for recorded QA runs.
 export const cases = defineCases('docs/testing/native-work.md', [
   {
     id: 'WORK01',
@@ -57,3 +58,26 @@ export const cases = defineCases('docs/testing/native-work.md', [
       'An exact pinned revision survives ambiguous publication; duplicate reconciliation is idempotent. Rejected publication preserves the saved revision; pins release only after terminal proof. Erasure fences stale activation.',
   },
 ]);
+
+/** Prospective requirements retained from the Work, language and hosting contracts.
+ * These do not change the qualified WORK denominator or claim executed evidence. */
+export const pendingSubcases = [
+  {
+    caseIds: ['WORK01'],
+    scenario: 'Enable and later disable hosted content on a metadata-only Work',
+    requiredResult: 'Keep Work identity, exact history and external references; independently authorize hosting-policy transitions, close affected delivery, and expose actual readable content in search and SEO.',
+    status: 'pending',
+  },
+  {
+    caseIds: ['WORK02'],
+    scenario: 'Represent language absence and mixed language content through authoring, selection, search and export',
+    requiredResult: 'Use a reviewed BCP 47 policy and preserve source spelling; distinguish missing, undetermined, multiple and nonlinguistic content, direction and script without inferring a translation from metadata or UI locale.',
+    status: 'pending',
+  },
+  {
+    caseIds: ['WORK05'],
+    scenario: 'Seal a multi-member release with cross-owner dependencies and external distributions',
+    requiredResult: 'Pin complete compatible members and occurrences, state unknown external correspondence and mapping losses, and recheck exact availability and download rights without inheriting unsupported translation coverage.',
+    status: 'pending',
+  },
+] as const satisfies readonly PendingSubcase[];

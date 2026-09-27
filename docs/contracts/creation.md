@@ -1,60 +1,25 @@
-# Native creation, collaboration and reading
+# Native creation and reading
 
-## Objects and relationships
+Creators can draft, publish and read source-free Works through the same Work,
+Contribution and Main Version identities used for source adoption. A Post may be
+a standalone utterance or occur more than once in a composition without copying
+its body. Image-only and poll-only publications need no fabricated text document.
+The [BOOK cases](../../scripts/qa/cases/book-and-creation.ts) and
+[publication owner](../../services/main/src/modules/content-publication/) carry
+the implemented command and exact-history behavior.
 
-Creators work with Work/Main Version, independent contributions, Documents,
-composition occurrences and publication contexts. A Post can be a standalone
-utterance, a chapter contribution or a discussion target without copying its body.
-Pure image/poll/link publications need no empty text document.
+Unsaved local edits, shared editing state and published history are different.
+Future collaborative editing needs an explicit session or qualified merge
+protocol that preserves block identity, validates the resulting document and
+keeps both inputs on conflict. [Client synchronization](client-synchronization.md)
+owns offline command replay; presence alone promises no conflict-free merge.
 
-[Post media](media.md#post-attachments-and-preview-selection) defines ordered
-attachments with their original aspect ratios and independent card-preview
-selection. Optional ratio-keyed cover and banner selections do not become required
-fields on an ordinary Post. These 2026-09-27 visual extensions are adopted design
-awaiting implementation.
+Reading progress belongs to stable occurrences. Exact comments and citations
+must retain revision and selector. Reuse in another Realm requires its own
+acceptance and does not transfer contributor control. Large exports need
+cancellable jobs, repeated disclosure checks and an explicit account of missing
+coverage or losses.
 
-## Work authoring and multilingual adoption
-
-Create metadata-only or content-bearing Works, draft contributions, edit bodies,
-submit/adopt translations and publish eligible selections. Multiple authors and
-same-language alternatives retain attribution and provenance. Source-free authoring
-uses the same contract as source adoption. Workspace defaults do not confer rights.
-
-Draft collaboration uses explicit sessions/leases or a qualified collaborative
-editing protocol. Unsaved local edits, shared editing state and published history
-are distinct. If collaborative editing is activated, its merge algorithm must
-preserve block identity and validate the resulting document before publication.
-Conflicts preserve input and offer compare/retry/explicit merge outcomes.
-
-[Client synchronization](client-synchronization.md) defines initial base-revision
-editing, offline queues and reconnect. Presence is not an automatic promise of
-conflict-free collaborative editing.
-
-## Publication and privacy
-
-Publishing validates the selected contribution, compatible composition, embedded
-assets, current disclosure and exact review basis. A later draft is not visible
-through a published link. Reuse in another Realm records separate acceptance and
-does not transfer control. Withdrawal evaluates each independent context and
-rights basis, then invalidates affected delivery/search paths.
-
-## Interactions and export
-
-Reading defaults to Main Version and eligible language selection. Progress belongs
-to stable occurrences; precise citations pin revision/block selectors. Shared
-discussion remains discoverable without merging version-specific targets/ratings.
-The `content-paragraph-comment-v1` command targets one retained Content revision
-with a unique whole-paragraph TextQuoteSelector. Comment creation requires an
-Account `comment:create` assertion and a `content:comment:<Work>` Access grant;
-reading the exact target requires current `work:read:<Work>` disclosure. A later
-draft does not replace the quoted source or expand that disclosure.
-Readers can list comments on one exact revision in pages of at most 100. The
-first page fixes an immutable comment-order cut; each continuation checks current
-Work disclosure again and excludes comments created after that cut. A changed
-Content owner epoch requires restarting at the first page.
-Exports seal the requested coverage and identify unavailable components or losses.
-Large exports are cancellable jobs with repeated disclosure checks.
-
-Qualification includes create/edit/publish/read without sources, same-language
-translations, Post chapter reuse, image-only content, concurrent edits, historical
-comments and recovery after failed publication.
+[Post media](media.md#post-attachments-and-preview-selection) retains the pending
+cover, banner and preview design. Its visual interaction belongs with the
+frontend implementation and stories.
