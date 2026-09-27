@@ -138,9 +138,7 @@ function domainRoutes(fuseki: FusekiClient, work: SearchRouteDependencies) {
     .use(realmReadRoutes(work))
     .use(zoneModuleRoutes(work))
     .use(rankingRoutes(work))
-    .use(realmDirectoryRoutes(work));
     .use(realmDirectoryRoutes(work))
-    .use(workContentsRoutes(work))
     .use(continueRoutes(work))
     .use(onboardingInterestsRoutes(work));
 }
