@@ -5,6 +5,7 @@ import { Card } from '@rezics/ui/card';
 import { Skeleton } from '@rezics/ui/skeleton';
 import { CircleAlertIcon, RotateCwIcon, SearchIcon, SearchXIcon, TriangleAlertIcon } from 'lucide-react';
 import { materializeData } from 'native-i18n';
+import Link from 'next/link';
 import type { UiLocale } from '../../i18n/define.ts';
 import { EmptyState } from '../shell/empty-state.tsx';
 import type { SearchMessages } from './messages.ts';
@@ -71,9 +72,9 @@ export function SearchResults({ total, sequence, results = [], state = 'idle', e
           <Card asChild className="relative gap-4 px-6 sm:flex-row sm:items-start sm:justify-between"><article>
             <div className="min-w-0 space-y-3">
               <h2 className="font-semibold font-work-title text-xl/snug">
-                <a href={`/works/${encodeURIComponent(revision)}`} className="outline-none after:absolute
+                <Link href={`/works/${encodeURIComponent(revision)}`} className="outline-none after:absolute
                   after:inset-0 after:rounded-2xl hover:text-primary focus-visible:after:ring-2 focus-visible:after:ring-ring">
-                  {result.title ?? t.workFallback({ id: lastSegment(result.work).slice(0, 8) })}</a>
+                  {result.title ?? t.workFallback({ id: lastSegment(result.work).slice(0, 8) })}</Link>
               </h2>
               <div className="flex flex-wrap gap-1.5">
                 <Badge variant="soft">{result.language}</Badge>
