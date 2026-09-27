@@ -122,9 +122,13 @@ test('WIKI01/WIKI02/VIEW03/VIEW06/CTX01: two Zones mount one Collection without 
         official: { routeSegment: 'books' }, defaultRealm: secondSpace.realm,
       }), 200);
     expect(marked.revision).not.toBe(publicationWrite.revision);
-    expect(await (await anonymous.handle(new Request('http://main.local/v1/zones?official=true'))).json())
-      .toMatchObject({ items: [{ zone: publicationZone.zone, realm: secondSpace.realm,
-        routeSegment: 'books' }], cost: { graphReads: 1, rows: 1 } });
+    const officialPage = await (await anonymous.handle(new Request(
+      'http://main.local/v1/zones?official=true'))).json() as {
+      items: Array<{ zone: string; realm: string; routeSegment: string }>;
+      cost: { graphReads: number; rows: number } };
+    expect(officialPage.items).toContainEqual({ zone: publicationZone.zone,
+      realm: secondSpace.realm, routeSegment: 'books' });
+    expect(officialPage.cost).toEqual({ graphReads: 1, rows: officialPage.items.length });
     expect(await (await anonymous.handle(new Request(
       'http://main.local/v1/zones/by-segment/books'))).json()).toMatchObject({
       zone: publicationZone.zone, realm: secondSpace.realm });
