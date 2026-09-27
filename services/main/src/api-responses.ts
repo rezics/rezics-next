@@ -48,13 +48,19 @@ export const authorizedReadProblems = {
 };
 export { pendingOperation };
 
+const actingContextOption = t.Object({ actingSubject: ref,
+  displayName: t.Nullable(t.String({ minLength: 1, maxLength: 200 })),
+  handle: t.Nullable(t.String({ minLength: 1, maxLength: 128 })),
+  kind: t.Nullable(t.Union([t.Literal('person'),
+    t.Literal('pen-name'), t.Literal('organization'), t.Literal('service')])) });
 export const actingContextDiscovery = t.Object({
   profile: t.Literal('work-create-acting-contexts-v1'),
   task: t.Literal('work.create'), scope: t.Literal('work:create:root'),
   authorityEpoch: t.String({ pattern: '^(0|[1-9][0-9]*)$' }),
-  contexts: t.Array(t.Object({ actingSubject: ref }), { maxItems: 50 }),
-  directContexts: t.Array(t.Object({ actingSubject: ref }), { maxItems: 50 }),
+  contexts: t.Array(actingContextOption, { maxItems: 50 }),
+  directContexts: t.Array(actingContextOption, { maxItems: 50 }),
   preferredActingSubject: nullableRef,
+  savedPreference: t.Nullable(t.Object({ actingSubject: ref, eligible: t.Boolean() })),
   preferenceRevision: nullableRef,
   complete: t.Literal(true),
 });

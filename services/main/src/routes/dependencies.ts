@@ -49,6 +49,7 @@ import type { SourceNativeChildStore } from '../modules/source/child-native-supp
 import type { ProviderIdentityStore } from '../modules/source/provider-identity.ts';
 import type { SourceScoreStore } from '../modules/source/score.ts';
 import type { AccessActingContexts } from '../modules/access/contexts.ts';
+import type { AccessSessionAgents } from '../modules/access/session-agent.ts';
 import type { AccountAssertionVerifier } from '../modules/account/verify-assertion.ts';
 import type { RelayHandoffPositions } from '../modules/outbox/relay-position.ts';
 import type { BackpressureProfile } from '../operations/backpressure.ts';
@@ -120,6 +121,8 @@ export interface MainWorkDependencies {
       | 'readRatingContextPolicyWitness' | 'issueTitleAdmission'>>;
   releaseRatingInventory?: ReleaseRatingInventoryStore;
   actingContexts?: AccessActingContexts;
+  actingContextDiscovery?: AccessActingContexts;
+  sessionAgents?: AccessSessionAgents;
   groups?: AccessGroups;
   grants?: AccessGrants;
   memberships?: AccessMemberships;

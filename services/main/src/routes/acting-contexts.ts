@@ -4,6 +4,41 @@ import { actingContextCheck, actingContextDiscovery, actingContextPreference,
 import type { MainWorkDependencies } from './dependencies.ts';
 import { commandError, problem } from './problems.ts';
 
+export const openApiOperations = {
+  '/v1/me/acting-contexts': { get: { bearer: true } },
+  '/v1/me/acting-context-checks': { post: { bearer: true } },
+  '/v1/me/acting-context-preferences/work.create': { put: { bearer: true } },
+  '/v1/me/session-agent': { get: { bearer: true },
+    put: { bearer: true, idempotencyKey: true } },
+  '/v1/me/main-agent-preference': { get: { bearer: true },
+    put: { bearer: true, idempotencyKey: true } },
+} as const;
+
+const agentChoice = t.Object({ actingSubject: t.Nullable(t.String()),
+  eligible: t.Boolean(), revision: t.Nullable(t.String()) });
+const sessionAgentRead = t.Object({ profile: t.Literal('session-agent-v1'),
+  sessionAgent: agentChoice, mainAgent: agentChoice,
+  initialActingSubject: t.Nullable(t.String()) });
+const mainAgentRead = t.Object({ profile: t.Literal('main-agent-preference-v1'),
+  mainAgent: agentChoice });
+const choiceWrite = t.Object({ profile: t.Union([t.Literal('session-agent-v1'),
+  t.Literal('main-agent-preference-v1')]), actingSubject: t.Nullable(t.String()),
+revision: t.String(), replayed: t.Boolean() });
+const choiceBody = t.Object({
+  actingSubject: t.Nullable(t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' })),
+  expectedRevision: t.Nullable(t.String({ pattern: '^[0-9a-f-]{36}$' })),
+}, { additionalProperties: false });
+const sessionKeyHeader = t.Object({
+  'x-session-key': t.String({ pattern: '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' }),
+});
+const sessionWriteHeaders = t.Object({
+  'x-session-key': t.String({ pattern: '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' }),
+  'idempotency-key': t.String({ minLength: 1, maxLength: 128 }),
+});
+const choiceWriteHeaders = t.Object({
+  'idempotency-key': t.String({ minLength: 1, maxLength: 128 }),
+});
+
 export function actingContextRoutes(work: MainWorkDependencies) {
   return new Elysia()
     .get('/v1/me/acting-contexts', {
@@ -16,7 +51,7 @@ export function actingContextRoutes(work: MainWorkDependencies) {
         if (!work.actingContexts) {
           return problem(503, 'acting_context_unavailable', 'Acting contexts are unavailable');
         }
-        const result = await work.actingContexts.discover(principal);
+        const result = await (work.actingContextDiscovery ?? work.actingContexts).discover(principal);
         return Response.json(result, { headers: { 'cache-control': 'no-store' } });
       } catch (error) { return commandError(error); }
     })
@@ -67,6 +102,57 @@ export function actingContextRoutes(work: MainWorkDependencies) {
         const result = await work.actingContexts.setPreference(principal,
           { actingSubject: body.actingSubject,
             expectedRevision: body.expectedRevision, idempotencyKey: body.idempotencyKey });
+        return Response.json(result, { headers: { 'cache-control': 'no-store' } });
+      } catch (error) { return commandError(error); }
+    })
+    .get('/v1/me/session-agent', {
+      headers: sessionKeyHeader,
+      response: { 200: sessionAgentRead, ...authorizedReadProblems },
+    }, async ({ request }) => {
+      try {
+        const principal = await work.account.verify(request, ['work:create']);
+        if (!work.sessionAgents) return problem(503, 'acting_context_unavailable', 'Session Agent is unavailable');
+        const result = await work.sessionAgents.readSession(principal,
+          request.headers.get('x-session-key') ?? '');
+        return Response.json(result, { headers: { 'cache-control': 'no-store' } });
+      } catch (error) { return commandError(error); }
+    })
+    .put('/v1/me/session-agent', {
+      headers: sessionWriteHeaders,
+      body: choiceBody,
+      response: { 200: choiceWrite, ...writeProblems },
+    }, async ({ request, body }) => {
+      try {
+        const principal = await work.account.verify(request, ['work:create']);
+        if (!work.sessionAgents) return problem(503, 'acting_context_unavailable', 'Session Agent is unavailable');
+        const result = await work.sessionAgents.setSession(principal,
+          request.headers.get('x-session-key') ?? '', {
+            actingSubject: body.actingSubject, expectedRevision: body.expectedRevision,
+            idempotencyKey: request.headers.get('idempotency-key') ?? '' });
+        return Response.json(result, { headers: { 'cache-control': 'no-store' } });
+      } catch (error) { return commandError(error); }
+    })
+    .get('/v1/me/main-agent-preference', {
+      response: { 200: mainAgentRead, ...authorizedReadProblems },
+    }, async ({ request }) => {
+      try {
+        const principal = await work.account.verify(request, ['work:create']);
+        if (!work.sessionAgents) return problem(503, 'acting_context_unavailable', 'Main Agent is unavailable');
+        const result = await work.sessionAgents.readMain(principal);
+        return Response.json(result, { headers: { 'cache-control': 'no-store' } });
+      } catch (error) { return commandError(error); }
+    })
+    .put('/v1/me/main-agent-preference', {
+      headers: choiceWriteHeaders,
+      body: choiceBody,
+      response: { 200: choiceWrite, ...writeProblems },
+    }, async ({ request, body }) => {
+      try {
+        const principal = await work.account.verify(request, ['work:create']);
+        if (!work.sessionAgents) return problem(503, 'acting_context_unavailable', 'Main Agent is unavailable');
+        const result = await work.sessionAgents.setMain(principal, {
+          actingSubject: body.actingSubject, expectedRevision: body.expectedRevision,
+          idempotencyKey: request.headers.get('idempotency-key') ?? '' });
         return Response.json(result, { headers: { 'cache-control': 'no-store' } });
       } catch (error) { return commandError(error); }
     });

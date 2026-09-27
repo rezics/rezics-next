@@ -10,7 +10,8 @@ import { installConsentRefreshFence } from '../../account/src/consent-fence.ts';
 import { createMainApp } from '../src/app.ts';
 import { FusekiClient } from '../src/infrastructure/fuseki.ts';
 import { AccessAdmissionRegistry, AdmissionDenied } from '../src/modules/access/admission.ts';
-import { AccessActingContexts } from '../src/modules/access/contexts.ts';
+import { AccessActingContexts, ActingContextUnavailable } from '../src/modules/access/contexts.ts';
+import { AccessSessionAgents } from '../src/modules/access/session-agent.ts';
 import { AccessGroups, GroupDenied, GroupStale, GroupUnavailable,
   groupWorkCreateProof } from '../src/modules/access/groups.ts';
 import { AccountAssertionVerifier } from '../src/modules/account/verify-assertion.ts';
@@ -155,6 +156,7 @@ test('IAM01/IAM03/IAM04: Account and Access check explicit Agents without poolin
         jwksUrl: `${base}/api/auth/jwks`, introspectUrl: `${base}/api/auth/oauth2/introspect`,
         clientId: mainClient.client_id, clientSecret: mainClient.client_secret! }),
       access, actingContexts: new AccessActingContexts(accessPool),
+      sessionAgents: new AccessSessionAgents(accessPool, new AccessActingContexts(accessPool)),
     });
     const discover = (token: string) => main.handle(new Request(
       'http://main.local/v1/me/acting-contexts?task=work.create',
@@ -170,16 +172,120 @@ test('IAM01/IAM03/IAM04: Account and Access check explicit Agents without poolin
     expect(firstBody.contexts.map(item => item.actingSubject))
       .toEqual([agentA, agentB].sort());
     expect(firstBody.preferredActingSubject).toBeNull();
+    expect((firstBody as typeof firstBody & { savedPreference: unknown }).savedPreference).toBeNull();
     expect(firstBody.preferenceRevision).toBeNull();
     expect(firstBody.directContexts).toEqual([]);
+    const labelQueries: string[] = [];
+    const labelledFuseki = { query: async (sparql: string) => {
+      labelQueries.push(sparql);
+      if (sparql.includes('ASK')) return { boolean: true };
+      expect(sparql).toContain(`<${agentA}>`);
+      expect(sparql).toContain(`<${agentB}>`);
+      expect(sparql).not.toContain(principalOne);
+      return { results: { bindings: [{ agent: { type: 'uri', value: agentA },
+        label: { type: 'literal', value: 'Ada Example' },
+        kind: { type: 'uri', value: 'https://rezics.com/vocab/PersonAgent' },
+        handle: { type: 'literal', value: 'ada' } }] } };
+    } } as unknown as FusekiClient;
+    const labelled = await new AccessActingContexts(accessPool, { fuseki: labelledFuseki,
+      lineage: { dataEpoch: Bun.env.MAIN_DATA_EPOCH, routingEpoch: Bun.env.MAIN_ROUTING_EPOCH },
+      objectDirectory: Bun.env.MAIN_OBJECT_DIRECTORY }).discover({
+      issuer: `${base}/api/auth`, subject: first.id });
+    expect(labelQueries).toHaveLength(2);
+    expect(labelled.contexts).toContainEqual({ actingSubject: agentA,
+      displayName: 'Ada Example', handle: 'ada', kind: 'person' });
+    expect(labelled.contexts).toContainEqual({ actingSubject: agentB,
+      displayName: null, handle: null, kind: null });
+    const malformedFuseki = { query: async (sparql: string) => sparql.includes('ASK')
+      ? { boolean: true } : { results: { bindings: [{
+        agent: { type: 'uri', value: agentA }, label: { type: 'literal', value: 'Bad\nname' },
+        kind: { type: 'uri', value: 'https://rezics.com/vocab/PersonAgent' },
+      }] } } } as unknown as FusekiClient;
+    await expect(new AccessActingContexts(accessPool, { fuseki: malformedFuseki,
+      lineage: { dataEpoch: Bun.env.MAIN_DATA_EPOCH, routingEpoch: Bun.env.MAIN_ROUTING_EPOCH },
+      objectDirectory: Bun.env.MAIN_OBJECT_DIRECTORY }).discover({
+      issuer: `${base}/api/auth`, subject: first.id }))
+      .rejects.toBeInstanceOf(ActingContextUnavailable);
+    const publicGraphDiscovery = await new AccessActingContexts(accessPool, {
+      fuseki, lineage: { dataEpoch: Bun.env.MAIN_DATA_EPOCH,
+        routingEpoch: Bun.env.MAIN_ROUTING_EPOCH },
+      objectDirectory: Bun.env.MAIN_OBJECT_DIRECTORY }).discover({
+      issuer: `${base}/api/auth`, subject: first.id });
+    expect(publicGraphDiscovery.contexts.map(option => option.actingSubject))
+      .toEqual(firstBody.contexts.map(option => option.actingSubject));
+    expect(publicGraphDiscovery.contexts.every(option => option.displayName === null)).toBe(true);
+    const sessionKeyA = randomUUID();
+    const sessionKeyB = randomUUID();
+    const sessionRead = (token: string, sessionKey: string) => main.handle(new Request(
+      'http://main.local/v1/me/session-agent', { headers: {
+        authorization: `Bearer ${token}`, 'x-session-key': sessionKey } }));
+    const sessionPut = (token: string, sessionKey: string, actingSubject: string | null,
+      expectedRevision: string | null, idempotencyKey = randomUUID()) => main.handle(new Request(
+      'http://main.local/v1/me/session-agent', { method: 'PUT', headers: {
+        authorization: `Bearer ${token}`, 'x-session-key': sessionKey,
+        'idempotency-key': idempotencyKey, 'content-type': 'application/json' },
+      body: JSON.stringify({ actingSubject, expectedRevision }) }));
+    const mainRead = (token: string) => main.handle(new Request(
+      'http://main.local/v1/me/main-agent-preference', { headers: {
+        authorization: `Bearer ${token}` } }));
+    const mainPut = (token: string, actingSubject: string | null,
+      expectedRevision: string | null, idempotencyKey = randomUUID()) => main.handle(new Request(
+      'http://main.local/v1/me/main-agent-preference', { method: 'PUT', headers: {
+        authorization: `Bearer ${token}`, 'idempotency-key': idempotencyKey,
+        'content-type': 'application/json' },
+      body: JSON.stringify({ actingSubject, expectedRevision }) }));
+    expect((await sessionRead(firstToken, sessionKeyA)).status).toBe(200);
+    expect(await (await sessionRead(firstToken, sessionKeyA)).json()).toMatchObject({
+      sessionAgent: { actingSubject: null, revision: null },
+      mainAgent: { actingSubject: null, revision: null }, initialActingSubject: null });
+    expect((await sessionRead(firstToken, 'bad')).status).toBe(400);
+    expect((await sessionPut(secondToken, sessionKeyA, agentB, null)).status).toBe(403);
+    const sessionKey = randomUUID();
+    const chosen = await sessionPut(firstToken, sessionKeyA, agentA, null, sessionKey);
+    expect(chosen.status).toBe(200);
+    const chosenBody = await chosen.json() as { revision: string; replayed: boolean };
+    expect(chosenBody.replayed).toBe(false);
+    expect(await (await sessionPut(firstToken, sessionKeyA, agentA, null, sessionKey)).json())
+      .toMatchObject({ revision: chosenBody.revision, replayed: true });
+    expect((await sessionPut(firstToken, sessionKeyA, agentB, null, sessionKey)).status).toBe(409);
+    expect((await sessionPut(firstToken, sessionKeyA, agentB, null)).status).toBe(409);
+    expect(await (await sessionRead(firstToken, sessionKeyB)).json()).toMatchObject({
+      sessionAgent: { actingSubject: null, revision: null } });
+    expect(await (await sessionRead(secondToken, sessionKeyA)).json()).toMatchObject({
+      sessionAgent: { actingSubject: null, revision: null } });
+    const concurrentSession = await Promise.all([
+      sessionPut(firstToken, sessionKeyA, agentB, chosenBody.revision),
+      sessionPut(firstToken, sessionKeyA, null, chosenBody.revision),
+    ]);
+    expect(concurrentSession.map(response => response.status).sort()).toEqual([200, 409]);
+    const mainKey = randomUUID();
+    const savedMain = await mainPut(firstToken, agentB, null, mainKey);
+    expect(savedMain.status).toBe(200);
+    const savedMainBody = await savedMain.json() as { revision: string };
+    expect(await (await mainPut(firstToken, agentB, null, mainKey)).json())
+      .toMatchObject({ revision: savedMainBody.revision, replayed: true });
+    expect((await mainPut(firstToken, agentA, null, mainKey)).status).toBe(409);
+    expect(await (await mainRead(firstToken)).json()).toMatchObject({
+      mainAgent: { actingSubject: agentB, revision: savedMainBody.revision, eligible: true } });
+    expect(await (await sessionRead(firstToken, sessionKeyB)).json()).toMatchObject({
+      sessionAgent: { actingSubject: null }, mainAgent: { actingSubject: agentB },
+      initialActingSubject: agentB });
+    const intentionallyEmptySession = randomUUID();
+    expect((await sessionPut(firstToken, intentionallyEmptySession, null, null)).status).toBe(200);
+    expect(await (await sessionRead(firstToken, intentionallyEmptySession)).json()).toMatchObject({
+      sessionAgent: { actingSubject: null, eligible: false }, initialActingSubject: null });
+    expect((await mainPut(secondToken, agentB, null)).status).toBe(403);
+    expect((await mainPut(firstToken, agentA, null)).status).toBe(409);
     expect(JSON.stringify(firstBody)).not.toContain(principalOne);
     expect(JSON.stringify(firstBody)).not.toContain(principalTwo);
     expect(JSON.stringify(firstBody)).not.toContain(first.id);
     expect(JSON.stringify(firstBody)).not.toContain(second.id);
     const secondDiscovery = await discover(secondToken);
     expect(secondDiscovery.status).toBe(200);
-    const secondBody = await secondDiscovery.json() as { contexts: Array<{ actingSubject: string }> };
-    expect(secondBody.contexts).toEqual([{ actingSubject: agentA }]);
+    const secondBody = await secondDiscovery.json() as { contexts: Array<{ actingSubject: string;
+      displayName: string | null; handle: string | null; kind: string | null }> };
+    expect(secondBody.contexts).toEqual([{ actingSubject: agentA,
+      displayName: null, handle: null, kind: null }]);
     for (const privateIdentity of [principalOne, principalTwo, first.id, second.id]) {
       expect(JSON.stringify(secondBody)).not.toContain(privateIdentity);
     }
@@ -249,10 +355,12 @@ test('IAM01/IAM03/IAM04: Account and Access check explicit Agents without poolin
       'direct-principal')).status).toBe(403);
     const directDiscovery = await (await discover(firstToken)).json() as {
       contexts: Array<{ actingSubject: string }>;
-      directContexts: Array<{ actingSubject: string }> };
+      directContexts: Array<{ actingSubject: string; displayName: string | null;
+        handle: string | null; kind: string | null }> };
     expect(directDiscovery.contexts.map(item => item.actingSubject).sort())
       .toEqual([agentA, agentB].sort());
-    expect(directDiscovery.directContexts).toEqual([{ actingSubject: representedOnly }]);
+    expect(directDiscovery.directContexts).toEqual([{ actingSubject: representedOnly,
+      displayName: null, handle: null, kind: null }]);
     const directRequest = { principal: { issuer: `${base}/api/auth`, subject: first.id },
       actingSubject: representedOnly, authorityPath: 'direct-principal' as const,
       scope: 'work:create:root', action: 'work.create',
@@ -366,6 +474,7 @@ test('IAM01/IAM03/IAM04: Account and Access check explicit Agents without poolin
       .toMatchObject({ revision: preferredA.revision, replayed: true });
     expect(await (await discover(firstToken)).json()).toMatchObject({
       preferredActingSubject: agentB, preferenceRevision: preferredB.revision,
+      savedPreference: { actingSubject: agentB, eligible: true },
     });
     // A shared optional preference does not replace either product request's
     // explicit Agent selection.
@@ -388,12 +497,25 @@ test('IAM01/IAM03/IAM04: Account and Access check explicit Agents without poolin
     expect((await check(firstToken, agentB)).status).toBe(403);
     expect(await (await discover(firstToken)).json()).toMatchObject({
       preferredActingSubject: null, preferenceRevision: preferredB.revision,
+      savedPreference: { actingSubject: agentB, eligible: false },
     });
+    expect(await (await mainRead(firstToken)).json()).toMatchObject({
+      mainAgent: { actingSubject: agentB, revision: savedMainBody.revision, eligible: false } });
+    expect(await (await sessionRead(firstToken, sessionKeyB)).json()).toMatchObject({
+      mainAgent: { actingSubject: agentB, eligible: false }, initialActingSubject: null });
+    expect((await mainPut(firstToken, agentB, savedMainBody.revision)).status).toBe(403);
+    const clearMain = await mainPut(firstToken, null, savedMainBody.revision);
+    expect(clearMain.status).toBe(200);
+    const clearedMainBody = await clearMain.json() as { revision: string };
+    expect(await (await mainRead(firstToken)).json()).toMatchObject({
+      mainAgent: { actingSubject: null, eligible: false,
+        revision: clearedMainBody.revision } });
     const cleared = await prefer(firstToken, null, preferredB.revision);
     expect(cleared.status).toBe(200);
     const clearedBody = await cleared.json() as { revision: string };
     expect(await (await discover(firstToken)).json()).toMatchObject({
       preferredActingSubject: null, preferenceRevision: clearedBody.revision,
+      savedPreference: null,
     });
     expect((await check(firstToken, agentA)).status).toBe(200);
     await accessPool.query(`UPDATE access.permission_grant SET active = false, generation = generation + 1
@@ -429,6 +551,8 @@ test('IAM01/IAM03/IAM04: Account and Access check explicit Agents without poolin
     expect((await check(firstToken, representedOnly, closed.authorityEpoch,
       'direct-principal')).status).toBe(403);
     expect((await prefer(firstToken, agentA, clearedBody.revision)).status).toBe(403);
+    expect((await sessionPut(firstToken, sessionKeyB, agentA, null)).status).toBe(403);
+    expect((await mainPut(firstToken, agentA, clearedMainBody.revision)).status).toBe(403);
     expect((await prefer(firstToken, null, clearedBody.revision)).status).toBe(200);
     const afterClose = await discover(firstToken);
     expect(afterClose.status).toBe(200);
@@ -482,7 +606,7 @@ test('IAM01/IAM03/IAM04: Account and Access check explicit Agents without poolin
     expect((await check(firstToken, representedOnly, closed.authorityEpoch)).status).toBe(200);
     const childDiscovery = await (await discover(firstToken)).json() as {
       contexts: Array<{ actingSubject: string }> };
-    expect(childDiscovery.contexts).toContainEqual({ actingSubject: representedOnly });
+    expect(childDiscovery.contexts.map(option => option.actingSubject)).toContain(representedOnly);
     expect(JSON.stringify(childDiscovery)).not.toContain(child);
     const groupRequest = { ...directRequest, authorityPath: 'represented-agent' as const,
       idempotencyKey: randomUUID() };
@@ -546,7 +670,10 @@ test('IAM01/IAM03/IAM04: Account and Access check explicit Agents without poolin
       SELECT gen_random_uuid(), $2, agent FROM unnest($1::text[]) AS agent`,
     [groupedAgents, child]);
     let discoveryQueries = 0;
-    const countedPool = { connect: async () => {
+    const countedPool = { query: (...args: unknown[]) => {
+      discoveryQueries += 1;
+      return (accessPool.query as (...values: unknown[]) => unknown).apply(accessPool, args);
+    }, connect: async () => {
       const client = await accessPool.connect();
       return new Proxy(client, { get(target, property) {
         if (property === 'query') return (...args: unknown[]) => {
@@ -565,7 +692,35 @@ test('IAM01/IAM03/IAM04: Account and Access check explicit Agents without poolin
     // Growth in the candidate set adds no round trips.
     expect(discoveryQueries).toBeLessThanOrEqual(15);
     for (const agent of groupedAgents) {
-      expect(countedDiscovery.contexts).toContainEqual({ actingSubject: agent });
+      expect(countedDiscovery.contexts).toContainEqual({ actingSubject: agent,
+        displayName: null, handle: null, kind: null });
+    }
+    const countedPrincipal = { issuer: `${base}/api/auth`, subject: first.id };
+    const countedSessions = new AccessSessionAgents(countedPool,
+      new AccessActingContexts(countedPool));
+    discoveryQueries = 0;
+    await countedSessions.readSession(countedPrincipal, randomUUID());
+    expect(discoveryQueries).toBeLessThanOrEqual(16);
+    discoveryQueries = 0;
+    const countedMain = await countedSessions.readMain(countedPrincipal);
+    expect(discoveryQueries).toBeLessThanOrEqual(16);
+    discoveryQueries = 0;
+    await countedSessions.setSession(countedPrincipal, randomUUID(), {
+      actingSubject: null, expectedRevision: null, idempotencyKey: randomUUID() });
+    expect(discoveryQueries).toBeLessThanOrEqual(12);
+    discoveryQueries = 0;
+    await countedSessions.setMain(countedPrincipal, { actingSubject: null,
+      expectedRevision: countedMain.mainAgent.revision, idempotencyKey: randomUUID() });
+    expect(discoveryQueries).toBeLessThanOrEqual(12);
+    await accessPool.query('UPDATE access.recovery_fence SET open = false WHERE id = true');
+    try {
+      await expect(countedSessions.readSession(countedPrincipal, randomUUID()))
+        .rejects.toBeInstanceOf(ActingContextUnavailable);
+      await expect(countedSessions.setSession(countedPrincipal, randomUUID(), {
+        actingSubject: null, expectedRevision: null, idempotencyKey: randomUUID() }))
+        .rejects.toBeInstanceOf(ActingContextUnavailable);
+    } finally {
+      await accessPool.query('UPDATE access.recovery_fence SET open = true WHERE id = true');
     }
     const remaining = missing - groupCount;
     const extraAgents = Array.from({ length: remaining + 1 }, () =>

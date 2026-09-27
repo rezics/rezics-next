@@ -1,5 +1,8 @@
 import { createHash, randomUUID } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
+import type { WorkActivationEnvironment } from '../work/activate.ts';
+import { GRAPHS, RV, iri } from '../work/activate.ts';
+import { assertGraphAdmissionOpen } from '../work/restore-lineage.ts';
 import { ACTIVE_ACCESS_BOUNDS_SQL,
   accessBoundsFromRow, type ProfileRow } from '../../operations/bounds.ts';
 import type { VerifiedPrincipal } from './admission.ts';
@@ -25,11 +28,19 @@ export interface ActingContextDiscovery {
   task: typeof WORK_CREATE_CONTEXT.task;
   scope: typeof WORK_CREATE_CONTEXT.scope;
   authorityEpoch: string;
-  contexts: Array<{ actingSubject: string }>;
-  directContexts: Array<{ actingSubject: string }>;
+  contexts: ActingContextOption[];
+  directContexts: ActingContextOption[];
   preferredActingSubject: string | null;
+  savedPreference: { actingSubject: string; eligible: boolean } | null;
   preferenceRevision: string | null;
   complete: true;
+}
+
+export interface ActingContextOption {
+  actingSubject: string;
+  displayName: string | null;
+  handle: string | null;
+  kind: 'person' | 'pen-name' | 'organization' | 'service' | null;
 }
 
 export interface ActingContextPreference {
@@ -72,7 +83,7 @@ const agentId = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
 const epoch = /^(0|[1-9][0-9]*)$/;
 const revisionId = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
-async function transaction<T>(pool: Pool, work: (client: PoolClient) => Promise<T>,
+export async function transaction<T>(pool: Pool, work: (client: PoolClient) => Promise<T>,
   isolation: 'REPEATABLE READ' | 'READ COMMITTED' = 'REPEATABLE READ'): Promise<T> {
   const client = await pool.connect();
   try {
@@ -97,7 +108,7 @@ async function transaction<T>(pool: Pool, work: (client: PoolClient) => Promise<
   } finally { client.release(); }
 }
 
-async function currentGate(client: PoolClient): Promise<{
+export async function currentGate(client: PoolClient): Promise<{
   authority_epoch: string; open: boolean; dispatch_open: boolean;
 }> {
   const recovery = await client.query<{ open: boolean }>(
@@ -121,7 +132,7 @@ async function activePrincipal(client: PoolClient, principal: VerifiedPrincipal)
   return result.rows[0]?.id ?? null;
 }
 
-async function eligibleSubject(client: PoolClient, principalId: string,
+export async function eligibleSubject(client: PoolClient, principalId: string,
   actingSubject: string): Promise<boolean> {
   const subject = await client.query(`SELECT id FROM access.authority_subject
     WHERE id = $1 AND kind = 'agent' AND active FOR SHARE`, [actingSubject]);
@@ -145,10 +156,55 @@ async function eligibleSubject(client: PoolClient, principalId: string,
  * convenience view; a selected Agent is checked again with its complete path
  * and every later command must still run ordinary Access admission. */
 export class AccessActingContexts {
-  constructor(private readonly pool: Pool) {}
+  constructor(private readonly pool: Pool, private readonly environment?: WorkActivationEnvironment) {}
+
+  /** One public current-graph read for at most 50 eligible Agents. Missing public
+   * descriptions remain null; private Access and provision rows are never labels. */
+  private async publicLabels(subjects: readonly string[]): Promise<Map<string, Omit<ActingContextOption, 'actingSubject'>>> {
+    const labels = new Map<string, Omit<ActingContextOption, 'actingSubject'>>();
+    if (!subjects.length || !this.environment) return labels;
+    if (subjects.length > 50 || subjects.some(subject => !agentId.test(subject))) {
+      throw new ActingContextUnavailable('Agent label batch exceeds supported limit');
+    }
+    try {
+      await assertGraphAdmissionOpen(this.environment.fuseki, this.environment.lineage);
+      const rows = (await this.environment.fuseki.query(`PREFIX rv: <${RV}>
+        PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+        SELECT ?agent ?label ?kind ?handle WHERE {
+          VALUES ?agent { ${subjects.map(iri).join(' ')} }
+          GRAPH ${iri(GRAPHS.current)} {
+            ?agent a rv:Agent ; rv:agentKind ?kind ; rdfs:label ?label .
+            OPTIONAL { ?agent rv:handle ?handle }
+          }
+        } LIMIT ${subjects.length + 1}`, 65_536)).results?.bindings ?? [];
+      if (rows.length > subjects.length) throw new Error('Agent descriptions are ambiguous');
+      const allowed = new Set(subjects);
+      const kinds: Record<string, ActingContextOption['kind']> = {
+        [`${RV}PersonAgent`]: 'person', [`${RV}PenNameAgent`]: 'pen-name',
+        [`${RV}OrganizationAgent`]: 'organization', [`${RV}ServiceAgent`]: 'service',
+      };
+      for (const row of rows) {
+        const agent = row.agent?.value;
+        const name = row.label?.value;
+        const kind = row.kind?.value;
+        const handle = row.handle?.value ?? null;
+        if (!agent || !allowed.has(agent) || labels.has(agent) || !name
+          || name.length > 200 || /[\u0000-\u001f\u007f]/.test(name)
+          || !kind || !(kind in kinds)
+          || (handle !== null && (handle.length < 1 || handle.length > 128
+            || /[\u0000-\u001f\u007f]/.test(handle)))) {
+          throw new Error('Agent description is invalid');
+        }
+        labels.set(agent, { displayName: name, handle, kind: kinds[kind]! });
+      }
+      return labels;
+    } catch {
+      throw new ActingContextUnavailable('public Agent descriptions are unavailable');
+    }
+  }
 
   async discover(principal: VerifiedPrincipal): Promise<ActingContextDiscovery> {
-    return transaction(this.pool, async client => {
+    const discovered = await transaction<ActingContextDiscovery>(this.pool, async client => {
       const gate = await currentGate(client);
       const principalId = await activePrincipal(client, principal);
       const preference = principalId ? (await client.query<{
@@ -160,6 +216,8 @@ export class AccessActingContexts {
         profile: 'work-create-acting-contexts-v1', task: WORK_CREATE_CONTEXT.task,
         scope: WORK_CREATE_CONTEXT.scope, authorityEpoch: gate.authority_epoch,
         contexts: [], directContexts: [], preferredActingSubject: null,
+        savedPreference: preference?.acting_subject
+          ? { actingSubject: preference.acting_subject, eligible: false } : null,
         preferenceRevision: preference?.revision ?? null, complete: true,
       };
       // Read the persisted profile and bounded candidates in one statement.
@@ -194,10 +252,9 @@ export class AccessActingContexts {
       const roleGranted = await roleWorkCreateSubjects(client,
         candidateSubjects.filter(subject => !directGranted.has(subject)
           && !groupGranted.has(subject)));
-      const contexts = candidateSubjects
+      const representedSubjects = candidateSubjects
         .filter(subject => directGranted.has(subject) || groupGranted.has(subject)
-          || roleGranted.has(subject))
-        .map(actingSubject => ({ actingSubject }));
+          || roleGranted.has(subject));
       const direct = await client.query<{ acting_subject: string }>(`
         SELECT DISTINCT s.id AS acting_subject
         FROM access.principal_agent_attribution a
@@ -207,23 +264,35 @@ export class AccessActingContexts {
         ORDER BY s.id LIMIT $3`,
       [principalId, WORK_CREATE_CONTEXT.action, bounds.actingContexts + 1]);
       if (direct.rows.length > bounds.actingContexts
-        || contexts.length + direct.rows.length > bounds.actingContexts) {
+        || representedSubjects.length + direct.rows.length > bounds.actingContexts) {
         throw new ActingContextUnavailable('acting context discovery exceeds supported limit');
       }
-      const directContexts: Array<{ actingSubject: string }> = [];
+      const directSubjects: string[] = [];
       for (const row of direct.rows) {
         if (await directWorkCreateProof(client, principalId, row.acting_subject)) {
-          directContexts.push({ actingSubject: row.acting_subject });
+          directSubjects.push(row.acting_subject);
         }
       }
+      const option = (actingSubject: string): ActingContextOption => ({ actingSubject,
+        displayName: null, handle: null, kind: null });
+      const contexts = representedSubjects.map(option);
+      const directContexts = directSubjects.map(option);
+      const preferredEligible = contexts.some(row => row.actingSubject === preference?.acting_subject);
       return { profile: 'work-create-acting-contexts-v1', task: WORK_CREATE_CONTEXT.task,
         scope: WORK_CREATE_CONTEXT.scope, authorityEpoch: gate.authority_epoch,
         contexts, directContexts,
-        preferredActingSubject: contexts.some(row => row.actingSubject === preference?.acting_subject)
-          ? preference!.acting_subject : null,
+        preferredActingSubject: preferredEligible ? preference!.acting_subject : null,
+        savedPreference: preference?.acting_subject
+          ? { actingSubject: preference.acting_subject, eligible: preferredEligible } : null,
         preferenceRevision: preference?.revision ?? null,
         complete: true };
     });
+    const subjects = [...new Set([...discovered.contexts, ...discovered.directContexts]
+      .map(option => option.actingSubject))];
+    const labels = await this.publicLabels(subjects);
+    return { ...discovered,
+      contexts: discovered.contexts.map(option => ({ ...option, ...labels.get(option.actingSubject) })),
+      directContexts: discovered.directContexts.map(option => ({ ...option, ...labels.get(option.actingSubject) })) };
   }
 
   async check(principal: VerifiedPrincipal, actingSubject: string,

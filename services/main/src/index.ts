@@ -20,6 +20,7 @@ import { PrivateSearchSettlement } from './modules/contribution/private-search-s
 import { ContentSearchReadAccess } from './modules/search-disclosure/content-read-lease.ts';
 import { ReleaseRatingInventoryStore } from './modules/access/rating-aggregate-inventory.ts';
 import { AccessActingContexts } from './modules/access/contexts.ts';
+import { AccessSessionAgents } from './modules/access/session-agent.ts';
 import { AccessGroups } from './modules/access/groups.ts';
 import { AccessGrants } from './modules/access/grants.ts';
 import { AccessMemberships } from './modules/access/memberships.ts';
@@ -243,6 +244,7 @@ const sourceCorrespondences = new SourceChildCorrespondenceStore(contentPool, so
 const sourceFieldWithdrawals = new SourceFieldWithdrawalStore(contentPool, environment);
 const correctionWorker = new VerificationCorrectionWorker(new VerificationCorrectionPublisher(
   new VerificationStore(contentPool), new NotificationStore(pool)));
+const actingContextDiscovery = new AccessActingContexts(pool, environment);
 const app = createMainApp(fuseki, {
   agentProvisioning: new AgentProvisioning(pool,
     { ...environment, ...(workObjects ? { workObjects } : {}) }),
@@ -283,6 +285,8 @@ const app = createMainApp(fuseki, {
   exportVerificationPrivate: new VerificationStore(contentPool),
   exportRights: rightsStore.exportScope,
   actingContexts: new AccessActingContexts(pool),
+  actingContextDiscovery,
+  sessionAgents: new AccessSessionAgents(pool, actingContextDiscovery),
   groups: new AccessGroups(pool),
   grants: new AccessGrants(pool),
   memberships: new AccessMemberships(pool),
