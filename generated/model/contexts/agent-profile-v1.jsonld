@@ -4,10 +4,6 @@
       "@id": "http://www.w3.org/1999/02/22-rdf-syntax-ns#",
       "@prefix": true
     },
-    "rdfs": {
-      "@id": "http://www.w3.org/2000/01/rdf-schema#",
-      "@prefix": true
-    },
     "sh": {
       "@id": "http://www.w3.org/ns/shacl#",
       "@prefix": true
@@ -22,17 +18,6 @@
     },
     "rdf:type": {
       "@id": "http://www.w3.org/1999/02/22-rdf-syntax-ns#type",
-      "@type": "@id"
-    },
-    "rdfs:label": {
-      "@id": "http://www.w3.org/2000/01/rdf-schema#label"
-    },
-    "rv:agentKind": {
-      "@id": "https://rezics.com/vocab/agentKind",
-      "@type": "@id"
-    },
-    "rv:compensatedFrom": {
-      "@id": "https://rezics.com/vocab/compensatedFrom",
       "@type": "@id"
     },
     "rv:profileDisclosure": {

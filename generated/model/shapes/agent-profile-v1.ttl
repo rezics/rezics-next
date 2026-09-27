@@ -1,0 +1,14 @@
+# Provisioning creates a public Agent profile; private Account identity is never copied.
+# The immutable agent-UUID handle is allocated from the native Agent identity, not its name.
+# Only active Access Agents with a public profile and unerased head are publicly readable.
+# Pen names are independent PersonAgents; no principal or same-person link is published.
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+@prefix rv: <https://rezics.com/vocab/> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+<https://rezics.com/definition/agent-profile-v1/profile-shape>
+    a sh:NodeShape ;
+    sh:property [ sh:path rdf:type ; sh:hasValue rv:Agent ] ;
+    sh:property [ sh:path rv:profileHandle ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:string ; sh:pattern "^agent-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" ] ;
+    sh:property [ sh:path rv:profileDisclosure ; sh:minCount 1 ; sh:maxCount 1 ; sh:in ( rv:Public rv:Private ) ] .

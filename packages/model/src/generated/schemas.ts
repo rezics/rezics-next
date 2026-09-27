@@ -2,7 +2,11 @@
 import { Type, type Static } from 'typebox';
 
 /** Node-local JSON-LD value envelopes. Jena performs graph-wide SHACL validation. */
-export const AgentProvisionV1AgentShapeSchema = Type.Object({ "@id": Type.String({ minLength: 1 }), "rdf:type": Type.Array(Type.String({}), { minItems: 1, contains: Type.Literal("https://rezics.com/vocab/Agent") }), "rv:agentKind": Type.Array(Type.Union([Type.Literal("https://rezics.com/vocab/PersonAgent"), Type.Literal("https://rezics.com/vocab/OrganizationAgent"), Type.Literal("https://rezics.com/vocab/ServiceAgent")]), { minItems: 1, maxItems: 1 }), "rdfs:label": Type.Array(Type.String({}), { minItems: 1, maxItems: 1 }) }, { additionalProperties: true });
+export const AgentProfileV1ProfileShapeSchema = Type.Object({ "@id": Type.String({ minLength: 1 }), "rdf:type": Type.Array(Type.String({}), { minItems: 1, contains: Type.Literal("https://rezics.com/vocab/Agent") }), "rv:profileHandle": Type.Array(Type.String({"pattern":"^agent-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"}), { minItems: 1, maxItems: 1 }), "rv:profileDisclosure": Type.Array(Type.Union([Type.Literal("https://rezics.com/vocab/Public"), Type.Literal("https://rezics.com/vocab/Private")]), { minItems: 1, maxItems: 1 }) }, { additionalProperties: true });
+
+export type AgentProfileV1ProfileShape = Static<typeof AgentProfileV1ProfileShapeSchema>;
+
+export const AgentProvisionV1AgentShapeSchema = Type.Object({ "@id": Type.String({ minLength: 1 }), "rdf:type": Type.Array(Type.String({}), { minItems: 1, contains: Type.Literal("https://rezics.com/vocab/Agent") }), "rv:agentKind": Type.Array(Type.Union([Type.Literal("https://rezics.com/vocab/PersonAgent"), Type.Literal("https://rezics.com/vocab/OrganizationAgent"), Type.Literal("https://rezics.com/vocab/ServiceAgent")]), { minItems: 1, maxItems: 1 }), "rdfs:label": Type.Array(Type.String({}), { minItems: 1, maxItems: 1 }), "rv:profileHandle": Type.Optional(Type.Array(Type.String({"pattern":"^agent-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"}), { maxItems: 1 })), "rv:profileDisclosure": Type.Optional(Type.Array(Type.Union([Type.Literal("https://rezics.com/vocab/Public"), Type.Literal("https://rezics.com/vocab/Private")]), { maxItems: 1 })) }, { additionalProperties: true });
 
 export type AgentProvisionV1AgentShape = Static<typeof AgentProvisionV1AgentShapeSchema>;
 
@@ -301,6 +305,14 @@ export type MainPackageReleaseRecommendationV1SetShape = Static<typeof MainPacka
 export const MainPackageReleaseRecommendationV1RecommendationShapeSchema = Type.Object({ "@id": Type.String({ minLength: 1 }), "rdf:type": Type.Array(Type.Literal("https://rezics.com/vocab/PackageReleaseRecommendation"), { maxItems: 1, minItems: 1 }), "rv:ecosystem": Type.Array(Type.String({"minLength":1,"maxLength":32}), { minItems: 1, maxItems: 1 }), "rv:packageName": Type.Array(Type.String({"minLength":1,"maxLength":256}), { minItems: 1, maxItems: 1 }), "rv:selectorKind": Type.Array(Type.Union([Type.Literal("https://rezics.com/vocab/VersionConstraint"), Type.Literal("https://rezics.com/vocab/ExactRelease")]), { minItems: 1, maxItems: 1 }), "rv:selector": Type.Array(Type.String({"minLength":1,"maxLength":256}), { minItems: 1, maxItems: 1 }), "rv:position": Type.Array(Type.Integer({"minimum":0,"maximum":15}), { minItems: 1, maxItems: 1 }) }, { additionalProperties: true });
 
 export type MainPackageReleaseRecommendationV1RecommendationShape = Static<typeof MainPackageReleaseRecommendationV1RecommendationShapeSchema>;
+
+export const NativeAgentCreditV1CreditShapeSchema = Type.Object({ "@id": Type.String({ minLength: 1 }), "rdf:type": Type.Array(Type.String({}), { minItems: 1, contains: Type.Literal("https://rezics.com/vocab/NativeAgentCredit") }), "rv:work": Type.Array(Type.String({}), { minItems: 1, maxItems: 1 }), "rv:agent": Type.Array(Type.String({}), { minItems: 1, maxItems: 1 }), "rv:creditRevision": Type.Array(Type.String({}), { minItems: 1, maxItems: 1 }), "schema:roleName": Type.Array(Type.Union([Type.Literal("author"), Type.Literal("translator"), Type.Literal("editor")]), { minItems: 1, maxItems: 1 }), "rv:externalKey": Type.Optional(Type.Array(Type.Unknown(), { maxItems: 0 })) }, { additionalProperties: true });
+
+export type NativeAgentCreditV1CreditShape = Static<typeof NativeAgentCreditV1CreditShapeSchema>;
+
+export const NativeAgentCreditV1RevisionShapeSchema = Type.Object({ "@id": Type.String({ minLength: 1 }), "rdf:type": Type.Array(Type.String({}), { minItems: 1, contains: Type.Literal("https://rezics.com/vocab/NativeAgentCreditRevision") }), "rv:component": Type.Array(Type.String({}), { minItems: 1, maxItems: 1 }), "rv:work": Type.Array(Type.String({}), { minItems: 1, maxItems: 1 }), "rv:agent": Type.Array(Type.String({}), { minItems: 1, maxItems: 1 }), "rv:workRevision": Type.Array(Type.String({}), { minItems: 1, maxItems: 1 }), "schema:roleName": Type.Array(Type.Union([Type.Literal("author"), Type.Literal("translator"), Type.Literal("editor")]), { minItems: 1, maxItems: 1 }) }, { additionalProperties: true });
+
+export type NativeAgentCreditV1RevisionShape = Static<typeof NativeAgentCreditV1RevisionShapeSchema>;
 
 export const PollAllocationV1PlanShapeSchema = Type.Object({ "@id": Type.String({ minLength: 1 }), "rdf:type": Type.Array(Type.String({}), { minItems: 1, contains: Type.Literal("https://rezics.com/vocab/AllocationPlan") }), "rv:poll": Type.Array(Type.String({}), { minItems: 1, maxItems: 1 }), "rv:rootEntitlement": Type.Array(Type.String({}), { minItems: 1, maxItems: 1 }), "rv:leafCount": Type.Array(Type.Integer({"minimum":1,"maximum":1024}), { minItems: 1, maxItems: 1 }), "rv:allocatedUnits": Type.Array(Type.Integer({"minimum":0,"maximum":1000000}), { minItems: 1, maxItems: 1 }), "rv:residualUnits": Type.Array(Type.Integer({"minimum":0,"maximum":1000000}), { minItems: 1, maxItems: 1 }), "rv:planDigest": Type.Array(Type.String({"pattern":"^[0-9a-f]{64}$"}), { minItems: 1, maxItems: 1 }), "rv:operation": Type.Array(Type.String({"pattern":"^urn:rezics:operation:[0-9a-f]{64}$"}), { minItems: 1, maxItems: 1 }), "rv:preparedAt": Type.Array(Type.String({ pattern: "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?(?:Z|[+-]\\d{2}:\\d{2})$" }), { minItems: 1, maxItems: 1 }) }, { additionalProperties: true });
 
@@ -839,6 +851,7 @@ export const ZoneCapabilityV1RevisionShapeSchema = Type.Object({ "@id": Type.Str
 export type ZoneCapabilityV1RevisionShape = Static<typeof ZoneCapabilityV1RevisionShapeSchema>;
 
 export const shapeSchemas = {
+  "https://rezics.com/definition/agent-profile-v1/profile-shape": AgentProfileV1ProfileShapeSchema,
   "https://rezics.com/definition/agent-provision-v1/agent-shape": AgentProvisionV1AgentShapeSchema,
   "https://rezics.com/definition/agent-provision-v1/tombstone-shape": AgentProvisionV1TombstoneShapeSchema,
   "https://rezics.com/definition/assessment-v1/reliability-scope-shape": AssessmentV1ReliabilityScopeShapeSchema,
@@ -914,6 +927,8 @@ export const shapeSchemas = {
   "https://rezics.com/definition/main-default-selection-v1/selection-shape": MainDefaultSelectionV1SelectionShapeSchema,
   "https://rezics.com/definition/main-package-release-recommendation-v1/set-shape": MainPackageReleaseRecommendationV1SetShapeSchema,
   "https://rezics.com/definition/main-package-release-recommendation-v1/recommendation-shape": MainPackageReleaseRecommendationV1RecommendationShapeSchema,
+  "https://rezics.com/definition/native-agent-credit-v1/credit-shape": NativeAgentCreditV1CreditShapeSchema,
+  "https://rezics.com/definition/native-agent-credit-v1/revision-shape": NativeAgentCreditV1RevisionShapeSchema,
   "https://rezics.com/definition/poll-allocation-v1/plan-shape": PollAllocationV1PlanShapeSchema,
   "https://rezics.com/definition/poll-allocation-v1/leaf-shape": PollAllocationV1LeafShapeSchema,
   "https://rezics.com/definition/poll-allocation-v1/activation-shape": PollAllocationV1ActivationShapeSchema,

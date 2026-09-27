@@ -2,8 +2,13 @@
   "commandModule": "0.5.33",
   "profiles": [
     {
+      "id": "agent-profile-v1",
+      "sha256": "d9449ad49a3338d9defff32e6a2270a7d5bae21e74a09566c202b76698a3916f",
+      "file": "shapes/agent-profile-v1.ttl"
+    },
+    {
       "id": "agent-provision-v1",
-      "sha256": "5523f932edd5ec848047fe7e968d63a0f509870bc2735fe02d38d13d041cae4c",
+      "sha256": "39be9701579192f77c67c10996d9c66aa5daf0b1182fa0566c07064281038028",
       "file": "shapes/agent-provision-v1.ttl"
     },
     {
@@ -258,6 +263,11 @@
       "id": "main-package-release-recommendation-v1",
       "sha256": "2560da59cda40c7ac9fd0fb38b39e2d63666e6fdb06dccf250728d7d28faab60",
       "file": "shapes/main-package-release-recommendation-v1.ttl"
+    },
+    {
+      "id": "native-agent-credit-v1",
+      "sha256": "5e40e324be6ea9a9aa0503e265264685ee72d858060aeedb0701db93b7f96dea",
+      "file": "shapes/native-agent-credit-v1.ttl"
     },
     {
       "id": "poll-allocation-v1",
@@ -1747,6 +1757,26 @@
       ]
     },
     {
+      "type": "https://rezics.com/vocab/NativeAgentCredit",
+      "routes": [
+        {
+          "profile": "native-agent-credit-v1",
+          "shape": "https://rezics.com/definition/native-agent-credit-v1/credit-shape",
+          "when": []
+        }
+      ]
+    },
+    {
+      "type": "https://rezics.com/vocab/NativeAgentCreditRevision",
+      "routes": [
+        {
+          "profile": "native-agent-credit-v1",
+          "shape": "https://rezics.com/definition/native-agent-credit-v1/revision-shape",
+          "when": []
+        }
+      ]
+    },
+    {
       "type": "https://rezics.com/vocab/NativeChild",
       "routes": [
         {
@@ -2414,7 +2444,8 @@
     }
   ],
   "artifacts": {
-    "contexts/agent-provision-v1.jsonld": "ecfc8c73c40c52c5ba66e336b3a079051eb75409546a2d41c5c85335a01708c1",
+    "contexts/agent-profile-v1.jsonld": "d8fe1c25d46293f9e93eb4b3c7ad105f677986161d665366818526b98bc100e2",
+    "contexts/agent-provision-v1.jsonld": "62c2a4eda19710dab2b44d0742065e1248765ec65200654804cc16c052a21d22",
     "contexts/assessment-v1.jsonld": "e1d2d9caf13cdb769a0b5378c64150f0873a82e5d1f4954d1301cb6d6c75d432",
     "contexts/ballot-mandate-approval-v1.jsonld": "3891b117248ab7df885eee0c0fb757b99c851c8f1237cef8f2218f96804aa289",
     "contexts/ballot-proxy-v1.jsonld": "2efecc0ce28ae8be50d8fae3de69b544d34517d184c163c8c494a47f5065f048",
@@ -2443,6 +2474,7 @@
     "contexts/hub-item-v1.jsonld": "8f223f595f3dd58294b50e1e0d6d8e5b96977efa634b9ab0d8ce7d4f7f1c9205",
     "contexts/main-default-selection-v1.jsonld": "f08bbc6a41d97eef45c81812c1938ede21b1a8a4a5a34abbbfa07c9d04ec3cd3",
     "contexts/main-package-release-recommendation-v1.jsonld": "583eb256a54cade90585067b0cbb9659a6d2fb42052c0772f830de5c5f1a944a",
+    "contexts/native-agent-credit-v1.jsonld": "5af722e5abc26a2dba37a9eaaec437dd11b20ad894f95c45c032862d58aea132",
     "contexts/poll-allocation-v1.jsonld": "d9e2c115b4ede5d0d2e6e63bc246f59c90f17ce112d9047bc8c669f12aab9a57",
     "contexts/poll-resolution-v1.jsonld": "b3ceb6ec3f789b15b77014d610facbb77100f46ed31bc7fb211b3963f08273a7",
     "contexts/poll-snapshot-v1.jsonld": "9fb3fab241d6162821eee026cd8678198c5c819be32ac318a4eb00fce78a23f7",
@@ -2492,7 +2524,8 @@
     "contexts/work-native-child-v1.jsonld": "6f5a3d023edc2048a18af848f10cacb6264a55d486e703d5909ec7ca4e9828ba",
     "contexts/work-title-control-v1.jsonld": "6d41cee07d63c6609e3c8ba36f45043ab1ff4ef888869d859520680125bb9b29",
     "contexts/zone-capability-v1.jsonld": "e2b55a2058a3b218a3fb2a7c4542886ff1f5c79b42101293a02c38b048869dcd",
-    "shapes/agent-provision-v1.ttl": "5523f932edd5ec848047fe7e968d63a0f509870bc2735fe02d38d13d041cae4c",
+    "shapes/agent-profile-v1.ttl": "d9449ad49a3338d9defff32e6a2270a7d5bae21e74a09566c202b76698a3916f",
+    "shapes/agent-provision-v1.ttl": "39be9701579192f77c67c10996d9c66aa5daf0b1182fa0566c07064281038028",
     "shapes/assessment-v1.ttl": "f4dceaac4879083028d3b97903a345b01e495f1b8b8a41fcf15a4b3d8e0a75ba",
     "shapes/ballot-mandate-approval-v1.ttl": "0fecd52c8455390decae35d5641030372402236bdad2c5c96cb32c57fdea6647",
     "shapes/ballot-proxy-v1.ttl": "f0d2242d2d8026b9f6283c38c1e5db4efb28e2fec203428a49e225c9a40246c7",
@@ -2521,6 +2554,7 @@
     "shapes/hub-item-v1.ttl": "d5a9c3598792cac47e1301ef9704551df121e50988643d0c1274583436bb0da8",
     "shapes/main-default-selection-v1.ttl": "92f91c7e990901a457bd688dd47f576178ffa1daa90f35a4d2d1c53f751de52a",
     "shapes/main-package-release-recommendation-v1.ttl": "2560da59cda40c7ac9fd0fb38b39e2d63666e6fdb06dccf250728d7d28faab60",
+    "shapes/native-agent-credit-v1.ttl": "5e40e324be6ea9a9aa0503e265264685ee72d858060aeedb0701db93b7f96dea",
     "shapes/poll-allocation-v1.ttl": "c277302719c0570563b7889276e106b9a1cee676551b2932299ad7cf03910ae4",
     "shapes/poll-resolution-v1.ttl": "47413e42bb40731c023a3129dd1c878b335e73ea20bc6e45204cb166bf2a4654",
     "shapes/poll-snapshot-v1.ttl": "f9471026df8866e1ce6379325f83fe20f7be7b3b68d160386e5a1319665b8214",
@@ -2570,9 +2604,9 @@
     "shapes/work-native-child-v1.ttl": "1c9e1ed2ab97a4211095848ddce43f361082b5b80c042000d384658ad029d5d5",
     "shapes/work-title-control-v1.ttl": "100dddad43cac4fd47c3090e987ef9dc9aa272d189fc4240cc08302340c5d42d",
     "shapes/zone-capability-v1.ttl": "c518389e8a7777b2358a5ed98f6016e77a803aa8c9336fefc40201fb38df4f65",
-    "packages/model/src/generated/arbitraries.ts": "e9efb79a9cad90619a6b38caa1b0e205b74600fb63b0982818e9081428558657",
-    "packages/model/src/generated/profiles.ts": "94adc93bc47ee8e01915b07a10ac416833ce962a8f67bdd2ea7ad3916840a896",
-    "packages/model/src/generated/schemas.ts": "4089356274951f1dd9acb74c942069d3e45cff3a237388f45194c2ac5a390140",
-    "packages/model/src/generated/vocabulary.ts": "d262f380af7ef0e91023d4bc2b92a25d8e803e2149588cff7c19646fb5ddcac2"
+    "packages/model/src/generated/arbitraries.ts": "62ae80c1842b02d9043a95f0250543deaf4cc04ae90380a02d829a91b4206906",
+    "packages/model/src/generated/profiles.ts": "cd0102af155120b7bf26ead42005b24118f5a696220224c170111b6c23de9f65",
+    "packages/model/src/generated/schemas.ts": "b985d735c2e92e537b5c574b29a943a33cf46acd06f3bf439878c4b715276b1c",
+    "packages/model/src/generated/vocabulary.ts": "0bba22d14f8d917629107111eb06632b4e0dee2bc9b7a3efcfb33ecc655db26c"
   }
 }

@@ -1,0 +1,55 @@
+{
+  "@context": {
+    "rdf": {
+      "@id": "http://www.w3.org/1999/02/22-rdf-syntax-ns#",
+      "@prefix": true
+    },
+    "sh": {
+      "@id": "http://www.w3.org/ns/shacl#",
+      "@prefix": true
+    },
+    "rv": {
+      "@id": "https://rezics.com/vocab/",
+      "@prefix": true
+    },
+    "schema": {
+      "@id": "https://schema.org/",
+      "@prefix": true
+    },
+    "xsd": {
+      "@id": "http://www.w3.org/2001/XMLSchema#",
+      "@prefix": true
+    },
+    "rdf:type": {
+      "@id": "http://www.w3.org/1999/02/22-rdf-syntax-ns#type",
+      "@type": "@id"
+    },
+    "rv:agent": {
+      "@id": "https://rezics.com/vocab/agent",
+      "@type": "@id"
+    },
+    "rv:component": {
+      "@id": "https://rezics.com/vocab/component",
+      "@type": "@id"
+    },
+    "rv:creditRevision": {
+      "@id": "https://rezics.com/vocab/creditRevision",
+      "@type": "@id"
+    },
+    "rv:externalKey": {
+      "@id": "https://rezics.com/vocab/externalKey"
+    },
+    "rv:work": {
+      "@id": "https://rezics.com/vocab/work",
+      "@type": "@id"
+    },
+    "rv:workRevision": {
+      "@id": "https://rezics.com/vocab/workRevision",
+      "@type": "@id"
+    },
+    "schema:roleName": {
+      "@id": "https://schema.org/roleName",
+      "@type": "@id"
+    }
+  }
+}
