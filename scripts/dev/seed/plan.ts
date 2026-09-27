@@ -84,6 +84,48 @@ export const realms = [
     featured: ['dumplings', 'noodles', 'pancakes', 'tea'] },
 ] as const;
 
+/** Agents the first demo person also controls: a pen name and an organization. */
+export const penNames = [
+  { id: 'moonlight', displayName: '月下书生 · Moonlit Scribe', kind: 'person' },
+  { id: 'northstar', displayName: 'North Star Editions · 北辰出版', kind: 'organization' },
+] as const;
+
+/**
+ * Profile pages (`/@handle`): who is credited on which Works, bios, and whose
+ * shelves are public. Only Works with a published text are public, so only
+ * those appear. Lin Mei (`people[0]`) is an author whose own shelves stay
+ * private; Daniel reads in public.
+ */
+export const profilePlan = {
+  credits: [
+    ...['serial', 'prompt', 'skill', 'mod-guide'].map(work => ({ agent: 'mei', work, role: 'author' })),
+    ...['journey-west', 'red-chamber'].map(work => ({ agent: 'moonlight', work, role: 'author' })),
+    ...['pride', 'alice'].map(work => ({ agent: 'northstar', work, role: 'editor' })),
+    { agent: 'mei', work: 'pride-ch2', role: 'translator' },
+  ] as ReadonlyArray<{ agent: string; work: string; role: 'author' | 'translator' | 'editor' }>,
+  bios: [
+    { agent: 'mei', language: 'en', text: 'Lin Mei writes 雨夜书店 (The Rainy Night Bookshop), a serial about '
+      + 'a bookshop that only opens when it rains, and short guides for book clubs and tinkerers. '
+      + 'She reads Austen in two languages.' },
+    { agent: 'moonlight', language: 'zh-Hans', text: '月下书生是林梅的笔名。写志怪、旧梦和夜里的书店，'
+      + '偶尔重讲《聊斋》里的故事。' },
+    { agent: 'northstar', language: 'en', text: 'North Star Editions edits public-domain classics '
+      + 'for readers of English and Chinese, with notes on the text and its history.' },
+  ],
+  libraries: [
+    { person: 'daniel', visibility: 'public', shelf: [
+      { work: 'serial', status: 'reading' }, { work: 'pride', status: 'read' },
+      { work: 'journey-west', status: 'read' }, { work: 'bun', status: 'read' }, { work: 'prompt', status: 'read' },
+      { work: 'red-chamber', status: 'want-to-read' }, { work: 'typescript', status: 'want-to-read' }] },
+  ] as ReadonlyArray<{ person: string; visibility: 'public';
+    shelf: ReadonlyArray<{ work: string; status: 'want-to-read' | 'reading' | 'read' }> }>,
+  /** Readers who follow each profile, so follower counts are not all zero. */
+  followers: [
+    { agent: 'mei', by: ['an', 'sophie', 'jun', 'aria'] },
+    { agent: 'moonlight', by: ['daniel', 'leo'] },
+  ],
+};
+
 export function seedKey(kind: string, id: string): string {
   return `dev-seed:v1:${kind}:${id}`;
 }

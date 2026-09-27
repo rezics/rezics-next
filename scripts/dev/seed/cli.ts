@@ -5,7 +5,8 @@ import { dirname, isAbsolute, join, resolve } from 'node:path';
 import { isDeepStrictEqual } from 'node:util';
 import { readEnv } from '../config.ts';
 import { SeedApi, SeedApiError, type SeedEndpoints } from './api.ts';
-import { people, realms, seedKey, semanticTypes, works } from './plan.ts';
+import { penNames, people, realms, seedKey, semanticTypes, works } from './plan.ts';
+import { profileSteps } from './profiles.ts';
 import { seedReply } from './replies.ts';
 import { seedRealmManagement } from './realm-management.ts';
 import { seedFeed } from './feed.ts';
@@ -129,13 +130,11 @@ async function run(options: Options): Promise<boolean> {
     accountSecret, accessDatabaseUrl, accountSubject: operator.id,
     ownerAccountSubject: owner.accountId, actingSubject: owner.actingSubject };
   const operatorSession = await operatorSeedSession(operatorInput);
-  for (const [id, displayName, kind] of [
-    ['moonlight', '月下书生 · Moonlit Scribe', 'person'],
-    ['northstar', 'North Star Editions · 北辰出版', 'organization'],
-  ] as const) {
+  const penAgents = new Map<string, string>();
+  for (const { id, displayName, kind } of penNames) {
     const agent = await optional('Pen name / organization Agent', () => api.post<AgentReceipt>('/v1/agents', {
       profile: 'agent-provision-v1', kind, displayName }, ownerToken, seedKey('agent', id)));
-    if (agent?.state === 'active') agentCount++;
+    if (agent?.state === 'active') { agentCount++; penAgents.set(id, agent.agent); }
   }
   const created = new Map<string, WorkReceipt>();
   for (const work of works) {
@@ -319,6 +318,14 @@ async function run(options: Options): Promise<boolean> {
   const feed = await optional('Home follows and votes', () => seedFeed(api, sessions, createdRealms));
   if (feed) console.log(`Home: ${feed.activities} activities, ${feed.followed} follows, ${feed.votes} votes.`);
   await optional('Home Continue and new activity', () => seedHomeV2(api, sessions, created, createdRealms));
+
+  const profile = profileSteps(api, owner, sessions, penAgents,
+    new Map([...created].map(([id, receipt]) => [id, receipt.work])));
+  const credits = await optional('Profile credits', profile.credits);
+  await optional('Profile bios', profile.bios);
+  await optional('Profile shelves', profile.libraries);
+  const profileFollows = await optional('Profile follows', profile.follows);
+  console.log(`Profiles: ${credits ?? 0} credits, ${profileFollows ?? 0} follows.`);
 
   const search = await optional('Public search', () => fetch(`${endpoints.main}/v1/queries`, { method: 'POST',
     headers: { 'content-type': 'application/json' }, body: JSON.stringify({
