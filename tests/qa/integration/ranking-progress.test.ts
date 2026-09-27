@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { startMediaStack } from './media-support.ts';
 import { StructureProgressStore } from '../../../services/main/src/modules/progress/store.ts';
 import { readProgressSignal } from '../../../services/main/src/modules/structure/progress-outbox.ts';
-import { ReadRankingProjection } from '../../../services/main/src/modules/rankings/projection.ts';
+import { ReadRankingProjection, rankingBuckets } from '../../../services/main/src/modules/rankings/projection.ts';
 import { createMainApp } from '../../../services/main/src/app.ts';
 import type { WorkActivationEnvironment } from '../../../services/main/src/modules/work/activate.ts';
 
@@ -31,6 +31,17 @@ test('G291: progress outbox replays once; ranking cursor and scores reset on gra
     const structure = id(), occurrence = id(), work = publicWork.work;
     const principal = { issuer: 'https://reader.example', subject: randomUUID() };
     const store = new StructureProgressStore(stack.contentPool);
+    const env = { ...stack.env, fuseki: { query: async () => ({ results: { bindings: [
+      { work: { type: 'uri', value: work } },
+    ] } }) } } as unknown as WorkActivationEnvironment;
+    const projection = new ReadRankingProjection(stack.accessPool, stack.content,
+      stack.contentPool, env);
+    for (let i = 0; i < 100 && (await projection.tick()) > 0; i++) { /* bounded catch-up */ }
+    const initial = await projection.current();
+    const previousDay = rankingBuckets(new Date(), 'day').previous;
+    await stack.accessPool.query(`INSERT INTO access.read_ranking_score
+      (generation, metric, interval, bucket, work, score, growth)
+      VALUES ($1,'reads','day',$2,$3,5,5)`, [initial.generation, previousDay, work]);
     const start = await stack.content.ownerPosition();
     const input = { principal, structure, occurrence, selectedRevision: null,
       completed: false, position: 'paragraph:1', expectedVersion: 0, idempotencyKey: randomUUID() };
@@ -49,13 +60,9 @@ test('G291: progress outbox replays once; ranking cursor and scores reset on gra
     await expect(readProgressSignal(stack.contentPool, { ...events[0]!,
       payload: { ...events[0]!.payload, read: false } })).rejects.toThrow('differs');
 
-    const env = { ...stack.env, fuseki: { query: async () => ({ results: { bindings: [
-      { work: { type: 'uri', value: work } },
-    ] } }) } } as unknown as WorkActivationEnvironment;
-    const projection = new ReadRankingProjection(stack.accessPool, stack.content,
-      stack.contentPool, env);
     for (let i = 0; i < 100 && (await projection.tick()) > 0; i++) { /* bounded catch-up */ }
     const first = await projection.current();
+    expect(first.generation).toBe(initial.generation);
     const bucket = new Date().toISOString().slice(0, 10);
     const score = await stack.accessPool.query<{ metric: string; score: string }>(
       `SELECT metric, score::text FROM access.read_ranking_score
@@ -81,6 +88,11 @@ test('G291: progress outbox replays once; ranking cursor and scores reset on gra
       `http://main.local/v1/realms/${realm.slice(-36)}/modules/rising?metric=reads&interval=day`));
     expect(rising.status).toBe(200);
     expect(await rising.json()).toMatchObject({ profile: 'rising-v1', realm,
+      items: [] });
+    const finishingRise = await app.handle(new Request(
+      `http://main.local/v1/realms/${realm.slice(-36)}/modules/rising?metric=finished-chapters&interval=day`));
+    expect(finishingRise.status).toBe(200);
+    expect(await finishingRise.json()).toMatchObject({ profile: 'rising-v1', realm,
       items: [{ id: work, score: 1, growth: 1 }] });
 
     const restored = new ReadRankingProjection(stack.accessPool, stack.content,
