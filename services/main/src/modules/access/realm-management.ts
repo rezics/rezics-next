@@ -7,6 +7,7 @@ import { REALM_ADMIN_COST, RealmAdminConflict, RealmAdminDenied, RealmAdminInval
   realmPermissions, type EscalationCommand, type RealmPermission, type RoleCommand,
   type RoleImpact, memberCommand, type MemberCommand, settingsCommand, type SettingsCommand } from '../realm-admin/contract.ts';
 import { changeRealmMember } from './realm-management-members.ts';
+import { searchRealmMembers } from './realm-management-search.ts';
 import { readRealmSettings, saveRealmSettings } from './realm-management-settings.ts';
 import { DATASET, GRAPHS, iri, lit, RV, type WorkActivationEnvironment } from '../work/activate.ts';
 
@@ -199,7 +200,8 @@ export class AccessRealmManagement {
     }
     return this.transaction(realm, async (client, generation) => {
       await this.authorize(client, principal, realm, options.actingSubject, 'realm.members.manage');
-      const search = (options.search ?? '').replace(/[\\%_]/g, '\\$&');
+      const matches = !options.search?.trim() ? null
+        : await searchRealmMembers(client, realm, options.search, options.after, limit + 1);
       // This is the public Agent roster. Private principal memberships never
       // disclose account identities through a public Agent listing.
       const rows = (await client.query<{ member: string; state: 'joined' | 'left';
@@ -220,8 +222,8 @@ export class AccessRealmManagement {
           AND b.owner_subject = m.owner_subject AND b.member_subject = m.member_subject
         WHERE m.kind = 'realm' AND m.owner_subject = $1
           AND ($2::text IS NULL OR m.member_subject > $2)
-          AND ($3 = '' OR m.member_subject LIKE $3 || '%')
-        ORDER BY m.member_subject LIMIT $4`, [realm, options.after ?? null, search, limit + 1])).rows;
+          AND ($3::text[] IS NULL OR m.member_subject = ANY($3))
+        ORDER BY m.member_subject LIMIT $4`, [realm, options.after ?? null, matches, limit + 1])).rows;
       return { generation, items: rows.slice(0, limit).map(row => ({ member: row.member, state: row.state,
         banned: row.banned, bannedUntil: row.banned_until?.toISOString() ?? null,
         membershipGeneration: row.membership_generation, joinedAt: row.joined_at?.toISOString() ?? null, roles: row.roles })),
