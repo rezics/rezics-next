@@ -8,13 +8,27 @@ interface Seed { work: string; realm: string; title: string; reply: string; chap
 // One public Work with versions, Realm adoption, classification, credits,
 // ratings, contents and a reviewed reply, seeded once into this isolated QA stack.
 let seed: Seed;
-test.beforeAll(() => {
+test.beforeAll(async () => {
+  test.setTimeout(150_000);
   const result = spawnSync('bun', ['apps/web/tests/work-page-seed.ts'], { cwd: process.cwd(), env: process.env,
     encoding: 'utf8', timeout: 90_000 });
   if (result.status !== 0 || result.error) {
     throw new Error(`Work page seed failed: ${result.stderr || result.error?.message || result.status}`);
   }
   seed = JSON.parse(result.stdout.trim().split('\n').at(-1)!) as Seed;
+  // Main keeps processing the seed's events for a while, moving the graph under every read (409). Browse once
+  // its position has held still for two seconds.
+  const main = `http://127.0.0.1:${process.env.MAIN_PORT}/v1/works/${seed.work.slice(-36)}`;
+  let last = '';
+  let still = 0;
+  for (const deadline = Date.now() + 60_000; Date.now() < deadline && still < 4;) {
+    const response = await fetch(main).catch(() => null);
+    const position = response?.ok ? JSON.stringify((await response.json() as { sourcePosition: unknown }).sourcePosition) : '';
+    still = position && position === last ? still + 1 : 0;
+    last = position;
+    await new Promise(done => setTimeout(done, 500));
+  }
+  if (still < 4) throw new Error('Main’s graph kept moving for a minute after the seed');
 });
 
 const uuid = (iri: string) => iri.slice(-36);
@@ -35,6 +49,8 @@ async function shoot(page: Page, context: BrowserContext, path: string, name: st
 }
 
 test('a public Work page reads by scope and tab, and names missing and invalid states', async ({ page, context }, info) => {
+  // One journey through every view, then 48 screenshots (views × themes × sizes × locales).
+  test.setTimeout(150_000);
   const errors: string[] = [];
   page.on('pageerror', error => errors.push(error.message));
   const id = uuid(seed.work);
