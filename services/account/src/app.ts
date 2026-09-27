@@ -30,13 +30,28 @@ export function createAccountApp(auth: ReturnType<typeof createAccountAuth>, poo
   options: AccountAppOptions = {}) {
   const operators = options.operatorUserIds ?? new Set<string>();
   const origin = new URL(String(auth.options.baseURL)).origin;
-  // pg-pool emits an error when a partition closes an idle connection. Without
-  // a listener Node terminates the Account process before readiness and
-  // protected requests can report the dependency outage.
+  // pg-pool emits errors for idle clients on the pool, but removes its client
+  // listener while a connection is checked out. A database cut can then reject
+  // the pending query and emit an unhandled client error before the caller
+  // returns its unavailable response. Keep one listener for each client.
   const idleConnectionError = (error: Error) => {
     console.error('Account database idle connection failed:', error.message);
   };
-  pool.on('error', idleConnectionError);
+  const observePool = (databasePool: Pool): Pool => {
+    const observed = new WeakSet<object>();
+    databasePool.on('error', idleConnectionError);
+    databasePool.on('acquire', client => {
+      if (observed.has(client)) return;
+      observed.add(client);
+      client.on('error', (error: Error) => {
+        if (client.listenerCount('error') === 1) {
+          console.error('Account database active connection failed:', error.message);
+        }
+      });
+    });
+    return databasePool;
+  };
+  observePool(pool);
   // The guard holds its own bounded connections across a provider exchange,
   // which draws on the owner pool. Excess concurrent exchanges wait at most
   // five seconds for a guard connection, then fail as temporarily unavailable;
@@ -45,10 +60,10 @@ export function createAccountApp(auth: ReturnType<typeof createAccountAuth>, poo
   // pg-pool deliberately hides an explicit password from object spreads.
   // Preserve it when the guard uses its own pool (remote Account placements
   // commonly configure host, user and password separately).
-  const guard = () => guardPool ??= new Pool({ ...pool.options,
+  const guard = () => guardPool ??= observePool(new Pool({ ...pool.options,
     ...('password' in pool.options ? { password: pool.options.password } : {}),
     max: options.codeGuardConnections ?? 4, connectionTimeoutMillis: 5_000,
-    idleTimeoutMillis: 1_000, allowExitOnIdle: true }).on('error', idleConnectionError);
+    idleTimeoutMillis: 1_000, allowExitOnIdle: true }));
   const operator = async (request: Request, write: boolean): Promise<string | Response> => {
     if (write && request.headers.get('origin') !== origin) {
       return Response.json({ error: 'invalid_origin' }, { status: 403 });
