@@ -3,7 +3,7 @@
 import { spawn, spawnSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { closeSync, copyFileSync, existsSync, mkdirSync, openSync, readdirSync, readFileSync, readSync, renameSync,
-  rmSync, statSync,
+  readlinkSync, rmSync, statSync,
   writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, isAbsolute, join, resolve } from 'node:path';
@@ -671,6 +671,27 @@ async function resumeTask(id: string, args: string[]): Promise<void> {
   });
 }
 
+
+/** Worker-started dev servers (task dev, Storybook, browsers) detach from the
+ * worker's process group and outlive it; they held several GB each on a
+ * 62 GB host. Terminate every process whose working directory is inside the
+ * worktree. Linux only: reads /proc. */
+export function killWorktreeProcesses(worktree: string): number {
+  if (!existsSync('/proc')) return 0;
+  const prefix = worktree.endsWith('/') ? worktree : `${worktree}/`;
+  const victims: number[] = [];
+  for (const entry of readdirSync('/proc')) {
+    const pid = Number(entry);
+    if (!Number.isInteger(pid) || pid === process.pid) continue;
+    try {
+      const cwd = readlinkSync(`/proc/${pid}/cwd`);
+      if (cwd === worktree || cwd.startsWith(prefix)) victims.push(pid);
+    } catch { /* exited or not ours */ }
+  }
+  for (const pid of victims) { try { process.kill(pid, 'SIGTERM'); } catch { /* gone */ } }
+  return victims.length;
+}
+
 async function stopTask(id: string): Promise<void> {
   const attempt = lastAttempt(taskOf(readLedger(), id));
   const program = programOf(engineOf(attempt));
@@ -680,6 +701,7 @@ async function stopTask(id: string): Promise<void> {
     while (pidAlive(attempt.pid, program) && Date.now() < deadline) await Bun.sleep(500);
     if (pidAlive(attempt.pid, program)) process.kill(-attempt.pid, 'SIGKILL');
   }
+  killWorktreeProcesses(taskOf(readLedger(), id).worktree);
   await withLedger(ledger => {
     const task = taskOf(ledger, id);
     lastAttempt(task).endedAt ??= new Date().toISOString();
@@ -762,6 +784,7 @@ async function closeTask(id: string, outcome: string): Promise<void> {
       throw new Error(`${task.id} is ${task.state}, not merged`);
     }
     if (existsSync(task.worktree)) {
+      killWorktreeProcesses(task.worktree);
       // Tasks may leave intentionally read-only artifacts (for example immutable release trees).
       spawnSync('chmod', ['-R', 'u+w', task.worktree]);
       git(root, ['worktree', 'remove', '--force', task.worktree]);
