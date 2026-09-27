@@ -41,12 +41,12 @@ function InvitationRow({ invitation, actingSubject, main }: { invitation: Pendin
   }
 
   if (outcome && 'answer' in outcome) {
-    return <li role="status" className="px-4 py-3.5 text-sm">
+    return <li className="px-4 py-3.5 text-sm"><p role="status">
       {outcome.answer === 'accept'
         ? <>{t.joinedRealm({ realm })}{' '}<Link href={localizedPath(invitation.realmHref, locale)}
           className="font-medium text-primary hover:underline">{realm}</Link></>
         : t.declinedInvitation({ realm })}
-    </li>;
+    </p></li>;
   }
   return <li className="flex flex-wrap items-start gap-3 px-4 py-3.5">
     <CommunityIcon icon={invitation.realmIcon} name={realm} size="md" />

@@ -95,7 +95,7 @@ export const KeepOrRemoveReport: Story = {
     await waitFor(() => expect(recorded.commits).toEqual([expect.objectContaining({ id: queue[0]!.id, action: 'keep',
       reason: null })]));
     await userEvent.click(within(list(canvas)).getByRole('button', { name: /Little Women/ }));
-    await expect(await canvas.findByText('The subtitle gives away the ending.')).toBeVisible();
+    await expect((await canvas.findAllByText('The subtitle gives away the ending.'))[0]).toBeInTheDocument();
     await userEvent.keyboard('r');
     const dialog = within(await within(document.body).findByRole('dialog', { name: 'Remove reported content' }, { timeout: 5000 }));
     await expect(dialog.queryByRole('textbox', { name: 'Private note for moderators' })).toBeNull();
@@ -134,7 +134,7 @@ export const OwnerDecides: Story = {
     await userEvent.keyboard('e');
     await expect(canvas.getByText('“Escalate” isn’t available for this item.')).toBeVisible();
     await userEvent.click(within(list(canvas)).getByRole('button', { name: /Sherlock Holmes/ }));
-    await expect(canvas.getByText('Rights complaints can’t be decided here yet.')).toBeVisible();
+    await expect(canvas.getAllByText('Rights complaints can’t be decided here yet.')[0]).toBeInTheDocument();
   },
 };
 

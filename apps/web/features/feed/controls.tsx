@@ -44,7 +44,9 @@ export function FeedControls({ state, defaults, signedIn, locale, messages, real
   const href = (change: Partial<FeedState>) => localizedPath(`/${feedSearch(withChange(state, change), defaults)}`, locale);
   const sorts: FeedSort[] = state.tab === 'following' ? ['best', 'new'] : ['best', 'new', 'top'];
   const sortHelp = { best: t.bestHelp, new: t.newHelp, top: t.topHelp };
-  return <div className="grid gap-3 border-border/60 border-b px-3 pt-1 pb-3 sm:px-4">
+  // One explicit shrinkable column: the kind chips scroll inside it, where an implicit auto column would take their
+  // full width and push the page wider than a phone.
+  return <div className="grid grid-cols-[minmax(0,1fr)] gap-3 border-border/60 border-b px-3 pt-1 pb-3 sm:px-4">
     <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
       {signedIn ? <nav aria-label={t.views} className="flex rounded-full bg-muted/70 p-1">
         {(['following', 'all'] as const).map(tab => <Link key={tab} href={href({ tab })}
