@@ -1,6 +1,7 @@
 # Exact Realm adoption of one eligible public Contribution state for one Main Version.
 @prefix sh: <http://www.w3.org/ns/shacl#> .
 @prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
 @prefix rv: <https://rezics.com/vocab/> .
 
 <https://rezics.com/definition/realm-local-selection-v1/selection-shape>
@@ -13,6 +14,10 @@
     sh:property [ sh:path rv:contribution ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
     sh:property [ sh:path rv:publicationDecision ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
     sh:property [ sh:path rv:selectedDraft ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
+    sh:property [ sh:path rv:mediaVariant ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
+    sh:property [ sh:path rv:mediaPublicationDecision ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
+    sh:property [ sh:path rv:mediaRevision ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
+    sh:property [ sh:path rv:mediaDigest ; sh:maxCount 1 ; sh:datatype xsd:string ] ;
     sh:property [ sh:path rv:selectionBasis ; sh:hasValue rv:RealmManagerReview ] ;
     sh:property [ sh:path rv:selectionMode ; sh:hasValue rv:Fixed ] ;
     sh:property [ sh:path rv:reviewPolicy ; sh:hasValue <https://rezics.com/definition/realm-manager-reviewed-v1> ] .

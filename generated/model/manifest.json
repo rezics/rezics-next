@@ -408,7 +408,7 @@
     },
     {
       "id": "realm-local-selection-v1",
-      "sha256": "a2c6dfa4bebe46b3be17501986bfbcac606ffce144b1deb7b17a9621eed56bca",
+      "sha256": "065cee2ee14324f92989a206e106a538a243621f3c54c55c9519cfcadf22def4",
       "file": "shapes/realm-local-selection-v1.ttl"
     },
     {
@@ -2454,7 +2454,7 @@
     "contexts/realm-experience-rating-context-v1.jsonld": "5252754cbd314ccba53c4daa132914c7bc8d56713bc42bcf244cc2d4cb8edf32",
     "contexts/realm-experience-rating-observation-v1.jsonld": "372fda997fd7386d284afd111f82165fc162385a252e59a1a6294ef98bc0111a",
     "contexts/realm-local-rejection-v1.jsonld": "30c3195374180744439a2ee6db2a9e6accd2c3413c63b2b41581494121bebcb5",
-    "contexts/realm-local-selection-v1.jsonld": "c5607a356036a445bfb6d67cde7a8902110718d977ed635ee094c7c679a52bc5",
+    "contexts/realm-local-selection-v1.jsonld": "720dfeb8c7c39eddd9fa6c19d90cdba5f2490516039151575827c095834c0f27",
     "contexts/realm-release-rating-context-v1.jsonld": "4fc40fca2efe60bafc880649eea0c609679800c9aaa70b4bb6068a8d38937e9c",
     "contexts/realm-release-rating-observation-v1.jsonld": "760d7eaa189c387c4a88401d7967671efe136086ffef15b7cdb27fc7217033dc",
     "contexts/realm-reply-placement-v1.jsonld": "8b60db1c14332a888f96264c301e4c9e4d4024fb8bdef15151814abd1681eeae",
@@ -2532,7 +2532,7 @@
     "shapes/realm-experience-rating-context-v1.ttl": "161452da6d838da538d753061cda75b09fa0a97bccfbb1cc79f8f4bb847a2c8f",
     "shapes/realm-experience-rating-observation-v1.ttl": "c3ce902cafe8b737aac34080fb1caf4b3953f5c737e500129d16e1d630654afe",
     "shapes/realm-local-rejection-v1.ttl": "8db4a0124cf3b2ac61a28595fb05677e8dff8977c4b0a126740f583de6589e02",
-    "shapes/realm-local-selection-v1.ttl": "a2c6dfa4bebe46b3be17501986bfbcac606ffce144b1deb7b17a9621eed56bca",
+    "shapes/realm-local-selection-v1.ttl": "065cee2ee14324f92989a206e106a538a243621f3c54c55c9519cfcadf22def4",
     "shapes/realm-release-rating-context-v1.ttl": "7520c99bb9669d866e67b4929ee624b1dafb3f2c6d616e67fca32bbd4a679c17",
     "shapes/realm-release-rating-observation-v1.ttl": "451a60e884d8c09b3f3e0c91742be3044f2067054479ad4f662b9abe9ba02f2f",
     "shapes/realm-reply-placement-v1.ttl": "b939a1b25d6351a97f4ac0cf48240a0bf76a3f61b51e1ace558348fd382eb511",
@@ -2571,8 +2571,8 @@
     "shapes/work-title-control-v1.ttl": "100dddad43cac4fd47c3090e987ef9dc9aa272d189fc4240cc08302340c5d42d",
     "shapes/zone-capability-v1.ttl": "c518389e8a7777b2358a5ed98f6016e77a803aa8c9336fefc40201fb38df4f65",
     "packages/model/src/generated/arbitraries.ts": "7cc2516a49be9274e35e79679e243cc47f4a7a617316b41fbbb80c692e334970",
-    "packages/model/src/generated/profiles.ts": "d1436bce72b34debb4f4fa2590de91553764702bda964984aaff707b854e1b7c",
-    "packages/model/src/generated/schemas.ts": "4071fa762c6e468abcf313a7c61b29f7fe8f3da4a0e3abe6b132ca93e40ff0fb",
-    "packages/model/src/generated/vocabulary.ts": "181bd3a90f2744cc6de6c987e68f258d14944e199c5eb67ef72c32047ea14f3f"
+    "packages/model/src/generated/profiles.ts": "328c739068f24252dee516175bc50ee75ff32b471317f068af161312d65b9f5b",
+    "packages/model/src/generated/schemas.ts": "b1bfa812e184c6f33b36043a2a68f3fddf516984279c5ca09345d3cae5c15e1e",
+    "packages/model/src/generated/vocabulary.ts": "99f0bbf36c82efcaea1d9910ce64c59915c0e20db9b372fe332688651a68319c"
   }
 }

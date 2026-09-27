@@ -543,7 +543,7 @@ export const profileRegistry = {
     ]
   },
   "realm-local-selection-v1": {
-    "sha256": "a2c6dfa4bebe46b3be17501986bfbcac606ffce144b1deb7b17a9621eed56bca",
+    "sha256": "065cee2ee14324f92989a206e106a538a243621f3c54c55c9519cfcadf22def4",
     "file": "shapes/realm-local-selection-v1.ttl",
     "shapes": [
       "https://rezics.com/definition/realm-local-selection-v1/selection-shape"

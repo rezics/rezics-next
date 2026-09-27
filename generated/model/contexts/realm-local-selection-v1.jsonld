@@ -8,6 +8,10 @@
       "@id": "http://www.w3.org/1999/02/22-rdf-syntax-ns#",
       "@prefix": true
     },
+    "xsd": {
+      "@id": "http://www.w3.org/2001/XMLSchema#",
+      "@prefix": true
+    },
     "rv": {
       "@id": "https://rezics.com/vocab/",
       "@prefix": true
@@ -26,6 +30,21 @@
     },
     "rv:mainVersion": {
       "@id": "https://rezics.com/vocab/mainVersion",
+      "@type": "@id"
+    },
+    "rv:mediaDigest": {
+      "@id": "https://rezics.com/vocab/mediaDigest"
+    },
+    "rv:mediaPublicationDecision": {
+      "@id": "https://rezics.com/vocab/mediaPublicationDecision",
+      "@type": "@id"
+    },
+    "rv:mediaRevision": {
+      "@id": "https://rezics.com/vocab/mediaRevision",
+      "@type": "@id"
+    },
+    "rv:mediaVariant": {
+      "@id": "https://rezics.com/vocab/mediaVariant",
       "@type": "@id"
     },
     "rv:publicationDecision": {
