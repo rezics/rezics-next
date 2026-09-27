@@ -1,0 +1,91 @@
+import { describe, expect, test } from 'bun:test';
+import { checkZonePresentation } from '../../../services/main/src/modules/zone/presentation-format.ts';
+import { editorList, extraWorks, fictionQuotes, fictionWorks, officialPresentation, type OfficialRealmId, penNames,
+  publicTexts, realmProfiles, zoneContent } from './official-plan.ts';
+import { people, penNames as basePenNames, realms, works } from './plan.ts';
+
+const official = Object.keys(zoneContent) as OfficialRealmId[];
+const known = new Set([...works.map(work => work.id), ...fictionWorks.map(work => work.id),
+  ...extraWorks.map(work => work.id)]);
+
+describe('Official Zone presentations', () => {
+  test('every official Realm has a layout Main accepts, under its own preset', () => {
+    expect(official.sort()).toEqual(realms.map(realm => realm.id).sort());
+    for (const realm of realms) {
+      const presentation = officialPresentation(realm.id, realm.preset);
+      expect(checkZonePresentation(presentation, [])).toBe(presentation);
+      expect(presentation.navigation).toEqual([]);
+      expect(presentation.modules.map(module => module.type)).toContain('hero-carousel');
+      // Every module and tab speaks the Zone's languages.
+      for (const module of presentation.modules) {
+        expect(module.titles).toMatchObject({ en: module.title, 'zh-Hans': expect.any(String) });
+        for (const tab of module.type === 'shelf' ? module.tabs ?? [] : []) {
+          expect(tab.labels).toMatchObject({ en: tab.label, 'zh-Hans': expect.any(String) });
+        }
+      }
+    }
+  });
+
+  test('Fiction reads as a serial publication', () => {
+    const fiction = officialPresentation('fiction', 'serial');
+    expect(fiction.modules.map(module => module.type)).toEqual(['hero-carousel', 'announcement', 'shelf', 'ranking',
+      'editorial-list', 'quote-stream', 'rising', 'decision-log']);
+    const editors = fiction.modules.find(module => module.type === 'editorial-list')!;
+    expect([editors.source, ...editors.tabs!.map(tab => tab.source)]).toEqual(zoneContent.fiction.lists
+      .map(list => ({ kind: 'collection', collection: editorList('fiction', list.id) })));
+  });
+});
+
+describe('Official Zone content', () => {
+  test('every adopted or listed Work is one the seed publishes', () => {
+    for (const realm of official) {
+      const { adopt, lists } = zoneContent[realm];
+      expect(new Set(adopt).size).toBe(adopt.length);
+      for (const id of [...adopt, ...lists.flatMap(list => list.works)]) expect(known).toContain(id);
+      for (const id of lists.flatMap(list => list.works)) expect(adopt).toContain(id);
+    }
+    for (const id of Object.keys(publicTexts)) expect(works.find(work => work.id === id)?.excerpt).toBeUndefined();
+  });
+
+  test('every serial has an author, a hook, chapters and a place in the Fiction Zone', () => {
+    const authors = new Set([...penNames.map(pen => pen.id), ...basePenNames.map(pen => pen.id),
+      ...people.map(person => person.id)]);
+    for (const work of fictionWorks) {
+      expect(authors).toContain(work.author);
+      expect(work.tagline.length).toBeGreaterThan(8);
+      expect(work.chapters.length).toBeGreaterThan(0);
+      expect(new Set(work.chapters.map(chapter => chapter.title)).size).toBe(work.chapters.length);
+      expect(zoneContent.fiction.adopt).toContain(work.id);
+    }
+    // Main's new-adoptions page is 20 Works; the Zone's cards read authors from it.
+    expect(zoneContent.fiction.adopt.length).toBeLessThanOrEqual(20);
+    // Serials and the base plan's Works share one namespace: one id, one Work.
+    for (const work of fictionWorks) expect(works.map(item => item.id)).not.toContain(work.id);
+  });
+
+  test('pen names have valid, distinct handles and belong to demo people', () => {
+    const handles = [...penNames.map(pen => pen.handle), ...people.map(person => person.handle)];
+    expect(new Set(handles).size).toBe(handles.length);
+    for (const pen of penNames) {
+      expect(pen.handle).toMatch(/^[A-Za-z0-9_]{3,30}$/);
+      expect(people.map(person => person.id)).toContain(pen.owner);
+    }
+  });
+
+  test('quotes are long enough for Main to quote, on serials the seed publishes', () => {
+    for (const quote of fictionQuotes) {
+      expect(quote.body.length).toBeGreaterThanOrEqual(24);
+      expect(fictionWorks.map(work => work.id)).toContain(quote.work);
+      expect(people.map(person => person.id)).toContain(quote.reader);
+    }
+  });
+
+  test('each official Realm names its moderators among the demo people', () => {
+    for (const realm of official) {
+      const profile = realmProfiles[realm];
+      expect(profile.moderators.length).toBeGreaterThan(0);
+      for (const person of profile.moderators) expect(people.map(item => item.id)).toContain(person);
+      expect(profile.rules.length).toBeGreaterThan(0);
+    }
+  });
+});
