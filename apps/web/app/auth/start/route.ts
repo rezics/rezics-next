@@ -2,12 +2,13 @@ import { createHash, randomBytes } from 'node:crypto';
 import { NextResponse } from 'next/server';
 import { appCallback, safeReturnPath, signInPath } from '../../../features/auth/paths.ts';
 import { serviceOrigin } from '../../../features/api/origins.ts';
+import { webConfig } from '../../../features/config/env.ts';
 
 export async function GET(request: Request) {
   const input = new URL(request.url);
   const accountOrigin = serviceOrigin('ACCOUNT_ORIGIN');
-  const clientId = process.env.WEB_OAUTH_CLIENT_ID;
-  const resource = process.env.MAIN_RESOURCE;
+  const clientId = webConfig().WEB_OAUTH_CLIENT_ID;
+  const resource = webConfig().MAIN_RESOURCE;
   if (!clientId || !resource) return new Response('Web OAuth client is not configured', { status: 503 });
   const session = await fetch(new URL('/api/auth/get-session', accountOrigin), {
     headers: { cookie: request.headers.get('cookie') ?? '' }, cache: 'no-store',

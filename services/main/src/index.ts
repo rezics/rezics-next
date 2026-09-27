@@ -100,21 +100,14 @@ import { verifyRankingSemanticBasis } from './modules/recommendation/semantic-ba
 import { graphZeroCandidates, graphZeroSnapshot } from './modules/recommendation/zero-candidates.ts';
 import { EventTemporalQueries } from './modules/event/queries.ts';
 import { PrivateContextSelections } from './modules/context/private-selection.ts';
+import { mainConfig } from './config.ts';
 
-function required(name: string): string {
-  const value = Bun.env[name];
-  if (!value) throw new Error(`${name} is required`);
-  return value;
-}
+const config = mainConfig();
+const fusekiUrl = config.FUSEKI_URL;
+const port = config.MAIN_PORT;
 
-const fusekiUrl = required('FUSEKI_URL');
-const port = Number(Bun.env.MAIN_PORT ?? '3001');
-if (!Number.isInteger(port) || port < 1 || port > 65535) {
-  throw new Error('MAIN_PORT must be an integer TCP port');
-}
-
-const fuseki = new FusekiClient(fusekiUrl);
-const pool = new Pool({ connectionString: required('ACCESS_DATABASE_URL') });
+const fuseki = new FusekiClient(fusekiUrl, config.FUSEKI_MAINTENANCE_TOKEN, config.FUSEKI_COMMAND_TOKEN);
+const pool = new Pool({ connectionString: config.ACCESS_DATABASE_URL });
 // IAM35: every Main enforces the Access-active profile; this release requests its own.
 const bounds = await activateOperationalBounds(pool, ACCESS_OPERATIONAL_BOUNDS_V1);
 if (bounds.status === 'restricted') {
@@ -122,22 +115,19 @@ if (bounds.status === 'restricted') {
     JSON.stringify(bounds.violations));
 }
 // OPS06: the broker lane observes the relay checkpoint through a read-only session.
-const relayUrl = Bun.env.MAIN_RELAY_DATABASE_URL;
-const relayConsumer = Bun.env.MAIN_RELAY_CONSUMER;
-if (Boolean(relayUrl) !== Boolean(relayConsumer)) {
-  throw new Error('MAIN_RELAY_DATABASE_URL and MAIN_RELAY_CONSUMER are configured together');
-}
+const relayUrl = config.MAIN_RELAY_DATABASE_URL;
+const relayConsumer = config.MAIN_RELAY_CONSUMER;
 const relayPool = relayUrl ? new Pool({ connectionString: relayUrl, max: 2,
   options: '-c default_transaction_read_only=on' }) : undefined;
-const erasureRelayUrl = relayUrl ?? Bun.env.ACCOUNT_RELAY_DATABASE_URL;
+const erasureRelayUrl = relayUrl ?? config.ACCOUNT_RELAY_DATABASE_URL;
 const erasureRelayPool = erasureRelayUrl ? new Pool({ connectionString: erasureRelayUrl, max: 2 }) : undefined;
-const ownerRelayUrl = Bun.env.OWNER_RELAY_DATABASE_URL ?? relayUrl;
+const ownerRelayUrl = config.OWNER_RELAY_DATABASE_URL ?? relayUrl;
 const ownerRelayPool = ownerRelayUrl
   ? new Pool({ connectionString: ownerRelayUrl, max: 4 }) : undefined;
-const recommendationRelayUrl = Bun.env.ACCOUNT_RELAY_DATABASE_URL ?? relayUrl;
+const recommendationRelayUrl = config.ACCOUNT_RELAY_DATABASE_URL ?? relayUrl;
 const recommendationRelayPool = recommendationRelayUrl ? new Pool({ connectionString: recommendationRelayUrl,
   max: 2, options: '-c default_transaction_read_only=on' }) : undefined;
-const contentPool = new Pool({ connectionString: required('CONTENT_DATABASE_URL') });
+const contentPool = new Pool({ connectionString: config.CONTENT_DATABASE_URL });
 await migrateContent(contentPool);
 const content = new ContentCore(contentPool);
 const sourceIntake = new SourceIntakeStore(contentPool);
@@ -147,12 +137,12 @@ const sourceConversions = new OpenLibraryConversionStore(contentPool, sourceInta
 const packageCaptures = new GoProxyCaptureStore(contentPool);
 const comments = new ContentComments(contentPool);
 const cursor = new ContentProjectionCursor(contentPool);
-const consumer = Bun.env.CONTENT_PROJECTION_CONSUMER ?? 'main-content-public-search-v1';
+const consumer = config.CONTENT_PROJECTION_CONSUMER;
 await cursor.initialize(consumer);
 const environment = {
   fuseki,
-  lineage: { dataEpoch: required('MAIN_DATA_EPOCH'), routingEpoch: required('MAIN_ROUTING_EPOCH') },
-  objectDirectory: required('MAIN_OBJECT_DIRECTORY'),
+  lineage: { dataEpoch: config.MAIN_DATA_EPOCH, routingEpoch: config.MAIN_ROUTING_EPOCH },
+  objectDirectory: config.MAIN_OBJECT_DIRECTORY,
 };
 const partitionRoutes = new OwnerPartitionRoutes(pool);
 const graphRouteLease = await partitionRoutes.initialize({ owner: 'graph', datasetId: DATASET,
@@ -161,29 +151,29 @@ Object.assign(environment, { partitionLease: { routes: partitionRoutes,
   location: fusekiUrl, leaseEpoch: graphRouteLease.leaseEpoch } });
 const sourceGraph = new OpenLibrarySourceGraph(fuseki, environment.lineage, sourceConversions);
 const sourceProposals = new SourceNativeWorkProposalStore(contentPool, sourceGraph, sourceConversions);
-const workObjects = Bun.env.MAIN_S3_ENDPOINT ? new S3ImmutableObjects({
-  endpoint: required('MAIN_S3_ENDPOINT'), bucket: required('MAIN_S3_BUCKET'),
-  region: required('MAIN_S3_REGION'), accessKeyId: required('MAIN_S3_ACCESS_KEY'),
-  secretAccessKey: required('MAIN_S3_SECRET_KEY'), prefix: 'semantic/work/',
+const workObjects = config.MAIN_S3_ENDPOINT ? new S3ImmutableObjects({
+  endpoint: config.MAIN_S3_ENDPOINT, bucket: config.MAIN_S3_BUCKET,
+  region: config.MAIN_S3_REGION, accessKeyId: config.MAIN_S3_ACCESS_KEY,
+  secretAccessKey: config.MAIN_S3_SECRET_KEY, prefix: 'semantic/work/',
 }) : undefined;
 if (workObjects) await workObjects.initialize();
 const structureObjects = new S3ImmutableObjects({
-  endpoint: required('MAIN_S3_ENDPOINT'), bucket: required('MAIN_S3_BUCKET'),
-  region: required('MAIN_S3_REGION'), accessKeyId: required('MAIN_S3_ACCESS_KEY'),
-  secretAccessKey: required('MAIN_S3_SECRET_KEY'), prefix: 'semantic/structure/',
+  endpoint: config.MAIN_S3_ENDPOINT, bucket: config.MAIN_S3_BUCKET,
+  region: config.MAIN_S3_REGION, accessKeyId: config.MAIN_S3_ACCESS_KEY,
+  secretAccessKey: config.MAIN_S3_SECRET_KEY, prefix: 'semantic/structure/',
 });
 await structureObjects.initialize();
 Object.assign(environment, { structureObjects });
 const semanticStageObjects = new S3ImmutableObjects({
-  endpoint: required('MAIN_S3_ENDPOINT'), bucket: required('MAIN_S3_BUCKET'),
-  region: required('MAIN_S3_REGION'), accessKeyId: required('MAIN_S3_ACCESS_KEY'),
-  secretAccessKey: required('MAIN_S3_SECRET_KEY'), prefix: 'semantic/stage/',
+  endpoint: config.MAIN_S3_ENDPOINT, bucket: config.MAIN_S3_BUCKET,
+  region: config.MAIN_S3_REGION, accessKeyId: config.MAIN_S3_ACCESS_KEY,
+  secretAccessKey: config.MAIN_S3_SECRET_KEY, prefix: 'semantic/stage/',
 });
 await semanticStageObjects.initialize();
 const mediaObjects = (prefix: string) => new S3ImmutableObjects({
-  endpoint: required('MAIN_S3_ENDPOINT'), bucket: required('MAIN_S3_BUCKET'),
-  region: required('MAIN_S3_REGION'), accessKeyId: required('MAIN_S3_ACCESS_KEY'),
-  secretAccessKey: required('MAIN_S3_SECRET_KEY'), prefix,
+  endpoint: config.MAIN_S3_ENDPOINT, bucket: config.MAIN_S3_BUCKET,
+  region: config.MAIN_S3_REGION, accessKeyId: config.MAIN_S3_ACCESS_KEY,
+  secretAccessKey: config.MAIN_S3_SECRET_KEY, prefix,
 });
 await mediaObjects('media/').initialize();
 await mediaObjects('package/artifact/public/').initialize();
@@ -198,16 +188,16 @@ const packageInstallations = new PackageInstallationStore(contentPool, packageLo
       process.env.PATH ?? '/usr/bin:/bin') });
 const media = { store: new MediaStore(contentPool, content), content, objects: mediaObjects };
 const account = new AccountAssertionVerifier({
-  issuer: required('ACCOUNT_ISSUER'), audience: required('ACCOUNT_MAIN_RESOURCE'),
-  jwksUrl: required('ACCOUNT_JWKS_URL'), introspectUrl: required('ACCOUNT_INTROSPECT_URL'),
-  clientId: required('ACCOUNT_MAIN_CLIENT_ID'), clientSecret: required('ACCOUNT_MAIN_CLIENT_SECRET'),
+  issuer: config.ACCOUNT_ISSUER, audience: config.ACCOUNT_MAIN_RESOURCE,
+  jwksUrl: config.ACCOUNT_JWKS_URL, introspectUrl: config.ACCOUNT_INTROSPECT_URL,
+  clientId: config.ACCOUNT_MAIN_CLIENT_ID, clientSecret: config.ACCOUNT_MAIN_CLIENT_SECRET,
 });
-const access = new AccessAdmissionRegistry(pool);
+const access = new AccessAdmissionRegistry(pool, config.FUSEKI_TITLE_ADMISSION_KEY);
 const rankingContextSelections = new PrivateContextSelections(pool);
 const recommendations = recommendationRelayPool ? new RankingGenerations({ access: pool,
   relay: recommendationRelayPool, dataEpoch: environment.lineage.dataEpoch,
   cursorKey: createHash('sha256').update('rezics-ranking-cursor-v1\0')
-    .update(required('ACCOUNT_MAIN_CLIENT_SECRET')).digest(),
+    .update(config.ACCOUNT_MAIN_CLIENT_SECRET).digest(),
   canReadWork: (principal, actingSubject, work) => access.canReadWork(principal, actingSubject, work),
   zeroSnapshot: () => graphZeroSnapshot(environment),
   zeroCandidates: graphZeroCandidates(environment),
@@ -215,15 +205,15 @@ const recommendations = recommendationRelayPool ? new RankingGenerations({ acces
     viewer, basis) }) : undefined;
 const recommendationWorker = recommendations ? new RankingBuildWorker(pool, recommendations) : undefined;
 const eventQueries = new EventTemporalQueries(pool, environment, createHash('sha256')
-  .update('rezics-event-cursor-v1\0').update(required('ACCOUNT_MAIN_CLIENT_SECRET')).digest());
+  .update('rezics-event-cursor-v1\0').update(config.ACCOUNT_MAIN_CLIENT_SECRET).digest());
 const hub = new HubStore(contentPool, content, access, environment, packageArtifacts);
 const downloadLeases = new AccessDownloadLeases(pool);
 const notificationStore = new NotificationStore(pool);
 if (relayPool) await notificationStore.reconcileRetainedErasures(relayPool);
 const notificationProviderConfig = {
-  url: Bun.env.MAIN_NOTIFICATION_PROVIDER_URL,
-  token: Bun.env.MAIN_NOTIFICATION_PROVIDER_TOKEN,
-  callbackSecret: Bun.env.MAIN_NOTIFICATION_CALLBACK_SECRET,
+  url: config.MAIN_NOTIFICATION_PROVIDER_URL,
+  token: config.MAIN_NOTIFICATION_PROVIDER_TOKEN,
+  callbackSecret: config.MAIN_NOTIFICATION_CALLBACK_SECRET,
 };
 const notificationProviderConfigured = Object.values(notificationProviderConfig).some(Boolean);
 if (notificationProviderConfigured && !Object.values(notificationProviderConfig).every(Boolean)) {
@@ -243,7 +233,7 @@ notificationDispatcher?.registerSubjectReader('verification-correction-subscript
 const notificationRealtime = relayPool ? new NotificationRealtimeHub(pool) : undefined;
 if (notificationRealtime) await notificationRealtime.start();
 const notificationDeliveryWorker = notificationDispatcher
-  ? new NotificationDeliveryWorker(notificationDispatcher, Number(Bun.env.MAIN_NOTIFICATION_INTERVAL_MS ?? '1000'))
+  ? new NotificationDeliveryWorker(notificationDispatcher, config.MAIN_NOTIFICATION_INTERVAL_MS)
   : undefined;
 const connectedApps = new ConnectedAppStore(contentPool);
 const sourceAdoptions = new SourceNativeWorkAdoptionStore(contentPool, sourceProposals,
@@ -268,7 +258,7 @@ const app = createMainApp(fuseki, {
   contextSelections: rankingContextSelections,
   eventQueries,
   downloadLeases,
-  protectionSigner: new ProtectionAdmissionSigner(pool),
+  protectionSigner: new ProtectionAdmissionSigner(pool, config.FUSEKI_TITLE_ADMISSION_KEY),
   erasures: erasureRelayPool ? new ErasureService(erasureRelayPool, contentPool) : undefined,
   recommendations,
   governance: governanceServices(pool, contentPool, content, sourceIntake, access, environment),
@@ -354,7 +344,7 @@ const app = createMainApp(fuseki, {
 });
 const worker = new ContentProjectionWorker(
   () => relayContentProjectionOnce(environment, content, cursor, consumer),
-  Number(Bun.env.CONTENT_PROJECTION_INTERVAL_MS ?? '1000'));
+  config.CONTENT_PROJECTION_INTERVAL_MS);
 app.listen({ hostname: '127.0.0.1', port });
 worker.start();
 recommendationWorker?.start();

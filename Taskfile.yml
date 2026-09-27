@@ -34,15 +34,30 @@ tasks:
   # Local development
 
   dev:
-    desc: Prepare the stack and start Account, Main, web and Storybook under Aspire (fixed ports 3002, 3001, 3000, 6006).
+    desc: 'Start the dev environment under Aspire. Main checkout: shared backend and frontend on ports 3002, 3001, 3000, 6006. Worktree: web and Storybook on random ports against it, or -- --backend for its own isolated stack.'
     deps: [aspire:restore]
     cmds:
       - bun scripts/dev/cli.ts dev {{.CLI_ARGS}}
 
   dev:stop:
-    desc: Stop the Aspire AppHost; an isolated QA profile also removes its stack.
+    desc: Stop this checkout's AppHost; a worktree backend also removes its isolated stack.
     cmds:
       - bun scripts/dev/cli.ts dev:stop {{.CLI_ARGS}}
+
+  urls:
+    desc: Show this checkout's running resources with their URLs and health.
+    cmds:
+      - bun scripts/dev/cli.ts dev:urls
+
+  env:
+    desc: Show the application environment this checkout uses, secrets masked, and where it comes from.
+    cmds:
+      - bun scripts/dev/cli.ts dev:env {{.CLI_ARGS}}
+
+  env:example:
+    desc: Regenerate each workspace's .env.example from its envalid config specs.
+    cmds:
+      - bun scripts/dev/env-example.ts
 
   dev:prepare:
     desc: Start storage, apply migrations and write the application environment without starting processes.
@@ -99,12 +114,8 @@ tasks:
   # Web
 
   web:dev:
-    desc: Run the web dev server alone against the shared `task dev` backend on its fixed ports (use -- --port <n> in a worktree).
+    desc: Run vinext alone, without Aspire, against the shared backend (defaults in apps/web/.env.example; pass -- --port <n>).
     dir: apps/web
-    env:
-      MAIN_ORIGIN: '{{.MAIN_ORIGIN | default "http://127.0.0.1:3001"}}'
-      ACCOUNT_ORIGIN: '{{.ACCOUNT_ORIGIN | default "http://127.0.0.1:3002"}}'
-      MAIN_RESOURCE: '{{.MAIN_RESOURCE | default "https://main.rezics.test"}}'
     cmds:
       - ../../node_modules/.bin/vinext dev --host 127.0.0.1 {{.CLI_ARGS}}
 

@@ -17,13 +17,14 @@ whole application server or establish human usability/performance acceptance.
 
 ## Agent access through MCP
 
-Storybook 11's `@storybook/addon-mcp` serves an MCP endpoint at
-`http://127.0.0.1:6006/mcp` while `task storybook` runs, with the components
-manifest enabled. Its tools list and show component documentation
+Storybook 11's `@storybook/addon-mcp` serves an MCP endpoint at `/mcp` on the
+Storybook port, with the components manifest enabled: `http://localhost:6006/mcp`
+under the main checkout's `task dev`, and the random port `task urls` reports in
+a worktree. Its tools list and show component documentation
 (`docs-list`, `docs-show`, `docs-show-story`), give story-writing instructions,
 find stories by component file or change, return preview URLs and run story tests
 with accessibility checks (`test-run`). Agents building UI connect to it, for
-Claude Code with `claude mcp add --transport http storybook http://127.0.0.1:6006/mcp`,
+Claude Code with `claude mcp add --transport http storybook <storybook-url>/mcp`,
 and check a component's documented props before using it.
 
 The manifest only covers components that have stories. Write stories for

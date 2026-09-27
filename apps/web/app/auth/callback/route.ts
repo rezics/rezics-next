@@ -2,6 +2,7 @@ import { cookies } from 'next/headers';
 import { NextResponse } from 'next/server';
 import { appCallback, safeReturnPath } from '../../../features/auth/paths.ts';
 import { serviceOrigin } from '../../../features/api/origins.ts';
+import { webConfig } from '../../../features/config/env.ts';
 
 export async function GET(request: Request) {
   const url = new URL(request.url);
@@ -13,8 +14,8 @@ export async function GET(request: Request) {
   if (!code || !state || !expectedState || state !== expectedState || !verifier) {
     return new Response('Authorization state is invalid or expired', { status: 400 });
   }
-  const clientId = process.env.WEB_OAUTH_CLIENT_ID;
-  const resource = process.env.MAIN_RESOURCE;
+  const clientId = webConfig().WEB_OAUTH_CLIENT_ID;
+  const resource = webConfig().MAIN_RESOURCE;
   if (!clientId || !resource) return new Response('Web OAuth client is not configured', { status: 503 });
   const token = await fetch(new URL('/api/auth/oauth2/token', serviceOrigin('ACCOUNT_ORIGIN')), {
     method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' },

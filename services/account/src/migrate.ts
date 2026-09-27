@@ -2,14 +2,11 @@ import { Pool } from 'pg';
 import { getMigrations } from 'better-auth/db/migration';
 import { accountAuthOptions } from './auth.ts';
 import { installConsentRefreshFence } from './consent-fence.ts';
+import { cleanEnv } from 'envalid';
+import { accountCoreSpec } from './config.ts';
 
-const baseURL = Bun.env.ACCOUNT_BASE_URL;
-const secret = Bun.env.ACCOUNT_SECRET;
-const resource = Bun.env.ACCOUNT_MAIN_RESOURCE;
-const databaseURL = Bun.env.ACCOUNT_DATABASE_URL;
-if (!baseURL || !secret || !resource || !databaseURL) {
-  throw new Error('ACCOUNT_BASE_URL, ACCOUNT_SECRET, ACCOUNT_MAIN_RESOURCE and ACCOUNT_DATABASE_URL are required');
-}
+const { ACCOUNT_BASE_URL: baseURL, ACCOUNT_SECRET: secret, ACCOUNT_MAIN_RESOURCE: resource,
+  ACCOUNT_DATABASE_URL: databaseURL } = cleanEnv(process.env, accountCoreSpec);
 const pool = new Pool({ connectionString: databaseURL });
 try {
   const plan = await getMigrations(accountAuthOptions({

@@ -38,6 +38,7 @@ const commands: string[][] = [
     'scripts/research/storage_architecture/tsconfig.json',
   ],
   ['bun', 'scripts/generate.ts', '--check'],
+  ['bun', 'scripts/dev/env-example.ts', '--check'],
   ['bun', 'scripts/research/storage_architecture/docs-check.ts'],
   [
     'node_modules/.bin/biome',

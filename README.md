@@ -33,9 +33,14 @@ task dev
 initializes the graph on first use, then starts Account, Main, the web app and
 Storybook under [Aspire](https://aspire.dev) in the background: web on
 <http://localhost:3000>, Main on 3001, Account on 3002 and Storybook on 6006. It
-prints the Aspire dashboard URL; `task aspire -- describe` and
-`task aspire -- logs <resource>` show state and logs, and `task --list` lists every
-command. Stop the processes, then the service containers, with:
+prints the resource URLs and the Aspire dashboard URL; `task urls`,
+`task aspire -- describe` and `task aspire -- logs <resource>` show addresses,
+state and logs, and `task --list` lists every command. In a git worktree,
+`task dev` runs only the web app and Storybook on random ports against this
+shared backend. Each workspace's `.env.example` documents its configuration;
+`task env` shows the local values with secrets masked, and `.env.dev` (see
+`.env.dev.example`) holds personal overrides. Stop the processes, then the
+service containers, with:
 
 ```sh
 task dev:stop

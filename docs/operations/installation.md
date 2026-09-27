@@ -24,8 +24,11 @@ Compose project, applies Account/Access/relay migrations, initializes a fresh
 graph with its data and routing epochs, then starts the Aspire AppHost in the
 background: Account and Main in watch mode behind readiness checks, the web app
 after Main, and Storybook, on fixed ports 3002, 3001, 3000 and 6006. It prints the
-Aspire dashboard URL; `task aspire -- describe` shows resource health and
-`task aspire -- logs <resource>` shows a process's output. No host Jena or Java installation is needed for this path.
+Aspire dashboard URL; `task urls` and `task aspire -- describe` show addresses
+and health, and `task aspire -- logs <resource>` shows a process's output. On
+first use it also registers the local web OAuth client and a member actor, so the
+web app can sign in. `task env` prints the application environment with secrets
+masked; each workspace's `.env.example` documents the variables. No host Jena or Java installation is needed for this path.
 The service endpoint and private configuration are saved under
 `.temp/stack/rezics-dev/`; `compose.env`, `apps.env` and `dev.env` contain secrets
 and must stay private. The generated configuration persists across ordinary restarts.

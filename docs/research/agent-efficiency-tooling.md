@@ -76,9 +76,13 @@ objection to a second entry point.
   and returned console logs; `aspire logs web` identified a failing process in
   one call. Structured logs and traces stay empty until Main and Account export
   OpenTelemetry.
-- The maintainer's direction is one shared backend: the dev profile serves it on
-  fixed ports through Aspire's proxy, and worktrees usually run only the web
-  dev server or Storybook against it.
+- The maintainer's direction is one shared backend: the main checkout serves it
+  on fixed ports through Aspire's proxy. A worktree's `task dev` runs web and
+  Storybook on random ports against it, or its own isolated backend with
+  `--backend`; `task urls` and the MCP server report the ports. A later probe
+  started all three modes side by side: the main checkout on 3000–3002 and 6006,
+  a worktree frontend on random ports serving search through the shared backend,
+  and a worktree backend with its own stack, removed again by `task dev:stop`.
 
 Constraints found while adopting them: running `aspire start` again for the
 same AppHost path replaces the running instance; vinext allows one dev server

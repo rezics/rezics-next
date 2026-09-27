@@ -1,7 +1,8 @@
 import { spawnSync } from 'node:child_process';
 import { cpSync, existsSync, mkdirSync, readFileSync, rmSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
-import { join, resolve } from 'node:path';
+import { basename, join, resolve } from 'node:path';
+import { parseEnv } from 'node:util';
 import { createServer } from 'node:net';
 import { Client } from 'pg';
 import { FusekiClient } from '../../services/main/src/infrastructure/fuseki.ts';
@@ -349,71 +350,149 @@ async function initializeGraph(apps: Record<string, string>): Promise<void> {
   if (health.boolean !== true) throw new Error('Existing graph lineage does not match this stack; use stack:reset only if its data may be discarded');
 }
 
-/** Start storage, apply migrations, check graph lineage and, for QA, the web
- * OAuth fixture. Returns the environment the application processes need. */
-async function prepareDev(options: StackOptions): Promise<{ apps: Record<string, string>;
-  processEnv: Record<string, string> }> {
+const overridesFile = join(root, '.env.dev');
+/** Variable names whose values are masked in output and passed to Aspire as secrets. */
+const secretName = /SECRET|TOKEN|KEY|PASSWORD|_DATABASE_URL$/;
+
+/** Start storage, apply migrations, check graph lineage and register the local
+ * web OAuth client. Returns the application environment: the stack's derived
+ * variables, the values the web auth fixture issued and personal overrides from
+ * the repository-root .env.dev. */
+async function prepareDev(options: StackOptions): Promise<Record<string, string>> {
   const { apps } = await stackUp(options);
   await migrateApps(apps);
   await initializeGraph(apps);
-  let processEnv = { ...apps };
-  if (options.profile === 'qa') {
-    const authDir = join(stackDirectory(root, options), 'web-auth');
-    const runtimePath = join(authDir, 'runtime.env');
-    const publicPath = join(authDir, 'public.json');
-    if (!existsSync(runtimePath) || !existsSync(publicPath)) {
-      await bootstrapWebAuth({ runId: options.runId!, redirectUris: [
-        'http://localhost:3000/auth/callback',
-        'http://127.0.0.1:3003/auth/callback',
-      ] });
-    }
-    const publicConfig = JSON.parse(readFileSync(publicPath, 'utf8')) as { clientId: string };
-    processEnv = { ...readEnv(runtimePath), WEB_OAUTH_CLIENT_ID: publicConfig.clientId };
+  const authDir = join(stackDirectory(root, options), 'web-auth');
+  const runtimePath = join(authDir, 'runtime.env');
+  const publicPath = join(authDir, 'public.json');
+  if (!existsSync(runtimePath) || !existsSync(publicPath)) {
+    // Account matches loopback callbacks without their port (RFC 8252), so these
+    // two cover the web app on any localhost or 127.0.0.1 port.
+    await bootstrapWebAuth({ profile: options.profile, runId: options.runId ?? 'dev',
+      redirectUris: options.profile === 'dev'
+        ? ['http://localhost:3000/auth/callback', 'http://127.0.0.1:3000/auth/callback']
+        : ['http://localhost:3000/auth/callback', 'http://127.0.0.1:3003/auth/callback'] });
   }
-  return { apps, processEnv };
+  const issued = readEnv(runtimePath);
+  const publicConfig = JSON.parse(readFileSync(publicPath, 'utf8')) as { clientId: string };
+  const overrides = existsSync(overridesFile) ? parseEnv(readFileSync(overridesFile, 'utf8')) : {};
+  return { ...apps,
+    ACCOUNT_OPERATOR_USER_IDS: issued.ACCOUNT_OPERATOR_USER_IDS ?? '',
+    ACCOUNT_MAIN_CLIENT_ID: issued.ACCOUNT_MAIN_CLIENT_ID ?? apps.ACCOUNT_MAIN_CLIENT_ID!,
+    ACCOUNT_MAIN_CLIENT_SECRET: issued.ACCOUNT_MAIN_CLIENT_SECRET ?? apps.ACCOUNT_MAIN_CLIENT_SECRET!,
+    WEB_OAUTH_CLIENT_ID: publicConfig.clientId,
+    ...Object.fromEntries(Object.entries(overrides).filter((entry): entry is [string, string] =>
+      typeof entry[1] === 'string')) };
 }
 
 /** Prepare the stack for an external process orchestrator and write the
  * application environment next to the stack's other private files. */
 async function devPrepare(options: StackOptions): Promise<void> {
-  const { processEnv } = await prepareDev(options);
   const file = join(stackDirectory(root, options), 'dev.env');
-  replacePrivate(file, processEnv);
+  replacePrivate(file, await prepareDev(options));
   console.log(file);
 }
 
-const appHost = join(root, 'apphost/apphost.mts');
 // The package's bin shim has a CRLF shebang, so run its launcher through Node.
 const aspire = join(root, 'node_modules/@microsoft/aspire-cli/bin/aspire.js');
+const appHost = join(root, 'apphost/apphost.mts');
+type DevMode = 'main' | 'frontend' | 'backend';
 
-/** Prepare the stack, then start Account, Main, web and Storybook under Aspire
- * in the background. The dev profile exposes fixed ports through Aspire's
- * proxy; a QA profile runs isolated on the stack's own random ports. */
-async function devStart(options: StackOptions): Promise<void> {
-  if (options.rawUpdate) throw new Error('--raw-update cannot run with task dev');
-  const { processEnv } = await prepareDev(options);
-  const file = join(stackDirectory(root, options), 'dev.env');
-  replacePrivate(file, processEnv);
-  const started = spawnSync('node', [aspire, 'start', '--apphost', appHost, '--non-interactive', '--nologo',
-    '--format', 'Json', ...(options.profile === 'qa' ? ['--isolated'] : [])],
-  { cwd: root, stdio: 'inherit',
-    env: { ...process.env, REZICS_DEV_ENV: file, REZICS_DEV_PROFILE: options.profile } });
-  if (started.error || started.status !== 0) throw started.error ?? new Error('aspire start failed');
-  if (options.profile === 'dev') {
-    console.log('  Web:       http://localhost:3000/');
-    console.log('  Main:      http://localhost:3001/health/ready');
-    console.log('  Account:   http://localhost:3002/health/ready');
-    console.log('  Storybook: http://localhost:6006/ (MCP at /mcp)');
-  }
-  console.log('Inspect with `aspire describe`, `aspire logs <resource>` or the dashboard; stop with `task dev:stop`.');
+function checkout(): { worktree: boolean; mainRoot: string } {
+  const gitDir = run('git', ['rev-parse', '--path-format=absolute', '--git-dir']);
+  const common = run('git', ['rev-parse', '--path-format=absolute', '--git-common-dir']);
+  return { worktree: gitDir !== common, mainRoot: resolve(common, '..') };
 }
 
-function devStop(options: StackOptions): void {
-  const stopped = spawnSync('node', [aspire, 'stop', '--apphost', appHost, '--non-interactive', '--nologo'],
-    { cwd: root, stdio: 'inherit', env: process.env });
-  if (stopped.error) throw stopped.error;
-  if (options.profile === 'qa' && !options.persistent) {
-    compose(options, ['down', '--volumes', '--remove-orphans'], runtimeEnv());
+/** The main checkout serves the shared backend on fixed ports. A linked worktree
+ * runs only the web app and Storybook against it, or with --backend its own
+ * isolated QA stack and services; both use random ports. */
+function devTarget(args: string[]): { mode: DevMode; options?: StackOptions } {
+  const backend = args.includes('--backend');
+  const rest = args.filter(arg => arg !== '--backend');
+  if (!checkout().worktree) {
+    if (backend) throw new Error('--backend is for worktrees; the main checkout always runs the shared backend');
+    const options = parseOptions(rest);
+    return { mode: options.profile === 'qa' ? 'backend' : 'main', options };
+  }
+  if (!backend) {
+    if (rest.length) throw new Error('A worktree frontend takes no stack options; add --backend for its own stack');
+    return { mode: 'frontend' };
+  }
+  const runId = `wt-${basename(root).toLowerCase().replace(/[^a-z0-9-]/g, '-')}`.slice(0, 31);
+  const options = parseOptions(rest.length ? rest : ['--profile', 'qa', '--run-id', runId]);
+  if (options.profile !== 'qa') throw new Error('A worktree backend runs an isolated QA stack');
+  return { mode: 'backend', options };
+}
+
+function aspireCli(args: string[], env: NodeJS.ProcessEnv = process.env, capture = false) {
+  const result = spawnSync('node', [aspire, ...args, '--apphost', appHost, '--non-interactive', '--nologo'],
+    { cwd: root, env, encoding: 'utf8', stdio: capture ? ['ignore', 'pipe', 'pipe'] : 'inherit' });
+  if (result.error || result.status !== 0) {
+    throw result.error ?? new Error(`aspire ${args[0]} failed${capture ? `: ${result.stderr || result.stdout}` : ''}`);
+  }
+  return result.stdout ?? '';
+}
+
+/** Print each running resource with its URL, state and health. */
+function devUrls(): void {
+  const described = JSON.parse(aspireCli(['describe', '--format', 'Json'], process.env, true)) as
+    { resources?: Array<{ name: string; displayName?: string; resourceType?: string; state?: string;
+      healthStatus?: string; urls?: Array<{ url: string }> }> };
+  for (const resource of described.resources ?? []) {
+    if (resource.resourceType === 'Parameter') continue;
+    const name = resource.displayName ?? resource.name.replace(/-[a-z0-9]{8}$/, '');
+    const urls = (resource.urls ?? []).map(item => item.url).join(' ') || '-';
+    console.log(`  ${name.padEnd(12)} ${urls.padEnd(28)} ${resource.state ?? ''} ${resource.healthStatus ?? ''}`.trimEnd());
+  }
+}
+
+async function devStart(args: string[]): Promise<void> {
+  const { mode, options } = devTarget(args);
+  let envFile: string;
+  if (mode === 'frontend') {
+    const { mainRoot } = checkout();
+    envFile = join(mainRoot, '.temp', 'stack', 'rezics-dev', 'dev.env');
+    const shared = existsSync(envFile) ? readEnv(envFile) : undefined;
+    const ready = shared && await fetch(`http://127.0.0.1:${shared.MAIN_PORT}/health/ready`,
+      { signal: AbortSignal.timeout(2_000) }).then(response => response.ok, () => false);
+    if (!ready) throw new Error(`The shared backend is not running; start it with \`task dev\` in ${mainRoot}`);
+  } else {
+    if (options!.rawUpdate) throw new Error('--raw-update cannot run with task dev');
+    envFile = join(stackDirectory(root, options!), 'dev.env');
+    replacePrivate(envFile, await prepareDev(options!));
+  }
+  aspireCli(['start', '--format', 'Json', ...(mode === 'main' ? [] : ['--isolated'])],
+    { ...process.env, REZICS_DEV_ENV: envFile, REZICS_DEV_MODE: mode });
+  console.log(`${mode === 'main' ? 'Shared backend and frontend' : mode === 'frontend'
+    ? 'Frontend against the shared backend' : 'Isolated backend and frontend'}:`);
+  for (const resource of ['account', 'main', 'web', 'storybook']) {
+    try { aspireCli(['wait', resource, '--timeout', '180'], process.env, true); }
+    catch { /* frontend mode has no account/main executables; a failure shows in the table */ }
+  }
+  devUrls();
+  console.log('Details: `task aspire -- describe`, `task aspire -- logs <resource>`, the dashboard above, '
+    + 'or `task aspire -- agent mcp` for agents. Stop with `task dev:stop`.');
+}
+
+function devStop(args: string[]): void {
+  const { mode, options } = devTarget(args);
+  aspireCli(['stop']);
+  if (mode === 'backend' && !options!.persistent) {
+    compose(options!, ['down', '--volumes', '--remove-orphans'], runtimeEnv());
+  }
+}
+
+/** Show where this checkout's application environment comes from, secrets masked. */
+function devEnv(args: string[]): void {
+  const { mode, options } = devTarget(args);
+  const file = mode === 'frontend'
+    ? join(checkout().mainRoot, '.temp', 'stack', 'rezics-dev', 'dev.env')
+    : join(stackDirectory(root, options!), 'dev.env');
+  if (!existsSync(file)) throw new Error(`${file} does not exist yet; run task dev or task dev:prepare`);
+  console.log(`# ${file}${existsSync(overridesFile) ? ` (includes overrides from ${overridesFile})` : ''}`);
+  for (const [name, value] of Object.entries(readEnv(file))) {
+    console.log(`${name}=${secretName.test(name) ? '********' : value}`);
   }
 }
 
@@ -421,8 +500,10 @@ async function main(): Promise<void> {
   const [command, ...args] = process.argv.slice(2);
   if (command === 'stack:clone') { await stackClone(args); return; }
   if (command === 'toolchain:install') { if (args.length) throw new Error('Unexpected arguments'); await install(); return; }
-  if (command === 'dev') { await devStart(parseOptions(args)); return; }
-  if (command === 'dev:stop') { devStop(parseOptions(args)); return; }
+  if (command === 'dev') { await devStart(args); return; }
+  if (command === 'dev:stop') { devStop(args); return; }
+  if (command === 'dev:urls') { devUrls(); return; }
+  if (command === 'dev:env') { devEnv(args); return; }
   if (command === 'stack:up') { await stackUp(parseOptions(args)); return; }
   if (command === 'dev:prepare') { await devPrepare(parseOptions(args)); return; }
   if (command === 'stack:backup') { await stackBackup(parseOptions(args)); return; }

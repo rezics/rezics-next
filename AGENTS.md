@@ -4,9 +4,12 @@ Put task-created temporary files in `.temp/`.
 
 Use only the tools, versions and root commands in `docs/development/toolchain.md`;
 change that page first to add or replace a tool. Run commands through Task
-(`task --list`; arguments after `--`); Yarn only installs dependencies. `task dev`
-serves one shared local backend under Aspire on fixed ports; worktrees normally
-reuse it instead of starting another.
+(`task --list`; arguments after `--`); Yarn only installs dependencies. The main
+checkout's `task dev` serves the shared local backend under Aspire on fixed ports;
+in a worktree `task dev` runs only web and Storybook on random ports against it
+(`-- --backend` for an isolated backend). Find addresses with `task urls` or
+Aspire's MCP server, and configuration with `task env` and each workspace's
+`.env.example`.
 
 No Goal is active; backend phase 1 finished on 2026-09-27. When the maintainer
 starts a Goal, it runs under `docs/goals/README.md`: one Claude Opus 5.5

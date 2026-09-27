@@ -6,13 +6,13 @@ import { Pool } from 'pg';
 import { createAccountAuth } from '../../services/account/src/auth.ts';
 import { createAccountApp } from '../../services/account/src/app.ts';
 import { FusekiClient } from '../../services/main/src/infrastructure/fuseki.ts';
-import { appEnvironment, readEnv, savePrivate } from './config.ts';
+import { appEnvironment, readEnv, savePrivate, stackDirectory } from './config.ts';
 
 const root = resolve(import.meta.dir, '../..');
 const runIdPattern = /^[a-z0-9][a-z0-9-]{0,30}$/;
 const scope = 'openid work:create work:read';
 
-export interface WebAuthOptions { runId: string; redirectUris: string[] }
+export interface WebAuthOptions { runId: string; redirectUris: string[]; profile?: 'dev' | 'qa' }
 
 export function parseWebAuthOptions(args: string[]): WebAuthOptions {
   if (args.length < 4 || args.length % 2 !== 0 || args[0] !== '--run-id'
@@ -137,11 +137,12 @@ export interface WebAuthResult {
 export async function bootstrapWebAuth(options: WebAuthOptions): Promise<WebAuthResult> {
   const { runId, redirectUris } = parseWebAuthOptions([
     '--run-id', options.runId, ...options.redirectUris.flatMap(uri => ['--redirect-uri', uri])]);
-  const stackDir = join(root, '.temp', 'stack', `rezics-qa-${runId}`);
+  const profile = options.profile ?? 'qa';
+  const stackDir = stackDirectory(root, profile === 'dev' ? { profile } : { profile, runId });
   const appsPath = join(stackDir, 'apps.env');
   const composePath = join(stackDir, 'compose.env');
   if (!existsSync(appsPath) || !existsSync(composePath)) {
-    throw new Error(`QA project rezics-qa-${runId} is absent; run stack:up --profile qa first`);
+    throw new Error(`Stack ${stackDir} is absent; run stack:up first`);
   }
   const apps = readEnv(appsPath);
   const compose = readEnv(composePath);
