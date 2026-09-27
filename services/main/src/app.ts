@@ -63,6 +63,7 @@ import { themeRoutes } from './routes/themes.ts';
 import { contentPrivateSearchRoutes } from './routes/content-private-search.ts';
 import { workReadRoutes } from './routes/work-reads.ts';
 import { realmReadRoutes } from './routes/realm-reads.ts';
+import { workContentsRoutes } from './routes/work-contents.ts';
 import { discoveryRoutes } from './routes/discovery.ts';
 
 export type { MainWorkDependencies } from './routes/dependencies.ts';
@@ -110,6 +111,7 @@ function domainRoutes(fuseki: FusekiClient, work: SearchRouteDependencies) {
   return new Elysia()
     .use(workReadRoutes(work))
     .use(realmReadRoutes(work))
+    .use(workContentsRoutes(work))
     .use(discoveryRoutes(work))
     .use(collectionRoutes(fuseki, work))
     .use(zoneRoutes(fuseki, work))

@@ -131,13 +131,30 @@ lands; composition-root additions follow the worker protocol.
 
 | Task / claimable paths | API/result and dependencies | Cost/disclosure contract to implement |
 | --- | --- | --- |
-| Reader: `routes/work-contents.ts`, `modules/work-contents/**`, `tests/work-contents*.ts` | `GET /works/{id}/contents?version&language&cursor`; `GET /chapters/{id}?revision&language` returns body, selected basis, previous/next. Define Work→composition selection and reuse composition page/exact Content/progress APIs. | ≤20 occurrences; one verified body ≤1 MiB; no recursive flattening; targets admitted individually, selected version and language bound in cursor. |
+| Reader: `routes/work-contents.ts`, `modules/work-contents/**`, `tests/work-contents*.ts` | `GET /works/{id}/contents?version&language&parent&cursor`; `GET /chapters/{id}?revision&language` returns body, selected basis, previous/next and progress identity. The version is the current Main Version; the chapter revision is a stale guard on the current composition head. | ≤20 occurrences per parent; one verified body ≤1 MiB; no recursive flattening; targets admitted individually, Main Version, parent and language bound in cursor. |
 | Discussion/history: `routes/work-activity.ts`, `modules/work-activity/**`, `tests/work-activity*.ts` | `GET /works/{id}/discussion?realm&cursor`, `/history?kind&cursor`; reviewed replies and public revision/decision events. Replace template metadata-only history at integration. | ≤20 records; current public review/admission on each item; hidden actors and unreleased bodies excluded. History index required for chronological scans across epochs. |
 | Discovery filters: `routes/discovery.ts`, `modules/discovery/**`, `tests/discovery*.ts` | Extend `/works?sort=recent|top-rated&type&term&scope`; preserve `POST /queries` phrase profiles and exact/lower-bound counts with matched-field/decision reasons. | Indexed eligible read projection with a measured seek+P bound; never synchronously aggregate all Work ratings. Depends on rating selection policy and classification query semantics, not reader/profile tasks. |
 | Agent/profile/library: `routes/profiles.ts`, `modules/profiles/**`, `tests/profiles*.ts` plus separately claimed Agent/address owners | `GET /agents/{id}`, `/handles/{handle}`, `/agents/{id}/works`, `/agents/{id}/collections`, `/me/contributions`, `/me/ratings`; public display name/kind/handle, attribution, shelf cards and ratings. Define native credit links, handle allocation and public profile disclosure first. | ≤20 items, batch summaries; public/private collection partition before pagination, Account identity and private contributions require current principal/representation proof. Reuse collections and ratings. |
 | Realm home/log: `routes/realm-reads.ts`, `modules/realm-reads/**`, `tests/realm-read*.ts` | `GET /realms/{realm}`, `/realms/{realm}/works`, `/realms/{realm}/decisions`; public Space name/icon, adopted Works, adoption/classification/semantic-Context-rule revisions. Description, banner, community rules, public moderators and public roster have no published owner yet, so the header reports null or unknown rather than inferring them from Access grants. | ≤20 records and exact page count, unknown membership total. Public graph revisions supply the decision relation without receipts or private actors; the first implementation has an O(D log D) scan/sort bound for D eligible revisions, not a measured seek bound. A materialized public decision index and public community-rule/roster publication need separate write owners before large-scale browsing or those fields become available. Private Realm reads need an Access lease owner. |
 | Management: `routes/management-reads.ts`, `modules/management-reads/**`, `tests/management-read*.ts` | `GET /realms/{id}/moderation?state&type&cursor`, `/realms/{id}/audit?kind&cursor`; actionable report/contribution/correction items and audited outcomes. | Indexed state/type+ID seeks ≤20; moderator admission and final revocation fence; no public alias for private queues or audit actors. Reuse report/review/admission owners. |
 | Metadata completeness: separately claim Work metadata/model, Agent credit and classification owners | Original-language title and localized metadata writes, native Agent credits/handles, bibliographic editions, and a defined relevance policy. The template's null fields can become meaningful only with these writes. | Owner schema and command validation precede reader extensions; no derived display value presented as recorded fact. |
+
+The reader selects the one Book composition attached to the Work's current Main
+Version. Native text contributions and fixed releases do not own separate
+compositions, so a `version` naming either is unavailable. The `parent` query
+pages one group; previous/next stay among the group's eligible chapter siblings.
+Chapter targets are public only while a current Content publication has public
+eligibility. This permits a published Post chapter without inventing a separate
+Main selection for the Post. An authenticated reader can see a target under
+current `work.read` authority, but chapter bodies still require that public
+Content publication. Progress remains private through the existing composition
+occurrence API, using the returned occurrence and selected Content revision.
+One parent page uses a Structure tree range and at most 20 target/publication
+checks; a chapter does one exact Content read and checks at most 20 sibling
+candidates per direction. The native sibling query may sort D placements for a
+high-degree parent (conservatively O(D log D)); this is a logical bound, not
+large-corpus Jena qualification. A reader navigation index is needed if measured
+high-degree parents exceed the 10-second read deadline.
 
 `services/main/tests/work-read.integration.test.ts` is registered in the QA
 integration gate and isolated-project lists: its classification cutover and
