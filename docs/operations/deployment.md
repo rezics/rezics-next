@@ -1,5 +1,26 @@
 # Initial host deployment
 
+## Email rollout
+
+Configure `ACCOUNT_SMTP_*` and `ACCOUNT_EMAIL_FROM` from
+`services/account/.env.example`. Development uses Mailpit on
+`127.0.0.1:1025` (inbox `http://127.0.0.1:8025`); production needs a verified
+transactional sender and TLS for remote SMTP. Keep credentials in deployment
+secrets. Account mail is for security/recovery; optional notification mail needs
+its own consent, suppression and signed unsubscribe integration before rollout.
+SMTP can lose an acknowledgement after delivery, so inspect `rezics_account_email`
+uncertain counts rather than resending those intents automatically. Integrate
+provider bounce and complaint processing before using a remote sender. Do not use
+the transactional sender for an unselected marketing campaign.
+
+## Commercial rollout
+
+Only the in-stack fake payment adapter is admitted today. Select a real provider,
+currency, tax, collection and refund policy before enabling transactions. Third-
+party seller onboarding, payouts and persistent hosting require separate operating
+arrangements. A stored provider status alone does not promise legal or financial
+settlement.
+
 ## Start with one graph process
 
 Use a single Fuseki JVM containing TDB2 and jena-text/Lucene, TypeScript/Elysia 2 Main on Bun with its

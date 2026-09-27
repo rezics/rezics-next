@@ -181,5 +181,5 @@ recovery meaning when selecting physical indexes.
 
 Plans/prices/purchases, independent awards, effective benefits, quotas and exact review acceptance.
 
-Owner: [Subscribe and Realm participation](subscriptions.md). Preserve exact identity, authority, lifecycle, query and
+Owner: [Commerce](../../services/main/src/modules/commerce/README.md) and [Realm participation](realm-participation.md). Preserve exact identity, authority, lifecycle, query and
 recovery meaning when selecting physical indexes.

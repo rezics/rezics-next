@@ -31,7 +31,10 @@ interpretations. Naming another concept does not remove those local uses.
 | M07 Sources | Current acquisition, exact observations, mapping/adoption, refresh/withdraw and portable exchange. | [Sources](../contracts/source-lifecycle.md). |
 | M08 Packages/Hub | Skill/Prompt/MCP catalog, dependency solving, lock/install/update/rollback and controlled execution. | [Packages](../contracts/package-management.md), [Hub schema](../../services/main/src/modules/hub/schema.ts), [remaining Hub flows](../contracts/skills-and-prompts.md), [execution decision](../research/ai-hub-execution.md). |
 | M09 Query/operations | Graph-integrated full-text, filters, recommendation, event jobs, diagnostics, recovery and erasure. | [Search](../contracts/search.md), [operations](../operations/README.md). |
-| M10 Commercial | Multi-plan subscriptions, independent gifts, Realm quotas/review and Pro application. | [Subscribe](../contracts/subscriptions.md), [Realm policy](../contracts/realm-participation.md). |
+| M10 Commercial | Multi-plan subscriptions, independent gifts, Realm quotas/review and Pro application. | [Commerce owner](../../services/main/src/modules/commerce/README.md), [Realm policy](../contracts/realm-participation.md). |
+
+Generic Person/Realm beneficiary targets and third-party sellers remain in M10
+scope; their onboarding and payout arrangements are not selected for rollout.
 
 These identifiers preserve coverage, not physical service count or completed gates.
 Each capability includes positive, denied, missing, stale, concurrency and recovery

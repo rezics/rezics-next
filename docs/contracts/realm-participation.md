@@ -41,5 +41,5 @@ Review binds exact content and policy revisions. Pending review cannot activate
 new publication, while an accepted earlier version survives a later pending
 version. Appeals are new attributable decisions. Pro uses the same Realm
 authority and delivery rules; a sparse fixed-Pro view cannot fill with general
-content. The [subscription cases](../testing/subscriptions-and-pro.md) retain
+content. The [subscription cases](../../scripts/qa/cases/subscriptions-and-pro.ts) retain
 these requirements until their owner profiles are implemented and qualified.

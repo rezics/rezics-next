@@ -22,7 +22,7 @@
 | Sources and knowledge | [Source lifecycle](../contracts/source-lifecycle.md), [standards](../contracts/standards.md), [information verification](../contracts/information-verification.md). |
 | Queries and interfaces | [Search](../contracts/search.md), [relationship graph](../contracts/relationship-graph.md), [API contracts](../contracts/api.md), [presentation](../contracts/presentation.md). |
 | Durable effects | [Commands](../contracts/commands.md), [events/jobs](../contracts/events-and-jobs.md), [governance](../contracts/content-governance.md), [notifications](../contracts/notifications.md). |
-| Operations and optional commercial rollout | [Recovery](../operations/recovery.md), [deployment](../operations/deployment.md), [Subscribe](../contracts/subscriptions.md), [Realm policies](../contracts/realm-participation.md). |
+| Operations and optional commercial rollout | [Recovery](../operations/recovery.md), [deployment](../operations/deployment.md#commercial-rollout), [Commerce owner](../../services/main/src/modules/commerce/README.md), [Realm policies](../contracts/realm-participation.md). |
 
 ## Reading rules
 
