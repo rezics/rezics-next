@@ -10,6 +10,38 @@ export const NODE_HOOK_PROFILE = 'rezics-node26-docker-v1';
 const ALLOWED = new Set(['preinstall', 'install', 'postinstall']);
 const DEADLINE_MS = 30_000;
 
+/** Reject output that could escape the staged package before any mount is published. */
+export async function validateHookOutput(root: string): Promise<void> {
+  const pending = [''];
+  const seen = new Set<string>();
+  let count = 0;
+  let bytes = 0;
+  while (pending.length) {
+    const parent = pending.pop()!;
+    for (const name of await readdir(join(root, parent))) {
+      const path = parent ? `${parent}/${name}` : name;
+      if (!confinedPath(path)) throw new Error('hook output escaped its package');
+      const folded = collisionKey(path);
+      if (seen.has(folded)) throw new Error('hook output has a case collision');
+      seen.add(folded);
+      if (++count > archiveLimits.entries) throw new Error('hook output entry budget exceeded');
+      const full = join(root, path);
+      const entry = await lstat(full);
+      if (entry.isSymbolicLink()) {
+        const target = await readlink(full);
+        const resolved = posix.normalize(posix.join(posix.dirname(path), target));
+        if (target.startsWith('/') || !confinedPath(resolved)) {
+          throw new Error('hook output has an escaping symlink');
+        }
+      } else if (entry.isDirectory()) pending.push(path);
+      else if (entry.isFile() && entry.nlink === 1) {
+        bytes += entry.size;
+        if (bytes > archiveLimits.expandedBytes) throw new Error('hook output byte budget exceeded');
+      } else throw new Error('hook output has an unsupported entry');
+    }
+  }
+}
+
 /** Docker has no host credentials, network, Docker socket or mount outside one staged package. */
 export class DockerNodeHookExecutor implements HookExecutor {
   readonly profile = NODE_HOOK_PROFILE;
@@ -36,38 +68,7 @@ export class DockerNodeHookExecutor implements HookExecutor {
       if (!ALLOWED.has(name) || typeof scripts[name] !== 'string' || !scripts[name]
         || scripts[name].length > 8192) throw new Error(`hook ${name} is not executable from the staged manifest`);
       await this.runOne(directory, scripts[name]);
-      await this.checkOutput(directory);
-    }
-  }
-
-  private async checkOutput(root: string): Promise<void> {
-    const pending = [''];
-    const seen = new Set<string>();
-    let count = 0;
-    let bytes = 0;
-    while (pending.length) {
-      const parent = pending.pop()!;
-      for (const name of await readdir(join(root, parent))) {
-        const path = parent ? `${parent}/${name}` : name;
-        if (!confinedPath(path)) throw new Error('hook output escaped its package');
-        const folded = collisionKey(path);
-        if (seen.has(folded)) throw new Error('hook output has a case collision');
-        seen.add(folded);
-        if (++count > archiveLimits.entries) throw new Error('hook output entry budget exceeded');
-        const full = join(root, path);
-        const entry = await lstat(full);
-        if (entry.isSymbolicLink()) {
-          const target = await readlink(full);
-          const resolved = posix.normalize(posix.join(posix.dirname(path), target));
-          if (target.startsWith('/') || !confinedPath(resolved)) {
-            throw new Error('hook output has an escaping symlink');
-          }
-        } else if (entry.isDirectory()) pending.push(path);
-        else if (entry.isFile() && entry.nlink === 1) {
-          bytes += entry.size;
-          if (bytes > archiveLimits.expandedBytes) throw new Error('hook output byte budget exceeded');
-        } else throw new Error('hook output has an unsupported entry');
-      }
+      await validateHookOutput(directory);
     }
   }
 

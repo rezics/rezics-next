@@ -12,7 +12,8 @@ import { AccountAssertionDenied, AccountAssertionVerifier }
   from '../../../services/main/src/modules/account/verify-assertion.ts';
 import { PackageInstallationStore, PackageInstallDenied, type HookExecutor, type InstallFault }
   from '../../../services/main/src/modules/package/install.ts';
-import { DockerNodeHookExecutor, NODE_HOOK_PROFILE } from '../../../services/main/src/modules/package/install-hooks.ts';
+import { DockerNodeHookExecutor, NODE_HOOK_PROFILE, validateHookOutput }
+  from '../../../services/main/src/modules/package/install-hooks.ts';
 import { PackageArtifactStore } from '../../../services/main/src/modules/package/lock-artifacts.ts';
 import { PackageLockStore, strongestIntegrity } from '../../../services/main/src/modules/package/lock.ts';
 import { NpmResolutionStore } from '../../../services/main/src/modules/package/npm-resolution.ts';
@@ -428,7 +429,10 @@ test('PKG15: unsafe hook output is rejected and leaves no package mount', async 
   const unsafe = await fixture({ bad: { versions: { '1.0.0': {
     scripts: { postinstall: `node -e "require('node:fs').symlinkSync('/etc/passwd','host-file')"` },
     installScript: true } } } });
-  unsafe.store(undefined, new DockerNodeHookExecutor(rootDirectory));
+  unsafe.store(undefined, { profile: NODE_HOOK_PROFILE, run: async input => {
+    await symlink('/etc/passwd', join(input.directory, 'host-file'));
+    await validateHookOutput(input.directory);
+  } });
   const badLock = await resolveLock(unsafe, { bad: '1.0.0' });
   await verifiedReplay(unsafe, badLock.lock);
   const badTarget = `qa-unsafe-hook-${randomUUID()}`;

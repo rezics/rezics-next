@@ -2,7 +2,7 @@ import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { mkdirSync, rmSync } from 'node:fs';
 import { createServer } from 'node:net';
 import { join, resolve } from 'node:path';
-import { expect, test } from 'bun:test';
+import { expect, setSystemTime, test } from 'bun:test';
 import { Pool } from 'pg';
 import { createAccountApp } from '../../../services/account/src/app.ts';
 import { createAccountAuth } from '../../../services/account/src/auth.ts';
@@ -181,7 +181,7 @@ test('VIEW09: changed dependencies and expired approval require a new exact them
     await grant(newTheme, outsiderSubject, outsiderPrincipal, false);
 
     const firstKey = 'theme-first-' + randomUUID();
-    const firstExpiry = new Date(Date.now() + 3000).toISOString();
+    const firstExpiry = new Date(Math.ceil((Date.now() + 120_000) / 1000) * 1000).toISOString();
     const firstDigest = createHash('sha256').update('dependency-set-a').digest('hex');
     fuseki.calls = 0;
     store.statements = 0;
@@ -198,15 +198,18 @@ test('VIEW09: changed dependencies and expired approval require a new exact them
     const firstView = await read(newTheme);
     expect(firstView.status).toBe(200);
     expect(fuseki.calls).toBeLessThanOrEqual(1);
-    await new Promise(resolveDelay => setTimeout(resolveDelay, 3300));
-    const expired = await read(newTheme);
-    expect(expired.status).toBe(200);
-    expect(await expired.json()).toMatchObject({ state: 'expired', active: false,
-      revision: first.revision, approvalId: first.approvalId });
+    // Advance only the application clock; the approval can be committed without racing a short expiry.
+    try {
+      setSystemTime(new Date(Date.parse(firstExpiry) + 1));
+      const expired = await read(newTheme);
+      expect(expired.status).toBe(200);
+      expect(await expired.json()).toMatchObject({ state: 'expired', active: false,
+        revision: first.revision, approvalId: first.approvalId });
+    } finally { setSystemTime(); }
 
     const secondDigest = createHash('sha256').update('dependency-set-b').digest('hex');
     const secondKey = 'theme-second-' + randomUUID();
-    const secondExpiry = new Date(Date.now() + 60_000).toISOString();
+    const secondExpiry = new Date(Date.now() + 300_000).toISOString();
     fuseki.calls = 0;
     store.statements = 0;
     const secondResponse = await activate(newTheme, ownerToken, ownerSubject, secondDigest,
@@ -222,13 +225,16 @@ test('VIEW09: changed dependencies and expired approval require a new exact them
 
     fuseki.calls = 0;
     store.statements = 0;
-    const replay = await activate(newTheme, ownerToken, ownerSubject, firstDigest, null,
-      firstExpiry, firstKey);
-    if (replay.status !== 200) throw new Error('theme activation replay failed: ' + await replay.clone().text());
-    expect(replay.status).toBe(200);
-    expect(fuseki.calls).toBeLessThanOrEqual(2);
-    expect(store.statements).toBeLessThanOrEqual(6);
-    expect(await replay.json()).toMatchObject({ revision: first.revision, active: false, replayed: true });
+    try {
+      setSystemTime(new Date(Date.parse(firstExpiry) + 1));
+      const replay = await activate(newTheme, ownerToken, ownerSubject, firstDigest, null,
+        firstExpiry, firstKey);
+      if (replay.status !== 200) throw new Error('theme activation replay failed: ' + await replay.clone().text());
+      expect(replay.status).toBe(200);
+      expect(fuseki.calls).toBeLessThanOrEqual(2);
+      expect(store.statements).toBeLessThanOrEqual(6);
+      expect(await replay.json()).toMatchObject({ revision: first.revision, active: false, replayed: true });
+    } finally { setSystemTime(); }
     fuseki.calls = 0;
     const keyConflict = await activate(newTheme, ownerToken, ownerSubject, secondDigest,
       second.revision, new Date(Date.now() + 60_000).toISOString(), firstKey);

@@ -70,6 +70,17 @@ function stable(value: unknown): unknown {
   return value;
 }
 
+function stableRecord(record: ThemeActivationRecord): unknown {
+  // Jena may serialize xsd:dateTime without trailing fractional zeroes; PostgreSQL
+  // returns the same instant with three millisecond digits.
+  const approvedAt = Date.parse(record.approvedAt);
+  const approvalExpiresAt = Date.parse(record.approvalExpiresAt);
+  if (!Number.isFinite(approvedAt) || !Number.isFinite(approvalExpiresAt)) {
+    throw new ThemeStoreConflict('theme approval timestamps are invalid');
+  }
+  return stable({ ...record, approvedAt, approvalExpiresAt });
+}
+
 /** Content retains the latest monotone approval basis alongside immutable history. */
 export class ThemeStore {
   statements = 0;
@@ -116,7 +127,7 @@ export class ThemeStore {
         FROM content.theme_activation WHERE graph_receipt = $1`, [record.graphReceipt]);
       if ((saved.rowCount ?? saved.rows.length) === 1) {
         const existing = fromRow(saved.rows[0]!);
-        if (JSON.stringify(stable(existing)) !== JSON.stringify(stable(record))) {
+        if (JSON.stringify(stableRecord(existing)) !== JSON.stringify(stableRecord(record))) {
           throw new ThemeStoreConflict('graph receipt is already projected with different theme state');
         }
         await client.query('COMMIT');

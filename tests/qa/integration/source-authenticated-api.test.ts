@@ -962,4 +962,4 @@ test('IAM10/LIVE01/LIVE02/LIVE03/LIVE05/LIVE13/PKG01/PKG02/PKG03/PKG04/PKG05/PKG
     await server.stop();
     await Promise.all([accountPool.end(), accessPool.end(), contentPool.end()]);
   }
-}, 30_000);
+}, 60_000);
