@@ -17,6 +17,7 @@ import { ModuleHeading } from '../zones/module-frame.tsx';
 import { decisionText } from '../zones/modules.tsx';
 import type { RealmMessages } from './messages.ts';
 import { decisionAnchor } from './route.ts';
+import { LinkedDecision } from './linked-decision.tsx';
 import type { ReadFailure } from './types.ts';
 
 /** A tab's heading block: the view's title and one line on what it lists. */
@@ -92,14 +93,16 @@ export function RealmDecisions({ decisions, next, first, locale, messages, zoneM
     <section aria-labelledby="realm-decisions" className="grid grid-cols-1 gap-5 rounded-(--zone-radius-card) bg-(--zone-panel)
       p-(--zone-panel-pad)">
       <ViewHeader id="realm-decisions" title={messages.decisionsTitle} intro={messages.decisionsIntro} />
-      {decisions.length ? <ol className="grid grid-cols-1">
+      <LinkedDecision listId="realm-decision-list" />
+      {decisions.length ? <ol id="realm-decision-list" className="grid grid-cols-1">
         {decisions.map(decision => {
           const Icon = decision.outcome === 'rejected' ? XIcon : kindIcons[decision.kind];
           return <li key={decision.id} id={decisionAnchor(decision.id)} className="group scroll-mt-32 border-border/60
-            border-b py-3.5 last:border-b-0 target:rounded-xl target:border-transparent target:bg-accent target:px-3">
+            border-b py-3.5 last:border-b-0 data-linked:rounded-xl data-linked:border-transparent data-linked:bg-accent
+            data-linked:px-3">
             <div className="flex items-start gap-3">
               <span aria-hidden="true" className="mt-0.5 grid size-8 shrink-0 place-items-center rounded-full bg-accent
-                text-accent-foreground group-target:bg-primary group-target:text-primary-foreground">
+                text-accent-foreground group-data-linked:bg-primary group-data-linked:text-primary-foreground">
                 <Icon className="size-4" /></span>
               <div className="min-w-0 flex-1 space-y-1">
                 <p className="font-medium">{decisionText(decision, locale, zoneMessages)}</p>
@@ -107,7 +110,7 @@ export function RealmDecisions({ decisions, next, first, locale, messages, zoneM
                   <Badge variant="outline">{kinds[decision.kind]}</Badge>
                   {decision.outcome ? <Badge variant={decision.outcome === 'accepted' ? 'success' : 'outline'}>
                     {decision.outcome === 'accepted' ? messages.accepted : messages.rejected}</Badge> : null}
-                  <span className="hidden font-medium text-primary group-target:inline">{messages.decisionLinked}</span>
+                  <span className="hidden font-medium text-primary group-data-linked:inline">{messages.decisionLinked}</span>
                 </div>
               </div>
               {decision.work ? <LocalizedLink href={decision.work.href} className={cn(buttonVariants({ variant: 'ghost',
