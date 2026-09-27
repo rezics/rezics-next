@@ -8,7 +8,7 @@ export type Density = Preferences['density'];
 type Permission = AdminMe['permissions'][number];
 
 /** An action the command palette offers while a page shows its subject. */
-export interface PaletteAction { id: string; label: string; run(): void; tone?: 'destructive' }
+export interface PaletteAction { id: string; label: string; hint?: string; run(): void }
 
 interface AdminState {
   me: AdminMe;
@@ -62,7 +62,7 @@ export function usePaletteActions(actions: PaletteAction[]) {
   const latest = useRef(actions);
   useEffect(() => { latest.current = actions; });
   // Re-register only when the offer changes; running reaches the page's latest handler.
-  const key = actions.map(action => `${action.id}:${action.label}`).join('|');
+  const key = actions.map(action => `${action.id}:${action.label}:${action.hint}`).join('|');
   useEffect(() => {
     setPageActions(latest.current.map(action => ({ ...action,
       run: () => latest.current.find(item => item.id === action.id)?.run() })));

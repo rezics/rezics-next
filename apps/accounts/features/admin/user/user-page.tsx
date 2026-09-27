@@ -38,7 +38,7 @@ export function UserPage({ initial, data }: { initial: UserDetail; data: TabData
   const actions = availableActions(target, me).filter(action => action !== 'add-note');
   const label = user.name || user.email;
   const open = useCallback((action: AdminAction) => setRequest({ action, targets: [toTarget(detail.profile)] }), [detail.profile]);
-  usePaletteActions(actions.map(action => ({ id: action, label: `${t.actions[action]} ${label}`, run: () => open(action) })));
+  usePaletteActions(actions.map(action => ({ id: action, label: t.actions[action], hint: label, run: () => open(action) })));
   const reload = useCallback(async () => {
     const [result, page] = await Promise.all([api.user(user.id), tabData.tab === 'sanctions' ? api.sanctions(user.id)
       : tabData.tab === 'audit' ? api.audit({ targetId: user.id }) : null]);

@@ -85,7 +85,7 @@ function ActionForm({ request, onClose, onDone }: { request: ActionRequest; onCl
     setJobId(result.data.jobId);
   }
 
-  if (jobId) return <BulkProgress jobId={jobId} action={action as BulkAction} onClose={onDone} />;
+  if (jobId) return <BulkProgress jobId={jobId} action={action as BulkAction} count={targets.length} onClose={onDone} />;
   const title = single ? t.actionTitles[action]({ name: label }) : t.bulkTitles[action as BulkAction](targets.length);
   const sample = targets.slice(0, 3).map(target => target.name || target.email);
   return <Dialog open onOpenChange={details => { if (!details.open && !pending) onClose(); }}
@@ -141,7 +141,7 @@ function ActionForm({ request, onClose, onDone }: { request: ActionRequest; onCl
 const stateIcons = { pending: LoaderIcon, succeeded: CheckIcon, skipped: MinusIcon, failed: CircleAlertIcon };
 
 /** A bulk job's progress and per-user results, polled until it finishes. */
-function BulkProgress({ jobId, action, onClose }: { jobId: string; action: BulkAction; onClose(): void }) {
+function BulkProgress({ jobId, action, count, onClose }: { jobId: string; action: BulkAction; count: number; onClose(): void }) {
   const { t } = useTranslation('admin');
   const { api } = useAdminClient();
   const [job, setJob] = useState<Job | null>(null);
@@ -158,10 +158,10 @@ function BulkProgress({ jobId, action, onClose }: { jobId: string; action: BulkA
     return () => { stopped = true; clearTimeout(timer); };
   }, [api, jobId]);
   const done = job ? job.total - job.pending : 0;
-  const total = job?.total ?? 0;
+  const total = job?.total ?? count;
   return <Dialog open onOpenChange={details => { if (!details.open) onClose(); }}>
     <DialogContent size="md">
-      <DialogHeader title={t.bulkTitles[action](total || 1)}
+      <DialogHeader title={t.bulkTitles[action](total)}
         description={job?.finishedAt ? t.jobResult({ succeeded: job.succeeded, skipped: job.skipped, failed: job.failed })
           : t.bulkRunning} />
       <DialogBody className="flex flex-col gap-4">

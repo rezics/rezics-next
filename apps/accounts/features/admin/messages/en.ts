@@ -15,7 +15,6 @@ export default {
   skipToContent: 'Skip to content',
 
   roles: { owner: 'Owner', admin: 'Admin', support: 'Support' },
-  noRole: 'Not staff',
   statuses: { active: 'Active', suspended: 'Suspended', 'password-reset-required': 'Reset required' },
   unverified: 'Unverified',
   verified: 'Verified',
@@ -63,7 +62,7 @@ export default {
   },
 
   columns: {
-    choose: 'Columns', name: 'Name', email: 'Email', status: 'Status', role: 'Role', verified: 'Email',
+    choose: 'Columns', name: 'Name', email: 'Email', status: 'Status', role: 'Role', verified: 'Verified',
     twoFactor: '2FA', created: 'Created', lastSignIn: 'Last sign-in', select: 'Select',
   },
   sortBy: insert('Sort by {{column}}', { column: String }),
@@ -74,13 +73,11 @@ export default {
   selected: plural({ one: '1 selected', other: insert('{{value}} selected') }),
   clearSelection: 'Clear selection',
   moreAvailable: 'More users match',
-  showing: plural({ '=0': 'No users', one: '1 user', other: insert('{{value}} users') }),
   pages: 'Pages',
   firstPage: 'First page',
   nextPage: 'Next page',
   previousPage: 'Previous page',
   loadMore: 'Load more',
-  loading: 'Loading…',
   emptyTitle: 'No users yet',
   emptyBody: 'People appear here when they create a REZICS account.',
   noMatchTitle: 'No users match',
@@ -99,7 +96,7 @@ export default {
     removed: 'View removed',
     suggestions: { suspended: 'Suspended', staff: 'Staff', unverified: 'Unverified' },
   },
-  density: { label: 'Density', comfortable: 'Comfortable', compact: 'Compact', saved: 'Density saved for you' },
+  density: { label: 'Density', comfortable: 'Comfortable', compact: 'Compact' },
 
   shortcuts: {
     title: 'Keyboard shortcuts',
@@ -146,7 +143,6 @@ export default {
     until: 'until',
     indefinite: 'until lifted',
     failedCount: plural({ one: '1 failure', other: insert('{{value}} failures') }),
-    count: insert('{{count}}', { count: String }),
     capped: insert('{{count}}+', { count: String }),
   },
   recentActions: 'Recent admin actions',
@@ -155,7 +151,6 @@ export default {
   yourJobs: 'Your bulk actions',
   jobProgress: insert('{{done}} of {{total}} done', { done: Number, total: Number }),
   jobResult: insert('{{succeeded}} done · {{skipped}} unchanged · {{failed}} failed', { succeeded: Number, skipped: Number, failed: Number }),
-  jobRunning: 'Running',
 
   user: {
     tabs: { overview: 'Overview', security: 'Security', roles: 'Roles', sanctions: 'Sanctions', apps: 'Connected apps', audit: 'Audit' },
@@ -255,7 +250,6 @@ export default {
   },
   bulkSample: insert('Including {{names}}', { names: String }),
   bulkMore: plural({ one: 'and 1 more', other: insert('and {{value}} more') }),
-  bulkLimit: insert('Select at most {{limit}} users for one bulk action.', { limit: Number }),
   bulkSkipNote: 'Users already in the requested state are left unchanged.',
   reasonCode: 'Reason',
   reasonCodePlaceholder: 'Choose a reason',
@@ -299,10 +293,8 @@ export default {
     'add-note': insert('Note saved on {{name}}', { name: String }),
   },
   requestId: insert('Request {{id}}', { id: String }),
-  bulkStarted: 'Bulk action started',
   bulkClose: 'Close',
   bulkRunning: 'Working through the list…',
-  bulkDone: 'Finished',
   itemStates: { pending: 'Waiting', succeeded: 'Done', skipped: 'Unchanged', failed: 'Failed' },
   itemErrors: { forbidden: 'Not allowed: staff accounts need an owner, or your access ended', not_found: 'The account no longer exists',
     conflict: 'Would leave no available owner', other: 'Couldn’t be changed' },

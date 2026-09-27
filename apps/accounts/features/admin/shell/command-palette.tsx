@@ -60,7 +60,7 @@ export function CommandPalette() {
     const found: Entry[] = users.map(user => ({ value: `user:${user.id}`, label: user.name || user.email, hint: user.email,
       group: t.palette.users, icon: <UserRoundIcon />, keywords: `${user.email} ${user.id}`,
       run: go(`/admin/users/${encodeURIComponent(user.id)}`) }));
-    const actions: Entry[] = pageActions.map(action => ({ value: `action:${action.id}`, label: action.label,
+    const actions: Entry[] = pageActions.map(action => ({ value: `action:${action.id}`, label: action.label, hint: action.hint,
       group: t.palette.actions, icon: <ZapIcon />, run: action.run }));
     const preferences: Entry[] = [
       density === 'compact'

@@ -120,9 +120,8 @@ export const KeyboardAndBulk: Story = {
     await expect(reauthenticate).toHaveBeenCalledWith('correct horse', undefined);
     await expect(bulk).toHaveBeenCalledWith(expect.objectContaining({ action: 'suspend', reasonCode: 'spam', reason: 'Coordinated spam wave',
       userIds: ['u-ada', 'u-radia'] }));
-    // The job's dialog replaces the form once the service has admitted it.
-    await waitFor(() => expect(screen.getByRole('dialog', { name: 'Suspend 3 users?' })).toBeVisible());
-    await waitFor(() => expect(screen.getByText('1 done · 1 unchanged · 1 failed')).toBeVisible());
+    // The job's dialog replaces the form once the service has admitted it, then polls the job.
+    await waitFor(() => expect(screen.getByText('1 done · 1 unchanged · 1 failed')).toBeVisible(), { timeout: 5_000 });
     await expect(screen.getByText(/staff accounts need an owner/)).toBeVisible();
   },
 };

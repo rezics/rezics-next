@@ -15,7 +15,6 @@ export default {
   skipToContent: '跳到主要内容',
 
   roles: { owner: '所有者', admin: '管理员', support: '客服' },
-  noRole: '非员工',
   statuses: { active: '正常', suspended: '已暂停', 'password-reset-required': '需重置密码' },
   unverified: '未验证',
   verified: '已验证',
@@ -63,7 +62,7 @@ export default {
   },
 
   columns: {
-    choose: '列', name: '姓名', email: '邮箱', status: '状态', role: '角色', verified: '邮箱',
+    choose: '列', name: '姓名', email: '邮箱', status: '状态', role: '角色', verified: '邮箱验证',
     twoFactor: '两步验证', created: '创建时间', lastSignIn: '上次登录', select: '选择',
   },
   sortBy: insert('按{{column}}排序', { column: String }),
@@ -74,13 +73,11 @@ export default {
   selected: plural({ other: insert('已选 {{value}} 位') }),
   clearSelection: '取消选择',
   moreAvailable: '还有更多匹配的用户',
-  showing: plural({ '=0': '没有用户', other: insert('{{value}} 位用户') }),
   pages: '分页',
   firstPage: '第一页',
   nextPage: '下一页',
   previousPage: '上一页',
   loadMore: '加载更多',
-  loading: '正在加载…',
   emptyTitle: '还没有用户',
   emptyBody: '有人创建 REZICS 账号后会显示在这里。',
   noMatchTitle: '没有匹配的用户',
@@ -99,7 +96,7 @@ export default {
     removed: '视图已移除',
     suggestions: { suspended: '已暂停', staff: '员工', unverified: '未验证' },
   },
-  density: { label: '密度', comfortable: '宽松', compact: '紧凑', saved: '已为您保存密度设置' },
+  density: { label: '密度', comfortable: '宽松', compact: '紧凑' },
 
   shortcuts: {
     title: '键盘快捷键',
@@ -146,7 +143,6 @@ export default {
     until: '至',
     indefinite: '直至解除',
     failedCount: plural({ other: insert('失败 {{value}} 次') }),
-    count: insert('{{count}}', { count: String }),
     capped: insert('{{count}}+', { count: String }),
   },
   recentActions: '最近的管理操作',
@@ -155,7 +151,6 @@ export default {
   yourJobs: '您的批量操作',
   jobProgress: insert('已完成 {{done}} / {{total}}', { done: Number, total: Number }),
   jobResult: insert('完成 {{succeeded}} · 未变更 {{skipped}} · 失败 {{failed}}', { succeeded: Number, skipped: Number, failed: Number }),
-  jobRunning: '进行中',
 
   user: {
     tabs: { overview: '概览', security: '安全', roles: '角色', sanctions: '处置记录', apps: '已关联的应用', audit: '审计' },
@@ -254,7 +249,6 @@ export default {
   },
   bulkSample: insert('包括 {{names}}', { names: String }),
   bulkMore: plural({ other: insert('等另外 {{value}} 位') }),
-  bulkLimit: insert('一次批量操作最多选择 {{limit}} 位用户。', { limit: Number }),
   bulkSkipNote: '已处于目标状态的用户不会变更。',
   reasonCode: '原因',
   reasonCodePlaceholder: '选择原因',
@@ -298,10 +292,8 @@ export default {
     'add-note': insert('已为 {{name}} 保存备注', { name: String }),
   },
   requestId: insert('请求 {{id}}', { id: String }),
-  bulkStarted: '批量操作已开始',
   bulkClose: '关闭',
   bulkRunning: '正在逐个处理…',
-  bulkDone: '已完成',
   itemStates: { pending: '等待中', succeeded: '完成', skipped: '未变更', failed: '失败' },
   itemErrors: { forbidden: '不允许：员工账号需由所有者处理，或您的访问权限已结束', not_found: '该账号已不存在',
     conflict: '会导致没有可用的所有者', other: '无法更改' },
