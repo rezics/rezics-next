@@ -43,16 +43,27 @@ export async function readAgent(session: WorkReadSession, agent: string) {
   if (rows.length !== 1 || !kind || !displayName || displayName.length > 200
     || field(row, 'handle') !== allocateAgentHandle(agent)) throw new WorkReadUnavailable('Agent profile is ambiguous');
   if (await owner.agentFence(agent) !== before) throw new WorkReadMissing('Agent unavailable');
+  let currentHandle: string;
+  try { currentHandle = await session.deps.agentHandles?.current(agent) ?? field(row, 'handle'); }
+  catch { throw new WorkReadUnavailable('Agent handle owner is unavailable'); }
   const path = `/v1/agents/${agent.slice(-36)}`;
   return { profile: 'agent-read-v1' as const, id: agent, displayName, kind,
-    handle: field(row, 'handle'), disclosure: 'public' as const, sourcePosition: session.position,
-    links: { profile: `/@${field(row, 'handle')}`, works: `${path}/works`, collections: `${path}/collections` } };
+    handle: currentHandle, disclosure: 'public' as const, sourcePosition: session.position,
+    links: { profile: `/@${currentHandle}`, works: `${path}/works`, collections: `${path}/collections` } };
 }
 
 export async function readHandle(session: WorkReadSession, handle: string) {
-  const agent = agentForHandle(handle);
-  if (!agent) throw new WorkReadMissing('Agent unavailable');
-  return readAgent(session, agent);
+  let resolved;
+  try { resolved = session.deps.agentHandles
+    ? await session.deps.agentHandles.resolve(handle)
+    : (agentForHandle(handle) ? { agent: agentForHandle(handle)!, state: 'native' as const,
+      redirect: false } : null); }
+  catch { throw new WorkReadUnavailable('Agent handle owner is unavailable'); }
+  if (!resolved) throw new WorkReadMissing('Agent unavailable');
+  const profile = await readAgent(session, resolved.agent);
+  return { ...profile, resolution: { requestedHandle: handle, state: resolved.state,
+    redirect: resolved.redirect || profile.handle !== handle,
+    canonical: profile.links.profile } };
 }
 
 export function pageBasis(session: WorkReadSession, family: string, subject: unknown) {

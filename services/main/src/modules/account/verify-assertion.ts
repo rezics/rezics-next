@@ -14,6 +14,7 @@ export interface AccountAssertionConfig {
 
 /** Account-signed consent basis exposed only after current introspection succeeds. */
 export interface VerifiedAccountAssertion extends VerifiedPrincipal {
+  accountDisplayName?: string;
   accountAuthMode?: string;
   accountClientId?: string;
   accountConsentId?: string;
@@ -104,6 +105,8 @@ export class AccountAssertionVerifier {
       currentAssertion: () => this.verify(request, requiredScopes),
       ...(current.email_verified === true && signed.rezics_auth_mode !== 'workload'
         ? { emailVerified: true } : {}),
+      accountDisplayName: typeof current.rezics_account_name === 'string'
+        ? current.rezics_account_name : undefined,
       accountAuthMode: typeof signed.rezics_auth_mode === 'string' ? signed.rezics_auth_mode : undefined,
       accountClientId: typeof current.client_id === 'string' ? current.client_id : undefined,
       accountConsentId: typeof signed.rezics_consent_id === 'string' ? signed.rezics_consent_id : undefined,

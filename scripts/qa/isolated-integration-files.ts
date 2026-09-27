@@ -48,4 +48,6 @@ export const isolatedIntegrationFileList = [
   'tests/qa/integration/discovery-projection.test.ts',
   // Profile/library probes change disclosure, erasure and the dataset restore hold.
   'services/main/tests/profiles.integration.test.ts',
+  // Person onboarding and vanity claims need a fresh Agent graph and Access owner.
+  'tests/qa/integration/agent-handle.test.ts',
 ] as const;

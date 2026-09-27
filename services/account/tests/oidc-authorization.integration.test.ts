@@ -85,7 +85,7 @@ test('IAM02: invalid OIDC requests and swapped two-client exchanges leave pendin
       const registration = await auth.api.adminCreateOAuthClient({ headers,
         body: { client_name: `IAM02 ${name}`, application_type: 'native',
           redirect_uris: [callback], token_endpoint_auth_method: 'none',
-          grant_types: ['authorization_code'], scope: 'openid work:create offline_access',
+          grant_types: ['authorization_code'], scope: 'openid work:create agent:create offline_access',
           subject_type: 'public', require_pkce: true } });
       const cookieName = `${name}_session`;
       const pending = new Map<string, { state: string; verifier: string }>();
@@ -99,7 +99,7 @@ test('IAM02: invalid OIDC requests and swapped two-client exchanges leave pendin
           const url = new URL(`${base}/api/auth/oauth2/authorize`);
           for (const [key, value] of Object.entries({ response_type: 'code',
             client_id: registration.client_id, redirect_uri: callback,
-            scope: 'openid work:create offline_access', state, resource,
+            scope: 'openid work:create agent:create offline_access', state, resource,
             code_challenge: createHash('sha256').update(verifier).digest('base64url'),
             code_challenge_method: 'S256' })) url.searchParams.set(key, value);
           if (new URL(request.url).searchParams.has('consent')) url.searchParams.set('prompt', 'consent');
@@ -156,7 +156,8 @@ test('IAM02: invalid OIDC requests and swapped two-client exchanges leave pendin
     }).then(response => response.json() as Promise<Record<string, unknown>>);
     const expectActive = async (tokens: Tokens, rp: RelyingParty) =>
       expect(await introspect(tokens.access_token)).toMatchObject({ active: true,
-        iss: issuer, sub: member.id, client_id: rp.clientId });
+        iss: issuer, sub: member.id, client_id: rp.clientId,
+        rezics_account_name: 'member' });
 
     // The first authorization of each client passes through explicit consent.
     const consented = async (rp: RelyingParty) => {
@@ -271,8 +272,9 @@ test('IAM02: invalid OIDC requests and swapped two-client exchanges leave pendin
     for (const tokens of [alphaFirst.tokens, betaFirst.tokens]) {
       const assertion = new Request(`${resource}/v1/works`, {
         headers: { authorization: `Bearer ${tokens.access_token}` } });
-      expect((await new AccountAssertionVerifier(verifierConfig)
-        .verify(assertion, ['work:create'])).subject).toBe(member.id);
+      expect(await new AccountAssertionVerifier(verifierConfig)
+        .verify(assertion, ['work:create'])).toMatchObject({
+          subject: member.id, accountDisplayName: 'member' });
       await unchanged(async () => {
         for (const mismatch of [
           { issuer: 'https://wrong-issuer.example.test' },

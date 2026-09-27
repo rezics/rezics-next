@@ -6,6 +6,7 @@ import type { ContentProjectionCursor } from '../../../content/src/projection-cu
 import type { ContentPrivateSearchOwners } from '../modules/search-disclosure/content-socket.ts';
 import type { AccessAdmissionRegistry } from '../modules/access/admission.ts';
 import type { AgentProvisioning } from '../modules/agent/provision.ts';
+import type { AgentVanityHandles } from '../modules/agent/vanity.ts';
 import type { ReleaseRatingInventoryStore } from '../modules/access/rating-aggregate-inventory.ts';
 import type { AccessOrganizationModeration } from '../modules/access/organization-moderation.ts';
 import type { AccessGroups } from '../modules/access/groups.ts';
@@ -93,6 +94,7 @@ export interface MainWorkDependencies {
   discovery?: import('../modules/discovery/store.ts').DiscoveryProjection;
   profiles?: ProfilesAccess;
   agentProvisioning?: AgentProvisioning;
+  agentHandles?: AgentVanityHandles;
   governance?: { store: GovernanceStore; rules?: GovernanceRules };
   managementReads?: ManagementReadStore;
   realmSubmissions?: RealmSubmissionStore;

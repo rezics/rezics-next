@@ -1,15 +1,15 @@
-export interface DemoPerson { id: string; name: string; email: string; password: string }
+export interface DemoPerson { id: string; name: string; handle: string; email: string; password: string }
 export interface DemoWork { id: string; title: string; type: 'book' | 'document' | 'recipe';
   language: 'en' | 'zh-Hans'; excerpt?: string }
 
 export const people: readonly DemoPerson[] = [
-  { id: 'mei', name: 'Lin Mei 林梅', email: 'rezics-demo-mei@example.test', password: 'Rezics-demo-2026-mei' },
-  { id: 'daniel', name: 'Daniel Chen 陈丹尼', email: 'rezics-demo-daniel@example.test', password: 'Rezics-demo-2026-daniel' },
-  { id: 'an', name: 'An Wu 吴安', email: 'rezics-demo-an@example.test', password: 'Rezics-demo-2026-an' },
-  { id: 'sophie', name: 'Sophie Li 李素菲', email: 'rezics-demo-sophie@example.test', password: 'Rezics-demo-2026-sophie' },
-  { id: 'jun', name: 'Jun Zhang 张俊', email: 'rezics-demo-jun@example.test', password: 'Rezics-demo-2026-jun' },
-  { id: 'aria', name: 'Aria Wang 王雅', email: 'rezics-demo-aria@example.test', password: 'Rezics-demo-2026-aria' },
-  { id: 'leo', name: 'Leo Sun 孙乐', email: 'rezics-demo-leo@example.test', password: 'Rezics-demo-2026-leo' },
+  { id: 'mei', handle: 'lin_mei', name: 'Lin Mei 林梅', email: 'rezics-demo-mei@example.test', password: 'Rezics-demo-2026-mei' },
+  { id: 'daniel', handle: 'daniel_chen', name: 'Daniel Chen 陈丹尼', email: 'rezics-demo-daniel@example.test', password: 'Rezics-demo-2026-daniel' },
+  { id: 'an', handle: 'an_wu', name: 'An Wu 吴安', email: 'rezics-demo-an@example.test', password: 'Rezics-demo-2026-an' },
+  { id: 'sophie', handle: 'sophie_li', name: 'Sophie Li 李素菲', email: 'rezics-demo-sophie@example.test', password: 'Rezics-demo-2026-sophie' },
+  { id: 'jun', handle: 'jun_zhang', name: 'Jun Zhang 张俊', email: 'rezics-demo-jun@example.test', password: 'Rezics-demo-2026-jun' },
+  { id: 'aria', handle: 'aria_wang', name: 'Aria Wang 王雅', email: 'rezics-demo-aria@example.test', password: 'Rezics-demo-2026-aria' },
+  { id: 'leo', handle: 'leo_sun', name: 'Leo Sun 孙乐', email: 'rezics-demo-leo@example.test', password: 'Rezics-demo-2026-leo' },
 ];
 
 export const works: readonly DemoWork[] = [

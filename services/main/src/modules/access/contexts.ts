@@ -162,8 +162,8 @@ export async function eligibleSubject(client: PoolClient, principalId: string,
 export class AccessActingContexts {
   constructor(private readonly pool: Pool, private readonly environment?: WorkActivationEnvironment) {}
 
-  /** One public current-graph read for at most 50 eligible Agents. Missing public
-   * descriptions remain null; private Access and provision rows are never labels. */
+  /** One public graph read and one bounded current-handle batch for at most 50
+   * eligible Agents. Missing public descriptions remain null. */
   private async publicLabels(subjects: readonly string[]): Promise<Map<string, Omit<ActingContextOption, 'actingSubject'>>> {
     const labels = new Map<string, Omit<ActingContextOption, 'actingSubject'>>();
     if (!subjects.length || !this.environment) return labels;
@@ -174,15 +174,19 @@ export class AccessActingContexts {
       await assertGraphAdmissionOpen(this.environment.fuseki, this.environment.lineage);
       const rows = (await this.environment.fuseki.query(`PREFIX rv: <${RV}>
         PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
-        SELECT ?agent ?label ?kind ?handle WHERE {
+        SELECT ?agent ?label ?kind ?nativeHandle ?legacyHandle WHERE {
           VALUES ?agent { ${subjects.map(iri).join(' ')} }
           GRAPH ${iri(GRAPHS.current)} {
             ?agent a rv:Agent ; rv:agentKind ?kind ; rdfs:label ?label .
-            OPTIONAL { ?agent rv:handle ?handle }
+            OPTIONAL { ?agent rv:profileHandle ?nativeHandle }
+            OPTIONAL { ?agent rv:handle ?legacyHandle }
           }
         } LIMIT ${subjects.length + 1}`, 65_536)).results?.bindings ?? [];
       if (rows.length > subjects.length) throw new Error('Agent descriptions are ambiguous');
       const allowed = new Set(subjects);
+      const claims = await this.pool.query<{ agent_id: string; handle: string }>(`SELECT agent_id, handle
+        FROM access.agent_handle WHERE agent_id = ANY($1::text[]) AND state = 'current'`, [subjects]);
+      const currentHandles = new Map(claims.rows.map(row => [row.agent_id, row.handle]));
       const kinds: Record<string, ActingContextOption['kind']> = {
         [`${RV}PersonAgent`]: 'person', [`${RV}PenNameAgent`]: 'pen-name',
         [`${RV}OrganizationAgent`]: 'organization', [`${RV}ServiceAgent`]: 'service',
@@ -191,7 +195,8 @@ export class AccessActingContexts {
         const agent = row.agent?.value;
         const name = row.label?.value;
         const kind = row.kind?.value;
-        const handle = row.handle?.value ?? null;
+        const handle = currentHandles.get(agent ?? '')
+          ?? row.nativeHandle?.value ?? row.legacyHandle?.value ?? null;
         if (!agent || !allowed.has(agent) || labels.has(agent) || !name
           || name.length > 200 || /[\u0000-\u001f\u007f]/.test(name)
           || !kind || !(kind in kinds)

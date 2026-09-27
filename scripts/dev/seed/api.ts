@@ -109,6 +109,13 @@ export class SeedApi {
     return result.access_token;
   }
 
+  async put<T>(path: string, body: unknown, token: string, key: string): Promise<T> {
+    const response = await fetch(`${this.endpoints.main}${path}`, { method: 'PUT',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${token}`,
+        'idempotency-key': key }, body: JSON.stringify(body) });
+    return payload<T>(response, `Main ${path}`);
+  }
+
   async post<T>(path: string, body: unknown, token: string, key: string): Promise<T> {
     const response = await fetch(`${this.endpoints.main}${path}`, { method: 'POST',
       headers: { 'content-type': 'application/json', authorization: `Bearer ${token}`,

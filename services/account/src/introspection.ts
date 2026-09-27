@@ -52,13 +52,16 @@ export async function currentIntrospection(pool: Pool, presented: string | null,
       // Current Account state, not an email claim cached in a five-minute JWT.
       // RFC 7662 permits authorization-context metadata in introspection:
       // https://www.rfc-editor.org/rfc/rfc7662.html#section-2.2
-      const verified = active && payload[AUTH_MODE_CLAIM] !== 'workload'
-        ? (await client.query<{ emailVerified: boolean }>(
-          'SELECT "emailVerified" FROM "user" WHERE id = $1', [payload.sub])).rows[0]?.emailVerified === true
-        : false;
+      const accountProfile = active && payload[AUTH_MODE_CLAIM] !== 'workload'
+        ? (await client.query<{ emailVerified: boolean; name: string }>(
+          'SELECT "emailVerified", name FROM "user" WHERE id = $1', [payload.sub])).rows[0]
+        : undefined;
+      const verified = accountProfile?.emailVerified === true;
       await client.query('COMMIT');
       committed = true;
-      return active ? Response.json({ ...payload, email_verified: verified },
+      return active ? Response.json({ ...payload, email_verified: verified,
+        ...(accountProfile && tokenScopes(payload).includes('agent:create')
+          ? { rezics_account_name: accountProfile.name } : {}) },
         { headers: { 'cache-control': 'no-store' } }) : inactive();
     } finally {
       try { if (!committed) await client.query('ROLLBACK'); } finally { client.release(); }

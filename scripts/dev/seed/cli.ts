@@ -99,6 +99,9 @@ async function run(options: Options): Promise<boolean> {
       profile: 'agent-provision-v1', kind: 'person', displayName: person.name },
     token, seedKey('agent', person.id));
     if (agent.state !== 'active') throw new Error(`Agent for ${person.id} is not active`);
+    await api.put(`/v1/agents/${agent.agent.slice(-36)}/handle`,
+      { profile: 'agent-handle-v1', handle: person.handle, expectedHandle: null },
+      token, seedKey('handle', person.id));
     sessions.push({ id: person.id, token, actingSubject: agent.agent });
     agentCount++;
   }

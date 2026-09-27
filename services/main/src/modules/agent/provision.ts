@@ -75,7 +75,7 @@ export class AgentProvisioning {
   }
 
   private async stage(principal: VerifiedPrincipal, key: string,
-    input: AgentProvisionInput, digest: string): Promise<{ row: ProvisionRow; replayed: boolean }> {
+    input: AgentProvisionInput, digest: string, onboarding: boolean): Promise<{ row: ProvisionRow; replayed: boolean }> {
     return this.transaction(async client => {
       await client.query(`INSERT INTO access.principal (id, account_issuer, account_subject)
         VALUES ($1,$2,$3) ON CONFLICT (account_issuer, account_subject) DO NOTHING`,
@@ -85,6 +85,18 @@ export class AgentProvisioning {
         WHERE account_issuer = $1 AND account_subject = $2 FOR UPDATE`,
       [principal.issuer, principal.subject])).rows[0];
       if (!actor?.active) throw new AgentProvisionDenied('Account principal is inactive in Access');
+      if (onboarding) {
+        const existing = (await client.query<ProvisionRow>(`SELECT * FROM access.agent_provision
+          WHERE principal_id = $1 AND agent_kind = 'person' AND state = 'active'
+          ORDER BY created_at, id LIMIT 1`, [actor.id])).rows[0];
+        if (existing) return { row: existing, replayed: true };
+        const pending = (await client.query<ProvisionRow>(`SELECT * FROM access.agent_provision
+          WHERE principal_id = $1 AND agent_kind = 'person'
+            AND idempotency_key LIKE 'system:person-onboarding:%'
+            AND state IN ('planned', 'graph_committed', 'compensating')
+          ORDER BY created_at, id LIMIT 1`, [actor.id])).rows[0];
+        if (pending) return { row: pending, replayed: true };
+      }
       const id = randomUUID();
       await client.query(`INSERT INTO access.agent_provision
         (id, principal_id, idempotency_key, request_digest, agent_id, agent_kind,
@@ -95,7 +107,9 @@ export class AgentProvisioning {
       const row = (await client.query<ProvisionRow>(`SELECT * FROM access.agent_provision
         WHERE principal_id = $1 AND idempotency_key = $2 FOR UPDATE`, [actor.id, key])).rows[0];
       if (!row) throw new AgentProvisionUnavailable('Agent provision row is unavailable');
-      if (row.request_digest !== digest) throw new AgentProvisionConflict('key binds another Agent intent');
+      if (row.request_digest !== digest && (!onboarding || row.agent_kind !== 'person')) {
+        throw new AgentProvisionConflict('key binds another Agent intent');
+      }
       return { row, replayed: row.id !== id };
     });
   }
@@ -168,13 +182,13 @@ export class AgentProvisioning {
   }
 
   async provision(account: Pick<AccountAssertionVerifier, 'verify'>, request: Request,
-    input: AgentProvisionInput, key: string): Promise<AgentProvisionResult> {
+    input: AgentProvisionInput, key: string, onboarding = false): Promise<AgentProvisionResult> {
     if (!/^[A-Za-z0-9:_./-]{1,128}$/.test(key)) {
       throw new AgentProvisionInvalid('bounded Idempotency-Key is required');
     }
     const digest = agentProvisionDigest(input);
     const principal = await account.verify(request, ['agent:create']);
-    const { row, replayed } = await this.stage(principal, key, input, digest);
+    const { row, replayed } = await this.stage(principal, key, input, digest, onboarding);
     if (row.state === 'active' || row.state === 'compensated') return view(row, replayed);
     if (row.state === 'compensating') {
       try { return view(await this.compensate(row), true); }
