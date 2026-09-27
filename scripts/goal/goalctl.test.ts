@@ -53,7 +53,17 @@ describe('goalctl claims', () => {
     expect(claimConflicts(parsed, [held({ cases: ['GOV13'], paths: ['services/main/src/modules/poll.ts'],
       migrations: ['main/access:045-049', 'content:040-044'] })])).toEqual([]);
     expect(pathsOverlap('tests/qa/integration/poll-*', 'tests/qa/integration/pkg-*')).toBe(false);
-    expect(pathsOverlap('services/**/poll.ts', 'services/main/src/app.ts')).toBe(true);
+    expect(pathsOverlap('services/**/poll.ts', 'services/main/src/app.ts')).toBe(false);
+    expect(pathsOverlap('services/**/poll.ts', 'services/main/src/poll.ts')).toBe(true);
+    expect(pathsOverlap('services/main/src/modules/*/outbox-event*.ts',
+      'services/main/src/modules/content-publication/comment.ts')).toBe(false);
+    expect(pathsOverlap('services/main/src/modules/*/outbox-event*.ts',
+      'services/main/src/modules/work/outbox-event.ts')).toBe(true);
+    expect(pathsOverlap('services/main/tests/*integration.test.ts', 'services/main/tests/member-reply*.ts')).toBe(true);
+    expect(pathsOverlap('model/definitions/**', 'model/definitions/work-metadata*.ts')).toBe(true);
+    expect(pathsOverlap('tests/qa/unit/*-resolution.test.ts', 'tests/qa/unit/core.test.ts')).toBe(false);
+    expect(pathsOverlap('apps/web/app/w/**', 'apps/web/app/works/**')).toBe(false);
+    expect(pathsOverlap('apps/web/**', 'apps/web/app/w/page.tsx')).toBe(true);
     expect(rangesOverlap('content:001-003', 'content:003-009')).toBe(true);
   });
 

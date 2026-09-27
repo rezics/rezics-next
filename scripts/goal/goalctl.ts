@@ -130,16 +130,48 @@ export function rangesOverlap(a: string, b: string): boolean {
   return !!left && !!right && left.dir === right.dir && left.start <= right.end && right.start <= left.end;
 }
 
-function literalPrefix(pattern: string): string {
-  const at = pattern.search(/[*?[{]/);
-  return at < 0 ? pattern : pattern.slice(0, at);
+function literalEnds(segment: string): [string, string] {
+  const first = segment.search(/[*?[{]/);
+  if (first < 0) return [segment, segment];
+  let last = -1;
+  for (let at = 0; at < segment.length; at++) if ('*?[]{}'.includes(segment[at]!)) last = at;
+  return [segment.slice(0, first), segment.slice(last + 1)];
 }
 
-// Conservative: any shared literal prefix counts as overlap, so a false positive only delays dispatch.
+function segmentRegex(segment: string): RegExp {
+  const body = segment.replace(/[.+^$()|\\]/g, '\\$&').replace(/\*+/g, '[^/]*').replace(/\?/g, '[^/]');
+  return new RegExp(`^${body}$`);
+}
+
+// Two single path segments can match a common name. Exact for literals and for a
+// literal against `*`/`?`; for two wildcard segments only the literal prefix and
+// suffix are compared, which may report overlap where none exists (safe side).
+function segmentsIntersect(a: string, b: string): boolean {
+  const wildA = /[*?[{]/.test(a);
+  const wildB = /[*?[{]/.test(b);
+  if (!wildA && !wildB) return a === b;
+  if (!wildA || !wildB) {
+    const [literal, glob] = wildA ? [b, a] : [a, b];
+    return /[[{]/.test(glob) || segmentRegex(glob).test(literal);
+  }
+  const [prefixA, suffixA] = literalEnds(a);
+  const [prefixB, suffixB] = literalEnds(b);
+  return (prefixA.startsWith(prefixB) || prefixB.startsWith(prefixA))
+    && (suffixA.endsWith(suffixB) || suffixB.endsWith(suffixA));
+}
+
+function globsIntersect(a: string[], i: number, b: string[], j: number): boolean {
+  if (i === a.length && j === b.length) return true;
+  if (a[i] === '**') return globsIntersect(a, i + 1, b, j) || (j < b.length && globsIntersect(a, i, b, j + 1));
+  if (b[j] === '**') return globsIntersect(a, i, b, j + 1) || (i < a.length && globsIntersect(a, i + 1, b, j));
+  if (i === a.length || j === b.length) return false;
+  return segmentsIntersect(a[i]!, b[j]!) && globsIntersect(a, i + 1, b, j + 1);
+}
+
+// Claims overlap when some file path could match both globs (segment-wise, with
+// `**` spanning any number of segments). Uncertain wildcard pairs count as overlap.
 export function pathsOverlap(a: string, b: string): boolean {
-  const left = literalPrefix(a);
-  const right = literalPrefix(b);
-  return left.startsWith(right) || right.startsWith(left);
+  return globsIntersect(a.split('/'), 0, b.split('/'), 0);
 }
 
 export function claimConflicts(brief: Brief, tasks: Task[]): string[] {
