@@ -1,7 +1,7 @@
 import { Elysia } from 'elysia';
-import { discoveryPage, discoveryQuery } from '../modules/discovery/contract.ts';
+import { discoveryPage, discoveryQuery, popularTermsPage, popularTermsQuery } from '../modules/discovery/contract.ts';
 import { discoveryError, discoveryManagementRoutes } from '../modules/discovery/management.ts';
-import { readDiscovery } from '../modules/discovery/read.ts';
+import { readDiscovery, readPopularTerms } from '../modules/discovery/read.ts';
 import { workRead } from '../modules/work/read-session.ts';
 import { WorkReadUnavailable } from '../modules/work/read-session.ts';
 import type { MainWorkDependencies } from './dependencies.ts';
@@ -9,6 +9,7 @@ import { workReadProblems } from './work-reads.ts';
 
 export const openApiOperations = {
   '/v1/works': { get: { bearer: false } },
+  '/v1/discovery/popular-terms': { get: { bearer: false } },
   '/v1/discovery/generation-builds': { post: { bearer: true, idempotencyKey: true } },
   '/v1/discovery/generations/{generation}': { get: { bearer: true } },
   '/v1/discovery/generations/{generation}/advance': { post: { bearer: true } },
@@ -32,6 +33,15 @@ export function discoveryRoutes(work: MainWorkDependencies) {
         { ...query, actingSubject: mine ? query.actingSubject : undefined },
         session => readDiscovery(session, work.discovery!, query)),
         { headers: { 'cache-control': 'no-store' } });
+    } catch (error) { return discoveryError(error); }
+  }).get('/v1/discovery/popular-terms', {
+    query: popularTermsQuery, response: { 200: popularTermsPage, ...workReadProblems },
+  }, async ({ request, query }) => {
+    try {
+      if (!work.discovery) throw new WorkReadUnavailable('Discovery owner is unavailable');
+      return Response.json(await workRead(work, new Request(request.url), query,
+        session => readPopularTerms(session, work.discovery!, query)),
+      { headers: { 'cache-control': 'no-store' } });
     } catch (error) { return discoveryError(error); }
   }).use(discoveryManagementRoutes(work));
 }

@@ -1,5 +1,6 @@
 import { t } from 'elysia';
 import { readAvatar, readId, readName, readPosition, WORK_READ_COST } from '../work/read-contract.ts';
+import { discoveryRating } from '../discovery/contract.ts';
 import { AGENT_HANDLE_PATTERN } from '../agent/handle.ts';
 import { VANITY_HANDLE_PATTERN } from '../agent/vanity.ts';
 
@@ -24,6 +25,9 @@ export const agentProfile = t.Object({ profile: t.Literal('agent-read-v1'), id: 
     redirect: t.Boolean(), canonical: t.String() })) });
 export const shelfWork = t.Object({ id: readId, title: readName, cover: readAvatar });
 export const creditedWork = t.Object({ ...shelfWork.properties,
+  types: t.Array(t.String(), { maxItems: 8 }), tagline: t.Nullable(readName),
+  completionStatus: t.Nullable(t.Union([t.Literal('ongoing'), t.Literal('completed'), t.Literal('hiatus')])),
+  rating: t.Nullable(discoveryRating),
   attribution: t.Array(t.Object({ credit: readId, role: creditRole }), { maxItems: 3 }) });
 export const shelfCollection = t.Object({ id: readId, revision: readId, name: t.String({ maxLength: 300 }),
   kind: t.Union([t.Literal('static'), t.Literal('captured')]), disclosure: t.Literal('public'),
@@ -39,7 +43,8 @@ export const libraryRating = t.Object({ id: readId, revision: readId, work: t.Nu
 
 /** Shared metered graph envelope. Agent reads use 3 graph calls and one Media
  * avatar slot probe; collections
- * use 5; Work pages use ≤8 including bounded attribution hydration. Library hydration
+ * use 5; Work pages use ≤8 plus at most one serial batch, one type batch and
+ * 20 bounded standing rating reads when a Context is selected. Library hydration
  * is O(P), P≤20, with two summary batches and final authority checks. SQL uses
  * five-second statements. Relation ordering may scan/sort D heads (O(D log D));
  * LIMIT bounds output, not native execution cost. No corpus-scale claim. */

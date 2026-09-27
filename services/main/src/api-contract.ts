@@ -1,4 +1,6 @@
 import { t } from 'elysia';
+import { discoveryCredit, discoveryRating } from './modules/discovery/contract.ts';
+import { readAvatar, readName } from './modules/work/read-contract.ts';
 
 export const sourcePosition = t.Object({ datasetId: t.Literal('product'), dataEpoch: t.String(),
   sequence: t.String({ pattern: '^[0-9]+$' }) });
@@ -85,6 +87,11 @@ const phraseMatch = t.Object({
   matchUnit: t.String(), work: t.String(), mainVersion: t.String(),
   contribution: t.String(), revision: t.String(), selection: t.String(),
   language: t.String(), score: t.Number(), types: t.Array(t.String(), { maxItems: 3 }),
+  title: t.Optional(readName), cover: t.Optional(readAvatar),
+  primaryCredits: t.Optional(t.Array(discoveryCredit, { maxItems: 3 })),
+  rating: t.Optional(t.Nullable(discoveryRating)), tagline: t.Optional(t.Nullable(readName)),
+  completionStatus: t.Optional(t.Nullable(t.Union([t.Literal('ongoing'),
+    t.Literal('completed'), t.Literal('hiatus')]))),
   chapterCount: t.Optional(t.Nullable(t.Integer({ minimum: 0 }))),
   wordCount: t.Optional(t.Nullable(t.Integer({ minimum: 0 }))),
   lastUpdatedAt: t.Optional(t.Nullable(t.String({ format: 'date-time' }))),

@@ -35,14 +35,19 @@ test('Discovery GET and generation APIs expose concrete types to a web-style tre
     const mean: number | undefined = page.data?.items[0]?.rating?.mean;
     const tagName: string | undefined = page.data?.items[0]?.classifications[0]?.name.value;
     const termName: string | undefined = page.data?.matchedTerm?.name.value;
-    const creditKey: string | undefined = page.data?.items[0]?.primaryCredits[0]?.key;
+    const creditKey: string | null | undefined = page.data?.items[0]?.primaryCredits[0]?.key;
+    const creditName: string | null | undefined = page.data?.items[0]?.primaryCredits[0]?.displayName;
+    const popular = await client.v1.discovery['popular-terms'].get({ query: { scope: 'realm', realm: id,
+      language: 'en', limit: 10 } });
+    const popularCount: number | undefined = popular.data?.items[0]?.workCount;
     const contexts = await client.v1['rating-contexts'].get({ query: { scope: 'realm', realm: id } });
     const question: string | undefined = contexts.data?.items[0]?.question;
     const scale: 5 | 10 | undefined = contexts.data?.items[0]?.scale.max;
     const build = await client.v1.discovery['generation-builds'].post({ profile: 'discovery-generation-build-v1',
       actingSubject: id, basis: { scope: 'global', context: null, realm: null } });
     const generation: string | undefined = build.data?.generation;
-    return { count, source, mean, generation, tagName, termName, creditKey, question, scale };
+    return { count, source, mean, generation, tagName, termName, creditKey, creditName,
+      popularCount, question, scale };
   };
   expect(consume).toBeFunction();
 });

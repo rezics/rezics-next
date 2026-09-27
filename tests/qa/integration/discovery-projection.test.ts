@@ -175,6 +175,18 @@ test('Discovery projection: native scoped reads, durable builds, disclosure, cur
     expect(translated.matchedTerm).toMatchObject({ sense: term.sense, name: { value: 'Aventure', language: 'fr' } });
     expect(translated.items[0]?.classifications[0]?.name).toMatchObject({ value: 'Aventure', basis: 'requested' });
     expect(translated.items[0]?.primaryCredits).toEqual([]);
+    const popular = (params: Record<string, string> = {}) =>
+      call(`/v1/discovery/popular-terms?${new URLSearchParams(params)}`);
+    const globalTerms = await json<{ items: { sense: string; name: { value: string; language: string };
+      workCount: number }[] }>(await popular({ language: 'fr' }));
+    expect(globalTerms.items).toMatchObject([{ sense: term.sense, name: { value: 'Aventure', language: 'fr' },
+      workCount: 2 }]);
+    const realmTerms = await json<typeof globalTerms>(await popular({ scope: 'realm', realm: realm.realm,
+      context: local.context }));
+    expect(realmTerms.items).toMatchObject([{ sense: term.sense, workCount: 1 }]);
+    expect((await popular({ scope: 'realm' })).status).toBe(400);
+    expect((await popular({ scope: 'realm', realm: uuid() })).status).toBe(404);
+    expect((await popular({ limit: '21' })).status).toBe(400);
     expect((await json<Page>(await get({ term: uuid() }))).matches).toEqual({ value: 0, kind: 'exact' });
     const beforeReads = stack.fuseki.queries;
     const ranked = await json<Page>(await get({ sort: 'top-rated', context: global.context }));

@@ -26,6 +26,7 @@ import { checkJudgmentProtection } from '../modules/judgment/protection.ts';
 import { PublicQueryBudgetExceeded, PublicQueryUnavailable } from '../modules/work/search-budget.ts';
 import { decoratePhraseRelation } from '../modules/work/search-facets.ts';
 import { enrichSerialSearch } from '../modules/work/summary-serial.ts';
+import { enrichSearchCardPage } from '../modules/search/result-cards.ts';
 import { problemResult, publicPhrasePageRequest, publicPhrasePageResult, publicQueryResult,
   unsupportedPublicSearchSelectors, workTypeFilters } from '../api-contract.ts';
 import type { MainWorkDependencies } from './dependencies.ts';
@@ -437,7 +438,8 @@ export function searchRoutes(fuseki: FusekiClient, work: SearchRouteDependencies
             ratingCriterion: relation.ratingCriterion,
             ratingPopulation: relation.ratingPopulation };
         }, undefined, diagnostics);
-        return Response.json(await enrichSerialSearch(page, work.serialStats),
+        return Response.json(page.resultGrain === 'mainVersion'
+          ? await enrichSearchCardPage(work, request, page) : await enrichSerialSearch(page, work.serialStats),
           { headers: { 'cache-control': 'no-store' } });
       } catch (error) {
         if (error instanceof SearchContinuationRestart) {

@@ -2,10 +2,12 @@ import { AccountAssertionDenied } from '../account/verify-assertion.ts';
 import { decodeReadCursor, encodeReadCursor, pageResult, WorkReadInvalid, WorkReadLimit, WorkReadUnavailable,
   type WorkReadSession } from '../work/read-session.ts';
 import type { Static } from 'typebox';
-import { discoveryItem, type DiscoveryQuery, type OwnedDiscoveryBasis, type DiscoveryPayload } from './contract.ts';
+import { DISCOVERY_COST, discoveryItem, type DiscoveryCredit, type DiscoveryQuery, type OwnedDiscoveryBasis,
+  type DiscoveryPayload, type PopularTermsQuery } from './contract.ts';
 import { MAX_SUMMARY_BATCH, type ResourceSummary } from '../media/summary.ts';
 import { admitDiscoveryBasis } from './source.ts';
 import { readSerialSummaries } from '../work/summary-serial.ts';
+import { namedDiscoveryCredits } from './credits.ts';
 import type { DiscoveryProjection } from './store.ts';
 
 export async function readDiscovery(session: WorkReadSession, projection: DiscoveryProjection, query: DiscoveryQuery) {
@@ -42,6 +44,8 @@ export async function readDiscovery(session: WorkReadSession, projection: Discov
   const serial = await readSerialSummaries(session, ids.filter((id, index) =>
     summaries[index]?.status === 'available' && summaries[index]?.disclosure === 'public'
     && summaries[index]?.type === 'work'));
+  const creditNames = await namedDiscoveryCredits(session,
+    page.flatMap(row => row.payload.primaryCredits ?? []));
   const concepts = [...new Set(page.flatMap(row => [
     ...(row.payload.classifications ?? []).map(tag => tag.concept),
     ...(row.payload.classification ? [row.payload.classification.concept] : []),
@@ -70,7 +74,11 @@ export async function readDiscovery(session: WorkReadSession, projection: Discov
     return [{ id: row.work, revision: payload.revision, mainVersion: payload.mainVersion,
       types: payload.types, title: summary.name, cover: summary.avatar, rating: payload.rating,
       ...serial.get(row.work)!,
-      primaryCredits: payload.primaryCredits ?? [],
+      primaryCredits: (payload.primaryCredits ?? []).flatMap((credit): DiscoveryCredit[] => {
+        if (credit.participantKind === 'external-reference') return [credit];
+        const name = creditNames.get(credit.agent);
+        return name ? [{ ...credit, ...name }] : [];
+      }),
       classifications: (payload.classifications ?? []).flatMap(tag => { const item = named(tag); return item ? [item] : []; }),
       match: { publication: 'public-main' as const, type: query.type ?? null, classification } }];
   });
@@ -84,4 +92,26 @@ export async function readDiscovery(session: WorkReadSession, projection: Discov
     scope: { kind: basis.scope, realm: basis.realm }, context: basis.context,
     matchedTerm: query.term ? items[0]?.match.classification ?? null : null,
     ...pageResult(session, items, next), matches: { value: seen, kind: next ? 'lower-bound' as const : 'exact' as const } };
+}
+
+/** The build caches Work counts by accepted Sense; this read seeks at most 20
+ * rows and names their current Concepts in the requested language. */
+export async function readPopularTerms(session: WorkReadSession, projection: DiscoveryProjection,
+  query: PopularTermsQuery) {
+  const basis: OwnedDiscoveryBasis = { scope: query.scope ?? 'global', realm: query.realm ?? null,
+    context: query.context ?? null, owner: null };
+  await admitDiscoveryBasis(session, basis);
+  const active = await projection.active(basis, session.position);
+  const rows = await projection.popular(active, query.limit ?? DISCOVERY_COST.pageSize);
+  const summaries = await session.summaries(rows.map(row => row.concept));
+  const items = rows.flatMap((row, index) => {
+    const summary = summaries[index];
+    if (summary?.status !== 'available' || summary.type !== 'concept') return [];
+    const count = Number(row.work_count);
+    if (!Number.isSafeInteger(count) || count < 1) throw new WorkReadUnavailable('Popular term count is invalid');
+    return [{ sense: row.term, concept: row.concept, name: summary.name, workCount: count }];
+  });
+  await projection.active(basis, session.position, active.generation_id);
+  return { profile: 'discovery-popular-terms-v1' as const,
+    scope: { kind: basis.scope, realm: basis.realm }, sourcePosition: session.position, items };
 }

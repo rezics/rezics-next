@@ -64,10 +64,12 @@ export function profileRoutes(work: MainWorkDependencies) {
       try { return response(await workRead(work, request, query, s => readHandle(s, path.handle))); }
       catch (error) { return readError(error); }
     })
-    .get('/v1/agents/:id/works', { params, detail, query: t.Object(pageQuery, { additionalProperties: false }),
+    .get('/v1/agents/:id/works', { params, detail, query: t.Object({ ...pageQuery,
+      context: t.Optional(readId) }, { additionalProperties: false }),
       response: { 200: t.Object({ items: t.Array(creditedWork, { maxItems: 20 }), ...pageFields }), ...workReadProblems },
     }, async ({ request, params: path, query }) => {
-      try { return response(await workRead(work, request, query, s => readAgentWorks(s, `https://rezics.com/id/${path.id}`))); }
+      try { return response(await workRead(work, request, query,
+        s => readAgentWorks(s, `https://rezics.com/id/${path.id}`, query.context))); }
       catch (error) { return readError(error); }
     })
     .get('/v1/agents/:id/collections', { params, detail, query: t.Object(pageQuery, { additionalProperties: false }),

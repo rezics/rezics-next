@@ -163,6 +163,7 @@ export class DiscoveryProjection {
       if (item) {
         if (item.work !== result.after || item.types.length > 3
           || item.classifications.length > DISCOVERY_COST.termsPerWork
+          || new Set(item.classifications.map(term => term.sense)).size !== item.classifications.length
           || item.primaryCredits.length > DISCOVERY_COST.primaryCredits) {
           throw new RecommendationUnavailable('Discovery projection exceeds its fanout');
         }
@@ -175,6 +176,17 @@ export class DiscoveryProjection {
           SELECT $1,$2,e.type,e.term,$3,$4,$5,e.payload
           FROM jsonb_to_recordset($6::jsonb) e(type text, term text, payload jsonb)`,
         [id, item.work, item.recentOrder, item.rating?.count ?? 0, item.rating?.sum ?? 0, JSON.stringify(entries)]);
+        if (item.classifications.length) {
+          const counts = await client.query(`INSERT INTO access.discovery_term_count (generation_id, term, concept, work_count)
+            SELECT $1, t.term, t.concept, 1 FROM jsonb_to_recordset($2::jsonb) t(term text, concept text)
+            ON CONFLICT (generation_id, term) DO UPDATE
+              SET work_count = access.discovery_term_count.work_count + 1
+              WHERE access.discovery_term_count.concept = EXCLUDED.concept`,
+          [id, JSON.stringify(item.classifications.map(({ sense, concept }) => ({ term: sense, concept })))]);
+          if (counts.rowCount !== item.classifications.length) {
+            throw new RecommendationUnavailable('Discovery term meaning changed within a build');
+          }
+        }
       }
       await client.query(`UPDATE access.discovery_generation SET checkpoint = $2, complete = $3,
         work_count = work_count + $4 WHERE generation_id = $1`, [id, result.after, result.complete, item ? 1 : 0]);
@@ -248,6 +260,19 @@ export class DiscoveryProjection {
         throw new RecommendationUnavailable('Discovery page exceeds its byte budget');
       }
       return result;
+    });
+  }
+
+  async popular(row: DiscoveryGeneration, limit: number) {
+    return inAccess(this.pool, async client => {
+      await assertFence(client, row);
+      if (!Number.isInteger(limit) || limit < 1 || limit > DISCOVERY_COST.pageSize) {
+        throw new RecommendationUnavailable('Popular term page is out of bounds');
+      }
+      return (await client.query<{ term: string; concept: string; work_count: string }>(`
+        SELECT term, concept, work_count::text FROM access.discovery_term_count
+        WHERE generation_id = $1 ORDER BY work_count DESC, term COLLATE "C" LIMIT $2`,
+      [row.generation_id, limit])).rows;
     });
   }
 }

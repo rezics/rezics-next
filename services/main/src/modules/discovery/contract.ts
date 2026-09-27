@@ -25,8 +25,16 @@ export const classificationReason = t.Object({ sense: readId, concept: readId,
 export const discoveryTag = t.Object({ ...classificationReason.properties, name: readName });
 export const discoveryRating = t.Object({ context: readId, count: t.Integer({ minimum: 1, maximum: 100 }),
   sum: t.Integer(), mean: t.Number(), scale: t.Object({ min: t.Literal(1), max: t.Union([t.Literal(5), t.Literal(10)]) }) });
+export const discoveryCredit = t.Union([creditItem, t.Object({ id: readId, role: t.Literal('author'),
+  participantKind: t.Literal('agent'), provider: t.Null(), key: t.Null(), ordinal: t.Null(),
+  agent: readId, displayName: t.String({ minLength: 1, maxLength: 200 }),
+  handle: t.String({ minLength: 1, maxLength: 100 }) })]);
+export type DiscoveryCredit = Static<typeof discoveryCredit>;
+export type ProjectedCredit = Static<typeof creditItem> | {
+  id: string; role: 'author'; participantKind: 'agent'; provider: null; key: null; ordinal: null;
+  agent: string; displayName: null; handle: null };
 export const discoveryItem = t.Object({ ...workCard.properties,
-  primaryCredits: t.Array(creditItem, { maxItems: DISCOVERY_COST.primaryCredits }),
+  primaryCredits: t.Array(discoveryCredit, { maxItems: DISCOVERY_COST.primaryCredits }),
   classifications: t.Array(discoveryTag, { maxItems: DISCOVERY_COST.cardTags }),
   rating: t.Nullable(discoveryRating), match: t.Object({ publication: t.Literal('public-main'),
     type: t.Nullable(t.String()), classification: t.Nullable(discoveryTag) }) });
@@ -36,11 +44,20 @@ export const discoveryPage = t.Object({ profile: t.Literal('discovery-works-v1')
   items: t.Array(discoveryItem, { maxItems: DISCOVERY_COST.pageSize }),
   ...pageFields, matches: t.Object({ value: t.Integer({ minimum: 0 }),
     kind: t.Union([t.Literal('exact'), t.Literal('lower-bound')]) }) });
+export const popularTermsQuery = t.Object({ language: pageQuery.language,
+  scope: t.Optional(t.Union([t.Literal('global'), t.Literal('realm')])), realm: t.Optional(readId),
+  context: t.Optional(readId),
+  limit: pageQuery.limit }, { additionalProperties: false });
+export type PopularTermsQuery = Static<typeof popularTermsQuery>;
+export const popularTermsPage = t.Object({ profile: t.Literal('discovery-popular-terms-v1'),
+  scope: readScope, sourcePosition: t.Object({ dataEpoch: t.String(), sequence: t.String() }),
+  items: t.Array(t.Object({ sense: readId, concept: readId, name: readName,
+    workCount: t.Integer({ minimum: 1 }) }), { maxItems: DISCOVERY_COST.pageSize }) });
 export interface ProjectedWork { work: string; revision: string; mainVersion: string; types: string[];
   recentOrder: string; rating: Static<typeof discoveryRating> | null;
-  primaryCredits: Static<typeof creditItem>[];
+  primaryCredits: ProjectedCredit[];
   classifications: Static<typeof classificationReason>[] }
 export interface DiscoveryPayload { revision: string; mainVersion: string; types: string[];
-  primaryCredits: Static<typeof creditItem>[]; classifications: Static<typeof classificationReason>[];
+  primaryCredits: ProjectedCredit[]; classifications: Static<typeof classificationReason>[];
   rating: Static<typeof discoveryRating> | null; classification: Static<typeof classificationReason> | null }
 export interface DiscoveryRow { work: string; order_key: string; payload: DiscoveryPayload }

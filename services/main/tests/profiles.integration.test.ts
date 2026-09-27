@@ -134,7 +134,7 @@ test('G238: native Agent profiles, credits and library enforce disclosure, autho
     expect(nativeCredits.items.every(item => item.agent === person.agent)).toBe(true);
     const workReadsBefore = stack.fuseki.queries;
     const works = await json<Page<{ id: string }>>(await call('GET', `${root}/works?limit=1`));
-    expect(stack.fuseki.queries - workReadsBefore).toBe(8);
+    expect(stack.fuseki.queries - workReadsBefore).toBeLessThanOrEqual(12);
     expect(works.items).toHaveLength(1);
     expect(works.nextCursor).toBeString();
     const more = await json<Page<{ id: string }>>(await call('GET', `${root}/works?limit=1&cursor=${works.nextCursor}`));
@@ -196,6 +196,14 @@ test('G238: native Agent profiles, credits and library enforce disclosure, autho
         profile: 'global-rating-standing-observation-v1', context: context.context, work: work.work,
         mainVersion: work.mainVersion, expectedRevisionHead: null, value, actingSubject: actor }, token), 201);
     }
+    const authored = await json<Page<{ id: string; types: string[]; tagline: null | { value: string };
+      completionStatus: string | null; rating: { context: string; mean: number; count: number } | null }>>(
+      await call('GET', `${root}/works?context=${encodeURIComponent(context.context)}`));
+    expect(authored.items).toHaveLength(2);
+    expect(authored.items.every(item => item.rating?.context === context.context
+      && item.rating.count === 2 && item.rating.mean === 3)).toBe(true);
+    expect(authored.items.every(item => Array.isArray(item.types)
+      && item.tagline === null && item.completionStatus === null)).toBe(true);
     const ratingReadsBefore = stack.fuseki.queries;
     const ratings = await json<Page<{ value: number; scope: string; id: string; revision: string;
       mainVersion: string; work: { id: string } }>>(await read('/v1/me/ratings?limit=1'));

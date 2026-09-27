@@ -30,6 +30,7 @@ export class DiscoveryRefreshStore {
         SELECT generation_id, work, work_type, term FROM access.discovery_entry WHERE generation_id = $1
         ORDER BY work, work_type, term LIMIT $2)`, [row.generation_id, DISCOVERY_REFRESH_COST.purgeEntries]);
       if ((deleted.rowCount ?? 0) < DISCOVERY_REFRESH_COST.purgeEntries) {
+        await client.query('DELETE FROM access.discovery_term_count WHERE generation_id = $1', [row.generation_id]);
         await client.query('DELETE FROM access.discovery_retirement WHERE generation_id = $1', [row.generation_id]);
       }
       return deleted.rowCount ?? 0;
