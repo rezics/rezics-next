@@ -26,6 +26,7 @@ test('RECIPE01/RECIPE02/RECIPE03: recipe Structure retains duplicate lines, scal
       [`work:edit:${work.work}`]);
     expect((await f.call('POST', '/v1/recipes', createBody, `recipe-${randomUUID()}`)).status).toBe(403);
     await f.grant(`work:edit:${work.work}`, 'recipe.edit');
+    await f.grant(`work:edit:${work.work}`, 'work.edit');
     await f.grant(`work:read:${work.work}`, 'work.read');
     const denied = await f.call('POST', '/v1/recipes', { owner: work.work,
       mainVersion: work.mainVersion, actingSubject: f.actor }, `recipe-${randomUUID()}`, f.account.noScope);

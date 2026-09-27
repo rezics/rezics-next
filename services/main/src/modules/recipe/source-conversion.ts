@@ -92,7 +92,8 @@ export class RecipeSourceConversionStore {
       reason?: 'undeclared-field' }> } {
     if (observation.retention !== 'retained' || !observation.rawBytesBase64
       || !observation.byteDigest || observation.coverage.scope !== 'complete-recipe'
-      || !observation.coverage.complete || !/^application\/json(?:;|$)/i.test(observation.mediaType)) {
+      || !observation.coverage.complete
+      || !/^application\/(?:json|ld\+json)(?:;|$)/i.test(observation.mediaType)) {
       throw new RecipeSourceConversionInvalid('complete retained JSON Recipe source is required');
     }
     const bytes = Buffer.from(observation.rawBytesBase64, 'base64');

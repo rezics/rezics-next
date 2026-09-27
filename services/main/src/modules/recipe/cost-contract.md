@@ -37,7 +37,7 @@ write/read, denied admission, idempotent replay, stale idempotency conflict,
 concurrent head conflict, and source-backed import. It does not establish a
 physical I/O bound or nutrition-data quality.
 
-Complete retained JSON Recipe import registers a sealed two-field Source mapping
+Complete retained JSON or JSON-LD Recipe import registers a sealed two-field Source mapping
 once per provider and namespace and one immutable conversion per observation.
 The conversion inventories at most 128 top-level fields. At most 128 exact text
 children can be attached through Source's field-support command, each resolving

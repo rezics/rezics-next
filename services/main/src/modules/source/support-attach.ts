@@ -85,7 +85,7 @@ export function checkedFieldEvidence(row: EvidenceRow | undefined, input: Pick<A
   'slot' | 'grain' | 'sourceField' | 'sourcePointer' | 'sourceOccurrence' | 'occurrence'>):
   { digest: string; mapping: string } {
   if (!row || row.retention !== 'retained' || !row.raw_bytes || !row.byte_digest
-    || !row.coverage.complete || !/^application\/json(?:;|$)/i.test(row.media_type)
+    || !row.coverage.complete || !/^application\/(?:json|ld\+json)(?:;|$)/i.test(row.media_type)
     || hash(row.raw_bytes) !== row.byte_digest || row.source_digest !== row.byte_digest
     || row.provider !== row.mapping_provider || row.namespace !== row.mapping_namespace
     || row.mapping_grain !== input.grain || row.native_target !== input.slot

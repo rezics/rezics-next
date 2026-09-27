@@ -29,10 +29,11 @@ test('RECIPE06: confirmed source withdrawal leaves independent support on import
       '/v1/recipes', { owner: work.work, mainVersion: work.mainVersion, actingSubject: h.actor },
       `recipe-${randomUUID()}`), 201);
     const recipePath = `/v1/recipes/${shortId(created.structure)}`;
-    const intake = async (ingredients: unknown[], externalId: string, instructions?: unknown[]) => h.json<{
+    const intake = async (ingredients: unknown[], externalId: string, instructions?: unknown[],
+      mediaType = 'application/json') => h.json<{
       observation: { observation: string; record: string } }>(await h.call('POST',
       '/v1/sources/intakes', { profile: 'source-manual-intake-v1', provider: 'recipe-fixture',
-        namespace: 'recipe', externalId, sourceRevision: '1', mediaType: 'application/json',
+        namespace: 'recipe', externalId, sourceRevision: '1', mediaType,
         retention: 'retained', rawBytesBase64: Buffer.from(JSON.stringify({
           recipeIngredient: ingredients, ...(instructions ? { recipeInstructions: instructions } : {}),
         })).toString('base64'),
@@ -40,7 +41,7 @@ test('RECIPE06: confirmed source withdrawal leaves independent support on import
         rightsEvidence: { basis: 'original', note: 'Fixture author confirmed these lines' },
       }, `recipe-intake-${randomUUID()}`), 201);
     const a = await intake(['salt', 'pepper'], `a-${randomUUID()}`,
-      [{ '@type': 'HowToStep', text: 'Mix the salt.' }]);
+      [{ '@type': 'HowToStep', text: 'Mix the salt.' }], 'application/ld+json');
     const importA = { sourceObservation: a.observation.observation,
       expectedHead: created.revision, actingSubject: h.actor };
     const importKey = `recipe-import-${randomUUID()}`;

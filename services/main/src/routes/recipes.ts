@@ -365,7 +365,7 @@ export function recipeRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
         }
         const structure = `https://rezics.com/id/${params.id}`;
         const candidates = recipeSourceSupportCandidates(source, parsed);
-        const bindSupport = /^application\/json(?:;|$)/i.test(observation.mediaType)
+        const bindSupport = /^application\/(?:json|ld\+json)(?:;|$)/i.test(observation.mediaType)
           && observation.coverage.complete && observation.coverage.scope === 'complete-recipe';
         let conversion: RecipeSourceConversion | undefined;
         let ownerWork: string | undefined;
