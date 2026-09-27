@@ -96,6 +96,7 @@ Exact direct pins from root and workspace manifests; `yarn.lock` resolves transi
 | @rezics/account | workspace:* | apps/accounts |
 | @rezics/main | workspace:* | apps/web |
 | @rezics/ui | workspace:* | apps/accounts, apps/web |
+| @rezics/zone-sdk | workspace:* | apps/web |
 | @scalar/types | 0.18.3 | services/account, services/main |
 | @storybook/addon-a11y | 11.0.0-alpha.1 | apps/accounts, apps/web |
 | @storybook/addon-mcp | 11.0.0-alpha.1 | apps/web |
@@ -107,7 +108,7 @@ Exact direct pins from root and workspace manifests; `yarn.lock` resolves transi
 | @types/node | 26.6.2 | apphost, apps/accounts, apps/web |
 | @types/nodemailer | 8.0.2 | services/account |
 | @types/pg | 8.23.1 | services/account, services/content, services/main |
-| @types/react | 19.2.18 | apps/accounts, apps/web, packages/ui |
+| @types/react | 19.2.18 | apps/accounts, apps/web, packages/ui, packages/zone-sdk |
 | @types/react-dom | 19.2.7 | apps/accounts, apps/web, packages/ui |
 | @vinext/cloudflare | 1.0.0-beta.9 | apps/web |
 | @vitejs/plugin-react | 6.1.1 | apps/accounts, apps/web |
@@ -137,7 +138,7 @@ Exact direct pins from root and workspace manifests; `yarn.lock` resolves transi
 | oxlint-tsgolint | 7.0.2003 | . |
 | pg | 8.23.0 | services/account, services/content, services/main |
 | playwright | 1.63.0 | apps/accounts, apps/web |
-| react | 19.3.0 | apps/accounts, apps/web, packages/ui |
+| react | 19.3.0 | apps/accounts, apps/web, packages/ui, packages/zone-sdk |
 | react-dom | 19.3.0 | apps/accounts, apps/web, packages/ui |
 | react-is | 19.3.0 | packages/ui |
 | react-server-dom-webpack | 19.3.0 | apps/accounts, apps/web |
@@ -149,7 +150,7 @@ Exact direct pins from root and workspace manifests; `yarn.lock` resolves transi
 | tsx | 4.23.13 | apphost |
 | tw-animate-css | 1.4.0 | packages/ui |
 | typebox | 1.3.34 | packages/model, services/account, services/main |
-| typescript | 7.0.2 | apphost, apps/accounts, apps/web, packages/model, packages/ui, services/account, services/content, services/main |
+| typescript | 7.0.2 | apphost, apps/accounts, apps/web, packages/model, packages/ui, packages/zone-sdk, services/account, services/content, services/main |
 | vinext | 1.0.0-beta.11 | apps/accounts, apps/web |
 | vite | 8.3.0 | apps/accounts, apps/web |
 | vitest | 5.0.2 | apps/accounts, apps/web |

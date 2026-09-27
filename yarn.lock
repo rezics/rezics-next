@@ -2982,6 +2982,7 @@ __metadata:
     "@fontsource-variable/source-serif-4": "npm:5.3.0"
     "@rezics/main": "workspace:*"
     "@rezics/ui": "workspace:*"
+    "@rezics/zone-sdk": "workspace:*"
     "@storybook/addon-a11y": "npm:11.0.0-alpha.1"
     "@storybook/addon-mcp": "npm:11.0.0-alpha.1"
     "@storybook/addon-vitest": "npm:11.0.0-alpha.1"
@@ -3013,6 +3014,18 @@ __metadata:
     vitest: "npm:5.0.2"
     webpack: "npm:5.110.3"
     wrangler: "npm:4.137.0"
+  languageName: unknown
+  linkType: soft
+
+"@rezics/zone-sdk@workspace:*, @rezics/zone-sdk@workspace:packages/zone-sdk":
+  version: 0.0.0-use.local
+  resolution: "@rezics/zone-sdk@workspace:packages/zone-sdk"
+  dependencies:
+    "@types/react": "npm:19.2.18"
+    react: "npm:19.3.0"
+    typescript: "npm:7.0.2"
+  peerDependencies:
+    react: 19.3.0
   languageName: unknown
   linkType: soft
 
