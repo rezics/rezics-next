@@ -10,7 +10,7 @@ import {
 } from 'lucide-react';
 import React from 'react';
 import { expect, fn, screen, userEvent, waitFor, within } from 'storybook/test';
-import { settled, withTheme } from '../stories/support.tsx';
+import { dismissed, settled, withTheme } from '../stories/support.tsx';
 import { Button } from './button.tsx';
 import {
   Menu,
@@ -142,7 +142,7 @@ export const SelectWithKeyboard: Story = {
       ),
     );
     await userEvent.keyboard('{Enter}');
-    await waitFor(() => expect(screen.queryByRole('menu')).not.toBeInTheDocument());
+    await dismissed('menu');
     await expect(args.onSelect).toHaveBeenCalledWith({ value: 'save' });
   },
 };
@@ -152,7 +152,7 @@ export const CloseWithEscape: Story = {
   async play({ canvasElement }) {
     await openMenu(canvasElement, 'Post actions');
     await userEvent.keyboard('{Escape}');
-    await waitFor(() => expect(screen.queryByRole('menu')).not.toBeInTheDocument());
+    await dismissed('menu');
     await expect(within(canvasElement).getByRole('button', { name: 'Post actions' })).toHaveFocus();
   },
 };

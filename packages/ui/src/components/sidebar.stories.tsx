@@ -9,8 +9,8 @@ import {
   ShieldIcon,
   UsersIcon,
 } from 'lucide-react';
-import { expect, screen, userEvent, waitFor, within } from 'storybook/test';
-import { settled, withTheme } from '../stories/support.tsx';
+import { expect, screen, userEvent, within } from 'storybook/test';
+import { dismissed, settled, withTheme } from '../stories/support.tsx';
 import { Avatar, AvatarFallback } from './avatar.tsx';
 import {
   Sidebar,
@@ -235,7 +235,7 @@ export const Toggle: Story = {
     if (isPhone()) {
       await openIfPhone(canvasElement);
       await userEvent.keyboard('{Escape}');
-      await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+      await dismissed('dialog');
       return;
     }
     const sidebar = canvasElement.querySelector('[data-slot=sidebar]');

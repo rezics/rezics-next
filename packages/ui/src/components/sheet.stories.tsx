@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { expect, screen, userEvent, waitFor, within } from 'storybook/test';
-import { settled, withTheme } from '../stories/support.tsx';
+import { expect, screen, userEvent, within } from 'storybook/test';
+import { dismissed, settled, withTheme } from '../stories/support.tsx';
 import { Button } from './button.tsx';
 import {
   Sheet,
@@ -109,7 +109,7 @@ export const CloseWithEscape: Story = {
   async play({ canvasElement }) {
     await openSheet(canvasElement);
     await userEvent.keyboard('{Escape}');
-    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    await dismissed('dialog');
     await expect(
       within(canvasElement).getByRole('button', { name: 'Revision history' }),
     ).toHaveFocus();

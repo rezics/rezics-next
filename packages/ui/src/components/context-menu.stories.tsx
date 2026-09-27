@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { expect, fireEvent, fn, screen, userEvent, waitFor, within } from 'storybook/test';
-import { settled, withTheme } from '../stories/support.tsx';
+import { expect, fireEvent, fn, screen, userEvent, within } from 'storybook/test';
+import { dismissed, settled, withTheme } from '../stories/support.tsx';
 import {
   ContextMenu,
   ContextMenuContent,
@@ -88,7 +88,7 @@ export const Select: Story = {
     const menu = await openContextMenu(canvasElement, 'The Three-Body Problem');
     await userEvent.click(within(menu).getByRole('menuitem', { name: 'Rate…' }));
     await expect(args.onSelect).toHaveBeenCalledWith({ value: 'rate' });
-    await waitFor(() => expect(screen.queryByRole('menu')).not.toBeInTheDocument());
+    await dismissed('menu');
   },
 };
 
@@ -97,7 +97,7 @@ export const CloseWithEscape: Story = {
   async play({ canvasElement }) {
     await openContextMenu(canvasElement, 'The Three-Body Problem');
     await userEvent.keyboard('{Escape}');
-    await waitFor(() => expect(screen.queryByRole('menu')).not.toBeInTheDocument());
+    await dismissed('menu');
   },
 };
 

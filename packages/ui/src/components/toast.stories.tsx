@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, fn, screen, userEvent, waitFor, within } from 'storybook/test';
-import { settled, withTheme } from '../stories/support.tsx';
+import { dismissed, settled, withTheme } from '../stories/support.tsx';
 import { Button } from './button.tsx';
 import { Toaster, toast } from './toast.tsx';
 
@@ -135,7 +135,7 @@ export const Dismiss: Story = {
   async play({ canvasElement }) {
     const status = await showToasts(canvasElement, 'Mark as read');
     await userEvent.click(within(status).getByRole('button', { name: 'Close' }));
-    await waitFor(() => expect(screen.queryByRole('status')).not.toBeInTheDocument());
+    await dismissed('status');
   },
 };
 

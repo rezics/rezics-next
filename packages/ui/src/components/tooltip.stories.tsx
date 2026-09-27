@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { ArrowBigDownIcon, ArrowBigUpIcon, BookmarkIcon, Share2Icon } from 'lucide-react';
-import { expect, screen, userEvent, waitFor, within } from 'storybook/test';
-import { settled, withTheme } from '../stories/support.tsx';
+import { expect, screen, userEvent, within } from 'storybook/test';
+import { dismissed, settled, withTheme } from '../stories/support.tsx';
 import { Button } from './button.tsx';
 import { Tooltip, TooltipContent, TooltipTrigger } from './tooltip.tsx';
 
@@ -70,7 +70,7 @@ export const OpenOnFocus: Story = {
     await expect(within(canvasElement).getByRole('button', { name: 'Upvoted' })).toHaveFocus();
     await expect(await screen.findByRole('tooltip')).toHaveTextContent('Upvoted');
     await userEvent.keyboard('{Escape}');
-    await waitFor(() => expect(screen.queryByRole('tooltip')).not.toBeInTheDocument());
+    await dismissed('tooltip');
   },
 };
 
@@ -81,7 +81,7 @@ export const CloseOnLeave: Story = {
     await userEvent.hover(share);
     await screen.findByRole('tooltip');
     await userEvent.unhover(share);
-    await waitFor(() => expect(screen.queryByRole('tooltip')).not.toBeInTheDocument());
+    await dismissed('tooltip');
   },
 };
 

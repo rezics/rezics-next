@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { BookmarkIcon, CompassIcon, HomeIcon, InboxIcon, LibraryIcon } from 'lucide-react';
-import { expect, screen, userEvent, waitFor, within } from 'storybook/test';
-import { settled, withTheme } from '../stories/support.tsx';
+import { expect, screen, userEvent, within } from 'storybook/test';
+import { dismissed, settled, withTheme } from '../stories/support.tsx';
 import { Button } from './button.tsx';
 import {
   Drawer,
@@ -78,7 +78,7 @@ export const CloseWithEscape: Story = {
   async play({ canvasElement }) {
     await openDrawer(canvasElement);
     await userEvent.keyboard('{Escape}');
-    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    await dismissed('dialog');
   },
 };
 
@@ -87,7 +87,7 @@ export const ChooseShelf: Story = {
   async play({ canvasElement }) {
     const drawer = await openDrawer(canvasElement);
     await userEvent.click(within(drawer).getByRole('button', { name: 'Read' }));
-    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    await dismissed('dialog');
   },
 };
 
@@ -136,7 +136,7 @@ export const CloseWithButton: Story = {
   async play({ canvasElement }) {
     const drawer = await openDrawer(canvasElement, 'Menu');
     await userEvent.click(within(drawer).getByRole('button', { name: 'Close' }));
-    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    await dismissed('dialog');
   },
 };
 

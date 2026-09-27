@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { NotebookPenIcon, XIcon } from 'lucide-react';
 import { expect, screen, userEvent, waitFor, within } from 'storybook/test';
-import { settled, withTheme } from '../stories/support.tsx';
+import { dismissed, settled, withTheme } from '../stories/support.tsx';
 import { Button } from './button.tsx';
 import {
   FloatingPanel,
@@ -123,7 +123,7 @@ export const Close: Story = {
   async play({ canvasElement }) {
     const panel = await openPanel(canvasElement);
     await userEvent.click(within(panel).getByRole('button', { name: 'Close notes' }));
-    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    await dismissed('dialog');
   },
 };
 

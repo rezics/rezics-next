@@ -66,7 +66,9 @@ export const CloseOnLeave: Story = {
   async play({ canvasElement }) {
     await hoverMention(canvasElement, '@ye_wenjie');
     await userEvent.unhover(within(canvasElement).getByRole('link', { name: '@ye_wenjie' }));
-    await waitFor(() => expect(screen.queryByText(/412 ratings/)).not.toBeInTheDocument());
+    await waitFor(() => expect(screen.queryByText(/412 ratings/)).not.toBeInTheDocument(), {
+      timeout: 3000,
+    });
   },
 };
 

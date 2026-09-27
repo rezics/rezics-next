@@ -1,8 +1,8 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { InfoIcon } from 'lucide-react';
 import React from 'react';
-import { expect, screen, userEvent, waitFor, within } from 'storybook/test';
-import { settled, withTheme } from '../stories/support.tsx';
+import { expect, screen, userEvent, within } from 'storybook/test';
+import { dismissed, settled, withTheme } from '../stories/support.tsx';
 import { Button } from './button.tsx';
 import { ToggleTooltip, ToggleTooltipContent, ToggleTooltipTrigger } from './toggle-tooltip.tsx';
 
@@ -60,7 +60,7 @@ export const ToggleClosed: Story = {
     await userEvent.click(trigger(canvasElement));
     await settled(await screen.findByRole('dialog'));
     await userEvent.click(trigger(canvasElement));
-    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    await dismissed('dialog');
   },
 };
 
@@ -70,7 +70,7 @@ export const CloseWithEscape: Story = {
     await userEvent.click(trigger(canvasElement));
     await settled(await screen.findByRole('dialog'));
     await userEvent.keyboard('{Escape}');
-    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    await dismissed('dialog');
   },
 };
 
@@ -93,7 +93,7 @@ export const Controlled: Story = {
   async play({ canvasElement }) {
     await expect(await screen.findByRole('dialog')).toBeInTheDocument();
     await userEvent.click(within(canvasElement).getByRole('button', { name: 'Dismiss hint' }));
-    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    await dismissed('dialog');
   },
 };
 

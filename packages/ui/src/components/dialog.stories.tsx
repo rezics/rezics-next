@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, screen, userEvent, waitFor, within } from 'storybook/test';
-import { settled, withTheme } from '../stories/support.tsx';
+import { dismissed, settled, withTheme } from '../stories/support.tsx';
 import { Button } from './button.tsx';
 import {
   Dialog,
@@ -88,7 +88,7 @@ export const CloseWithKeyboard: Story = {
     await userEvent.tab();
     await expect(dialog).toContainElement(document.activeElement as HTMLElement);
     await userEvent.keyboard('{Escape}');
-    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    await dismissed('dialog');
     await waitFor(() => expect(trigger).toHaveFocus());
   },
 };
@@ -98,7 +98,7 @@ export const CloseWithButton: Story = {
   async play({ canvasElement }) {
     const dialog = await openDialog(canvasElement, 'New shelf');
     await userEvent.click(within(dialog).getByRole('button', { name: 'Close' }));
-    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    await dismissed('dialog');
   },
 };
 

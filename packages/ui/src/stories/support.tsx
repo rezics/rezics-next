@@ -1,5 +1,6 @@
 import type { Decorator } from '@storybook/react-vite';
 import React from 'react';
+import { expect, screen, waitFor } from 'storybook/test';
 import { cn } from '../utils.ts';
 
 /** Story parameters read by {@link withTheme}. */
@@ -71,3 +72,10 @@ export const settled = async <T extends Element>(element: T): Promise<T> => {
   await Promise.race([Promise.allSettled(finite.map((animation) => animation.finished)), cap]);
   return element;
 };
+
+/**
+ * Waits for the layer with this role to leave the document. Exit animations can outlast
+ * waitFor's one-second default when the whole suite runs in parallel.
+ */
+export const dismissed = (role: 'dialog' | 'alertdialog' | 'menu' | 'tooltip' | 'status') =>
+  waitFor(() => expect(screen.queryByRole(role)).not.toBeInTheDocument(), { timeout: 3000 });
