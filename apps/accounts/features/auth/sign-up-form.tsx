@@ -62,7 +62,7 @@ export function SignUpForm({ next, oauthQuery, carry = '' }: { next: string; oau
     <AuthHeading title={t.signUpTitle} subtitle={t.signUpSubtitle} />
     {failure ? <Alert role="alert" variant="destructive" className="mb-6">
       <AlertDescription>{failureMessage}</AlertDescription></Alert> : null}
-    <form noValidate onSubmit={submit} className="flex flex-col gap-5">
+    <form method="post" noValidate onSubmit={submit} className="flex flex-col gap-5">
       <NameField label={t.nameLabel} value={values.name} error={errors.name} autoFocus disabled={busy}
         onChange={change('name')} />
       <EmailField label={t.emailLabel} value={values.email} error={errors.email} autoComplete="email"

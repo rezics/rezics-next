@@ -107,7 +107,7 @@ export function SignInFlow({ next, oauthQuery, carry = '', reauthEmail, notice: 
           <Button type="submit" size="lg">{t.next}</Button>
         </div>
       </form>
-      : <form noValidate onSubmit={submitPassword} className="flex flex-col gap-6">
+      : <form method="post" noValidate onSubmit={submitPassword} className="flex flex-col gap-6">
         <input type="email" name="username" autoComplete="username" value={email} readOnly hidden />
         <PasswordField label={t.passwordLabel} value={password} autoComplete="current-password" autoFocus
           visibilityLabel={t.showPassword} error={passwordError} disabled={busy}

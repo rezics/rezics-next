@@ -93,7 +93,7 @@ export function AccountShell({ section, user, webOrigin, children }: { section?:
 /** Page heading used by every account section. */
 export function SectionHeading({ title, intro }: { title: string; intro?: string }) {
   return <header className="mb-6 md:mb-8">
-    <h1 className="font-heading text-3xl font-semibold tracking-tight md:text-[34px]">{title}</h1>
+    <h1 className="text-3xl font-semibold tracking-tight md:text-[34px]">{title}</h1>
     {intro ? <p className="mt-2 text-base text-muted-foreground">{intro}</p> : null}
   </header>;
 }
@@ -104,7 +104,7 @@ export function SettingsCard({ title, description, children, className }: { titl
   const id = `card-${title.replace(/\W+/g, '-').toLowerCase()}`;
   return <section aria-labelledby={id} className={cn('rounded-3xl border border-border/60 bg-card shadow-(--aura-shadow-card)', className)}>
     <header className="px-5 pt-5 pb-3 sm:px-6">
-      <h2 id={id} className="font-heading text-lg font-semibold">{title}</h2>
+      <h2 id={id} className="text-lg font-semibold">{title}</h2>
       {description ? <p className="mt-1 text-sm text-muted-foreground">{description}</p> : null}
     </header>
     <div className="divide-y divide-border/60">{children}</div>

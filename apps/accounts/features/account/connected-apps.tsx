@@ -58,7 +58,7 @@ export function ConnectedApps({ apps }: { apps: ConnectedApp[] }) {
       ? <section className="flex flex-col items-center gap-3 rounded-3xl border border-border/60 bg-card px-6 py-12 text-center shadow-(--aura-shadow-card)">
         <span className="grid size-12 place-items-center rounded-full bg-accent text-accent-foreground">
           <AppWindowIcon className="size-6" aria-hidden="true" /></span>
-        <h2 className="font-heading text-xl font-semibold">{t.appsEmptyTitle}</h2>
+        <h2 className="text-xl font-semibold">{t.appsEmptyTitle}</h2>
         <p className="max-w-md text-muted-foreground">{t.appsEmptyBody}</p>
       </section>
       : <ul className="flex flex-col gap-4">
@@ -69,7 +69,7 @@ export function ConnectedApps({ apps }: { apps: ConnectedApp[] }) {
               {app.logo ? <img src={app.logo} alt="" className="size-full object-cover" />
                 : <AppWindowIcon className="size-6" aria-hidden="true" />}</span>
             <div className="min-w-0 flex-1">
-              <h2 className="truncate font-heading text-lg font-semibold">{app.uri
+              <h2 className="truncate text-lg font-semibold">{app.uri
                 ? <a href={app.uri} target="_blank" rel="noreferrer" className="hover:underline">{label(app)}</a>
                 : label(app)}</h2>
               <p className="text-sm text-muted-foreground">{t.accessSince({ date: app.since })}</p>

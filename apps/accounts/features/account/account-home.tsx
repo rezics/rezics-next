@@ -26,7 +26,7 @@ function Check({ icon: Icon, tone, children }: { icon: LucideIcon; tone: 'ok' | 
 function HomeCard({ title, children, href, action }: { title: string; children: ReactNode; href: string;
   action: string }) {
   return <section className="flex flex-col rounded-3xl border border-border/60 bg-card p-6 shadow-(--aura-shadow-card)">
-    <h2 className="font-heading text-lg font-semibold">{title}</h2>
+    <h2 className="text-lg font-semibold">{title}</h2>
     <div className="mt-2 flex-1 text-muted-foreground">{children}</div>
     <div className="mt-5"><Button variant="soft" asChild><a href={href}>{action}</a></Button></div>
   </section>;
@@ -38,7 +38,7 @@ export function AccountHome({ summary }: { summary: HomeSummary }) {
   return <div className="flex flex-col gap-8">
     <header className="flex flex-col items-center gap-4 pt-2 text-center">
       <UserAvatar user={user} className="size-24 text-3xl" />
-      <h1 className="font-heading text-3xl font-semibold tracking-tight md:text-[34px]">
+      <h1 className="text-3xl font-semibold tracking-tight md:text-[34px]">
         {t.greeting({ name: user.name || user.email })}</h1>
       <p className="max-w-lg text-base text-muted-foreground">{t.homeIntro}</p>
     </header>

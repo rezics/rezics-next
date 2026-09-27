@@ -65,7 +65,7 @@ function PasswordForm({ onDone, onCancel }: { onDone(): void; onCancel(): void }
     setFailure(failureText(result.kind, common));
   }
 
-  return <form noValidate onSubmit={submit} className="flex flex-col gap-4 px-5 py-4 sm:px-6">
+  return <form method="post" noValidate onSubmit={submit} className="flex flex-col gap-4 px-5 py-4 sm:px-6">
     <input type="text" name="username" autoComplete="username" hidden readOnly />
     <PasswordField label={t.currentPassword} name="current-password" value={values.current}
       error={errors.current} autoComplete="current-password" visibilityLabel={showLabel} autoFocus

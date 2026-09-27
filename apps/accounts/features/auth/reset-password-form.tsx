@@ -50,7 +50,7 @@ export function ResetPasswordForm({ token }: { token?: string }) {
     <AuthHeading title={t.resetTitle} subtitle={t.resetBody} />
     {outcome ? <Alert role="alert" variant="destructive" className="mb-6"><AlertDescription>
       {outcome === 'rate-limited' ? t.tooManyAttempts : t.unavailable}</AlertDescription></Alert> : null}
-    <form noValidate onSubmit={submit} className="flex flex-col gap-5">
+    <form method="post" noValidate onSubmit={submit} className="flex flex-col gap-5">
       <PasswordField label={t.newPasswordLabel} value={password} error={errors.password} autoFocus
         autoComplete="new-password" visibilityLabel={t.showPassword} disabled={busy}
         description={t.passwordHint} onChange={value => { setPassword(value); setErrors({}); }} />

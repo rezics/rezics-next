@@ -12,7 +12,7 @@ export function AuthOutcome({ title, body, action, icon = 'mail' }: { title: str
   return <div role="status" className="flex flex-col gap-4">
     <span className="grid size-12 place-items-center rounded-full bg-accent text-accent-foreground">
       <Icon className="size-6" aria-hidden="true" /></span>
-    <h1 className="font-heading text-[28px] leading-tight font-semibold tracking-tight">{title}</h1>
+    <h1 className="text-[28px] leading-tight font-semibold tracking-tight">{title}</h1>
     <p className="text-base text-muted-foreground">{body}</p>
     {action ? <div className="mt-2 flex justify-end">{action}</div> : null}
   </div>;

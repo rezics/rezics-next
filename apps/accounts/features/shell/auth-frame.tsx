@@ -24,7 +24,7 @@ export function AuthFrame({ children }: { children: ReactNode }) {
 export function AuthHeading({ title, subtitle, children }: { title: string; subtitle?: ReactNode;
   children?: ReactNode }) {
   return <header className="mb-7">
-    <h1 className="font-heading text-[28px] leading-tight font-semibold tracking-tight">{title}</h1>
+    <h1 className="text-[28px] leading-tight font-semibold tracking-tight">{title}</h1>
     {subtitle ? <p className="mt-2 text-base text-muted-foreground">{subtitle}</p> : null}
     {children}
   </header>;

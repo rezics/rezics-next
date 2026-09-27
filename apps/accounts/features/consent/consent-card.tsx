@@ -48,7 +48,7 @@ export function ConsentCard({ app, user, scopes, oauthQuery }: { app: ConsentApp
       <span className="grid size-14 place-items-center overflow-hidden rounded-2xl border border-border/60 bg-accent text-accent-foreground">
         {app?.logo ? <img src={app.logo} alt="" className="size-full object-cover" />
           : <AppWindowIcon className="size-7" aria-hidden="true" />}</span>
-      <h1 className="font-heading text-[26px] leading-tight font-semibold tracking-tight">{t.title({ app: name })}</h1>
+      <h1 className="text-[26px] leading-tight font-semibold tracking-tight">{t.title({ app: name })}</h1>
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
         <span className="inline-flex max-w-full items-center gap-2 rounded-full border border-border/80 py-1 ps-1 pe-3 text-sm">
           <UserAvatar user={user} size="sm" />

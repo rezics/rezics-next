@@ -20,7 +20,7 @@ export function StatePanel({ icon, title, body, action, className, headingLevel 
   return <section className={cn('flex flex-col items-center gap-3 rounded-3xl border border-border/60 bg-card px-6 py-12 text-center shadow-(--aura-shadow-card)', className)}>
     <span className="grid size-12 place-items-center rounded-full bg-accent text-accent-foreground">
       <Icon className="size-6" aria-hidden="true" /></span>
-    <Heading className="font-heading text-xl font-semibold">{title}</Heading>
+    <Heading className="text-xl font-semibold">{title}</Heading>
     <p className="max-w-md text-muted-foreground">{body}</p>
     {action ? <div className="mt-2">{action}</div> : null}
   </section>;

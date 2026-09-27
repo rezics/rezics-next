@@ -1,5 +1,15 @@
+@import "@fontsource-variable/manrope";
 @import "@rezics/ui/styles.css";
 @source "../../../packages/ui/src";
 
 :root { color-scheme: light; }
 .dark { color-scheme: dark; }
+
+/* Rezics Aura's interface face, self-hosted so no third party sees Account
+ * visitors; Simplified Chinese falls back to the system's CJK faces. */
+body { font-family: "Manrope Variable", ui-sans-serif, system-ui, sans-serif; }
+html:lang(zh-CN) body {
+  font-family: "Manrope Variable", "PingFang SC", "Noto Sans CJK SC", "Noto Sans SC",
+    "Microsoft YaHei", sans-serif;
+  text-autospace: normal;
+}
