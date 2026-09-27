@@ -2,19 +2,11 @@
 
 ## Program authority
 
-The maintainer activated the backend-only Goal and authorized autonomous local
-implementation, qualification and coherent local commits. The
-[plan](README.md#current-state) names its current scope, status and slice
-ledger; the [Goal program](../goals/README.md#management-handover) is the
-manager's operating manual, including worker processes, claims and the
-maintainer's documentation-change rule.
-
-The root [goal specification](../../GOAL.md) supplies the retained implementation
-outcome and completion criteria. The 2026-09-26 activated scope is backend/API
-only; frontend and rendered QA are excluded, and UI consumes independently
-callable APIs.
-Keep scope, current slice, remaining work, blockers and evidence in the plan;
-the goal file remains the completion contract, not a second status ledger.
+The root [Goal](../../GOAL.md) states the current outcome. A running Goal's
+manager follows the [manager charter](../goals/manager.md), which gives it the
+maintainer's authority and standing directions, and runs workers through the
+[Goal program](../goals/README.md). This page records delivery practice from the
+backend phase for the manager to use or change.
 
 There is no old-system compatibility requirement for schemas, APIs, SDKs, IDs,
 URLs, data formats or deployment layouts. New-system integrity, live-source
@@ -57,42 +49,26 @@ system or manually log every turn.
 
 ## Delegation and worker lifecycle
 
-For the active Goal, one interactive Claude Code manager (Opus 5.5, `xhigh`)
-dispatches separate `claude -p` worker processes through
+During a Goal, the manager dispatches separate worker processes through
 `bun scripts/goal/goalctl.ts`, as the [Goal program](../goals/README.md#worker-processes)
-specifies. Workers follow the [worker protocol](../goals/worker.md). Outside the
-Goal, delegate only a complete, bounded deliverable whose benefit justifies its
-startup, review and integration cost.
+describes, and chooses each task's engine, model and effort from the need and
+the remaining usage ([charter](../goals/manager.md#resources)). Workers follow the
+[worker protocol](../goals/worker.md). Outside a Goal, delegate only a complete,
+bounded deliverable whose benefit justifies its startup, review and integration
+cost.
 
-- **Model and effort.** Every worker runs Claude Opus 5.5 (`claude-opus-5-5`) with
-  an effort pinned in its brief: `medium` by default; `high` for non-trivial
-  semantics after a template exists, cross-module consumers and failed-wave
-  repairs; `xhigh` for owner schemas, the first template of an operation family,
-  authority, transactions, erasure, recovery and owner reconciliation. Never
-  `max`. Escalate by resuming the same worker at a higher effort.
-- **Unit of work.** A brief closes a named set of cases, normally two to six,
-  following the phase order: owner schema, verified write/read API template,
+- **Unit of work.** A brief delivers a complete outcome: for the backend phase,
+  two to six cases following owner schema, verified write/read API template,
   then template-based bulk work. Small dependent repairs stay with the owning
   worker session instead of a new worker.
-- **Exclusive claims.** Each brief claims case IDs, path globs, migration
-  number ranges and shared slots. `goalctl` refuses a dispatch that overlaps an
-  unclosed task and rejects a merge that changed files outside the claim.
-- **Isolation.** Every writing worker has its own worktree under
-  `.temp/worktrees/` on a `goal/<id>` branch. The manager alone rebases,
-  fast-forwards `main`, runs wave QA and commits.
-- **Concurrency.** Up to 25 live workers and 8 concurrent QA stacks, limited
-  further by merge throughput and the paced [usage governor](../goals/README.md#capacity-and-usage):
-  dispatch nothing new while the burn rate projects 95% or more of the 5-hour
-  or 7-day window at its reset; at 95% used, only merge and test. Widen or narrow
-  from merged passing cases and rework, not from occupied slots.
-- **Lifecycle.** A worker returns one handoff (result, cases, commits, checks,
-  proposed tasks, blockers, next action) and exits. The manager waits on the
-  process in the background instead of polling. It changes a running worker's
-  instructions only by stopping it and resuming the same session; there is no
-  inbound messaging into running workers. A replacement starts only after the
-  previous process has exited.
-- **No recursion.** Workers do not start agents or other workers. Claude does
-  the research; Grok 4.7 may supplement X evidence as a read-only lookup.
+- **Exclusive claims and isolation.** Each brief claims case IDs, path globs,
+  migration ranges and shared slots, and each writing worker has its own
+  worktree. The manager alone rebases, fast-forwards `main`, runs wave QA and commits.
+- **Concurrency.** Widen or narrow from merged, verified results and rework, not
+  from occupied slots, within the [usage governor](../goals/README.md#capacity-and-usage).
+- **Lifecycle.** A worker returns one handoff and exits. The manager waits on the
+  process in the background, changes a worker's instructions only by stopping
+  and resuming it, and starts a replacement only after the previous process exited.
 
 A handoff is not verification. Merged source and recorded test evidence decide
 status. Long-running commands own their logs and completion; do not assign an

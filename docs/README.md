@@ -20,12 +20,11 @@ Development uses the [toolchain lock](development/toolchain.md) and the
 [executable test harness](testing/test-harness.md). Main and Account exist in part;
 the web client is pending.
 
-For sustained implementation, use the root [goal specification](../GOAL.md) and
-[task reading routes](plan/README.md#task-reading-routes). The maintainer activates
-the Goal explicitly; the plan retains slice status and qualification. The
-[Goal program](goals/README.md) is the manager's operating manual for Claude Code
-worker processes, claims and integration waves; workers follow the
-[worker protocol](goals/worker.md).
+For sustained implementation, use the root [Goal](../GOAL.md) and
+[task reading routes](plan/README.md#task-reading-routes). The maintainer starts
+a Goal explicitly. Its manager follows the [manager charter](goals/manager.md)
+and runs worker processes, claims and integration waves through the
+[Goal program](goals/README.md); workers follow the [worker protocol](goals/worker.md).
 
 1. [Product scope and capabilities](product/capabilities.md).
 2. [Architecture overview](architecture/overview.md) and [service boundaries](architecture/services.md).

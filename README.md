@@ -65,9 +65,8 @@ and the [qualification page](docs/plan/qualification.md) for results and remaini
 - [Build the first authenticated journey](docs/plan/README.md#fast-start-milestones):
   safe commands, a Work/Main Version, Realm classification and public search.
 - [Read the complete design](docs/README.md) and [selected architecture](docs/architecture/overview.md).
-- [Run the implementation goal](GOAL.md): target scope, continuation and completion
-  evidence for a maintainer-activated Claude Code manager and its
-  [worker program](docs/goals/README.md).
+- [Run the Goal](GOAL.md): the current outcome for a maintainer-started Claude Code
+  manager, its [charter](docs/goals/manager.md) and [worker program](docs/goals/README.md).
 - [Restore and rebuild indexes](docs/operations/recovery.md).
 - [Check documentation](docs/development/README.md): local links and document roles;
   these checks do not qualify runtime behavior.
