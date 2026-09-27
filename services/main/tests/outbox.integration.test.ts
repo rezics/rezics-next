@@ -39,7 +39,7 @@ test('SYS04/SYS05/SYS12 partial: retained RDF outbox and durable handoff', async
   const base = join(state, 'fuseki');
   mkdirSync(join(base, 'databases/rezics/tdb2'), { recursive: true });
   mkdirSync(join(base, 'databases/rezics/lucene'), { recursive: true });
-  copyFileSync(join(root, 'docs/operations/examples/fuseki-text.ttl'), join(base, 'fuseki-text.ttl'));
+  copyFileSync(join(root, 'infra/jena/fuseki-text-quickstart.ttl'), join(base, 'fuseki-text.ttl'));
   const port = await freePort();
   const log = openSync(join(state, 'fuseki.log'), 'w');
   const server = spawn(join(fusekiHome, 'fuseki-server'), [

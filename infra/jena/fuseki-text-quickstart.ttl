@@ -1,5 +1,5 @@
-# Graph-substrate example for Apache Jena/Fuseki 6.2.0.
-# Run from the private state directory described in ../installation.md.
+# Graph-substrate S0 fixture for Apache Jena/Fuseki 6.2.0.
+# Run from the private state directory described in docs/operations/installation.md.
 # Relative storage paths resolve against the process working directory.
 PREFIX fuseki: <http://jena.apache.org/fuseki#>
 PREFIX tdb2:   <http://jena.apache.org/2016/tdb#>

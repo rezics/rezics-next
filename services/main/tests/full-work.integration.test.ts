@@ -66,7 +66,7 @@ test('IAM01/IAM07/IAM10/SYS02/G3 partial: real Account to Access to Main HTTP to
   const base = join(state, 'fuseki');
   mkdirSync(join(base, 'databases/rezics/tdb2'), { recursive: true });
   mkdirSync(join(base, 'databases/rezics/lucene'), { recursive: true });
-  copyFileSync(join(root, 'docs/operations/examples/fuseki-text.ttl'), join(base, 'fuseki-text.ttl'));
+  copyFileSync(join(root, 'infra/jena/fuseki-text-quickstart.ttl'), join(base, 'fuseki-text.ttl'));
   const fusekiPort = await freePort();
   const fusekiLog = openSync(join(state, 'fuseki.log'), 'w');
   const fusekiProcess = spawn(join(fusekiHome, 'fuseki-server'), [

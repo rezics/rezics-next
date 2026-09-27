@@ -14,7 +14,7 @@ const GRAPH = 'urn:rezics:smoke';
 const PREFIXES = `PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
 PREFIX text: <http://jena.apache.org/text#>
 `;
-const QUICKSTART = 'docs/operations/examples/fuseki-text.ttl';
+const QUICKSTART = 'infra/jena/fuseki-text-quickstart.ttl';
 
 type Bindings = { [key: string]: { value: string; 'xml:lang'?: string } }[];
 

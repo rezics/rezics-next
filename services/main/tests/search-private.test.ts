@@ -17,7 +17,7 @@ test('SEARCH11 projection has a distinct private field, unit and no public body 
   expect(triples).toContain('Private');
   expect(triples).not.toContain('<https://rezics.com/vocab/searchBody>');
   for (const path of ['infra/jena/fuseki-text.ttl', 'infra/jena/fuseki-text-qa.ttl',
-    'infra/jena/fuseki-text-qa-raw.ttl', 'docs/operations/examples/fuseki-text.ttl']) {
+    'infra/jena/fuseki-text-qa-raw.ttl', 'infra/jena/fuseki-text-quickstart.ttl']) {
     const assembler = readFileSync(join(root, path), 'utf8');
     expect(assembler).toContain('text:field "body" ; text:predicate rv:searchBody');
     expect(assembler).toContain('text:field "privateBody" ; text:predicate rv:privateSearchBody');

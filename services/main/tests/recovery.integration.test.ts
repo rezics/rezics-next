@@ -135,7 +135,7 @@ test('OPS03/SYS13/BOOK04/IAM21 partial: real OAuth across isolated Account, Acce
   const contentRestoredPg = join(state, 'content', 'restored');
   mkdirSync(join(liveBase, 'databases/rezics/tdb2'), { recursive: true });
   mkdirSync(join(liveBase, 'databases/rezics/lucene'), { recursive: true });
-  copyFileSync(join(root, 'docs/operations/examples/fuseki-text.ttl'), join(liveBase, 'fuseki-text.ttl'));
+  copyFileSync(join(root, 'infra/jena/fuseki-text-quickstart.ttl'), join(liveBase, 'fuseki-text.ttl'));
   mkdirSync(join(state, 'restore'), { recursive: true });
   mkdirSync(join(state, 'saved-cut'), { recursive: true });
   const socketDirectory = join(root, '.temp', 'pg-sock');

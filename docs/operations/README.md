@@ -2,7 +2,7 @@
 
 Start with [the local installation guide](installation.md): pinned Compose
 services plus host Main and Account through root commands. Its separate S0
-substrate drill uses a versioned [raw-update example assembler](examples/fuseki-text.ttl)
+substrate drill uses a versioned [raw-update fixture](../../infra/jena/fuseki-text-quickstart.ttl)
 for Fuseki/TDB2 and jena-text/Lucene restart and restore checks. The product
 [assembler](../../infra/jena/fuseki-text.ttl) uses the guarded command endpoint.
 

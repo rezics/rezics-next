@@ -34,7 +34,7 @@ test('SYS02/SYS09/SYS10/SYS14 partial: guarded Work edit and exact retained hist
   const base = join(state, 'fuseki');
   mkdirSync(join(base, 'databases/rezics/tdb2'), { recursive: true });
   mkdirSync(join(base, 'databases/rezics/lucene'), { recursive: true });
-  copyFileSync(join(root, 'docs/operations/examples/fuseki-text.ttl'), join(base, 'fuseki-text.ttl'));
+  copyFileSync(join(root, 'infra/jena/fuseki-text-quickstart.ttl'), join(base, 'fuseki-text.ttl'));
   const port = await freePort();
   const log = openSync(join(state, 'fuseki.log'), 'w');
   const server = spawn(join(fusekiHome, 'fuseki-server'), [

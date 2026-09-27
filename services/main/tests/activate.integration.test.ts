@@ -53,7 +53,7 @@ test('IAM07/SYS02/SYS10/SYS14 partial: Work receipt and strong seal races', asyn
   const base = join(state, 'run');
   mkdirSync(join(base, 'databases/rezics/tdb2'), { recursive: true });
   mkdirSync(join(base, 'databases/rezics/lucene'), { recursive: true });
-  copyFileSync(join(root, 'docs/operations/examples/fuseki-text.ttl'), join(base, 'fuseki-text.ttl'));
+  copyFileSync(join(root, 'infra/jena/fuseki-text-quickstart.ttl'), join(base, 'fuseki-text.ttl'));
   const port = await freePort();
   const log = openSync(join(state, 'fuseki.log'), 'w');
   const serverProcess = spawn(join(fusekiHome, 'fuseki-server'), [

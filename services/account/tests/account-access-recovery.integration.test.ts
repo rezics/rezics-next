@@ -168,7 +168,7 @@ test('OPS03/IAM10 partial: two-owner deletion cut rejects either missing WAL fro
       const graphBase = join(state, 'graph-live');
       mkdirSync(join(graphBase, 'databases/rezics/tdb2'), { recursive: true });
       mkdirSync(join(graphBase, 'databases/rezics/lucene'), { recursive: true });
-      copyFileSync(join(root, 'docs/operations/examples/fuseki-text.ttl'),
+      copyFileSync(join(root, 'infra/jena/fuseki-text-quickstart.ttl'),
         join(graphBase, 'fuseki-text.ttl'));
       await initializeFreshGraph(await startFuseki(graphBase, 'graph-live'), priorLineage);
       await stopFuseki();
