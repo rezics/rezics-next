@@ -6,7 +6,6 @@ import { EmptyState } from '../../../../../../features/shell/empty-state.tsx';
 import Link from '../../../../../../features/shell/localized-link.tsx';
 import { PageContainer } from '../../../../../../features/shell/page.tsx';
 import { RetryButton } from '../../../../../../features/work-page/retry-button.tsx';
-import { saveDetails } from '../../../../../../features/studio/actions.ts';
 import { studioHref } from '../../../../../../features/studio/agent.ts';
 import type { DetailsState } from '../../../../../../features/studio/details-form.tsx';
 import { readStudioWork } from '../../../../../../features/studio/read.ts';
@@ -59,7 +58,7 @@ export default async function StudioWorkPage(props: Params) {
     </PageContainer>;
   }
   const { metadata } = loaded.data;
-  return <StudioWork agent={agent} work={loaded.data} detailsAction={saveDetails}
+  return <StudioWork agent={agent} work={loaded.data}
     details={detailsOf(metadata.ok ? metadata.data : null, loaded.data.header.selectedLanguage ?? locale)}
     locale={locale} messages={messages} />;
 }

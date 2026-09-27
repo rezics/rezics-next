@@ -11,7 +11,7 @@ import type { AgentOption } from '../auth/acting-identity.ts';
 import Link from '../shell/localized-link.tsx';
 import { PageContainer } from '../shell/page.tsx';
 import { studioHref } from './agent.ts';
-import { type DetailsState, DetailsForm } from './details-form.tsx';
+import { type DetailsState, DetailsForm, type SaveDetails } from './details-form.tsx';
 import { ManuscriptCover } from './manuscript-cover.tsx';
 import type { StudioMessages } from './messages.ts';
 import type { StudioWork as Work } from './read.ts';
@@ -33,9 +33,10 @@ function Section({ id, title, help, children }: { id: string; title: string; hel
  * details as readers see them, and what Realms decided. Writing a new language
  * is a plain GET form, so it works before the page hydrates.
  */
-export function StudioWork({ agent, work, detailsAction, details, locale, messages }: {
-  agent: AgentOption; work: Work; detailsAction: (previous: DetailsState, form: FormData) => Promise<DetailsState>;
-  details: DetailsState; locale: UiLocale; messages: StudioMessages;
+export function StudioWork({ agent, work, details, saveDetails, locale, messages }: {
+  agent: AgentOption; work: Work; details: DetailsState;
+  /** Stories pass a stand-in; the app saves through the BFF. */
+  saveDetails?: SaveDetails; locale: UiLocale; messages: StudioMessages;
 }) {
   const t = materializeData(messages, { locale });
   const { header } = work;
@@ -101,7 +102,7 @@ export function StudioWork({ agent, work, detailsAction, details, locale, messag
       </Section>
       <Section id="studio-details" title={t.details} help={t.detailsHelp}>
         {work.metadata.ok || work.metadata.failure !== 'unavailable'
-          ? <DetailsForm agent={agent} work={idOf(header.id)} action={detailsAction} initialState={details}
+          ? <DetailsForm agent={agent} work={idOf(header.id)} initialState={details} save={saveDetails}
             locale={locale} messages={messages} />
           : <Alert variant="destructive"><AlertDescription>{t.workFailed}</AlertDescription></Alert>}
       </Section>

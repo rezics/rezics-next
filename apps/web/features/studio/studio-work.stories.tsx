@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, fn, userEvent, within } from 'storybook/test';
 import { PageContainer, PageHeader } from '../shell/page.tsx';
-import type { DetailsState } from './details-form.tsx';
+import type { DetailsState, SaveDetails } from './details-form.tsx';
 import { agents, header, submissions, texts } from './fixtures.ts';
 import { messages } from './messages.ts';
 import { type NewWorkState, NewWorkForm } from './new-work-form.tsx';
@@ -19,17 +19,15 @@ texts: { ok: true as const, data: texts.filter(text => text.work?.id === 'https:
 submissions: { ok: true as const, data: submissions.slice(0, 1) },
 realms: { [submissions[0]!.realm]: '中文网络小说 · Chinese Web Fiction' } };
 
-const answer = (state: Omit<DetailsState, 'values' | 'head'>) => fn(async (previous: DetailsState, form: FormData) =>
-  ({ ...previous, ...state, values: { ...previous.values, entries: form.getAll('entryLanguage').map((language, index) =>
-    ({ language: String(language), title: String(form.getAll('entryTitle')[index] ?? ''),
-      description: String(form.getAll('entryDescription')[index] ?? '') })) } }));
+const answer = (state: Omit<DetailsState, 'values' | 'head'>): SaveDetails => fn(async input =>
+  ({ head: input.head, values: input.values, ...state }));
 
 const meta = {
   title: 'Studio/Work',
   component: StudioWork,
   parameters: { route: { pathname: '/en/studio/@agent-00000000-0000-4000-8000-000000000001/works/x' } },
   args: { agent: agents[0]!, work: work as never, details, locale: 'en', messages: messages.en,
-    detailsAction: answer({ status: 'saved', message: messages.en.detailsSaved }) },
+    saveDetails: answer({ status: 'saved' }) },
 } satisfies Meta<typeof StudioWork>;
 export default meta;
 type Story = StoryObj<typeof meta>;
@@ -49,7 +47,7 @@ export const Overview: Story = {
 
 /** Main does not let a Work's creator edit its details yet; the form says so and keeps the values. */
 export const DetailsDenied: Story = {
-  args: { detailsAction: answer({ status: 'denied', message: messages.en.detailsDenied }) },
+  args: { saveDetails: answer({ status: 'denied' }) },
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     await userEvent.click(canvas.getByRole('button', { name: 'Save details' }));
@@ -60,7 +58,7 @@ export const DetailsDenied: Story = {
 
 /** Someone saved first: the writer's values stay and the saved ones are shown beside them. */
 export const DetailsChangedElsewhere: Story = {
-  args: { detailsAction: answer({ status: 'stale', message: messages.en.detailsStale,
+  args: { saveDetails: answer({ status: 'stale',
     theirs: [{ language: 'zh-Hans', title: '雨夜书店 · 第三章', description: '另一个版本的简介。' }] }) },
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
