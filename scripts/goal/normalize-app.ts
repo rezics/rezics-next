@@ -5,7 +5,8 @@ import { readFileSync, writeFileSync } from 'node:fs';
 const file = 'services/main/src/app.ts';
 const text = readFileSync(file, 'utf8');
 const groupNames = ['identitySourceRoutes', 'accessSearchRoutes', 'contentCommunityRoutes', 'domainRoutes',
-  'extraRoutes1', 'extraRoutes2', 'extraRoutes3', 'extraRoutes4', 'extraRoutes5'];
+  'extraRoutes1', 'extraRoutes2', 'extraRoutes3', 'extraRoutes4', 'extraRoutes5', 'extraRoutes6',
+  'extraRoutes7', 'extraRoutes8', 'extraRoutes9', 'extraRoutes10'];
 const calls = new Map<string, string>();
 for (const match of text.matchAll(/\.use\((\w+Routes)\(([^)]*)\)\)/g)) {
   const [, name, args] = match;
