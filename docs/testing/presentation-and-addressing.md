@@ -48,13 +48,25 @@ and frontend work are deferred by the maintainer's documentation-only direction.
 - Avatar crops are 1:1 in oriented source-image pixels. A rectangular source with
   equal normalized crop width/height is not accepted as square solely on that
   basis. Mask changes do not rewrite the crop or original bytes.
-- Portrait and landscape cover slots coexist and change independently; Banner
-  is a third independent selection. Reusing an asset never shares mutable crop,
-  focal point or fit settings between its Uses.
-- Omitted update fields preserve selections; explicit null clears only its slot.
+- Cover/Banner keys use canonical positive integer ratios: `1920:1080` and
+  `32:18` resolve to `16:9`; duplicate keys after normalization are rejected.
+  Reject malformed/nonpositive components and preserve distinct nearby ratios.
+  Keys select target frames rather than imposing an aspect ratio on originals.
+- Multiple Cover and Banner ratios coexist and change independently. A `16:9`
+  Cover and a `16:9` Banner can retain different compositions. Reusing an asset
+  never shares mutable crop, focal point or fit settings between its Uses;
+  different rendition sizes do not create additional ratio entries.
+- Editors preserve valid ratios beyond their initial presets, including when
+  changing a known entry. Reads prefer an eligible exact ratio match, then
+  only an admitted role-local full-image fallback or no image. Numerical
+  proximity alone cannot authorize a crop or a cross-role selection.
+- Omitted update fields preserve selections; null at a ratio key clears only
+  that selection. An empty map patch clears nothing; whole-set replacement or
+  clearing requires explicit operation semantics.
   Requested-context clearing is not mistaken for absent configuration where
-  context inheritance is admitted. Missing covers/banners resolve without hidden
-  references or implicit persisted substitutions.
+  context inheritance is admitted or reversed through a display fallback.
+  Missing covers/banners resolve without hidden references, ratio-key leaks or
+  implicit persisted substitutions.
 - New selections obey current authority, expected revision and idempotency.
   Concurrent writers cannot lose an accepted change; stale cached descriptors
   cannot deliver private, suppressed or erased images.
@@ -66,7 +78,16 @@ and frontend work are deferred by the maintainer's documentation-only direction.
 
 Future rendered review must inspect circular avatar previews against the saved
 square, title-bearing and square covers in contain/crop modes, simultaneous
-portrait/landscape selections, and 3:1 desktop/mobile banners with actual overlays.
-Missing banners must leave no empty banner region. Long/wide single-image Posts
-and multi-image layouts must preserve full-image access and authored order.
-API checks alone do not establish rendered or human-usability acceptance.
+ratio selections, and both default 3:1 and explicitly requested alternative
+banner frames with actual overlays. Missing banners leave no empty banner region.
+
+The [candidate Feed height budget](../contracts/presentation.md#post-feed-media-height)
+requires rendered validation before its numbers are adopted. Inspect single
+images, very long screenshots, panoramas and mixed-ratio multi-image layouts at
+different widths and short/tall viewports. Check ordinary images can scale down
+without distortion, long-image previews expose full-image access and truncation,
+and multiple attachments share a bounded region with their order intact. The
+composer reflects the active policy; original dimensions, crop choices and bytes
+remain unchanged by viewport limits. Full-image and article views do not inherit
+the Feed cap. API checks alone do not establish rendered or human-usability
+acceptance.

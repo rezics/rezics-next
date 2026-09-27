@@ -65,7 +65,7 @@ recovery meaning when selecting physical indexes.
 
 Body/asset revision anchors, immutable payloads, representations, contextual uses
 and selectors; a resolved emoji/icon/image/fallback avatar on every resource
-summary; independent optional portrait/landscape covers and banner; ordered Post
+summary; independent optional ratio-keyed `covers` and `banners` maps; ordered Post
 attachments and an independent auto/selected/none preview policy. These visual
 extensions are adopted design; the media owner records implementation status.
 

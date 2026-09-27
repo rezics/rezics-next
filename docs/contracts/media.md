@@ -1,6 +1,8 @@
 # Media assets, representations and uses
 
-Status: Avatar, CoverSet, Banner and Post media design adopted on 2026-09-27.
+Status: Avatar, ratio-keyed covers/banners and Post media design adopted on
+2026-09-27. The ratio-keyed design supersedes fixed portrait/landscape fields;
+those names remain presentation presets.
 This is a target contract. The existing backend supports image/fallback avatars
 and ordered image publications; the structured avatar choices, cover/banner
 selections and Post preview policy below await implementation. Frontend editing
@@ -75,55 +77,107 @@ emoji/icon/image selection.
 
 ## Covers, banners and aspect ratios
 
-CoverSet provides independent nullable `portrait` and `landscape` selections in
-the admitted owner/context. Both can exist simultaneously, reference different
-assets, or reuse an asset with different Media Uses. Banner is a separate nullable
-selection for the resource's page header. These are reusable capabilities for
-resource owners, not compulsory images or records on every object.
+CoverSet and BannerSet expose separate `covers` and `banners` maps keyed by target
+aspect ratio in the admitted owner/context. Each selected entry references an
+exact Media Use. Entries can coexist, reference different assets, or reuse an
+asset with independent crop/focal/fit settings. These are reusable capabilities
+for resource owners, not compulsory images or records on every object.
 
-The following ratios are width:height. They define REZICS presentation profiles,
-not required dimensions of uploaded originals or claims of an industry standard.
+Conceptual shape; example Use IDs are illustrative, not a shipped API schema:
 
-| Use | Adopted profile | Meaning |
+```json
+{
+  "covers": {
+    "2:3": { "useId": "cover-a" },
+    "16:9": { "useId": "cover-b" },
+    "1:1": { "useId": "cover-c" }
+  },
+  "banners": {
+    "3:1": { "useId": "banner-a" },
+    "16:9": { "useId": "banner-b" }
+  }
+}
+```
+
+Cover and Banner remain separate roles even at the same ratio: a cover may carry
+the work's title while a banner leaves space for page controls. Each role/ratio
+has its own selection in the owner/context; the map is a logical/API shape, not
+a requirement to replace the existing Media Use and selection owners with a JSON
+blob. Neither role creates assets for absent entries.
+
+### Ratio keys and presets
+
+Keys use `width:height` with positive integers reduced to lowest terms by their
+greatest common divisor: `1920:1080` and `32:18` normalize to `16:9`. Reject zero, negative,
+non-finite or malformed components, and reject duplicate keys after normalization
+instead of overwriting a selection. Floating-point strings such as `1.77778` and
+hyphenated aliases such as `16-9` are not canonical keys. Preserve exact distinct
+ratios; numerical closeness does not establish equality.
+
+A key describes the intended display frame, not the source image's dimensions.
+For example, a 3:4 original can be fully contained in a `2:3` cover frame. Crops,
+fit and original dimensions remain independent data. Different resolutions of
+one composition, such as 800x450 and 1600x900, are representations of the same
+`16:9` selection, not additional cover entries.
+
+The following width:height ratios are initial UI presets. Cover/Banner maps admit
+other validated ratios within owner capacity limits; the presets are not a closed
+storage enum, mandatory uploads or an industry standard. Editors preserve entries
+whose ratios they do not expose in their ordinary controls.
+
+| Use | Initial preset | Meaning |
 | --- | --- | --- |
 | Avatar | 1:1 | Square image crop; the renderer applies its mask. |
 | Portrait cover | 2:3 | Standard portrait card/library frame. |
 | Landscape cover | 16:9 | Standard landscape card/list frame. |
-| Banner | 3:1 | Standard resource page-header frame on desktop and mobile. |
+| Banner | 3:1 | Default resource page-header frame on desktop and mobile; other ratios may be selected explicitly. |
 | Post attachment | Original aspect ratio | Each item retains its own dimensions; feed layout may constrain its viewport. |
+
+Avatar remains one typed choice with a 1:1 image crop; it does not become a ratio
+map. Portrait/landscape are editor labels and layout presets rather than stored
+selection keys. Front/back/booklet describe content roles independently of ratios.
+
+### Composition, selection and updates
 
 Asset aspect ratio, authored crop and display-frame aspect ratio are distinct.
 Cover uses support `contain` (show the selected image fully with background space)
 and `cover` (fill the frame using an authored crop/focal point). Prefer full-image
 display for book/album covers carrying titles; allow explicit crop-to-fill for
-photographs and illustrations. Portrait/landscape identify presentation slots;
-front/back/booklet identify content roles and remain independent metadata.
+photographs and illustrations.
 
-Banner editing uses a 3:1 composition preview and retains the original, crop and
-focal point. Its initial desktop/mobile frame scales at 3:1 with container width.
-1500x500 and 1800x600 are examples of the same ratio, not two profiles or mandatory
-upload sizes. Pixel/byte limits and generated rendition sizes belong to the
-processing policy. A later surface needing a different frame ratio must declare
-that profile and preview its focal-point crop; it cannot stretch the image or
-silently replace the authored composition.
+Banner editing previews the selected ratio, initially 3:1, and retains the
+original, crop and focal point. The default desktop/mobile frame scales at 3:1
+with container width; a surface requesting another ratio declares that display
+profile and resolves the corresponding entry. It cannot stretch the image or
+silently replace the authored composition. Pixel/byte limits and generated
+rendition sizes belong to the processing policy.
+
+Resolve an eligible exact ratio in the requested role first. If no entry is
+available, use an explicitly admitted, role-local fallback policy with full-image
+containment or return no image. A mathematically nearest ratio alone is not
+permission to crop: it may cut title text or other content. A fallback must report
+its actual readable source and fit without writing a new ratio entry. Never
+implicitly cross between Cover and Banner roles. Resolved missing or
+undisclosable selections return null without hidden asset references; public
+reads must not expose ratio keys solely to reveal undisclosable selections.
 
 Cover and Banner selection changes use current resource authority, expected
 selection revision, idempotency and durable outcomes, as avatar selection does.
-Changing/removing one slot preserves the others. In a partial update, an omitted
-slot is unchanged; explicit null clears that slot. Absence and explicit clearing
-must remain distinguishable where context inheritance is admitted. No implicit
-cover-to-banner, banner-to-cover or cross-orientation selection is authored.
-Resolved absent or undisclosable cover/banner slots return null without hidden
-asset references. An explicitly admitted display fallback can reuse a readable
-image without persisting a new selection and must identify its actual basis.
+Changing/removing one role/ratio entry preserves the others, including unfamiliar
+ratios. In a partial update, an omitted role or key is unchanged; null at a ratio
+key clears that selection only. An empty map patch changes no entries and does
+not mean clear-all. Absence and explicit clearing remain distinguishable where
+context inheritance is admitted; explicit clearing cannot be silently undone by
+inheritance or display fallback. Whole-set replacement/clearing requires explicit
+operation semantics rather than treating a partial editor's map as exhaustive.
 
 ## Post attachments and preview selection
 
 Posts retain an ordered list of exact Media Uses, with stable item identity and
 each image's original dimensions/aspect ratio. Reordering preserves the identities
 and bytes. A pure-text Post needs no image, and a normal short Post need not
-provide portrait and landscape covers. Article-like Posts may additionally use
-the optional CoverSet and Banner capabilities.
+provide any cover. Article-like Posts may additionally use the optional CoverSet
+and BannerSet capabilities.
 
 A Post's card/search/quote preview is a separate authored policy:
 
@@ -141,6 +195,11 @@ the owning edit must resolve an affected preview choice explicitly. A preview
 does not impose its card ratio on the original or on the Post body. Future video
 attachments may select an eligible poster representation through the same media
 model; this design does not claim an implemented video upload/transcode path.
+
+Feed media height is a [presentation policy](presentation.md#post-feed-media-height).
+It limits the displayed media region, not uploaded image dimensions or the exact
+attachment data. Backend size/pixel/processing budgets remain separate. Full-image
+viewing and article reading need not use the Feed's viewport crop or height cap.
 
 ## Upload and processing
 
@@ -179,17 +238,31 @@ Primary references reviewed for the 2026-09-27 decision:
   own choice, not Steam's Header specification.
 - [X profile/header guidance](https://help.x.com/en/managing-your-account/common-issues-when-uploading-profile-photo)
   recommends a 1500x500 header and describes possible display cropping. REZICS
-  selects 3:1 as its initial shared profile, with explicit later profile changes.
+  uses 3:1 as its initial banner preset while allowing other ratio-keyed entries.
+- [TYPO3 image manipulation](https://docs.typo3.org/m/typo3/reference-tca/main/en-us/ColumnsConfig/Type/ImageManipulation/Index.html)
+  uses ratio keys such as `16:9` and separately named crop variants. It is a
+  precedent for explicit ratio identifiers and contextual compositions, not the
+  source of REZICS's canonicalization or role/ratio selection contract.
+- [MDN responsive images](https://developer.mozilla.org/en-US/docs/Web/HTML/Guides/Responsive_images)
+  distinguishes art direction from resolution switching: different compositions
+  and multiple resolutions of a composition address different display needs.
 - [X media data model](https://docs.x.com/x-api/fundamentals/data-dictionary)
   associates Post attachments with media identities and dimensions. It does not
   prescribe REZICS's preview policy or feed layout.
+- [X photo posting guidance](https://help.x.com/en/using-x/posting-gifs-and-pictures)
+  says single photos between 3:4 and 2:1 display in full, with a matching composer
+  preview, and documents 1-4 photos with reordering. It gives no universal fixed
+  pixel height or precise cross-client multi-photo layout. REZICS's Feed height
+  formula is a proposed UI policy, not a claim about X's implementation or an
+  adoption of its attachment count limit.
 - [Sanity image model](https://www.sanity.io/docs/studio/image-type) separates
   asset references from contextual crop, hotspot and caption data, supporting
   reuse of one original with independently edited uses.
 
-Before implementation acceptance, prove selection round trips, square crop
-validation, independent slots, concurrency and disclosure through real owner
-APIs. Before rendered acceptance, inspect representative title-bearing covers,
+Before implementation acceptance, prove selection round trips, ratio-key
+normalization, square crop validation, independent entries, concurrency and
+disclosure through real owner APIs. Before rendered acceptance, inspect representative title-bearing covers,
 square album art, very tall/wide Post images, multi-image Posts and banner
-overlays on desktop/mobile. These defaults remain unverified in REZICS UI;
-prospective checks belong to [presentation acceptance](../testing/presentation-and-addressing.md).
+overlays on desktop/mobile, including the candidate Feed height budget. These
+defaults remain unverified in REZICS UI; prospective checks belong to
+[presentation acceptance](../testing/presentation-and-addressing.md).

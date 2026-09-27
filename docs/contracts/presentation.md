@@ -67,19 +67,24 @@ meaning stays unavailable instead of being replaced by Global.
 ## Rendering
 
 The [media presentation profiles](media.md#covers-banners-and-aspect-ratios)
-define square avatars, independent portrait/landscape covers and optional banners.
+define square avatars and independent optional `covers[ratio]` and `banners[ratio]`
+selections. Portrait/landscape cover controls and the initial banner ratio are
+presets over these maps; editors retain other saved ratios.
 Avatar editing preserves a square crop and previews the circular mask so the
 author can see which corners will be hidden. Circle or rounded-square rendering
 does not rewrite the saved crop. Emoji/icon choices use the same display canvas.
 
-Cover frames share their profile ratio while preserving the selected use's
-full-image or crop-to-fill setting. Do not distort the source to fit. A missing
-cover may use an admitted placeholder or full-image display fallback without
-creating an authored selection. A missing banner uses the page layout without
-a banner: no reserved empty image region and no automatic cover substitution.
+Each cover/banner surface requests its display ratio and preserves the resolved
+use's full-image or crop-to-fill setting. Do not distort the source to fit. Exact
+ratio selection precedes an explicitly admitted fallback; numerical proximity
+alone does not authorize cropping. A missing cover may use an admitted placeholder
+or full-image display fallback without creating an authored selection. A missing
+banner uses the page layout without a banner: no reserved empty image region and
+no automatic cover substitution.
 The banner editor previews actual title/avatar/control overlays where present;
 resource names and controls remain interface content rather than baked-in image
-requirements. The initial banner frame remains 3:1 on desktop and mobile.
+requirements. The default banner frame is 3:1 on desktop and mobile; a surface
+using another ratio declares it and previews the matching composition.
 
 [Post media](media.md#post-attachments-and-preview-selection) keeps body media
 and card preview selection independent. Prefer the original ratio for one image;
@@ -92,6 +97,39 @@ bounded render-safe fallbacks without rewriting authoritative content or allowin
 executable HTML/URLs. Render only selected, currently readable dependencies.
 Progressive disclosure exposes ordinary tasks directly and retains advanced
 configuration, provenance, context and material consequences.
+
+### Post Feed media height
+
+Feed layouts bound the entire Post media region while retaining the original
+attachments. A single ordinary image preserves its aspect ratio; when it exceeds
+the region's height budget, it can scale down fully with surrounding space.
+Extremely tall images may show a cropped preview with a visible full-image action
+and an author-adjustable preview region. Multiple images share one bounded grid
+or carousel region instead of accumulating one full-height region per attachment.
+Keep order and full-image access; the composer previews the active Feed policy
+and makes truncation visible before publication.
+
+Candidate sizing policy for frontend validation, in CSS pixels:
+
+```text
+W = available media-region width
+V = usable viewport height after persistent application chrome
+Hmax = min(W * 4 / 3, V * 0.8)
+```
+
+The width term corresponds to the height of a 3:4 image at width W. The 0.8
+viewport factor is a REZICS starting hypothesis, not an X specification or an
+already-qualified default. For W=360 and V=800, the candidate height cap is 480.
+Neither term requires stretching or filling the entire width when a complete
+image is scaled down. The cap constrains a viewport, never mutates image data,
+and is not stored as a pixel-height property on each Post. Full-image viewing
+and article reading have independent layout policies.
+
+Validate this candidate with ordinary portrait/landscape photos, panoramas,
+long screenshots, mixed-ratio image sets and short desktop/mobile viewports.
+Assess full-image readability, visible crop boundaries and access to the rest of
+the Feed before adopting the numeric height budget. The confirmed external
+behavior and its limits are recorded with the [media decision evidence](media.md#decision-evidence-and-remaining-validation).
 
 ## Query Blocks and themes
 
