@@ -1,18 +1,23 @@
+import { headers } from 'next/headers';
 import { type ReactNode, Suspense } from 'react';
 import type { UiLocale } from '../../i18n/define.ts';
+import { localizedPath } from '../../i18n/locale.ts';
+import { signInPath } from '../auth/paths.ts';
+import { browseReader } from '../discover/server.ts';
 import { AdoptionRegion } from './adoption.tsx';
+import { AuthorSection } from './author.tsx';
 import { ClassificationRegion } from './classification.tsx';
 import { WorkCredits, WorkCreditsSkeleton } from './credits.tsx';
 import { HistoryRegion } from './history.tsx';
 import type { WorkPageMessages } from './messages.ts';
-import { RatingSummaryRegion } from './ratings.tsx';
+import { RatingLine, RatingSummaryRegion } from './ratings.tsx';
 import { ContentsRegion } from './contents.tsx';
 import { DiscussionRegion } from './discussion.tsx';
-import { readAdoptions, readAgentCredits, readClassifications, readContents, readCredits, readDiscussion,
-  readHistory, readRatings, readRealm, readVersions } from './read.ts';
+import { readAdoptions, readAgentCredits, readAgentWorks, readClassifications, readContents, readCredits,
+  readDiscussion, readHistory, readingAgent, readRatings, readRealm, readVersions } from './read.ts';
 import { RegionSkeleton } from './region.tsx';
 import { WorkRecord } from './record.tsx';
-import { type ContentsQuery, type HistoryFilter, idOf, type VersionQuery, type WorkScope } from './route.ts';
+import { type ContentsQuery, type HistoryFilter, idOf, type VersionQuery, type WorkScope, workHref } from './route.ts';
 import { ScopeBar, ScopeBarSkeleton, type ScopeRealm, type ScopeView } from './scope-bar.tsx';
 import type { WorkHeader as Header } from './types.ts';
 import { VersionsRegion } from './versions.tsx';
@@ -44,13 +49,21 @@ async function Credits({ id, locale, messages }: Common & { id: string }) {
   return <WorkCredits agentCredits={agentCredits} credits={credits} locale={locale} messages={messages} />;
 }
 
-/** Header and tabs around every Work view; credits stream in on their own. */
-export function WorkFrameView({ workRef, id, work, locale, messages, children }: Common & {
+/** Everyone's rating summary for the header, on the Work's first rating question. */
+async function RatingLineSlot({ id, locale, messages }: Common & { id: string }) {
+  return <RatingLine ratings={await readRatings(id, { kind: 'global' }, undefined)} locale={locale} messages={messages} />;
+}
+
+/** Header and tabs around every Work view; credits and the rating summary stream in on their own. */
+export async function WorkFrameView({ workRef, id, work, locale, messages, children }: Common & {
   workRef: string; id: string; work: Header; children: ReactNode;
 }) {
-  return <WorkFrame workRef={workRef} work={work} locale={locale} messages={messages}
+  const [{ signedIn }, { avatarQuery }] = await Promise.all([readingAgent(), browseReader()]);
+  return <WorkFrame workRef={workRef} work={work} locale={locale} messages={messages} signedIn={signedIn}
+    signInHref={signInPath(localizedPath(workHref(workRef), locale))} avatarQuery={avatarQuery}
     credits={<Suspense fallback={<WorkCreditsSkeleton label={messages.loadingRegion} />}>
-      <Credits id={id} locale={locale} messages={messages} /></Suspense>}>
+      <Credits id={id} locale={locale} messages={messages} /></Suspense>}
+    ratingLine={<Suspense fallback={null}><RatingLineSlot id={id} locale={locale} messages={messages} /></Suspense>}>
     {children}</WorkFrame>;
 }
 
@@ -69,7 +82,31 @@ async function view({ workRef, id, scope, locale }: ScopedProps): Promise<ScopeV
 
 async function Ratings(props: ScopedProps & { context: string | undefined }) {
   const [scopeView, ratings] = await Promise.all([view(props), readRatings(props.id, props.scope, props.context)]);
-  return <RatingSummaryRegion ratings={ratings} view={scopeView} locale={props.locale} messages={props.messages} />;
+  return <RatingSummaryRegion ratings={ratings} view={scopeView} locale={props.locale} messages={props.messages}
+    scopeBar={<ScopeBar workRef={props.workRef} scope={props.scope} realms={scopeView.realms} locale={props.locale}
+      messages={props.messages} />} />;
+}
+
+/**
+ * Details with a citation: the title, native authors, REZICS and the page's
+ * address in this interface language, from the proxy's record of the request.
+ */
+async function Record({ id, workRef, work, locale, messages }: Common & { id: string; workRef: string; work: Header }) {
+  const [credits, page] = await Promise.all([readAgentCredits(id), headers().then(list => list.get('x-rezics-page-url'))]);
+  const authors = credits.ok ? credits.data.items.filter(credit => credit.role === 'author').map(credit => credit.displayName)
+    : [];
+  const url = page ? new URL(localizedPath(workHref(workRef), locale), page).toString() : null;
+  const citation = url ? [work.title.value, authors.join(', '), 'REZICS', url].filter(Boolean).join('. ') : undefined;
+  return <WorkRecord work={work} citation={citation} locale={locale} messages={messages} />;
+}
+
+async function Author({ id, locale, messages }: Common & { id: string }) {
+  const credits = await readAgentCredits(id);
+  const author = credits.ok ? credits.data.items.find(credit => credit.role === 'author') : undefined;
+  if (!author) return null;
+  const [works, { avatarQuery }] = await Promise.all([readAgentWorks(author.agent, locale), browseReader()]);
+  return <AuthorSection credit={author} works={works} work={id} avatarQuery={avatarQuery} locale={locale}
+    messages={messages} />;
 }
 
 async function Classification(props: ScopedProps) {
@@ -106,7 +143,9 @@ export function WorkOverview({ workRef, id, work, scope, context, locale, messag
       label={loading} lines={2} />}>
       <Adoption workRef={workRef} id={id} scope={scope} locale={locale} messages={messages} />
     </Suspense> : null}
-    record={<WorkRecord work={work} locale={locale} messages={messages} />} />;
+    record={<Suspense fallback={<WorkRecord work={work} locale={locale} messages={messages} />}>
+      <Record id={id} workRef={workRef} work={work} locale={locale} messages={messages} /></Suspense>}
+    author={<Suspense fallback={null}><Author id={id} locale={locale} messages={messages} /></Suspense>} />;
 }
 
 export async function WorkVersions({ workRef, id, query, locale, messages }: Common & {

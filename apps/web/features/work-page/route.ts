@@ -1,6 +1,8 @@
 // Work page addresses: `/w/{slug|id}/{tab}?scope=…`. Pure functions shared by
 // the routes, the components and their tests.
 
+import { withoutLocale } from '../../i18n/locale.ts';
+
 /** The Work's views, in tab order. Each is its own URL. */
 export const workTabs = ['overview', 'contents', 'versions', 'discussion', 'history'] as const;
 export type WorkTab = (typeof workTabs)[number];
@@ -92,7 +94,8 @@ export function workHref(ref: string, tab: WorkTab = 'overview', scope: WorkScop
 
 /** The tab a pathname shows, for the tab bar's current item. */
 export function tabOf(pathname: string): WorkTab {
-  const segment = pathname.split('/')[3];
+  // `/{locale}/w/{ref}/{tab}`; the locale prefix is optional.
+  const segment = withoutLocale(pathname).split('/')[3];
   return workTabs.find(tab => tab === segment) ?? 'overview';
 }
 

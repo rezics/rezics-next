@@ -1,12 +1,15 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { expect, within } from 'storybook/test';
+import { expect, screen, userEvent, waitFor, within } from 'storybook/test';
 import type { UiLocale } from '../../i18n/define.ts';
+import { memoryReaderActions } from '../catalogue/fixtures.ts';
+import type { ReaderActions } from '../catalogue/reader-actions.tsx';
 import { AdoptionRegion } from './adoption.tsx';
+import { AuthorSection } from './author.tsx';
 import { ClassificationRegion } from './classification.tsx';
 import { WorkCredits } from './credits.tsx';
 import * as fixture from './fixtures.ts';
 import { messages } from './messages.ts';
-import { RatingSummaryRegion } from './ratings.tsx';
+import { RatingLine, RatingSummaryRegion } from './ratings.tsx';
 import { WorkRecord } from './record.tsx';
 import { type WorkScope, workHref } from './route.ts';
 import { ScopeBar, type ScopeRealm } from './scope-bar.tsx';
@@ -19,23 +22,30 @@ interface OverviewArgs {
   work: WorkHeader; agentCredits: Loaded<AgentCreditPage>; credits: Loaded<CreditPage>; scope: WorkScope | null;
   realms: ScopeRealm[];
   ratings: Loaded<RatingRead>; classifications: Loaded<ClassificationPage> | null; adoptions: Loaded<AdoptionPage>;
-  locale: UiLocale;
+  locale: UiLocale; readerActions?: ReaderActions;
 }
 
 /** The Overview as the route composes it, with each region's Main answer given directly. */
 function Overview({ work, agentCredits, credits, scope, realms, ratings, classifications, adoptions,
-  locale }: OverviewArgs) {
+  locale, readerActions }: OverviewArgs) {
   const t = messages[locale];
   const view = scope ? fixture.scopeView(scope, realms) : null;
-  return <WorkFrame workRef={fixture.workRef} work={work} locale={locale} messages={t}
-    credits={<WorkCredits agentCredits={agentCredits} credits={credits} locale={locale} messages={t} />}>
-    <OverviewLayout messages={t} about={<WorkAbout work={work} messages={t} />}
-      scopeBar={<ScopeBar workRef={fixture.workRef} scope={scope} realms={realms} locale={locale} messages={t} />}
-      ratings={view ? <RatingSummaryRegion ratings={ratings} view={view} locale={locale} messages={t} /> : null}
+  const scopeBar = <ScopeBar workRef={fixture.workRef} scope={scope} realms={realms} locale={locale} messages={t} />;
+  const author = agentCredits.ok ? agentCredits.data.items.find(credit => credit.role === 'author') : undefined;
+  return <WorkFrame workRef={fixture.workRef} work={work} locale={locale} messages={t} readerActions={readerActions}
+    signedIn={Boolean(readerActions)} signInHref={`/auth/start?next=%2F${locale}%2Fw%2F${fixture.workRef}`}
+    credits={<WorkCredits agentCredits={agentCredits} credits={credits} locale={locale} messages={t} />}
+    ratingLine={scope?.kind === 'global' ? <RatingLine ratings={ratings} locale={locale} messages={t} /> : null}>
+    <OverviewLayout messages={t} about={<WorkAbout work={work} messages={t} />} scopeBar={scopeBar}
+      ratings={view ? <RatingSummaryRegion ratings={ratings} view={view} scopeBar={scopeBar} locale={locale}
+        messages={t} /> : null}
       classification={view ? <ClassificationRegion classifications={classifications} view={view} locale={locale}
         messages={t} /> : null}
       adoption={view ? <AdoptionRegion adoptions={adoptions} view={view} locale={locale} messages={t} /> : null}
-      record={<WorkRecord work={work} locale={locale} messages={t} />} />
+      record={<WorkRecord work={work} locale={locale} messages={t}
+        citation={`${work.title.value}. Maren Osei. REZICS. https://rezics.com/${locale}/w/${fixture.workRef}`} />}
+      author={author ? <AuthorSection credit={author} works={fixture.agentWorks} work={work.id} locale={locale}
+        messages={t} /> : null} />
   </WorkFrame>;
 }
 
@@ -67,25 +77,55 @@ export const Global: Story = {
     await expect(canvas.getByRole('link', { name: 'Read' })).toHaveAttribute('href', `/en/w/${fixture.workRef}/contents`);
     await expect(canvas.getByRole('link', { name: /Open Library author OL2162284A/ }))
       .toHaveAttribute('href', 'https://openlibrary.org/authors/OL2162284A');
-    await expect(canvas.getByText('Maren Osei')).toBeVisible();
-    await expect(canvas.getByText('Translator')).toBeVisible();
-    await expect(canvas.getByText('La Cartographe des marées')).toHaveAttribute('lang', 'fr');
+    await expect(canvas.getAllByText('Maren Osei')[0]).toBeVisible();
+    await expect(canvas.getByText(/Translated by/)).toHaveTextContent('Translated by 林晓');
+    await expect(canvas.getAllByText('La Cartographe des marées')[0]).toHaveAttribute('lang', 'fr');
+    await expect(canvas.getByText('Book · English')).toBeVisible();
     await expect(canvas.getByRole('region', { name: 'About this Work' })).toHaveTextContent('A surveyor maps a delta');
-    const scope = canvas.getByRole('navigation', { name: 'Scope' });
-    await expect(within(scope).getByRole('link', { name: 'Global' })).toHaveAttribute('aria-current', 'true');
-    await expect(scope).toHaveTextContent('Showing ratings and classification from everyone on REZICS.');
+    // The summary under the title leads down to the full ratings.
+    await expect(canvas.getByRole('link', { name: '1,287 ratings' })).toHaveAttribute('href', '#work-ratings');
+    // Signed out, the shelf and rating controls lead to sign-in, which returns here.
+    await expect(canvas.getByRole('link', { name: /^Want to read/ }))
+      .toHaveAttribute('href', `/auth/start?next=%2Fen%2Fw%2F${fixture.workRef}`);
     const ratings = canvas.getByRole('region', { name: 'Ratings' });
+    const scope = within(ratings).getByRole('navigation', { name: 'Community' });
+    await expect(within(scope).getByRole('link', { name: 'Everyone' })).toHaveAttribute('aria-current', 'true');
     await expect(ratings).toHaveTextContent('1,287 ratings');
-    await expect(ratings).toHaveTextContent('How good is this Work overall?');
     await expect(within(ratings).getByRole('list', { name: 'Rating distribution' }).children).toHaveLength(5);
+    await expect(within(ratings).getByRole('list', { name: 'Rating distribution' })).toHaveTextContent('5 stars');
     await expect(within(ratings).getByRole('link', { name: 'How good is this Work overall?' }))
       .toHaveAttribute('aria-current', 'true');
-    const chips = within(canvas.getByRole('region', { name: 'Classification' })).getAllByRole('listitem');
-    // Recorded relevance orders the chips, most central first; unrecorded ones keep Main's order after them.
+    const genres = canvas.getByRole('region', { name: 'Genres' });
+    const chips = within(genres).getAllByRole('listitem');
+    // Recorded relevance orders the genres, most central first; unrecorded ones keep Main's order after them.
     await expect(chips.map(chip => chip.textContent)).toEqual(['Maritime fictionRelevance: Central',
       'AdventureRelevance: Substantial', 'Coming of ageRelevance: Incidental', 'Maps and cartography', '海洋']);
-    await expect(within(canvas.getByRole('region', { name: 'Realm adoption' })).getByRole('link', { name: /Tidewater Readers/ }))
+    await expect(within(genres).getByRole('link', { name: 'Adventure' }))
+      .toHaveAttribute('href', expect.stringMatching(/^\/en\/discover\?term=[0-9a-f-]{36}$/));
+    await expect(within(canvas.getByRole('region', { name: 'Communities' })).getByRole('link', { name: /Tidewater Readers/ }))
       .toHaveAttribute('href', `/en/w/${fixture.workRef}?scope=realm&realm=${fixture.realms[0]!.id}`);
+    const author = canvas.getByRole('region', { name: 'About the author' });
+    const more = within(author).getByRole('region', { name: 'More by Maren Osei' });
+    // The Work itself is not offered again.
+    await expect(within(more).getAllByRole('article')).toHaveLength(3);
+    // Model detail is folded away until asked for.
+    await expect(canvas.getByText(fixture.work.id)).not.toBeVisible();
+    await userEvent.click(canvas.getByText('Details and identifiers'));
+    await expect(canvas.getByText(fixture.work.id)).toBeVisible();
+    await expect(canvas.getByRole('button', { name: 'Copy citation' })).toBeVisible();
+  },
+};
+
+/** Signed in with Main's reader state (G-285): shelve and rate from under the cover. */
+export const SignedInActions: Story = {
+  args: { readerActions: memoryReaderActions() },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await userEvent.click(canvas.getByRole('button', { name: 'More shelves' }));
+    await userEvent.click(await screen.findByRole('menuitemradio', { name: 'Currently reading' }));
+    await waitFor(() => expect(canvas.getByRole('button', { name: /^Currently reading — Shelve/ })).toBeVisible());
+    await userEvent.click(canvas.getAllByRole('radio')[4]!);
+    await waitFor(() => expect(canvas.getByText('Your rating')).toBeVisible());
   },
 };
 
@@ -94,15 +134,15 @@ export const Realm: Story = {
   parameters: route(fixture.realmScope),
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
-    const scope = canvas.getByRole('navigation', { name: 'Scope' });
-    await expect(within(scope).getByRole('link', { name: 'Realm: Tidewater Readers' })).toHaveAttribute('aria-current', 'true');
     const ratings = canvas.getByRole('region', { name: 'Ratings' });
+    const scope = within(ratings).getByRole('navigation', { name: 'Community' });
+    await expect(within(scope).getByRole('link', { name: 'Community: Tidewater Readers' }))
+      .toHaveAttribute('aria-current', 'true');
     await expect(within(ratings).getByRole('list', { name: 'Rating distribution' }).children).toHaveLength(10);
-    await expect(ratings).toHaveTextContent('Scale 1–10');
-    const classification = canvas.getByRole('region', { name: 'Classification' });
-    await expect(within(classification).getByRole('list', { name: 'Decided in Tidewater Readers' })).toBeVisible();
-    await expect(within(classification).getByRole('list', { name: 'From Global' })).toBeVisible();
-    await expect(canvas.getByRole('region', { name: 'Realm adoption' })).toHaveTextContent('In scope');
+    const genres = canvas.getByRole('region', { name: 'Genres' });
+    await expect(within(genres).getByRole('list', { name: 'Chosen in Tidewater Readers' })).toBeVisible();
+    await expect(within(genres).getByRole('list', { name: 'Chosen by everyone' })).toBeVisible();
+    await expect(canvas.getByRole('region', { name: 'Communities' })).toHaveTextContent('Showing');
     // The chosen scope travels with the tabs.
     await expect(canvas.getByRole('link', { name: 'Versions' }))
       .toHaveAttribute('href', `/en/w/${fixture.workRef}/versions?scope=realm&realm=${fixture.realms[0]!.id}`);
@@ -116,8 +156,8 @@ export const MineSignedOut: Story = {
     const canvas = within(canvasElement);
     await expect(canvas.getByRole('link', { name: 'Sign in' }))
       .toHaveAttribute('href', `/auth/start?next=${encodeURIComponent(`/en/w/${fixture.workRef}?scope=mine`)}`);
-    await expect(canvas.getByRole('region', { name: 'Classification' })).toHaveTextContent('Classification isn’t personal');
-    await expect(canvas.getByRole('link', { name: 'See Global' })).toBeVisible();
+    await expect(canvas.getByRole('region', { name: 'Genres' })).toHaveTextContent('Genres aren’t personal');
+    await expect(canvas.getByRole('link', { name: 'See everyone' })).toBeVisible();
   },
 };
 
@@ -143,9 +183,9 @@ export const EmptyGlobal: Story = {
   args: { ratings: fixture.noGlobalRatings, classifications: fixture.noClassifications },
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
-    await expect(canvas.getByText('No Global ratings yet')).toBeVisible();
-    await expect(canvas.getByText('No Global classification yet')).toBeVisible();
-    // Global offers the first Realm that adopted the Work, never silently switching to it.
+    await expect(within(canvas.getByRole('region', { name: 'Ratings' })).getByText('No ratings yet')).toBeVisible();
+    await expect(canvas.getByText('No genres yet')).toBeVisible();
+    // Everyone's view offers the first community that features the Work, never silently switching to it.
     await expect(canvas.getAllByRole('link', { name: 'See Tidewater Readers' })).toHaveLength(2);
   },
 };
@@ -156,15 +196,15 @@ export const EmptyRealm: Story = {
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     await expect(canvas.getByText('No ratings in Tidewater Readers yet')).toBeVisible();
-    await expect(canvas.getByText('Tidewater Readers hasn’t classified this Work')).toBeVisible();
-    await expect(canvas.getAllByRole('link', { name: 'See Global' })[0]).toHaveAttribute('href', `/en/w/${fixture.workRef}`);
+    await expect(canvas.getByText('Tidewater Readers hasn’t tagged this Work')).toBeVisible();
+    await expect(canvas.getAllByRole('link', { name: 'See everyone' })[0]).toHaveAttribute('href', `/en/w/${fixture.workRef}`);
   },
 };
 
 export const NoRatingQuestion: Story = {
   args: { ratings: fixture.noQuestion },
   async play({ canvasElement }) {
-    await expect(within(canvasElement).getByText('Global has no rating question for this Work')).toBeVisible();
+    await expect(within(canvasElement).getByText('Ratings aren’t open for this Work yet')).toBeVisible();
   },
 };
 
@@ -177,21 +217,21 @@ export const PartialFailure: Story = {
     const alerts = canvas.getAllByRole('alert');
     await expect(alerts.map(alert => alert.textContent)).toEqual([
       expect.stringContaining('Credits unavailable'), expect.stringContaining('Ratings unavailable'),
-      expect.stringContaining('Realm adoption unavailable')]);
+      expect.stringContaining('Communities unavailable')]);
     await expect(canvas.getAllByRole('button', { name: 'Retry' })).toHaveLength(3);
     // The regions that loaded are unaffected.
-    await expect(within(canvas.getByRole('region', { name: 'Classification' })).getAllByRole('listitem')).toHaveLength(5);
+    await expect(within(canvas.getByRole('region', { name: 'Genres' })).getAllByRole('listitem')).toHaveLength(5);
   },
 };
 
 export const InvalidScope: Story = {
   args: { scope: null },
-  parameters: { route: { pathname: `/w/${fixture.workRef}`, search: 'scope=everyone' } },
+  parameters: { route: { pathname: `/en/w/${fixture.workRef}`, search: 'scope=everyone' } },
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
-    await expect(canvas.getByRole('alert')).toHaveTextContent('This scope isn’t available');
+    await expect(canvas.getByRole('alert')).toHaveTextContent('This view isn’t available');
     await expect(canvas.queryByRole('region', { name: 'Ratings' })).toBeNull();
-    for (const link of within(canvas.getByRole('navigation', { name: 'Scope' })).getAllByRole('link')) {
+    for (const link of within(canvas.getByRole('navigation', { name: 'Community' })).getAllByRole('link')) {
       await expect(link).not.toHaveAttribute('aria-current');
     }
   },
@@ -205,8 +245,8 @@ export const MetadataOnly: Story = {
     const canvas = within(canvasElement);
     await expect(canvas.getByText('Private')).toBeVisible();
     await expect(canvas.getByText('No confirmed credits yet')).toBeVisible();
-    await expect(canvas.getByText('No Realm has adopted this Work yet', { exact: true })).toBeVisible();
-    await expect(canvas.getByRole('navigation', { name: 'Scope' })).toHaveTextContent('No Realm has adopted this Work yet.');
+    await expect(canvas.getByText('No community features this Work yet', { exact: true })).toBeVisible();
+    await expect(canvas.queryByRole('region', { name: 'About the author' })).toBeNull();
   },
 };
 
@@ -237,8 +277,9 @@ export const Chinese: Story = {
   parameters: route(fixture.realmScope),
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
-    await expect(canvas.getByRole('navigation', { name: '范围' })).toHaveTextContent('显示在Tidewater Readers中决定的评分和分类。');
-    await expect(canvas.getByRole('region', { name: '分类' })).toHaveTextContent('由Tidewater Readers决定');
+    await expect(within(canvas.getByRole('navigation', { name: '社区' })).getByRole('link', { name: '社区: Tidewater Readers' }))
+      .toHaveAttribute('aria-current', 'true');
+    await expect(canvas.getByRole('region', { name: '类型' })).toHaveTextContent('Tidewater Readers选定');
   },
 };
 

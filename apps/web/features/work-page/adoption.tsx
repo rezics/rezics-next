@@ -13,10 +13,9 @@ import type { AdoptionPage, Loaded } from './types.ts';
 export const ADOPTION_REGION = 'work-adoption';
 
 /**
- * The public Realms that adopted this Work and which language version each
- * selected. Each opens the Work in that Realm's scope. Adoption is a public
- * fact about Realms, so the list is the same in every scope; the current
- * Realm is marked.
+ * The public communities that feature this Work and which language version
+ * each reads. Each opens the Work in that community's view; the one being
+ * shown is marked. The list is the same whichever view is chosen.
  */
 export function AdoptionRegion({ adoptions, view, locale, messages }: {
   adoptions: Loaded<AdoptionPage>; view: ScopeView; locale: UiLocale; messages: WorkPageMessages;
@@ -29,30 +28,29 @@ export function AdoptionRegion({ adoptions, view, locale, messages }: {
   }
   const { items, nextCursor } = adoptions.data;
   return <Region id={ADOPTION_REGION} title={t.adoption}>
-    {items.length ? <ul className="-mx-2 grid gap-1">
+    {items.length ? <ul className="-mx-3 grid gap-0.5">
       {items.map(item => {
         const realm = idOf(item.realm);
         const scope = realm ? { kind: 'realm' as const, realm } : null;
         const current = sameScope(view.scope, scope);
         return <li key={item.realm}>
           <Link href={workHref(view.workRef, 'overview', scope)} aria-current={current ? 'true' : undefined}
-            className="group flex items-center gap-3 rounded-xl px-2 py-2 outline-none transition-colors hover:bg-accent
-              focus-visible:ring-2 focus-visible:ring-ring aria-[current=true]:bg-primary/5">
-            <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-primary/10 text-primary">
-              <UsersRoundIcon aria-hidden="true" className="size-4.5" /></span>
+            className="group flex items-center gap-3 rounded-xl px-3 py-2.5 outline-none transition-colors hover:bg-accent
+              focus-visible:ring-2 focus-visible:ring-ring aria-[current=true]:bg-accent/70">
+            <UsersRoundIcon aria-hidden="true" className="size-4.5 shrink-0 text-muted-foreground" />
             <span className="grid min-w-0 flex-1">
-              <span lang={item.name.language} dir={item.name.direction} className="truncate font-medium text-sm">
+              <span lang={item.name.language} dir={item.name.direction} className="truncate font-medium">
                 {item.name.value}</span>
-              <span className="text-muted-foreground text-xs">
+              <span className="text-muted-foreground text-sm">
                 {t.adoptedVersion({ language: languageName(item.language, locale) })}</span>
             </span>
-            {current ? <Badge variant="soft" size="sm">{t.inScope}</Badge>
-              : <ChevronRightIcon aria-hidden="true" className="size-4 text-muted-foreground" />}
+            {current ? <Badge variant="secondary" size="sm">{t.inScope}</Badge>
+              : <ChevronRightIcon aria-hidden="true" className="size-4 text-muted-foreground rtl:rotate-180" />}
           </Link>
         </li>;
       })}
     </ul> : <div className="grid gap-1">
-      <p className="font-medium text-sm">{t.notAdopted}</p>
+      <p className="font-medium">{t.notAdopted}</p>
       <p className="text-muted-foreground text-sm">{t.notAdoptedBody}</p>
     </div>}
     {nextCursor ? <p className="text-muted-foreground text-xs">{t.moreAdoptions}</p> : null}

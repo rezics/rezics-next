@@ -7,7 +7,7 @@ import { sessionAgentState } from '../auth/session.ts';
 import type { UiLocale } from '../../i18n/define.ts';
 import { localizedPath } from '../../i18n/locale.ts';
 import { type ContentsQuery, iriOf, mainScope, parseWorkRef, type VersionQuery, type WorkRef, type WorkScope, workHref } from './route.ts';
-import type { AdoptionPage, AgentCreditPage, ChapterRead, ClassificationPage, ContentsPage, CreditPage,
+import type { AdoptionPage, AgentCreditPage, AgentWorksPage, ChapterRead, ClassificationPage, ContentsPage, CreditPage,
   DiscussionPage, HistoryKind, HistoryPage, Loaded, Progress, RatingContextPage, RatingRead, ReadFailure,
   RealmHeader, VersionPage, WorkHeader } from './types.ts';
 
@@ -192,6 +192,13 @@ export async function readDiscussion(id: string, realm: string | undefined, curs
   return settle(() => main.v1.works({ id }).discussion.get({ query: { actingSubject,
     realm: realm ? iriOf(realm) : undefined, cursor } }), cursor);
 }
+
+/** Works an Agent is credited on, newest first, for "More by" on a Work page. */
+export const readAgentWorks = cache(async (agent: string, locale: UiLocale): Promise<Loaded<AgentWorksPage>> => {
+  const { main, actingSubject } = await reader();
+  return settle(() => main.v1.agents({ id: agent.slice(-36) }).works.get({ query: { language: locale, actingSubject,
+    limit: 12 } }));
+});
 
 export const readAgentCredits = cache(async (id: string): Promise<Loaded<AgentCreditPage>> => {
   const { main, actingSubject } = await reader();

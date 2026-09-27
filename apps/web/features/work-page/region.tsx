@@ -1,6 +1,5 @@
 import { Alert, AlertAction, AlertDescription, AlertTitle } from '@rezics/ui/alert';
 import { buttonVariants } from '@rezics/ui/button';
-import { Card } from '@rezics/ui/card';
 import { Skeleton, SkeletonText } from '@rezics/ui/skeleton';
 import { cn } from '@rezics/ui/utils';
 import { TriangleAlertIcon } from 'lucide-react';
@@ -10,19 +9,20 @@ import type { WorkPageMessages } from './messages.ts';
 import { RetryButton } from './retry-button.tsx';
 import type { ReadFailure } from './types.ts';
 
-/** One independently loaded part of a Work view, titled by its own heading. */
+/**
+ * One independently loaded part of a Work view, titled by its own heading.
+ * Sections sit on the page ground, as Goodreads' do, rather than in cards.
+ */
 export function Region({ id, title, aside, children, className }: {
   id: string; title: string; aside?: ReactNode; children: ReactNode; className?: string;
 }) {
-  return <Card asChild className={cn('min-w-0 gap-4 px-5 sm:px-6', className)}>
-    <section aria-labelledby={id}>
-      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
-        <h2 id={id} className="font-semibold text-lg/7">{title}</h2>
-        {aside}
-      </div>
-      {children}
-    </section>
-  </Card>;
+  return <section aria-labelledby={id} className={cn('grid min-w-0 content-start gap-4', className)}>
+    <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+      <h2 id={id} className="font-semibold text-xl tracking-tight">{title}</h2>
+      {aside}
+    </div>
+    {children}
+  </section>;
 }
 
 function failureText(failure: ReadFailure, t: WorkPageMessages): string {

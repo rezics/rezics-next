@@ -1,7 +1,13 @@
 import { Alert, AlertDescription, AlertTitle } from '@rezics/ui/alert';
-import { CircleAlertIcon } from 'lucide-react';
+import { buttonVariants } from '@rezics/ui/button';
+import { cn } from '@rezics/ui/utils';
+import { WorkCover } from '@rezics/ui/work-cover';
+import { BookOpenIcon, CircleAlertIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
 import type { UiLocale } from '../../i18n/define.ts';
+import { RateWork, type ReaderActions, ReaderActionsProvider, ShelfButton } from '../catalogue/reader-actions.tsx';
+import { coverImage, coverKindOf } from '../catalogue/work.ts';
+import Link from '../shell/localized-link.tsx';
 import { PageContainer } from '../shell/page.tsx';
 import type { WorkPageMessages } from './messages.ts';
 import { workHref } from './route.ts';
@@ -9,44 +15,89 @@ import type { WorkHeader as Header } from './types.ts';
 import { WorkHeader } from './work-header.tsx';
 import { WorkTabs } from './work-tabs.tsx';
 
-/** Header and tabs around every Work view. */
-export function WorkFrame({ workRef, work, credits, locale, messages, children }: {
-  workRef: string; work: Header; credits: ReactNode; locale: UiLocale; messages: WorkPageMessages; children: ReactNode;
+/**
+ * Header and tabs around every Work view, laid out as Goodreads' book page:
+ * a large cover on the left with the primary actions under it (Read, the
+ * shelf and the reader's rating), and the title, authors and rating summary
+ * beside it. On a phone the cover leads, centred, and the actions follow the
+ * title. The left column stays in view while the page scrolls.
+ */
+export function WorkFrame({ workRef, work, credits, ratingLine, signedIn = false, signInHref, readerActions,
+  avatarQuery, locale, messages, children }: {
+  workRef: string; work: Header; credits: ReactNode;
+  /** The rating summary under the title, streamed on its own. */
+  ratingLine?: ReactNode;
+  signedIn?: boolean;
+  /** Where the shelf and rating controls send a signed-out reader; sign-in returns here. */
+  signInHref?: string;
+  /** Stories supply reader actions; pages derive them from the session. */
+  readerActions?: ReaderActions;
+  avatarQuery?: string;
+  locale: UiLocale; messages: WorkPageMessages; children: ReactNode;
 }) {
-  // CJK text spaces itself from inserted Latin names and digits ("来自 Tidewater Readers").
-  return <PageContainer className="grid gap-6 [text-autospace:normal]">
-    <WorkHeader work={work} credits={credits} readHref={workHref(workRef, 'contents')} locale={locale}
-      messages={messages} />
-    <WorkTabs workRef={workRef} label={messages.sections} labels={{ overview: messages.overview,
-      contents: messages.contents, versions: messages.versions, discussion: messages.discussion,
-      history: messages.history }} />
-    {children}
-  </PageContainer>;
+  return <ReaderActionsProvider signedIn={signedIn} signInHref={signInHref ?? '/auth/start'} actions={readerActions}>
+    {/* CJK text spaces itself from inserted Latin names and digits ("来自 Tidewater Readers"). */}
+    <PageContainer className="grid gap-x-12 gap-y-6 [text-autospace:normal] lg:grid-cols-[15rem_minmax(0,1fr)]
+      lg:grid-rows-[auto_1fr] xl:grid-cols-[17rem_minmax(0,1fr)] xl:gap-x-16">
+      {/* On a phone this column dissolves into the page so the title can sit between cover and actions. */}
+      <div className="contents lg:sticky lg:top-6 lg:col-start-1 lg:row-span-2 lg:row-start-1 lg:grid lg:content-start
+        lg:gap-6 lg:self-start">
+        <div className="order-1 flex justify-center lg:order-none">
+          <WorkCover title={work.title.value} lang={work.title.language} dir={work.title.direction}
+            kind={coverKindOf(work.types)} seed={work.cover.kind === 'fallback' ? work.cover.key : work.id}
+            image={coverImage(work.cover, avatarQuery)} loading="eager" className="w-44 sm:w-52 lg:w-full" />
+        </div>
+        <div className="order-3 mx-auto grid w-full max-w-sm content-start gap-3 lg:order-none">
+          <Link href={workHref(workRef, 'contents')} className={cn(buttonVariants({ size: 'lg', pill: true }), 'w-full')}>
+            <BookOpenIcon aria-hidden="true" />{messages.read}</Link>
+          <ShelfButton work={work.id} title={work.title.value} locale={locale} size="lg" variant="outline" />
+          <RateWork work={work.id} locale={locale} className="mt-1" />
+        </div>
+      </div>
+      <div className="order-2 min-w-0 lg:order-none lg:col-start-2 lg:row-start-1">
+        <WorkHeader work={work} credits={credits} ratingLine={ratingLine} locale={locale} messages={messages} />
+      </div>
+      <div className="order-4 grid min-w-0 content-start gap-8 lg:order-none lg:col-start-2 lg:row-start-2">
+        <WorkTabs workRef={workRef} label={messages.sections} labels={{ overview: messages.overview,
+          contents: messages.contents, versions: messages.versions, discussion: messages.discussion,
+          history: messages.history }} />
+        {children}
+      </div>
+    </PageContainer>
+  </ReaderActionsProvider>;
 }
 
 /**
- * The Overview's arrangement: the description, the scope bar, then ratings and classification
- * in the chosen scope beside Realm adoption and the record. An unknown scope
- * is reported in place of the scoped regions, never replaced by Global.
+ * The Overview's order: the description, genres and the folded details, then
+ * ratings (whose ratings is switched beside their heading), the communities
+ * that feature the Work and its author. An unknown scope is reported in
+ * place of the scoped sections, with the switch to choose another; it is
+ * never replaced by everyone's view.
  */
-export function OverviewLayout({ about, scopeBar, ratings, classification, adoption, record, messages }: {
+export function OverviewLayout({ about, scopeBar, ratings, classification, adoption, record, author, messages }: {
   /** The Work's description; it does not change with scope, so it comes first. */
-  about?: ReactNode; scopeBar: ReactNode;
+  about?: ReactNode;
+  /** Shown on its own only when the URL names no known scope; the ratings section carries it otherwise. */
+  scopeBar: ReactNode;
   /** Null when the URL names no known scope. */
   ratings: ReactNode | null; classification: ReactNode; adoption: ReactNode; record: ReactNode;
+  /** About the author and more by them, when the Work has a native author credit. */
+  author?: ReactNode;
   messages: WorkPageMessages;
 }) {
-  return <>
+  return <div className="grid min-w-0 gap-10">
     {about}
-    {scopeBar}
-    {ratings === null ? <InvalidScope messages={messages} /> : <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_20rem] lg:items-start">
-      <div className="grid min-w-0 gap-6">{ratings}{classification}</div>
-      <div className="grid min-w-0 gap-6">{adoption}{record}</div>
-    </div>}
-  </>;
+    {ratings === null ? <div className="grid gap-4">{scopeBar}<InvalidScope messages={messages} /></div> : <>
+      {classification}
+      {record}
+      {ratings}
+      {adoption}
+    </>}
+    {author}
+  </div>;
 }
 
-/** The URL names no scope this page can show; it says so instead of showing Global. */
+/** The URL names no scope this page can show; it says so instead of showing everyone's view. */
 export function InvalidScope({ messages }: { messages: WorkPageMessages }) {
   return <Alert variant="warning" role="alert">
     <CircleAlertIcon aria-hidden="true" />

@@ -46,18 +46,20 @@ function ScopeLink({ href, current, icon: Icon, children }: {
   href: string; current: boolean; icon: LucideIcon; children: ReactNode;
 }) {
   return <Link href={href} aria-current={current ? 'true' : undefined} className={cn(
-    'flex h-9 max-w-64 items-center gap-1.5 rounded-xl px-3 font-medium text-sm outline-none transition-colors',
+    'flex h-8 max-w-56 items-center gap-1.5 rounded-full px-3 font-medium text-sm outline-none transition-colors',
     'text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring',
-    'aria-[current=true]:bg-primary/10 aria-[current=true]:text-primary')}>
-    <Icon aria-hidden="true" className="size-4 shrink-0" />
+    'aria-[current=true]:bg-foreground aria-[current=true]:text-background')}>
+    <Icon aria-hidden="true" className="size-3.5 shrink-0" />
     <span className="truncate">{children}</span>
   </Link>;
 }
 
 /**
- * Whose ratings, classification, adoption and discussion the view shows: Global, a Realm
- * or Mine. Realms offered are those that adopted the Work plus the one in the
- * URL. The line under it names the scope in words, so it is never implicit.
+ * Whose ratings, genres and replies a section shows: everyone, a community
+ * that features the Work, or the reader. Small and beside the section's
+ * title, so it is there when wanted and never the headline. Discussion adds a
+ * line saying whose replies are shown; elsewhere the section's own content
+ * names the community when one is chosen.
  */
 export function ScopeBar({ workRef, scope, realms, locale, messages, tab = 'overview' }: {
   workRef: string; scope: WorkScope | null; realms: readonly ScopeRealm[]; locale: UiLocale;
@@ -66,36 +68,29 @@ export function ScopeBar({ workRef, scope, realms, locale, messages, tab = 'over
   const t = materializeData(messages, { locale });
   const current = scope?.kind === 'realm' ? realms.find(realm => realm.id === scope.realm) : undefined;
   const realm = scope?.kind === 'realm' ? realmLabel(current ?? { id: scope.realm, name: null }, messages, locale) : '';
-  const discussion = tab === 'discussion';
-  const description = !scope ? null
-    : scope.kind === 'global' ? (discussion ? t.scopeDiscussionGlobal : t.scopeGlobal)
-      : scope.kind === 'mine' ? (discussion ? t.scopeDiscussionMine : t.scopeMine)
-        : discussion ? t.scopeDiscussionRealm({ realm }) : t.scopeRealm({ realm });
+  const description = tab !== 'discussion' || !scope ? null : scope.kind === 'global' ? t.scopeDiscussionGlobal
+    : scope.kind === 'mine' ? t.scopeDiscussionMine : t.scopeDiscussionRealm({ realm });
   return <nav aria-label={t.scope} className="grid min-w-0 gap-2">
-    <div className="flex">
-      <ul className="flex min-w-0 flex-wrap gap-1 rounded-2xl border border-border/60 bg-card/80 p-1
-        shadow-(--aura-shadow-card)">
-        <li><ScopeLink href={workHref(workRef, tab)} current={sameScope(scope, { kind: 'global' })} icon={GlobeIcon}>
-          {t.global}</ScopeLink></li>
-        {realms.map(realm => <li key={realm.id}>
-          <ScopeLink href={workHref(workRef, tab, { kind: 'realm', realm: realm.id })} icon={UsersRoundIcon}
-            current={sameScope(scope, { kind: 'realm', realm: realm.id })}>
-            <span className="sr-only">{t.realm}: </span>
-            <span lang={realm.name?.language}>{realmLabel(realm, messages, locale)}</span>
-          </ScopeLink>
-        </li>)}
-        <li><ScopeLink href={workHref(workRef, tab, { kind: 'mine' })} current={sameScope(scope, { kind: 'mine' })}
-          icon={UserRoundIcon}>{t.mine}</ScopeLink></li>
-      </ul>
-    </div>
-    <p className="text-muted-foreground text-xs">
-      {description}{realms.length ? null : <> {t.noAdoptingRealms}</>}
-    </p>
+    <ul className="flex min-w-0 flex-wrap gap-1">
+      <li><ScopeLink href={workHref(workRef, tab)} current={sameScope(scope, { kind: 'global' })} icon={GlobeIcon}>
+        {t.global}</ScopeLink></li>
+      {realms.map(realm => <li key={realm.id}>
+        <ScopeLink href={workHref(workRef, tab, { kind: 'realm', realm: realm.id })} icon={UsersRoundIcon}
+          current={sameScope(scope, { kind: 'realm', realm: realm.id })}>
+          <span className="sr-only">{t.realm}: </span>
+          <span lang={realm.name?.language}>{realmLabel(realm, messages, locale)}</span>
+        </ScopeLink>
+      </li>)}
+      <li><ScopeLink href={workHref(workRef, tab, { kind: 'mine' })} current={sameScope(scope, { kind: 'mine' })}
+        icon={UserRoundIcon}>{t.mine}</ScopeLink></li>
+    </ul>
+    {description ? <p className="text-muted-foreground text-xs">{description}</p> : null}
   </nav>;
 }
 
 export function ScopeBarSkeleton({ label }: { label: string }) {
-  return <div role="status" aria-label={label} className="grid gap-2">
-    <Skeleton className="h-11 w-64 rounded-2xl" /><Skeleton className="h-4 w-72 rounded-md" />
+  return <div role="status" aria-label={label} className="flex gap-1">
+    <Skeleton className="h-8 w-24 rounded-full" /><Skeleton className="h-8 w-32 rounded-full" />
+    <Skeleton className="h-8 w-16 rounded-full" />
   </div>;
 }

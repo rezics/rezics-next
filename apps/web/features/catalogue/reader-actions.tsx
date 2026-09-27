@@ -123,14 +123,16 @@ export function ShelfMark({ work, title, locale }: { work: string; title: string
  * The primary shelf action: "Want to read" in one press, the other status
  * shelves and removal in its menu. Signed out, it leads to sign-in.
  */
-export function ShelfButton({ work, title, locale, size = 'lg', className }: {
-  work: string; title: string; locale: UiLocale; size?: 'sm' | 'md' | 'lg'; className?: string;
+export function ShelfButton({ work, title, locale, size = 'lg', variant = 'default', className }: {
+  work: string; title: string; locale: UiLocale; size?: 'sm' | 'md' | 'lg';
+  /** `outline` where another action leads, such as Read on the Work page. */
+  variant?: 'default' | 'outline'; className?: string;
 }) {
   const t = materializeData(messages[locale], { locale });
   const { actions, status, state, choose } = useStatus(work);
   if (actions.kind === 'unavailable') return null;
   if (actions.kind === 'signed-out') {
-    return <Link href={actions.signInHref} className={cn(buttonVariants({ size, pill: true }), className)}>
+    return <Link href={actions.signInHref} className={cn(buttonVariants({ size, variant, pill: true }), className)}>
       <BookmarkPlusIcon aria-hidden="true" />{t.wantToRead}<span className="sr-only"> — {t.signInToShelve}</span></Link>;
   }
   const failure = state === 'failed'
@@ -150,13 +152,13 @@ export function ShelfButton({ work, title, locale, size = 'lg', className }: {
   }
   return <div className={cn('grid gap-1.5', className)}>
     <ButtonGroup className="w-full">
-      <Button size={size} className="flex-1 rounded-s-full" isLoading={state === 'saving'}
+      <Button size={size} variant={variant} className="flex-1 rounded-s-full" isLoading={state === 'saving'}
         onClick={() => void choose('want-to-read')}>
         <BookmarkPlusIcon aria-hidden="true" />{t.wantToRead}</Button>
       <Menu onSelect={selectStatus(choose)}>
         <MenuTrigger aria-label={t.shelfOptions}
-          className={cn(buttonVariants({ size: size === 'lg' ? 'icon-lg' : size === 'md' ? 'icon-md' : 'icon-sm' }),
-            'w-11 flex-none rounded-e-full border-s border-s-primary-foreground/25')}>
+          className={cn(buttonVariants({ variant, size: size === 'lg' ? 'icon-lg' : size === 'md' ? 'icon-md' : 'icon-sm' }),
+            'w-11 flex-none rounded-e-full', variant === 'default' && 'border-s border-s-primary-foreground/25')}>
           <ChevronDownIcon aria-hidden="true" /></MenuTrigger>
         <MenuContent className="w-56"><StatusMenuItems status={status} t={t} /></MenuContent>
       </Menu>

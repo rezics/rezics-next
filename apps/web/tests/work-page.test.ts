@@ -29,6 +29,9 @@ describe('Work page addresses', () => {
     expect(workHref(work, 'versions', null, { kind: undefined, language: 'ja' })).toBe(`/w/${work}/versions?language=ja`);
     expect(tabOf(`/w/${work}`)).toBe('overview');
     expect(tabOf(`/w/${work}/discussion`)).toBe('discussion');
+    // Pages live under the interface locale.
+    expect(tabOf(`/zh-Hans/w/${work}/versions`)).toBe('versions');
+    expect(tabOf(`/en/w/${work}`)).toBe('overview');
     expect(tabOf(`/w/${work}/unknown`)).toBe('overview');
   });
 
@@ -68,9 +71,9 @@ describe('Work page scope', () => {
     expect(neighbourScope({ kind: 'global' }, [])).toBeNull();
   });
 
-  test('a Realm Main cannot name is still named, by its short ID', () => {
+  test('a community Main cannot name is still named, by its short ID', () => {
     const view = { workRef: work, scope: { kind: 'realm' as const, realm }, realms: [] };
-    expect(scopeName(view, messages.en, 'en')).toBe('Realm 9b1d3c2a');
+    expect(scopeName(view, messages.en, 'en')).toBe('Community 9b1d3c2a');
     expect(scopeName({ ...view, realms: [{ id: realm, name: { value: '潮汐', language: 'zh-Hans',
       direction: 'ltr' as const, basis: 'requested' as const } }] }, messages['zh-Hans'], 'zh-Hans')).toBe('潮汐');
   });

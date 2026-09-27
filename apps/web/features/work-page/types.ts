@@ -33,6 +33,7 @@ export type RatingContextPage = Ok<Work['rating-contexts']['get']>;
 export type RatingContext = RatingContextPage['items'][number];
 export type RatingSummary = Ok<Work['ratings']['get']>;
 export type RealmHeader = Ok<ReturnType<Main['v1']['realms']>['get']>;
+export type AgentWorksPage = Ok<ReturnType<Main['v1']['agents']>['works']['get']>;
 
 /** A scope's rating summary with the Context (question) it answers. */
 export interface RatingRead {

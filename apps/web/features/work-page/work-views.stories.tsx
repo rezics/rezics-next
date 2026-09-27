@@ -120,7 +120,7 @@ export const History: Story = {
     const region = within(canvasElement).getByRole('region', { name: 'History' });
     await expect(region).toHaveTextContent('Newest first.');
     const items = within(region).getAllByRole('listitem');
-    await expect(items.map(item => item.querySelector('p')?.textContent)).toEqual(['Reply placed in a Realm',
+    await expect(items.map(item => item.querySelector('p')?.textContent)).toEqual(['Reply placed in a community',
       'Metadata revised', 'Version published', 'Metadata revised']);
     await expect(within(region).getAllByRole('link', { name: 'View revision' })[0])
       .toHaveAttribute('href', `/en/works/${fixture.work.revision.slice(-36)}`);
@@ -215,8 +215,8 @@ export const Discussion: Story = {
   render: () => <Framed>{discussionView()}</Framed>,
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
-    await expect(canvas.getByRole('navigation', { name: 'Scope' }))
-      .toHaveTextContent('Showing reviewed replies from every public Realm.');
+    await expect(canvas.getByRole('navigation', { name: 'Community' }))
+      .toHaveTextContent('Showing reviewed replies from every public community.');
     const region = canvas.getByRole('region', { name: 'Discussion' });
     const replies = within(region).getAllByRole('article');
     await expect(replies).toHaveLength(3);
@@ -233,7 +233,7 @@ export const DiscussionEmptyRealm: Story = {
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     await expect(canvas.getByRole('heading', { name: 'No reviewed replies in Tidewater Readers yet' })).toBeVisible();
-    await expect(canvas.getByRole('link', { name: 'See Global' })).toHaveAttribute('href', `/en/w/${fixture.workRef}/discussion`);
+    await expect(canvas.getByRole('link', { name: 'See everyone' })).toHaveAttribute('href', `/en/w/${fixture.workRef}/discussion`);
   },
 };
 
