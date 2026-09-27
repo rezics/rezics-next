@@ -22,7 +22,7 @@ export interface ManualSourceIntake {
 }
 
 export interface SourceCapture {
-  profile: 'open-library-work-acquisition-v1';
+  profile: 'open-library-work-acquisition-v1' | 'open-library-author-acquisition-v1';
   url: string;
   status: 200;
   etag: string | null;
@@ -216,13 +216,16 @@ export class SourceIntakeStore {
       if (!permitted) throw new SourceIntakeInvalid('provider terms prohibit raw response retention');
     }
     const { bytes, digest: byteDigest } = checkedInput(input);
-    if (capture && (capture.profile !== 'open-library-work-acquisition-v1'
+    const authorCapture = capture?.profile === 'open-library-author-acquisition-v1';
+    const capturePath = authorCapture ? 'authors' : 'works';
+    if (capture && ((!authorCapture && capture.profile !== 'open-library-work-acquisition-v1')
       || capture.status !== 200
-      || !/^https:\/\/openlibrary\.org\/works\/OL[1-9][0-9]{0,11}W\.json(?:\?v=[1-9][0-9]{0,8})?$/.test(capture.url)
-      || input.provider !== 'open-library' || input.namespace !== 'work'
-      || ![ `https://openlibrary.org/works/${input.externalId}.json`,
+      || !(authorCapture ? /^OL[1-9][0-9]{0,11}A$/ : /^OL[1-9][0-9]{0,11}W$/).test(input.externalId)
+      || input.provider !== 'open-library' || input.namespace !== (authorCapture ? 'author' : 'work')
+      || ![ `https://openlibrary.org/${capturePath}/${input.externalId}.json`,
         ...(input.sourceRevision?.startsWith('open-library-revision:')
-          ? [`https://openlibrary.org/works/${input.externalId}.json?v=${input.sourceRevision.slice(22)}`]
+          && /^[1-9][0-9]{0,8}$/.test(input.sourceRevision.slice(22))
+          ? [`https://openlibrary.org/${capturePath}/${input.externalId}.json?v=${input.sourceRevision.slice(22)}`]
           : []) ].includes(capture.url)
       || input.retention !== 'retained'
       || !Number.isFinite(Date.parse(capture.fetchedAt))

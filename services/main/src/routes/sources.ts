@@ -1,5 +1,6 @@
 import { Elysia, t } from 'elysia';
 import { SourceIntakeConflict } from '../modules/source/intake.ts';
+import { authorNameProvenance } from '../modules/source/author-name.ts';
 import { checkedOpenLibraryWorkId, fetchOpenLibraryWork } from '../modules/source/open-library.ts';
 import { compareSourceChildren } from '../modules/source/child-correspondence.ts';
 import { ProviderIdentityConflict, ProviderIdentityInvalid, ProviderIdentityUnavailable }
@@ -13,6 +14,8 @@ import { commandError, problem } from './problems.ts';
 import { groupAgent, groupUuid, sourceRightsEvidence } from './shared.ts';
 
 export const openApiOperations = {
+  '/v1/sources/open-library/authors/{author}/name': {
+    get: { bearer: true }, post: { bearer: true, idempotencyKey: true } },
   '/v1/sources/identity-changes': { post: { bearer: true } },
   '/v1/sources/identity-changes/{change}': { get: { bearer: true } },
   '/v1/sources/identity-corrections': { post: { bearer: true, idempotencyKey: true } },
@@ -75,7 +78,8 @@ const sourceObservationResult = t.Object({ profile: t.Union([
   byteDigest: t.Nullable(t.String()), byteLength: t.Nullable(t.Number()),
   rawBytesBase64: t.Optional(t.String()), coverage: sourceCoverage,
   rightsEvidence: sourceRightsEvidence, submittedAt: t.String(),
-  capture: t.Optional(t.Object({ profile: t.Literal('open-library-work-acquisition-v1'),
+  capture: t.Optional(t.Object({ profile: t.Union([t.Literal('open-library-work-acquisition-v1'),
+    t.Literal('open-library-author-acquisition-v1')]),
     url: t.String(), status: t.Literal(200), etag: t.Nullable(t.String()),
     lastModified: t.Nullable(t.String()), fetchedAt: t.String() })),
 });
@@ -172,6 +176,11 @@ const sourceProposalResult = t.Object({
 const sourceProposalWriteResult = t.Object({ proposal: sourceProposalResult,
   replayed: t.Boolean() });
 
+const sourceAuthorNameResult = t.Object({ revision: groupUuid, authorKey: t.String(),
+  state: t.Union([t.Literal('available'), t.Literal('removed')]),
+  name: t.Nullable(t.Object({ displayName: t.String({ minLength: 1, maxLength: 200 }),
+    nameSource: authorNameProvenance })) });
+
 const sourceAdoptionResult = t.Object({
   profile: t.Literal('source-native-work-adoption-v1'), state: t.Literal('adopted'),
   binding: t.String(), proposal: t.String(), sourceRecord: t.String(),
@@ -188,6 +197,39 @@ const sourceAdoptionWriteResult = t.Object({ adoption: sourceAdoptionResult,
 
 export function sourceRoutes(work: MainWorkDependencies) {
   return new Elysia()
+    .get('/v1/sources/open-library/authors/:author/name', {
+      params: t.Object({ author: t.String({ pattern: '^OL[1-9][0-9]{0,11}A$' }) }),
+      response: { 200: sourceAuthorNameResult, ...authorizedReadProblems },
+    }, async ({ request, params }) => {
+      try {
+        if (!work.sourceAuthorNames) return problem(503, 'source_names_unavailable', 'Source names are unavailable');
+        const principal = await work.account.verify(request, ['source:read']);
+        if (!await work.access.activePrincipalId(principal)) return problem(403, 'authority_denied', 'Source principal is inactive');
+        const result = await work.sourceAuthorNames.read(`/authors/${params.author}`);
+        if (!result) return problem(404, 'source_name_unavailable', 'Source name is unavailable');
+        return Response.json(result, { headers: { 'cache-control': 'no-store' } });
+      } catch (error) { return commandError(error); }
+    })
+    .post('/v1/sources/open-library/authors/:author/name', {
+      params: t.Object({ author: t.String({ pattern: '^OL[1-9][0-9]{0,11}A$' }) }),
+      body: t.Union([
+        t.Object({ action: t.Literal('refresh'), expectedRevision: t.Nullable(groupUuid) }, { additionalProperties: false }),
+        t.Object({ action: t.Literal('remove'), expectedRevision: groupUuid,
+          reason: t.String({ minLength: 1, maxLength: 500 }) }, { additionalProperties: false }),
+      ]),
+      response: { 200: t.Object({ ...sourceAuthorNameResult.properties, replayed: t.Boolean() }), ...writeProblems },
+    }, async ({ request, params, body }) => {
+      try {
+        if (!work.sourceAuthorNames) return problem(503, 'source_names_unavailable', 'Source names are unavailable');
+        const key = request.headers.get('idempotency-key');
+        if (!key) return problem(400, 'invalid_idempotency_key', 'Idempotency-Key is required');
+        const principal = await work.account.verify(request, ['source:acquire']);
+        const principalId = await work.access.activePrincipalId(principal);
+        if (!principalId) return problem(403, 'authority_denied', 'Source principal is inactive');
+        return Response.json(await work.sourceAuthorNames.command(principalId, key, `/authors/${params.author}`, body),
+          { headers: { 'cache-control': 'no-store' } });
+      } catch (error) { return commandError(error); }
+    })
     .post('/v1/sources/statistics', {
       body: t.Object({ profile: t.Literal('source-statistic-v1'), observation: groupAgent,
         kind: t.Union([t.Literal('aggregate-score'), t.Literal('provider-user-score')]),

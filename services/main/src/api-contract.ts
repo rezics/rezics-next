@@ -87,9 +87,12 @@ const phraseMatch = t.Object({
   matchUnit: t.String(), work: t.String(), mainVersion: t.String(),
   contribution: t.String(), revision: t.String(), selection: t.String(),
   language: t.String(), score: t.Number(), types: t.Array(t.String(), { maxItems: 3 }),
+  matchedField: t.Optional(t.Union(['title', 'credit', 'tagline', 'body'].map(value => t.Literal(value)))),
+  matchedText: t.Optional(t.String()), matchedLanguage: t.Optional(t.Nullable(t.String())),
   title: t.Optional(readName), cover: t.Optional(readAvatar),
   primaryCredits: t.Optional(t.Array(discoveryCredit, { maxItems: 3 })),
   rating: t.Optional(t.Nullable(discoveryRating)), tagline: t.Optional(t.Nullable(readName)),
+  ratingStatus: t.Optional(t.Union(['available', 'unrated', 'no-context', 'context-required'].map(value => t.Literal(value)))),
   completionStatus: t.Optional(t.Nullable(t.Union([t.Literal('ongoing'),
     t.Literal('completed'), t.Literal('hiatus')]))),
   chapterCount: t.Optional(t.Nullable(t.Integer({ minimum: 0 }))),
@@ -133,9 +136,6 @@ const ratedRealmMatch = t.Object({ ...classifiedRealmMatch.properties,
   rating: t.Object({ context: t.String(), count: t.Number(), sum: t.Number(),
     mean: t.Number(), precision: t.Object({ kind: t.Literal('exact-rational'),
       numerator: t.Number(), denominator: t.Number() }) }) });
-const baseQuery = { contractVersion: t.Literal('1'), resultGrain: t.Literal('mainVersion'),
-  complete: t.Literal(true), population: t.Number(), indexGeneration: t.String(),
-  total: t.Number(), sourcePosition, facets: phraseFacets };
 const realmContext = t.Object({ kind: t.Literal('realm-local'), id: t.String() });
 const contentPosition = t.Object({ owner: t.Literal('content'), dataEpoch: t.String(),
   sequence: t.String({ pattern: '^[0-9]+$' }) });
@@ -158,6 +158,73 @@ const publicDisclosedFieldMatch = t.Union([
   t.Object({ kind: t.Literal('resource-name'), owner: t.String(), text: t.String(),
     language: t.String(), avatar: publicSearchAvatar, score: t.Literal(1) }, { additionalProperties: false }),
 ]);
+const pageContinuation = t.Object({
+  queryDigest: t.String({ pattern: '^[0-9a-f]{64}$' }),
+  resultDigest: t.String({ pattern: '^[0-9a-f]{64}$' }),
+  sourcePosition, indexGeneration: t.String(),
+  nextOffset: t.Integer({ minimum: 1, maximum: 512 }),
+  expiresAt: t.Integer({ minimum: 0 }),
+}, { additionalProperties: false });
+const contentPageContinuation = t.Object({
+  queryDigest: t.String({ pattern: '^[0-9a-f]{64}$' }),
+  resultDigest: t.String({ pattern: '^[0-9a-f]{64}$' }),
+  graphPosition: t.Object({ dataEpoch: t.String(),
+    sequence: t.String({ pattern: '^[0-9]+$' }) }),
+  contentPosition, indexGeneration: t.String(),
+  nextOffset: t.Integer({ minimum: 1, maximum: 512 }),
+  expiresAt: t.Integer({ minimum: 0 }),
+}, { additionalProperties: false });
+const pageRequest = {
+  ...unsupportedPublicSearchSelectors,
+  ...workTypeFilters,
+  phrase: t.String({ minLength: 2, maxLength: 80 }),
+  language: t.Union([t.String({ minLength: 2, maxLength: 35,
+    pattern: '^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$' }), t.Null()]),
+  author: t.Optional(t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' })),
+  pageSize: t.Integer({ minimum: 1, maximum: 64 }),
+  continuation: t.Optional(pageContinuation),
+};
+const titleBodyPageRequest = {
+  ...unsupportedPublicSearchSelectors,
+  ...workTypeFilters,
+  titleTerm: t.String({ minLength: 2, maxLength: 80 }),
+  bodyTerm: t.String({ minLength: 2, maxLength: 80 }),
+  language: pageRequest.language, author: pageRequest.author,
+  pageSize: pageRequest.pageSize, continuation: pageRequest.continuation,
+};
+const classifiedPageRequest = {
+  ...pageRequest,
+  sense: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
+};
+export const publicPhrasePageRequest = t.Union([
+  t.Object({ profile: t.Literal('public-content-phrase-page-v1'),
+    ...unsupportedPublicSearchSelectors,
+    phrase: t.String({ minLength: 2, maxLength: 80 }),
+    language: t.Union([t.String({ minLength: 2, maxLength: 35,
+      pattern: '^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$' }), t.Null()]),
+    pageSize: t.Integer({ minimum: 1, maximum: 64 }),
+    continuation: t.Optional(contentPageContinuation) }, { additionalProperties: false }),
+  t.Object({ profile: t.Literal('public-main-phrase-page-v1'), ...pageRequest },
+    { additionalProperties: false }),
+  t.Object({ profile: t.Literal('public-main-title-body-page-v1'), ...titleBodyPageRequest },
+    { additionalProperties: false }),
+  t.Object({ profile: t.Literal('public-realm-phrase-page-v1'),
+    context: realmContext, ...pageRequest }, { additionalProperties: false }),
+  t.Object({ profile: t.Literal('public-main-classified-phrase-page-v1'),
+    ...classifiedPageRequest }, { additionalProperties: false }),
+  t.Object({ profile: t.Literal('public-realm-classified-phrase-page-v1'),
+    context: realmContext, ...classifiedPageRequest }, { additionalProperties: false }),
+  t.Object({ profile: t.Literal('public-realm-classified-rated-phrase-page-v1'),
+    context: realmContext, ...classifiedPageRequest,
+    ratingContext: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
+    minimumMeanTimes10: t.Integer({ minimum: 10, maximum: 100 }) },
+  { additionalProperties: false }),
+]);
+const baseQuery = { contractVersion: t.Literal('1'), resultGrain: t.Literal('mainVersion'),
+  complete: t.Literal(true), population: t.Number(), indexGeneration: t.String(),
+  total: t.Number(), sourcePosition, facets: phraseFacets,
+  cardWindow: t.Optional(t.Object({ hydrated: t.Integer({ minimum: 0, maximum: 20 }),
+    limit: t.Literal(20), next: t.Nullable(publicPhrasePageRequest) }, { additionalProperties: false })) };
 
 export const publicQueryResult = t.Union([
   t.Object({ contractVersion: t.Literal('1'), profile: t.Literal('public-grouped-statement-phrase-v1'),
@@ -223,68 +290,7 @@ export const publicQueryResult = t.Union([
   { additionalProperties: false }),
 ]);
 
-const pageContinuation = t.Object({
-  queryDigest: t.String({ pattern: '^[0-9a-f]{64}$' }),
-  resultDigest: t.String({ pattern: '^[0-9a-f]{64}$' }),
-  sourcePosition, indexGeneration: t.String(),
-  nextOffset: t.Integer({ minimum: 1, maximum: 512 }),
-  expiresAt: t.Integer({ minimum: 0 }),
-}, { additionalProperties: false });
-const contentPageContinuation = t.Object({
-  queryDigest: t.String({ pattern: '^[0-9a-f]{64}$' }),
-  resultDigest: t.String({ pattern: '^[0-9a-f]{64}$' }),
-  graphPosition: t.Object({ dataEpoch: t.String(),
-    sequence: t.String({ pattern: '^[0-9]+$' }) }),
-  contentPosition, indexGeneration: t.String(),
-  nextOffset: t.Integer({ minimum: 1, maximum: 512 }),
-  expiresAt: t.Integer({ minimum: 0 }),
-}, { additionalProperties: false });
-const pageRequest = {
-  ...unsupportedPublicSearchSelectors,
-  ...workTypeFilters,
-  phrase: t.String({ minLength: 2, maxLength: 80 }),
-  language: t.Union([t.String({ minLength: 2, maxLength: 35,
-    pattern: '^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$' }), t.Null()]),
-  author: t.Optional(t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' })),
-  pageSize: t.Integer({ minimum: 1, maximum: 64 }),
-  continuation: t.Optional(pageContinuation),
-};
-const titleBodyPageRequest = {
-  ...unsupportedPublicSearchSelectors,
-  ...workTypeFilters,
-  titleTerm: t.String({ minLength: 2, maxLength: 80 }),
-  bodyTerm: t.String({ minLength: 2, maxLength: 80 }),
-  language: pageRequest.language, author: pageRequest.author,
-  pageSize: pageRequest.pageSize, continuation: pageRequest.continuation,
-};
-const classifiedPageRequest = {
-  ...pageRequest,
-  sense: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
-};
-export const publicPhrasePageRequest = t.Union([
-  t.Object({ profile: t.Literal('public-content-phrase-page-v1'),
-    ...unsupportedPublicSearchSelectors,
-    phrase: t.String({ minLength: 2, maxLength: 80 }),
-    language: t.Union([t.String({ minLength: 2, maxLength: 35,
-      pattern: '^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$' }), t.Null()]),
-    pageSize: t.Integer({ minimum: 1, maximum: 64 }),
-    continuation: t.Optional(contentPageContinuation) }, { additionalProperties: false }),
-  t.Object({ profile: t.Literal('public-main-phrase-page-v1'), ...pageRequest },
-    { additionalProperties: false }),
-  t.Object({ profile: t.Literal('public-main-title-body-page-v1'), ...titleBodyPageRequest },
-    { additionalProperties: false }),
-  t.Object({ profile: t.Literal('public-realm-phrase-page-v1'),
-    context: realmContext, ...pageRequest }, { additionalProperties: false }),
-  t.Object({ profile: t.Literal('public-main-classified-phrase-page-v1'),
-    ...classifiedPageRequest }, { additionalProperties: false }),
-  t.Object({ profile: t.Literal('public-realm-classified-phrase-page-v1'),
-    context: realmContext, ...classifiedPageRequest }, { additionalProperties: false }),
-  t.Object({ profile: t.Literal('public-realm-classified-rated-phrase-page-v1'),
-    context: realmContext, ...classifiedPageRequest,
-    ratingContext: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
-    minimumMeanTimes10: t.Integer({ minimum: 10, maximum: 100 }) },
-  { additionalProperties: false }),
-]);
+
 const pageResult = { resultGrain: t.Literal('mainVersion'), facets: phraseFacets,
   relationComplete: t.Literal(true), population: t.Integer(), total: t.Integer(),
   sourcePosition, indexGeneration: t.String(), next: t.Nullable(pageContinuation) };

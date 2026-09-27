@@ -14,6 +14,7 @@ import { DEFAULT_MEDIA_CONTEXT } from '../media/store.ts';
 import { DATASET, GRAPHS, RV, iri, lit } from './activate.ts';
 import { WORK_READ_COST } from './read-contract.ts';
 import { SearchSnapshotMoved } from './search-readiness.ts';
+import { fenceAuthorNames } from '../source/author-name-read.ts';
 export { publicWork, unerased } from './public-patterns.ts';
 
 export class WorkReadInvalid extends Error {}
@@ -155,10 +156,20 @@ async function position(deps: MainWorkDependencies): Promise<ReadPosition> {
 
 export async function workRead<T>(deps: MainWorkDependencies, request: Request, options: ReadOptions,
   operation: (session: WorkReadSession) => Promise<T>): Promise<T> {
-  const signal = AbortSignal.timeout(WORK_READ_COST.deadlineMs);
+  const outer = fusekiReadBudget.getStore();
+  const deadline = AbortSignal.timeout(WORK_READ_COST.deadlineMs);
+  const signal = outer ? AbortSignal.any([deadline, outer.signal]) : deadline;
+  let callsLeft: number = WORK_READ_COST.graphCalls, bytesLeft: number = WORK_READ_COST.graphBytes;
+  // Allocate once, outside the retry loop: every attempt debits both this read
+  // and any enclosing search's call/byte budget and shares their deadline.
+  const budget = { signal,
+    get callsLeft() { return Math.min(callsLeft, outer?.callsLeft ?? callsLeft); },
+    set callsLeft(value: number) { const used = this.callsLeft - value; callsLeft -= used; if (outer) outer.callsLeft -= used; },
+    get bytesLeft() { return Math.min(bytesLeft, outer?.bytesLeft ?? bytesLeft); },
+    set bytesLeft(value: number) { const used = this.bytesLeft - value; bytesLeft -= used; if (outer) outer.bytesLeft -= used; },
+  };
   try {
-    return await fusekiReadBudget.run({ signal, callsLeft: WORK_READ_COST.graphCalls,
-      bytesLeft: WORK_READ_COST.graphBytes }, async () => {
+    return await fusekiReadBudget.run(budget, async () => {
       // Fuseki HTTP operations each own a transaction, not the whole callback:
       // https://jena.apache.org/documentation/rdfconnection/#remote-transactions
       // Retry first pages and explicitly retained continuations. Internal build callbacks and commands
@@ -186,6 +197,7 @@ export async function workRead<T>(deps: MainWorkDependencies, request: Request, 
             throw new AccountAssertionDenied('Principal is inactive');
           }
           await session.fenceRealms();
+          await fenceAuthorNames(session);
           signal.throwIfAborted();
           return result;
         } catch (error) {

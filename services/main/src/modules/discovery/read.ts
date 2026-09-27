@@ -8,6 +8,7 @@ import { MAX_SUMMARY_BATCH, type ResourceSummary } from '../media/summary.ts';
 import { admitDiscoveryBasis } from './source.ts';
 import { readSerialSummaries } from '../work/summary-serial.ts';
 import { namedDiscoveryCredits } from './credits.ts';
+import { readAuthorNames } from '../source/author-name-read.ts';
 import type { DiscoveryProjection } from './store.ts';
 import { READ_BASIS_RETENTION_MS } from '../read-basis/retention.ts';
 
@@ -48,6 +49,8 @@ export async function readDiscovery(session: WorkReadSession, projection: Discov
     && summaries[index]?.type === 'work'));
   const creditNames = await namedDiscoveryCredits(session,
     page.flatMap(row => row.payload.primaryCredits ?? []));
+  const sourceNames = await readAuthorNames(session, page.flatMap(row => row.payload.primaryCredits
+    .flatMap(credit => credit.participantKind === 'external-reference' ? [credit.key] : [])));
   const concepts = [...new Set(page.flatMap(row => [
     ...(row.payload.classifications ?? []).map(tag => tag.concept),
     ...(row.payload.classification ? [row.payload.classification.concept] : []),
@@ -77,7 +80,8 @@ export async function readDiscovery(session: WorkReadSession, projection: Discov
       types: payload.types, title: summary.name, cover: summary.avatar, rating: payload.rating,
       ...serial.get(row.work)!,
       primaryCredits: (payload.primaryCredits ?? []).flatMap((credit): DiscoveryCredit[] => {
-        if (credit.participantKind === 'external-reference') return [credit];
+        if (credit.participantKind === 'external-reference') return [{ ...credit,
+          displayName: null, nameSource: undefined, ...sourceNames.get(credit.key) }];
         const name = creditNames.get(credit.agent);
         return name ? [{ ...credit, ...name }] : [];
       }),

@@ -27,6 +27,12 @@ import { PublicQueryBudgetExceeded, PublicQueryUnavailable } from '../modules/wo
 import { decoratePhraseRelation } from '../modules/work/search-facets.ts';
 import { enrichSerialSearch } from '../modules/work/summary-serial.ts';
 import { enrichSearchCardPage } from '../modules/search/result-cards.ts';
+import { searchCardWindow } from '../modules/search/card-window.ts';
+import { MAX_SEARCH_RESPONSE_BYTES } from '../modules/work/search-readiness.ts';
+import { assertPublicTextReady } from '../modules/work/search-readiness.ts';
+import { querySearchFields, normalizedSearchText, SEARCH_FIELD_COST, fenceSearchFields } from '../modules/search/fields.ts';
+import { workRead } from '../modules/work/read-session.ts';
+import { readName, readAvatar } from '../modules/work/read-contract.ts';
 import { problemResult, publicPhrasePageRequest, publicPhrasePageResult, publicQueryResult,
   unsupportedPublicSearchSelectors, workTypeFilters } from '../api-contract.ts';
 import type { MainWorkDependencies } from './dependencies.ts';
@@ -149,6 +155,10 @@ export interface SearchRouteDependencies extends MainWorkDependencies {
 }
 
 export function searchRoutes(fuseki: FusekiClient, work: SearchRouteDependencies) {
+  const fieldOwners = () => ({ names: work.sourceAuthorNames,
+    restrictedTitles: work.governance?.store
+      ? (heads: readonly { work: string; revision: string }[], context: string) =>
+        work.governance!.store.restrictedTitles(heads, context) : undefined });
   const principals = new WeakMap<Request, VerifiedPrincipal>();
   const connections = new Map<string, PrivateSearchConnection>();
   async function presentationSelection(request: Request) {
@@ -178,6 +188,53 @@ export function searchRoutes(fuseki: FusekiClient, work: SearchRouteDependencies
   }
   return new Elysia()
     .use(websocket({ sendPings: false }))
+    .get('/v1/search/typeahead', {
+      query: t.Object({ prefix: t.String({ minLength: 1, maxLength: 80 }),
+        language: t.Optional(t.String({ pattern: '^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$', maxLength: 35 })) },
+      { additionalProperties: false }),
+      response: { 200: t.Object({ profile: t.Literal('public-work-typeahead-v1'),
+        items: t.Array(t.Object({ work: t.String(), mainVersion: t.String(), title: readName,
+          cover: readAvatar, matchedField: t.Union([t.Literal('title'), t.Literal('credit')]),
+          matchedText: t.String(), matchedLanguage: t.Nullable(t.String()) }), { maxItems: 10 }),
+        hasMore: t.Boolean(), sourcePosition: t.Object({ dataEpoch: t.String(), sequence: t.String() }) }),
+        400: problemResult(400), 422: problemResult(422), 503: problemResult(503) },
+    }, async ({ query, request }) => {
+      try {
+        const prefix = normalizedSearchText(query.prefix);
+        if (!prefix || /[\u0000-\u001f\u007f]/u.test(prefix)) return problem(400, 'invalid_request', 'Search prefix is invalid');
+        const result = await withStableSearchSnapshot(fuseki, async () => {
+          const publicFields = fieldOwners();
+          const position = await assertPublicTextReady(fuseki, work.environment.lineage);
+          const selection = await presentationSelection(request);
+          const results = await querySearchFields(work.environment, { phrase: prefix,
+            language: null }, position, publicFields, true);
+          const visible = await present(selection, { context: 'main-version-default' as const,
+            sourcePosition: position, total: results.length, results });
+          const page = visible.results.slice(0, SEARCH_FIELD_COST.typeaheadItems);
+          const items = await workRead(work, new Request(request.url), { language: query.language }, async session => {
+            if (session.position.dataEpoch !== position.dataEpoch || session.position.sequence !== position.sequence) {
+              throw new SearchSnapshotMoved('Typeahead moved during hydration');
+            }
+            const summaries = await session.summaries(page.map(row => row.work));
+            const after = await session.summaries(page.map(row => row.work));
+            if (JSON.stringify(summaries) !== JSON.stringify(after)) {
+              throw new SearchSnapshotMoved('Typeahead disclosure changed during hydration');
+            }
+            return page.flatMap((row, i) => {
+              const summary = summaries[i];
+              return summary?.status === 'available' && summary.type === 'work' && summary.disclosure === 'public'
+                ? [{ work: row.work, mainVersion: row.mainVersion, title: summary.name, cover: summary.avatar,
+                  matchedField: row.matchedField as 'title' | 'credit', matchedText: row.matchedText,
+                  matchedLanguage: row.matchedLanguage }] : [];
+            });
+          });
+          await fenceSearchFields(publicFields);
+          return { profile: 'public-work-typeahead-v1', items, hasMore: visible.results.length > page.length,
+            sourcePosition: { dataEpoch: position.dataEpoch, sequence: position.sequence } };
+        });
+        return Response.json(result, { headers: { 'cache-control': 'no-store' } });
+      } catch (error) { return commandError(error); }
+    })
     .post('/v1/private-queries', {
       body: t.Object({ profile: t.Literal('private-contribution-phrase-v1'),
         contribution: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
@@ -328,6 +385,7 @@ export function searchRoutes(fuseki: FusekiClient, work: SearchRouteDependencies
           return problem(503, 'content_projection_unavailable', 'Public Content projection is unavailable');
         }
         const result = await withStableSearchSnapshot(fuseki, async () => {
+          const publicFields = fieldOwners();
           if (body.profile === 'public-grouped-statement-phrase-v1') {
             if (!work.judgments || !work.access.canReadSemanticResource) {
               throw new PublicQueryUnavailable('grouped search admission owner is unavailable');
@@ -357,19 +415,28 @@ export function searchRoutes(fuseki: FusekiClient, work: SearchRouteDependencies
             ? await queryPublicMainTitleBody(work.environment, body)
             : body.profile === 'public-realm-classified-rated-phrase-v1'
             ? await protectClassifiedResults(work,
-              await queryPublicRealmClassifiedRatedPhrase(work.environment, body), body.context.id)
+              await queryPublicRealmClassifiedRatedPhrase(work.environment, { ...body, publicFields }), body.context.id)
             : body.profile === 'public-realm-phrase-v1'
-            ? await queryPublicRealmPhrase(work.environment, body)
+            ? await queryPublicRealmPhrase(work.environment, { ...body, publicFields })
             : body.profile === 'public-main-phrase-v1'
-              ? await queryPublicMainPhrase(work.environment, body)
+              ? await queryPublicMainPhrase(work.environment, { ...body, publicFields })
               : body.profile === 'public-realm-classified-phrase-v1'
                 ? await protectClassifiedResults(work,
-                  await queryPublicRealmClassifiedPhrase(work.environment, body), body.context.id)
+                  await queryPublicRealmClassifiedPhrase(work.environment, { ...body, publicFields }), body.context.id)
                 : await protectClassifiedResults(work,
-                  await queryPublicMainClassifiedPhrase(work.environment, body));
-          return decoratePhraseRelation(work.environment, await present(selection, relation), body);
+                  await queryPublicMainClassifiedPhrase(work.environment, { ...body, publicFields }));
+          const complete = await decoratePhraseRelation(work.environment, await present(selection, relation), body);
+          const window = searchCardWindow(body, complete, selection?.generation);
+          const hydrated = await enrichSearchCardPage(work, request, window.page, body.language);
+          await fenceSearchFields(publicFields);
+          const result = { ...complete, cardWindow: window.cardWindow,
+            results: [...hydrated.results, ...complete.results.slice(window.cardWindow.hydrated)] };
+          if (Buffer.byteLength(JSON.stringify(result)) > MAX_SEARCH_RESPONSE_BYTES) {
+            throw new PublicQueryBudgetExceeded('Hydrated search response exceeds its byte bound');
+          }
+          return result;
         }, undefined, diagnostics);
-        return Response.json(await enrichSerialSearch(result, work.serialStats), {
+        return Response.json(result, {
           headers: { 'cache-control': 'no-store' },
         });
       } catch (error) {
@@ -388,6 +455,8 @@ export function searchRoutes(fuseki: FusekiClient, work: SearchRouteDependencies
         const unsupported = unsupportedSearchSelection(body);
         if (unsupported) return unsupported;
         const page = await withStableSearchSnapshot(fuseki, async () => {
+          const publicFields = fieldOwners();
+          const read = async () => {
           if (body.profile === 'public-content-phrase-page-v1') {
             if (!work.contentProjection) {
               throw new ContentProjectionUnavailable('Public Content projection is unavailable');
@@ -400,7 +469,7 @@ export function searchRoutes(fuseki: FusekiClient, work: SearchRouteDependencies
           const selection = await presentationSelection(request);
           if (body.profile === 'public-main-phrase-page-v1') {
             const relation = await decoratePhraseRelation(work.environment,
-              await present(selection, await queryPublicMainPhrase(work.environment, body)), body);
+              await present(selection, await queryPublicMainPhrase(work.environment, { ...body, publicFields })), body);
             return { ...pageCompletePublicRelation(body, relation, Date.now(), selection?.generation),
               facets: relation.facets };
           }
@@ -412,34 +481,43 @@ export function searchRoutes(fuseki: FusekiClient, work: SearchRouteDependencies
           }
           if (body.profile === 'public-realm-phrase-page-v1') {
             const relation = await decoratePhraseRelation(work.environment,
-              await present(selection, await queryPublicRealmPhrase(work.environment, body)), body);
+              await present(selection, await queryPublicRealmPhrase(work.environment, { ...body, publicFields })), body);
             return { ...pageCompletePublicRelation(body, relation, Date.now(), selection?.generation),
               facets: relation.facets };
           }
           if (body.profile === 'public-main-classified-phrase-page-v1') {
             const relation = await decoratePhraseRelation(work.environment,
               await present(selection, await protectClassifiedResults(work,
-                await queryPublicMainClassifiedPhrase(work.environment, body))), body);
+                await queryPublicMainClassifiedPhrase(work.environment, { ...body, publicFields }))), body);
             return { ...pageCompletePublicRelation(body, relation, Date.now(), selection?.generation),
               classificationSense: relation.classificationSense, facets: relation.facets };
           }
           if (body.profile === 'public-realm-classified-phrase-page-v1') {
             const relation = await decoratePhraseRelation(work.environment,
               await present(selection, await protectClassifiedResults(work,
-                await queryPublicRealmClassifiedPhrase(work.environment, body), body.context.id)), body);
+                await queryPublicRealmClassifiedPhrase(work.environment, { ...body, publicFields }), body.context.id)), body);
             return { ...pageCompletePublicRelation(body, relation, Date.now(), selection?.generation),
               classificationSense: relation.classificationSense, facets: relation.facets };
           }
           const relation = await decoratePhraseRelation(work.environment,
             await present(selection, await protectClassifiedResults(work,
-              await queryPublicRealmClassifiedRatedPhrase(work.environment, body), body.context.id)), body);
+              await queryPublicRealmClassifiedRatedPhrase(work.environment, { ...body, publicFields }), body.context.id)), body);
           return { ...pageCompletePublicRelation(body, relation, Date.now(), selection?.generation),
             classificationSense: relation.classificationSense, facets: relation.facets,
             ratingCriterion: relation.ratingCriterion,
             ratingPopulation: relation.ratingPopulation };
+          };
+          const selected = await read();
+          const result = selected.resultGrain === 'mainVersion'
+            ? await enrichSearchCardPage(work, request, selected, body.language)
+            : await enrichSerialSearch(selected, work.serialStats);
+          await fenceSearchFields(publicFields);
+          if (Buffer.byteLength(JSON.stringify(result)) > MAX_SEARCH_RESPONSE_BYTES) {
+            throw new PublicQueryBudgetExceeded('Hydrated search page exceeds its byte bound');
+          }
+          return result;
         }, undefined, diagnostics);
-        return Response.json(page.resultGrain === 'mainVersion'
-          ? await enrichSearchCardPage(work, request, page) : await enrichSerialSearch(page, work.serialStats),
+        return Response.json(page,
           { headers: { 'cache-control': 'no-store' } });
       } catch (error) {
         if (error instanceof SearchContinuationRestart) {

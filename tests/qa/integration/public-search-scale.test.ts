@@ -138,7 +138,8 @@ test('IAM18/SEARCH01/SEARCH02/SEARCH04/SEARCH07/SEARCH08/SEARCH16/SEARCH18: rate
       throw new Error(`public scale query returned ${response.status}: ${await response.text()}`);
     }
     return response.json() as Promise<{ complete: boolean; population: number; total: number;
-      results: Array<{ work: string }> }>;
+      results: Array<{ work: string; title?: unknown }>;
+      cardWindow: { hydrated: number; limit: number; next: Record<string, unknown> | null } }>;
   }
   async function page(continuation?: SearchContinuation, token?: string) {
     return app.handle(new Request('http://main.local/v1/queries/page', {
@@ -202,8 +203,9 @@ test('IAM18/SEARCH01/SEARCH02/SEARCH04/SEARCH07/SEARCH08/SEARCH16/SEARCH18: rate
     expect(late.total).toBe(1);
     expect(late.results[0]?.work).toBe(lateWork);
     expect(fuseki.inventories).toBe(1);
-    // The route adds one position-fenced Work-type batch to the phrase read.
-    expect(fuseki.queryCalls - coldStart.queries).toBe(5);
+    // Work types, current fields and a 20-card window add a fixed nine reads;
+    // they share the phrase request's deadline and 72-call budget.
+    expect(fuseki.queryCalls - coldStart.queries).toBe(14);
     expect(fuseki.healthCalls - coldStart.health).toBe(3);
     const warmStart = { queries: fuseki.queryCalls, health: fuseki.healthCalls };
     const all = await query(null);
@@ -212,8 +214,23 @@ test('IAM18/SEARCH01/SEARCH02/SEARCH04/SEARCH07/SEARCH08/SEARCH16/SEARCH18: rate
     expect(all.total).toBe(102);
     expect(new Set(all.results.map(row => row.work))).toEqual(new Set([...works, lateWork]));
     expect(fuseki.inventories).toBe(1);
-    expect(fuseki.queryCalls - warmStart.queries).toBe(4);
+    expect(fuseki.queryCalls - warmStart.queries).toBe(13);
     expect(fuseki.healthCalls - warmStart.health).toBe(3);
+    expect(all.cardWindow).toMatchObject({ hydrated: 20, limit: 20 });
+    expect(all.results.filter(row => row.title !== undefined)).toHaveLength(20);
+    const cardNext = await app.handle(new Request('http://main.local/v1/queries/page', {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(all.cardWindow.next),
+    }));
+    expect(cardNext.status).toBe(200);
+    const cardPage = await cardNext.json() as { results: Array<{ work: string; title?: unknown }> };
+    expect(cardPage.results.map(row => row.work)).toEqual(all.results.slice(20, 40).map(row => row.work));
+    expect(cardPage.results.every(row => row.title !== undefined)).toBe(true);
+    const suggestions = await app.handle(new Request('http://main.local/v1/search/typeahead?prefix=Search%20scale'));
+    expect(suggestions.status).toBe(200);
+    const suggested = await suggestions.json() as { items: unknown[]; hasMore: boolean };
+    expect(suggested.items).toHaveLength(10);
+    expect(suggested.hasMore).toBe(true);
     const pageStart = { queries: fuseki.queryCalls, inventories: fuseki.inventories,
       phrases: fuseki.phraseQueries };
     const firstPageResponse = await page();
@@ -233,10 +250,9 @@ test('IAM18/SEARCH01/SEARCH02/SEARCH04/SEARCH07/SEARCH08/SEARCH16/SEARCH18: rate
       .map(row => row.work)).toEqual(all.results.map(row => row.work));
     expect(fuseki.phraseQueries - pageStart.phrases).toBe(3);
     expect(fuseki.inventories).toBe(pageStart.inventories);
-    // Phrase relation cost stays at its original bound. Card hydration adds
-    // six fixed graph calls per page (position fences, summary and final
-    // disclosure check, serial, credits).
-    expect(fuseki.queryCalls - pageStart.queries).toBeLessThanOrEqual(33);
+    // Each page adds current-field matching/fencing and a rating-context lookup
+    // to the existing bounded card reads; the population does not multiply calls.
+    expect(fuseki.queryCalls - pageStart.queries).toBeLessThanOrEqual(42);
     const nextWork = await addWork(102, 'en');
     const stalePage = await page(firstPage.next!);
     expect(stalePage.status).toBe(409);
@@ -294,13 +310,13 @@ test('IAM18/SEARCH01/SEARCH02/SEARCH04/SEARCH07/SEARCH08/SEARCH16/SEARCH18: rate
     const firstAuthor = await query('en', actor);
     expect(firstAuthor.complete).toBe(true);
     expect(firstAuthor.results.map(row => row.work)).toEqual([nextWork]);
-    expect(fuseki.queryCalls - authorStart.queries).toBe(4);
+    expect(fuseki.queryCalls - authorStart.queries).toBe(13);
     expect(fuseki.healthCalls - authorStart.health).toBe(3);
     const secondAuthorStart = { queries: fuseki.queryCalls, health: fuseki.healthCalls };
     const secondAuthor = await query('en', otherAuthor);
     expect(secondAuthor.complete).toBe(true);
     expect(secondAuthor.results.map(row => row.work)).toEqual([lateWork]);
-    expect(fuseki.queryCalls - secondAuthorStart.queries).toBe(4);
+    expect(fuseki.queryCalls - secondAuthorStart.queries).toBe(13);
     expect(fuseki.healthCalls - secondAuthorStart.health).toBe(3);
     expect(fuseki.inventories).toBe(3);
 
@@ -484,6 +500,8 @@ test('IAM18/SEARCH01/SEARCH02/SEARCH04/SEARCH07/SEARCH08/SEARCH16/SEARCH18: rate
       classification: { decision: localDecision, source: 'local' },
       rating: { count: 1, sum: 9 } }]);
     expect(rated.results.some(row => row.work === lateWork)).toBe(false);
+    expect((await joinedRated('Search scale 102')).results).toMatchObject([{ work: nextWork,
+      matchedField: 'title', rating: { count: 1, sum: 9 } }]);
     const joinedAuthorStart = fuseki.joinedQueries;
     expect((await joinedRated(phrase, 'en', actor)).results.map(row => row.work))
       .toEqual([nextWork]);

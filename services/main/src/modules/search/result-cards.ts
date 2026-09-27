@@ -7,13 +7,19 @@ import { GRAPHS, iri } from '../work/activate.ts';
 import { metadataComponent, METADATA_PROFILE } from '../work/metadata-schema.ts';
 import { parsedMetadataState, selectedMetadata } from '../work/metadata-read.ts';
 import { SearchSnapshotMoved } from '../work/search-readiness.ts';
+import { readAuthorNames } from '../source/author-name-read.ts';
+import { WorkReadMoved } from '../work/read-session.ts';
+import { searchPageRatings } from './ratings.ts';
 
 export const SEARCH_CARD_COST = { works: 64, creditsPerWork: 3,
   summaryBatches: 2, serialQueries: 1, creditQueries: 1, creditRows: 192,
-  agentNameQueries: 1, graphCallsWithoutAgentNames: 6, graphCallsWithAgentNames: 7 } as const;
+  sourceNameQueries: 2, ratingContextQueries: 1, ratingQueriesPerWork: 1,
+  agentNameQueries: 1, graphCallsWithoutAgentNames: 7, graphCallsWithAgentNames: 8 } as const;
 
 /** Exact current metadata heads, one graph query plus the existing serial
- * stats owner batch. Missing metadata is an explicit null card state. */
+ * stats owner batch. Nest the revision OPTIONAL under its owning head: two
+ * independent OPTIONALs can bind another Work's metadata to a headless Work.
+ * Missing metadata is an explicit null card state. */
 export async function searchPageSerial(session: WorkReadSession, works: readonly string[]) {
   if (works.length > SEARCH_CARD_COST.works) throw new WorkReadUnavailable('Search serial page exceeds its bound');
   const result = new Map<string, { tagline: ReturnType<typeof selectedMetadata>['tagline'];
@@ -22,10 +28,10 @@ export async function searchPageSerial(session: WorkReadSession, works: readonly
   if (!works.length) return result;
   const rows = await session.query(`SELECT ?work ?head ?component ?state WHERE {
     VALUES ?work { ${works.map(iri).join(' ')} }
-    OPTIONAL { GRAPH ${iri(GRAPHS.current)} { ?work rv:descriptiveMetadataHead ?head } }
-    OPTIONAL { FILTER(BOUND(?head)) GRAPH ${iri(GRAPHS.revisions)} { ?head a rv:WorkMetadataRevision ;
+    OPTIONAL { GRAPH ${iri(GRAPHS.current)} { ?work rv:descriptiveMetadataHead ?head }
+      OPTIONAL { GRAPH ${iri(GRAPHS.revisions)} { ?head a rv:WorkMetadataRevision ;
         rv:component ?component ; rv:modelRevision ${iri(METADATA_PROFILE)} ;
-        rv:shapeRevision ${iri(METADATA_PROFILE)} ; rv:metadataState ?state } }
+        rv:shapeRevision ${iri(METADATA_PROFILE)} ; rv:metadataState ?state } } }
   } LIMIT ${works.length + 1}`, works.length + 1);
   if (rows.length !== works.length || new Set(rows.map(row => row.work?.value)).size !== works.length
     || rows.some(row => !row.work || !works.includes(row.work.value))) {
@@ -96,14 +102,15 @@ export async function searchPageCredits(session: WorkReadSession, works: readonl
  * Its candidate set and continuation remain those of the search owner. */
 export async function enrichSearchCardPage<T extends { resultGrain: string;
   sourcePosition?: { dataEpoch: string; sequence: string };
-  results: Array<{ work: string }> }>(
-  deps: MainWorkDependencies, request: Request, page: T): Promise<T> {
+  context?: 'main-version-default' | { kind: 'realm-local'; id: string };
+  results: Array<{ work: string; mainVersion?: string; rating?: unknown }> }>(
+  deps: MainWorkDependencies, request: Request, page: T, language?: string | null): Promise<T> {
   if (page.resultGrain !== 'mainVersion' || !page.sourcePosition) return page;
   const matches = page.results;
   const ids = [...new Set(matches.map(match => match.work))];
   if (ids.length > SEARCH_CARD_COST.works) throw new WorkReadUnavailable('Search card page exceeds its bound');
   if (!ids.length) return page;
-  const cards = await workRead(deps, new Request(request.url), {}, async session => {
+  const cards = await workRead(deps, new Request(request.url), { language: language ?? undefined }, async session => {
     if (session.position.dataEpoch !== page.sourcePosition!.dataEpoch
       || session.position.sequence !== page.sourcePosition!.sequence) {
       throw new SearchSnapshotMoved('Search card graph position changed');
@@ -119,6 +126,9 @@ export async function enrichSearchCardPage<T extends { resultGrain: string;
     const serial = await searchPageSerial(session, ids);
     const credits = await searchPageCredits(session, ids);
     const names = await namedDiscoveryCredits(session, [...credits.values()].flat(), SEARCH_CARD_COST.works);
+    const sourceNames = await readAuthorNames(session, [...credits.values()].flat()
+      .flatMap(credit => credit.participantKind === 'external-reference' ? [credit.key] : []));
+    const ratings = await searchPageRatings(session, matches, page.context);
     const fenced: ResourceSummary[] = [];
     for (let i = 0; i < ids.length; i += MAX_SUMMARY_BATCH) {
       fenced.push(...await session.summaries(ids.slice(i, i + MAX_SUMMARY_BATCH)));
@@ -131,16 +141,22 @@ export async function enrichSearchCardPage<T extends { resultGrain: string;
       const value = serial.get(id);
       if (summary.status !== 'available' || !value) throw new WorkReadUnavailable('Search card is incomplete');
       return [id, { title: summary.name, cover: summary.avatar,
+        rating: ratings.values.get(id) ?? null,
+        ratingStatus: ratings.values.has(id) || matches.some(match => match.work === id && match.rating)
+          ? 'available' : ratings.status === 'selected' ? 'unrated' : ratings.status,
         tagline: value.tagline, completionStatus: value.completionStatus,
         chapterCount: value.chapterCount, wordCount: value.wordCount,
         lastUpdatedAt: value.lastUpdatedAt,
         primaryCredits: credits.get(id)!.flatMap((credit): DiscoveryCredit[] => {
-          if (credit.participantKind === 'external-reference') return [credit];
+          if (credit.participantKind === 'external-reference') return [{ ...credit, ...sourceNames.get(credit.key) }];
           const name = names.get(credit.agent);
           return name ? [{ ...credit, ...name }] : [];
         }) }];
     }));
+  }).catch((error: unknown) => {
+    if (error instanceof WorkReadMoved) throw new SearchSnapshotMoved(error.message);
+    throw error;
   });
   return { ...page, results: matches.map(match => ({ ...match, ...cards.get(match.work),
-    rating: 'rating' in match ? match.rating ?? null : null })) } as T;
+    ...(match.rating ? { rating: match.rating } : {}) })) } as T;
 }

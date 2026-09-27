@@ -1,4 +1,5 @@
 import type { Static } from 'typebox';
+import { readAuthorNames } from '../source/author-name-read.ts';
 import { GRAPHS, iri, lit } from './activate.ts';
 import { adoptionItem, creditItem, versionItem } from './read-contract.ts';
 import { decodeReadCursor, encodeReadCursor, pageResult, WorkReadUnavailable, type WorkReadSession } from './read-session.ts';
@@ -70,6 +71,7 @@ export async function readWorkPage(session: WorkReadSession, work: string, kind:
     return row[key]!.value;
   };
   const names = kind === 'adoptions' ? await session.summaries(page.map(row => row.id!.value)) : [];
+  const authorNames = kind === 'credits' ? await readAuthorNames(session, page.map(row => field(row, 'key'))) : new Map();
   const items = page.flatMap<Version | Adoption | Credit>((row, index) => {
     const id = field(row, 'id');
     switch (kind) {
@@ -77,7 +79,7 @@ export async function readWorkPage(session: WorkReadSession, work: string, kind:
         contribution: field(row, 'contribution'), revision: field(row, 'revision'), selected: row.selected?.value === 'true' }];
       case 'credits': return [{ id, role: 'author' as const, participantKind: 'external-reference' as const,
         provider: 'open-library' as const, key: field(row, 'key'), ordinal: Number(field(row, 'ordinal')),
-        agent: null, displayName: null, handle: null }];
+        agent: null, displayName: null, handle: null, ...authorNames.get(field(row, 'key')) }];
       case 'adoptions': {
         const name = names[index];
         return name?.status === 'available' ? [{ realm: id, name: name.name,

@@ -16,6 +16,7 @@ import { CLASSIFIED_AS, STATEMENT_DECISION_PROFILE, decisionSlotIri,
   statementMeaningKey } from '../statement/schema.ts';
 import { exactDecisionSupports, readSearchDecisionSupports } from './search-supports.ts';
 import { PublicQueryBudgetExceeded, PublicQueryUnavailable } from './search-budget.ts';
+import { querySearchFields, rankedSearchMatches, type SearchFieldOwners } from '../search/fields.ts';
 
 export class InvalidPublicQuery extends Error {}
 export { PublicQueryBudgetExceeded, PublicQueryUnavailable } from './search-budget.ts';
@@ -26,6 +27,8 @@ export interface PublicMainPhraseQuery {
   language: string | null;
   /** Exact author of the currently selected public Contribution. */
   author?: string;
+  /** API discovery also matches current titles, taglines and credited names. */
+  publicFields?: SearchFieldOwners;
 }
 
 const nativeId = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
@@ -114,7 +117,10 @@ export async function queryPublicMainPhrase(env: WorkActivationEnvironment,
   });
   const unique = new Set(matches.map(match => match.matchUnit));
   if (unique.size !== matches.length) throw new PublicQueryUnavailable('public query has duplicate units');
-  const results = mainSearchMatches(matches);
+  const fields = input.publicFields ? await querySearchFields(env, input,
+    { dataEpoch: rows[0].epoch.value, sequence: rows[0].sequence.value }, input.publicFields) : [];
+  const results = fields.length ? rankedSearchMatches([...matches, ...fields]) : mainSearchMatches(matches);
+  if (results.length > 512) throw new PublicQueryBudgetExceeded('Combined search candidates exceed their bound');
   return { contractVersion: '1', resultGrain: 'mainVersion' as const,
     context: 'main-version-default' as const, complete: true as const, population: index.population,
     indexGeneration: index.generation,
@@ -231,7 +237,10 @@ export async function queryPublicRealmPhrase(env: WorkActivationEnvironment,
   if (unique.size !== matches.length || (matches.length === 0 && rows.length !== 1)) {
     throw new PublicQueryUnavailable('Realm query has ambiguous results');
   }
-  const results = mainSearchMatches(matches);
+  const fields = input.publicFields ? await querySearchFields(env, input,
+    { dataEpoch: rows[0].epoch.value, sequence: rows[0].sequence.value }, input.publicFields) : [];
+  const results = fields.length ? rankedSearchMatches([...matches, ...fields]) : mainSearchMatches(matches);
+  if (results.length > 512) throw new PublicQueryBudgetExceeded('Combined search candidates exceed their bound');
   return { contractVersion: '1', resultGrain: 'mainVersion' as const,
     context: { kind: 'realm-local' as const, id: realm },
     complete: true as const, population: index.population, total: results.length, results,

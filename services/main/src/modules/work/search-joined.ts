@@ -20,6 +20,7 @@ import { statementCutoverActive } from '../statement/migrate-v1.ts';
 import { CLASSIFIED_AS, STATEMENT_DECISION_PROFILE }
   from '../statement/schema.ts';
 import { exactDecisionSupports, readSearchDecisionSupports } from './search-supports.ts';
+import { querySearchFields, rankedSearchMatches, type SearchFieldOwners } from '../search/fields.ts';
 
 const nativeId = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
 const MAX_SLOTS = 100;
@@ -32,6 +33,7 @@ export interface PublicRealmClassifiedRatedPhraseQuery {
   sense: string;
   ratingContext: string;
   minimumMeanTimes10: number;
+  publicFields?: SearchFieldOwners;
 }
 
 /** One bounded graph/text/classification/current-standing-score ARQ relation. */
@@ -53,6 +55,17 @@ export async function queryPublicRealmClassifiedRatedPhrase(env: WorkActivationE
   await assertGraphAdmissionOpen(env.fuseki, env.lineage);
   const cutover = await statementCutoverActive(env);
   const index = await assertPublicTextReady(env.fuseki, env.lineage);
+  const fields = input.publicFields ? await querySearchFields(env, input, index, input.publicFields) : [];
+  // Both body and current field candidates pass through the same native
+  // classification/rating join. Deduplicate units before that join.
+  const phrasePattern = (unit: string, score: string) => fields.length
+    ? `{ SELECT ${unit} (MAX(?fieldScore) AS ${score}) WHERE {
+        { GRAPH ${iri(PUBLIC_SEARCH_GRAPH)} {
+          (${unit} ?fieldScore) text:query (rv:searchBody ${lit(lucene)} ${PHRASE_HIT_PROBE}) } }
+        UNION { VALUES (${unit} ?fieldScore) { ${fields.map(row => `(${iri(row.matchUnit)} 1)`).join(' ')} } }
+      } GROUP BY ${unit} }`
+    : `GRAPH ${iri(PUBLIC_SEARCH_GRAPH)} {
+        (${unit} ${score}) text:query (rv:searchBody ${lit(lucene)} ${PHRASE_HIT_PROBE}) }`;
   const result = await env.fuseki.query(`PREFIX rv: <${RV}>
     PREFIX schema: <https://schema.org/>
     PREFIX text: <http://jena.apache.org/text#>
@@ -112,9 +125,7 @@ export async function queryPublicRealmClassifiedRatedPhrase(env: WorkActivationE
           rv:component ${iri(input.ratingContext)} .
       }
       { SELECT (COUNT(?rawUnit) AS ?candidateCount) WHERE {
-        { SELECT ?rawUnit WHERE { GRAPH ${iri(PUBLIC_SEARCH_GRAPH)} {
-          (?rawUnit ?rawScore) text:query (rv:searchBody ${lit(lucene)} ${PHRASE_HIT_PROBE}) .
-        } } LIMIT ${PHRASE_HIT_PROBE} }
+        { SELECT ?rawUnit WHERE { ${phrasePattern('?rawUnit', '?rawScore')} } LIMIT ${PHRASE_HIT_PROBE} }
       } }
       { SELECT (COUNT(DISTINCT ?ratingCandidate) AS ?ratingPopulation) WHERE {
         { SELECT DISTINCT ?ratingCandidate WHERE { GRAPH ${iri(GRAPHS.current)} {
@@ -150,8 +161,8 @@ export async function queryPublicRealmClassifiedRatedPhrase(env: WorkActivationE
         }
       }
       OPTIONAL {
+        ${phrasePattern('?unit', '?score')}
         GRAPH ${iri(PUBLIC_SEARCH_GRAPH)} {
-          (?unit ?score) text:query (rv:searchBody ${lit(lucene)} ${PHRASE_HIT_PROBE}) .
           ?unit a rv:MatchUnit ; rv:disclosure rv:Public ;
             rv:work ?work ; rv:mainVersion ?main ; rv:context ?unitContext ;
             rv:contribution ?contribution ; rv:revision ?revision ;
@@ -345,7 +356,9 @@ export async function queryPublicRealmClassifiedRatedPhrase(env: WorkActivationE
     || (matches.length === 0 && rows.length !== 1)) {
     throw new PublicQueryUnavailable('joined public query has ambiguous results');
   }
-  const selected = mainSearchMatches(matches);
+  const byUnit = new Map(fields.map(row => [row.matchUnit, row]));
+  const selected = fields.length ? rankedSearchMatches(matches.map(match => ({ ...match,
+    ...byUnit.get(match.matchUnit) }))) : mainSearchMatches(matches);
   const supports = cutover ? await readSearchDecisionSupports(env,
     { dataEpoch: first.epoch.value, sequence: first.sequence.value },
     selected.map(match => ({ mainVersion: match.mainVersion,

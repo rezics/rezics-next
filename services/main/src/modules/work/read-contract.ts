@@ -1,4 +1,5 @@
 import { t } from 'elysia';
+import { authorNameProvenance } from '../source/author-name.ts';
 import { recordedText, recordedRelevance } from './metadata-schema.ts';
 
 export const readId = t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' });
@@ -46,7 +47,9 @@ export const adoptionItem = t.Object({ realm: readId, name: readName, selection:
   contribution: readId, language: t.String() });
 export const creditItem = t.Object({ id: readId, role: t.Literal('author'),
   participantKind: t.Literal('external-reference'), provider: t.Literal('open-library'),
-  key: t.String(), ordinal: t.Integer(), agent: t.Null(), displayName: t.Null(), handle: t.Null() });
+  key: t.String(), ordinal: t.Integer(), agent: t.Null(),
+  displayName: t.Nullable(t.String({ minLength: 1, maxLength: 200 })), handle: t.Null(),
+  nameSource: t.Optional(authorNameProvenance) });
 export const classificationItem = t.Object({ sense: readId, concept: readId, name: readName,
   relevanceRevision: t.Nullable(readId),
   relevanceStatus: t.Union([t.Literal('unrecorded'), t.Literal('recorded'), t.Literal('stale'), t.Literal('withdrawn')]),

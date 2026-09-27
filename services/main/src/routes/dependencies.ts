@@ -24,6 +24,7 @@ import type { AccessRepresentedMembershipAuthority }
 import type { AccessEligibleOrgMemberSet } from '../modules/access/eligible-org-member-set.ts';
 import type { AccessRoles } from '../modules/access/roles.ts';
 import type { SourceIntakeStore } from '../modules/source/intake.ts';
+import type { SourceAuthorNameStore } from '../modules/source/author-name.ts';
 import type { RecipeSourceConversionStore } from '../modules/recipe/source-conversion.ts';
 import type { SourceAcquisitionServices } from '../modules/source/acquisition.ts';
 import type { OpenLibraryConversionStore } from '../modules/source/open-library-conversion.ts';
@@ -174,6 +175,7 @@ export interface MainWorkDependencies {
   eligibleOrgMemberSet?: AccessEligibleOrgMemberSet;
   roles?: AccessRoles;
   sourceIntake?: SourceIntakeStore;
+  sourceAuthorNames?: SourceAuthorNameStore;
   recipeSourceConversions?: RecipeSourceConversionStore;
   sourceAcquisitions?: SourceAcquisitionServices;
   sourceConversions?: OpenLibraryConversionStore;
