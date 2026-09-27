@@ -1,5 +1,9 @@
 import { defineCases } from './types.ts';
 
+// The retired page path remains the B00 inventory fingerprint until its explicit migration.
+// Complete-case evidence is declared in scripts/qa/coverage/pkg-*.ts. Provider
+// relation-modeling fixtures are authored separately from keyless live captures;
+// skipped authenticated acquisition is not a passing test.
 export const cases = defineCases('docs/testing/packages.md', [
   {
     id: 'PKG01',

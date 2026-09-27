@@ -10,7 +10,7 @@ incompatible) pass through the real receipt path without duplicate downloads or
 lost dependency grain. Live CurseForge capture is skipped. The API-key capture
 path (`REZICS_CURSEFORGE_API_KEY`) stays available as an optional advanced-user
 configuration; users are never required to supply a key. See
-[packages](../../testing/packages.md).
+[package cases](../../../scripts/qa/cases/packages.ts).
 
 ## What was learned
 

@@ -374,7 +374,7 @@ captures them once, then compares native-tool/profile behavior against the same
 snapshot. Assert constraint satisfaction, selected feature/instance topology,
 update/rollback meaning and explainable failures, not fixed release numbers or
 identical lockfile formatting. Offline adversarial cases complement live data.
-See [package acceptance](../testing/packages.md) and [live sources](../testing/source-conformance.md).
+See [package acceptance](../../scripts/qa/cases/packages.ts) and [live sources](../testing/source-conformance.md).
 
 ## Evidence
 

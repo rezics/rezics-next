@@ -1,7 +1,7 @@
 # Package ecosystem profile decisions and remaining boundaries
 
 The admitted request and receipt contracts live in the package module types,
-validators and schemas. [Package acceptance](../testing/packages.md) names the
+validators and schemas. [Package acceptance](../../scripts/qa/cases/packages.ts) names the
 qualified scenarios; native tools are oracles only for the recorded version,
 target and captured input. A resolution receipt alone does not prove that an
 artifact was fetched, installed or built.
@@ -33,7 +33,7 @@ The profiles do not establish general Cargo backtracking, workspace/patch/git
 resolution, rust-version fallback, native build scripts, artifact integrity or
 installation. Preserve the difference between a fresh yanked denial and an exact
 caller-lock reuse when extending them. The pinned Cargo 1.98.1 differential cases
-and their scope remain in [package acceptance](../testing/packages.md).
+and their scope remain in [package acceptance](../../scripts/qa/cases/packages.ts).
 
 ## npm, pnpm and Yarn
 
@@ -92,7 +92,7 @@ adds exact/path-wide remote replacements and excludes without changing older
 receipts. It reloads roots after an upgrade so requirements from a displaced
 root do not remain. This follows the [module reference](https://go.dev/ref/mod#graph-pruning)
 and [Go 1.17 graph pruning](https://go.dev/doc/go1.17#go-command); see the
-pinned Go 1.27.1 oracle cases in [package acceptance](../testing/packages.md).
+pinned Go 1.27.1 oracle cases in [package acceptance](../../scripts/qa/cases/packages.ts).
 The separate receipt version preserves earlier replay semantics. For excludes,
 the profile follows the reference's [directive rule](https://go.dev/ref/mod#go-mod-file-exclude)
 and pinned Go behavior, rather than the older next-higher-version description
@@ -120,7 +120,7 @@ verifies a nested Fabric child against the captured parent JAR. Provider relatio
 kinds retain Modrinth project/version grain, CurseForge embedded/include meaning,
 and Steam advisory/Collection meaning. A missing or inaccessible response is not
 an empty dependency set. [Source conformance](../testing/source-conformance.md)
-records access gaps; [package acceptance](../testing/packages.md) records the
+records access gaps; [package acceptance](../../scripts/qa/cases/packages.ts) records the
 qualified relation cases. Loader semantics follow the
 [Fabric manifest](https://wiki.fabricmc.net/documentation:fabric_mod_json_spec),
 [Forge metadata](https://docs.minecraftforge.net/en/latest/gettingstarted/modfiles/)
@@ -140,7 +140,7 @@ strings across ecosystems are interchangeable. Future composition of Skill
 requirements, Rust binaries, Nix and mod/runtime dependencies needs explicit
 capability and environment matching. Shared artifact bytes prove only those bytes,
 not equivalent package semantics or rights. See `lock.ts` and
-[package acceptance](../testing/packages.md).
+[package acceptance](../../scripts/qa/cases/packages.ts).
 
 ## Sources
 

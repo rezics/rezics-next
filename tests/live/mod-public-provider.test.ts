@@ -109,7 +109,7 @@ test('PKG11: keyless Steam Collection details retain membership without hard ins
 }, 15_000);
 
 const curseForgeKey = Bun.env.REZICS_CURSEFORGE_API_KEY;
-test.skip('PKG09: authenticated CurseForge capture skipped per docs/testing/packages.md (live acquisition design pending)', async () => {
+test.skip('PKG09: authenticated CurseForge acquisition awaits the operator decision', async () => {
   const url = 'https://api.curseforge.com/v1/mods/238222/files';
   const response = await fetch(url, { headers: { 'x-api-key': curseForgeKey!, Accept: 'application/json' },
     signal: AbortSignal.timeout(10_000) });
@@ -137,7 +137,7 @@ test.skip('PKG09: authenticated CurseForge capture skipped per docs/testing/pack
 });
 
 const nexusKey = Bun.env.REZICS_NEXUS_API_KEY;
-test.skip('PKG10: authenticated Nexus capture skipped per docs/testing/packages.md (live acquisition design pending)', async () => {
+test.skip('PKG10: authenticated Nexus acquisition is unqualified; keyless denial is tested above', async () => {
   const base = 'https://api.nexusmods.com/v3';
   const get = async (path: string): Promise<unknown> => {
     const response = await fetch(`${base}${path}`, {
@@ -162,7 +162,7 @@ test.skip('PKG10: authenticated Nexus capture skipped per docs/testing/packages.
 });
 
 const steamKey = Bun.env.REZICS_STEAM_WEB_API_KEY;
-test.skip('PKG11: authenticated Steam capture skipped per docs/testing/packages.md (live acquisition design pending)', async () => {
+test.skip('PKG11: authenticated Steam item acquisition awaits the operator decision', async () => {
   const url = 'https://api.steampowered.com/IPublishedFileService/QueryFiles/v1/';
   const input = new URLSearchParams({ input_json: JSON.stringify({ query_type: 0,
     cursor: '*', numperpage: 5, appid: 255710, filetype: 1, return_children: true }) });

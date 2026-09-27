@@ -11,7 +11,7 @@ Collection membership is also captured live through a keyless endpoint. Live
 capture of an item's required items is skipped. The API-key path
 (`REZICS_STEAM_WEB_API_KEY`) stays available as an optional advanced-user
 configuration; users are never required to supply a key. See
-[packages](../../testing/packages.md).
+[package cases](../../../scripts/qa/cases/packages.ts).
 
 ## What was learned
 
