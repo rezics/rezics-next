@@ -1,56 +1,44 @@
 # Declarative filters and query state
 
-## Contract
+## Intended contract
 
-A FilterDocument contains optional categories, typed predicates and sparse control
-configuration. An empty document supplies no hidden query/sort/page defaults.
-The server's field registry and WorkPolicy own supported operations and ceilings;
-presets cannot add privileges or increase budgets. Ordinary and advanced editors
-preserve the same descriptor without dropping unsupported-to-that-UI fields.
+FilterDocument is a proposed shared descriptor for ordinary and advanced
+editors. It has no deployed schema or round-trip client test yet, so this page
+remains until both editors preserve unsupported-to-that-UI fields. An empty
+document supplies no hidden query, sort or page defaults. It contains sparse
+categories, typed predicates and controls. Server field and Work policies set
+privileges and budgets; a preset cannot enlarge either.
 
-## Composition
-
-Intersect host/site scope, resource boundary and user predicates. Bind typed
-context roles, Main Version selection, rating question/time policy and semantic
-match intent. Canonicalize identical predicates without changing multiplicity
-where it matters. A nested Block shares the parent request's overall budget.
-Inline/global filters cannot remove a mandatory fixed-Realm site boundary.
-
-Named term selection first resolves the exact interpretation through the declared
-explicit/speaker/entry/Global policy, then compiles its admitted definition pattern.
-Persist the resulting DefinitionRefs and semantic Context revision in a saved
-semantic filter. A later preference, default or concept rename cannot reinterpret
-that filter; changing its criterion is an explicit edit. Return ambiguity when
-multiple equal-priority meanings remain. A new named concept does not remove
-contextual uses of another. The descriptor does not send a navigation Path/Sense
-or infer meaning from a label.
-Related filters explicitly bind the same participant/occurrence where required;
-the red-haired-female-lead condition cannot be split into two independent
-existential matches over a Work. Count grain, display groups and optional
-self-filter-excluding facet counts follow
+The future compiler must intersect site, resource and user scopes, including
+a mandatory fixed-Realm site boundary. Named terms resolve through an explicit,
+speaker, entry or Global policy before compiling their admitted definitions;
+equal-priority meanings remain ambiguous. Saved filters retain exact
+DefinitionRefs and Context revisions. A new concept cannot erase another's
+contextual uses, and labels or navigation Path/Sense cannot choose meaning.
+Semantic selection, preference, disclosure, populations and acceptance scopes
+remain separate. The compiler binds Context roles, Main Version, rating policy
+and semantic match intent. It canonicalizes identical predicates without
+losing meaningful multiplicity. Related predicates that describe one
+participant or occurrence must bind to that same occurrence. Count grain,
+display groups and optional self-filter-excluding facets follow
 [statement aggregation](search.md#statement-aggregation).
 
-## Execution
+Admission must check descriptor shape, node count, field/operator applicability,
+depth, sources and the parent budget of any nested Block before Jena execution.
+Candidate scans, graph expansion,
+time, memory and bytes need bounds. Saved query state excludes cursors;
+continuations bind policy, semantic, preference and disclosure revisions and
+report actual selection, data/index generations and completeness.
+Text hit limits cannot substitute for final post-filter limits or a snapshot
+across ordinary SPARQL offset requests. Temporal controls preserve possible
+and definite time plus calendar semantics. Rating controls preserve question,
+population, scale, time basis and aggregation. A display edit cannot create a
+rating Context or recast a correction as a new vote. Restore rechecks format
+and capability eligibility. Private text
+and unsupported query shapes fail explicitly. Each client adapter must verify
+scope intersection, empty and advanced documents, stale cursors and graph/text
+semantics.
 
-Main compiles the descriptor to admitted SPARQL 1.1 graph patterns and jena-text
-operators over Fuseki/TDB2. Validate depth, node count, operator/field applicability
-and data sources before execution. Bound
-candidate scans, graph expansion, time, memory and bytes, not only output count.
-Saved query state excludes cursors and records descriptor/policy revisions.
-Preference-only changes can affect order or display without changing meaning
-keys. Shared Contexts do not merge acceptance scopes, populations or private query
-state. Bind separate semantic, preference and disclosure dependencies to the
-continuation as applicable.
-
-Temporal controls preserve possible/definite and calendar semantics. Rating
-controls preserve question, population, scale, time basis and aggregation. Editing
-a display control never creates a new rating context or recasts a correction as
-a new vote. Restore checks current format/capability eligibility.
-
-The adapter follows the [search contract](search.md): a jena-text hit limit cannot
-stand in for a final post-filter limit, and ordinary SPARQL offset pagination does
-not hold one snapshot across requests. Unsupported private-text or unbounded query
-shapes fail explicitly. Responses report actual selection, data/index generation,
-complete/partial outcomes and the continuation mode actually provided. Verify scope
-intersection, empty documents, retained advanced state, stale cursors and graph/text
-semantics through every client adapter.
+The current narrower [graph query schema](../../services/main/src/modules/graph-query/schema.ts)
+and [grouped Statement read](../../services/main/src/modules/work/search-grouped.ts)
+implement pieces of this contract, not FilterDocument itself.

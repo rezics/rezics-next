@@ -1,24 +1,20 @@
 # Recommendation generation acceptance
 
-These are prospective tests, not executed results. Run at the applicable
-[verification phase](../plan/execution-workflow.md), preserving actual owner
-boundaries, source snapshots and positive/denied/partial outcomes.
+[REC01–06 declarations](../../scripts/qa/cases/recommendations.ts) carry the
+case identities and base outcomes. [Coverage declarations](../../scripts/qa/coverage/rec.ts)
+distinguish schema, generation, delivery and load evidence. A mock-only pass
+cannot qualify storage or capacity; record inputs, receipts, exact
+profiles/builds and failures at the applicable
+[verification phase](../plan/execution-workflow.md).
 
-| ID | Scenario | Required result |
-| --- | --- | --- |
-| REC01 | Build candidate ranking from private/source signals | Only admitted data and declared population participate. |
-| REC02 | One target receives extreme activity | No global exact-counter bottleneck or unbounded per-event fan-out. |
-| REC03 | Fail second ranking generation | First valid active generation remains. |
-| REC04 | Stale worker resumes | Cannot activate or overwrite newer generation. |
-| REC05 | Candidate becomes private/erased after ranking | Delivery excludes it without leaking counts/reasons. |
-| REC06 | Cursor references expired generation | Explicit restart; no mixed-order pagination. |
+## Prospective refinements
 
-Record inputs, operation receipts, exact profiles/builds and failures. A mock-only
-pass cannot qualify storage, cross-service behavior or capacity.
-
-Under [shared Context preferences](../contracts/context.md), REC01 preserves
-the exact semantic criterion and independent personal/Realm populations when
-preferences change. REC05 includes private definition/selection dependencies;
-REC06 binds preference-ordering and semantic-selection revisions separately.
-Liking or prioritizing a concept cannot silently assert its interpretation or
-rewrite an authored statement. These are prospective refinements of existing IDs.
+REC01 must preserve exact semantic criteria and independent personal/Realm
+populations as preferences change; liking or prioritizing a concept cannot
+assert its interpretation or rewrite an author's Statement. REC05 must include
+private definition and selection dependencies. REC06 must bind semantic
+selection and preference ordering revisions separately. These refinements do
+not inherit the base cases' recorded pass status. REC02's skew/load result
+remains a separate tier from generation correctness.
+Repeated snapshots, stale leases, sparse/private candidates and recovery
+remain required evidence for any additional ranking profile.

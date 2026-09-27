@@ -1,37 +1,24 @@
 # Relationship graph acceptance
 
-These are prospective tests, not executed results. Run at the applicable
-[verification phase](../plan/execution-workflow.md), preserving actual owner
-boundaries, source snapshots and positive/denied/partial outcomes.
+[GRAPH01–06 declarations](../../scripts/qa/cases/relationship-graph.ts) carry
+the case identities and base outcomes. [Coverage declarations](../../scripts/qa/coverage/graph.ts)
+and the recorded qualification show which tests actually ran. A mock-only pass
+cannot qualify storage, cross-service behavior or capacity; record inputs,
+receipts, exact profiles/builds and failures at the applicable
+[verification phase](../plan/execution-workflow.md).
 
-| ID | Scenario | Required result |
-| --- | --- | --- |
-| GRAPH01 | Query performer and character roles | Both belong to the same credit occurrence. |
-| GRAPH02 | Display causal/background links from conflicting canons | Context and evidence remain explicit; reachability is not causation. |
-| GRAPH03 | Expand dense hub or unanchored closure | Bounded plan/admission and truthful frontier. |
-| GRAPH04 | Encounter private intermediate node | No path/count/existence leakage. |
-| GRAPH05 | Search text then continue relation traversal | Same ARQ binding semantics within one admitted request; no cross-request snapshot assumption. |
-| GRAPH06 | Edit graph layout | Presentation state does not mutate relation truth. |
+## Prospective refinements
 
-Record inputs, operation receipts, exact profiles/builds and failures. A mock-only
-pass cannot qualify storage, cross-service behavior or capacity.
+GRAPH01 needs a female-lead/red-hair counterexample in which the traits belong
+to different characters, plus different releases/canons and repeated
+appearances. Successful reads must preserve exact supporting Statement and
+occurrence IDs. GRAPH02 must compare personal and Realm interpretations while
+preserving speaker, exact definition, evidence and decision scope.
 
-For the [Statement model](../contracts/classification.md), extend GRAPH01 with
-the female-lead/red-hair counterexample: the same Work having each on different
-characters must fail the conjunction. Repeat with different releases/canons and
-with repeated appearances of the same character. Successful responses preserve
-the exact supporting statement and occurrence IDs.
-
-GRAPH03/GRAPH05 must qualify bounded grouped/inverse reads, distinct count grain
-and shared summary hydration. GRAPH04 includes hidden names/avatar references and
-aggregate buckets. GRAPH06 includes moving an Appearance display group without
-changing any accepted statement or semantic identity. These are prospective
-refinements of existing IDs, not newly executed results.
-
-GRAPH02 also compares personal and Realm interpretations of the same object while
-preserving speaker, exact definitions and decision scope. GRAPH03/GRAPH05 bound
-shared Context/definition hydration and keep same-label criteria separate; only
-an admitted equivalence/inclusion mapping permits combined results. GRAPH04 hides
-private Context/base references and personal selections. GRAPH06 checks that a
-Context preference change cannot rewrite an edge's authored meaning. These
-shared-Context requirements remain prospective.
+GRAPH03/05 need bounded grouped and inverse reads, distinct count grain,
+summary and shared Context hydration; same-label criteria stay separate absent
+admitted equivalence. GRAPH04 must hide private intermediate paths, names,
+avatars, buckets, Context/base references and personal selections. GRAPH06
+must show moving an Appearance group or changing a Context preference cannot
+change accepted Statements, semantic identity or an edge's authored meaning.
+These refinements do not inherit the base cases' recorded pass status.

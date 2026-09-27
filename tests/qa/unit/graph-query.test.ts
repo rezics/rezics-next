@@ -2,6 +2,7 @@ import { expect, test } from 'bun:test';
 import { relationGraphQueryText } from '../../../services/main/src/modules/graph-query/query.ts';
 import { statementGraphQueryText } from '../../../services/main/src/modules/graph-query/statements.ts';
 import { checkedRelationGraphQuery, GRAPH_QUERY_COST, GRAPH_QUERY_LIMITS,
+  checkedStatementGraphQuery, InvalidGraphQuery,
   type RelationGraphQuery } from '../../../services/main/src/modules/graph-query/schema.ts';
 
 const id = (suffix: string) => `https://rezics.com/id/00000000-0000-4000-8000-${suffix.padStart(12, '0')}`;
@@ -16,6 +17,17 @@ function request(overrides: Partial<RelationGraphQuery> = {}): RelationGraphQuer
     anchor: { kind: 'resource', id: id('3') }, definition,
     fromRole: 'performer', toRole: 'character', direction: 'outgoing', roleBindings: [], ...overrides };
 }
+
+test('GRAPH01/GRAPH03: descriptor validation rejects unknown graph profiles and anchor kinds', () => {
+  expect(() => checkedRelationGraphQuery(request({ profile: 'other' as RelationGraphQuery['profile'] })))
+    .toThrow(InvalidGraphQuery);
+  expect(() => checkedRelationGraphQuery(request({ anchor: { kind: 'other' } as RelationGraphQuery['anchor'] })))
+    .toThrow(InvalidGraphQuery);
+  expect(() => checkedRelationGraphQuery(request({ anchor: null as unknown as RelationGraphQuery['anchor'] })))
+    .toThrow(InvalidGraphQuery);
+  expect(() => checkedStatementGraphQuery({ profile: 'other' as 'statement-graph-v1',
+    actingSubject: id('2'), anchor: id('3'), direction: 'outgoing' })).toThrow(InvalidGraphQuery);
+});
 
 test('GRAPH01: query binds role predicates and participants through one exact occurrence revision', () => {
   const query = relationGraphQueryText(request({ roleBindings: [

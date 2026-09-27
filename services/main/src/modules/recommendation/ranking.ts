@@ -65,6 +65,7 @@ function validBasis(basis: RankingBasis): void {
   const population = basis.population;
   const semantic = basis.semantic;
   if (basis.profile !== RANKING_PROFILE || basis.candidateGrain !== 'work'
+    || !population || !['public', 'realm', 'personal'].includes(population.kind)
     || (population.kind === 'realm' && !nativeIri.test(population.realm))
     || (semantic && (!nativeIri.test(semantic.context) || !nativeIri.test(semantic.contextRevision)
       || !(population.kind === 'personal'

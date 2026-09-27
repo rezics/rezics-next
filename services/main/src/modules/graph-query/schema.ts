@@ -87,7 +87,9 @@ export interface StatementGraphQuery {
 export class InvalidGraphQuery extends Error {}
 
 export function checkedRelationGraphQuery(input: RelationGraphQuery): RelationGraphQuery {
-  if (!nativeId.test(input.actingSubject) || !nativeId.test(input.definition)
+  if (input.profile !== 'relation-graph-v1'
+    || !nativeId.test(input.actingSubject) || !nativeId.test(input.definition)
+    || !input.anchor || (input.anchor.kind !== 'resource' && input.anchor.kind !== 'phrase')
     || (input.anchor.kind === 'resource' && !nativeId.test(input.anchor.id))
     || (input.anchor.kind === 'phrase' && (input.anchor.phrase.trim().length < 2
       || input.anchor.phrase.length > GRAPH_QUERY_LIMITS.phraseLength
@@ -119,7 +121,8 @@ export function checkedRelationGraphQuery(input: RelationGraphQuery): RelationGr
 
 
 export function checkedStatementGraphQuery(input: StatementGraphQuery): StatementGraphQuery {
-  if (!nativeId.test(input.actingSubject) || !nativeId.test(input.anchor)
+  if (input.profile !== 'statement-graph-v1'
+    || !nativeId.test(input.actingSubject) || !nativeId.test(input.anchor)
     || !['outgoing', 'incoming'].includes(input.direction)
     || (input.predicate !== undefined && !/^https?:\/\/[^\s<>"{}|\\^`]{1,2040}$/u.test(input.predicate))
     || (input.continuation !== undefined && (!input.continuation

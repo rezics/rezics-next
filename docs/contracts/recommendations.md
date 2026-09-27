@@ -1,34 +1,30 @@
 # Recommendation and ranking generations
 
-## Inputs and meaning
+## Current profile and intended scope
 
-Declare admitted content/activity signals, counting population, time decay,
-context and score policy. Imported source aggregates retain origin and do not
-create native votes. Private exclusions/preferences narrow delivery independently
-of public ranking. Popularity is not classification truth or authorization.
+The deployed [ranking basis](../../services/main/src/modules/recommendation/ranking.ts)
+counts admitted latest rating slots per declared public, Realm or personal
+population. Exact Context definition/selection and preference revisions are
+separate dependencies. Popularity cannot authorize a candidate, establish
+classification truth, infer a person's interpretation from reading or liking,
+or promote an interpretation to Global meaning. Imported aggregates do not
+become native votes.
 
-Shared [Context](context.md) preferences may select or emphasize eligible objects
-and properties. Resolve any semantic criterion to exact definitions first;
-recommendation preferences cannot change its meaning or an author's statement.
-Personal, Realm and public populations remain separate even when they reuse the
-same semantic Context. Do not infer a person's interpretation solely from reading
-or liking a concept, and never promote it into Global meaning from popularity.
+[Generation state](../../services/main/src/modules/recommendation/derived-generation.ts)
+pins source positions, validates before activation and fences stale workers.
+The ranking worker coalesces bounded signal batches and checkpoints progress;
+one synchronous global exact counter is outside this profile.
+Reads use deterministic score/IRI order, bounded positive and zero-score
+windows, current disclosure checks and generation-bound cursors. Missing
+active ranking has no fallback in this profile. [Recommendation acceptance](../testing/recommendations.md)
+separates generation, disclosure and skew/load evidence.
 
-## Computation and reads
+## Further profiles
 
-Build partitionable sparse scores from bounded signal batches. Coalesce updates,
-checkpoint progress and avoid one synchronous exact global counter. A generation
-pins input/policy revisions and can be activated only after complete validation
-and catch-up. Failed/stale workers cannot replace a valid active generation.
-
-Query positive scores and eligible zero-score fallback under declared ordering,
-deterministic tie-break and shared candidate budgets. Cursors bind generation,
-context and disclosure. Expired/stale generations yield explicit restart or the
-declared fallback, never mixed-order results. Semantic definition/selection and
-preference-ordering revisions are distinct dependencies. Recheck current content visibility
-without leaking suppressed titles/counts or claiming an incomplete page is exact.
-
-Retention bounds old generations and replay requirements. Erasure/revocation
-invalidates affected delivery immediately and recomputes asynchronously. Qualify
-skew, repeated snapshots, stale leases, sparse/private candidates and recovery in
-[recommendation acceptance](../testing/recommendations.md).
+Additional content/activity signals, source aggregates or time decay require
+their own declared population, counting and score policy. They must preserve
+semantic meaning independently of preference ordering and private delivery
+exclusions. Erasure or revocation must stop affected delivery immediately and
+recompute asynchronously. No profile may present an incomplete page as exact
+or mix orders after a stale cursor. Cursor dependencies include Context and
+disclosure; retention must bound old generations and preserve replay needs.
