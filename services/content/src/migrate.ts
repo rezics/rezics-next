@@ -31,11 +31,15 @@ export async function migrateContent(pool: Pool): Promise<void> {
       version integer PRIMARY KEY, applied_at timestamptz NOT NULL DEFAULT now())`);
     const applied = await client.query<{ version: number }>(
       'SELECT version FROM content.schema_migration ORDER BY version');
-    const versions = applied.rows.map(row => row.version);
-    if (versions.some((version, index) => version !== pending[index]?.version)) {
+    // Parallel owner work merges reserved ranges in any order, so a lower version
+    // can arrive after higher ones were applied (as Access and relay migrations,
+    // tracked by name, already allow). Every applied version must still be known.
+    const versions = new Set(applied.rows.map(row => row.version));
+    const known = new Set(pending.map(migration => migration.version));
+    if ([...versions].some(version => !known.has(version))) {
       throw new Error('Content schema history differs from local migrations');
     }
-    for (const migration of pending.slice(versions.length)) {
+    for (const migration of pending.filter(migration => !versions.has(migration.version))) {
       await client.query(migration.sql);
       await client.query('INSERT INTO content.schema_migration (version) VALUES ($1)',
         [migration.version]);
