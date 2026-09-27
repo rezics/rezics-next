@@ -20,7 +20,7 @@ const position: readonly PropertyDefinition[] = [
 // Selection policy of one targeted use. Structural roles carry no target.
 const selection: readonly (readonly PropertyDefinition[])[] = [
   [
-    { path: 'rv:target', maxCount: 0 },
+    { path: 'schema:item', maxCount: 0 },
     { path: 'rv:selectionMode', maxCount: 0 },
     { path: 'rv:selectionRealm', maxCount: 0 },
     { path: 'rv:pinnedRevision', maxCount: 0 },
@@ -28,25 +28,25 @@ const selection: readonly (readonly PropertyDefinition[])[] = [
   [
     // Profile writers admit exact external catalog classes here; unlike a resource target,
     // a type IRI has no content variant or access grant to follow.
-    oneIri('rv:target'),
+    { path: 'schema:item', minCount: 1, maxCount: 1, nodeKind: 'sh:IRI' },
     { path: 'rv:selectionMode', maxCount: 0 },
     { path: 'rv:selectionRealm', maxCount: 0 },
     { path: 'rv:pinnedRevision', maxCount: 0 },
   ],
   [
-    oneIri('rv:target'),
+    { path: 'schema:item', minCount: 1, maxCount: 1, nodeKind: 'sh:IRI' },
     { path: 'rv:selectionMode', hasValue: 'rv:FollowContext' },
     { path: 'rv:selectionRealm', maxCount: 0 },
     { path: 'rv:pinnedRevision', maxCount: 0 },
   ],
   [
-    oneIri('rv:target'),
+    { path: 'schema:item', minCount: 1, maxCount: 1, nodeKind: 'sh:IRI' },
     { path: 'rv:selectionMode', hasValue: 'rv:FixedRealm' },
     { path: 'rv:selectionRealm', minCount: 1, maxCount: 1, class: 'rv:Realm' },
     { path: 'rv:pinnedRevision', maxCount: 0 },
   ],
   [
-    oneIri('rv:target'),
+    { path: 'schema:item', minCount: 1, maxCount: 1, nodeKind: 'sh:IRI' },
     { path: 'rv:selectionMode', hasValue: 'rv:FixedRevision' },
     { path: 'rv:selectionRealm', maxCount: 0 },
     oneIri('rv:pinnedRevision'),
@@ -65,6 +65,7 @@ export const structureCompositionProfile = {
     ['sh', 'http://www.w3.org/ns/shacl#'],
     ['rdf', 'http://www.w3.org/1999/02/22-rdf-syntax-ns#'],
     ['xsd', 'http://www.w3.org/2001/XMLSchema#'],
+    ['schema', 'https://schema.org/'],
     ['rv', 'https://rezics.com/vocab/'],
   ],
   layout: 'compact',
@@ -111,9 +112,9 @@ export const structureCompositionProfile = {
     },
     {
       iri: 'https://rezics.com/definition/structure-composition-v1/occurrence-shape',
-      canonical: { types: ['rv:StructureOccurrence'] },
+      canonical: { types: ['schema:ListItem'] },
       properties: [
-        { path: 'rdf:type', hasValue: 'rv:StructureOccurrence', maxCount: 1 },
+        { path: 'rdf:type', hasValue: 'schema:ListItem', maxCount: 1 },
         { path: 'rv:structure', minCount: 1, maxCount: 1, class: 'rv:Structure' },
         { path: 'rv:introducedBy', minCount: 1, maxCount: 1, class: 'rv:StructureRevision' },
       ],
@@ -123,7 +124,7 @@ export const structureCompositionProfile = {
       canonical: { types: ['rv:OccurrencePlacement'] },
       properties: [
         { path: 'rdf:type', hasValue: 'rv:OccurrencePlacement', maxCount: 1 },
-        { path: 'rv:occurrence', minCount: 1, maxCount: 1, class: 'rv:StructureOccurrence' },
+        { path: 'rv:occurrence', minCount: 1, maxCount: 1, class: 'schema:ListItem' },
         { path: 'rv:generation', minCount: 1, maxCount: 1, class: 'rv:StructureGeneration' },
         { path: 'rv:orderSegment', minCount: 1, maxCount: 1, class: 'rv:OrderSegment' },
         { path: 'rv:orderKey', minCount: 1, maxCount: 1, datatype: 'xsd:string',
@@ -132,7 +133,7 @@ export const structureCompositionProfile = {
         { path: 'rv:occurrenceLabel', datatype: 'rdf:langString', maxLength: 500, uniqueLang: true },
         { path: 'rv:qualifier', maxCount: 1, nodeKind: 'sh:IRI' },
         { path: 'rv:sourceKey', maxCount: 1, datatype: 'xsd:string', minLength: 1, maxLength: 200 },
-        { path: 'rv:target', maxCount: 1, nodeKind: 'sh:IRI' },
+        { path: 'schema:item', maxCount: 1, nodeKind: 'sh:IRI' },
         { path: 'rv:selectionMode', maxCount: 1,
           in: ['rv:FollowContext', 'rv:FixedRealm', 'rv:FixedRevision'] },
         { path: 'rv:selectionRealm', maxCount: 1, nodeKind: 'sh:IRI' },
@@ -145,14 +146,14 @@ export const structureCompositionProfile = {
       canonical: { types: ['rv:RemovedPlacement'] },
       properties: [
         { path: 'rdf:type', hasValue: 'rv:RemovedPlacement', maxCount: 1 },
-        { path: 'rv:occurrence', minCount: 1, maxCount: 1, class: 'rv:StructureOccurrence' },
+        { path: 'rv:occurrence', minCount: 1, maxCount: 1, class: 'schema:ListItem' },
         { path: 'rv:generation', minCount: 1, maxCount: 1, class: 'rv:StructureGeneration' },
         { path: 'rv:orderSegment', maxCount: 0 },
         { path: 'rv:orderKey', maxCount: 0 },
         { path: 'rv:occurrenceRole', minCount: 1, maxCount: 1, in: STRUCTURE_ROLES },
         oneIri('rv:lastParent'),
         { path: 'rv:removedBy', minCount: 1, maxCount: 1, class: 'rv:StructureRevision' },
-        { path: 'rv:target', maxCount: 1, nodeKind: 'sh:IRI' },
+        { path: 'schema:item', maxCount: 1, nodeKind: 'sh:IRI' },
         { path: 'rv:sourceKey', maxCount: 1, datatype: 'xsd:string', minLength: 1, maxLength: 200 },
       ],
     },

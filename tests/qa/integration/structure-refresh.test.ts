@@ -84,6 +84,17 @@ test('BOOK07: exact source import and three-way refresh preserve local edits or 
     expect(first.occurrences).toHaveLength(2);
     expect(first.occurrences.map(item => item.target)).toEqual([source.work, source.work]);
     expect(new Set(first.occurrences.map(item => item.occurrence)).size).toBe(2);
+    const importedItems = await f.env.fuseki.query(`PREFIX schema: <https://schema.org/>
+      PREFIX rv: <https://rezics.com/vocab/> SELECT ?item ?target WHERE {
+        GRAPH ${iri(GRAPHS.current)} {
+          VALUES ?item { ${first.occurrences.map(item => iri(item.occurrence)).join(' ')} }
+          ?item a schema:ListItem .
+          ${iri(destination.structure)} rv:selectedGeneration ?generation .
+          ?placement rv:occurrence ?item ; rv:generation ?generation ; schema:item ?target .
+        } }`);
+    expect(importedItems.results?.bindings).toHaveLength(2);
+    expect(importedItems.results!.bindings.map(row => row.target!.value))
+      .toEqual([source.work, source.work]);
     const localMove = await json<{ revision: string }>(await call('POST', `${destPath}/changes`, {
       profile: 'book-composition', expectedHead: imported.revision, actingSubject: f.actor,
       operations: [{ op: 'move', occurrence: first.occurrences[0]!.occurrence,

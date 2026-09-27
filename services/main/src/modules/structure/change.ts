@@ -924,8 +924,8 @@ function placementTriples(state: PlacementState, generation: string,
     add('removedBy', iri(state.removedBy!));
   }
   if (state.label) add('occurrenceLabel', `${lit(state.label.value)}@${state.label.language}`);
-  if (state.target) add('target', profile && isCatalogTarget(profile, state.target)
-    ? structureIri(state.target) : iri(state.target));
+  if (state.target) triples.push(`${subject} <https://schema.org/item> ${profile
+    && isCatalogTarget(profile, state.target) ? structureIri(state.target) : iri(state.target)} .`);
   if (state.selection?.mode === 'follow-context') add('selectionMode', 'rv:FollowContext');
   if (state.selection?.mode === 'fixed-revision') {
     add('selectionMode', 'rv:FixedRevision');
@@ -1040,7 +1040,7 @@ export async function changeComposition(env: WorkActivationEnvironment,
       changedExisting.push(old);
       if (old.active) order.set(orderTreeKey(old as Required<PlacementState>), null);
     } else {
-      inserts.push(`${iri(occurrence)} a rv:StructureOccurrence ; rv:structure ${iri(header.structure)} ;
+      inserts.push(`${iri(occurrence)} a <https://schema.org/ListItem> ; rv:structure ${iri(header.structure)} ;
         rv:introducedBy ${iri(revision)} .`);
     }
     deletes.push(...change.removed);
@@ -1551,7 +1551,7 @@ export async function restoreComposition(env: WorkActivationEnvironment, intent:
       ...(record.sourceKey ? { sourceKey: record.sourceKey } : {}) };
     projectionByRecord[index]!.push(...placementTriples(state, generation, header.profile));
     if (intent.stage && record.introducedBy === revision) {
-      projectionByRecord[index]!.push(`${iri(record.occurrence)} a rv:StructureOccurrence ;
+      projectionByRecord[index]!.push(`${iri(record.occurrence)} a <https://schema.org/ListItem> ;
         rv:structure ${iri(header.structure)} ; rv:introducedBy ${iri(revision)} .`);
     }
     if (intent.stage && record.introducedBy === revision) {

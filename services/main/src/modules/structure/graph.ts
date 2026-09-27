@@ -143,9 +143,9 @@ export async function readPlacements(env: WorkActivationEnvironment, generation:
   const scope = 'occurrences' in selector
     ? `VALUES ?occurrence { ${selector.occurrences.map(iri).join(' ')} }`
     : `?placement rv:orderSegment ${iri(selector.segment)} .`;
-  const result = await env.fuseki.query(`PREFIX rv: <${RV}>
+  const result = await env.fuseki.query(`PREFIX rv: <${RV}> PREFIX schema: <https://schema.org/>
     SELECT ?placement ?occurrence ?type ?segment ?parent ?segmentKey ?orderKey ?role ?label
-      ?target ?mode ?pinned ?sourceKey ?introducedBy ?removedBy ?lastParent WHERE {
+      ?item ?legacyTarget ?mode ?pinned ?sourceKey ?introducedBy ?removedBy ?lastParent WHERE {
       GRAPH ${iri(GRAPHS.current)} {
         ${scope}
         ?placement rv:generation ${iri(generation)} ; rv:occurrence ?occurrence ; a ?type ;
@@ -155,7 +155,8 @@ export async function readPlacements(env: WorkActivationEnvironment, generation:
         OPTIONAL { ?placement rv:orderSegment ?segment ; rv:orderKey ?orderKey .
           ?segment rv:parent ?parent ; rv:segmentKey ?segmentKey . }
         OPTIONAL { ?placement rv:occurrenceLabel ?label }
-        OPTIONAL { ?placement rv:target ?target }
+        OPTIONAL { ?placement schema:item ?item }
+        OPTIONAL { ?placement rv:target ?legacyTarget }
         OPTIONAL { ?placement rv:selectionMode ?mode }
         OPTIONAL { ?placement rv:pinnedRevision ?pinned }
         OPTIONAL { ?placement rv:sourceKey ?sourceKey }
@@ -175,7 +176,12 @@ export async function readPlacements(env: WorkActivationEnvironment, generation:
     const role = (Object.entries(ROLE_IRI).find(([, uri]) => uri === value(row, 'role'))?.[0]
       ?? null) as OccurrenceRole | null;
     const mode = value(row, 'mode');
-    const target = value(row, 'target');
+    const item = value(row, 'item');
+    const legacyTarget = value(row, 'legacyTarget');
+    if (item && legacyTarget && item !== legacyTarget) {
+      throw new CompositionCorrupt('placement has conflicting target predicates');
+    }
+    const target = item ?? legacyTarget;
     const labelLanguage = row.label?.['xml:lang'];
     const state: PlacementState = { occurrence, placement: value(row, 'placement')!, active,
       parent: active ? value(row, 'parent') ?? '' : value(row, 'lastParent') ?? '',

@@ -92,6 +92,21 @@ test('BOOK02/COMP01/COMP02/COMP05/COMP06: admitted Book composition keeps occurr
     expect(current.occurrences.map(item => item.target)).toEqual([work.work, work.work]);
     expect(current.occurrences.map(item => item.sourceKey)).toEqual([
       'source:/chapters/one', 'source:/chapters/two']);
+    const listItems = await f.env.fuseki.query(`PREFIX schema: <https://schema.org/>
+      PREFIX rv: <https://rezics.com/vocab/> SELECT ?item ?target ?role ?order WHERE {
+        GRAPH ${iri(GRAPHS.current)} {
+          VALUES ?item { ${changed.occurrences.map(iri).join(' ')} }
+          ?item a schema:ListItem .
+          ${iri(created.structure)} rv:selectedGeneration ?generation .
+          ?placement rv:occurrence ?item ; rv:generation ?generation ;
+            schema:item ?target ; rv:occurrenceRole ?role ; rv:orderKey ?order .
+        } }`);
+    expect(listItems.results?.bindings).toHaveLength(2);
+    expect(new Set(listItems.results!.bindings.map(row => row.item!.value)).size).toBe(2);
+    expect(listItems.results!.bindings.map(row => row.target!.value))
+      .toEqual([work.work, work.work]);
+    expect(listItems.results!.bindings.map(row => row.role!.value))
+      .toEqual(['https://rezics.com/vocab/ChapterRole', 'https://rezics.com/vocab/ChapterRole']);
     const progressPaths = changed.occurrences.map(occurrence =>
       `${path}/occurrences/${shortId(occurrence)}/progress`);
     const progressBody = (position: string) => ({ actingSubject: f.actor,
