@@ -7,7 +7,7 @@ They describe the selected target, not deployed endpoints or passing prototypes.
 - [Model profiles and validation](model-profile-validation.md): standard terms, compiled shapes/rules, complete affected-state validation and guarded commands.
 - [API and event surfaces](api-and-events.md): operation envelopes, service commands, errors and committed-event transport.
 - [Authorization bridge](authorization-bridge.md): Main admission around Fuseki queries and publication/revocation fences.
-- [Access implementation plan](access-control.md): PostgreSQL authority, object grants, coherent ordered decisions, Realm exclusion and the release sequence.
+- [Access storage decision](../research/access-storage-and-policy.md): PostgreSQL authority and coherent ordered decisions; the current rules live in the Access module.
 - [Vertical workflows](vertical-workflows.md): end-to-end creation, context, source and recovery sequences.
 - [Package plans](package-plans.md): constraints, instances, locks and journaled installation.
 - [Interaction graph and cache bootstrap](interactions-and-cache.md): Main-owned TDB2 likes/favorites, Jena acceptance cases and later Redis read caching.

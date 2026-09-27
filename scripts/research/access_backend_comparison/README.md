@@ -89,5 +89,4 @@ shape; they are not its current performance. The recorded final measurement used
 that optimized shape. All evidence files identify their limited experiment rather
 than a product acceptance pass.
 
-See [the owning research](../../../docs/research/access-storage-and-policy.md) and
-[the implementation proposal](../../../docs/implementation/access-control.md).
+See [the owning research](../../../docs/research/access-storage-and-policy.md).
