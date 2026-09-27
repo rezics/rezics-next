@@ -55085,6 +55085,14 @@
                     ],
                     "type": "string"
                   },
+                  "embeds": {
+                    "items": {
+                      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                      "type": "string"
+                    },
+                    "maxItems": 16,
+                    "type": "array"
+                  },
                   "expectedHead": {
                     "pattern": "^[0-9a-f-]{36}$",
                     "type": [
@@ -55160,6 +55168,14 @@
                     ],
                     "type": "string"
                   },
+                  "embeds": {
+                    "items": {
+                      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                      "type": "string"
+                    },
+                    "maxItems": 16,
+                    "type": "array"
+                  },
                   "expectedHead": {
                     "pattern": "^[0-9a-f-]{36}$",
                     "type": [
@@ -55234,6 +55250,14 @@
                       "none"
                     ],
                     "type": "string"
+                  },
+                  "embeds": {
+                    "items": {
+                      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                      "type": "string"
+                    },
+                    "maxItems": 16,
+                    "type": "array"
                   },
                   "expectedHead": {
                     "pattern": "^[0-9a-f-]{36}$",

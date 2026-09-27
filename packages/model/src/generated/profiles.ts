@@ -629,7 +629,7 @@ export const profileRegistry = {
     ]
   },
   "recipe-structure-v1": {
-    "sha256": "a2669830423778a6175f968bd595f86858462200e37a438d4ac98ca4b2c99dd3",
+    "sha256": "b950e8eb396bc5261a976cf9c8378e42655b0aa2bdf9531701c7aaa51958dd72",
     "file": "shapes/recipe-structure-v1.ttl",
     "shapes": [
       "https://rezics.com/definition/recipe-structure-v1/ingredient-line-shape",
@@ -823,7 +823,7 @@ export const profileRegistry = {
     ]
   },
   "structure-composition-v1": {
-    "sha256": "0b0048428fdfc30f8472426d1a2cf83309e262d6e1531b74b7faab13acc9f549",
+    "sha256": "0043acb8748937d04d177a90695b06ac23fcccd5742b7d0da3c728e2d468d746",
     "file": "shapes/structure-composition-v1.ttl",
     "shapes": [
       "https://rezics.com/definition/structure-composition-v1/structure-shape",

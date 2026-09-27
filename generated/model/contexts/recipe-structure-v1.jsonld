@@ -12,6 +12,10 @@
       "@id": "http://www.w3.org/2001/XMLSchema#",
       "@prefix": true
     },
+    "schema": {
+      "@id": "https://schema.org/",
+      "@prefix": true
+    },
     "rv": {
       "@id": "https://rezics.com/vocab/",
       "@prefix": true

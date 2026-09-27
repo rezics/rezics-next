@@ -533,7 +533,7 @@
     },
     {
       "id": "recipe-structure-v1",
-      "sha256": "a2669830423778a6175f968bd595f86858462200e37a438d4ac98ca4b2c99dd3",
+      "sha256": "b950e8eb396bc5261a976cf9c8378e42655b0aa2bdf9531701c7aaa51958dd72",
       "file": "shapes/recipe-structure-v1.ttl"
     },
     {
@@ -608,7 +608,7 @@
     },
     {
       "id": "structure-composition-v1",
-      "sha256": "0b0048428fdfc30f8472426d1a2cf83309e262d6e1531b74b7faab13acc9f549",
+      "sha256": "0043acb8748937d04d177a90695b06ac23fcccd5742b7d0da3c728e2d468d746",
       "file": "shapes/structure-composition-v1.ttl"
     },
     {
@@ -2197,16 +2197,6 @@
       ]
     },
     {
-      "type": "https://rezics.com/vocab/StructureOccurrence",
-      "routes": [
-        {
-          "profile": "structure-composition-v1",
-          "shape": "https://rezics.com/definition/structure-composition-v1/occurrence-shape",
-          "when": []
-        }
-      ]
-    },
-    {
       "type": "https://rezics.com/vocab/StructureRevision",
       "routes": [
         {
@@ -2272,6 +2262,16 @@
         {
           "profile": "zone-capability-v1",
           "shape": "https://rezics.com/definition/zone-capability-v1/revision-shape",
+          "when": []
+        }
+      ]
+    },
+    {
+      "type": "https://schema.org/ListItem",
+      "routes": [
+        {
+          "profile": "structure-composition-v1",
+          "shape": "https://rezics.com/definition/structure-composition-v1/occurrence-shape",
           "when": []
         }
       ]
@@ -2460,7 +2460,7 @@
     "contexts/realm-reply-placement-v1.jsonld": "8b60db1c14332a888f96264c301e4c9e4d4024fb8bdef15151814abd1681eeae",
     "contexts/realm-standing-rating-context-v1.jsonld": "b21ab6bd59692cb3ccc2fa388c55297e26aed4bba274d252c0f7075afa4bdd43",
     "contexts/realm-standing-rating-observation-v1.jsonld": "d06d58146a3e4e722fdf24c8dbf7720d802d00d5952d6a039e8700a87c76cc87",
-    "contexts/recipe-structure-v1.jsonld": "ecf1ef3d25ce0e64c465b253eeece62cc02809c45136639c7426a700d112bfbb",
+    "contexts/recipe-structure-v1.jsonld": "9cd287b924b91e207ef04c036dfe21a6dfd48cd77d9110e3a929dc0486c2e852",
     "contexts/relation-occurrence-v1.jsonld": "ef11293038d3809b756e9a3f472b5cd58ba1d673794fc7f44b009b6faaa57bce",
     "contexts/rights-offering-v1.jsonld": "849a6bbeffacb662605a26dc09e0ce069dcbda4f32164173300fb9d7f3206293",
     "contexts/semantic-annotation-v1.jsonld": "15e08572d951513ddac7b9e3c1d1f2315d520a0b03c67d418271872d98b85f7d",
@@ -2475,7 +2475,7 @@
     "contexts/statement-cutover-v1.jsonld": "6bafd791bb47c90b3411bd1592324dd9b16417df27fea0fa34f51ac9c2ed5e9a",
     "contexts/statement-decision-v1.jsonld": "6fde37ebce49b673eca2752de6e7041553b3d2f2a7fdcbf26b6466b2c6af32fd",
     "contexts/statement-v1.jsonld": "cfa9f2493ab50152388e2158a1771d418bbfba84e42ddd46a6aeb069c25f87de",
-    "contexts/structure-composition-v1.jsonld": "08dcb56593716567332097b690e2966dc22fc8c6284baffdc2f439435ee0561b",
+    "contexts/structure-composition-v1.jsonld": "d57e94df71e5eca10623c63af5886224a81d8218273c1caaaea8fa3833cf4294",
     "contexts/text-contribution-v1.jsonld": "78215401ecbc983cb593884da5d0a66775d5a63507343a1bbe69a218043f8bb9",
     "contexts/text-publication-v1.jsonld": "61f3a20fceb5f8a60a8ae389a537cc92dc3ce9d49c56d7389eac37a69e2a5ad2",
     "contexts/theme-activation-v1.jsonld": "13fd168bf8e9a109ae4a753c1b4aa424e61e22c951d0631d1591933ff7b858b1",
@@ -2538,7 +2538,7 @@
     "shapes/realm-reply-placement-v1.ttl": "b939a1b25d6351a97f4ac0cf48240a0bf76a3f61b51e1ace558348fd382eb511",
     "shapes/realm-standing-rating-context-v1.ttl": "be1cfde2f3f0c6207e684829b7a5a9c66383f52a640908051cd245ebf0454cd9",
     "shapes/realm-standing-rating-observation-v1.ttl": "a0206416dfc9d591e187dc22400ac802810a01245adb20e4ff48bdd4360960da",
-    "shapes/recipe-structure-v1.ttl": "a2669830423778a6175f968bd595f86858462200e37a438d4ac98ca4b2c99dd3",
+    "shapes/recipe-structure-v1.ttl": "b950e8eb396bc5261a976cf9c8378e42655b0aa2bdf9531701c7aaa51958dd72",
     "shapes/relation-occurrence-v1.ttl": "085eb7668d18baad0c135943856d0f428d31d5a5429216155f967a8001b75222",
     "shapes/rights-offering-v1.ttl": "dd10150cfac446923dbb9ac8501f47a0a24bb292dd0eb4ddbad9449ed1746f85",
     "shapes/semantic-annotation-v1.ttl": "d195472baf5db656b7086c576e95e0f17f057c95ebd766e3789bdecf033835a8",
@@ -2553,7 +2553,7 @@
     "shapes/statement-cutover-v1.ttl": "e2ae65228aa4e311c183d230f96530358c88e7bd4e09928f482f394f1fda8daa",
     "shapes/statement-decision-v1.ttl": "f5d5c72e0473c6abd0816c0cddceb6c70c8075a47a4d2eeb81b28f9e598b2490",
     "shapes/statement-v1.ttl": "da4cf542d30ca2d0af244fa86efd53e4a8780a7b8feae260abc05168c358aa2a",
-    "shapes/structure-composition-v1.ttl": "0b0048428fdfc30f8472426d1a2cf83309e262d6e1531b74b7faab13acc9f549",
+    "shapes/structure-composition-v1.ttl": "0043acb8748937d04d177a90695b06ac23fcccd5742b7d0da3c728e2d468d746",
     "shapes/text-contribution-v1.ttl": "4a42b1851eaa3cace3e06c5a142329e7c3c380e756123c3b131dc2584c9d2d8b",
     "shapes/text-publication-v1.ttl": "831355eccb08af104d4dfc8d972cb4b8e4e4c39b40a3d83aab6a13f67af0dd37",
     "shapes/theme-activation-v1.ttl": "a6783b594ea6ff88743128c994707b49dc59da2d234ac3969c0a1bd5f294d8b6",
@@ -2570,9 +2570,9 @@
     "shapes/work-native-child-v1.ttl": "1c9e1ed2ab97a4211095848ddce43f361082b5b80c042000d384658ad029d5d5",
     "shapes/work-title-control-v1.ttl": "100dddad43cac4fd47c3090e987ef9dc9aa272d189fc4240cc08302340c5d42d",
     "shapes/zone-capability-v1.ttl": "b0374ad8d4506ef6a3337f784e77d97470a3df881f211c74a3281d2430365015",
-    "packages/model/src/generated/arbitraries.ts": "b4cec14bfe0ad63a546c59531637f666489db0a5e5895295fb5f10d4e2afe9d2",
-    "packages/model/src/generated/profiles.ts": "9e12ae16523d07d13e7326c9e84f595566fe4777601082518fed4af64eea9f0c",
-    "packages/model/src/generated/schemas.ts": "94ddc0f13f5f4248252fe6d16f091a8f934973771bcd3b3d08ed92550b178777",
-    "packages/model/src/generated/vocabulary.ts": "1c7361c406c3f0fe05268698bb00613284a3fe6687775479b8dfeb07a1c52ca8"
+    "packages/model/src/generated/arbitraries.ts": "3fce7e413adff558429b776115335dc88036280998318ef3282ef90a239fa070",
+    "packages/model/src/generated/profiles.ts": "eec7fd3d750f144d9d8f56b30def456e2b013d839f07357858e07585b146b67a",
+    "packages/model/src/generated/schemas.ts": "1f57e73a8dcbad25980be4d493d24d50a6f040c0821bc91607b3d9c6383667ba",
+    "packages/model/src/generated/vocabulary.ts": "41074f40c157789088150716b11b48cf7585f0eb9fe3c37f6574284d77ba4777"
   }
 }
