@@ -13,7 +13,7 @@ export const Landing: Story = {
     await expect(canvas.getByRole('heading', { level: 1, name: 'Find a work. Follow its meaning.' })).toBeVisible();
     const search = canvas.getByRole('search', { name: 'Search published works' });
     await expect(search).toHaveAttribute('action', '/search');
-    await expect(canvas.getByRole('link', { name: /Search works/ })).toHaveAttribute('href', '/search');
+    await expect(canvas.getByRole('link', { name: /Browse works/ })).toHaveAttribute('href', '/discover');
     await expect(canvas.getByRole('link', { name: /Open Studio/ })).toHaveAttribute('href', '/studio');
     // Sections without a live destination say so instead of showing sample data.
     await expect(canvas.getAllByText('Coming soon')).toHaveLength(2);

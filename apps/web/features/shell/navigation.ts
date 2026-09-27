@@ -17,7 +17,7 @@ export interface NavigationItem {
 // merges this file with the union driver (see .gitattributes).
 export const navigation: readonly NavigationItem[] = [
   { href: '/', icon: House, bottom: true, label: { en: 'Home', 'zh-CN': '首页' } },
-  { href: '/search', icon: Compass, bottom: true, label: { en: 'Discover', 'zh-CN': '发现' } },
+  { href: '/discover', icon: Compass, bottom: true, label: { en: 'Discover', 'zh-CN': '发现' } },
   { href: '/studio', icon: Plus, bottom: true, emphasized: true, label: { en: 'Create', 'zh-CN': '创作' } },
   { href: '/inbox', icon: Inbox, bottom: true, label: { en: 'Inbox', 'zh-CN': '收件箱' }, planned: { en: 'Notifications, replies and messages from the Realms you follow will arrive here.', 'zh-CN': '来自你关注的领域的通知、回复和消息将显示在这里。' } },
   { href: '/shelves', icon: LibraryBig, bottom: true, label: { en: 'Shelves', 'zh-CN': '书架' }, planned: { en: 'Keep the works you are reading, want to read and have finished on your shelves.', 'zh-CN': '把正在读、想读和读过的作品放在书架上。' } },

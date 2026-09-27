@@ -9,22 +9,19 @@ test('interface locale persists without changing public search language or anoth
     await expect(page.locator('html')).toHaveAttribute('lang', 'en');
     await expect(page.getByRole('heading', { name: 'Search works' })).toBeVisible();
 
-    const queryAfterSwitch = page.waitForRequest(request => request.url().includes('/api/main/v1/queries')
-      && request.method() === 'POST');
     await page.getByRole('form', { name: 'Interface language' })
       .getByRole('button', { name: '简体中文' }).click();
-    const initialQuery = await queryAfterSwitch;
-    expect(initialQuery.postDataJSON()).toMatchObject({ language: null });
     await expect(page).toHaveURL(/\/search\?q=river$/);
     await expect(page.locator('html')).toHaveAttribute('lang', 'zh-CN');
     await expect(page.getByRole('heading', { name: '搜索作品' })).toBeVisible();
-    await expect(page.getByRole('region', { name: '搜索结果' })).toContainText('没有找到匹配的作品。');
+    // The interface locale never becomes a content-language filter.
+    await expect(page.getByRole('region', { name: '搜索结果' })).toContainText('全局中没有与“river”匹配的作品');
+    await expect(page.getByTestId('search-completeness')).not.toContainText('仅限');
 
-    const selectedQuery = page.waitForRequest(request => request.url().includes('/api/main/v1/queries')
-      && request.method() === 'POST' && request.postDataJSON()?.language === 'en');
-    await page.getByRole('radio', { name: '英语' }).check();
-    expect((await selectedQuery).postDataJSON()).toMatchObject({ language: 'en' });
-    await expect(page.getByRole('radio', { name: '英语' })).toBeChecked();
+    await page.getByRole('link', { name: '英语' }).click();
+    await expect(page).toHaveURL(/\/search\?q=river&lang=en$/);
+    await expect(page.getByRole('link', { name: '英语' })).toHaveAttribute('aria-current', 'true');
+    await expect(page.getByTestId('search-completeness')).toContainText('仅限英语文本');
 
     await page.goto('/studio');
     await expect(page).toHaveURL(/\/sign-in\?next=%2Fstudio$/);

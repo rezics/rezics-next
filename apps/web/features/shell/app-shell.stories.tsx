@@ -139,7 +139,7 @@ export const Chinese: Story = {
 
 export const Phone: Story = {
   globals: { viewport: { value: 'phone' } },
-  parameters: { route: { pathname: '/search' } },
+  parameters: { route: { pathname: '/discover' } },
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     const bottom = canvas.getByRole('navigation', { name: 'Main navigation' });

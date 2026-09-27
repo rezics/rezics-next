@@ -5,6 +5,7 @@ import { Input } from '@rezics/ui/input';
 import { ArrowRightIcon, CompassIcon, LibraryBigIcon, type LucideIcon, PenLineIcon, SearchIcon,
   UsersRoundIcon } from 'lucide-react';
 import Link from 'next/link';
+import type { ReactNode } from 'react';
 import { PageContainer } from '../shell/page.tsx';
 import type { HomeMessages } from './messages.ts';
 
@@ -19,7 +20,7 @@ interface HomeSection {
 function sections(messages: HomeMessages): HomeSection[] {
   return [
     { icon: CompassIcon, title: messages.discoverTitle, body: messages.discoverBody,
-      action: { href: '/search', label: messages.discoverAction } },
+      action: { href: '/discover', label: messages.discoverAction } },
     { icon: PenLineIcon, title: messages.createTitle, body: messages.createBody,
       action: { href: '/studio', label: messages.createAction } },
     { icon: LibraryBigIcon, title: messages.readingTitle, body: messages.readingBody },
@@ -27,8 +28,11 @@ function sections(messages: HomeMessages): HomeSection[] {
   ];
 }
 
-/** The landing page: search first, then what REZICS offers now and what is coming. */
-export function HomePage({ messages }: { messages: HomeMessages }) {
+/**
+ * The landing page: search first, then a scoped discovery shelf when the
+ * route supplies one, then what REZICS offers now and what is coming.
+ */
+export function HomePage({ messages, shelf }: { messages: HomeMessages; shelf?: ReactNode }) {
   return <PageContainer className="grid gap-10">
     <section aria-labelledby="home-title" className="aura-surface rounded-3xl border border-border/60 px-6 py-10
       shadow-(--aura-shadow-card) sm:px-10 sm:py-14 lg:px-14 lg:py-20">
@@ -46,6 +50,7 @@ export function HomePage({ messages }: { messages: HomeMessages }) {
         <Button type="submit" size="xl">{messages.search}</Button>
       </form>
     </section>
+    {shelf}
     <section aria-labelledby="home-sections" className="grid gap-4">
       <h2 id="home-sections" className="sr-only">{messages.sections}</h2>
       <ul className="grid gap-4 sm:grid-cols-2">

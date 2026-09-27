@@ -44,9 +44,9 @@ describe('navigation', () => {
   test('home is current only at the root; other items cover their subtree', () => {
     const [home, discover] = navigation;
     expect(isCurrent(home!, '/')).toBe(true);
-    expect(isCurrent(home!, '/search')).toBe(false);
-    expect(isCurrent(discover!, '/search')).toBe(true);
-    expect(isCurrent(discover!, '/searching')).toBe(false);
+    expect(isCurrent(home!, '/discover')).toBe(false);
+    expect(isCurrent(discover!, '/discover')).toBe(true);
+    expect(isCurrent(discover!, '/discovery')).toBe(false);
   });
 
   test('a planned route shows its coming-soon item; unknown routes stay not found', () => {
