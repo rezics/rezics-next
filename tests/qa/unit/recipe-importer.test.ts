@@ -1,5 +1,6 @@
 import { expect, test } from 'bun:test';
-import { importRecipe } from '../../../services/main/src/modules/recipe/importer.ts';
+import { importRecipe, recipeSourceSupportCandidates }
+  from '../../../services/main/src/modules/recipe/importer.ts';
 
 test('RECIPE03: duplicate ingredient occurrences and grouped multilingual instructions retain order', () => {
   const result = importRecipe({ recipeIngredient: ['1/2 cup milk', '1/2 cup milk'],
@@ -39,4 +40,20 @@ test('RECIPE03: free text instructions and unknown quantities remain source text
     parseStatus: 'unparsed', originalText: { value: 'a handful of herbs', language: 'en' } });
   expect(result.steps[0]).toMatchObject({ text: 'Taste and adjust as needed.',
     sourceKey: 'source-observation#/recipeInstructions/0' });
+});
+
+test('RECIPE06: only exact retained source text becomes a Recipe child support candidate', () => {
+  const source = { recipeIngredient: ['salt',
+    { '@type': 'PropertyValue', value: '1/2', name: 'flour', unitText: 'cup' }],
+  recipeInstructions: [{ '@type': 'HowToStep', text: 'Stir gently.' }] };
+  const parsed = importRecipe(source, 'observation');
+  expect(recipeSourceSupportCandidates(source, parsed)).toMatchObject([
+    { sourceKey: 'observation#/recipeIngredient/0', sourcePointer: '/recipeIngredient/0',
+      slot: 'structure-occurrence-v1#qualifier.originalText.value' },
+    { sourceKey: 'observation#/recipeInstructions/0', sourcePointer: '/recipeInstructions/0/text',
+      slot: 'structure-occurrence-v1#qualifier.instructionText.value' },
+  ]);
+  const text = { recipeInstructions: 'Mix until smooth.' };
+  expect(recipeSourceSupportCandidates(text, importRecipe(text, 'observation'))[0]?.sourcePointer)
+    .toBe('/recipeInstructions');
 });

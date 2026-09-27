@@ -8,6 +8,7 @@ import { ProtectionAdmissionSigner } from '../../../services/main/src/modules/ac
 import { OpenLibraryConversionStore } from '../../../services/main/src/modules/source/open-library-conversion.ts';
 import { OpenLibrarySourceGraph } from '../../../services/main/src/modules/source/graph-projection.ts';
 import { SourceIntakeStore } from '../../../services/main/src/modules/source/intake.ts';
+import { RecipeSourceConversionStore } from '../../../services/main/src/modules/recipe/source-conversion.ts';
 import { SourceNativeWorkProposalStore, type NativeWorkSourceProposal } from '../../../services/main/src/modules/source/native-work-proposal.ts';
 import { SourceNativeWorkAdoptionStore, type NativeWorkSourceAdoption } from '../../../services/main/src/modules/source/native-work-adoption.ts';
 import { SourceNativeWorkAttachmentStore } from '../../../services/main/src/modules/source/native-work-attachment.ts';
@@ -130,7 +131,8 @@ export async function authorCreditFixture(apps: Record<string, string>, objectDi
   const app = createMainApp(fuseki, { environment: env, account: account.verifier, access,
     governance: { store: governance }, rights: { store: rightsStore },
     protectionSigner: new ProtectionAdmissionSigner(accessPool, apps.FUSEKI_TITLE_ADMISSION_KEY),
-    sourceIntake: intake, sourceConversions: conversions, sourceGraph: graph, sourceProposals: proposals,
+    sourceIntake: intake, recipeSourceConversions: new RecipeSourceConversionStore(pool, intake),
+    sourceConversions: conversions, sourceGraph: graph, sourceProposals: proposals,
     sourceCorrespondences: correspondences, sourceAdoptions: adoptions, sourceAuthorCredits: credits,
     sourceNativeChildren: nativeChildren,
     sourceProviderIdentity: new ProviderIdentityStore(pool),

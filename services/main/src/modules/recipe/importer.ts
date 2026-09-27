@@ -14,6 +14,14 @@ export interface RecipeImport {
   residual: string;
 }
 
+export interface RecipeSourceSupportCandidate {
+  sourceKey: string;
+  sourceField: 'recipeIngredient' | 'recipeInstructions';
+  sourcePointer: string;
+  slot: 'structure-occurrence-v1#qualifier.originalText.value'
+    | 'structure-occurrence-v1#qualifier.instructionText.value';
+}
+
 const textOf = (value: unknown): string | undefined => typeof value === 'string' && value.trim()
   ? value.trim() : undefined;
 const languageOf = (value: unknown, fallback = 'en'): string => typeof value === 'string'
@@ -153,4 +161,49 @@ export function importRecipe(value: unknown, sourceKey: string): RecipeImport {
     throw new Error('recipe source contains a value beyond the native Structure bound');
   }
   return { sections, ingredients, steps, residual };
+}
+
+/** Only bind source text that equals the exact accepted native child value. */
+export function recipeSourceSupportCandidates(source: unknown, imported: RecipeImport):
+  RecipeSourceSupportCandidate[] {
+  const at = (pointer: string): unknown => {
+    let value = source;
+    for (const part of pointer.slice(1).split('/')) {
+      if (Array.isArray(value) && /^(0|[1-9][0-9]*)$/.test(part)) value = value[Number(part)];
+      else if (value && typeof value === 'object' && Object.hasOwn(value, part)) {
+        value = (value as Record<string, unknown>)[part];
+      } else return undefined;
+    }
+    return value;
+  };
+  const pointerOf = (key: string) => key.slice(key.indexOf('#') + 1);
+  const candidate = (sourceKey: string, nativeText: string,
+    sourceField: RecipeSourceSupportCandidate['sourceField'],
+    slot: RecipeSourceSupportCandidate['slot']): RecipeSourceSupportCandidate | undefined => {
+    let base = pointerOf(sourceKey);
+    if (!base.startsWith(`/${sourceField}/`)) return undefined;
+    let raw = at(base);
+    if (raw === undefined && sourceField === 'recipeInstructions'
+      && base === '/recipeInstructions/0' && typeof at('/recipeInstructions') === 'string') {
+      base = '/recipeInstructions'; raw = at(base);
+    }
+    if (raw === undefined && sourceField === 'recipeIngredient'
+      && base.startsWith('/recipeIngredient/')) {
+      const nested = base.replace('/recipeIngredient/', '/recipeIngredient/itemListElement/');
+      if (at(nested) !== undefined) { base = nested; raw = at(base); }
+    }
+    const suffix = raw === nativeText ? '' : raw && typeof raw === 'object'
+      ? ['text', 'name', 'description'].find(field => (raw as Record<string, unknown>)[field] === nativeText)
+      : undefined;
+    const sourcePointer = `${base}${suffix ? `/${suffix}` : ''}`;
+    if (raw !== nativeText && !suffix || sourcePointer.length > 200
+      || sourcePointer.split('/').length > 9) return undefined;
+    return { sourceKey, sourceField, sourcePointer, slot };
+  };
+  return [
+    ...imported.ingredients.map(item => candidate(item.sourceKey, item.qualifier.originalText.value,
+      'recipeIngredient', 'structure-occurrence-v1#qualifier.originalText.value')),
+    ...imported.steps.map(item => candidate(item.sourceKey, item.text,
+      'recipeInstructions', 'structure-occurrence-v1#qualifier.instructionText.value')),
+  ].filter((item): item is RecipeSourceSupportCandidate => item !== undefined);
 }

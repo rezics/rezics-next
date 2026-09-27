@@ -49,6 +49,7 @@ import { VerificationCorrectionPublisher, VerificationCorrectionWorker }
 import { verificationCorrectionSubjectReader } from './modules/verification/correction-delivery.ts';
 import { NotificationStore } from './modules/notification/store.ts';
 import { SourceIntakeStore } from './modules/source/intake.ts';
+import { RecipeSourceConversionStore } from './modules/recipe/source-conversion.ts';
 import { sourceAcquisitionServices } from './modules/source/acquisition.ts';
 import { OpenLibraryConversionStore } from './modules/source/open-library-conversion.ts';
 import { SourceChildCorrespondenceStore }
@@ -305,6 +306,7 @@ const app = createMainApp(fuseki, {
   roles: new AccessRoles(pool),
   accessPolicy: new AccessPolicyOwner(pool),
   sourceIntake,
+  recipeSourceConversions: new RecipeSourceConversionStore(contentPool, sourceIntake),
   sourceAcquisitions: sourceAcquisitionServices(contentPool,
     { reserve: () => sourceIntake.reserveOpenLibrarySlot(),
       rawRetentionPermitted: (provider, namespace) => rightsStore.rawRetentionPermitted(provider, namespace) }),

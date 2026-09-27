@@ -1,4 +1,5 @@
 import { Elysia, t } from 'elysia';
+import { createHash } from 'node:crypto';
 import type { Static } from 'typebox';
 import type { FusekiClient } from '../infrastructure/fuseki.ts';
 import { createAdmittedComposition, changeAdmittedComposition, changeAdmittedStructureMeasures }
@@ -15,7 +16,13 @@ import { RecipeMeasure, STRUCTURE_LIMITS, type OccurrenceRecord }
 import { assertGraphAdmissionOpen } from '../modules/work/restore-lineage.ts';
 import { calculateNutrition, scaleIngredients } from '../modules/recipe/operations.ts';
 import { exactRational, InexactQuantity } from '../modules/recipe/quantity.ts';
-import { importRecipe } from '../modules/recipe/importer.ts';
+import { importRecipe, recipeSourceSupportCandidates } from '../modules/recipe/importer.ts';
+import { RecipeSourceConversionInvalid, RecipeSourceConversionUnavailable,
+  type RecipeSourceConversion }
+  from '../modules/recipe/source-conversion.ts';
+import { sourceFieldOccurrence } from '../modules/source/support-attach.ts';
+import { FieldWithdrawalConflict, FieldWithdrawalInvalid, FieldWithdrawalUnavailable }
+  from '../modules/source/withdrawal.ts';
 import { exportRecipe, RecipeExportLimit } from '../modules/recipe/export.ts';
 import type { MainWorkDependencies } from './dependencies.ts';
 import { commandError, problem } from './problems.ts';
@@ -110,6 +117,13 @@ function key(request: Request): string | null {
 function routeError(error: unknown): Response {
   if (error instanceof InvalidCompositionChange) return problem(400, 'invalid_recipe_change', error.message);
   if (error instanceof InexactQuantity) return problem(400, 'invalid_recipe_quantity', error.message);
+  if (error instanceof RecipeSourceConversionInvalid || error instanceof FieldWithdrawalInvalid) {
+    return problem(400, 'invalid_recipe_source_support', error.message);
+  }
+  if (error instanceof FieldWithdrawalConflict) return problem(409, 'recipe_source_support_conflict', error.message);
+  if (error instanceof RecipeSourceConversionUnavailable || error instanceof FieldWithdrawalUnavailable) {
+    return problem(503, 'recipe_source_support_unavailable', error.message);
+  }
   if (error instanceof RecipeExportLimit) return problem(413, 'recipe_export_too_large', error.message);
   if (error instanceof CompositionUnavailable) return problem(404, 'recipe_unavailable', 'Recipe is unavailable');
   if (error instanceof StaleCompositionHead || error instanceof CompositionConflict) {
@@ -350,6 +364,28 @@ export function recipeRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
           return problem(400, 'invalid_recipe_source', 'Recipe source has no importable lines or steps');
         }
         const structure = `https://rezics.com/id/${params.id}`;
+        const candidates = recipeSourceSupportCandidates(source, parsed);
+        const bindSupport = /^application\/json(?:;|$)/i.test(observation.mediaType)
+          && observation.coverage.complete && observation.coverage.scope === 'complete-recipe';
+        let conversion: RecipeSourceConversion | undefined;
+        let ownerWork: string | undefined;
+        let supportPrincipal = sourcePrincipal;
+        if (bindSupport) {
+          if (!work.recipeSourceConversions || !work.sourceFieldAttachments
+            || !work.sourceFieldWithdrawals
+            || !work.access.withWorkEditAuthority) {
+            return problem(503, 'recipe_source_support_unavailable', 'Recipe source support owner is unavailable');
+          }
+          supportPrincipal = await work.account.verify(request, ['source:read', 'source:adopt', 'work:edit']);
+          const owner = await readCompositionHeader(work.environment, structure);
+          if (!owner || owner.profile !== 'recipe-composition') throw new CompositionUnavailable('Recipe is unavailable');
+          ownerWork = owner.owner;
+          await work.access.withWorkEditAuthority(supportPrincipal, body.actingSubject,
+            owner.owner, async () => undefined);
+          const converted = await work.recipeSourceConversions.convert(principalId, observationId);
+          if (!converted) throw new RecipeSourceConversionUnavailable('Recipe conversion is unavailable');
+          conversion = converted;
+        }
         let expectedHead = body.expectedHead;
         const receipts: string[] = [];
         let sourcePosition: { datasetId: 'product'; dataEpoch: string; sequence: string } | undefined;
@@ -393,17 +429,75 @@ export function recipeRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
               instructionText: { value: item.text, language: item.language },
               usesIngredient: [], media: [], scaling: 'linear' as const }, sourceKey: item.sourceKey })),
         ];
+        const importedOccurrences = new Map<string, string>();
         for (let offset = 0; offset < operations.length; offset += 16) {
           const result = await changeAdmittedComposition(work.environment, work.account, work.access,
             request, { structure, expectedHead, actingSubject: body.actingSubject,
               idempotencyKey: `${idempotencyKey}.content.${offset / 16}`,
               operations: operations.slice(offset, offset + 16) });
           if (!result.revision) return problem(503, 'recipe_import_pending', 'Recipe import is pending');
+          if (result.occurrences?.length === Math.min(16, operations.length - offset)) {
+            result.occurrences.forEach((occurrence, index) => {
+              importedOccurrences.set(operations[offset + index]!.sourceKey, occurrence);
+            });
+          }
           expectedHead = result.revision; receipts.push(result.receipt);
           sourcePosition = { datasetId: 'product', dataEpoch: result.dataEpoch, sequence: result.sequence };
         }
+        const supports: string[] = [];
+        if (conversion && work.sourceFieldAttachments) {
+          const current = await readCompositionHeader(work.environment, structure);
+          if (!current || current.profile !== 'recipe-composition') {
+            throw new CompositionUnavailable('Recipe is unavailable');
+          }
+          const supportHead = current.head;
+          if (candidates.some(candidate => !importedOccurrences.has(candidate.sourceKey))) {
+            const { records } = await allOccurrences(work, request, structure, body.actingSubject, supportHead);
+            for (const candidate of candidates) {
+              if (importedOccurrences.has(candidate.sourceKey)) continue;
+              const matches = records.filter(row => row.state === 'active'
+                && row.sourceKey === candidate.sourceKey);
+              if (matches.length !== 1) throw new CompositionConflict('Recipe support replay is ambiguous');
+              importedOccurrences.set(candidate.sourceKey, matches[0]!.occurrence);
+            }
+          }
+          for (const candidate of candidates) {
+            const occurrence = importedOccurrences.get(candidate.sourceKey);
+            if (!occurrence) throw new CompositionCorrupt('imported Recipe occurrence is unavailable');
+            const supportKey = `recipe-support-${createHash('sha256').update(JSON.stringify([
+              idempotencyKey, structure, observation.observation, candidate.sourceKey,
+            ])).digest('hex')}`;
+            const sourceOccurrence = sourceFieldOccurrence(observation.observation, 'recipe',
+              candidate.sourceField, candidate.sourcePointer);
+            const prior = await work.sourceFieldAttachments.supportByKey(principalId, supportKey);
+            if (prior) {
+              const supported = await work.sourceFieldWithdrawals!.read(principalId, prior);
+              if (!supported || supported.target !== ownerWork || supported.slot !== candidate.slot
+                || supported.occurrence !== occurrence || supported.context !== structure
+                || supported.sourceRecord !== conversion.record
+                || supported.conversion !== conversion.conversion
+                || supported.sourceOccurrence !== sourceOccurrence) {
+                throw new FieldWithdrawalConflict('Recipe support replay differs from imported child');
+              }
+              supports.push(prior);
+              continue;
+            }
+            const attached = await work.sourceFieldAttachments.attach(supportPrincipal, principalId,
+              supportKey, { profile: 'source-field-support-attachment-v1', target: ownerWork!,
+                slot: candidate.slot, occurrence, context: structure, sourceRecord: conversion.record,
+                conversion: conversion.conversion, grain: 'recipe', sourceField: candidate.sourceField,
+                sourceOccurrence,
+                sourcePointer: candidate.sourcePointer, expectedHead: supportHead,
+                actingSubject: body.actingSubject });
+            supports.push(attached.support);
+          }
+        }
         return Response.json({ structure, revision: expectedHead, sourceObservation: observation.observation,
-          residualDigest: parsed.residual, receipts, sourcePosition },
+          residualDigest: parsed.residual, receipts, sourcePosition,
+          ...(conversion ? { conversion: conversion.conversion, supports,
+            unboundSourceKeys: [...parsed.ingredients, ...parsed.steps]
+              .filter(item => !candidates.some(candidate => candidate.sourceKey === item.sourceKey))
+              .map(item => item.sourceKey) } : {}) },
         { headers: { 'cache-control': 'no-store' } });
       } catch (error) { return routeError(error); }
     })

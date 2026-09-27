@@ -27,4 +27,10 @@ export const recipeCases: CaseDeclarations = {
     name: 'RECIPE04: two Realms independently adopt published Recipe variants of one Main Version' }],
   RECIPE05: [{ tier: 'integration', file: 'tests/qa/integration/recipe-measures.test.ts',
     name: 'RECIPE05: receipt-backed nutrition and yield retain coverage, basis and exact revisions' }],
+  RECIPE06: [
+    { tier: 'integration', file: 'tests/qa/integration/recipe-withdrawal.test.ts',
+      name: 'RECIPE06: confirmed source withdrawal leaves independent support on imported Recipe occurrence' },
+    { tier: 'unit', file: 'tests/qa/unit/recipe-importer.test.ts',
+      name: 'RECIPE06: only exact retained source text becomes a Recipe child support candidate' },
+  ],
 };

@@ -150,6 +150,17 @@ export class SourceFieldAttachmentStore {
   constructor(private readonly pool: Pool, private readonly env: WorkActivationEnvironment,
     private readonly access: Pick<AccessAdmissionRegistry, 'withWorkEditAuthority'>) {}
 
+  /** Locate a settled attachment after a lost import response, before retrying at a moved head. */
+  async supportByKey(principalId: string, key: string): Promise<string | null> {
+    if (!UUID.test(principalId) || !KEY.test(key)) {
+      throw new FieldWithdrawalInvalid('invalid field support attachment identity');
+    }
+    const row = (await this.pool.query<{ support_id: string }>(`SELECT support_id
+      FROM source.field_support_step WHERE principal_id = $1 AND idempotency_key = $2`,
+    [principalId, key])).rows[0];
+    return row ? iri(row.support_id) : null;
+  }
+
   /** One retained observation, one exact native revision, one Access lock envelope, one Source transaction. */
   async attach(principal: VerifiedPrincipal, principalId: string, key: string,
     input: AttachFieldSupportInput): Promise<{ support: string; replayed: boolean }> {

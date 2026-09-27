@@ -36,3 +36,15 @@ ambiguous-unit lexical retention. The integration test exercises a real Jena
 write/read, denied admission, idempotent replay, stale idempotency conflict,
 concurrent head conflict, and source-backed import. It does not establish a
 physical I/O bound or nutrition-data quality.
+
+Complete retained JSON Recipe import registers a sealed two-field Source mapping
+once per provider and namespace and one immutable conversion per observation.
+The conversion inventories at most 128 top-level fields. At most 128 exact text
+children can be attached through Source's field-support command, each resolving
+one indexed Structure occurrence and one retained JSON pointer of at most eight
+segments. Structured values without an exact text match are returned as
+`unboundSourceKeys`; they do not acquire inferred support. Each attach uses one
+Source transaction and bounded Access/Jena probes. The RECIPE06 integration
+test checks the per-attach Fuseki call and byte ceilings, replay, stale authority,
+confirmed withdrawal and independent support on the same native occurrence.
+Withdrawal leaves the immutable Recipe revision and unrelated supports intact.
