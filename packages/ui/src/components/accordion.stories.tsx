@@ -32,14 +32,6 @@ const meta = {
   tags: ['autodocs'],
   decorators: [withTheme],
   args: { defaultValue: ['spoilers'], onValueChange: fn() },
-  parameters: {
-    docs: {
-      description: {
-        component:
-          'A stack of headings that each reveal a short section, for reference content readers scan rather than read in order: a Realm’s rules, help and FAQ answers, the details of a Work’s editions. Only one section is open at a time unless `multiple` is set; arrow keys move between headings. Do not hide content most readers need; show it.',
-      },
-    },
-  },
 } satisfies Meta<typeof Accordion>;
 export default meta;
 type Story = StoryObj<typeof meta>;

@@ -10,12 +10,6 @@ const meta = {
   decorators: [withTheme],
   parameters: {
     padded: false,
-    docs: {
-      description: {
-        component:
-          'A “Skip to content” link that stays hidden until the first Tab press, so keyboard and screen-reader readers can jump past the header and navigation straight to the page’s main content. Put `SkipNavLink` first in the document and wrap the main region in `SkipNavContent`; every REZICS page shell needs exactly one pair.',
-      },
-    },
   },
 } satisfies Meta<typeof SkipNavLink>;
 export default meta;

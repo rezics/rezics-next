@@ -21,10 +21,6 @@ const meta = {
   decorators: [withTheme],
   parameters: {
     docs: {
-      description: {
-        component:
-          'A modal window for a short, focused task that must finish or be dismissed before the page continues: creating a shelf, editing a Work’s details, writing a moderation note. It traps focus, closes on Escape and returns focus to its trigger. On phones it sticks to the bottom edge (`bottomStickOnMobile`). Use an alert dialog for irreversible confirmations, a sheet for side panels that keep context, and a popover for light, non-blocking choices.',
-      },
       story: { inline: false, iframeHeight: 560 },
     },
   },

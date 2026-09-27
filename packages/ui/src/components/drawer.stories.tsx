@@ -20,10 +20,6 @@ const meta = {
   decorators: [withTheme],
   parameters: {
     docs: {
-      description: {
-        component:
-          'A swipeable panel for phones. On REZICS it carries the shelf actions for a Work (Want to read, Reading, Read), quick replies, and the left navigation that the bottom navigation replaces on small screens. It follows the finger, supports snap points and dismisses by swipe, Escape or the backdrop. On desktop prefer a dialog, sheet or popover.',
-      },
       story: { inline: false, iframeHeight: 600 },
     },
   },

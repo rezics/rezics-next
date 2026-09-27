@@ -29,10 +29,6 @@ const meta = {
   },
   parameters: {
     docs: {
-      description: {
-        component:
-          'A non-modal window the reader can drag, resize, minimise and maximise while the page stays usable, such as reading notes kept open beside a chapter, or a moderator’s notes while working through a report queue. It is for desktop multitasking; on phones use a drawer or a full page. Keep the title short, since it truncates in the header.',
-      },
       story: { inline: false, iframeHeight: 520 },
     },
   },

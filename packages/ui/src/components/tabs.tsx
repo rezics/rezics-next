@@ -7,6 +7,12 @@ import { cn } from '../utils.ts';
 
 export const useTabs = useTabsContext;
 
+/**
+ * Switches between sibling views of one object without leaving the page: a Work’s Overview,
+ * Editions, Reviews and Discussions, or a Realm’s Hot and New feeds. The default variant is Aura’s
+ * segmented track for compact switches; `underline` suits page-level sections. Arrow keys move
+ * between tabs. Use links, not tabs, when each view needs its own URL in history.
+ */
 export const Tabs = (props: React.ComponentProps<typeof ArkTabs.Root>) => {
   const { lazyMount = true, unmountOnExit = true, className, ...rest } = props;
 

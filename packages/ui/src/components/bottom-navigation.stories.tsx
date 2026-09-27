@@ -19,10 +19,6 @@ const meta = {
   parameters: {
     padded: false,
     docs: {
-      description: {
-        component:
-          'The phone navigation bar fixed to the bottom edge: a `nav` landmark of links, with `active` marking the current page. REZICS uses five destinations: Home, Discover, Create (emphasised in the centre), Inbox and Shelves; the desktop left navigation moves into a drawer. Keep labels to one short word, mark unread Inbox items with a brand-red dot plus screen-reader text, and hide the bar above the phone breakpoint.',
-      },
       story: { inline: false, iframeHeight: 320 },
     },
   },

@@ -20,10 +20,6 @@ const meta = {
   args: { onOpenChange: fn() },
   parameters: {
     docs: {
-      description: {
-        component:
-          'A modal confirmation with `role="alertdialog"` for actions that are hard to undo: removing a post as a moderator, deleting a shelf, leaving a Realm you moderate. It has no close button, so the reader must choose; Escape still cancels. State the consequence in the description and name the action on its button. Use the destructive action only for removals and always pair it with a clear label.',
-      },
       story: { inline: false, iframeHeight: 420 },
     },
   },

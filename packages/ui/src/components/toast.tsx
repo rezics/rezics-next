@@ -29,6 +29,13 @@ interface ToasterProps
   toaster?: ReturnType<typeof createToaster>;
 }
 
+/**
+ * A brief, non-blocking status message in the corner: “Added to your Read shelf”, “Rating saved”,
+ * “Post held for moderator review”, with an optional action such as Undo. Render one `Toaster`
+ * near the app root and call `toast.create()` (or `toast.success`, `toast.error`,
+ * `toast.promise`). Toasts are polite live regions, so never put the only copy of an error that
+ * blocks progress in one; show that inline.
+ */
 export const Toaster = (props: ToasterProps) => {
   const { toaster: toasterInstance = toast, className, style, ...rest } = props;
 

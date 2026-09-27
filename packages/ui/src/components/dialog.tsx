@@ -23,6 +23,13 @@ interface DialogContextProps {
 
 const DialogContext = React.createContext({} as DialogContextProps);
 
+/**
+ * A modal window for a short, focused task that must finish or be dismissed before the page
+ * continues: creating a shelf, editing a Work’s details, writing a moderation note. It traps
+ * focus, closes on Escape and returns focus to its trigger. On phones it sticks to the bottom edge
+ * (`bottomStickOnMobile`). Use an alert dialog for irreversible confirmations, a sheet for side
+ * panels that keep context, and a popover for light, non-blocking choices.
+ */
 export const Dialog = (props: React.ComponentProps<typeof ArkDialog.Root>) => {
   const { modal = true, lazyMount = true, unmountOnExit = true, ...rest } = props;
 

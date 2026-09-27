@@ -8,6 +8,12 @@ import { cn } from '../utils.ts';
 
 export const useSteps = useStepsContext;
 
+/**
+ * Shows progress through a short, ordered task and lets readers move between its steps: creating a
+ * Realm, importing shelves from another site, submitting a new Work with its first edition. Keep
+ * it to three to five steps with short titles; completed steps show a check. Use a single form
+ * when the order does not matter.
+ */
 export const Steps = (props: React.ComponentProps<typeof ArkSteps.Root>) => {
   const { className, ...rest } = props;
 

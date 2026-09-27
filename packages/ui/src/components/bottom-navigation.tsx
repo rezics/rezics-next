@@ -7,6 +7,13 @@ import { cn } from '../utils.ts';
 // A landmark of links, not Ark Tabs: each destination is its own page, and tabs would point
 // aria-controls at panels that never exist. Mark the current page with `active`.
 
+/**
+ * The phone navigation bar fixed to the bottom edge: a `nav` landmark of links, with `active`
+ * marking the current page. REZICS uses five destinations: Home, Discover, Create (emphasised in
+ * the centre), Inbox and Shelves; the desktop left navigation moves into a drawer. Keep labels to
+ * one short word, mark unread Inbox items with a brand-red dot plus screen-reader text, and hide
+ * the bar above the phone breakpoint.
+ */
 export const BottomNavigation = (props: React.ComponentProps<typeof ark.nav>) => {
   const { className, ...rest } = props;
 

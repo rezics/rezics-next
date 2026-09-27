@@ -15,14 +15,6 @@ const meta = {
   tags: ['autodocs'],
   decorators: [withTheme],
   args: { onOpenChange: fn() },
-  parameters: {
-    docs: {
-      description: {
-        component:
-          'Shows and hides one region under a single trigger: a spoiler inside a review, the rest of a long review (`collapsedHeight` keeps a preview visible), a Work’s full edition details, or a thread’s collapsed replies. The trigger states what it reveals. Use an accordion for several related sections.',
-      },
-    },
-  },
 } satisfies Meta<typeof Collapsible>;
 export default meta;
 type Story = StoryObj<typeof meta>;

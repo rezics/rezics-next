@@ -14,6 +14,12 @@ interface BreadcrumbProps extends React.ComponentProps<typeof ark.nav> {
   'aria-label'?: string;
 }
 
+/**
+ * Shows where a page sits in the hierarchy and links back up it: Realms › Hard SF › Discussions ›
+ * a thread, or Works › The Three-Body Problem › Editions. The last item is the current page
+ * (`aria-current="page"`) and is not a link. Collapse middle levels with an ellipsis on narrow
+ * screens rather than letting the trail wrap onto several lines.
+ */
 export const Breadcrumb = (props: BreadcrumbProps) => {
   const { 'aria-label': ariaLabel = 'Breadcrumb', ...rest } = props;
 

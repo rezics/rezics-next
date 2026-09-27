@@ -21,10 +21,6 @@ const meta = {
   decorators: [withTheme],
   parameters: {
     docs: {
-      description: {
-        component:
-          'A floating panel anchored to its trigger for short, interactive content that keeps the page in view: explaining a rating’s Context, choosing which Realm to cross-post to, quick shelf notes. It is modal by default (focus stays inside until it closes); pass `modal={false}` for purely informational panels. Use a tooltip for a one-line label and a dialog when the task needs the reader’s full attention.',
-      },
       story: { inline: false, iframeHeight: 420 },
     },
   },

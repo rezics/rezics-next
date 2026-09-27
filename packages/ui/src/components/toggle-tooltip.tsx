@@ -6,6 +6,12 @@ import React from 'react';
 import { cn } from '../utils.ts';
 import { Popover, PopoverTrigger, usePopoverLabelling } from './popover.tsx';
 
+/**
+ * A tooltip-styled hint that opens on tap or click instead of hover, so phone readers can reach
+ * it: what a rating Context means, why a Work is marked “merged”, how Realm karma is counted. Keep
+ * it to a sentence or two of text. It closes on a second tap, on Escape or when focus leaves. Use
+ * a popover when the hint needs a title, links or actions.
+ */
 export const ToggleTooltip = (props: React.ComponentProps<typeof ArkPopover.Root>) => {
   const {
     positioning = { placement: 'top' },

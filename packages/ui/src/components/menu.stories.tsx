@@ -36,10 +36,6 @@ const meta = {
   args: { onSelect: fn() },
   parameters: {
     docs: {
-      description: {
-        component:
-          'A list of actions or options behind a button, such as the overflow menu at the end of a post’s engagement bar, a Work’s “Add to shelf” menu, or feed sort and display options. Items support icons, shortcuts, checkbox and radio items, groups and submenus, and full keyboard use (arrows, typeahead, Enter, Escape). Destructive items use the text-safe red and sit last, after a separator. For navigation between pages use links, not a menu.',
-      },
       story: { inline: false, iframeHeight: 420 },
     },
   },

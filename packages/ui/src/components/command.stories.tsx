@@ -161,10 +161,6 @@ const meta = {
   args: { collection: createListCollection<unknown>({ items: entries }), onValueChange: fn() },
   parameters: {
     docs: {
-      description: {
-        component:
-          'A searchable list of destinations and actions, filtered as the reader types and driven entirely by keyboard. On REZICS it is the ⌘K palette for jumping to a Work, a Realm or an action such as “Create a post”, shown inline or in `CommandDialog`. Build it from an Ark list collection so filtering and grouping stay in one place; for choosing a form value use a combobox instead.',
-      },
       story: { inline: false, iframeHeight: 520 },
     },
   },

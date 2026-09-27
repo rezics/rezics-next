@@ -9,6 +9,12 @@ export const useHoverCard = useHoverCardContext;
 
 interface HoverCardProps extends React.ComponentProps<typeof ArkHoverCard.Root> {}
 
+/**
+ * A preview that appears while a pointer rests on, or keyboard focus reaches, a link: a member’s
+ * profile behind an @mention, a Work behind a title in a post, a Realm behind its name. It only
+ * previews what the link already leads to, so never put the only copy of an action or fact inside
+ * it; touch readers never see it.
+ */
 export const HoverCard = (props: HoverCardProps) => {
   const {
     lazyMount = true,

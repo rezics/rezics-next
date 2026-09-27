@@ -7,6 +7,12 @@ import { cn } from '../utils.ts';
 
 export const useCollapsible = useCollapsibleContext;
 
+/**
+ * Shows and hides one region under a single trigger: a spoiler inside a review, the rest of a long
+ * review (`collapsedHeight` keeps a preview visible), a Work’s full edition details, or a thread’s
+ * collapsed replies. The trigger states what it reveals. Use an accordion for several related
+ * sections.
+ */
 export const Collapsible = (props: React.ComponentProps<typeof ArkCollapsible.Root>) => {
   const { collapsedHeight, lazyMount = true, unmountOnExit = true, className, ...rest } = props;
 

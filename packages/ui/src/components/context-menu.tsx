@@ -17,6 +17,12 @@ import {
 
 export const useContextMenu = useMenuContext;
 
+/**
+ * A menu opened by right-click or long-press on an object, such as a Work cover on a shelf, a
+ * chapter in a reading list or a row in a moderation queue. It is a shortcut only: every action in
+ * it must also be reachable from a visible button or overflow menu, because touch and keyboard
+ * readers may never open it.
+ */
 export const ContextMenu = (props: React.ComponentProps<typeof Menu>) => (
   <Menu data-slot="context-menu" {...props} />
 );

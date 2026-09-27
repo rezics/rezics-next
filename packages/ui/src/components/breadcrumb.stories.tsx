@@ -17,14 +17,6 @@ const meta = {
   component: Breadcrumb,
   tags: ['autodocs'],
   decorators: [withTheme],
-  parameters: {
-    docs: {
-      description: {
-        component:
-          'Shows where a page sits in the hierarchy and links back up it: Realms › Hard SF › Discussions › a thread, or Works › The Three-Body Problem › Editions. The last item is the current page (`aria-current="page"`) and is not a link. Collapse middle levels with an ellipsis on narrow screens rather than letting the trail wrap onto several lines.',
-      },
-    },
-  },
 } satisfies Meta<typeof Breadcrumb>;
 export default meta;
 type Story = StoryObj<typeof meta>;

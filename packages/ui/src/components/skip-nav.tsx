@@ -15,6 +15,12 @@ export interface SkipNavLinkProps extends React.ComponentProps<typeof ark.a> {
   id?: string;
 }
 
+/**
+ * A “Skip to content” link that stays hidden until the first Tab press, so keyboard and screen-
+ * reader readers can jump past the header and navigation straight to the page’s main content. Put
+ * `SkipNavLink` first in the document and wrap the main region in `SkipNavContent`; every REZICS
+ * page shell needs exactly one pair.
+ */
 export const SkipNavLink = (props: SkipNavLinkProps) => {
   const { id = SKIP_NAV_ID, className, children, ...rest } = props;
 

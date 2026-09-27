@@ -45,6 +45,12 @@ const PaginationControl = (props: React.ComponentProps<typeof Button>) => {
 
 interface PaginationProps extends React.ComponentProps<typeof ArkPagination.Root> {}
 
+/**
+ * Moves through a long, stable, numbered list in fixed pages: a Work’s reviews, a Realm’s
+ * moderation log, search results. Readers can jump to a page and share its URL (`type="link"` with
+ * `getPageUrl`). Feeds that grow while you read, like a Realm’s Hot posts, should load more on
+ * scroll instead. `PaginationPrevious` and `PaginationNext` take localized labels as children.
+ */
 export const Pagination = (props: PaginationProps) => {
   const { className, type = 'button', ...rest } = props;
 

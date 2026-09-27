@@ -46,14 +46,6 @@ const meta = {
   tags: ['autodocs'],
   decorators: [withTheme],
   args: { count: realmSteps.length, defaultStep: 0, onStepChange: fn() },
-  parameters: {
-    docs: {
-      description: {
-        component:
-          'Shows progress through a short, ordered task and lets readers move between its steps: creating a Realm, importing shelves from another site, submitting a new Work with its first edition. Keep it to three to five steps with short titles; completed steps show a check. Use a single form when the order does not matter.',
-      },
-    },
-  },
 } satisfies Meta<typeof Steps>;
 export default meta;
 type Story = StoryObj<typeof meta>;

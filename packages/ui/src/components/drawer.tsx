@@ -59,6 +59,12 @@ export const DrawerProvider = (props: React.ComponentProps<typeof ArkDrawer.Inde
   );
 };
 
+/**
+ * A swipeable panel for phones. On REZICS it carries the shelf actions for a Work (Want to read,
+ * Reading, Read), quick replies, and the left navigation that the bottom navigation replaces on
+ * small screens. It follows the finger, supports snap points and dismisses by swipe, Escape or the
+ * backdrop. On desktop prefer a dialog, sheet or popover.
+ */
 export const Drawer = (props: React.ComponentProps<typeof ArkDrawer.Root>) => {
   const { modal = true, lazyMount = true, unmountOnExit = true, ...rest } = props;
 

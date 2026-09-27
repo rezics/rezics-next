@@ -9,14 +9,6 @@ const meta = {
   tags: ['autodocs'],
   decorators: [withTheme],
   args: { count: 1284, pageSize: 20, defaultPage: 1, onPageChange: fn() },
-  parameters: {
-    docs: {
-      description: {
-        component:
-          'Moves through a long, stable, numbered list in fixed pages: a Work’s reviews, a Realm’s moderation log, search results. Readers can jump to a page and share its URL (`type="link"` with `getPageUrl`). Feeds that grow while you read, like a Realm’s Hot posts, should load more on scroll instead. `PaginationPrevious` and `PaginationNext` take localized labels as children.',
-      },
-    },
-  },
 } satisfies Meta<typeof Pagination>;
 export default meta;
 type Story = StoryObj<typeof meta>;

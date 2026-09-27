@@ -14,6 +14,12 @@ import { ScrollArea } from './scroll-area.tsx';
 
 export const useFloatingPanel = useFloatingPanelContext;
 
+/**
+ * A non-modal window the reader can drag, resize, minimise and maximise while the page stays
+ * usable, such as reading notes kept open beside a chapter, or a moderator’s notes while working
+ * through a report queue. It is for desktop multitasking; on phones use a drawer or a full page.
+ * Keep the title short, since it truncates in the header.
+ */
 export const FloatingPanel = (props: React.ComponentProps<typeof ArkFloatingPanel.Root>) => {
   const { lazyMount = true, unmountOnExit = true, ...rest } = props;
 

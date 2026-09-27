@@ -13,10 +13,6 @@ const meta = {
   decorators: [withTheme],
   parameters: {
     docs: {
-      description: {
-        component:
-          'A tooltip-styled hint that opens on tap or click instead of hover, so phone readers can reach it: what a rating Context means, why a Work is marked “merged”, how Realm karma is counted. Keep it to a sentence or two of text. It closes on a second tap, on Escape or when focus leaves. Use a popover when the hint needs a title, links or actions.',
-      },
       story: { inline: false, iframeHeight: 260 },
     },
   },

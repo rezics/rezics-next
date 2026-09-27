@@ -146,6 +146,13 @@ interface SidebarProps extends React.ComponentProps<typeof Sheet> {
   variant?: 'sidebar' | 'floating' | 'inset';
 }
 
+/**
+ * The desktop left navigation of the REZICS shell: Home, Discover, Inbox and Shelves, the reader’s
+ * Realms, and moderation tools for moderators, with the acting identity at the foot. It collapses
+ * to icons (with tooltips) or off-canvas, toggles with ⌘B / Ctrl+B, and below 768px becomes a
+ * sheet opened by `SidebarTrigger`, alongside the phone bottom navigation. Wrap the menu in a
+ * `nav` landmark and mark the current page with `isActive`.
+ */
 export const Sidebar = (props: SidebarProps) => {
   const {
     collapsible = 'offcanvas',

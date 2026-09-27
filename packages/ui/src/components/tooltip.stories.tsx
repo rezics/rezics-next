@@ -12,10 +12,6 @@ const meta = {
   decorators: [withTheme],
   parameters: {
     docs: {
-      description: {
-        component:
-          'A short label shown on hover or keyboard focus, mostly for icon-only controls in the post and feed bars: upvote, downvote, share, save. It repeats the control’s accessible name and never holds the only copy of information, since touch readers cannot hover. For a tap-to-open hint use a toggle tooltip; for anything interactive use a popover.',
-      },
       story: { inline: false, iframeHeight: 240 },
     },
   },

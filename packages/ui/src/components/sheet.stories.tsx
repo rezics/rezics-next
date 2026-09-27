@@ -19,10 +19,6 @@ const meta = {
   decorators: [withTheme],
   parameters: {
     docs: {
-      description: {
-        component:
-          'A modal panel that slides in from an edge and keeps the page visible beside it. Use it for secondary work tied to the current page: filtering a Realm feed, reviewing a Work’s revision history, reading a moderation report next to the post. `placement` picks the edge; the `inset` variant floats the panel with a margin on wider screens. Use a drawer instead when phones need swipe-to-dismiss.',
-      },
       story: { inline: false, iframeHeight: 560 },
     },
   },
