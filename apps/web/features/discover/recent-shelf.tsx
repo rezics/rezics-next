@@ -17,7 +17,7 @@ export async function RecentShelf({ locale }: { locale: UiLocale }) {
   const initial = await readDiscovery(reader.anonymous, query);
   return <Providers>
     <Shelf title={t.recent} scopeLabel={t.global} scope={global.scope} query={query} initial={initial}
-      browseAll={{ href: '/discover', label: t.openDiscover }} avatarQuery={reader.avatarQuery} locale={locale}
+      browseAll={{ href: '/discover', label: t.openDiscover }} avatarQuery={reader.avatarQuery} compact locale={locale}
       messages={messages} />
   </Providers>;
 }

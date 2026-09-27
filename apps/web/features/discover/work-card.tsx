@@ -42,8 +42,11 @@ export function Cover({ cover, title, fallbackKey, avatarQuery = '', className }
   </div>;
 }
 
-/** A mean rating in the scope and Context it came from; the card never implies a wider population. */
-export interface CardRating { mean: number; count: number; max: number }
+/**
+ * A mean rating in the scope and Context it came from; the card never implies a
+ * wider population. `own` is Mine: the reader's single standing rating.
+ */
+export interface CardRating { mean: number; count: number; max: number; own?: boolean }
 
 export interface WorkCardProps {
   work: string;
@@ -73,27 +76,32 @@ export function WorkCard({ work, title, cover, types, href, scopeLabel, rating, 
   const decimal = new Intl.NumberFormat(locale, { minimumFractionDigits: 1, maximumFractionDigits: 1 });
   const kinds = types.map(workTypeOf).filter(kind => kind !== null);
   const row = layout === 'row';
-  return <article className={cn('group relative flex rounded-2xl bg-card text-card-foreground',
+  return <article className={cn('group relative flex min-w-0 rounded-2xl bg-card text-card-foreground',
     'border border-border/60 shadow-(--aura-shadow-card) transition-shadow hover:border-primary/40',
     row ? 'flex-row gap-4 p-4 sm:gap-5' : 'h-full flex-col gap-3 p-3')}>
     <Cover cover={cover} title={name} fallbackKey={work} avatarQuery={avatarQuery}
       className={row ? 'w-18 shrink-0 self-start sm:w-22' : undefined} />
     <div className={cn('flex min-w-0 flex-1 flex-col', row ? 'gap-2' : 'gap-2 px-1 pb-1')}>
       <Heading lang={title?.language} dir={title?.direction}
-        className={cn('font-semibold font-work-title', row ? 'text-lg/snug sm:text-xl/snug' : 'line-clamp-3 text-base/snug')}>
-        <Link href={href} className="break-words outline-none after:absolute after:inset-0 after:rounded-2xl
+        className={cn('font-semibold font-work-title',
+          row ? 'text-lg/snug sm:text-xl/snug' : 'line-clamp-3 text-base/snug')}>
+        <Link href={href} className="wrap-anywhere outline-none after:absolute after:inset-0 after:rounded-2xl
           hover:text-primary focus-visible:after:ring-2 focus-visible:after:ring-ring">{name}</Link>
       </Heading>
       {title?.basis === 'fallback' ? <p className="sr-only">{t.fallbackTitle}</p> : null}
       {kinds.length || rating ? <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-sm">
         {kinds.map(kind => <Badge key={kind} variant="outline">{t[`${kind}Type`]}</Badge>)}
-        {rating ? <p className="flex items-center gap-1 text-muted-foreground">
-          <span className="sr-only">{t.ratingLabel({ mean: decimal.format(rating.mean), max: String(rating.max),
-            count: String(rating.count), scope: scopeLabel })}</span>
-          <StarIcon aria-hidden="true" className="size-3.5 fill-current text-warning" />
-          <span aria-hidden="true" className="font-medium text-foreground">
+        {rating ? <p className="flex basis-full flex-wrap items-center gap-x-2 text-muted-foreground">
+          <span className="sr-only">{rating.own
+            ? t.ownRating({ value: decimal.format(rating.mean), max: String(rating.max) })
+            : t.ratingLabel({ mean: decimal.format(rating.mean), max: String(rating.max),
+              count: String(rating.count), scope: scopeLabel })}</span>
+          <span aria-hidden="true"
+            className="inline-flex items-center gap-1 whitespace-nowrap font-medium text-foreground">
+            <StarIcon className="size-3.5 fill-current text-warning" />
             {t.ratingSummary({ mean: decimal.format(rating.mean), max: String(rating.max) })}</span>
-          <span aria-hidden="true">· {t.ratingCount(rating.count)}</span>
+          {rating.own ? null
+            : <span aria-hidden="true" className="whitespace-nowrap">{t.ratingCount(rating.count)}</span>}
         </p> : null}
       </div> : null}
       {children ? <div className="relative z-10 text-sm">{children}</div> : null}

@@ -44,7 +44,8 @@ function Filters({ state, idPrefix, locale, t }: { state: SearchState; idPrefix:
       <h2 id={`${idPrefix}-language`} className="mb-1 font-semibold text-sm">{t.language}</h2>
       <ul className="grid gap-0.5">
         {languages.map(language => <li key={language ?? 'any'}>
-          <Link href={searchHref({ ...state, language })} aria-current={state.language === language ? 'true' : undefined}
+          <Link href={searchHref({ ...state, language })}
+            aria-current={state.language === language ? 'true' : undefined}
             className="group/lang flex items-center gap-2.5 rounded-xl px-2 py-1.5 text-sm outline-none transition-colors
               hover:bg-accent/60 focus-visible:ring-2 focus-visible:ring-ring aria-[current=true]:bg-primary/10
               aria-[current=true]:font-medium aria-[current=true]:text-primary">
@@ -59,7 +60,8 @@ function Filters({ state, idPrefix, locale, t }: { state: SearchState; idPrefix:
     </nav>
     <section aria-labelledby={`${idPrefix}-term`} className="grid gap-2">
       <h2 id={`${idPrefix}-term`} className="font-semibold text-sm">{t.classification}</h2>
-      {state.term ? <p className="inline-flex h-8 w-fit items-center gap-1 rounded-full bg-secondary ps-3.5 pe-1 text-sm">
+      {state.term ? <p className="inline-flex h-8 w-fit items-center gap-1 rounded-full bg-secondary ps-3.5 pe-1
+        text-sm">
         {t.classificationActive}
         <Link href={searchHref({ ...state, term: null })} aria-label={t.removeFilter({ filter: t.classificationActive })}
           className="grid size-6 place-items-center rounded-full outline-none hover:bg-background/70

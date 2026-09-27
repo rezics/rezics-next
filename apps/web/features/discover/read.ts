@@ -18,9 +18,10 @@ export async function settle<T>(call: () => Promise<Answer<T>>): Promise<Loaded<
   }
 }
 
-/** One page of a discovery shelf. */
-export function readDiscovery(main: MainClient, query: DiscoveryQuery): Promise<Loaded<DiscoveryPage>> {
-  return settle(() => main.v1.works.get({ query }));
+/** One page of a discovery shelf. A first page cannot have moved under a cursor, so its 409 is staleness. */
+export async function readDiscovery(main: MainClient, query: DiscoveryQuery): Promise<Loaded<DiscoveryPage>> {
+  const read = await settle(() => main.v1.works.get({ query }));
+  return !read.ok && read.failure === 'moved' && !query.cursor ? { ok: false, failure: 'stale' } : read;
 }
 
 /** A public Realm's header, for its name in the scope bar and shelf titles. */

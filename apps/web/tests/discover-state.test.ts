@@ -79,6 +79,10 @@ describe('discover shelves', () => {
     const answering = (status: number, code: string) => ({ v1: { works: { get: async () => ({ data: null,
       error: { status, value: { code } } }) } } }) as unknown as MainClient;
     expect(await readDiscovery(answering(503, 'discovery_unavailable'), {})).toEqual({ ok: false, failure: 'unbuilt' });
+    // A first page has no cursor to move under: its 409 means the built list predates a write.
+    expect(await readDiscovery(answering(409, 'read_basis_changed'), {})).toEqual({ ok: false, failure: 'stale' });
+    expect(await readDiscovery(answering(409, 'read_basis_changed'), { cursor: 'c' }))
+      .toEqual({ ok: false, failure: 'moved' });
     const throwing = { v1: { works: { get: async () => { throw new Error('offline'); } } } } as unknown as MainClient;
     expect(await readDiscovery(throwing, {})).toEqual({ ok: false, failure: 'unavailable' });
   });

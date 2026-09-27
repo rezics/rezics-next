@@ -20,9 +20,12 @@ export type RealmHeader = Ok<ReturnType<MainClient['v1']['realms']>['get']>;
 
 /**
  * Why a read has no data. Each shelf shows its own; the rest of the page stays.
- * `unbuilt` is Main's 503 for a scope whose discovery generation is not active.
+ * `unbuilt` is Main's 503 for a scope whose discovery generation is not active;
+ * `stale` is its 409 on a first page, when the active generation predates a
+ * write and no operator has rebuilt it; `moved` is a 409 on a later page.
  */
-export type ReadFailure = 'unbuilt' | 'moved' | 'invalid' | 'sign-in' | 'missing' | 'budget' | 'unavailable';
+export type ReadFailure = 'unbuilt' | 'stale' | 'moved' | 'invalid' | 'sign-in' | 'missing' | 'budget'
+  | 'unavailable';
 
 export type Loaded<T> = { ok: true; data: T } | { ok: false; failure: ReadFailure };
 

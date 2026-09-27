@@ -64,7 +64,9 @@ export function shelvesFor(state: DiscoverState): ShelfSpec[] {
   const shelves: ShelfSpec[] = [{ key: 'recent', sort: 'recent', ...focus }];
   if (ranked) shelves.push({ key: 'top-rated', sort: 'top-rated', ...focus });
   if (state.type === null && state.term === null) {
-    for (const type of workTypes) shelves.push({ key: `recent-${type.key}`, sort: 'recent', type: type.key, term: null });
+    for (const type of workTypes) {
+      shelves.push({ key: `recent-${type.key}`, sort: 'recent', type: type.key, term: null });
+    }
   }
   return shelves;
 }

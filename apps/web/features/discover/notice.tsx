@@ -37,6 +37,7 @@ export function failureNotice(failure: ReadFailure, scope: string, t: ContractOf
   switch (failure) {
     case 'unbuilt': return { icon: HourglassIcon, title: t.unbuilt({ scope }), description: t.unbuiltHelp,
       tone: 'default' };
+    case 'stale': return { icon: HourglassIcon, title: t.stale({ scope }), description: t.staleHelp, tone: 'default' };
     case 'moved': return { icon: RefreshCwIcon, title: t.moved, description: t.movedHelp, tone: 'default' };
     case 'missing': return { icon: CircleSlashIcon, title: t.missingContext({ scope }), description: t.missingHelp,
       tone: 'default' };

@@ -87,6 +87,16 @@ export const NotBuilt: Story = {
 };
 
 const emptyRealm: DiscoverState = { scope: { kind: 'realm', realm }, context: null, type: 'recipe', term: null };
+export const OutOfDate: Story = {
+  args: { shelves: shelves(global, key => key === 'recent' ? failed('stale') : overview(key)) },
+  async play({ canvasElement }) {
+    const recent = within(within(canvasElement).getByRole('region', { name: 'Recently updated · Global' }));
+    await expect(recent.getByText('The Global list is out of date')).toBeVisible();
+    await expect(recent.getByRole('button', { name: 'Try again' })).toBeVisible();
+    await expect(recent.queryByRole('button', { name: 'Start over' })).toBeNull();
+  },
+};
+
 export const EmptyRealmOffersGlobal: Story = {
   args: { state: emptyRealm, realm: { id: realm, name: null }, shelves: shelves(emptyRealm, () => ok(page([]))) },
   async play({ canvasElement }) {
@@ -104,6 +114,16 @@ export const MineSignedOut: Story = {
     const canvas = within(canvasElement);
     await expect(canvas.getAllByRole('link', { name: 'Sign in' })[0]).toHaveAttribute('href', '/sign-in?next=%2Fdiscover');
     await expect(canvas.getByText('Only public works you rated appear here, ranked by your own ratings.')).toBeVisible();
+  },
+};
+
+export const MineSignedIn: Story = {
+  args: { state: mine, question: { question: 'How much did you enjoy it?', max: 5 },
+    shelves: shelves(mine, key => ok(page(key === 'top-rated' ? [works.chamber, works.pride] : [works.jane]))) },
+  async play({ canvasElement }) {
+    const top = within(within(canvasElement).getByRole('region', { name: 'Top rated · Rated by you' }));
+    await expect(top.getByText('Your rating: 4.9 of 5')).toBeInTheDocument();
+    await expect(top.queryByText('40 ratings')).toBeNull();
   },
 };
 

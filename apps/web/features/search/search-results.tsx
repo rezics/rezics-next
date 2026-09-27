@@ -96,7 +96,8 @@ function FailureNotice({ failure, state, t, onRetry, onRestart }: {
 /** Where an empty search can look instead: the neighbouring scope and each filter removed. */
 function Widen({ state, t }: { state: SearchState; t: Text }) {
   const links = [
-    ...(state.scope.kind === 'realm' ? [{ label: t.seeGlobal, href: searchHref({ ...state, scope: { kind: 'global' } }) }] : []),
+    ...(state.scope.kind === 'realm'
+      ? [{ label: t.seeGlobal, href: searchHref({ ...state, scope: { kind: 'global' } }) }] : []),
     ...(state.language ? [{ label: t.anyLanguageAction, href: searchHref({ ...state, language: null }) }] : []),
     ...(state.term ? [{ label: t.removeClassification, href: searchHref({ ...state, term: null }) }] : []),
   ];
@@ -112,9 +113,12 @@ function Pages({ first, props, t }: { first: SearchResultPage; props: SearchResu
   const pages = useInfiniteQuery(options);
   const list = useRef<HTMLOListElement>(null);
   const loaded = pages.data?.pages ?? [first];
+  // Page one as last read: a restart replaces the server's, and the counts with it.
+  const current = loaded[0]!;
   const hits = loaded.flatMap(page => page.hits);
-  const failure = !pages.isFetchNextPageError ? null
-    : pages.error instanceof SearchError ? pages.error.failure : 'unavailable';
+  // A later page, or page one again after a restart, may fail while the shown pages stay.
+  const failed = pages.isFetchNextPageError || pages.isRefetchError;
+  const failure = !failed ? null : pages.error instanceof SearchError ? pages.error.failure : 'unavailable';
 
   // Keep keyboard users where the new results begin, once they are on screen.
   const focusFrom = useRef<number | null>(null);
@@ -133,15 +137,15 @@ function Pages({ first, props, t }: { first: SearchResultPage; props: SearchResu
     void pages.refetch();
   }
 
-  if (!first.total) {
+  if (!current.total) {
     return <>
-      <Completeness page={first} state={state} scopeLabel={scopeLabel} signedIn={signedIn} locale={locale} t={t} />
+      <Completeness page={current} state={state} scopeLabel={scopeLabel} signedIn={signedIn} locale={locale} t={t} />
       <EmptyState icon={SearchXIcon} title={t.empty({ scope: scopeLabel, phrase: state.phrase })}
         description={t.emptyHelp}><Widen state={state} t={t} /></EmptyState>
     </>;
   }
   return <>
-    <Completeness page={first} state={state} scopeLabel={scopeLabel} signedIn={signedIn} locale={locale} t={t} />
+    <Completeness page={current} state={state} scopeLabel={scopeLabel} signedIn={signedIn} locale={locale} t={t} />
     {loaded.some(page => !page.titles) ? <Alert variant="warning">
       <TriangleAlertIcon aria-hidden="true" />
       <AlertDescription className="text-foreground">{t.titlesUnavailable}</AlertDescription>
@@ -155,7 +159,8 @@ function Pages({ first, props, t }: { first: SearchResultPage; props: SearchResu
         </WorkCard>
       </li>)}
     </ol>
-    {failure ? <FailureNotice failure={failure} state={state} t={t} onRetry={() => void pages.fetchNextPage()}
+    {failure ? <FailureNotice failure={failure} state={state} t={t}
+      onRetry={() => void (pages.isRefetchError ? pages.refetch() : pages.fetchNextPage())}
       onRestart={restart} /> : null}
     {pages.hasNextPage && !failure ? <div className="flex justify-center">
       <Button variant="outline" onClick={showMore} isLoading={pages.isFetchingNextPage}

@@ -1,6 +1,7 @@
 'use client';
 
 import { Button, buttonVariants } from '@rezics/ui/button';
+import { cn } from '@rezics/ui/utils';
 import { useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
 import { ArrowRightIcon, LibraryBigIcon, RotateCwIcon } from 'lucide-react';
 import { materializeData } from 'native-i18n';
@@ -35,6 +36,8 @@ export interface ShelfProps {
   avatarQuery?: string;
   /** Reads later pages; the BFF by default, a fixture in stories. */
   load?: DiscoveryLoader;
+  /** One of several shelves on a page: a single swipeable row on phones. */
+  compact?: boolean;
   locale: UiLocale;
   messages: DiscoverMessages;
 }
@@ -52,23 +55,30 @@ function Failure({ failure, scopeLabel, messages, locale, onRetry, onStartOver, 
       <RotateCwIcon aria-hidden="true" />{t.retry}</Button> : null}
     {failure === 'sign-in' && signInHref ? <Link href={signInHref} className={buttonVariants({ size: 'sm' })}>
       {t.signIn}</Link> : null}
-    {(failure === 'unbuilt' || failure === 'missing') && neighbour
+    {failure === 'stale' ? <Button size="sm" variant="outline" onClick={onRetry}>
+      <RotateCwIcon aria-hidden="true" />{t.retry}</Button> : null}
+    {(failure === 'unbuilt' || failure === 'stale' || failure === 'missing') && neighbour
       ? <Link href={neighbour.href} className={buttonVariants({ size: 'sm', variant: 'outline' })}>
         {neighbour.label}</Link> : null}
   </Notice>;
 }
 
-function Cards({ items, scope, scopeLabel, avatarQuery, locale, messages, listRef }: {
-  items: readonly DiscoveryItem[]; scope: BrowseScope; scopeLabel: string; avatarQuery?: string;
+function Cards({ items, scope, scopeLabel, avatarQuery, locale, messages, listRef, compact }: {
+  items: readonly DiscoveryItem[]; scope: BrowseScope; scopeLabel: string; avatarQuery?: string; compact: boolean;
   locale: UiLocale; messages: DiscoverMessages; listRef: RefObject<HTMLUListElement | null>;
 }) {
   const t = materializeData(messages, { locale });
-  return <ul ref={listRef} className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 md:grid-cols-4 lg:grid-cols-6">
-    {items.map(item => <li key={item.id} className="grid">
+  // A compact shelf is one swipeable row on phones, so an overview of several shelves stays short.
+  return <ul ref={listRef} className={cn('gap-3 sm:grid sm:grid-cols-3 sm:gap-4 md:grid-cols-4 lg:grid-cols-6',
+    compact ? cn('-mx-4 flex snap-x snap-mandatory scroll-px-4 overflow-x-auto px-4 pb-2',
+      'sm:mx-0 sm:overflow-visible sm:px-0 sm:pb-0')
+      : 'grid grid-cols-2')}>
+    {items.map(item => <li key={item.id} className={cn('grid grid-cols-1',
+      compact && 'w-[42%] shrink-0 snap-start sm:w-auto')}>
       <WorkCard work={item.id} title={item.title} cover={item.cover} types={item.types}
         href={workHref(item.id, scope)} scopeLabel={scopeLabel} avatarQuery={avatarQuery} locale={locale}
         messages={messages} rating={item.rating ? { mean: item.rating.mean, count: item.rating.count,
-          max: item.rating.scale.max } : null}>
+          max: item.rating.scale.max, own: scope.kind === 'mine' } : null}>
         {item.match.classification ? <p className="text-muted-foreground text-xs">
           {item.match.classification.source === 'local' ? t.localDecision
             : scope.kind === 'realm' ? t.inheritedDecision : t.globalDecision}</p> : null}
@@ -83,7 +93,7 @@ function Cards({ items, scope, scopeLabel, avatarQuery, locale, messages, listRe
  * count is exact once the list ends and a lower bound before.
  */
 export function Shelf({ title, scopeLabel, scope, subtitle, query, initial, browseAll, neighbour, signInHref,
-  avatarQuery, load = bffDiscovery, locale, messages }: ShelfProps) {
+  avatarQuery, load = bffDiscovery, compact = false, locale, messages }: ShelfProps) {
   const headingId = useId();
   const router = useRouter();
   return <section aria-labelledby={headingId} className="grid gap-4">
@@ -97,7 +107,7 @@ export function Shelf({ title, scopeLabel, scope, subtitle, query, initial, brow
         {browseAll.label}<ArrowRightIcon aria-hidden="true" /></Link> : null}
     </header>
     {initial.ok
-      ? <Pages first={initial.data} query={query} load={load} scope={scope} scopeLabel={scopeLabel}
+      ? <Pages first={initial.data} query={query} load={load} scope={scope} scopeLabel={scopeLabel} compact={compact}
         neighbour={neighbour} signInHref={signInHref} avatarQuery={avatarQuery} locale={locale}
         messages={messages} />
       : <Failure failure={initial.failure} scopeLabel={scopeLabel} messages={messages} locale={locale}
@@ -106,8 +116,10 @@ export function Shelf({ title, scopeLabel, scope, subtitle, query, initial, brow
   </section>;
 }
 
-function Pages({ first, query, load, scope, scopeLabel, neighbour, signInHref, avatarQuery, locale, messages }: {
-  first: DiscoveryPage; query: DiscoveryQuery; load: DiscoveryLoader; scope: BrowseScope; scopeLabel: string;
+function Pages({ first, query, load, scope, scopeLabel, neighbour, signInHref, avatarQuery, compact, locale,
+  messages }: {
+  first: DiscoveryPage; compact: boolean; query: DiscoveryQuery; load: DiscoveryLoader; scope: BrowseScope;
+  scopeLabel: string;
   neighbour?: ShelfProps['neighbour']; signInHref?: string; avatarQuery?: string; locale: UiLocale;
   messages: DiscoverMessages;
 }) {
@@ -119,8 +131,9 @@ function Pages({ first, query, load, scope, scopeLabel, neighbour, signInHref, a
   const loaded = pages.data?.pages ?? [first];
   const items = loaded.flatMap(page => page.items);
   const last = loaded.at(-1)!;
-  const failure = pages.isFetchNextPageError && pages.error instanceof ReadError ? pages.error.failure
-    : pages.isFetchNextPageError ? 'unavailable' : null;
+  // A later page, or page one again after "Start over", may fail while the shown pages stay.
+  const failed = pages.isFetchNextPageError || pages.isRefetchError;
+  const failure = !failed ? null : pages.error instanceof ReadError ? pages.error.failure : 'unavailable';
 
   // Keep keyboard users where the new results begin, once they are on screen.
   const focusFrom = useRef<number | null>(null);
@@ -144,6 +157,7 @@ function Pages({ first, query, load, scope, scopeLabel, neighbour, signInHref, a
     <p aria-live="polite" className="-mt-2 text-muted-foreground text-sm">{count}</p>
     {items.length
       ? <Cards items={items} scope={scope} scopeLabel={scopeLabel} avatarQuery={avatarQuery} locale={locale}
+        compact={compact}
         messages={messages} listRef={list} />
       : !pages.hasNextPage ? <Notice icon={LibraryBigIcon} title={t.empty({ scope: scopeLabel })}
         description={t.emptyHelp}>
@@ -151,7 +165,8 @@ function Pages({ first, query, load, scope, scopeLabel, neighbour, signInHref, a
           {neighbour.label}</Link> : null}
       </Notice> : null}
     {failure ? <Failure failure={failure} scopeLabel={scopeLabel} messages={messages} locale={locale}
-      onRetry={() => void pages.fetchNextPage()} onStartOver={startOver} neighbour={neighbour}
+      onRetry={() => void (pages.isRefetchError ? pages.refetch() : pages.fetchNextPage())}
+      onStartOver={startOver} neighbour={neighbour}
       signInHref={signInHref} /> : null}
     {pages.hasNextPage && !failure ? <div className="flex justify-center">
       <Button variant="outline" onClick={showMore} isLoading={pages.isFetchingNextPage}

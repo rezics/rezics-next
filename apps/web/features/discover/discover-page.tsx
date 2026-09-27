@@ -58,7 +58,7 @@ function Pill({ href, current, children }: { href: string; current: boolean; chi
 
 function Chip({ href, label, remove }: { href: string; label: string; remove: string }) {
   return <li className="inline-flex h-8 items-center gap-1 rounded-full bg-secondary ps-3.5 pe-1 text-sm">
-    <span className="max-w-72 truncate">{label}</span>
+    <span className="max-w-[min(28rem,70vw)] truncate">{label}</span>
     <Link href={href} aria-label={remove} title={remove} className="grid size-6 place-items-center rounded-full
       outline-none hover:bg-background/70 focus-visible:ring-2 focus-visible:ring-ring">
       <XIcon aria-hidden="true" className="size-3.5" /></Link>
@@ -115,8 +115,8 @@ export function DiscoverPage({ state, realm, realmMissing, question, shelves, si
           max: String(question.max) }) : t.rankedByUnknown : spec.term ? t.termLine : undefined}
         browseAll={spec.type && !state.type ? { href: discoverHref({ ...state, type: spec.type }),
           label: t.browseAll({ shelf: t[spec.type] }) } : undefined}
-        neighbour={neighbour} signInHref={signInHref} avatarQuery={avatarQuery} locale={locale}
-        messages={messages} />)}
+        neighbour={neighbour} signInHref={signInHref} avatarQuery={avatarQuery} compact={shelves.length > 1}
+        locale={locale} messages={messages} />)}
     </div>}
   </PageContainer>;
 }

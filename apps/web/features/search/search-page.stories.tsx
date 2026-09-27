@@ -113,13 +113,21 @@ export const Idle: Story = {
 };
 
 export const RestartWhenResultsMove: Story = {
-  args: { load: more('restart') },
+  // The continuation no longer follows on; page one read again reflects the newer index.
+  args: { load: async continuation => continuation ? failed('restart')
+    : results([...pride, hit(8, 'Pride and Prejudice — Chapter 4', 'en')], { sequence: '48' }) },
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     await userEvent.click(canvas.getByRole('button', { name: 'Show more' }));
     await expect(await canvas.findByText('Results changed since the first page')).toBeVisible();
-    await expect(canvas.getByRole('button', { name: 'Restart search' })).toBeVisible();
+    // The pages already shown stay until the reader restarts.
     await expect(canvas.getByRole('link', { name: 'Pride and Prejudice' })).toBeVisible();
+    await userEvent.click(canvas.getByRole('button', { name: 'Restart search' }));
+    const completeness = canvas.getByTestId('search-completeness');
+    await waitFor(() => expect(completeness).toHaveTextContent('Exactly 4 works match'));
+    await expect(completeness).toHaveTextContent('index current as of change 48');
+    await expect(canvas.getByRole('link', { name: 'Pride and Prejudice — Chapter 4' })).toBeVisible();
+    await expect(canvas.queryByText('Results changed since the first page')).toBeNull();
   },
 };
 
