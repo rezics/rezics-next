@@ -21,6 +21,16 @@ async function signIn(page: Page, next = '/studio'): Promise<void> {
   await page.getByRole('button', { name: 'Sign in', exact: true }).click();
 }
 
+/** Opens the shell's account menu; a click that lands before hydration does nothing, so retry. */
+async function openAccountMenu(page: Page): Promise<void> {
+  const trigger = page.getByRole('banner').getByRole('button', { name: 'Account menu' });
+  await expect(async () => {
+    if (await page.getByRole('menu').isVisible()) return;
+    await trigger.click();
+    await expect(page.getByRole('menu')).toBeVisible({ timeout: 1_000 });
+  }).toPass();
+}
+
 async function cookie(context: BrowserContext, name: string) {
   return (await context.cookies()).find(item => item.name === name);
 }
@@ -59,14 +69,14 @@ test('IAM01: a web session outlives its access token, keeps its Agent and signs 
   await page.goto('/studio');
   const account = page.getByRole('banner').getByRole('button', { name: 'Account menu' });
   await expect(account).toContainText(`Agent ${publicFixture.actingSubject.split('/').at(-1)!.slice(0, 8)}`);
-  await account.click();
+  await openAccountMenu(page);
   await page.getByRole('menuitem', { name: 'Switch Agent' }).click();
   await expect(page).toHaveURL('/identity?next=%2Fstudio');
   await expect(page.getByRole('radio', { checked: true })).toHaveValue(publicFixture.actingSubject);
 
   // Signing out from the menu ends the session and returns to the page, which asks to sign in.
   await page.goto('/studio');
-  await account.click();
+  await openAccountMenu(page);
   await page.getByRole('menuitem', { name: 'Sign out' }).click();
   await expect(page).toHaveURL('/sign-in?next=%2Fstudio');
   for (const name of ['rezics_access', 'rezics_refresh', 'rezics_session', 'rezics_subject']) {

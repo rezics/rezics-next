@@ -49,7 +49,8 @@ export function AgentPicker({ options, current, preferred, preferenceRevision, n
     {options?.length ? <form method="post" action="/identity/select" className="flex flex-col gap-4">
       <input type="hidden" name="next" value={next} />
       <input type="hidden" name="preferenceRevision" value={preferenceRevision ?? ''} />
-      <fieldset className="flex flex-col gap-2">
+      {/* min-w-0: a fieldset is min-content wide by default, and a long IRI would widen the page. */}
+      <fieldset className="flex min-w-0 flex-col gap-2">
         <legend className="mb-2 font-medium text-sm">{messages.agentsLegend}</legend>
         {options.map(option => <label key={option.iri} className="flex cursor-pointer items-start gap-3
           rounded-xl border border-border p-3 hover:bg-accent/60 has-checked:border-primary

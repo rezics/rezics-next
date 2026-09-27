@@ -73,3 +73,12 @@ export const Chinese: Story = {
     await expect(canvas.getByRole('button', { name: '使用此身份' })).toBeInTheDocument();
   },
 };
+
+export const Phone: Story = {
+  args: { current: pen },
+  globals: { viewport: { value: 'phone' } },
+  async play() {
+    // Agent IRIs are long; they truncate instead of widening the page.
+    await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
+  },
+};
