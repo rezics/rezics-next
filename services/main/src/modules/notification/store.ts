@@ -75,6 +75,7 @@ export interface StreamItem {
   /** Present only for active items; withdrawn or erased items keep their sequence as a tombstone. */
   subject: { owner: string; ref: string; revision: string | null } | null;
   display: (Omit<NotificationDisplayContext, 'actorAgent'> & { actor: NotificationAgentSummary | null;
+    realmName: string | null; realmRouteSegment: string | null; roleName: string | null;
     target: { title: string | null; excerpt: string | null;
     language: string | null; linkTarget: string | null } }) | null;
   createdAt: string;
@@ -455,6 +456,8 @@ export class NotificationStore {
       items.push({ ...base,
         subject: { owner: raw.subject_owner, ref: raw.subject_ref, revision: raw.subject_revision },
         display: raw.kind ? { kind: raw.kind, actor, realm: fields.realm ?? null,
+          realmName: fields.realmName ?? null, realmRouteSegment: fields.realmRouteSegment ?? null,
+          roleName: fields.roleName ?? null,
           groupKey: raw.group_key, target: {
             title: fields.title ?? null, excerpt: fields.excerpt ?? null,
             language: fields.language ?? null, linkTarget: fields.linkTarget ?? null,

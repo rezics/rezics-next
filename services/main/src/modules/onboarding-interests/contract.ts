@@ -25,6 +25,7 @@ export const suggestedFollow = t.Object({ id: readId,
   sampleWorks: t.Array(sampleWork, { maxItems: 3 }) });
 export const suggestionsResult = t.Object({ profile: t.Literal('home-suggested-follows-v1'),
   items: t.Array(suggestedFollow, { maxItems: 6 }), sourcePosition: readPosition });
-/** One directory page, at most eight Realm Work pages, one bounded kind read
- * and at most one discussion probe per Realm, plus one official Zone directory. */
-export const ONBOARDING_COST = { realms: 8, samples: 3, suggestions: 3, interestRows: 120 } as const;
+/** One activity directory page, at most four non-official and eight official
+ * Realm candidates. Each reads at most eight adopted Works and one kind page. */
+export const ONBOARDING_COST = { realms: 8, nonOfficialRealms: 4, officialRealms: 8, workScan: 8,
+  samples: 3, suggestions: 3, interestRows: 120 } as const;

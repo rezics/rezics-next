@@ -46,9 +46,12 @@ const streamItem = t.Object({ id: t.String(), sequence: t.String(), purpose: t.S
   subject: t.Nullable(t.Object({ owner: t.String(), ref: t.String(), revision: t.Nullable(t.String()) })),
   display: t.Nullable(t.Object({ kind: t.Union([
     t.Literal('reply'), t.Literal('submission_decision'), t.Literal('moderation_outcome'),
-    t.Literal('realm_role_change'), t.Literal('follow'), t.Literal('claim_correction')]),
+    t.Literal('realm_role_change'), t.Literal('follow'), t.Literal('claim_correction'),
+    t.Literal('review'), t.Literal('review_helpful')]),
     actor: t.Nullable(t.Object({ id: t.String(), name: t.String(), handle: t.String(),
-      avatar: t.Nullable(t.String()) })), realm: t.Nullable(t.String()), groupKey: t.Nullable(t.String()),
+      avatar: t.Nullable(t.String()) })), realm: t.Nullable(t.String()),
+    realmName: t.Nullable(t.String()), realmRouteSegment: t.Nullable(t.String()),
+    roleName: t.Nullable(t.String()), groupKey: t.Nullable(t.String()),
     target: t.Object({ title: t.Nullable(t.String()), excerpt: t.Nullable(t.String()),
       language: t.Nullable(t.String()), linkTarget: t.Nullable(t.String()) }) })),
   createdAt: t.String() });

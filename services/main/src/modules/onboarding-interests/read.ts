@@ -95,6 +95,13 @@ export function parseChoices(value: string | undefined, allowed: readonly string
   return choices;
 }
 
+/** Match and official identity outrank the activity page's existing order. */
+export function rankSuggestedFollows<T>(candidates: readonly { value: T; matchingOfficial: boolean;
+  score: number; index: number }[], limit: number): T[] {
+  return [...candidates].sort((a, b) => Number(b.matchingOfficial) - Number(a.matchingOfficial)
+    || b.score - a.score || a.index - b.index).slice(0, limit).map(item => item.value);
+}
+
 export async function readInterests(session: WorkReadSession) {
   // Only accepted global Senses with public sample Works are offered. The
   // bounded catalog can be empty without inventing a topic or a cover.
@@ -145,27 +152,43 @@ export async function readSuggestedFollows(session: WorkReadSession,
   const effectiveLanguages = selectedLanguages.length ? selectedLanguages : personal?.preferences.contentLanguages ?? [];
   const directory = await readRealmDirectory(new WorkReadSession(session.deps, session.request,
     { language: session.options.language, limit: ONBOARDING_COST.realms }, session.position),
-  { sort: 'members' });
+  { sort: 'activity' });
   const muted = new Set(personal?.exclusions.filter(item => item.kind === 'realm'
     && item.strength === 'mute').map(item => item.target) ?? []);
   const tagRules = personal?.exclusions.filter(item => item.kind === 'tag') ?? [];
-  const followed = reader && session.deps.follows ? await session.deps.follows.matches(reader.principal,
-    reader.agent, directory.items.map(item => [item.id])) : null;
-  const official = await listOfficialZones(session.deps.environment, { limit: 50 });
+  const official = await listOfficialZones(session.deps.environment, { limit: ONBOARDING_COST.officialRealms });
+  if (official.next) throw new WorkReadUnavailable('Official Zone candidate bound exceeded');
   const zoneByRealm = new Map(official.items.map(item => [item.realm, item.zone]));
+  const candidateRealms: Pick<typeof directory.items[number], 'id' | 'name' | 'icon' | 'membership'>[] =
+    directory.items.filter(realm => !zoneByRealm.has(realm.id)).slice(0, ONBOARDING_COST.nonOfficialRealms);
+  const officialSummaries = await session.summaries(official.items.map(item => item.realm));
+  for (const zone of official.items) {
+    if (candidateRealms.some(realm => realm.id === zone.realm)) continue;
+    const indexed = directory.items.find(realm => realm.id === zone.realm);
+    if (indexed) { candidateRealms.push(indexed); continue; }
+    const summary = officialSummaries[official.items.indexOf(zone)];
+    if (summary?.status !== 'available' || summary.type !== 'realm'
+      || summary.disclosure !== 'public') continue;
+    candidateRealms.push({ id: zone.realm, name: summary.name, icon: summary.avatar,
+      membership: { count: { kind: 'unknown', value: null } } });
+  }
+  const followed = reader && session.deps.follows ? await session.deps.follows.matches(reader.principal,
+    reader.agent, candidateRealms.map(item => [item.id])) : null;
   const items: { id: string; kind: 'realm' | 'zone'; realm: string; name: typeof directory.items[number]['name'];
     icon: typeof directory.items[number]['icon']; membership: typeof directory.items[number]['membership'];
     reason: { kind: 'popular' | 'matching-kind' | 'official'; interest: HomeInterestKind | null };
     sampleWorks: { id: string; title: typeof directory.items[number]['name'];
       cover: typeof directory.items[number]['icon'] }[] }[] = [];
-  const fallback: typeof items = [];
-  for (const [index, realm] of directory.items.entries()) {
+  const ranked: { value: typeof items[number]; score: number; index: number;
+    matchingOfficial: boolean }[] = [];
+  for (const [index, realm] of candidateRealms.entries()) {
     if (muted.has(realm.id) || followed?.matches[index]) continue;
     if (personal?.exclusions.some(rule => rule.kind === 'realm' && rule.target === realm.id
       && rule.strength === 'fewer'
       && Number.parseInt(digest([realm.id, rule.kind, rule.target]).slice(0, 2), 16) % 4 !== 0)) continue;
     const works = await readRealmWorks(new WorkReadSession(session.deps, session.request,
-      { language: session.options.language, limit: ONBOARDING_COST.samples }, session.position), realm.id);
+      { language: session.options.language, limit: ONBOARDING_COST.workScan }, session.position), realm.id);
+    if (!works.items.length) continue;
     const candidates = works.items.filter(work => (!effectiveLanguages.length
       || effectiveLanguages.some(language => language.toLowerCase() === work.language.toLowerCase()))
       && !personal?.exclusions.some(rule => rule.kind === 'work' && rule.target === work.id
@@ -186,6 +209,7 @@ export async function readSuggestedFollows(session: WorkReadSession,
       }
       samples.push(work);
     }
+    if (!samples.length) continue;
     const matched = selectedKinds.find(kind => samples.some(work => kindMatches.get(work.id)?.includes(kind))
       || kind === 'discussions' && hasDiscussion
         && matchingActivityKinds('discussion').includes(kind));
@@ -196,11 +220,12 @@ export async function readSuggestedFollows(session: WorkReadSession,
       name: realm.name, icon: realm.icon, membership: realm.membership,
       reason: { kind: matched ? 'matching-kind' : zone ? 'official' : 'popular', interest: matched ?? null },
       sampleWorks } as typeof items[number];
-    if (selectedKinds.length && !matched) fallback.push(suggestion);
-    else items.push(suggestion);
-    if (items.length >= ONBOARDING_COST.suggestions) break;
+    const activityRank = directory.items.findIndex(item => item.id === realm.id);
+    ranked.push({ value: suggestion, matchingOfficial: !!zone && !!matched,
+      score: (matched ? 1_000 : 0) + Math.min(samples.length, ONBOARDING_COST.workScan) * 10
+        + (activityRank < 0 ? 0 : directory.items.length - activityRank), index });
   }
-  items.push(...fallback.slice(0, ONBOARDING_COST.suggestions - items.length));
+  items.push(...rankSuggestedFollows(ranked, ONBOARDING_COST.suggestions));
   if (reader && personal && (await session.deps.homePersonal!.read(reader.principal, reader.agent)).revision !== personal.revision) {
     throw new WorkReadMoved('Home suggestions changed');
   }

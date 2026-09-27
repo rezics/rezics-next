@@ -398,7 +398,9 @@ export class AccessRealmManagement {
         }
         await client.query(`UPDATE access.scope_gate SET authority_epoch = authority_epoch + 1 WHERE id = ANY($1::text[])`,
           [[`review:decide:${realm}`, `publication:adopt:${realm}`]]);
-        return { receiptId, generation, replayed: false, impact: plan.impact };
+        return { receiptId, generation, replayed: false, impact: plan.impact,
+          notificationRole: { id: change.roleId,
+            name: change.kind === 'role' ? change.name.trim() : plan.role!.name } };
       });
   }
 

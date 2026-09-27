@@ -5,6 +5,8 @@ import { RealmReplyContentStore } from '../realm-reply/content-store.ts';
 import { publicReplyRoot } from '../realm-reply/root.ts';
 import { GRAPHS, RV, iri, type WorkActivationEnvironment } from '../work/activate.ts';
 import { reviewSubject } from '../notification/producer-review.ts';
+import { notificationRealmDisplay, notificationRoleName, notificationWorkTitle }
+  from '../notification/display.ts';
 
 const native = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -38,9 +40,21 @@ async function currentContributionAuthors(env: WorkActivationEnvironment, resour
 export function notificationProducerSubjectReader(access: Pool, content: Pool,
   env: WorkActivationEnvironment): NotificationSubjectReader {
   const replies = new RealmReplyContentStore(content);
+  const present = async (result: SubjectResolution, realm: string | null | undefined,
+    work?: string, publicOnly = true): Promise<SubjectResolution> => {
+    if (result.status !== 'available') return result;
+    const place = realm ? await notificationRealmDisplay(env, realm) : {};
+    const title = work ? await notificationWorkTitle(env, work, publicOnly) : null;
+    return { status: 'available', subject: { ...result.subject,
+      fields: { ...result.subject.fields, ...place, ...(title ? { title } : {}) } } };
+  };
   return { async resolve(input): Promise<SubjectResolution> {
     if (input.disclosureBasis === 'review-created-v1' || input.disclosureBasis === 'review-helpful-v1') {
-      return reviewSubject(access, env.fuseki, input);
+      const result = await reviewSubject(access, env.fuseki, input);
+      if (result.status !== 'available') return result;
+      const row = (await access.query<{ work: string }>(`SELECT work FROM access.reader_review
+        WHERE id = $1`, [input.ref])).rows[0];
+      return present(result, input.realm, row?.work);
     }
     if (input.disclosureBasis === 'realm-reply-v1') {
       if (input.owner !== 'graph' || !native.test(input.ref) || !input.realm || !native.test(input.realm)
@@ -50,8 +64,9 @@ export function notificationProducerSubjectReader(access: Pool, content: Pool,
       const reply = await replies.readCurrent(input.ref);
       if (!reply || reply.revisionId !== placement.revisionId) return { status: 'erased' };
       if (!await publicReplyRoot(env.fuseki, reply.rootTarget, reply.rootRevision)) return hidden;
-      return { status: 'available', subject: { private: false,
-        fields: { linkTarget: input.ref, realm: input.realm, excerpt: reply.body.slice(0, 240) } } };
+      return present({ status: 'available', subject: { private: false,
+        fields: { linkTarget: input.ref, realm: input.realm, excerpt: reply.body.slice(0, 240) } } },
+      input.realm, reply.rootTarget);
     }
     if (input.owner !== 'access' || !uuid.test(input.ref)) return hidden;
     if (input.disclosureBasis === 'submission-decision-v1') {
@@ -63,8 +78,9 @@ export function notificationProducerSubjectReader(access: Pool, content: Pool,
         WHERE s.id = $1 AND h.revision = $2`, [input.ref, input.revision])).rows[0];
       if (!row || row.realm !== input.realm || !['accepted', 'rejected', 'changes-requested'].includes(row.state)
         || !await represents(access, input.principalId, row.submitting_agent, 'submission.submit')) return hidden;
-      return { status: 'available', subject: { private: true,
-        fields: { linkTarget: row.work, realm: row.realm, excerpt: row.state } } };
+      return present({ status: 'available', subject: { private: true,
+        fields: { linkTarget: row.work, realm: row.realm, excerpt: row.state } } },
+      row.realm, row.work, false);
     }
     if (input.disclosureBasis === 'moderation-outcome-v1') {
       const row = (await access.query<{ case_id: string; target_resource: string;
@@ -82,16 +98,18 @@ export function notificationProducerSubjectReader(access: Pool, content: Pool,
         if (await represents(access, input.principalId, author)) { ownsTarget = true; break; }
       }
       if (!row.reporter && !ownsTarget) return hidden;
-      return { status: 'available', subject: { private: true,
+      return present({ status: 'available', subject: { private: true,
         fields: { linkTarget: row.target_resource, excerpt: row.outcome,
-          ...(native.test(row.context) ? { realm: row.context } : {}) } } };
+          ...(native.test(row.context) ? { realm: row.context } : {}) } } },
+      native.test(row.context) ? row.context : null, row.target_resource);
     }
     if (input.disclosureBasis === 'realm-role-change-v1') {
       const row = (await access.query<{ realm: string; result: unknown }>(`
         SELECT realm, result FROM access.realm_admin_receipt WHERE id = $1
           AND action IN ('realm.roles.manage', 'realm.members.manage')`, [input.ref])).rows[0];
       if (!row || row.realm !== input.realm) return hidden;
-      const result = row.result as { member?: unknown; impact?: { changes?: { member?: unknown }[] } };
+      const result = row.result as { member?: unknown; impact?: { changes?: { member?: unknown }[] };
+        notificationRole?: unknown };
       const members = typeof result.member === 'string' ? [result.member]
         : Array.isArray(result.impact?.changes) ? result.impact.changes.map(change => change.member) : [];
       const effects = (await access.query<{ member: string }>(`
@@ -100,8 +118,10 @@ export function notificationProducerSubjectReader(access: Pool, content: Pool,
       if (effects.length > 256) return { status: 'unavailable' };
       for (const member of [...members, ...effects.map(effect => effect.member)]) {
         if (typeof member === 'string' && await represents(access, input.principalId, member)) {
-          return { status: 'available', subject: { private: true,
-            fields: { linkTarget: row.realm, realm: row.realm } } };
+          const roleName = await notificationRoleName(access, row.realm, member, result.notificationRole);
+          return present({ status: 'available', subject: { private: true,
+            fields: { linkTarget: row.realm, realm: row.realm,
+              ...(roleName ? { roleName } : {}) } } }, row.realm);
         }
       }
       return hidden;
