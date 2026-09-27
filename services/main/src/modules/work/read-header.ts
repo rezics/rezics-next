@@ -1,0 +1,62 @@
+import type { Static } from 'typebox';
+import { iri, GRAPHS, WORK_SEMANTIC_TYPES } from './activate.ts';
+import { workCard } from './read-contract.ts';
+import { WorkReadMissing, WorkReadUnavailable, publicWork, unerased, type WorkReadSession } from './read-session.ts';
+
+export type WorkCard = Static<typeof workCard>;
+export interface WorkBasis { card: WorkCard; mainRevision: string; selectedLanguage: string | null;
+  disclosure: 'public' | 'restricted' }
+
+export async function readWorkBasis(session: WorkReadSession, work: string): Promise<WorkBasis> {
+  const rows = await session.query(`SELECT ?head ?main ?mainHead ?type ?language ?public WHERE {
+    GRAPH ${iri(GRAPHS.current)} {
+      ${iri(work)} a schema:CreativeWork ; rv:head ?head ; rv:mainVersion ?main .
+      ?main a rv:MainVersion ; rv:work ${iri(work)} ; rv:head ?mainHead .
+      OPTIONAL { ${iri(work)} a ?type . VALUES ?type { ${WORK_SEMANTIC_TYPES.map(type => `<${type}>`).join(' ')} } }
+      OPTIONAL { ?main rv:selectionHead ?selection .
+        GRAPH ${iri(GRAPHS.revisions)} { ?selection rv:language ?language } }
+    }
+    ${unerased(iri(work))}
+    BIND(EXISTS { ${publicWork(iri(work), '?main')} } AS ?public)
+  } LIMIT 10`, 9);
+  const row = rows[0];
+  if (!row) throw new WorkReadMissing('Work is unavailable');
+  if (!row.head || !row.main || !row.mainHead || !row.public
+    || ['head', 'main', 'mainHead', 'public', 'language'].some(key =>
+      new Set(rows.map(item => item[key]?.value)).size !== 1)) {
+    throw new WorkReadUnavailable('Work basis is ambiguous');
+  }
+  const isPublic = row.public.value === 'true';
+  if (!isPublic && (!session.principal || !session.options.actingSubject
+    || !await session.deps.access.canReadWork(session.principal, session.options.actingSubject, work))) {
+    throw new WorkReadMissing('Work is unavailable');
+  }
+  const summary = (await session.summaries([work]))[0];
+  if (summary?.status !== 'available' || summary.type !== 'work') throw new WorkReadMissing('Work is unavailable');
+  return { card: { id: work, revision: row.head.value, mainVersion: row.main.value,
+    title: summary.name, cover: summary.avatar, types: [...new Set(rows.flatMap(item => item.type ? [item.type.value] : []))].sort() },
+  mainRevision: row.mainHead.value, selectedLanguage: isPublic ? row.language?.value ?? null : null,
+  disclosure: isPublic ? 'public' : 'restricted' };
+}
+
+/** Repeat the admission after hydration; Access restrictions need not move the graph. */
+export async function fenceWorkBasis(session: WorkReadSession, basis: WorkBasis): Promise<void> {
+  if (basis.disclosure === 'restricted' && (!session.principal || !session.options.actingSubject
+    || !await session.deps.access.canReadWork(session.principal, session.options.actingSubject, basis.card.id))) {
+    throw new WorkReadMissing('Work is unavailable');
+  }
+  const summary = (await session.summaries([basis.card.id]))[0];
+  if (summary?.status !== 'available') throw new WorkReadMissing('Work is unavailable');
+}
+
+export async function readWorkHeader(session: WorkReadSession, work: string) {
+  const basis = await readWorkBasis(session, work);
+  await fenceWorkBasis(session, basis);
+  const path = `/v1/works/${work.slice(-36)}`;
+  return { profile: 'work-read-v1' as const, ...basis.card, disclosure: basis.disclosure,
+    // The metadata profile has no original-language marker or Main Version label.
+    originalTitle: null, mainVersionRevision: basis.mainRevision, mainVersionLabel: null,
+    selectedLanguage: basis.selectedLanguage, sourcePosition: session.position,
+    links: { versions: `${path}/versions`, classifications: `${path}/classifications`,
+      adoptions: `${path}/adoptions`, ratings: `${path}/ratings`, history: `${path}/history`, credits: `${path}/credits` } };
+}

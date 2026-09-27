@@ -102,7 +102,8 @@ export function standingComponentsQuery(env: WorkActivationEnvironment,
 
 /** Compare one Context's sealed Access inventory with the shared graph snapshot. */
 function verifyComponent(env: WorkActivationEnvironment, kind: Kind, context: string, target: Target,
-  inventory: RatingAggregateInventory, root: Row, rows: readonly Row[], budget: RevisionReadBudget) {
+  inventory: RatingAggregateInventory, root: Row, rows: readonly Row[], budget: RevisionReadBudget,
+  onlySlot?: string) {
   const spec = KINDS[kind];
   const epoch = root.epoch!.value, sequence = root.sequence!.value;
   const later = (dataEpoch: string, at: string) => dataEpoch === epoch && BigInt(at) > BigInt(sequence);
@@ -157,7 +158,7 @@ function verifyComponent(env: WorkActivationEnvironment, kind: Kind, context: st
     const intent = { context, work: target.work, mainVersion: target.mainVersion, value,
       expectedRevisionHead: state.predecessor as string | null, actingSubject: head.actingSubject };
     if ((kind === 'global' ? globalRatingDigest(intent) : standingRatingDigest(intent)) !== head.requestDigest) unavailable();
-    values.push(value);
+    if (onlySlot === undefined || head.slot === onlySlot) values.push(value);
   }
   return { context, populationOwner: inventory.realm, contextProfile: spec.contextProfile.split('/').at(-1)!,
     populationPolicy: spec.populationPolicy, cadence: 'standing' as const,
@@ -166,7 +167,8 @@ function verifyComponent(env: WorkActivationEnvironment, kind: Kind, context: st
 }
 
 async function snapshot(env: WorkActivationEnvironment, access: InventoryAccess,
-  components: readonly { kind: Kind; context: string }[], target: Target, signal: AbortSignal) {
+  components: readonly { kind: Kind; context: string }[], target: Target, signal: AbortSignal,
+  onlySlot?: string) {
   const inventories: RatingAggregateInventory[] = [];
   for (const { kind, context } of components) {
     const inventory = await access.readRatingAggregateInventory(context, target.mainVersion, signal);
@@ -192,7 +194,7 @@ async function snapshot(env: WorkActivationEnvironment, access: InventoryAccess,
     const roots = own.filter(row => row.kind?.value === 'context');
     if (roots.length !== 1) unavailable();
     return verifyComponent(env, kind, context, target, inventories[index]!, roots[0]!,
-      own.filter(row => row.kind?.value === 'observation'), budget);
+      own.filter(row => row.kind?.value === 'observation'), budget, onlySlot);
   });
   if (rows.some(row => !components.some(({ kind }) => kind === row.component?.value))) unavailable();
   if (!await access.checkRatingAggregateFence(inventories[0]!.recoveryGeneration, signal)) unavailable();
@@ -234,6 +236,19 @@ export async function queryGlobalRatingAggregate(env: WorkActivationEnvironment,
     sourcePosition: result.sourcePosition };
 }
 
+/** Work-page adapter: preserve the same sealed evidence and caps for a single Realm
+ * population or the authenticated reader's slot. Slot derivation stays server-side. */
+export async function queryWorkStandingRating(env: WorkActivationEnvironment, access: InventoryAccess,
+  input: { kind: Kind; context: string; onlySlot?: string } & Target) {
+  if (![input.context, input.work, input.mainVersion].every(value => nativeId.test(value))
+    || (input.onlySlot !== undefined && !/^urn:rezics:rating-slot:[0-9a-f]{64}$/.test(input.onlySlot))) {
+    throw new InvalidRatingAggregateQuery('invalid Work Rating target');
+  }
+  const result = await bounded(signal => snapshot(env, access,
+    [{ kind: input.kind, context: input.context }], input, signal, input.onlySlot));
+  return { ...result.components[0]!, sourcePosition: result.sourcePosition };
+}
+
 export async function queryRealmGlobalSynthesis(env: WorkActivationEnvironment, access: InventoryAccess,
   input: { realmContext: string; globalContext: string } & Target) {
   if (![input.realmContext, input.globalContext, input.work, input.mainVersion].every(value => nativeId.test(value))
@@ -248,4 +263,3 @@ export async function queryRealmGlobalSynthesis(env: WorkActivationEnvironment, 
     ...synthesizeRealmGlobal(realm, global), components: { realm, global },
     sourcePosition: result.sourcePosition };
 }
-

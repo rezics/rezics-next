@@ -1,0 +1,114 @@
+import { Elysia, t } from 'elysia';
+import { problemResult } from '../api-contract.ts';
+import { authorizedReadProblems } from '../api-responses.ts';
+import { MediaUnavailable } from '../modules/media/store.ts';
+import { ContextCommandUnavailable } from '../modules/context/command.ts';
+import { SearchSnapshotMoved } from '../modules/work/search-readiness.ts';
+import { WorkReadInvalid, WorkReadLimit, WorkReadMissing, WorkReadMoved, WorkReadUnavailable,
+  workRead } from '../modules/work/read-session.ts';
+import { readWorkHeader } from '../modules/work/read-header.ts';
+import { readWorkPage } from '../modules/work/read-pages.ts';
+import { readWorkClassifications } from '../modules/work/read-classifications.ts';
+import { readWorkRating, readWorkRatingContexts } from '../modules/work/read-rating.ts';
+import { adoptionItem, classificationItem, creditItem, historyItem, pageFields, pageQuery,
+  ratingRead, readId, readLanguage, readQuery, readScope, readUuid, scopeQuery, versionItem,
+  workHeader } from '../modules/work/read-contract.ts';
+import type { MainWorkDependencies } from './dependencies.ts';
+import { commandError, problem } from './problems.ts';
+
+export const workReadProblems = { ...authorizedReadProblems, 409: problemResult(409), 422: problemResult(422) };
+export function workReadError(error: unknown): Response {
+  if (error instanceof WorkReadInvalid) return problem(400, 'invalid_work_read', error.message);
+  if (error instanceof WorkReadMissing) return problem(404, 'work_unavailable', 'Resource is unavailable');
+  if (error instanceof WorkReadMoved || error instanceof SearchSnapshotMoved) {
+    return problem(409, 'read_basis_changed', 'Restart the read from its first page');
+  }
+  if (error instanceof WorkReadLimit) return problem(422, 'work_read_budget_exceeded', 'Work read exceeds its budget');
+  if (error instanceof WorkReadUnavailable || error instanceof MediaUnavailable || error instanceof ContextCommandUnavailable) {
+    return problem(503, 'work_read_unavailable', 'Work read is unavailable');
+  }
+  return commandError(error);
+}
+const params = t.Object({ id: readUuid });
+const query = t.Object(pageQuery, { additionalProperties: false });
+const headers = { 'cache-control': 'private, no-store' };
+const detail: { security: Record<string, string[]>[] } = { security: [{}, { bearerAuth: [] }] };
+// Bearer is optional for public reads; Mine requires it at runtime. No GET uses an idempotency key.
+export const openApiOperations = {
+  '/v1/works/{id}': { get: { bearer: false } },
+  '/v1/works/{id}/versions': { get: { bearer: false } },
+  '/v1/works/{id}/history': { get: { bearer: false } },
+  '/v1/works/{id}/adoptions': { get: { bearer: false } },
+  '/v1/works/{id}/credits': { get: { bearer: false } },
+  '/v1/works/{id}/classifications': { get: { bearer: false } },
+  '/v1/works/{id}/ratings': { get: { bearer: false } },
+  '/v1/works/{id}/rating-contexts': { get: { bearer: false } },
+} as const;
+
+export function workReadRoutes(work: MainWorkDependencies) {
+  return new Elysia()
+    .get('/v1/works/:id', { params, detail, query: t.Object(readQuery, { additionalProperties: false }),
+      response: { 200: workHeader, ...workReadProblems },
+    }, async ({ request, params: path, query: options }) => {
+      try { return Response.json(await workRead(work, request, options,
+        session => readWorkHeader(session, `https://rezics.com/id/${path.id}`)), { headers }); }
+      catch (error) { return workReadError(error); }
+    })
+    .get('/v1/works/:id/versions', { params, detail,
+      query: t.Object({ ...pageQuery, contentLanguage: t.Optional(readLanguage),
+        kind: t.Optional(t.Union([t.Literal('text-variant'), t.Literal('release')])) }, { additionalProperties: false }),
+      response: { 200: t.Object({ items: t.Array(versionItem), ...pageFields }), ...workReadProblems },
+    }, async ({ request, params: path, query: options }) => {
+      try { return Response.json(await workRead(work, request, options,
+        session => readWorkPage(session, `https://rezics.com/id/${path.id}`, 'versions',
+          { language: options.contentLanguage, kind: options.kind })), { headers }); }
+      catch (error) { return workReadError(error); }
+    })
+    .get('/v1/works/:id/history', { params, detail, query,
+      response: { 200: t.Object({ items: t.Array(historyItem), ...pageFields }), ...workReadProblems },
+    }, async ({ request, params: path, query: options }) => {
+      try { return Response.json(await workRead(work, request, options,
+        session => readWorkPage(session, `https://rezics.com/id/${path.id}`, 'history')), { headers }); }
+      catch (error) { return workReadError(error); }
+    })
+    .get('/v1/works/:id/adoptions', { params, detail, query,
+      response: { 200: t.Object({ items: t.Array(adoptionItem), ...pageFields }), ...workReadProblems },
+    }, async ({ request, params: path, query: options }) => {
+      try { return Response.json(await workRead(work, request, options,
+        session => readWorkPage(session, `https://rezics.com/id/${path.id}`, 'adoptions')), { headers }); }
+      catch (error) { return workReadError(error); }
+    })
+    .get('/v1/works/:id/credits', { params, detail, query,
+      response: { 200: t.Object({ items: t.Array(creditItem), ...pageFields }), ...workReadProblems },
+    }, async ({ request, params: path, query: options }) => {
+      try { return Response.json(await workRead(work, request, options,
+        session => readWorkPage(session, `https://rezics.com/id/${path.id}`, 'credits')), { headers }); }
+      catch (error) { return workReadError(error); }
+    })
+    .get('/v1/works/:id/classifications', { params, detail,
+      query: t.Object({ ...pageQuery, ...scopeQuery }, { additionalProperties: false }),
+      response: { 200: t.Object({ items: t.Array(classificationItem), scope: readScope, ...pageFields }), ...workReadProblems },
+    }, async ({ request, params: path, query: options }) => {
+      try { return Response.json(await workRead(work, request, options,
+        session => readWorkClassifications(session, `https://rezics.com/id/${path.id}`)), { headers }); }
+      catch (error) { return workReadError(error); }
+    })
+    .get('/v1/works/:id/rating-contexts', { params, detail,
+      query: t.Object({ ...pageQuery, ...scopeQuery }, { additionalProperties: false }),
+      response: { 200: t.Object({ items: t.Array(t.Object({ context: readId, question: t.String(),
+        language: t.Literal('en'), scale: t.Object({ min: t.Integer(), max: t.Integer(), step: t.Literal(1) }) })),
+        scope: readScope, ...pageFields }), ...workReadProblems },
+    }, async ({ request, params: path, query: options }) => {
+      try { return Response.json(await workRead(work, request, options,
+        session => readWorkRatingContexts(session, `https://rezics.com/id/${path.id}`)), { headers }); }
+      catch (error) { return workReadError(error); }
+    })
+    .get('/v1/works/:id/ratings', { params, detail,
+      query: t.Object({ ...readQuery, ...scopeQuery, context: t.Optional(readId) }, { additionalProperties: false }),
+      response: { 200: ratingRead, ...workReadProblems },
+    }, async ({ request, params: path, query: options }) => {
+      try { return Response.json(await workRead(work, request, options,
+        session => readWorkRating(session, `https://rezics.com/id/${path.id}`, options.context)), { headers }); }
+      catch (error) { return workReadError(error); }
+    });
+}
