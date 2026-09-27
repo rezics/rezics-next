@@ -49,9 +49,9 @@ export function kindLabel(profile: Pick<AgentProfile, 'kind'>, credited: boolean
   return credited ? t.author : t.reader;
 }
 
-// CJK prose reads at a taller line height, with spacing between scripts (frontend principles).
+// CJK prose reads at a taller line height (frontend principles); the page spaces the scripts apart.
 const proseClass = (language: string | undefined) => /^(?:zh|ja|ko)(?:-|$)/.test(language ?? '')
-  ? 'leading-[1.8] [text-autospace:normal]' : 'leading-relaxed';
+  ? 'leading-[1.8]' : 'leading-relaxed';
 
 /** A region that could not load, said quietly with a way to try again. */
 function Failure({ failure, title, retryHref, t }: { failure: ReadFailure; title: string; retryHref: string; t: Text }) {
@@ -83,8 +83,8 @@ function ProfileHeader({ profile, credited, follow, reader, followActions, local
     </div>
     <div className="col-span-2 grid content-start gap-5 sm:col-span-1 sm:col-start-2">
       {own ? <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-        <a href={localizedPath('/settings', locale)} className={cn(buttonVariants({ variant: 'outline', pill: true }),
-          'min-w-32')}><UserRoundIcon aria-hidden="true" />{t.editProfile}</a>
+        <Link href={localizedPath('/settings', locale)} className={cn(buttonVariants({ variant: 'outline', pill: true }),
+          'min-w-32')}><UserRoundIcon aria-hidden="true" />{t.editProfile}</Link>
         {followers ? <span className="text-muted-foreground text-sm tabular-nums">
           {followerLabel(followers, locale, messages)}</span> : null}
       </div>
