@@ -5,6 +5,7 @@ import { createMainApp } from '../src/app.ts';
 import { AccountAssertionDenied } from '../src/modules/account/verify-assertion.ts';
 import { ManagementReadStore, realmGovernanceScope } from '../src/modules/management-reads/read-store.ts';
 import { DATASET, GRAPHS, RV, iri } from '../src/modules/work/activate.ts';
+import { fusekiReadBudget } from '../src/infrastructure/fuseki.ts';
 
 const short = (id: string) => id.slice(-36);
 const digest = (value: string) => createHash('sha256').update(value).digest('hex');
@@ -78,6 +79,20 @@ test('Realm management: private report queue, decision audit, pagination, scope 
     expect((await moderation('&type=rights_complaint').then(r => r.json()) as Page<unknown>).items).toEqual([]);
     expect((await moderation('&type=content_report').then(r => r.json()) as Page<unknown>).items)
       .toHaveLength(3);
+    const graphQuery = stack.fuseki.query.bind(stack.fuseki);
+    let concurrentWrite = false;
+    stack.fuseki.query = async (...args) => {
+      const result = await graphQuery(...args);
+      if (!concurrentWrite && args[0].includes('SELECT ?epoch ?sequence ?realm')) {
+        concurrentWrite = true;
+        await fusekiReadBudget.exit(() => stack.privateWork(a.actor, 'Unrelated write during management read'));
+      }
+      return result;
+    };
+    try { expect((await moderation()).status).toBe(200); }
+    finally { stack.fuseki.query = graphQuery; }
+    expect(concurrentWrite).toBe(true);
+    // Continuations bind the Realm queue revision, not the unrelated graph head.
     const second = await moderation(`&limit=1&cursor=${page.nextCursor}`);
     expect(second.status).toBe(200);
     const next = await second.json() as Page<{ id: string }>;

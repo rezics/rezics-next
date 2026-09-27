@@ -259,7 +259,8 @@ test('Discovery projection: native scoped reads, durable builds, disclosure, cur
       await rollback.query('ROLLBACK');
     } finally { rollback.release(); }
     expect((await stack.accessPool.query('SELECT revision FROM access.discovery_source_fence')).rows[0].revision).toBe(fenceBefore);
-    // Actual Access invalidation during graph hydration withholds the response.
+    // Unrelated Access invalidation retains the population but withholds fields
+    // whose classification/credit protection proof belongs to the older cut.
     const originalQuery = stack.fuseki.query.bind(stack.fuseki);
     let invalidated = false;
     stack.fuseki.query = async (sparql, maxBytes) => {
@@ -270,13 +271,13 @@ test('Discovery projection: native scoped reads, durable builds, disclosure, cur
       }
       return result;
     };
-    try { expect((await get()).status).toBe(409); } finally { stack.fuseki.query = originalQuery; }
+    try { expect(await json(await get())).toMatchObject({ stale: true }); } finally { stack.fuseki.query = originalQuery; }
     expect(invalidated).toBe(true);
-    expect((await get({ cursor: page.nextCursor! })).status).toBe(409);
+    expect((await get({ cursor: page.nextCursor! })).status).toBe(200);
     expect((await activate(globalRank.generation, '1')).status).toBe(409);
     await build(base, a, '1');
     expect((await get()).status).toBe(200);
-    expect((await get({ cursor: page.nextCursor! })).status).toBe(409);
+    expect((await get({ cursor: page.nextCursor! })).status).toBe(200);
 
     // Post-cutover Statement classification and spoiler protection use the real
     // owner. Empty baseline inserts must not churn the discovery source fence.
@@ -296,7 +297,8 @@ test('Discovery projection: native scoped reads, durable builds, disclosure, cur
     await build(base, a, '2');
     expect((await json<Page>(await get({ term: term.sense }))).items.length).toBe(2);
     await json(await hint('major', '1'), 201);
-    expect((await get({ term: term.sense })).status).toBe(409);
+    expect(await json(await get({ term: term.sense }))).toMatchObject({ stale: true, items: [],
+      matchedTerm: null, matches: { kind: 'lower-bound' } });
     await build(base, a, '3');
     expect((await json<Page>(await get({ term: term.sense }))).matches).toEqual({ value: 0, kind: 'exact' });
     const candidates: Generation[] = [];
@@ -318,9 +320,10 @@ test('Discovery projection: native scoped reads, durable builds, disclosure, cur
     expect((await get()).status).toBe(503);
     await stack.fuseki.update(`PREFIX rv: <${RV}> DELETE DATA {
       GRAPH ${iri(GRAPHS.control)} { <urn:rezics:dataset:product> rv:restoreHold true } }`);
-    // A normal graph write invalidates source positions and old cursors.
+    // A normal graph write preserves discovery's retained generation. Graph-only
+    // context cursors still require a storage snapshot before they can do this.
     await stack.publicWork(a.actor, ['en'], 'Discovery changed');
-    expect((await get({ cursor: page.nextCursor! })).status).toBe(409);
+    expect((await get({ cursor: page.nextCursor! })).status).toBe(200);
     expect((await call(`/v1/rating-contexts?cursor=${contexts.nextCursor}`)).status).toBe(409);
   } finally { await stack.stop(); }
 }, 240_000);

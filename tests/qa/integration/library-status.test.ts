@@ -346,5 +346,32 @@ test('G285: status set, clear, retry, stale and concurrent commands preserve one
     expect(await (await app.handle(new Request(`http://main.local${visibilityPath}`,
       { headers: { authorization: `Bearer ${a.token}` } }))).json())
       .toMatchObject({ visibility: 'private', version: 3 });
+
+    // Read after the next graph commit, before its admission seals the Access
+    // inventory. The prior immutable rating remains usable and is marked stale.
+    const command = stack.fuseki.commandWithReceipt.bind(stack.fuseki);
+    let catchupRead = false;
+    stack.fuseki.commandWithReceipt = async envelope => {
+      const result = await command(envelope);
+      if (result.status === 'committed' && envelope.update.includes('rv:GlobalRatingObservationRevision')) {
+        catchupRead = true;
+        const pending = await view();
+        expect(pending.status).toBe(200);
+        expect(await pending.json()).toMatchObject({ rating: { global: {
+          value: 5, revision: observed.observationRevision, stale: true } } });
+      }
+      return result;
+    };
+    try {
+      const updated = await app.handle(new Request('http://main.local/v1/global-rating-observations', {
+        method: 'POST', headers: { authorization: `Bearer ${a.token}`, 'content-type': 'application/json',
+          'idempotency-key': randomUUID() },
+        body: JSON.stringify({ profile: 'global-rating-standing-observation-v1',
+          context: context.context, work: publicWork.work, mainVersion: publicWork.mainVersion,
+          expectedRevisionHead: observed.observationRevision, value: 4, actingSubject: person.agent }) }));
+      expect(updated.status).toBe(201);
+      expect(catchupRead).toBe(true);
+    } finally { stack.fuseki.commandWithReceipt = command; }
+    expect(await (await view()).json()).toMatchObject({ rating: { global: { value: 4, stale: false } } });
   } finally { await stack.stop(); }
 }, 120_000);

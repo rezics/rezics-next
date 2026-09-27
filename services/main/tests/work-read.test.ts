@@ -72,9 +72,12 @@ test('Work read envelope meters actual HTTP attempts/bytes and rejects mixed gra
     })).rejects.toBeInstanceOf(WorkReadLimit);
     expect(calls).toBe(2);
     oversized = false;
-    await expect(workRead(dependencies, request, {}, async () => {
+    let attempts = 0;
+    expect(await workRead(dependencies, request, {}, async session => {
+      attempts++;
       sequence = '13';
-      return { secret: 'never returned on a mixed basis' };
-    })).rejects.toBeInstanceOf(WorkReadMoved);
+      return session.position;
+    })).toEqual({ dataEpoch: 'one', sequence: '13' });
+    expect(attempts).toBe(2);
   } finally { await server.stop(true); }
 });

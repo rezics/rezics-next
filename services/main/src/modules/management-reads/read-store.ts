@@ -103,11 +103,17 @@ export class ManagementReadStore {
       // the first concurrent write when a Realm has no earlier queue records.
       await client.query(`INSERT INTO access.realm_management_read_revision (realm, revision)
         VALUES ($1, 0) ON CONFLICT DO NOTHING`, [realm]);
-      const revision = await this.revision(client, realm, false);
+      // Queue mutations advance this row in their transaction. Pin the SQL
+      // population until COMMIT; readers share the lock and writers wait within
+      // the existing statement deadline instead of invalidating a first page.
+      const revision = await this.revision(client, realm, true);
       const position: ManagementPosition = { dataEpoch: start.epoch,
         sequence: `${start.sequence}:${revision}` };
+      // No graph-derived payload is in these pages: graph authority/existence
+      // stays live, but unrelated graph writes are not a queue revision.
+      const cursorPosition = { dataEpoch: start.epoch, sequence: revision };
       const binding = [family, realm, options.actingSubject, principal.issuer, principal.subject, filter, submissions];
-      const cursor = decodeReadCursor(options.cursor, binding, position);
+      const cursor = decodeReadCursor(options.cursor, binding, cursorPosition);
       const after = cursor ? { time: cursor.after, id: cursor.order } : null;
       if (after && (!Number.isFinite(Date.parse(after.time)) || !uuid.test(after.id))) {
         throw new WorkReadInvalid('Invalid page cursor');
@@ -116,11 +122,10 @@ export class ManagementReadStore {
       if (rows.length > limit + 1) throw new ManagementReadLimit('Page exceeds its row budget');
       const chosen = rows.slice(0, limit);
       const nextCursor = rows.length > limit
-        ? encodeReadCursor(binding, position, time(chosen.at(-1)!), chosen.at(-1)!.id) : null;
+        ? encodeReadCursor(binding, cursorPosition, time(chosen.at(-1)!), chosen.at(-1)!.id) : null;
       const end = await this.graphBasis(realm);
-      if (!end.exists || end.epoch !== start.epoch || end.sequence !== start.sequence) {
-        throw new WorkReadMoved('Realm basis changed');
-      }
+      if (!end.exists) throw new ManagementReadMissing('Realm management is unavailable');
+      if (end.epoch !== start.epoch) throw new ManagementReadUnavailable('Realm recovery basis changed');
       if (await this.revision(client, realm, true) !== revision) {
         throw new WorkReadMoved('Access basis changed');
       }

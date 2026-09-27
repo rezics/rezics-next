@@ -114,7 +114,7 @@ test('Discovery scheduled refresh: relay gating, automatic enrollment, restart, 
 
     // Access-only changes also refresh after the relay stays at the same cut.
     const b = await stack.member('b');
-    expect((await read()).status).toBe(409);
+    expect(await json(await read())).toMatchObject({ stale: true });
     await due();
     const held = await store.claim();
     expect(held).not.toBeNull();
@@ -123,9 +123,9 @@ test('Discovery scheduled refresh: relay gating, automatic enrollment, restart, 
     const replacement = await store.claim();
     expect(BigInt(replacement!.lease_epoch)).toBeGreaterThan(BigInt(held!.lease_epoch));
     await expect(store.finish(held!, null, 'current', 0, 0)).rejects.toBeInstanceOf(RecommendationStale);
-    for (let i = 0; i < 8 && (await read()).status !== 200; i++) await tick();
+    for (let i = 0; i < 8 && (await json<{ stale: boolean }>(await read())).stale; i++) await tick();
     expect((await read()).status).toBe(200);
-    expect((await read(`?cursor=${page.nextCursor}`)).status).toBe(409);
+    expect((await read(`?cursor=${page.nextCursor}`)).status).toBe(200);
     await stack.accessPool.query('UPDATE access.recovery_fence SET open = false WHERE id');
     await expect(worker().tick()).rejects.toBeInstanceOf(RecommendationUnavailable);
     await stack.accessPool.query('UPDATE access.recovery_fence SET open = true WHERE id');

@@ -1,6 +1,6 @@
 import { t } from 'elysia';
 import type { Static } from 'typebox';
-import { creditItem, pageFields, pageQuery, readId, readName, readScope, scopeQuery, workCard } from '../work/read-contract.ts';
+import { creditItem, pageFields, pageQuery, readId, readName, readPosition, readScope, readUuid, scopeQuery, workCard } from '../work/read-contract.ts';
 import { WORK_SEMANTIC_TYPES } from '../work/activate.ts';
 
 /** Per GET: one B-tree seek + P+1 projected candidates, two Work summary batches,
@@ -39,6 +39,7 @@ export const discoveryItem = t.Object({ ...workCard.properties,
   rating: t.Nullable(discoveryRating), match: t.Object({ publication: t.Literal('public-main'),
     type: t.Nullable(t.String()), classification: t.Nullable(discoveryTag) }) });
 export const discoveryPage = t.Object({ profile: t.Literal('discovery-works-v1'),
+  generation: readUuid, stale: t.Boolean(), projectionPosition: readPosition,
   order: t.Union([t.Literal('recent'), t.Literal('top-rated')]), scope: readScope,
   context: t.Nullable(readId), matchedTerm: t.Nullable(discoveryTag),
   items: t.Array(discoveryItem, { maxItems: DISCOVERY_COST.pageSize }),
@@ -50,6 +51,7 @@ export const popularTermsQuery = t.Object({ language: pageQuery.language,
   limit: pageQuery.limit }, { additionalProperties: false });
 export type PopularTermsQuery = Static<typeof popularTermsQuery>;
 export const popularTermsPage = t.Object({ profile: t.Literal('discovery-popular-terms-v1'),
+  generation: readUuid, stale: t.Boolean(), projectionPosition: readPosition,
   scope: readScope, sourcePosition: t.Object({ dataEpoch: t.String(), sequence: t.String() }),
   items: t.Array(t.Object({ sense: readId, concept: readId, name: readName,
     workCount: t.Integer({ minimum: 1 }) }), { maxItems: DISCOVERY_COST.pageSize }) });

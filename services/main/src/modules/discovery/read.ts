@@ -9,6 +9,7 @@ import { admitDiscoveryBasis } from './source.ts';
 import { readSerialSummaries } from '../work/summary-serial.ts';
 import { namedDiscoveryCredits } from './credits.ts';
 import type { DiscoveryProjection } from './store.ts';
+import { READ_BASIS_RETENTION_MS } from '../read-basis/retention.ts';
 
 export async function readDiscovery(session: WorkReadSession, projection: DiscoveryProjection, query: DiscoveryQuery) {
   const basis: OwnedDiscoveryBasis = { scope: query.scope ?? 'global', realm: query.realm ?? null,
@@ -23,7 +24,7 @@ export async function readDiscovery(session: WorkReadSession, projection: Discov
   }
   const binding = ['discovery-works-v1', basis, sort, query.type ?? '', query.term ?? '',
     query.language?.toLowerCase() ?? null];
-  const cursor = decodeReadCursor(query.cursor, binding, session.position);
+  const cursor = decodeReadCursor(query.cursor, binding, session.position, true);
   let after: { generation: string; key: string; seen: number } | undefined;
   if (cursor) {
     try {
@@ -38,8 +39,9 @@ export async function readDiscovery(session: WorkReadSession, projection: Discov
     after && cursor ? { key: after.key, work: cursor.after } : undefined);
   const page = rows.slice(0, limit);
   const ids = page.map(row => row.work);
-  // Projection freshness fences graph publication, types, decisions and ratings;
-  // summaries recheck current title/cover disclosure without copying stored names.
+  // Retained ordering is independent of live title/cover disclosure. Stale
+  // classification/credit payloads lack a current protection/erasure proof and
+  // are withheld below, including term matches, until a fresh build is active.
   const summaries = await session.summaries(ids);
   const serial = await readSerialSummaries(session, ids.filter((id, index) =>
     summaries[index]?.status === 'available' && summaries[index]?.disclosure === 'public'
@@ -82,16 +84,22 @@ export async function readDiscovery(session: WorkReadSession, projection: Discov
       classifications: (payload.classifications ?? []).flatMap(tag => { const item = named(tag); return item ? [item] : []; }),
       match: { publication: 'public-main' as const, type: query.type ?? null, classification } }];
   });
-  await projection.active(basis, session.position, active.generation_id);
-  const seen = (after?.seen ?? 0) + items.length;
+  const final = await projection.active(basis, session.position, active.generation_id);
+  const stale = active.stale || final.stale;
+  const visible = stale ? query.term ? [] : items.map(item => ({ ...item,
+    primaryCredits: [], classifications: [], match: { ...item.match, classification: null } })) : items;
+  const seen = (after?.seen ?? 0) + visible.length;
   if (!Number.isSafeInteger(seen)) throw new WorkReadLimit('Discovery count exceeds its integer domain');
   const last = page.at(-1);
   const next = rows.length > limit && last ? encodeReadCursor(binding, session.position, last.work,
-    JSON.stringify({ generation: active.generation_id, key: last.order_key, seen })) : null;
+    JSON.stringify({ generation: active.generation_id, key: last.order_key, seen }),
+    cursor?.expiresAt ?? Date.now() + READ_BASIS_RETENTION_MS) : null;
   return { profile: 'discovery-works-v1' as const, order: sort,
     scope: { kind: basis.scope, realm: basis.realm }, context: basis.context,
-    matchedTerm: query.term ? items[0]?.match.classification ?? null : null,
-    ...pageResult(session, items, next), matches: { value: seen, kind: next ? 'lower-bound' as const : 'exact' as const } };
+    matchedTerm: query.term ? visible[0]?.match.classification ?? null : null,
+    generation: active.generation_id, stale,
+    projectionPosition: { dataEpoch: active.source_epoch, sequence: active.source_sequence },
+    ...pageResult(session, visible, next), matches: { value: seen, kind: next || stale ? 'lower-bound' as const : 'exact' as const } };
 }
 
 /** The build caches Work counts by accepted Sense; this read seeks at most 20
@@ -111,7 +119,11 @@ export async function readPopularTerms(session: WorkReadSession, projection: Dis
     if (!Number.isSafeInteger(count) || count < 1) throw new WorkReadUnavailable('Popular term count is invalid');
     return [{ sense: row.term, concept: row.concept, name: summary.name, workCount: count }];
   });
-  await projection.active(basis, session.position, active.generation_id);
+  const final = await projection.active(basis, session.position, active.generation_id);
+  const stale = active.stale || final.stale;
   return { profile: 'discovery-popular-terms-v1' as const,
-    scope: { kind: basis.scope, realm: basis.realm }, sourcePosition: session.position, items };
+    scope: { kind: basis.scope, realm: basis.realm }, sourcePosition: session.position,
+    generation: active.generation_id, stale,
+    projectionPosition: { dataEpoch: active.source_epoch, sequence: active.source_sequence },
+    items: stale ? [] : items };
 }

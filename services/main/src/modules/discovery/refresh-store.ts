@@ -3,6 +3,7 @@ import type { VerifiedPrincipal } from '../access/admission.ts';
 import { inAccess, RecommendationStale, requireRecoveryOpen } from '../recommendation/derived-generation.ts';
 import type { ReadPosition } from '../work/read-session.ts';
 import { WORK_READ_COST } from '../work/read-contract.ts';
+import { READ_BASIS_RETENTION_MS } from '../read-basis/retention.ts';
 import type { OwnedDiscoveryBasis } from './contract.ts';
 import { discoveryScopeKey, generation, sourceFence, type DiscoveryGeneration } from './store.ts';
 
@@ -23,8 +24,12 @@ export class DiscoveryRefreshStore {
   async purge(): Promise<number> {
     return inAccess(this.pool, async client => {
       await requireRecoveryOpen(client);
-      const row = (await client.query<{ generation_id: string }>(`SELECT generation_id FROM access.discovery_retirement
-        ORDER BY generation_id LIMIT 1 FOR UPDATE SKIP LOCKED`)).rows[0];
+      const row = (await client.query<{ generation_id: string }>(`SELECT r.generation_id FROM access.discovery_retirement r
+        JOIN access.derived_generation g ON g.id = r.generation_id
+        WHERE g.state IN ('cancelled', 'failed') OR g.finished_at <= clock_timestamp()
+          - make_interval(secs => $1::double precision / 1000)
+        ORDER BY r.generation_id LIMIT 1 FOR UPDATE OF r SKIP LOCKED`,
+      [READ_BASIS_RETENTION_MS + WORK_READ_COST.deadlineMs])).rows[0];
       if (!row) return 0;
       const deleted = await client.query(`DELETE FROM access.discovery_entry WHERE (generation_id, work, work_type, term) IN (
         SELECT generation_id, work, work_type, term FROM access.discovery_entry WHERE generation_id = $1

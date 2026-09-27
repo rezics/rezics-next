@@ -7,7 +7,7 @@ import { GRAPHS, RV, iri, lit } from '../work/activate.ts';
 import { WorkReadUnavailable, type WorkReadSession } from '../work/read-session.ts';
 
 export interface OwnRating { context: string; value: number | null;
-  availability: 'available' | 'withdrawn'; revision: string }
+  availability: 'available' | 'withdrawn'; revision: string; stale: boolean }
 interface RatingHead { context: string; work: string; main_version: string; observation: string;
   revision: string; slot: string; receipt: string; digest: string; valid: boolean }
 
@@ -72,17 +72,18 @@ export class ReaderLibraryRatings {
       if (head.main_version !== currentMain.get(head.work)) continue;
       const kind = head.context === global ? 'global' : head.context === selectedRealm ? 'realm' : null;
       if (!kind) throw new WorkReadUnavailable('Rating inventory context changed');
-      const rows = await session.query(`SELECT ?availability ?value ?manifest WHERE {
+      const rows = await session.query(`SELECT ?availability ?value ?manifest ?currentHead WHERE {
         GRAPH ${iri(GRAPHS.current)} {
           ${iri(head.observation)} a rv:${kind === 'global' ? 'GlobalRatingObservation' : 'RatingObservation'} ;
             rv:ratingContext ${iri(head.context)} ; rv:targetMainVersion ${iri(head.main_version)} ;
-            rv:ratingSlot ${iri(head.slot)} ; rv:observationHead ${iri(head.revision)} .
+            rv:ratingSlot ${iri(head.slot)} ; rv:observationHead ?currentHead .
         }
         GRAPH ${iri(GRAPHS.revisions)} {
           ${iri(head.revision)} a rv:${kind === 'global' ? 'GlobalRatingObservationRevision' : 'RatingObservationRevision'} ;
             rv:component ${iri(head.observation)} ; rv:ratingAvailability ?availability ; rv:manifest ?manifest .
           OPTIONAL { ${iri(head.revision)} rv:ratingValue ?value }
           FILTER NOT EXISTS { ${iri(head.revision)} a rv:ErasedRevision }
+          FILTER NOT EXISTS { ?currentHead a rv:ErasedRevision }
         }
         GRAPH ${iri(GRAPHS.receipts)} {
           ${iri(head.receipt)} rv:outcome rv:Succeeded ; rv:ratingObservation ${iri(head.observation)} ;
@@ -112,7 +113,11 @@ export class ReaderLibraryRatings {
       } catch { throw new WorkReadUnavailable('Rating manifest is unavailable'); }
       const owned = result.get(head.work) ?? { global: null, realm: null };
       if (owned[kind]) throw new WorkReadUnavailable('Multiple own ratings for one Work');
-      owned[kind] = { context: head.context, value, availability, revision: head.revision };
+      // The sealed Access inventory can lag the graph until the relay drains.
+      // Its immutable revision and receipt remain a consistent owned value;
+      // require live authority and erasure checks, and report that it is stale.
+      owned[kind] = { context: head.context, value, availability, revision: head.revision,
+        stale: row.currentHead?.value !== head.revision };
       result.set(head.work, owned);
     }
     for (const context of new Set(heads.map(head => head.context))) {

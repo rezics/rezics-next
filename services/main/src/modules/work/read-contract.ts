@@ -62,4 +62,5 @@ export const ratingRead = t.Object({ profile: t.Literal('work-rating-read-v1'), 
 
 /** Logical ceilings, not a claim about native Jena query-plan complexity. */
 export const WORK_READ_COST = { pageSize: 20, graphCalls: 160, graphBytes: 4 * 1024 * 1024,
-  queryBytes: 512 * 1024, deadlineMs: 10_000, rootRows: 128 } as const;
+  queryBytes: 512 * 1024, deadlineMs: 10_000, rootRows: 128, attempts: 6,
+  retryDelayMs: 25, maximumRetryDelayMs: 200 } as const;

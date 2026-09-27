@@ -1,4 +1,5 @@
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from 'node:crypto';
+import { setTimeout as delay } from 'node:timers/promises';
 import { fusekiReadBudget, FusekiQueryResponseTooLarge, FusekiReadBudgetExceeded,
   type SparqlResult } from '../../infrastructure/fuseki.ts';
 import type { MainWorkDependencies } from '../../routes/dependencies.ts';
@@ -12,33 +13,39 @@ import { readRealmPolicy } from '../space/policy.ts';
 import { DEFAULT_MEDIA_CONTEXT } from '../media/store.ts';
 import { DATASET, GRAPHS, RV, iri, lit } from './activate.ts';
 import { WORK_READ_COST } from './read-contract.ts';
+import { SearchSnapshotMoved } from './search-readiness.ts';
 export { publicWork, unerased } from './public-patterns.ts';
 
 export class WorkReadInvalid extends Error {}
 export class WorkReadMissing extends Error {}
 export class WorkReadMoved extends Error {}
+export class WorkReadExpired extends WorkReadMoved {}
 export class WorkReadUnavailable extends Error {}
 export class WorkReadLimit extends Error {}
 export type ReadRow = NonNullable<SparqlResult['results']>['bindings'][number];
 export interface ReadPosition { dataEpoch: string; sequence: string }
 export interface ReadOptions { language?: string; actingSubject?: string; cursor?: string; limit?: number;
-  scope?: 'global' | 'realm' | 'mine'; realm?: string }
+  scope?: 'global' | 'realm' | 'mine'; realm?: string;
+  /** Internal owner promise: its continuation addresses retained immutable rows. */
+  retainedBasis?: boolean }
 export const READ_PREFIX = `PREFIX rv: <${RV}> PREFIX schema: <https://schema.org/>
   PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
   PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
   PREFIX skos: <http://www.w3.org/2004/02/skos/core#>`;
 // Process-local encrypted cursors intentionally expire on restart; never authorization.
 const cursorKey = randomBytes(32);
-interface Cursor { version: 1; binding: string; position: ReadPosition; after: string; order: string }
+interface Cursor { version: 1; binding: string; position: ReadPosition; after: string; order: string;
+  expiresAt?: number }
 const bindingOf = (value: unknown) => createHash('sha256').update(JSON.stringify(value)).digest('hex');
-export function encodeReadCursor(binding: unknown, position: ReadPosition, after: string, order = ''): string {
+export function encodeReadCursor(binding: unknown, position: ReadPosition, after: string, order = '', expiresAt?: number): string {
   const iv = randomBytes(12);
   const cipher = createCipheriv('aes-256-gcm', cursorKey, iv);
   const body = Buffer.concat([cipher.update(JSON.stringify({ version: 1, binding: bindingOf(binding),
-    position, after, order } satisfies Cursor)), cipher.final()]);
+    position, after, order, expiresAt } satisfies Cursor)), cipher.final()]);
   return Buffer.concat([iv, cipher.getAuthTag(), body]).toString('base64url');
 }
-export function decodeReadCursor(token: string | undefined, binding: unknown, position: ReadPosition): Cursor | null {
+export function decodeReadCursor(token: string | undefined, binding: unknown, position: ReadPosition,
+  retained = false): Cursor | null {
   if (!token) return null;
   let decoded: Cursor;
   try {
@@ -48,10 +55,19 @@ export function decodeReadCursor(token: string | undefined, binding: unknown, po
     cipher.setAuthTag(bytes.subarray(12, 28));
     decoded = JSON.parse(Buffer.concat([cipher.update(bytes.subarray(28)), cipher.final()]).toString()) as Cursor;
     if (decoded.version !== 1 || decoded.binding !== bindingOf(binding)
-      || typeof decoded.after !== 'string' || typeof decoded.order !== 'string') throw new Error('cursor');
+      || typeof decoded.after !== 'string' || typeof decoded.order !== 'string'
+      || !decoded.position || typeof decoded.position.dataEpoch !== 'string'
+      || typeof decoded.position.sequence !== 'string'
+      || decoded.expiresAt !== undefined && !Number.isSafeInteger(decoded.expiresAt)) throw new Error('cursor');
   } catch { throw new WorkReadInvalid('Cursor is invalid or expired'); }
-  if (decoded.position.dataEpoch !== position.dataEpoch || decoded.position.sequence !== position.sequence) {
-    throw new WorkReadMoved('Collection changed; restart from the first page');
+  if (decoded.expiresAt !== undefined && decoded.expiresAt <= Date.now()) {
+    throw new WorkReadExpired('Read basis expired; restart from the first page');
+  }
+  // Only an owner with immutable retained rows may relax the graph sequence.
+  // The epoch remains a recovery fence; a cursor never grants disclosure.
+  if (decoded.position.dataEpoch !== position.dataEpoch
+    || (!retained || decoded.expiresAt === undefined) && decoded.position.sequence !== position.sequence) {
+    throw new WorkReadExpired('Collection changed; restart from the first page');
   }
   return decoded;
 }
@@ -143,23 +159,45 @@ export async function workRead<T>(deps: MainWorkDependencies, request: Request, 
   try {
     return await fusekiReadBudget.run({ signal, callsLeft: WORK_READ_COST.graphCalls,
       bytesLeft: WORK_READ_COST.graphBytes }, async () => {
-      const session = new WorkReadSession(deps, request, options, await position(deps));
-      if (request.headers.has('authorization')) {
-        if (!options.actingSubject) throw new WorkReadInvalid('actingSubject is required for authenticated reads');
-        session.principal = await deps.account.verify(request, ['work:read']);
-        if (!await deps.access.activePrincipalId(session.principal)) throw new AccountAssertionDenied('Principal is inactive');
-      } else if (options.actingSubject) throw new AccountAssertionDenied('Authentication is required');
-      const result = await operation(session);
-      const after = await position(deps);
-      if (after.dataEpoch !== session.position.dataEpoch || after.sequence !== session.position.sequence) {
-        throw new WorkReadMoved('Graph changed during the read');
+      // Fuseki HTTP operations each own a transaction, not the whole callback:
+      // https://jena.apache.org/documentation/rdfconnection/#remote-transactions
+      // Retry first pages and explicitly retained continuations. Internal build callbacks and commands
+      // can commit effects and must never be replayed by this envelope. Attempts
+      // share one deadline/call/byte budget and repeat every authority check.
+      const url = new URL(request.url);
+      // Some owners decode their own cursor without forwarding it in options.
+      const hasCursor = !!options.cursor || url.searchParams.has('cursor');
+      const attempts = (!hasCursor || options.retainedBasis) && request.method === 'GET'
+        && url.pathname.startsWith('/v1/') ? WORK_READ_COST.attempts : 1;
+      for (let attempt = 0; ; attempt++) {
+        try {
+          const session = new WorkReadSession(deps, request, options, await position(deps));
+          if (request.headers.has('authorization')) {
+            if (!options.actingSubject) throw new WorkReadInvalid('actingSubject is required for authenticated reads');
+            session.principal = await deps.account.verify(request, ['work:read']);
+            if (!await deps.access.activePrincipalId(session.principal)) throw new AccountAssertionDenied('Principal is inactive');
+          } else if (options.actingSubject) throw new AccountAssertionDenied('Authentication is required');
+          const result = await operation(session);
+          const after = await position(deps);
+          if (after.dataEpoch !== session.position.dataEpoch || after.sequence !== session.position.sequence) {
+            throw new WorkReadMoved('Graph changed during the read');
+          }
+          if (session.principal && !await deps.access.activePrincipalId(session.principal)) {
+            throw new AccountAssertionDenied('Principal is inactive');
+          }
+          await session.fenceRealms();
+          signal.throwIfAborted();
+          return result;
+        } catch (error) {
+          if (!(error instanceof WorkReadMoved || error instanceof SearchSnapshotMoved)
+            || error instanceof WorkReadExpired || attempts === 1) throw error;
+          if (attempt + 1 === attempts) {
+            throw new WorkReadUnavailable('A consistent graph read could not be obtained within its budget', { cause: error });
+          }
+          await delay(Math.min(WORK_READ_COST.retryDelayMs * 2 ** attempt,
+            WORK_READ_COST.maximumRetryDelayMs), undefined, { signal });
+        }
       }
-      if (session.principal && !await deps.access.activePrincipalId(session.principal)) {
-        throw new AccountAssertionDenied('Principal is inactive');
-      }
-      await session.fenceRealms();
-      signal.throwIfAborted();
-      return result;
     });
   } catch (error) {
     if (error instanceof FusekiReadBudgetExceeded || error instanceof FusekiQueryResponseTooLarge) {

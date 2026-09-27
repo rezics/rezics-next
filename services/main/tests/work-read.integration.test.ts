@@ -233,9 +233,9 @@ test('Work reads: native public/private/erased disclosure, fallback, scoped rati
     await refreshDiscovery();
     const remaining = await json<Page<{ id: string }>>(await get('/v1/works'));
     expect(remaining.items.map(item => item.id)).toEqual([second.work]);
-    // A fresh metadata edit changes the graph position, invalidating an old cursor.
+    // Unrelated writes preserve retained discovery order; live erasure still filters cards.
     await stack.privateWork(a.actor, 'Unrelated corpus growth');
-    expect((await get(`/v1/works?cursor=${discover.nextCursor}`)).status).toBe(409);
+    expect((await get(`/v1/works?cursor=${discover.nextCursor}`)).status).toBe(200);
     await refreshDiscovery();
     await stack.fuseki.update(`PREFIX rv: <${RV}> INSERT DATA { GRAPH ${iri(GRAPHS.control)} {
       <urn:rezics:dataset:product> rv:restoreHold true } }`);

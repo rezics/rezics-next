@@ -5,6 +5,7 @@ import { activateHead, authorizeManager, claimLease, digest, fenceLease, inAcces
   RecommendationDenied, RecommendationMissing, RecommendationRestart, RecommendationStale, RecommendationUnavailable,
   type ManageContext, type ReceiptKey } from '../recommendation/derived-generation.ts';
 import type { ReadPosition } from '../work/read-session.ts';
+import { READ_BASIS_RETENTION_MS } from '../read-basis/retention.ts';
 import { DISCOVERY_COST, type DiscoveryBasis, type DiscoveryRow, type OwnedDiscoveryBasis,
   type ProjectedWork } from './contract.ts';
 import { discoveryAutomation, DISCOVERY_SERVICE_PRINCIPAL, type DiscoveryAutomation } from './automation.ts';
@@ -17,6 +18,7 @@ export interface DiscoveryGeneration {
   access_revision: string; recovery_generation: string; checkpoint: string; complete: boolean;
   state: string; work_count: string; active_head: string | null;
 }
+export interface DiscoveryReadGeneration extends DiscoveryGeneration { stale: boolean }
 const basisOf = (row: DiscoveryGeneration): OwnedDiscoveryBasis => ({ scope: row.scope,
   realm: row.realm, context: row.context, owner: row.principal_id });
 export const discoveryScopeKey = (basis: OwnedDiscoveryBasis) => digest(['discovery-standing-mean-v1', basis]);
@@ -229,28 +231,45 @@ export class DiscoveryProjection {
     });
   }
 
-  async active(basis: OwnedDiscoveryBasis, position: ReadPosition, pinned?: string) {
+  async active(basis: OwnedDiscoveryBasis, position: ReadPosition, pinned?: string): Promise<DiscoveryReadGeneration> {
     return inAccess(this.pool, async client => {
       await requireRecoveryOpen(client);
       const head = (await client.query<{ active_generation: string }>(`SELECT active_generation::text
         FROM access.derived_generation_head WHERE family = 'discovery' AND scope_key = $1`,
       [discoveryScopeKey(basis)])).rows[0];
       if (!head) throw new RecommendationUnavailable('Discovery has no active generation');
-      if (pinned && head.active_generation !== pinned) throw new RecommendationRestart('Discovery generation changed');
-      const row = await generation(client, head.active_generation);
-      if (row.state !== 'ready' || digest(basisOf(row)) !== digest(basis)) {
+      const row = await generation(client, pinned ?? head.active_generation);
+      // Activation may replace the head between these READ COMMITTED statements.
+      // The captured generation is also a pin on a first page, not a 503 race.
+      const retained = row.state !== 'ready' && (await client.query(`SELECT id FROM access.derived_generation
+        WHERE id = $1 AND state IN ('superseded', 'expired')
+          AND finished_at > clock_timestamp() - make_interval(secs => $2::double precision / 1000)`,
+      [row.generation_id, READ_BASIS_RETENTION_MS])).rowCount === 1;
+      if (row.state !== 'ready' && !retained) {
+        if (pinned) throw new RecommendationRestart('Discovery generation expired');
         throw new RecommendationUnavailable('Discovery basis is unavailable');
       }
-      assertPosition(row, position);
-      await assertFence(client, row);
-      return row;
+      if (digest(basisOf(row)) !== digest(basis)) {
+        throw new RecommendationUnavailable('Discovery basis is unavailable');
+      }
+      const fence = await sourceFence(client);
+      if (row.source_epoch !== position.dataEpoch || row.recovery_generation !== fence.generation) {
+        if (pinned) throw new RecommendationRestart('Discovery recovery basis expired');
+        throw new RecommendationUnavailable('Discovery recovery basis is unavailable');
+      }
+      return { ...row, stale: row.source_sequence !== position.sequence
+        || row.access_revision !== fence.revision || row.state !== 'ready'
+        || head.active_generation !== row.generation_id };
     });
   }
 
   async page(row: DiscoveryGeneration, sort: 'recent' | 'top-rated', type: string, term: string,
     limit: number, after?: { key: string; work: string }) {
     return inAccess(this.pool, async client => {
-      await assertFence(client, row);
+      // Ranking rows are immutable. Source writes invalidate freshness, not the
+      // population; recovery remains a hard boundary for every page.
+      const fence = await sourceFence(client);
+      if (fence.generation !== row.recovery_generation) throw new RecommendationRestart('Discovery recovery basis expired');
       if (!Number.isInteger(limit) || limit < 1 || limit > DISCOVERY_COST.pageSize) {
         throw new RecommendationUnavailable('Discovery page is out of bounds');
       }
@@ -265,7 +284,8 @@ export class DiscoveryProjection {
 
   async popular(row: DiscoveryGeneration, limit: number) {
     return inAccess(this.pool, async client => {
-      await assertFence(client, row);
+      const fence = await sourceFence(client);
+      if (fence.generation !== row.recovery_generation) throw new RecommendationRestart('Discovery recovery basis expired');
       if (!Number.isInteger(limit) || limit < 1 || limit > DISCOVERY_COST.pageSize) {
         throw new RecommendationUnavailable('Popular term page is out of bounds');
       }

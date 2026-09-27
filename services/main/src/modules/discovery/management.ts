@@ -42,7 +42,7 @@ async function operator(work: MainWorkDependencies, request: Request, actingSubj
 }
 function sourceRead<T>(work: MainWorkDependencies, request: Request, operator: ManageContext,
   basis: DiscoveryBasis, operation: (session: WorkReadSession) => Promise<T>) {
-  return workRead(work, new Request(request.url), { scope: basis.scope, realm: basis.realm ?? undefined },
+  return workRead(work, new Request(request.url, { method: request.method }), { scope: basis.scope, realm: basis.realm ?? undefined },
     async session => { session.principal = operator.principal; return operation(session); });
 }
 const detail: { security: Record<string, string[]>[] } = { security: [{ bearerAuth: [] }] };

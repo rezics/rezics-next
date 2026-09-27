@@ -30,7 +30,7 @@ export function discoveryRoutes(work: MainWorkDependencies) {
       const mine = query.scope === 'mine';
       const readerRequest = mine ? request : new Request(request.url);
       return Response.json(await workRead(work, readerRequest,
-        { ...query, actingSubject: mine ? query.actingSubject : undefined },
+        { ...query, actingSubject: mine ? query.actingSubject : undefined, retainedBasis: true },
         session => readDiscovery(session, work.discovery!, query)),
         { headers: { 'cache-control': 'no-store' } });
     } catch (error) { return discoveryError(error); }

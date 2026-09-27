@@ -22,7 +22,7 @@ const customShelf = t.Object({ id: readId, name: t.String(),
   disclosure: t.Union([t.Literal('public'), t.Literal('private')]) });
 const ownRating = t.Nullable(t.Object({ context: readId,
   value: t.Nullable(t.Integer({ minimum: 1, maximum: 10 })),
-  availability: t.Union([t.Literal('available'), t.Literal('withdrawn')]), revision: readId }));
+  availability: t.Union([t.Literal('available'), t.Literal('withdrawn')]), revision: readId, stale: t.Boolean() }));
 const item = t.Object({ work: readId, status: statusState,
   customShelves: t.Array(customShelf), rating: t.Object({ global: ownRating, realm: ownRating }),
   progress: t.Nullable(t.Object({ structure: readId, occurrence: readId,
