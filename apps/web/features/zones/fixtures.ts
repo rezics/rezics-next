@@ -7,8 +7,8 @@ import { presetTokens } from './presentation.ts';
 import type { ModuleState, PlacedModule } from './zone-home.tsx';
 
 // Story data: an invented web-fiction catalogue for the official Fiction
-// Zone and a small community Realm. Covers are generated illustrations, so
-// shelves look like a real publication without shipping image files.
+// Zone and a small community Realm. Works carry no cover image, so they wear
+// the catalogue's generated covers; banners are generated art.
 
 function hash(seed: string): number {
   let value = 0x811c9dc5;
@@ -26,23 +26,6 @@ function escape(text: string) {
   return text.replace(/[&<>"]/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[char]!);
 }
 
-/** An illustrated cover: a sky, one scene, the title set at the foot. */
-export function coverArt(seed: string, title: string): ZoneImage {
-  const value = hash(seed);
-  const [top, glow] = skies[value % skies.length]!;
-  const scene = value >> 4 & 3;
-  const x = 80 + (value >> 8 & 255) % 240;
-  const hills = Array.from({ length: 6 }, (_, index) => `${index * 80},${420 + ((value >> index * 3) & 7) * 12}`).join(' ');
-  const scenes = [
-    `<circle cx="${x}" cy="170" r="70" fill="${glow}" opacity=".9"/><polygon points="0,600 ${hills} 400,430 400,600" fill="#0b1020" opacity=".85"/>`,
-    Array.from({ length: 7 }, (_, index) => `<rect x="${index * 58}" y="${330 + ((value >> index) & 7) * 18}" width="50" height="300" fill="#0b1020" opacity=".8"/><rect x="${index * 58 + 12}" y="${360 + ((value >> index) & 7) * 18}" width="8" height="10" fill="${glow}"/>`).join(''),
-    `<circle cx="${x}" cy="140" r="36" fill="${glow}"/><path d="M0 470 Q100 440 200 470 T400 470 V600 H0Z" fill="#0b1020" opacity=".7"/><rect x="${x - 10}" y="300" width="20" height="170" fill="#f5efe0"/><polygon points="${x - 18},300 ${x + 18},300 ${x},270" fill="${glow}"/>`,
-    Array.from({ length: 9 }, (_, index) => `<polygon points="${index * 50 - 20},600 ${index * 50 + 25},${380 + ((value >> index) & 7) * 15} ${index * 50 + 70},600" fill="#0b1020" opacity="${0.55 + (index % 3) * 0.15}"/>`).join(''),
-  ];
-  const size = [...title].length > 8 ? 30 : 40;
-  return { width: 400, height: 600, url: svg(`<defs><linearGradient id="s" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${top}"/><stop offset="1" stop-color="${glow}"/></linearGradient></defs><rect width="400" height="600" fill="url(#s)"/>${scenes[scene]}<rect y="490" width="400" height="110" fill="#000" opacity=".28"/><text x="200" y="${size > 30 ? 560 : 556}" text-anchor="middle" font-family="Songti SC, Noto Serif CJK SC, Georgia, serif" font-weight="700" font-size="${size}" fill="#fff">${escape(title.slice(0, 12))}</text>`, 400, 600) };
-}
-
 /** A wide art-directed banner, as an official Zone's editors would upload. */
 function bannerArt(seed: string, headline: string, sub: string): ZoneImage {
   const [top, glow] = skies[hash(seed) % skies.length]!;
@@ -57,7 +40,7 @@ const realmId = '01a0e3d0-dca8-7736-a626-f53097e68dce';
 const ref = 'fiction';
 
 interface Seed { key: string; title: string; author: string; tagline: string; lang?: string;
-  status?: ZoneWork['status']; chapters?: number; words?: number; art?: boolean }
+  status?: ZoneWork['status']; chapters?: number; words?: number }
 
 const seeds: Seed[] = [
   { key: 'rain', title: '雨夜书店', author: '林梅', tagline: '打烊前的一封无名信，把她带回二十年前的末班车。', chapters: 212, words: 684000 },
@@ -79,9 +62,9 @@ const seeds: Seed[] = [
   { key: 'salt', title: 'Salt and Starlight', author: 'June Hartley', lang: 'en',
     tagline: 'Two rival lighthouse keepers, one storm, and a letter neither will send.', status: 'completed', chapters: 30 },
   { key: 'ferry', title: 'The Night Ferry Library', author: 'Theo Arkwright', lang: 'en',
-    tagline: 'Books borrowed on the midnight ferry must be returned before dawn.', chapters: 22, art: false },
-  { key: 'bone', title: '龙骨山守墓人', author: '夜航船', tagline: '守墓人的规矩只有一条：月圆之夜，别回头。', chapters: 256, art: false },
-  { key: 'cloud', title: '云端书简', author: '三更灯', tagline: '寄往云端的信，总会在第二年春天收到回音。', chapters: 19, art: false },
+    tagline: 'Books borrowed on the midnight ferry must be returned before dawn.', chapters: 22 },
+  { key: 'bone', title: '龙骨山守墓人', author: '夜航船', tagline: '守墓人的规矩只有一条：月圆之夜，别回头。', chapters: 256 },
+  { key: 'cloud', title: '云端书简', author: '三更灯', tagline: '寄往云端的信，总会在第二年春天收到回音。', chapters: 19 },
 ];
 
 const decisionOf = (key: string) => `/en/r/${ref}/decisions#decision-${key}`;
@@ -90,7 +73,7 @@ export const works: ZoneWork[] = seeds.map((seed, index) => ({
   id: `https://rezics.com/id/00000000-0000-7000-8000-${String(index).padStart(12, '0')}`,
   href: `/w/00000000-0000-7000-8000-${String(index).padStart(12, '0')}?scope=realm&realm=${realmId}`,
   title: text(seed.title, seed.lang), author: text(seed.author, seed.lang), tagline: text(seed.tagline, seed.lang),
-  cover: seed.art === false ? null : coverArt(seed.key, seed.title), kind: 'book',
+  cover: null, kind: 'book',
   status: seed.status ?? 'ongoing', chapters: seed.chapters ?? null, words: seed.words ?? null,
   updatedAt: '2026-09-27T12:00:00.000Z', decision: decisionOf(seed.key),
 }));

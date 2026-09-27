@@ -155,16 +155,22 @@ export interface HeaderSlotProps extends ZoneSlotProps {
   members: string | null;
 }
 export interface HeroSlotProps extends ZoneSlotProps { banners: ZoneBanner[] }
+/** A cover tile, a row with a small cover, or a one-line rail row. */
+export type ZoneCardLayout = 'cover' | 'row' | 'rail';
+
+/** How a module asks for a card: its layout, chart position and the row's tallest cover proportion. */
+export interface ZoneCardOptions { layout?: ZoneCardLayout; rank?: number; slot?: number }
+
 export interface WorkCardSlotProps extends ZoneSlotProps {
   work: ZoneWork;
-  layout: 'cover' | 'row';
+  layout: ZoneCardLayout;
   rank?: number;
 }
 export interface ModuleSlotProps<Type extends ZoneModuleType> extends ZoneSlotProps {
   module: ZoneModule<Type>;
   data: ZoneModuleData[Type];
   /** Renders a Work with the platform card (and the package's `workCard` slot). */
-  card: (work: ZoneWork, options?: { layout?: 'cover' | 'row'; rank?: number }) => ReactNode;
+  card: (work: ZoneWork, options?: ZoneCardOptions) => ReactNode;
 }
 
 /** The slots a package may fill; an empty slot keeps the platform rendering. */

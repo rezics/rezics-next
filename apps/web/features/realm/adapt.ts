@@ -1,6 +1,7 @@
 import type { ZoneDecision, ZoneImage, ZoneText, ZoneWork } from '@rezics/zone-sdk';
 import type { UiLocale } from '../../i18n/define.ts';
 import { BFF_PREFIX } from '../api/browser.ts';
+import { coverKindOf } from '../catalogue/work.ts';
 import type { FallbackReason, MainExecution, PresentationBanner } from '../zones/presentation.ts';
 import { decisionHref, idOf, realmWorkHref } from './route.ts';
 import type { MainAvatar, MainName, RealmDecision, WorkCard, ZonePresentationRead } from './types.ts';
@@ -14,10 +15,14 @@ export function zoneText(name: MainName | null): ZoneText | null {
   return name ? { value: name.value, lang: name.language, dir: name.direction } : null;
 }
 
-/** An image Main serves, as a path through the BFF; a generated fallback is no image. */
-export function zoneImage(avatar: MainAvatar | null): ZoneImage | null {
-  return avatar?.kind === 'image' ? { url: `${BFF_PREFIX}${avatar.url}`, width: avatar.width, height: avatar.height }
-    : null;
+/**
+ * An image Main serves, as a path through the BFF; a generated fallback is no
+ * image. A signed-in reader's BFF sends their token, so Main also needs the
+ * Agent they read as (`avatarQuery`).
+ */
+export function zoneImage(avatar: MainAvatar | null, avatarQuery = ''): ZoneImage | null {
+  return avatar?.kind === 'image'
+    ? { url: `${BFF_PREFIX}${avatar.url}${avatarQuery}`, width: avatar.width, height: avatar.height } : null;
 }
 
 /** A presentation banner's media resource, delivered through Main's public media use read. */
@@ -26,18 +31,11 @@ export function bannerImage(banner: PresentationBanner): ZoneImage | null {
   return id ? { url: `${BFF_PREFIX}/v1/media/uses/${id}`, width: 1200, height: 630 } : null;
 }
 
-const schema = 'https://schema.org/';
-
-/** The object a generated cover imitates. */
-export function workKind(types: readonly string[]): ZoneWork['kind'] {
-  if (types.includes(`${schema}Recipe`)) return 'recipe';
-  if (types.some(type => type === `${schema}SoftwareSourceCode` || type === `${schema}SoftwareApplication`)) {
-    return 'package';
-  }
-  return types.includes(`${schema}Book`) ? 'book' : 'document';
+export interface AdaptContext {
+  locale: UiLocale; ref: string; realm: string;
+  /** `?actingSubject=` for a signed-in reader's media reads, or empty. */
+  avatarQuery?: string;
 }
-
-export interface AdaptContext { locale: UiLocale; ref: string; realm: string }
 
 /**
  * A Work card in this Zone. `decision` is the public Decision that placed
@@ -45,7 +43,8 @@ export interface AdaptContext { locale: UiLocale; ref: string; realm: string }
  */
 export function zoneWork(card: WorkCard, context: AdaptContext, decision: string | null): ZoneWork {
   return { id: card.id, href: realmWorkHref(card.id, context.realm), title: zoneText(card.title),
-    cover: zoneImage(card.cover), kind: workKind(card.types), author: null, tagline: zoneText(card.tagline),
+    cover: zoneImage(card.cover, context.avatarQuery), kind: coverKindOf(card.types), author: null,
+    tagline: zoneText(card.tagline),
     status: card.completionStatus, chapters: card.chapterCount, words: card.wordCount,
     updatedAt: card.lastUpdatedAt,
     decision: decision ? decisionHref(context.locale, context.ref, decision) : null };

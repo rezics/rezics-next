@@ -71,12 +71,12 @@ describe('Zone themes', () => {
     const themed = zoneTheme(presetTokens.serial, { reader: 'light', enabled: true });
     expect(themed.style['--primary']).toMatch(/^light-dark\(#[0-9a-f]{6}, #[0-9a-f]{6}\)$/);
     expect(themed.style['--zone-panel']).toBe('var(--card)');
-    expect(themed.style['--zone-radius-cover']).toBe('0.25rem');
-    expect(themed.style['--zone-cover-ratio']).toBe('2 / 3');
+    expect(themed.style['--zone-radius-card']).toBe('0.375rem');
+    expect(themed.style['--zone-tiles']).toBe('6');
     const standard = zoneTheme(presetTokens.vibrant, { reader: 'system', enabled: false });
     expect(standard.style['--primary']).toBeUndefined();
     expect(standard.style['--zone-heading-font']).toBe('var(--font-interface)');
-    expect(standard.style['--zone-cover-ratio']).toBe('1 / 1');
+    expect(standard.style['--zone-tiles']).toBe('5');
     expect(standard.className).toBe('zone-scope');
   });
 

@@ -1,21 +1,23 @@
 import { buttonVariants } from '@rezics/ui/button';
 import { cn } from '@rezics/ui/utils';
-import type { ZoneBanner, ZoneDecision, ZoneModule, ZoneModuleData, ZoneModuleType, ZoneWork } from '@rezics/zone-sdk';
+import type { ZoneBanner, ZoneCardOptions, ZoneDecision, ZoneModule, ZoneModuleData, ZoneModuleType, ZoneWork }
+  from '@rezics/zone-sdk';
 import { BookOpenIcon, MessageCircleIcon, PlusIcon, ScaleIcon, TagIcon, XIcon } from 'lucide-react';
 import { materializeData } from 'native-i18n';
 import type { ReactNode } from 'react';
 import type { UiLocale } from '../../i18n/define.ts';
 import LocalizedLink from '../shell/localized-link.tsx';
-import { WhyHere, workTitle } from './card.tsx';
+import { slotRatio } from '../catalogue/work.ts';
+import { CoverLink } from '../catalogue/work-tile.tsx';
+import { catalogueWork, WhyHere, workTitle } from './card.tsx';
 import { HeroCarousel } from './carousel.tsx';
-import { ZoneCover } from './cover.tsx';
 import { Announcement, ModuleTabs, ShuffleModule } from './islands.tsx';
 import type { ZoneMessages } from './messages.ts';
 import { ModuleFrame } from './module-frame.tsx';
 import { ScrollRow } from './scroll-row.tsx';
 
 /** Renders one Work card; the renderer supplies the package's `workCard` slot when one runs. */
-export type CardRenderer = (work: ZoneWork, options?: { layout?: 'cover' | 'row'; rank?: number }) => ReactNode;
+export type CardRenderer = (work: ZoneWork, options?: ZoneCardOptions) => ReactNode;
 
 export interface ModuleProps<Type extends ZoneModuleType> {
   module: ZoneModule<Type>;
@@ -23,10 +25,12 @@ export interface ModuleProps<Type extends ZoneModuleType> {
   card: CardRenderer;
   locale: UiLocale;
   messages: ZoneMessages;
+  /** The reader's Agent on Main media reads, when signed in. */
+  avatarQuery?: string;
 }
 
-function PickSlide({ banner, work, locale, messages }: {
-  banner: ZoneBanner; work: ZoneWork; locale: UiLocale; messages: ZoneMessages;
+function PickSlide({ banner, work, locale, messages, avatarQuery }: {
+  banner: ZoneBanner; work: ZoneWork; locale: UiLocale; messages: ZoneMessages; avatarQuery?: string;
 }) {
   const title = workTitle(work, messages);
   return <article className="relative isolate flex h-full overflow-hidden rounded-(--zone-radius-card) bg-card
@@ -37,8 +41,7 @@ function PickSlide({ banner, work, locale, messages }: {
         opacity-25" />}
     <span aria-hidden="true" className="absolute inset-0 -z-10 bg-linear-to-r from-card via-card/88 to-card/55" />
     <div className="flex w-full gap-4 p-4 sm:gap-6 sm:p-6">
-      <LocalizedLink href={work.href} tabIndex={-1} aria-hidden="true" className="w-26 shrink-0 self-center sm:w-36">
-        <ZoneCover work={work} sizes="large" /></LocalizedLink>
+      <CoverLink work={catalogueWork(work)} avatarQuery={avatarQuery} className="w-26 shrink-0 self-center sm:w-36" />
       <div className="flex min-w-0 flex-1 flex-col gap-1.5 py-1">
         <p className="font-semibold text-primary text-xs tracking-wide">{banner.kicker?.value ?? messages.heroLabel}</p>
         <h2 lang={work.title?.lang} dir={work.title?.dir} className="line-clamp-2 text-balance font-semibold
@@ -73,13 +76,14 @@ function BannerSlide({ banner }: { banner: ZoneBanner }) {
   </LocalizedLink>;
 }
 
-export function HeroModule({ module, data, locale, messages }: ModuleProps<'hero-carousel'>) {
+export function HeroModule({ module, data, locale, messages, avatarQuery }: ModuleProps<'hero-carousel'>) {
   const t = materializeData(messages, { locale });
   const count = String(data.banners.length);
   return <HeroCarousel label={module.title} previous={messages.previous} next={messages.next}
     slideLabels={data.banners.map((_, index) => t.slide({ index: String(index + 1), count }))}>
     {data.banners.map(banner => banner.image || !banner.work ? <BannerSlide key={banner.id} banner={banner} />
-      : <PickSlide key={banner.id} banner={banner} work={banner.work} locale={locale} messages={messages} />)}
+      : <PickSlide key={banner.id} banner={banner} work={banner.work} locale={locale} messages={messages}
+        avatarQuery={avatarQuery} />)}
   </HeroCarousel>;
 }
 
@@ -118,14 +122,16 @@ export function ShelfModule({ module, data, card, messages }: ModuleProps<'shelf
   const rows = module.layout === 'rows' || module.rail;
   const tabs = data.tabs.filter(tab => tab.items.length);
   if (tabs.length === 1 && module.shuffle && !rows) {
-    return <ShuffleModule module={module} more={messages.more} shuffleLabel={messages.shuffle} size={7} render="row"
+    const slot = slotRatio(tabs[0]!.items);
+    return <ShuffleModule module={module} more={messages.more} shuffleLabel={messages.shuffle} size={6} render="row"
       previous={messages.previous} next={messages.next}
-      items={tabs[0]!.items.map(work => card(work))} />;
+      items={tabs[0]!.items.map(work => card(work, { slot }))} />;
   }
   return <ModuleFrame module={module} more={messages.more}>
     <ModuleTabs label={module.title} tabs={tabs.map(tab => ({ id: tab.id, label: tab.label,
       content: rows ? <RowGrid items={tab.items.map(work => card(work, { layout: 'row' }))} />
-        : <CoverRow label={tab.label} messages={messages} items={tab.items.map(work => card(work))} /> }))} />
+        : <CoverRow label={tab.label} messages={messages}
+          items={tab.items.map(work => card(work, { slot: slotRatio(tab.items) }))} /> }))} />
   </ModuleFrame>;
 }
 
@@ -138,7 +144,8 @@ export function RankingModule({ module, data, card, locale, messages }: ModulePr
       content: compact ? <ol className="grid grid-cols-1 gap-3">
         {tab.items.map(item => <li key={item.work.id}>{card(item.work, { layout: 'row', rank: item.rank })}</li>)}
       </ol> : <CoverRow label={`${module.title} · ${t[tab.interval]}`} messages={messages}
-        items={tab.items.map(item => card(item.work, { rank: item.rank }))} />,
+        items={tab.items.map(item => card(item.work, { rank: item.rank,
+          slot: slotRatio(tab.items.map(entry => entry.work)) }))} />,
     }))} />
   </ModuleFrame>;
 }
@@ -189,21 +196,10 @@ export function QuoteModule({ module, data, locale, messages }: ModuleProps<'quo
   </ModuleFrame>;
 }
 
-export function RisingModule({ module, data, locale, messages }: ModuleProps<'rising'>) {
+export function RisingModule({ module, data, card, messages }: ModuleProps<'rising'>) {
   return <ModuleFrame module={module} more={messages.more}>
-    <ol className="grid grid-cols-1 gap-1">
-      {data.items.map(work => <li key={work.id} className="group relative flex items-center gap-3 rounded-lg p-1.5
-        hover:bg-accent/60">
-        <ZoneCover work={work} className="w-10" />
-        <div className="min-w-0 flex-1">
-          <h3 lang={work.title?.lang} className="truncate font-medium text-sm">
-            <LocalizedLink href={work.href} className="outline-none after:absolute after:inset-0 after:rounded-lg
-              focus-visible:after:ring-2 focus-visible:after:ring-ring">{workTitle(work, messages)}</LocalizedLink></h3>
-          {work.tagline ? <p lang={work.tagline.lang} className="truncate text-muted-foreground text-xs">
-            {work.tagline.value}</p> : null}
-        </div>
-        <WhyHere work={work} locale={locale} messages={messages} />
-      </li>)}
+    <ol className="grid grid-cols-1 gap-3.5">
+      {data.items.map(work => <li key={work.id}>{card(work, { layout: 'rail' })}</li>)}
     </ol>
   </ModuleFrame>;
 }

@@ -5,6 +5,10 @@ import type { ReactNode } from 'react';
 import type { UiLocale } from '../../i18n/define.ts';
 import { getMessages } from '../../i18n/server.ts';
 import { installedDigest, loadPackage } from '../../zones/official/index.ts';
+import { localizedPath } from '../../i18n/locale.ts';
+import { signInPath } from '../auth/paths.ts';
+import { ReaderActionsProvider } from '../catalogue/reader-actions.tsx';
+import { browseReader } from '../discover/server.ts';
 import { parseTheme, THEME_COOKIE } from '../shell/preferences.ts';
 import { ZONE_NONCE_HEADER } from '../zones/csp.ts';
 import { decideExecution, type Execution, isSafeMode, ZONE_LOOK_COOKIE, zoneLookEnabled } from '../zones/execution.ts';
@@ -17,7 +21,7 @@ import { type AdaptContext, mainExecution, zoneImage, zoneText } from './adapt.t
 import type { RealmMessages } from './messages.ts';
 import { readPresentation, type RealmResolution, resolveRealm } from './read.ts';
 import { RealmTabs } from './realm-tabs.tsx';
-import { realmHref } from './route.ts';
+import { type RealmTab, realmHref } from './route.ts';
 import type { RealmHeader } from './types.ts';
 
 type Search = Record<string, string | string[] | undefined>;
@@ -40,6 +44,8 @@ export interface RealmView {
   zone: ZoneContext;
   context: AdaptContext;
   lookEnabled: boolean;
+  /** Who reads: signed in or not, and the Agent their shelf controls act as. */
+  reader: { signedIn: boolean; actingSubject: string | null; avatarQuery: string };
   messages: RealmMessages;
   zoneMessages: ZoneMessages;
 }
@@ -63,8 +69,8 @@ async function runnablePackage(execution: Execution): Promise<{ execution: Execu
  */
 export async function loadRealmView(ref: string, locale: UiLocale, search: Search):
   Promise<RealmView | Exclude<RealmResolution, { kind: 'realm' }>> {
-  const [realm, messages, zoneMessages, jar] = await Promise.all([resolveRealm(ref, locale),
-    getMessages('realm', locale), getMessages('zones', locale), cookies()]);
+  const [realm, messages, zoneMessages, jar, reader] = await Promise.all([resolveRealm(ref, locale),
+    getMessages('realm', locale), getMessages('zones', locale), cookies(), browseReader()]);
   if (realm.kind !== 'realm') return realm;
   const read = realm.zone ? await readPresentation(realm.zone.id) : null;
   // A Zone whose presentation cannot be read still renders its Realm with the default layout.
@@ -78,18 +84,20 @@ export async function loadRealmView(ref: string, locale: UiLocale, search: Searc
   const header = realm.header;
   const zone: ZoneContext = {
     slug, realm: header.id, name: zoneText(header.name), description: zoneText(header.description),
-    icon: zoneImage(header.icon), hero: zoneImage(header.banner), tokens: presentation.tokens, locale,
+    icon: zoneImage(header.icon, reader.avatarQuery), hero: zoneImage(header.banner, reader.avatarQuery),
+    tokens: presentation.tokens, locale,
     links: { home: realmHref(locale, ref), works: realmHref(locale, ref, 'works'),
       discussions: realmHref(locale, ref, 'discussions'), decisions: realmHref(locale, ref, 'decisions'),
       about: realmHref(locale, ref, 'about') },
   };
   return { kind: 'view', realm, presentation, execution, pkg, zone, lookEnabled, messages, zoneMessages,
-    context: { locale, ref, realm: realm.realm } };
+    reader: { signedIn: reader.signedIn, actingSubject: reader.actingSubject ?? null, avatarQuery: reader.avatarQuery },
+    context: { locale, ref, realm: realm.realm, avatarQuery: reader.avatarQuery } };
 }
 
 /** The Zone frame around one Realm tab. */
-export async function RealmFrame({ view, locale, search, children }: {
-  view: RealmView; locale: UiLocale; search: Search; children: ReactNode;
+export async function RealmFrame({ view, tab, locale, search, children }: {
+  view: RealmView; tab: RealmTab; locale: UiLocale; search: Search; children: ReactNode;
 }) {
   const [jar, request] = await Promise.all([cookies(), headers()]);
   const { realm, presentation, execution, pkg, zone, messages, zoneMessages, lookEnabled } = view;
@@ -108,6 +116,8 @@ export async function RealmFrame({ view, locale, search, children }: {
       labels={{ home: messages.home, works: messages.works, discussions: messages.discussions,
         decisions: messages.decisions, about: messages.about }} />}
     notice={<ExecutionNotice execution={execution} showDesignHref={showDesign} messages={zoneMessages} />}>
-    {children}
+    {/* Shelf controls on every tile; signing in from one returns to this tab. */}
+    <ReaderActionsProvider signedIn={view.reader.signedIn} actingSubject={view.reader.actingSubject}
+      signInHref={signInPath(localizedPath(realmHref(locale, realm.ref, tab), locale))}>{children}</ReaderActionsProvider>
   </ZoneFrame>;
 }

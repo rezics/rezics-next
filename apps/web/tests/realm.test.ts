@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { bannerImage, liveBanners, mainExecution, workKind, zoneDecision, zoneImage, zoneText, zoneWork }
+import { bannerImage, liveBanners, mainExecution, zoneDecision, zoneImage, zoneText, zoneWork }
   from '../features/realm/adapt.ts';
 import { decisionAnchor, decisionHref, idOf, parseCursor, parseRealmRef, realmHref, realmWorkHref, tabOf }
   from '../features/realm/route.ts';
@@ -79,11 +79,10 @@ describe('Main reads as Zone data', () => {
     expect(zoneText(null)).toBeNull();
   });
 
-  test('types choose what a generated cover imitates', () => {
-    expect(workKind(['https://schema.org/Recipe'])).toBe('recipe');
-    expect(workKind(['https://schema.org/SoftwareSourceCode'])).toBe('package');
-    expect(workKind(['https://schema.org/Book'])).toBe('book');
-    expect(workKind(['https://schema.org/DigitalDocument'])).toBe('document');
+  test('a signed-in reader’s images name the Agent they read as, as the catalogue’s covers do', () => {
+    expect(zoneImage(card().cover, '?actingSubject=x')?.url).toBe('/api/main/v1/media/avatars/s?actingSubject=x');
+    expect(zoneWork(card({ types: ['https://schema.org/Recipe'] }), { ...context, avatarQuery: '?actingSubject=x' },
+      null)).toMatchObject({ kind: 'recipe', cover: { url: '/api/main/v1/media/avatars/s?actingSubject=x' } });
   });
 
   test('a Decision is titled from Works the page already read, and never guesses', () => {

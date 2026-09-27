@@ -10,7 +10,8 @@ import type { UiLocale } from '../../i18n/define.ts';
 import { EmptyState } from '../shell/empty-state.tsx';
 import LocalizedLink from '../shell/localized-link.tsx';
 import { PageContainer } from '../shell/page.tsx';
-import { workTitle, ZoneWorkCard } from '../zones/card.tsx';
+import { slotRatio } from '../catalogue/work.ts';
+import { workTitle, ZoneWorkCard, ZoneWorkRow } from '../zones/card.tsx';
 import type { ZoneMessages } from '../zones/messages.ts';
 import { ModuleHeading } from '../zones/module-frame.tsx';
 import { decisionText } from '../zones/modules.tsx';
@@ -54,10 +55,11 @@ function Pager({ next, first, messages }: { next: string | null; first: string |
 }
 
 /** The Works tab: every Work the Realm adopted, covers first, a page at a time. */
-export function RealmWorks({ realmName, works, next, first, locale, messages, zoneMessages }: {
+export function RealmWorks({ realmName, works, next, first, locale, messages, zoneMessages, avatarQuery }: {
   realmName: string; works: readonly ZoneWork[]; next: string | null; first: string | null;
-  locale: UiLocale; messages: RealmMessages; zoneMessages: ZoneMessages;
+  locale: UiLocale; messages: RealmMessages; zoneMessages: ZoneMessages; avatarQuery?: string;
 }) {
+  const slot = slotRatio(works);
   const t = materializeData(messages, { locale });
   return <PageContainer className="grid grid-cols-1 gap-6">
     <section aria-labelledby="realm-works" className="grid grid-cols-1 gap-5 rounded-(--zone-radius-card) bg-(--zone-panel)
@@ -65,9 +67,11 @@ export function RealmWorks({ realmName, works, next, first, locale, messages, zo
       <ViewHeader id="realm-works" title={t.worksTitle({ realm: realmName })} intro={messages.worksIntro}>
         {works.length ? <p className="text-muted-foreground text-sm">{t.worksCount(works.length)}</p> : null}
       </ViewHeader>
-      {works.length ? <ul className="grid grid-cols-3 gap-x-(--zone-shelf-gap) gap-y-6 sm:grid-cols-4 lg:grid-cols-6">
+      {works.length ? <ul className="grid grid-cols-2 gap-x-(--zone-shelf-gap) gap-y-8 sm:grid-cols-3 md:grid-cols-4
+        lg:grid-cols-5">
         {works.map(work => <li key={work.id} className="min-w-0">
-          <ZoneWorkCard work={work} locale={locale} messages={zoneMessages} headingLevel={3} /></li>)}
+          <ZoneWorkCard work={work} slot={slot} locale={locale} messages={zoneMessages} avatarQuery={avatarQuery} />
+        </li>)}
       </ul> : <EmptyState icon={BookOpenTextIcon} title={messages.worksEmpty} description={messages.worksEmptyBody}
         headingLevel={3} />}
     </section>
@@ -121,8 +125,9 @@ export function RealmDecisions({ decisions, next, first, locale, messages, zoneM
 }
 
 /** The Discussions tab: conversations live on each Work, read in this Realm's scope. */
-export function RealmDiscussions({ works, locale, messages, zoneMessages }: {
+export function RealmDiscussions({ works, locale, messages, zoneMessages, avatarQuery }: {
   works: readonly ZoneWork[]; locale: UiLocale; messages: RealmMessages; zoneMessages: ZoneMessages;
+  avatarQuery?: string;
 }) {
   return <PageContainer className="grid grid-cols-1 gap-6">
     <section aria-labelledby="realm-discussions" className="grid grid-cols-1 gap-5 rounded-(--zone-radius-card) bg-(--zone-panel)
@@ -130,8 +135,8 @@ export function RealmDiscussions({ works, locale, messages, zoneMessages }: {
       <ViewHeader id="realm-discussions" title={messages.discussionsTitle} intro={messages.discussionsIntro} />
       {works.length ? <ul className="grid grid-cols-1 gap-x-8 gap-y-5 sm:grid-cols-2">
         {works.map(work => <li key={work.id} className="flex min-w-0 items-center gap-3">
-          <div className="min-w-0 flex-1"><ZoneWorkCard work={work} layout="row" locale={locale}
-            messages={zoneMessages} /></div>
+          <div className="min-w-0 flex-1"><ZoneWorkRow work={work} locale={locale} messages={zoneMessages}
+            avatarQuery={avatarQuery} /></div>
           <LocalizedLink href={discussionHref(work)} aria-label={`${messages.openDiscussion}: ${workTitle(work,
             zoneMessages)}`} className={cn(buttonVariants({ variant: 'outline', size: 'sm', pill: true }),
             'relative z-10 shrink-0')}>

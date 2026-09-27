@@ -10,7 +10,7 @@ import { Children, type ReactNode, useCallback, useEffect, useRef, useState } fr
  */
 export function ScrollRow({ children, label, previous, next, itemClassName, className }: {
   children: ReactNode; label: string; previous: string; next: string;
-  /** Sizes each item; the default fits seven covers on a wide column and three on a phone. */
+  /** Sizes each item; the default fits the Zone's `--zone-tiles` covers on a wide column and two and a half on a phone. */
   itemClassName?: string; className?: string;
 }) {
   const list = useRef<HTMLUListElement>(null);
@@ -43,7 +43,8 @@ export function ScrollRow({ children, label, previous, next, itemClassName, clas
   return <div className={cn('relative min-w-0', className)}>
     <ul ref={list} aria-label={label} className="-mx-1 flex snap-x snap-mandatory scroll-px-1 gap-(--zone-shelf-gap)
       overflow-x-auto overscroll-x-contain px-1 pt-1 pb-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-      {Children.map(children, child => <li className={cn('w-[29%] shrink-0 snap-start sm:w-[21%] lg:w-[calc((100%-6*var(--zone-shelf-gap))/7)]',
+      {Children.map(children, child => <li className={cn('w-[38%] shrink-0 snap-start sm:w-[23%]',
+        'lg:w-[calc((100%-(var(--zone-tiles,5)-1)*var(--zone-shelf-gap))/var(--zone-tiles,5))]',
         itemClassName)}>{child}</li>)}
     </ul>
     <button type="button" aria-label={previous} onClick={() => page(-1)} tabIndex={-1}

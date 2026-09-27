@@ -2,6 +2,7 @@ import type { ZoneContext, ZonePackage } from '@rezics/zone-sdk';
 import { LibraryBigIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
 import type { UiLocale } from '../../i18n/define.ts';
+import { ReaderActionsProvider } from '../catalogue/reader-actions.tsx';
 import { EmptyState } from '../shell/empty-state.tsx';
 import type { Execution } from '../zones/execution.ts';
 import { LookMenu } from '../zones/look-menu.tsx';
@@ -39,7 +40,10 @@ export function RealmPageStory({ zone, modules = [], pkg = null, execution = { m
       labels={{ home: messages.home, works: messages.works, discussions: messages.discussions,
         decisions: messages.decisions, about: messages.about }} />}
     notice={<ExecutionNotice execution={execution} showDesignHref={zone.links.home} messages={zoneMessages} />}>
-    {children ?? <ZoneHome modules={modules} zone={zone} pkg={pkg} locale={locale} messages={zoneMessages}
-      empty={<EmptyState icon={LibraryBigIcon} title={messages.emptyHomeTitle} description={messages.emptyHomeBody} />} />}
+    {/* Signed out, as a first visit: shelf controls lead to sign-in. */}
+    <ReaderActionsProvider signedIn={false} signInHref="/auth/start">
+      {children ?? <ZoneHome modules={modules} zone={zone} pkg={pkg} locale={locale} messages={zoneMessages}
+        empty={<EmptyState icon={LibraryBigIcon} title={messages.emptyHomeTitle} description={messages.emptyHomeBody} />} />}
+    </ReaderActionsProvider>
   </ZoneFrame>;
 }

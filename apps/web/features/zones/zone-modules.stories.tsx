@@ -102,9 +102,9 @@ export const LatestTabs: Story = {
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     await expect(canvas.getByRole('tab', { name: 'New chapters' })).toHaveAttribute('aria-selected', 'true');
+    await expect(canvas.getAllByText('Ongoing').length).toBeGreaterThan(0);
     await userEvent.click(canvas.getByRole('tab', { name: 'Completed' }));
     await expect(canvas.getByRole('heading', { level: 3, name: '剑与茶' })).toBeVisible();
-    await expect(canvas.getAllByText('Completed').length).toBeGreaterThan(1);
   },
 };
 

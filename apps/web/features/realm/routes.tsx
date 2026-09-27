@@ -40,13 +40,14 @@ export async function realmMetadata({ params }: Pick<RealmRouteProps, 'params'>,
 
 type Content = (view: RealmView, locale: UiLocale, search: Search) => Promise<ReactNode>;
 
-async function realmRoute({ params, searchParams }: RealmRouteProps, content: Content) {
+async function realmRoute({ params, searchParams }: RealmRouteProps, tab: RealmTab, content: Content) {
   const [{ locale, realm }, search] = await Promise.all([params, searchParams]);
   if (!isUiLocale(locale)) notFound();
   const view = await loadRealmView(realm, locale, search);
   if (view.kind === 'missing') notFound();
   if (view.kind === 'unavailable') return <RealmUnavailable messages={await getMessages('realm', locale)} />;
-  return <RealmFrame view={view} locale={locale} search={search}>{await content(view, locale, search)}</RealmFrame>;
+  return <RealmFrame view={view} tab={tab} locale={locale} search={search}>{await content(view, locale, search)}
+  </RealmFrame>;
 }
 
 /** Cursor links for a paged tab: the next page, and the first page once past it. */
@@ -62,10 +63,10 @@ function failure(view: RealmView, tab: RealmTab, reason: ReadFailure) {
 }
 
 export function RealmHomeRoute(props: RealmRouteProps) {
-  return realmRoute(props, async view => {
+  return realmRoute(props, 'home', async view => {
     const modules = await loadModules(view.presentation, view.context);
     return <ZoneHome modules={modules} zone={view.zone} pkg={view.pkg} locale={view.context.locale}
-      messages={view.zoneMessages} empty={<EmptyState icon={LibraryBigIcon} title={view.messages.emptyHomeTitle}
+      messages={view.zoneMessages} avatarQuery={view.reader.avatarQuery} empty={<EmptyState icon={LibraryBigIcon} title={view.messages.emptyHomeTitle}
         description={view.messages.emptyHomeBody}>
         <LocalizedLink href={view.zone.links.about} className={buttonVariants({ variant: 'outline' })}>
           {view.messages.seeAbout}</LocalizedLink>
@@ -74,18 +75,18 @@ export function RealmHomeRoute(props: RealmRouteProps) {
 }
 
 export function RealmWorksRoute(props: RealmRouteProps) {
-  return realmRoute(props, async (view, locale, search) => {
+  return realmRoute(props, 'works', async (view, locale, search) => {
     const cursor = parseCursor(search);
     const page = await readRealmWorks(view.context.realm, locale, cursor);
     if (!page.ok) return failure(view, 'works', page.failure);
     return <RealmWorks realmName={view.zone.name.value} locale={locale} messages={view.messages}
-      zoneMessages={view.zoneMessages} {...paging(view, 'works', cursor, page.data.nextCursor)}
+      zoneMessages={view.zoneMessages} avatarQuery={view.reader.avatarQuery} {...paging(view, 'works', cursor, page.data.nextCursor)}
       works={page.data.items.map(item => zoneWork(item, view.context, item.selection))} />;
   });
 }
 
 export function RealmDecisionsRoute(props: RealmRouteProps) {
-  return realmRoute(props, async (view, locale, search) => {
+  return realmRoute(props, 'decisions', async (view, locale, search) => {
     const cursor = parseCursor(search);
     const [page, works] = await Promise.all([readRealmDecisions(view.context.realm, cursor),
       readRealmWorks(view.context.realm, locale)]);
@@ -99,16 +100,16 @@ export function RealmDecisionsRoute(props: RealmRouteProps) {
 }
 
 export function RealmDiscussionsRoute(props: RealmRouteProps) {
-  return realmRoute(props, async (view, locale) => {
+  return realmRoute(props, 'discussions', async (view, locale) => {
     const page = await readRealmWorks(view.context.realm, locale);
     if (!page.ok) return failure(view, 'discussions', page.failure);
     return <RealmDiscussions locale={locale} messages={view.messages} zoneMessages={view.zoneMessages}
-      works={page.data.items.map(item => zoneWork(item, view.context, item.selection))} />;
+      avatarQuery={view.reader.avatarQuery} works={page.data.items.map(item => zoneWork(item, view.context, item.selection))} />;
   });
 }
 
 export function RealmAboutRoute(props: RealmRouteProps) {
-  return realmRoute(props, async (view, locale) => {
+  return realmRoute(props, 'about', async (view, locale) => {
     const header = view.realm.header;
     const directory = await readRealmDirectory(locale);
     const others = (directory.ok ? directory.data.items : []).filter(item => item.id !== header.id).slice(0, 5)

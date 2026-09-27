@@ -23,14 +23,13 @@ export interface ZoneTheme {
   style: Record<`--${string}`, string>;
 }
 
-const radii = { sm: ['0.375rem', '0.25rem', '0.5rem'], md: ['0.875rem', '0.5rem', '1rem'],
-  lg: ['1.375rem', '0.875rem', '1.25rem'] } as const;
+// Module panels, then the UI kit's base radius (buttons, chips, tabs).
+const radii = { sm: ['0.375rem', '0.5rem'], md: ['0.875rem', '1rem'], lg: ['1.375rem', '1.25rem'] } as const;
 const fonts = {
   sans: 'var(--font-interface)',
   serif: 'var(--font-work-serif)',
   rounded: 'ui-rounded, "SF Pro Rounded", "Hiragino Maru Gothic ProN", "Arial Rounded MT Bold", var(--font-interface)',
 } as const;
-const coverRatios = { portrait: '2 / 3', square: '1 / 1', landscape: '4 / 3' } as const;
 const tints = { none: 0, subtle: 0.035, accent: 0.075 } as const;
 
 const pair = (light: string, dark: string) => light === dark ? light : `light-dark(${light}, ${dark})`;
@@ -72,19 +71,20 @@ export function zoneScheme(tokens: ZoneTokens, reader: ReaderTheme): 'dark' | nu
  */
 export function zoneTheme(tokens: ZoneTokens, { reader, enabled }: { reader: ReaderTheme; enabled: boolean }):
   ZoneTheme {
-  const density = tokens.density === 'compact'
-    ? { '--zone-gap': '1rem', '--zone-pad': '1rem', '--zone-shelf-gap': '0.75rem' }
-    : { '--zone-gap': '1.75rem', '--zone-pad': '1.25rem', '--zone-shelf-gap': '1rem' };
-  const structure = { ...density, '--zone-cover-ratio': coverRatios[tokens.coverStyle] } as const;
+  // Covers keep the catalogue's proportions for each kind of Work, so coverStyle has no effect here;
+  // density sets how many covers a shelf shows across.
+  const structure = tokens.density === 'compact'
+    ? { '--zone-gap': '1rem', '--zone-pad': '1rem', '--zone-shelf-gap': '1rem', '--zone-tiles': '6' }
+    : { '--zone-gap': '1.75rem', '--zone-pad': '1.25rem', '--zone-shelf-gap': '1.5rem', '--zone-tiles': '5' };
   if (!enabled) {
     return { className: 'zone-scope', style: { ...structure, '--zone-page': 'var(--background)',
-      '--zone-panel': 'transparent', '--zone-panel-pad': '0px', '--zone-radius-card': radii.md[0], '--zone-radius-cover': radii.md[1],
+      '--zone-panel': 'transparent', '--zone-panel-pad': '0px', '--zone-radius-card': radii.md[0],
       '--zone-heading-font': fonts.sans, '--zone-heading-scale': '1' } };
   }
   const light = accentRoles(tokens, 'light');
   const dark = accentRoles(tokens, 'dark');
   const both = (role: keyof typeof light) => pair(toHex(light[role]), toHex(dark[role]));
-  const [card, cover, kit] = radii[tokens.cardRadius];
+  const [card, kit] = radii[tokens.cardRadius];
   return {
     className: ['zone-scope', zoneScheme(tokens, reader) ?? ''].join(' ').trim(),
     style: {
@@ -94,7 +94,7 @@ export function zoneTheme(tokens: ZoneTokens, { reader, enabled }: { reader: Rea
       '--zone-accent': both('primary'), '--zone-page': both('page'),
       '--zone-panel': tokens.pageSurface === 'cards' ? 'var(--card)' : 'transparent',
       '--zone-panel-pad': tokens.pageSurface === 'cards' ? 'var(--zone-pad)' : '0px',
-      '--zone-radius-card': card, '--zone-radius-cover': cover, '--radius': kit,
+      '--zone-radius-card': card, '--radius': kit,
       '--zone-heading-font': fonts[tokens.fontPairing],
       '--zone-heading-scale': tokens.headingFontScale === 'lg' ? '1.2' : '1',
     },
