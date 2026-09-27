@@ -96997,6 +96997,14 @@
                         "null"
                       ]
                     },
+                    "defaultSelections": {
+                      "patternProperties": {
+                        "^.*$": {
+                          "type": "string"
+                        }
+                      },
+                      "type": "object"
+                    },
                     "hostingPolicy": {
                       "const": "metadata-only",
                       "type": "string"
@@ -97045,6 +97053,7 @@
                     "operation",
                     "hostingPolicy",
                     "defaultSelection",
+                    "defaultSelections",
                     "sourcePosition"
                   ],
                   "type": "object"
@@ -97884,6 +97893,15 @@
             "required": true,
             "schema": {
               "pattern": "^[0-9a-f-]{36}$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "language",
+            "required": false,
+            "schema": {
+              "pattern": "^[a-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$",
               "type": "string"
             }
           }
@@ -103516,6 +103534,15 @@
               "pattern": "^[0-9a-f-]{36}$",
               "type": "string"
             }
+          },
+          {
+            "in": "query",
+            "name": "language",
+            "required": false,
+            "schema": {
+              "pattern": "^[a-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$",
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -108540,6 +108567,15 @@
             "required": true,
             "schema": {
               "pattern": "^[0-9a-f-]{36}$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "language",
+            "required": false,
+            "schema": {
+              "pattern": "^[a-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$",
               "type": "string"
             }
           }
@@ -223123,8 +223159,13 @@
                     "type": "string"
                   },
                   "reviewDecisionId": {
+                    "~elyTyp": 7,
+                    "nullable": true,
                     "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
-                    "type": "string"
+                    "type": [
+                      "string",
+                      "null"
+                    ]
                   },
                   "revisionDigest": {
                     "pattern": "^[0-9a-f]{64}$",
@@ -223178,8 +223219,13 @@
                     "type": "string"
                   },
                   "reviewDecisionId": {
+                    "~elyTyp": 7,
+                    "nullable": true,
                     "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
-                    "type": "string"
+                    "type": [
+                      "string",
+                      "null"
+                    ]
                   },
                   "revisionDigest": {
                     "pattern": "^[0-9a-f]{64}$",
@@ -223233,8 +223279,13 @@
                     "type": "string"
                   },
                   "reviewDecisionId": {
+                    "~elyTyp": 7,
+                    "nullable": true,
                     "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
-                    "type": "string"
+                    "type": [
+                      "string",
+                      "null"
+                    ]
                   },
                   "revisionDigest": {
                     "pattern": "^[0-9a-f]{64}$",
@@ -224426,6 +224477,27 @@
                                   {
                                     "properties": {
                                       "kind": {
+                                        "const": "exact",
+                                        "type": "string"
+                                      },
+                                      "revision": {
+                                        "type": "string"
+                                      },
+                                      "value": {
+                                        "minimum": 0,
+                                        "type": "integer"
+                                      }
+                                    },
+                                    "required": [
+                                      "kind",
+                                      "value",
+                                      "revision"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  {
+                                    "properties": {
+                                      "kind": {
                                         "const": "estimated",
                                         "type": "string"
                                       },
@@ -224947,6 +225019,27 @@
                               "required": [
                                 "kind",
                                 "value"
+                              ],
+                              "type": "object"
+                            },
+                            {
+                              "properties": {
+                                "kind": {
+                                  "const": "exact",
+                                  "type": "string"
+                                },
+                                "revision": {
+                                  "type": "string"
+                                },
+                                "value": {
+                                  "minimum": 0,
+                                  "type": "integer"
+                                }
+                              },
+                              "required": [
+                                "kind",
+                                "value",
+                                "revision"
                               ],
                               "type": "object"
                             },
@@ -227293,6 +227386,15 @@
               "pattern": "^[0-9a-f-]{36}$",
               "type": "string"
             }
+          },
+          {
+            "in": "query",
+            "name": "language",
+            "required": false,
+            "schema": {
+              "pattern": "^[a-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$",
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -229346,6 +229448,23 @@
                             "additionalProperties": false,
                             "properties": {
                               "kind": {
+                                "const": "exact",
+                                "type": "string"
+                              },
+                              "value": {
+                                "type": "null"
+                              }
+                            },
+                            "required": [
+                              "kind",
+                              "value"
+                            ],
+                            "type": "object"
+                          },
+                          {
+                            "additionalProperties": false,
+                            "properties": {
+                              "kind": {
                                 "const": "unknown",
                                 "type": "string"
                               },
@@ -229436,6 +229555,13 @@
                           "zh-CN"
                         ],
                         "type": "object"
+                      },
+                      "replyPolicy": {
+                        "enum": [
+                          "moderated",
+                          "members-direct"
+                        ],
+                        "type": "string"
                       },
                       "rules": {
                         "items": {
@@ -229583,6 +229709,23 @@
                             "additionalProperties": false,
                             "properties": {
                               "kind": {
+                                "const": "exact",
+                                "type": "string"
+                              },
+                              "value": {
+                                "type": "null"
+                              }
+                            },
+                            "required": [
+                              "kind",
+                              "value"
+                            ],
+                            "type": "object"
+                          },
+                          {
+                            "additionalProperties": false,
+                            "properties": {
+                              "kind": {
                                 "const": "unknown",
                                 "type": "string"
                               },
@@ -229673,6 +229816,13 @@
                           "zh-CN"
                         ],
                         "type": "object"
+                      },
+                      "replyPolicy": {
+                        "enum": [
+                          "moderated",
+                          "members-direct"
+                        ],
+                        "type": "string"
                       },
                       "rules": {
                         "items": {
@@ -229820,6 +229970,23 @@
                             "additionalProperties": false,
                             "properties": {
                               "kind": {
+                                "const": "exact",
+                                "type": "string"
+                              },
+                              "value": {
+                                "type": "null"
+                              }
+                            },
+                            "required": [
+                              "kind",
+                              "value"
+                            ],
+                            "type": "object"
+                          },
+                          {
+                            "additionalProperties": false,
+                            "properties": {
+                              "kind": {
                                 "const": "unknown",
                                 "type": "string"
                               },
@@ -229910,6 +230077,13 @@
                           "zh-CN"
                         ],
                         "type": "object"
+                      },
+                      "replyPolicy": {
+                        "enum": [
+                          "moderated",
+                          "members-direct"
+                        ],
+                        "type": "string"
                       },
                       "rules": {
                         "items": {
