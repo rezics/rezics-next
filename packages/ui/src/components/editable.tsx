@@ -4,6 +4,7 @@ import { Editable as ArkEditable, useEditableContext } from '@ark-ui/react/edita
 import type React from 'react';
 import { cn } from '../utils.ts';
 import { type ButtonProps, buttonVariants } from './button.tsx';
+import { type InputProps, inputVariants } from './input.tsx';
 
 export const useEditable = useEditableContext;
 
@@ -23,7 +24,7 @@ export const Editable = (props: EditableProps) => {
         'group/editable',
         'relative',
         'w-full',
-        'data-[orientation=vertical]:items-end',
+        'data-[orientation=vertical]:flex-col data-[orientation=vertical]:items-end',
         'flex items-center gap-2',
         className,
       )}
@@ -43,11 +44,21 @@ export const EditableArea = (props: React.ComponentProps<typeof ArkEditable.Area
 };
 
 export interface EditableInputProps
-  extends Omit<React.ComponentProps<typeof ArkEditable.Input>, 'size'> {}
+  extends Omit<React.ComponentProps<typeof ArkEditable.Input>, 'size'>,
+    Pick<InputProps, 'size'> {}
 
-export const EditableInput = (props: EditableInputProps) => (
-  <ArkEditable.Input data-slot="editable-input" {...props} />
-);
+// Styled like Input; it renders the Ark part directly so zag keeps its focus and keys.
+export const EditableInput = (props: EditableInputProps) => {
+  const { size = 'md', className, ...rest } = props;
+
+  return (
+    <ArkEditable.Input
+      className={cn(inputVariants({ size }), 'px-3', className)}
+      data-slot="editable-input"
+      {...rest}
+    />
+  );
+};
 
 interface EditablePreviewProps extends React.ComponentProps<typeof ArkEditable.Preview> {
   /**
@@ -72,7 +83,7 @@ export const EditablePreview = (props: EditablePreviewProps) => {
       className={cn(
         buttonVariants({ variant, size, clickEffect: false }),
         'w-full justify-start',
-        'px-3',
+        'h-auto min-h-9 px-3 py-1.5 text-start',
         'whitespace-pre-wrap font-normal text-base sm:text-sm',
         'dark:hover:bg-input/32',
         'data-placeholder-shown:text-muted-foreground',
@@ -90,11 +101,7 @@ export const EditableControl = (props: React.ComponentProps<typeof ArkEditable.C
 
   return (
     <ArkEditable.Control
-      className={cn(
-        'group-data-[orientation=vertical]/editable:flex-col',
-        'inline-flex items-center gap-2',
-        className,
-      )}
+      className={cn('inline-flex items-center gap-2', className)}
       data-slot="editable-control"
       {...rest}
     />
