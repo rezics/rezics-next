@@ -1,96 +1,185 @@
-import { Alert, AlertAction, AlertDescription, AlertTitle } from '@rezics/ui/alert';
-import { Badge } from '@rezics/ui/badge';
-import { Button } from '@rezics/ui/button';
-import { Card } from '@rezics/ui/card';
-import { Skeleton } from '@rezics/ui/skeleton';
-import { CircleAlertIcon, RotateCwIcon, SearchIcon, SearchXIcon, TriangleAlertIcon } from 'lucide-react';
-import { materializeData } from 'native-i18n';
+'use client';
+
+import { Alert, AlertDescription } from '@rezics/ui/alert';
+import { Button, buttonVariants } from '@rezics/ui/button';
+import { useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
+import { BanIcon, CircleSlashIcon, FileTextIcon, LibraryIcon, RefreshCwIcon, RotateCwIcon, SearchIcon, SearchXIcon,
+  TagIcon, TriangleAlertIcon, UsersRoundIcon } from 'lucide-react';
+import { type ContractOf, materializeData } from 'native-i18n';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { type ReactNode, useEffect, useRef } from 'react';
 import type { UiLocale } from '../../i18n/define.ts';
+import type { DiscoverMessages } from '../discover/messages.ts';
+import { Notice } from '../discover/notice.tsx';
+import { workHref } from '../discover/scope.ts';
+import { WorkCard } from '../discover/work-card.tsx';
 import { EmptyState } from '../shell/empty-state.tsx';
 import type { SearchMessages } from './messages.ts';
+import { bffSearch, SearchError, type SearchLoader, searchPagesOptions } from './query.ts';
+import { phraseStatus, type SearchState, searchHref } from './state.ts';
+import type { SearchFailure, SearchHit, SearchLoaded, SearchResultPage } from './types.ts';
 
-export interface SearchResultRow {
-  matchUnit: string;
-  work: string;
-  revision: string;
-  language: string;
-  reason?: string;
-  title?: string;
-}
+type Text = ContractOf<SearchMessages>;
 
 export interface SearchResultsProps {
+  state: SearchState;
+  /** Page one from the server; null while the phrase is too short to search. */
+  initial: SearchLoaded | null;
+  /** The scope in words ("Global", a Realm's name). */
+  scopeLabel: string;
+  /** Mutes apply to a signed-in reader's results, which the completeness line says. */
+  signedIn: boolean;
+  actingSubject?: string;
+  avatarQuery?: string;
+  /** Reads later pages; the BFF by default, a fixture in stories. */
+  load?: SearchLoader;
   locale: UiLocale;
   messages: SearchMessages;
-  total?: number;
-  sequence?: string;
-  results?: readonly SearchResultRow[];
-  /** `blocked`: the selected perspective is incomplete, so no query runs. */
-  state?: 'idle' | 'blocked' | 'loading' | 'error' | 'ready';
-  error?: string;
-  onRetry?: () => void;
+  discoverMessages: DiscoverMessages;
 }
 
-const lastSegment = (iri: string) => iri.split('/').at(-1) ?? iri;
+function languageName(tag: string, locale: UiLocale): string {
+  try { return new Intl.DisplayNames([locale], { type: 'language' }).of(tag) ?? tag; } catch { return tag; }
+}
 
-export function SearchResults({ total, sequence, results = [], state = 'idle', error, onRetry,
-  locale, messages }: SearchResultsProps) {
-  const t = materializeData(messages, { locale });
-  return <section aria-live="polite" aria-label={t.resultsRegion} aria-busy={state === 'loading'}
-    className="grid gap-4">
-    <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 text-sm">
-      <span className="font-medium">{total === undefined ? t.results : t.resultCount(total)}</span>
-      {sequence ? <span className="text-muted-foreground">{t.sequence({ sequence })}</span> : null}
-    </div>
-    {state === 'idle' ? <EmptyState icon={SearchIcon} title={t.idleTitle} description={t.idle} /> : null}
-    {state === 'blocked' ? <Alert variant="warning">
-      <CircleAlertIcon aria-hidden="true" />
-      <AlertDescription className="text-foreground">{t.invalidRealm}</AlertDescription>
-    </Alert> : null}
-    {state === 'loading' ? <div className="grid gap-4">
-      <span className="sr-only">{t.loading}</span>
-      {[0, 1, 2].map(row => <Card key={row} aria-hidden="true" className="gap-3 px-6">
-        <Skeleton className="h-6 w-2/3 rounded-lg" />
-        <div className="flex gap-2"><Skeleton className="h-6 w-20 rounded-full" /><Skeleton className="h-6 w-28 rounded-full" /></div>
-        <Skeleton className="h-4 w-1/2 rounded-md" />
-      </Card>)}
-    </div> : null}
-    {state === 'error' ? <Alert variant="destructive" role="alert">
+/** What was searched and how complete the answer is: exact count, scope, filters, exclusions, index position. */
+function Completeness({ page, state, scopeLabel, signedIn, locale, t }: {
+  page: SearchResultPage; state: SearchState; scopeLabel: string; signedIn: boolean; locale: UiLocale; t: Text;
+}) {
+  const parts = [t.searched({ count: page.population, scope: scopeLabel }),
+    ...(state.language ? [t.onlyLanguage({ language: languageName(state.language, locale) })] : []),
+    ...(state.term ? [t.onlyTerm] : []), ...(signedIn ? [t.mutes] : []),
+    t.freshness({ sequence: page.sequence })];
+  return <p className="text-pretty text-muted-foreground text-sm" data-testid="search-completeness">
+    <span className="font-medium text-foreground">{t.countExact(page.total)}</span>
+    {parts.map(part => <span key={part}> · {part}</span>)}
+  </p>;
+}
+
+function Reasons({ hit, scopeLabel, locale, t }: { hit: SearchHit; scopeLabel: string; locale: UiLocale; t: Text }) {
+  const { reasons } = hit;
+  const term = reasons.classification?.conceptName;
+  const items: { icon: typeof FileTextIcon; text: ReactNode }[] = [
+    { icon: FileTextIcon, text: t.textMatch({ language: languageName(reasons.language, locale) }) },
+    ...(reasons.realm ? [{ icon: UsersRoundIcon, text: reasons.realm === 'realm-adoption'
+      ? t.realmAdopted({ realm: scopeLabel }) : t.realmFallback({ realm: scopeLabel }) }] : []),
+    ...(reasons.classification ? [{ icon: TagIcon, text: <span lang={term?.language}>
+      {reasons.classification.source === 'local'
+        ? t.classifiedLocal({ term: term?.value ?? t.thisTerm, realm: scopeLabel })
+        : t.classifiedGlobal({ term: term?.value ?? t.thisTerm })}</span> }] : []),
+  ];
+  return <ul aria-label={t.reasons} className="grid gap-1 text-muted-foreground">
+    {items.map((item, index) => <li key={index} className="flex items-start gap-2">
+      <item.icon aria-hidden="true" className="mt-0.5 size-4 shrink-0" /><span>{item.text}</span></li>)}
+  </ul>;
+}
+
+function FailureNotice({ failure, state, t, onRetry, onRestart }: {
+  failure: SearchFailure; state: SearchState; t: Text; onRetry: () => void; onRestart: () => void;
+}) {
+  switch (failure) {
+    case 'restart': return <Notice icon={RefreshCwIcon} title={t.restartTitle} description={t.restartHelp}>
+      <Button size="sm" onClick={onRestart}><RotateCwIcon aria-hidden="true" />{t.restart}</Button></Notice>;
+    case 'budget': return <Notice icon={LibraryIcon} title={t.budgetTitle} description={t.budgetHelp} />;
+    case 'missing': return <Notice icon={CircleSlashIcon} title={t.realmMissingTitle}>
+      <Link href={searchHref({ ...state, scope: { kind: 'global' } })}
+        className={buttonVariants({ size: 'sm', variant: 'outline' })}>{t.seeGlobal}</Link></Notice>;
+    case 'invalid': return <Notice icon={BanIcon} tone="destructive" title={t.invalidTitle} />;
+    case 'unavailable': return <Notice icon={TriangleAlertIcon} tone="destructive" title={t.errorTitle}
+      description={t.errorFallback}>
+      <Button size="sm" variant="outline" onClick={onRetry}><RotateCwIcon aria-hidden="true" />{t.retry}</Button>
+    </Notice>;
+  }
+}
+
+/** Where an empty search can look instead: the neighbouring scope and each filter removed. */
+function Widen({ state, t }: { state: SearchState; t: Text }) {
+  const links = [
+    ...(state.scope.kind === 'realm' ? [{ label: t.seeGlobal, href: searchHref({ ...state, scope: { kind: 'global' } }) }] : []),
+    ...(state.language ? [{ label: t.anyLanguageAction, href: searchHref({ ...state, language: null }) }] : []),
+    ...(state.term ? [{ label: t.removeClassification, href: searchHref({ ...state, term: null }) }] : []),
+  ];
+  return links.map(link => <Link key={link.href} href={link.href}
+    className={buttonVariants({ size: 'sm', variant: 'outline' })}>{link.label}</Link>);
+}
+
+function Pages({ first, props, t }: { first: SearchResultPage; props: SearchResultsProps; t: Text }) {
+  const { state, scopeLabel, signedIn, avatarQuery, locale, discoverMessages } = props;
+  const client = useQueryClient();
+  const options = searchPagesOptions(state, locale, first,
+    props.load ?? bffSearch(state, locale, props.actingSubject));
+  const pages = useInfiniteQuery(options);
+  const list = useRef<HTMLOListElement>(null);
+  const loaded = pages.data?.pages ?? [first];
+  const hits = loaded.flatMap(page => page.hits);
+  const failure = !pages.isFetchNextPageError ? null
+    : pages.error instanceof SearchError ? pages.error.failure : 'unavailable';
+
+  // Keep keyboard users where the new results begin, once they are on screen.
+  const focusFrom = useRef<number | null>(null);
+  useEffect(() => {
+    if (focusFrom.current === null || hits.length <= focusFrom.current) return;
+    list.current?.querySelectorAll<HTMLElement>('h2 a')[focusFrom.current]?.focus();
+    focusFrom.current = null;
+  }, [hits.length]);
+  function showMore() {
+    focusFrom.current = hits.length;
+    void pages.fetchNextPage();
+  }
+  function restart() {
+    client.setQueryData(options.queryKey, data => data && { pages: data.pages.slice(0, 1),
+      pageParams: data.pageParams.slice(0, 1) });
+    void pages.refetch();
+  }
+
+  if (!first.total) {
+    return <>
+      <Completeness page={first} state={state} scopeLabel={scopeLabel} signedIn={signedIn} locale={locale} t={t} />
+      <EmptyState icon={SearchXIcon} title={t.empty({ scope: scopeLabel, phrase: state.phrase })}
+        description={t.emptyHelp}><Widen state={state} t={t} /></EmptyState>
+    </>;
+  }
+  return <>
+    <Completeness page={first} state={state} scopeLabel={scopeLabel} signedIn={signedIn} locale={locale} t={t} />
+    {loaded.some(page => !page.titles) ? <Alert variant="warning">
       <TriangleAlertIcon aria-hidden="true" />
-      <AlertTitle>{t.errorTitle}</AlertTitle>
-      <AlertDescription>{error ?? t.errorFallback}</AlertDescription>
-      {onRetry ? <AlertAction>
-        <Button size="sm" variant="outline" onClick={onRetry}><RotateCwIcon aria-hidden="true" />{t.retry}</Button>
-      </AlertAction> : null}
+      <AlertDescription className="text-foreground">{t.titlesUnavailable}</AlertDescription>
     </Alert> : null}
-    {state === 'ready' && results.length === 0
-      ? <EmptyState icon={SearchXIcon} title={t.empty} description={t.emptyHelp} /> : null}
-    {state === 'ready' && results.length > 0 ? <ol className="grid gap-4">
-      {results.map(result => {
-        const revision = lastSegment(result.revision);
-        return <li key={result.matchUnit}>
-          <Card asChild className="relative gap-4 px-6 sm:flex-row sm:items-start sm:justify-between"><article>
-            <div className="min-w-0 space-y-3">
-              <h2 className="font-semibold font-work-title text-xl/snug">
-                <Link href={`/works/${encodeURIComponent(revision)}`} className="outline-none after:absolute
-                  after:inset-0 after:rounded-2xl hover:text-primary focus-visible:after:ring-2 focus-visible:after:ring-ring">
-                  {result.title ?? t.workFallback({ id: lastSegment(result.work).slice(0, 8) })}</Link>
-              </h2>
-              <div className="flex flex-wrap gap-1.5">
-                <Badge variant="soft">{result.language}</Badge>
-                <Badge variant="outline">{t.mainVersion}</Badge>
-                <Badge variant="outline" className="font-mono">{t.revision({ id: revision.slice(0, 8) })}</Badge>
-              </div>
-              <p className="break-all text-muted-foreground text-xs">
-                {t.workId} <span className="font-mono">{result.work}</span></p>
-            </div>
-            <div className="rounded-xl bg-muted/70 p-3 text-sm sm:w-64 sm:shrink-0">
-              <p className="font-medium">{result.reason ? t.realmRelation : t.textMatch}</p>
-              <p className="mt-1 text-muted-foreground">{result.reason ?? t.defaultReason}</p>
-            </div>
-          </article></Card>
-        </li>;
-      })}
-    </ol> : null}
+    <ol ref={list} className="grid gap-3">
+      {hits.map(hit => <li key={hit.matchUnit}>
+        <WorkCard layout="row" headingLevel={2} work={hit.work} title={hit.title} cover={hit.cover} types={[]}
+          href={workHref(hit.work, state.scope)} scopeLabel={scopeLabel} avatarQuery={avatarQuery} locale={locale}
+          messages={discoverMessages}>
+          <Reasons hit={hit} scopeLabel={scopeLabel} locale={locale} t={t} />
+        </WorkCard>
+      </li>)}
+    </ol>
+    {failure ? <FailureNotice failure={failure} state={state} t={t} onRetry={() => void pages.fetchNextPage()}
+      onRestart={restart} /> : null}
+    {pages.hasNextPage && !failure ? <div className="flex justify-center">
+      <Button variant="outline" onClick={showMore} isLoading={pages.isFetchingNextPage}
+        disabled={pages.isFetching}>{pages.isFetchingNextPage ? t.loadingMore : t.showMore}</Button>
+    </div> : null}
+  </>;
+}
+
+/**
+ * Results for the URL's search: an exact count and what was searched, each
+ * Work with why it matched, and "Show more" through Main's continuation. A
+ * continuation that expires or no longer follows on offers a restart.
+ */
+export function SearchResults(props: SearchResultsProps) {
+  const { state, initial, locale, messages } = props;
+  const t = materializeData(messages, { locale });
+  const router = useRouter();
+  const status = phraseStatus(state.phrase);
+  return <section aria-label={t.resultsRegion} aria-live="polite" className="grid min-w-0 content-start gap-4">
+    {status === 'empty' || status === 'short'
+      ? <EmptyState icon={SearchIcon} title={t.idleTitle} description={t.idle} /> : null}
+    {status === 'long' ? <Notice icon={BanIcon} title={t.tooLong} /> : null}
+    {initial && !initial.ok ? <FailureNotice failure={initial.failure} state={state} t={t}
+      onRetry={() => router.refresh()} onRestart={() => router.refresh()} /> : null}
+    {initial?.ok ? <Pages first={initial.page} props={props} t={t} /> : null}
   </section>;
 }

@@ -3,6 +3,7 @@
 // branches add their lines without conflicts; keep one entry per line.
 export const catalogs = {
   auth: () => import('../features/auth/messages.ts').then(module => module.messages),
+  discover: () => import('../features/discover/messages.ts').then(module => module.messages),
   home: () => import('../features/home/messages.ts').then(module => module.messages),
   search: () => import('../features/search/messages.ts').then(module => module.messages),
   shell: () => import('../features/shell/messages.ts').then(module => module.messages),
