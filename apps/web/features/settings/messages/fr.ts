@@ -1,3 +1,32 @@
 import type { SettingsMessages } from '../messages.ts';
 
-export default {} satisfies Partial<SettingsMessages>;
+export default {
+  title: 'Paramètres du profil',
+  description: 'Votre profil public permet aux autres de vous reconnaître sur REZICS.',
+  actingAs: 'Modification de',
+  publicProfile: 'Profil public',
+  displayName: 'Nom public',
+  avatar: 'Avatar',
+  chooseAvatar: 'Choisir une image',
+  noAvatarSelected: 'Aucune image sélectionnée',
+  bio: 'Présentation',
+  avatarHelp: 'PNG, JPEG, WebP ou GIF, jusqu’à 4 Mo. L’image sera publique après son enregistrement.',
+  removeAvatar: 'Supprimer l’avatar actuel',
+  accountInfo: 'Ce nom public reprend le nom de votre compte. Les changements effectués ici ne modifient pas le nom de votre compte.',
+  otherInfo: 'Ces changements seront visibles publiquement pour cette identité.',
+  profileUnavailable: 'La modification du profil est temporairement indisponible. Rechargez cette page.',
+  saveProfile: 'Enregistrer le profil public',
+  profileSaved: 'Votre profil public a été mis à jour.',
+  invalid: 'Vérifiez le nom, la présentation et l’image, puis réessayez.',
+  avatarDenied: 'Vous ne pouvez pas encore définir d’avatar pour ce profil. Vos modifications sont conservées.',
+  avatarUnavailable: 'Le service d’avatar est indisponible. Vos modifications sont conservées ; réessayez.',
+  handleTitle: 'Nom d’utilisateur',
+  handleHelp: 'Vous pouvez changer de nom d’utilisateur une fois tous les 30 jours. Votre ancien nom restera lié au nouveau pendant 90 jours.',
+  save: 'Changer de nom d’utilisateur',
+  saved: 'Votre nom d’utilisateur a été modifié.',
+  cooldown: 'Vous pourrez changer à nouveau de nom d’utilisateur 30 jours après votre dernier changement.',
+  conflict: 'Ce profil a changé ou ce nom d’utilisateur n’est plus disponible. Rechargez la page et réessayez.',
+  denied: 'Vous ne pouvez plus modifier ce profil. Choisissez-en un autre.',
+  failed: 'Impossible d’enregistrer les modifications. Réessayez.',
+  choose: 'Choisir un profil',
+} satisfies Partial<SettingsMessages>;

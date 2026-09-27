@@ -1,3 +1,32 @@
 import type { SettingsMessages } from '../messages.ts';
 
-export default {} satisfies Partial<SettingsMessages>;
+export default {
+  title: 'Ajustes del perfil',
+  description: 'Tu perfil público ayuda a que te reconozcan en REZICS.',
+  actingAs: 'Editando a',
+  publicProfile: 'Perfil público',
+  displayName: 'Nombre visible',
+  avatar: 'Avatar',
+  chooseAvatar: 'Elegir imagen',
+  noAvatarSelected: 'No hay ninguna imagen seleccionada',
+  bio: 'Biografía',
+  avatarHelp: 'PNG, JPEG, WebP o GIF, hasta 4 MB. La imagen será pública cuando la guardes.',
+  removeAvatar: 'Quitar el avatar actual',
+  accountInfo: 'Este nombre público se basó inicialmente en el nombre de tu cuenta. Los cambios aquí no modifican el nombre de tu cuenta.',
+  otherInfo: 'Los cambios serán públicos para esta identidad.',
+  profileUnavailable: 'La edición del perfil no está disponible temporalmente. Recarga esta página.',
+  saveProfile: 'Guardar perfil público',
+  profileSaved: 'Se actualizó tu perfil público.',
+  invalid: 'Revisa el nombre, la biografía y la imagen, y vuelve a intentarlo.',
+  avatarDenied: 'Todavía no se puede establecer un avatar para este perfil. Tus cambios siguen aquí.',
+  avatarUnavailable: 'El servicio de avatar no está disponible. Tus cambios siguen aquí; vuelve a intentarlo.',
+  handleTitle: 'Nombre de usuario',
+  handleHelp: 'Puedes cambiar tu nombre de usuario una vez cada 30 días. Tu nombre anterior seguirá vinculado al nuevo durante 90 días.',
+  save: 'Cambiar nombre de usuario',
+  saved: 'Se cambió tu nombre de usuario.',
+  cooldown: 'Podrás cambiar tu nombre de usuario 30 días después del último cambio.',
+  conflict: 'Este perfil cambió o el nombre de usuario ya no está disponible. Recarga la página e inténtalo de nuevo.',
+  denied: 'Ya no puedes editar este perfil. Elige otro.',
+  failed: 'No se pudieron guardar los cambios. Inténtalo de nuevo.',
+  choose: 'Elegir un perfil',
+} satisfies Partial<SettingsMessages>;
