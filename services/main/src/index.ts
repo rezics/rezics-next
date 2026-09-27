@@ -5,6 +5,7 @@ import { ContentComments, ContentCore, ContentProjectionCursor,
   migrateContent } from '../../content/src/index.ts';
 import { createMainApp } from './app.ts';
 import { ContentProjectionWorker } from './content-projection-worker.ts';
+import { DiscoveryProjection } from './modules/discovery/store.ts';
 import { FusekiClient } from './infrastructure/fuseki.ts';
 import { S3ImmutableObjects } from './infrastructure/immutable-objects.ts';
 import { StructureProgressStore } from './modules/progress/store.ts';
@@ -246,6 +247,7 @@ const correctionWorker = new VerificationCorrectionWorker(new VerificationCorrec
   new VerificationStore(contentPool), new NotificationStore(pool)));
 const actingContextDiscovery = new AccessActingContexts(pool, environment);
 const app = createMainApp(fuseki, {
+  discovery: new DiscoveryProjection(pool),
   agentProvisioning: new AgentProvisioning(pool,
     { ...environment, ...(workObjects ? { workObjects } : {}) }),
   environment: {

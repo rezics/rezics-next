@@ -85,6 +85,7 @@ import type { ThemeStore } from '../modules/theme/store.ts';
 import type { PrivateContextSelections } from '../modules/context/private-selection.ts';
 
 export interface MainWorkDependencies {
+  discovery?: import('../modules/discovery/store.ts').DiscoveryProjection;
   agentProvisioning?: AgentProvisioning;
   governance?: { store: GovernanceStore; rules?: GovernanceRules };
   managementReads?: ManagementReadStore;

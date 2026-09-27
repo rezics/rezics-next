@@ -1,23 +1,37 @@
-import { Elysia, t } from 'elysia';
-import { readRecentWorks } from '../modules/discovery/recent.ts';
-import { pageFields, pageQuery, workCard } from '../modules/work/read-contract.ts';
+import { Elysia } from 'elysia';
+import { discoveryPage, discoveryQuery } from '../modules/discovery/contract.ts';
+import { discoveryError, discoveryManagementRoutes } from '../modules/discovery/management.ts';
+import { readDiscovery } from '../modules/discovery/read.ts';
 import { workRead } from '../modules/work/read-session.ts';
+import { WorkReadUnavailable } from '../modules/work/read-session.ts';
 import type { MainWorkDependencies } from './dependencies.ts';
-import { workReadError, workReadProblems } from './work-reads.ts';
+import { workReadProblems } from './work-reads.ts';
 
-/** Phrase-free public discovery; the response gives exact page size, never an invented total. */
+export const openApiOperations = {
+  '/v1/works': { get: { bearer: false } },
+  '/v1/discovery/generation-builds': { post: { bearer: true, idempotencyKey: true } },
+  '/v1/discovery/generations/{generation}': { get: { bearer: true } },
+  '/v1/discovery/generations/{generation}/advance': { post: { bearer: true } },
+  '/v1/discovery/generations/{generation}/cancel': { post: { bearer: true } },
+  '/v1/discovery/generation-activations': { post: { bearer: true, idempotencyKey: true } },
+} as const;
+
+/** Phrase-free discovery over a separately built, admitted population. */
 export function discoveryRoutes(work: MainWorkDependencies) {
   return new Elysia().get('/v1/works', {
-    query: t.Object({ language: pageQuery.language, limit: pageQuery.limit, cursor: pageQuery.cursor },
-      { additionalProperties: false }),
-    response: { 200: t.Object({ profile: t.Literal('recent-works-v1'),
-      order: t.Literal('metadata-updated-desc'), items: t.Array(workCard), ...pageFields }), ...workReadProblems },
+    query: discoveryQuery,
+    detail: { security: [{}, { bearerAuth: [] }] },
+    response: { 200: discoveryPage, ...workReadProblems },
   }, async ({ request, query }) => {
     try {
       // A public list never turns into a private inventory merely because a browser sent a token.
-      const publicRequest = new Request(request.url);
-      return Response.json(await workRead(work, publicRequest, query, readRecentWorks),
+      if (!work.discovery) throw new WorkReadUnavailable('Discovery owner is unavailable');
+      const mine = query.scope === 'mine';
+      const readerRequest = mine ? request : new Request(request.url);
+      return Response.json(await workRead(work, readerRequest,
+        { ...query, actingSubject: mine ? query.actingSubject : undefined },
+        session => readDiscovery(session, work.discovery!, query)),
         { headers: { 'cache-control': 'no-store' } });
-    } catch (error) { return workReadError(error); }
-  });
+    } catch (error) { return discoveryError(error); }
+  }).use(discoveryManagementRoutes(work));
 }

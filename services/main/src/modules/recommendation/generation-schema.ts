@@ -17,7 +17,7 @@ export function declareTable<Row>() {
     name: string, columns: Exhaustive<Row, Columns>): TableDeclaration<Row> => ({ schema, name, columns });
 }
 
-const DERIVED_GENERATION_FAMILIES = ['ranking', 'event-interval'] as const;
+const DERIVED_GENERATION_FAMILIES = ['ranking', 'event-interval', 'discovery'] as const;
 type DerivedGenerationFamily = (typeof DERIVED_GENERATION_FAMILIES)[number];
 const DERIVED_GENERATION_STATES =
   ['building', 'ready', 'failed', 'cancelled', 'superseded', 'expired'] as const;
