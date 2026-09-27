@@ -15,6 +15,8 @@ export const NOTIFICATION_SCOPE = 'notification:manage';
 
 export const openApiOperations = {
   '/v1/me/notifications': { get: { bearer: true } },
+  '/v1/me/notifications/unread-count': { get: { bearer: true } },
+  '/v1/me/notifications/{item}/read': { put: { bearer: true } },
   '/v1/me/notifications/hint': { get: { bearer: true } },
   '/v1/me/notification-read-watermarks/inbox': { put: { bearer: true } },
   '/v1/me/notification-streams/inbox/resets': { post: { bearer: true } },
@@ -39,12 +41,24 @@ const generation = t.String({ pattern: '^[1-9][0-9]{0,18}$' });
 const noStore = { headers: { 'cache-control': 'no-store' } };
 
 const streamItem = t.Object({ id: t.String(), sequence: t.String(), purpose: t.String(), topic: t.String(),
+  read: t.Boolean(),
   state: t.Union([t.Literal('active'), t.Literal('withdrawn'), t.Literal('erased')]),
   subject: t.Nullable(t.Object({ owner: t.String(), ref: t.String(), revision: t.Nullable(t.String()) })),
+  display: t.Nullable(t.Object({ kind: t.Union([
+    t.Literal('reply'), t.Literal('submission_decision'), t.Literal('moderation_outcome'),
+    t.Literal('realm_role_change'), t.Literal('follow'), t.Literal('claim_correction')]),
+    actor: t.Nullable(t.Object({ id: t.String(), name: t.String(), handle: t.String(),
+      avatar: t.Nullable(t.String()) })), realm: t.Nullable(t.String()), groupKey: t.Nullable(t.String()),
+    target: t.Object({ title: t.Nullable(t.String()), excerpt: t.Nullable(t.String()),
+      language: t.Nullable(t.String()), linkTarget: t.Nullable(t.String()) }) })),
   createdAt: t.String() });
 const streamPage = t.Object({ profile: t.Literal('notification-stream-page-v1'), generation: t.String(),
   head: t.String(), reset: t.Boolean(), readThrough: t.String(), items: t.Array(streamItem),
+  groups: t.Array(t.Object({ kind: t.String(), key: t.String(), itemIds: t.Array(t.String()) })),
   next: t.Nullable(t.String()) });
+const unreadCount = t.Object({ profile: t.Literal('notification-unread-count-v1'), count: t.Number(),
+  overflow: t.Boolean() });
+const itemRead = t.Object({ profile: t.Literal('notification-item-read-v1'), id: t.String(), readAt: t.String() });
 const hint = t.Object({ profile: t.Literal('notification-stream-hint-v1'), generation: t.String(), head: t.String() });
 const watermark = t.Object({ profile: t.Literal('notification-read-watermark-v1'), generation: t.String(),
   readThrough: t.String() });
@@ -98,6 +112,27 @@ export function notificationRoutes(work: MainWorkDependencies) {
           generationPart && sequencePart ? { generation: generationPart, sequence: sequencePart } : null,
           query.limit ?? 50);
         return Response.json({ profile: 'notification-stream-page-v1', ...page }, noStore);
+      } catch (error) { return notificationError(error); }
+    })
+    .get('/v1/me/notifications/unread-count', {
+      response: { 200: unreadCount, ...authorizedReadProblems },
+    }, async ({ request }) => {
+      try {
+        const principal = await work.account.verify(request, [NOTIFICATION_SCOPE]);
+        if (!owner) return unavailable();
+        return Response.json({ profile: 'notification-unread-count-v1',
+          ...await owner.store.unreadCount(principal) }, noStore);
+      } catch (error) { return notificationError(error); }
+    })
+    .put('/v1/me/notifications/:item/read', {
+      params: t.Object({ item: t.String({ pattern: uuid }) }),
+      response: { 200: itemRead, ...writeProblems },
+    }, async ({ request, params }) => {
+      try {
+        const principal = await work.account.verify(request, [NOTIFICATION_SCOPE]);
+        if (!owner) return unavailable();
+        return Response.json({ profile: 'notification-item-read-v1',
+          ...await owner.store.markItemRead(principal, params.item) }, noStore);
       } catch (error) { return notificationError(error); }
     })
     .get('/v1/me/notifications/hint', {

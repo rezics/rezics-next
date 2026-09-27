@@ -2,7 +2,7 @@
 
 Template for the PostgreSQL-owned private command/read family with an external
 channel adapter. Contract: [notifications](../../../../../docs/contracts/notifications.md);
-schema: Access migrations 062–064; cases GOV05–GOV08.
+schema: Access migrations 062–064 and 440–441; cases GOV05–GOV08.
 
 ## Shape
 
@@ -71,6 +71,9 @@ schema: Access migrations 062–064; cases GOV05–GOV08.
 | Subject reader selection | One map lookup and exactly one owner-specific read per delivery; registrations are fixed during Main startup. |
 | Scheduled delivery tick | At most 32 expired leases recovered plus 32 due rows dispatched; one active tick per Main process. |
 | `readStream` | 9 statements; one index range on `(principal_id, stream, generation, sequence)` of ≤ 51 rows, independent of other recipients (EXPLAIN checked at 100/1,000/10,000). |
+| Display read | The same ≤ 51-row page plus at most 50 exact owner disclosure reads, at most 50 current public Agent reads and avatar probes. A denied or unsupported subject yields no subject reference or display fields. Groups cover only the page and contain at most 10 visible items. |
+| `unreadCount` | One ≤ 257-row Access scan plus at most 256 exact owner disclosure reads. It returns the exact visible count through 99, `99+` at 100, or 503 when 256 candidates cannot prove either result. |
+| `markItemRead` | One current-generation recipient lookup and one guarded, idempotent item marker insert. Mark-all remains the monotonic `advanceWatermark` command. |
 | `advanceWatermark`, `setPreference`, `readDelivery` | Constant statements on primary/unique keys. |
 | Realtime | One listener connection per Main process; O(active sockets for the notified recipient) local sends; ≤256 post-commit hints per event. Provider response bodies are capped at 16 KiB and each HTTP exchange has a 5 s timeout. |
 | Production Content disclosure | One Access principal identity lookup, one Access `canReadWork` decision and one exact Content revision read per delivery; the decision is current and recipient-specific. |

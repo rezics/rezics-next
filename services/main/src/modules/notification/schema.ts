@@ -88,6 +88,22 @@ export const notificationReadWatermark = access.table('notification_read_waterma
   updatedAt: at('updated_at').notNull(),
 }, table => [primaryKey({ columns: [table.principalId, table.stream, table.generation] })]);
 
+export const notificationItemRead = access.table('notification_item_read', {
+  principalId: uuid('principal_id').notNull(),
+  itemId: uuid('item_id').notNull(),
+  readAt: at('read_at').notNull(),
+}, table => [primaryKey({ columns: [table.principalId, table.itemId] })]);
+
+export const notificationKinds = ['reply', 'submission_decision', 'moderation_outcome',
+  'realm_role_change', 'follow', 'claim_correction'] as const;
+export const notificationDisplayContext = access.table('notification_display_context', {
+  itemId: uuid('item_id').primaryKey(),
+  kind: text('kind', { enum: notificationKinds }).notNull(),
+  actorAgent: text('actor_agent'),
+  realm: text('realm'),
+  groupKey: text('group_key'),
+});
+
 export const notificationDelivery = access.table('notification_delivery', {
   id: uuid('id').primaryKey(),
   itemId: uuid('item_id').notNull(),
@@ -135,13 +151,16 @@ export const notificationProviderEvent = access.table('notification_provider_eve
 
 export const notificationTables = [notificationPreference, notificationPreferenceChange,
   notificationEndpoint, notificationStream, notificationItem, notificationReadWatermark,
-  notificationDelivery, notificationAttempt, notificationProviderEvent] as const;
+  notificationItemRead, notificationDisplayContext, notificationDelivery,
+  notificationAttempt, notificationProviderEvent] as const;
 
 export type NotificationPreferenceRow = typeof notificationPreference.$inferSelect;
 export type NotificationEndpointRow = typeof notificationEndpoint.$inferSelect;
 export type NotificationStreamRow = typeof notificationStream.$inferSelect;
 export type NotificationItemRow = typeof notificationItem.$inferSelect;
 export type NotificationReadWatermarkRow = typeof notificationReadWatermark.$inferSelect;
+export type NotificationItemReadRow = typeof notificationItemRead.$inferSelect;
+export type NotificationDisplayContextRow = typeof notificationDisplayContext.$inferSelect;
 export type NotificationDeliveryRow = typeof notificationDelivery.$inferSelect;
 export type NotificationAttemptRow = typeof notificationAttempt.$inferSelect;
 export type NotificationProviderEventRow = typeof notificationProviderEvent.$inferSelect;

@@ -95,7 +95,7 @@ import { ManagementReadStore } from './modules/management-reads/read-store.ts';
 import { RealmSubmissionStore } from './modules/realm-submission/store.ts';
 import { RealmSubmissionReads } from './modules/realm-submission/reads.ts';
 import { AccessProposalExecutions } from './modules/proposal/access.ts';
-import { currentContentSubjectReader } from './modules/notification/subjects.ts';
+import { currentContentSubjectReader, currentNotificationAgentReader } from './modules/notification/subjects.ts';
 import { NotificationRealtimeHub } from './modules/notification/realtime.ts';
 import { NotificationDispatcher } from './modules/notification/dispatcher.ts';
 import { NotificationDeliveryWorker } from './modules/notification/delivery-worker.ts';
@@ -220,6 +220,10 @@ const eventQueries = new EventTemporalQueries(pool, environment, createHash('sha
 const hub = new HubStore(contentPool, content, access, environment, packageArtifacts);
 const downloadLeases = new AccessDownloadLeases(pool);
 const notificationStore = new NotificationStore(pool);
+notificationStore.setDefaultReadSubjectReader(currentContentSubjectReader(content, notificationStore, access));
+notificationStore.setReadAgentReader(currentNotificationAgentReader(fuseki, environment.lineage, media.store));
+notificationStore.registerReadSubjectReader('verification-correction-subscription-v1',
+  verificationCorrectionSubjectReader(new VerificationStore(contentPool)));
 if (relayPool) await notificationStore.reconcileRetainedErasures(relayPool);
 const notificationProviderConfig = {
   url: config.MAIN_NOTIFICATION_PROVIDER_URL,

@@ -24,6 +24,7 @@ export class VerificationCorrectionPublisher {
         queued = await this.notifications.enqueue({ sourceOwner: 'content',
           sourceEvent: nativeId(page.generation), purpose: 'governance', topic: 'claim-correction',
           subject: { owner: 'content', ref: page.claim, revision: nativeId(page.generation) },
+          display: { kind: 'claim_correction', actorAgent: null, realm: null, groupKey: null },
           disclosureBasis: 'verification-correction-subscription-v1', recipients: page.recipients });
       }
       await this.verification.acknowledgeCorrectionPage(owner, page.generation,
@@ -74,6 +75,6 @@ export function verificationCorrectionSubjectReader(verification: VerificationSt
     if (notice.claim !== input.ref || notice.generation !== input.revision) return { status: 'unavailable' };
     return { status: 'available', subject: { private: true,
       fields: { claim: notice.claim, generation: notice.generation,
-        support: notice.support, dispute: notice.dispute } } };
+        support: notice.support, dispute: notice.dispute, linkTarget: notice.claim } } };
   } };
 }

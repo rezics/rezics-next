@@ -79,8 +79,11 @@ async function notificationStack(name: string) {
     },
   } as unknown as Pool;
   const store = new NotificationStore(measured);
+  store.setReadAgentReader(async id => ({ id, name: 'Current Agent', handle: `agent-${id.slice(-36)}`,
+    avatar: null }));
   const subjects = contentSubjectReader(content, async (principalId, ids) =>
     new Set(ids.filter(id => disclosed.has(`${principalId}:${id}`))));
+  store.setDefaultReadSubjectReader(subjects);
   const dispatcher = new NotificationDispatcher(measured, provider, subjects, { retryMs: 0 });
   const access = new AccessAdmissionRegistry(pool);
   const productionDispatcher = new NotificationDispatcher(measured, provider,
@@ -430,11 +433,13 @@ test('GOV08: monotonic read watermarks and a real realtime reconnect reconcile e
     await connection.opened;
     expect(await realtimeHint(connection)).toMatchObject({ profile: 'notification-stream-hint-v1',
       generation: '1', head: '0' });
-    const first = s.event([a], r);
+    const first = s.event([a], r, { display: { kind: 'reply', actorAgent: s.readerActor, realm: null,
+      groupKey: 'chapter-1' } });
     await s.store.enqueue(first);
     expect(await realtimeHint(connection)).toMatchObject({ generation: '1', head: '1' });
     await connection.close();
-    const reconnectEvent = s.event([a], r);
+    const reconnectEvent = s.event([a], r, { display: { kind: 'reply', actorAgent: s.readerActor,
+      realm: null, groupKey: 'chapter-1' } });
     await s.store.enqueue(reconnectEvent);
     connection = notificationSocket(port, account.tokenA);
     await connection.opened;
@@ -448,6 +453,30 @@ test('GOV08: monotonic read watermarks and a real realtime reconnect reconcile e
     const page = await s.call('GET', '/v1/me/notifications?after=1:1', account.tokenA);
     expect(page.body.items.map((item: { sequence: string }) => item.sequence)).toEqual(['2', '3']);
     expect(page.body).toMatchObject({ reset: false, head: '3', readThrough: '0', next: null });
+    const hidden = (await s.call('GET', '/v1/me/notifications', account.tokenA)).body.items[0];
+    expect(hidden).toMatchObject({ subject: null, display: null });
+    s.disclosed.add(`${a}:${r}`);
+    const shown = (await s.call('GET', '/v1/me/notifications', account.tokenA)).body.items[0];
+    expect(shown.display).toMatchObject({ kind: 'reply', actor: { name: 'Current Agent' },
+      target: { title: 'Stream subject', language: 'en' } });
+    expect((await s.call('GET', '/v1/me/notifications', account.tokenA)).body.groups[0].itemIds)
+      .toHaveLength(2);
+    expect((await s.call('GET', '/v1/me/notifications/unread-count', account.tokenA)).body)
+      .toMatchObject({ count: 3, overflow: false });
+    s.disclosed.delete(`${a}:${r}`);
+    expect((await s.call('GET', '/v1/me/notifications', account.tokenA)).body.items[0])
+      .toMatchObject({ subject: null, display: null });
+    expect((await s.call('GET', '/v1/me/notifications/unread-count', account.tokenA)).body)
+      .toMatchObject({ count: 0, overflow: false });
+    const firstItemId = (await s.pool.query<{ id: string }>(`SELECT id FROM access.notification_item
+      WHERE principal_id = $1 AND sequence = 1`, [a])).rows[0]!.id;
+    const individuallyRead = await s.call('PUT', `/v1/me/notifications/${firstItemId}/read`, account.tokenA);
+    expect(individuallyRead.status).toBe(200);
+    expect((await s.call('PUT', `/v1/me/notifications/${firstItemId}/read`, account.tokenA)).body)
+      .toEqual(individuallyRead.body);
+    expect((await s.call('PUT', `/v1/me/notifications/${firstItemId}/read`, account.tokenB)).status).toBe(404);
+    expect((await s.call('GET', '/v1/me/notifications/unread-count', account.tokenA)).body)
+      .toMatchObject({ count: 0, overflow: false });
 
     // Two devices race read positions: the watermark only moves forward and repeats are idempotent.
     const mark = (readThrough: string, generation = '1') => s.call('PUT', '/v1/me/notification-read-watermarks/inbox',
@@ -455,6 +484,8 @@ test('GOV08: monotonic read watermarks and a real realtime reconnect reconcile e
     const raced = await Promise.all(['2', '3', '1', '3', '2'].map(value => mark(value)));
     expect(raced.every(response => response.status === 200)).toBe(true);
     expect((await mark('1')).body.readThrough).toBe('3');
+    expect((await s.call('GET', '/v1/me/notifications/unread-count', account.tokenA)).body)
+      .toMatchObject({ count: 0, overflow: false });
     expect((await mark('4')).body.code).toBe('stale_notification_state');
     expect((await mark('1', '2')).body.code).toBe('stale_notification_state');
 
@@ -482,6 +513,7 @@ test('GOV08: monotonic read watermarks and a real realtime reconnect reconcile e
       WHERE id = $1`, [erasedItem]);
     const tomb = (await s.call('GET', '/v1/me/notifications?after=1:4&limit=1', account.tokenA)).body.items[0];
     expect(tomb).toMatchObject({ sequence: '5', state: 'erased', subject: null });
+    expect((await s.call('PUT', `/v1/me/notifications/${erasedItem}/read`, account.tokenA)).status).toBe(404);
 
     // Other recipients see only their own empty stream.
     expect((await s.call('GET', '/v1/me/notifications', account.tokenB)).body).toMatchObject({ head: '0', items: [] });
@@ -536,4 +568,43 @@ test('GOV08: monotonic read watermarks and a real realtime reconnect reconcile e
     await connection?.close();
     await s.close();
   }
+}, 180_000);
+
+test('G-286: unread badge saturates at 99+ only for currently disclosed items', async () => {
+  const s = await notificationStack('unread-cap');
+  try {
+    await s.store.registerEndpoint(s.principal(s.account.a), { channel: 'email', deviceId: null,
+      address: null, addressDigest: digest('cap@example.test'), lockScreenDisclosure: false });
+    const a = await s.principalId(s.account.a);
+    const revision = await s.revision('Cap subject');
+    const event = s.event([a], revision);
+    await s.pool.query(`INSERT INTO access.notification_stream (principal_id, stream)
+      VALUES ($1, 'inbox')`, [a]);
+    await s.pool.query(`UPDATE access.notification_stream SET head_sequence = 100
+      WHERE principal_id = $1 AND stream = 'inbox'`, [a]);
+    await s.pool.query(`INSERT INTO access.notification_item (id, principal_id, stream, generation, sequence,
+      purpose, topic, source_owner, source_event, subject_owner, subject_ref, subject_revision, disclosure_basis)
+      SELECT gen_random_uuid(), $1, 'inbox', 1, n, 'social', 'reply', 'content', 'cap-' || n,
+        'content', $2, $3, $4 FROM generate_series(1, 100) AS n`,
+    [a, event.subject.ref, revision, event.disclosureBasis]);
+    s.disclosed.add(`${a}:${revision}`);
+    expect((await s.call('GET', '/v1/me/notifications/unread-count', s.account.tokenA)).body)
+      .toMatchObject({ count: 99, overflow: true });
+    const id = (await s.pool.query<{ id: string }>(`SELECT id FROM access.notification_item
+      WHERE principal_id = $1 AND sequence = 1`, [a])).rows[0]!.id;
+    expect((await s.call('PUT', `/v1/me/notifications/${id}/read`, s.account.tokenA)).status).toBe(200);
+    expect((await s.call('GET', '/v1/me/notifications/unread-count', s.account.tokenA)).body)
+      .toMatchObject({ count: 99, overflow: false });
+    s.disclosed.clear();
+    expect((await s.call('GET', '/v1/me/notifications/unread-count', s.account.tokenA)).body)
+      .toMatchObject({ count: 0, overflow: false });
+    await s.pool.query(`UPDATE access.notification_stream SET head_sequence = 258
+      WHERE principal_id = $1 AND stream = 'inbox'`, [a]);
+    await s.pool.query(`INSERT INTO access.notification_item (id, principal_id, stream, generation, sequence,
+      purpose, topic, source_owner, source_event, subject_owner, subject_ref, subject_revision, disclosure_basis)
+      SELECT gen_random_uuid(), $1, 'inbox', 1, n, 'social', 'reply', 'content', 'cap-' || n,
+        'content', $2, $3, $4 FROM generate_series(101, 258) AS n`,
+    [a, event.subject.ref, revision, event.disclosureBasis]);
+    expect((await s.call('GET', '/v1/me/notifications/unread-count', s.account.tokenA)).status).toBe(503);
+  } finally { await s.close(); }
 }, 180_000);

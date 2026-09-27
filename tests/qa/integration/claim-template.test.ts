@@ -351,6 +351,11 @@ test('FACT01/FACT02/FACT03/FACT04/FACT06: claim verification preserves origin, h
       FROM access.notification_item WHERE source_owner = 'content' AND source_event = $1 AND principal_id = $2`,
     [corrections.corrections.at(-1)!.generation, challenger]);
     expect(correctionItems.rows[0]?.count).toBe('1');
+    const display = await accessPool.query<{ kind: string }>(`SELECT c.kind
+      FROM access.notification_display_context c JOIN access.notification_item i ON i.id = c.item_id
+      WHERE i.source_owner = 'content' AND i.source_event = $1 AND i.principal_id = $2`,
+    [corrections.corrections.at(-1)!.generation, challenger]);
+    expect(display.rows[0]?.kind).toBe('claim_correction');
     const delivered = await dispatcher.runOnce();
     expect(delivered.delivered).toBeGreaterThanOrEqual(1);
     const publishedPayloads = [...deliveryProvider.accepted.values()].map(value => value.payload);

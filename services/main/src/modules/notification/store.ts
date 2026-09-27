@@ -1,7 +1,9 @@
 import { createHash, randomUUID } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
 import type { VerifiedPrincipal } from '../access/admission.ts';
-import { deliveryChannels, notificationPurposes, optionalPurposes, preferenceChannels } from './schema.ts';
+import { deliveryChannels, notificationKinds, notificationPurposes, optionalPurposes,
+  preferenceChannels } from './schema.ts';
+import type { NotificationSubjectReader } from './dispatcher.ts';
 
 export class NotificationInvalid extends Error {}
 export class NotificationDenied extends Error {}
@@ -13,12 +15,26 @@ export type NotificationPurpose = typeof notificationPurposes[number];
 export type OptionalPurpose = typeof optionalPurposes[number];
 export type PreferenceChannel = typeof preferenceChannels[number];
 export type DeliveryChannel = typeof deliveryChannels[number];
+export type NotificationKind = typeof notificationKinds[number];
+export interface NotificationDisplayContext {
+  kind: NotificationKind;
+  actorAgent: string | null;
+  realm: string | null;
+  /** Stable, producer-selected identity of a repeatable conversation or event family. */
+  groupKey: string | null;
+}
+export interface NotificationAgentSummary {
+  id: string; name: string; handle: string; avatar: string | null;
+}
+export type NotificationAgentReader = (agent: string) => Promise<NotificationAgentSummary | null>;
 
 /** Fixed bounds of the first notification profile; every operation is O(bound). */
 export const NOTIFICATION_LIMITS = {
   recipientsPerEvent: 256,
   endpointsPerRecipient: 8,
   streamPage: 50,
+  unreadCap: 100,
+  unreadScan: 256,
   deliveryTtlMs: 86_400_000,
 } as const;
 
@@ -39,6 +55,8 @@ export interface NotificationEvent {
   disclosureBasis: string;
   /** Access principal ids already resolved by the producer's current subscription read. */
   recipients: readonly string[];
+  /** Follow producers may use kind `follow`; current labels are read from their owners. */
+  display?: NotificationDisplayContext;
 }
 export interface EnqueuedItem { principalId: string; itemId: string; generation: string; sequence: string;
   deliveries: number; replayed: boolean }
@@ -53,13 +71,32 @@ export interface Preference { purpose: string; topic: string; channel: string; s
 
 export interface StreamItem {
   id: string; sequence: string; purpose: string; topic: string; state: 'active' | 'withdrawn' | 'erased';
+  read: boolean;
   /** Present only for active items; withdrawn or erased items keep their sequence as a tombstone. */
   subject: { owner: string; ref: string; revision: string | null } | null;
+  display: (Omit<NotificationDisplayContext, 'actorAgent'> & { actor: NotificationAgentSummary | null;
+    target: { title: string | null; excerpt: string | null;
+    language: string | null; linkTarget: string | null } }) | null;
   createdAt: string;
 }
 export interface StreamPage {
   generation: string; head: string; reset: boolean; readThrough: string;
-  items: StreamItem[]; next: string | null;
+  items: StreamItem[]; groups: { kind: NotificationKind; key: string; itemIds: string[] }[];
+  next: string | null;
+}
+
+/** Page-local repeat groups; a missing or undisclosed context is never grouped. */
+export function groupNotifications(items: readonly StreamItem[]): StreamPage['groups'] {
+  const groups: StreamPage['groups'] = [];
+  for (const item of items) {
+    const display = item.display;
+    if (!display?.groupKey) continue;
+    const group = groups.find(candidate => candidate.kind === display.kind
+      && candidate.key === display.groupKey && candidate.itemIds.length < 10);
+    if (group) group.itemIds.push(item.id);
+    else groups.push({ kind: display.kind, key: display.groupKey, itemIds: [item.id] });
+  }
+  return groups;
 }
 export interface DeliveryView {
   id: string; itemId: string; channel: string; state: string; cancelReason: string | null;
@@ -96,6 +133,26 @@ export function normalizeNotificationError(error: unknown): Error {
  * NotificationDispatcher; this class never calls a provider.
  */
 export class NotificationStore {
+  private readonly readSubjects = new Map<string, NotificationSubjectReader>();
+  private defaultReadSubject: NotificationSubjectReader | null = null;
+  private readAgent: NotificationAgentReader | null = null;
+
+  setReadAgentReader(reader: NotificationAgentReader): void {
+    if (this.readAgent) throw new NotificationInvalid('read Agent reader is already registered');
+    this.readAgent = reader;
+  }
+
+  setDefaultReadSubjectReader(reader: NotificationSubjectReader): void {
+    if (this.defaultReadSubject) throw new NotificationInvalid('default read subject is already registered');
+    this.defaultReadSubject = reader;
+  }
+
+  registerReadSubjectReader(disclosureBasis: string, reader: NotificationSubjectReader): void {
+    if (!disclosureBasis || this.readSubjects.has(disclosureBasis)) {
+      throw new NotificationInvalid('read subject basis is invalid or already registered');
+    }
+    this.readSubjects.set(disclosureBasis, reader);
+  }
   constructor(private readonly pool: Pool) {}
 
   private async transaction<T>(work: (client: PoolClient) => Promise<T>): Promise<T> {
@@ -150,7 +207,14 @@ export class NotificationStore {
       || event.subject.ref.length < 1 || event.subject.ref.length > 512
       || event.recipients.length < 1 || event.recipients.length > NOTIFICATION_LIMITS.recipientsPerEvent
       || new Set(event.recipients).size !== event.recipients.length
-      || !event.recipients.every(id => uuidPattern.test(id))) {
+      || !event.recipients.every(id => uuidPattern.test(id))
+      || (event.display !== undefined && (
+        !(notificationKinds as readonly string[]).includes(event.display.kind)
+        || (event.display.actorAgent !== null
+          && !/^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/.test(event.display.actorAgent))
+        || (event.display.realm !== null && (event.display.realm.length < 1 || event.display.realm.length > 512))
+        || (event.display.groupKey !== null
+          && (event.display.groupKey.length < 1 || event.display.groupKey.length > 256))))) {
       throw new NotificationInvalid('notification event does not match its profile');
     }
     // Canonical order keeps concurrent producers from deadlocking on stream rows.
@@ -186,6 +250,9 @@ export class NotificationStore {
           VALUES ($1, $2, 'inbox', $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
         [itemId, principalId, stream.generation, sequence, event.purpose, event.topic, event.sourceOwner,
           event.sourceEvent, event.subject.owner, event.subject.ref, event.subject.revision, event.disclosureBasis]);
+        if (event.display) await client.query(`INSERT INTO access.notification_display_context
+          (item_id, kind, actor_agent, realm, group_key) VALUES ($1, $2, $3, $4, $5)`,
+        [itemId, event.display.kind, event.display.actorAgent, event.display.realm, event.display.groupKey]);
         const inserted = await client.query(`INSERT INTO access.notification_delivery (id, item_id, principal_id,
             endpoint_id, channel, endpoint_generation, next_attempt_at, expires_at)
           SELECT gen_random_uuid(), $1, e.principal_id, e.id, e.channel, e.generation, clock_timestamp(),
@@ -327,7 +394,7 @@ export class NotificationStore {
       || (after && (!/^[1-9][0-9]{0,18}$/.test(after.generation) || !/^(0|[1-9][0-9]{0,18})$/.test(after.sequence)))) {
       throw new NotificationInvalid('stream cursor does not match its profile');
     }
-    return this.transaction(async client => {
+    const { page: result, principalId } = await this.transaction(async client => {
       const principalId = await this.reader(client, principal);
       const stream = (principalId === null ? undefined : (await client.query<{ generation: string;
         head_sequence: string }>(`SELECT generation::text, head_sequence::text FROM access.notification_stream
@@ -341,23 +408,111 @@ export class NotificationStore {
       if (BigInt(from) > BigInt(stream.head_sequence)) throw new NotificationStale('stream cursor is ahead of head');
       const rows = (await client.query<{ id: string; sequence: string; purpose: string; topic: string;
         state: StreamItem['state']; subject_owner: string; subject_ref: string; subject_revision: string | null;
-        created_at: Date }>(`SELECT i.id, i.sequence::text AS sequence, i.purpose, i.topic, i.state,
-          i.subject_owner, i.subject_ref, i.subject_revision, i.created_at FROM access.notification_item i
+        disclosure_basis: string; kind: NotificationKind | null; actor_agent: string | null;
+        realm: string | null; group_key: string | null;
+        created_at: Date; individually_read: boolean }>(`SELECT i.id, i.sequence::text AS sequence, i.purpose,
+          i.topic, i.state, i.subject_owner, i.subject_ref, i.subject_revision, i.created_at,
+          i.disclosure_basis, c.kind, c.actor_agent, c.realm, c.group_key,
+          (r.item_id IS NOT NULL) AS individually_read FROM access.notification_item i
+        LEFT JOIN access.notification_item_read r ON r.principal_id = i.principal_id AND r.item_id = i.id
+        LEFT JOIN access.notification_display_context c ON c.item_id = i.id
         WHERE i.principal_id = $1 AND i.stream = 'inbox' AND i.generation = $2 AND i.sequence > $3
         ORDER BY i.sequence LIMIT $4`, [principalId, stream.generation, from, limit + 1])).rows;
       const watermark = (await client.query<{ read_through: string }>(`SELECT read_through::text
         FROM access.notification_read_watermark WHERE principal_id = $1 AND stream = 'inbox' AND generation = $2`,
       [principalId, stream.generation])).rows[0];
       const page = rows.slice(0, limit);
-      return {
+      return { principalId, page: {
         generation: stream.generation, head: stream.head_sequence, reset,
         readThrough: watermark?.read_through ?? '0',
         items: page.map(row => ({ id: row.id, sequence: row.sequence, purpose: row.purpose, topic: row.topic,
-          state: row.state, createdAt: row.created_at.toISOString(),
-          subject: row.state === 'active'
-            ? { owner: row.subject_owner, ref: row.subject_ref, revision: row.subject_revision } : null })),
+          state: row.state, read: row.individually_read
+            || BigInt(row.sequence) <= BigInt(watermark?.read_through ?? '0'),
+          createdAt: row.created_at.toISOString(),
+          subject: null, display: null, raw: row })),
         next: rows.length > limit ? `${stream.generation}:${page.at(-1)!.sequence}` : null,
-      };
+      } };
+    });
+    const items: StreamItem[] = [];
+    for (const item of result.items) {
+      const { raw, ...base } = item;
+      const resolver = this.readSubjects.get(raw.disclosure_basis) ?? this.defaultReadSubject;
+      if (!principalId || raw.state !== 'active' || !resolver) { items.push(base); continue; }
+      const resolved = await resolver.resolve({ principalId, owner: raw.subject_owner,
+        ref: raw.subject_ref, revision: raw.subject_revision, disclosureBasis: raw.disclosure_basis })
+        .catch(() => { throw new NotificationUnavailable('subject owner is unavailable'); });
+      if (resolved.status !== 'available') { items.push(base); continue; }
+      const fields = resolved.subject.fields;
+      const actor = raw.actor_agent && this.readAgent
+        ? await this.readAgent(raw.actor_agent).catch(() => {
+          throw new NotificationUnavailable('Agent owner is unavailable');
+        }) : null;
+      items.push({ ...base,
+        subject: { owner: raw.subject_owner, ref: raw.subject_ref, revision: raw.subject_revision },
+        display: raw.kind ? { kind: raw.kind, actor, realm: fields.realm ?? null,
+          groupKey: raw.group_key, target: {
+            title: fields.title ?? null, excerpt: fields.excerpt ?? null,
+            language: fields.language ?? null, linkTarget: fields.linkTarget ?? null,
+          } } : null });
+    }
+    return { ...result, items, groups: groupNotifications(items) };
+  }
+
+  /** Exact visible count through 99; an unusually hidden-heavy inbox fails closed after 256 reads. */
+  async unreadCount(principal: VerifiedPrincipal): Promise<{ count: number; overflow: boolean }> {
+    const { principalId, rows } = await this.transaction(async client => {
+      const principalId = await this.reader(client, principal);
+      if (!principalId) return { principalId, rows: [] };
+      const rows = (await client.query<{ subject_owner: string; subject_ref: string;
+        subject_revision: string | null; disclosure_basis: string }>(`SELECT i.subject_owner, i.subject_ref,
+          i.subject_revision, i.disclosure_basis FROM access.notification_item i
+        JOIN access.notification_stream s ON s.principal_id = i.principal_id AND s.stream = i.stream
+          AND s.generation = i.generation
+        LEFT JOIN access.notification_read_watermark w ON w.principal_id = i.principal_id
+          AND w.stream = i.stream AND w.generation = i.generation
+        LEFT JOIN access.notification_item_read r ON r.principal_id = i.principal_id AND r.item_id = i.id
+        WHERE i.principal_id = $1 AND i.stream = 'inbox' AND i.state = 'active'
+          AND i.sequence > coalesce(w.read_through, 0) AND r.item_id IS NULL
+        ORDER BY i.sequence DESC LIMIT $2`, [principalId, NOTIFICATION_LIMITS.unreadScan + 1])).rows;
+      return { principalId, rows };
+    });
+    let count = 0;
+    for (const row of rows.slice(0, NOTIFICATION_LIMITS.unreadScan)) {
+      const resolver = this.readSubjects.get(row.disclosure_basis) ?? this.defaultReadSubject;
+      if (!resolver) continue;
+      const resolved = await resolver.resolve({ principalId: principalId!, owner: row.subject_owner,
+        ref: row.subject_ref, revision: row.subject_revision, disclosureBasis: row.disclosure_basis })
+        .catch(() => { throw new NotificationUnavailable('subject owner is unavailable'); });
+      if (resolved.status === 'available' && ++count >= NOTIFICATION_LIMITS.unreadCap) {
+        return { count: 99, overflow: true };
+      }
+    }
+    if (rows.length > NOTIFICATION_LIMITS.unreadScan) {
+      throw new NotificationUnavailable('unread count exceeds the disclosure scan bound');
+    }
+    return { count, overflow: false };
+  }
+
+  /** Mark one current-generation item; repeated requests return the first read time. */
+  async markItemRead(principal: VerifiedPrincipal, itemId: string): Promise<{ id: string; readAt: string }> {
+    if (!uuidPattern.test(itemId)) throw new NotificationInvalid('invalid item id');
+    return this.transaction(async client => {
+      const principalId = await this.recipient(client, principal, false);
+      const row = (await client.query<{ read_at: Date }>(`WITH current_item AS (
+        SELECT i.id FROM access.notification_item i
+        JOIN access.notification_stream s ON s.principal_id = i.principal_id AND s.stream = i.stream
+          AND s.generation = i.generation
+        WHERE i.id = $2 AND i.principal_id = $1 AND i.state = 'active'
+      ), inserted AS (
+        INSERT INTO access.notification_item_read (principal_id, item_id)
+        SELECT $1, id FROM current_item ON CONFLICT DO NOTHING RETURNING read_at
+      ) SELECT read_at FROM inserted UNION ALL
+        SELECT r.read_at FROM access.notification_item_read r
+        JOIN current_item i ON i.id = r.item_id
+        WHERE r.principal_id = $1 AND r.item_id = $2
+        LIMIT 1`, [principalId, itemId])).rows[0];
+      if (!row) throw new NotificationDenied('item is unavailable');
+      return { id: itemId, readAt: row.read_at.toISOString() };
     });
   }
 
