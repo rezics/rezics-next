@@ -726,6 +726,22 @@ export const profileRegistry = {
       "revision"
     ]
   },
+  "semantic-rule-v1": {
+    "sha256": "bf01a1cebd44c8ec698e408e49fe2bd08cb41aeccb8ffb88b2bf99fadbba29a2",
+    "file": "shapes/semantic-rule-v1.ttl",
+    "shapes": [
+      "https://rezics.com/definition/semantic-rule-v1/slot-shape",
+      "https://rezics.com/definition/semantic-rule-v1/revision-shape",
+      "https://rezics.com/definition/semantic-rule-v1/dependency-shape",
+      "https://rezics.com/definition/semantic-rule-v1/dependency-page-shape"
+    ],
+    "focusRoles": [
+      "slot",
+      "revision",
+      "dependency",
+      "dependency-page"
+    ]
+  },
   "source-field-statement-v1": {
     "sha256": "ef3347dcf04ad576bb156afcfcbb8b35316abaeb3700dc30f2d4827e686594d2",
     "file": "shapes/source-field-statement-v1.ttl",

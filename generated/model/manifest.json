@@ -567,6 +567,11 @@
       "file": "shapes/semantic-resource-v1.ttl"
     },
     {
+      "id": "semantic-rule-v1",
+      "sha256": "bf01a1cebd44c8ec698e408e49fe2bd08cb41aeccb8ffb88b2bf99fadbba29a2",
+      "file": "shapes/semantic-rule-v1.ttl"
+    },
+    {
       "id": "source-field-statement-v1",
       "sha256": "ef3347dcf04ad576bb156afcfcbb8b35316abaeb3700dc30f2d4827e686594d2",
       "file": "shapes/source-field-statement-v1.ttl"
@@ -1432,6 +1437,16 @@
       ]
     },
     {
+      "type": "https://rezics.com/vocab/ContextRule",
+      "routes": [
+        {
+          "profile": "semantic-rule-v1",
+          "shape": "https://rezics.com/definition/semantic-rule-v1/slot-shape",
+          "when": []
+        }
+      ]
+    },
+    {
       "type": "https://rezics.com/vocab/ContextSelection",
       "routes": [
         {
@@ -1617,6 +1632,16 @@
         {
           "profile": "value-exact-v1",
           "shape": "https://rezics.com/definition/value-exact-v1/external-reference-shape",
+          "when": []
+        }
+      ]
+    },
+    {
+      "type": "https://rezics.com/vocab/FiniteRuleRevision",
+      "routes": [
+        {
+          "profile": "semantic-rule-v1",
+          "shape": "https://rezics.com/definition/semantic-rule-v1/revision-shape",
           "when": []
         }
       ]
@@ -1997,6 +2022,26 @@
         {
           "profile": "rights-offering-v1",
           "shape": "https://rezics.com/definition/rights-offering-v1/recognition-revision-shape",
+          "when": []
+        }
+      ]
+    },
+    {
+      "type": "https://rezics.com/vocab/RuleDependency",
+      "routes": [
+        {
+          "profile": "semantic-rule-v1",
+          "shape": "https://rezics.com/definition/semantic-rule-v1/dependency-shape",
+          "when": []
+        }
+      ]
+    },
+    {
+      "type": "https://rezics.com/vocab/RuleDependencyPage",
+      "routes": [
+        {
+          "profile": "semantic-rule-v1",
+          "shape": "https://rezics.com/definition/semantic-rule-v1/dependency-page-shape",
           "when": []
         }
       ]
@@ -2392,6 +2437,7 @@
     "contexts/semantic-definition-v1.jsonld": "a455850c8e286d4953be2778e82b5d208e30ece15bf8fc33ee107eb9eb2ae77b",
     "contexts/semantic-model-generation-v1.jsonld": "7c41fe9b34d5c5703d5aac1881ee9372a8c3582b1b566356071251920d54e1d6",
     "contexts/semantic-resource-v1.jsonld": "a732e5dddc4ec515a0d6222219c9d6e78f4f5a13f7b18165878645922497e009",
+    "contexts/semantic-rule-v1.jsonld": "f275d7bc7a7fca4f1408e983e0dac046d98754cbd7de7ec74550360581be006f",
     "contexts/source-field-statement-v1.jsonld": "9154e0e5683d657545fdd38d1a148151dbb8310b2c7b4e3b728f7f1199cc2d98",
     "contexts/source-open-library-work-v1.jsonld": "7f19c2c76b00224ad9037200f328e60e78b19f6857006d3001212d1ee7ac8b22",
     "contexts/source-reification-v1.jsonld": "8bbf1269642d326a80b8d660e8933b14653aaaad3a5531187771aad0bdd15f8c",
@@ -2467,6 +2513,7 @@
     "shapes/semantic-definition-v1.ttl": "c4755adab864370f58a4b27067ecd9aa6e4d4923ef97249364b4b34a76147e3e",
     "shapes/semantic-model-generation-v1.ttl": "16d519183b325de019c55dc5ca2c5bf140b246ba4bb81609b16e386d431595f0",
     "shapes/semantic-resource-v1.ttl": "0ebbb7cd1f04b9adb75ecb0504013195561e38a8e59a398937b95e3c679bfd99",
+    "shapes/semantic-rule-v1.ttl": "bf01a1cebd44c8ec698e408e49fe2bd08cb41aeccb8ffb88b2bf99fadbba29a2",
     "shapes/source-field-statement-v1.ttl": "ef3347dcf04ad576bb156afcfcbb8b35316abaeb3700dc30f2d4827e686594d2",
     "shapes/source-open-library-work-v1.ttl": "708b975233ceb3e4dc670ff4821011ba91c938a73c9739cfe94052ebdf22ce07",
     "shapes/source-reification-v1.ttl": "57e5a667cb62b1b72357b77aa2c7ac6133ed4f729732e681817ad1c537839100",
@@ -2489,9 +2536,9 @@
     "shapes/work-metadata-v1.ttl": "ac918cf0458150520bf03f9683e6a363ad702376ebc50eaa729f98d84b3b8760",
     "shapes/work-title-control-v1.ttl": "100dddad43cac4fd47c3090e987ef9dc9aa272d189fc4240cc08302340c5d42d",
     "shapes/zone-capability-v1.ttl": "b0374ad8d4506ef6a3337f784e77d97470a3df881f211c74a3281d2430365015",
-    "packages/model/src/generated/arbitraries.ts": "7a3a0337fe6bc5c32efe94366b27f985d8c479594a5354720c58240189c5ecb3",
-    "packages/model/src/generated/profiles.ts": "a2b4c0c91d350177e55c4c4c82943bf61372a0f500f38d851e54fa6755cd1fc7",
-    "packages/model/src/generated/schemas.ts": "b10c7df868654263bfe14b415c8ac14ac8b3cdbb055641e4e646a898f85aeb2a",
-    "packages/model/src/generated/vocabulary.ts": "bd3a2ca26c717809b2554506cb8458cdd586f826b6f26936a6c95eeac2250b84"
+    "packages/model/src/generated/arbitraries.ts": "ec199cf900e3549ee267d622915067096f9cbe61605ff817c2f5412de65192e9",
+    "packages/model/src/generated/profiles.ts": "3839ed61d5eb7d38d0ce37a157db3c0b494183888d6c60896fd37b2861bbe40c",
+    "packages/model/src/generated/schemas.ts": "5b7e13812a602b24388024fe6d54f6e8644d8842279e09a3bebd575b9be4ef9a",
+    "packages/model/src/generated/vocabulary.ts": "4da76cdf668e21c0f7b8fc4419cb945f88960e6d8ca1d4d0a2a498fe9636d9f8"
   }
 }

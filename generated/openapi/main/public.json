@@ -61119,6 +61119,3026 @@
         }
       }
     },
+    "/v1/context-rule-dependencies": {
+      "get": {
+        "operationId": "getV1Context-rule-dependencies",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "slot",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "expectedGeneration",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "after",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "actingSubject",
+            "required": true,
+            "schema": {
+              "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "currentGeneration": {
+                      "type": "string"
+                    },
+                    "items": {
+                      "items": {
+                        "properties": {
+                          "dependency": {
+                            "type": "string"
+                          },
+                          "previousGeneration": {
+                            "type": "string"
+                          },
+                          "target": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "dependency",
+                          "target",
+                          "previousGeneration"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "next": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "profile": {
+                      "const": "context-rule-invalidation-v1",
+                      "type": "string"
+                    },
+                    "slot": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "profile",
+                    "slot",
+                    "currentGeneration",
+                    "items",
+                    "next"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 200"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 400,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 400"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 401,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 401"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 403,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 403"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 404,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 404"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 409,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 409"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 500,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 500"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 503,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 503"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      },
+      "post": {
+        "operationId": "postV1Context-rule-dependencies",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 128,
+              "minLength": 1,
+              "pattern": "^[A-Za-z0-9:_./-]{1,128}$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "actingSubject": {
+                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                    "type": "string"
+                  },
+                  "expectedGeneration": {
+                    "type": "string"
+                  },
+                  "profile": {
+                    "const": "context-rule-dependency-v1",
+                    "type": "string"
+                  },
+                  "slot": {
+                    "type": "string"
+                  },
+                  "targets": {
+                    "items": {
+                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                      "type": "string"
+                    },
+                    "maxItems": 64,
+                    "minItems": 1,
+                    "type": "array"
+                  }
+                },
+                "required": [
+                  "profile",
+                  "slot",
+                  "expectedGeneration",
+                  "targets",
+                  "actingSubject"
+                ],
+                "type": "object"
+              }
+            },
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "actingSubject": {
+                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                    "type": "string"
+                  },
+                  "expectedGeneration": {
+                    "type": "string"
+                  },
+                  "profile": {
+                    "const": "context-rule-dependency-v1",
+                    "type": "string"
+                  },
+                  "slot": {
+                    "type": "string"
+                  },
+                  "targets": {
+                    "items": {
+                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                      "type": "string"
+                    },
+                    "maxItems": 64,
+                    "minItems": 1,
+                    "type": "array"
+                  }
+                },
+                "required": [
+                  "profile",
+                  "slot",
+                  "expectedGeneration",
+                  "targets",
+                  "actingSubject"
+                ],
+                "type": "object"
+              }
+            },
+            "multipart/form-data": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "actingSubject": {
+                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                    "type": "string"
+                  },
+                  "expectedGeneration": {
+                    "type": "string"
+                  },
+                  "profile": {
+                    "const": "context-rule-dependency-v1",
+                    "type": "string"
+                  },
+                  "slot": {
+                    "type": "string"
+                  },
+                  "targets": {
+                    "items": {
+                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                      "type": "string"
+                    },
+                    "maxItems": 64,
+                    "minItems": 1,
+                    "type": "array"
+                  }
+                },
+                "required": [
+                  "profile",
+                  "slot",
+                  "expectedGeneration",
+                  "targets",
+                  "actingSubject"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "component": {
+                      "type": "string"
+                    },
+                    "expectedHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "generation": {
+                      "type": "string"
+                    },
+                    "profile": {
+                      "const": "context-rule-dependency-v1",
+                      "type": "string"
+                    },
+                    "replayed": {
+                      "type": "boolean"
+                    },
+                    "revision": {
+                      "type": "string"
+                    },
+                    "slot": {
+                      "type": "string"
+                    },
+                    "sourcePosition": {
+                      "properties": {
+                        "dataEpoch": {
+                          "type": "string"
+                        },
+                        "datasetId": {
+                          "const": "product",
+                          "type": "string"
+                        },
+                        "sequence": {
+                          "pattern": "^[0-9]+$",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "datasetId",
+                        "dataEpoch",
+                        "sequence"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "profile",
+                    "slot",
+                    "generation",
+                    "component",
+                    "revision",
+                    "expectedHead",
+                    "sourcePosition",
+                    "replayed"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 200"
+          },
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "component": {
+                      "type": "string"
+                    },
+                    "expectedHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "generation": {
+                      "type": "string"
+                    },
+                    "profile": {
+                      "const": "context-rule-dependency-v1",
+                      "type": "string"
+                    },
+                    "replayed": {
+                      "type": "boolean"
+                    },
+                    "revision": {
+                      "type": "string"
+                    },
+                    "slot": {
+                      "type": "string"
+                    },
+                    "sourcePosition": {
+                      "properties": {
+                        "dataEpoch": {
+                          "type": "string"
+                        },
+                        "datasetId": {
+                          "const": "product",
+                          "type": "string"
+                        },
+                        "sequence": {
+                          "pattern": "^[0-9]+$",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "datasetId",
+                        "dataEpoch",
+                        "sequence"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "profile",
+                    "slot",
+                    "generation",
+                    "component",
+                    "revision",
+                    "expectedHead",
+                    "sourcePosition",
+                    "replayed"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 201"
+          },
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "operationId": {
+                      "type": "string"
+                    },
+                    "phase": {
+                      "type": "string"
+                    },
+                    "result": {
+                      "type": "null"
+                    },
+                    "retry": {
+                      "properties": {
+                        "afterMs": {
+                          "type": "number"
+                        },
+                        "allowed": {
+                          "const": true,
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "allowed",
+                        "afterMs"
+                      ],
+                      "type": "object"
+                    },
+                    "status": {
+                      "const": "reconciling",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "operationId",
+                    "status",
+                    "phase",
+                    "result",
+                    "retry"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 202"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 400,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 400"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 401,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 401"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 403,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 403"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 409,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 409"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 500,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 500"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 503,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 503"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/v1/context-rule-plans": {
+      "post": {
+        "operationId": "postV1Context-rule-plans",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "actingSubject": {
+                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                    "type": "string"
+                  },
+                  "facts": {
+                    "items": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "context": {
+                          "anyOf": [
+                            {
+                              "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                              "type": "string"
+                            },
+                            {
+                              "const": "urn:rezics:semantic-context:global",
+                              "type": "string"
+                            }
+                          ]
+                        },
+                        "contextRevision": {
+                          "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                          "type": "string"
+                        },
+                        "definition": {
+                          "pattern": "^https?://[^\\s<>\"{}|\\\\^`]{1,2040}$",
+                          "type": "string"
+                        },
+                        "id": {
+                          "maxLength": 512,
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "object": {
+                          "pattern": "^https?://[^\\s<>\"{}|\\\\^`]{1,2040}$",
+                          "type": "string"
+                        },
+                        "predicate": {
+                          "pattern": "^https?://[^\\s<>\"{}|\\\\^`]{1,2040}$",
+                          "type": "string"
+                        },
+                        "realm": {
+                          "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                          "type": "string"
+                        },
+                        "subject": {
+                          "pattern": "^https?://[^\\s<>\"{}|\\\\^`]{1,2040}$",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "subject",
+                        "predicate",
+                        "object",
+                        "definition",
+                        "context",
+                        "contextRevision",
+                        "realm"
+                      ],
+                      "type": "object"
+                    },
+                    "maxItems": 10000,
+                    "type": "array"
+                  },
+                  "profile": {
+                    "const": "context-rule-plan-v1",
+                    "type": "string"
+                  },
+                  "selections": {
+                    "items": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "context": {
+                          "anyOf": [
+                            {
+                              "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                              "type": "string"
+                            },
+                            {
+                              "const": "urn:rezics:semantic-context:global",
+                              "type": "string"
+                            }
+                          ]
+                        },
+                        "realm": {
+                          "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                          "type": "string"
+                        },
+                        "revision": {
+                          "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                          "type": "string"
+                        },
+                        "semanticRevision": {
+                          "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                          "type": "string"
+                        },
+                        "slot": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "slot",
+                        "revision",
+                        "context",
+                        "semanticRevision",
+                        "realm"
+                      ],
+                      "type": "object"
+                    },
+                    "maxItems": 16,
+                    "minItems": 1,
+                    "type": "array"
+                  }
+                },
+                "required": [
+                  "profile",
+                  "selections",
+                  "facts",
+                  "actingSubject"
+                ],
+                "type": "object"
+              }
+            },
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "actingSubject": {
+                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                    "type": "string"
+                  },
+                  "facts": {
+                    "items": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "context": {
+                          "anyOf": [
+                            {
+                              "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                              "type": "string"
+                            },
+                            {
+                              "const": "urn:rezics:semantic-context:global",
+                              "type": "string"
+                            }
+                          ]
+                        },
+                        "contextRevision": {
+                          "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                          "type": "string"
+                        },
+                        "definition": {
+                          "pattern": "^https?://[^\\s<>\"{}|\\\\^`]{1,2040}$",
+                          "type": "string"
+                        },
+                        "id": {
+                          "maxLength": 512,
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "object": {
+                          "pattern": "^https?://[^\\s<>\"{}|\\\\^`]{1,2040}$",
+                          "type": "string"
+                        },
+                        "predicate": {
+                          "pattern": "^https?://[^\\s<>\"{}|\\\\^`]{1,2040}$",
+                          "type": "string"
+                        },
+                        "realm": {
+                          "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                          "type": "string"
+                        },
+                        "subject": {
+                          "pattern": "^https?://[^\\s<>\"{}|\\\\^`]{1,2040}$",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "subject",
+                        "predicate",
+                        "object",
+                        "definition",
+                        "context",
+                        "contextRevision",
+                        "realm"
+                      ],
+                      "type": "object"
+                    },
+                    "maxItems": 10000,
+                    "type": "array"
+                  },
+                  "profile": {
+                    "const": "context-rule-plan-v1",
+                    "type": "string"
+                  },
+                  "selections": {
+                    "items": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "context": {
+                          "anyOf": [
+                            {
+                              "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                              "type": "string"
+                            },
+                            {
+                              "const": "urn:rezics:semantic-context:global",
+                              "type": "string"
+                            }
+                          ]
+                        },
+                        "realm": {
+                          "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                          "type": "string"
+                        },
+                        "revision": {
+                          "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                          "type": "string"
+                        },
+                        "semanticRevision": {
+                          "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                          "type": "string"
+                        },
+                        "slot": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "slot",
+                        "revision",
+                        "context",
+                        "semanticRevision",
+                        "realm"
+                      ],
+                      "type": "object"
+                    },
+                    "maxItems": 16,
+                    "minItems": 1,
+                    "type": "array"
+                  }
+                },
+                "required": [
+                  "profile",
+                  "selections",
+                  "facts",
+                  "actingSubject"
+                ],
+                "type": "object"
+              }
+            },
+            "multipart/form-data": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "actingSubject": {
+                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                    "type": "string"
+                  },
+                  "facts": {
+                    "items": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "context": {
+                          "anyOf": [
+                            {
+                              "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                              "type": "string"
+                            },
+                            {
+                              "const": "urn:rezics:semantic-context:global",
+                              "type": "string"
+                            }
+                          ]
+                        },
+                        "contextRevision": {
+                          "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                          "type": "string"
+                        },
+                        "definition": {
+                          "pattern": "^https?://[^\\s<>\"{}|\\\\^`]{1,2040}$",
+                          "type": "string"
+                        },
+                        "id": {
+                          "maxLength": 512,
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "object": {
+                          "pattern": "^https?://[^\\s<>\"{}|\\\\^`]{1,2040}$",
+                          "type": "string"
+                        },
+                        "predicate": {
+                          "pattern": "^https?://[^\\s<>\"{}|\\\\^`]{1,2040}$",
+                          "type": "string"
+                        },
+                        "realm": {
+                          "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                          "type": "string"
+                        },
+                        "subject": {
+                          "pattern": "^https?://[^\\s<>\"{}|\\\\^`]{1,2040}$",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "subject",
+                        "predicate",
+                        "object",
+                        "definition",
+                        "context",
+                        "contextRevision",
+                        "realm"
+                      ],
+                      "type": "object"
+                    },
+                    "maxItems": 10000,
+                    "type": "array"
+                  },
+                  "profile": {
+                    "const": "context-rule-plan-v1",
+                    "type": "string"
+                  },
+                  "selections": {
+                    "items": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "context": {
+                          "anyOf": [
+                            {
+                              "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                              "type": "string"
+                            },
+                            {
+                              "const": "urn:rezics:semantic-context:global",
+                              "type": "string"
+                            }
+                          ]
+                        },
+                        "realm": {
+                          "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                          "type": "string"
+                        },
+                        "revision": {
+                          "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                          "type": "string"
+                        },
+                        "semanticRevision": {
+                          "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                          "type": "string"
+                        },
+                        "slot": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "slot",
+                        "revision",
+                        "context",
+                        "semanticRevision",
+                        "realm"
+                      ],
+                      "type": "object"
+                    },
+                    "maxItems": 16,
+                    "minItems": 1,
+                    "type": "array"
+                  }
+                },
+                "required": [
+                  "profile",
+                  "selections",
+                  "facts",
+                  "actingSubject"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "properties": {
+                        "accepted": {
+                          "const": false,
+                          "type": "boolean"
+                        },
+                        "authorizes": {
+                          "const": false,
+                          "type": "boolean"
+                        },
+                        "conflictingRevisions": {
+                          "items": {
+                            "type": "string"
+                          },
+                          "type": "array"
+                        },
+                        "inferences": {
+                          "items": {
+                            "properties": {
+                              "context": {
+                                "type": "string"
+                              },
+                              "contextRevision": {
+                                "type": "string"
+                              },
+                              "definitions": {
+                                "items": {
+                                  "type": "string"
+                                },
+                                "type": "array"
+                              },
+                              "inputIds": {
+                                "items": {
+                                  "type": "string"
+                                },
+                                "type": "array"
+                              },
+                              "object": {
+                                "type": "string"
+                              },
+                              "predicate": {
+                                "type": "string"
+                              },
+                              "realm": {
+                                "type": "string"
+                              },
+                              "ruleRevision": {
+                                "type": "string"
+                              },
+                              "subject": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "subject",
+                              "predicate",
+                              "object",
+                              "context",
+                              "contextRevision",
+                              "realm",
+                              "ruleRevision",
+                              "inputIds",
+                              "definitions"
+                            ],
+                            "type": "object"
+                          },
+                          "maxItems": 0,
+                          "type": "array"
+                        },
+                        "profile": {
+                          "const": "context-rule-plan-v1",
+                          "type": "string"
+                        },
+                        "reason": {
+                          "const": "conflicting-rules",
+                          "type": "string"
+                        },
+                        "state": {
+                          "const": "rejected",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "profile",
+                        "state",
+                        "reason",
+                        "conflictingRevisions",
+                        "inferences",
+                        "accepted",
+                        "authorizes"
+                      ],
+                      "type": "object"
+                    },
+                    {
+                      "properties": {
+                        "accepted": {
+                          "const": false,
+                          "type": "boolean"
+                        },
+                        "authorizes": {
+                          "const": false,
+                          "type": "boolean"
+                        },
+                        "exactCount": {
+                          "~elyTyp": 7,
+                          "nullable": true,
+                          "type": [
+                            "integer",
+                            "null"
+                          ]
+                        },
+                        "generations": {
+                          "items": {
+                            "type": "string"
+                          },
+                          "type": "array"
+                        },
+                        "inferences": {
+                          "items": {
+                            "properties": {
+                              "context": {
+                                "type": "string"
+                              },
+                              "contextRevision": {
+                                "type": "string"
+                              },
+                              "definitions": {
+                                "items": {
+                                  "type": "string"
+                                },
+                                "type": "array"
+                              },
+                              "inputIds": {
+                                "items": {
+                                  "type": "string"
+                                },
+                                "type": "array"
+                              },
+                              "object": {
+                                "type": "string"
+                              },
+                              "predicate": {
+                                "type": "string"
+                              },
+                              "realm": {
+                                "type": "string"
+                              },
+                              "ruleRevision": {
+                                "type": "string"
+                              },
+                              "subject": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "subject",
+                              "predicate",
+                              "object",
+                              "context",
+                              "contextRevision",
+                              "realm",
+                              "ruleRevision",
+                              "inputIds",
+                              "definitions"
+                            ],
+                            "type": "object"
+                          },
+                          "type": "array"
+                        },
+                        "inspected": {
+                          "type": "integer"
+                        },
+                        "modelGeneration": {
+                          "type": "string"
+                        },
+                        "profile": {
+                          "const": "context-rule-plan-v1",
+                          "type": "string"
+                        },
+                        "projectionKey": {
+                          "type": "string"
+                        },
+                        "state": {
+                          "enum": [
+                            "complete",
+                            "partial"
+                          ],
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "profile",
+                        "state",
+                        "inferences",
+                        "exactCount",
+                        "accepted",
+                        "authorizes",
+                        "modelGeneration",
+                        "inspected",
+                        "generations",
+                        "projectionKey"
+                      ],
+                      "type": "object"
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "Response for status 200"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 400,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 400"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 401,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 401"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 403,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 403"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 404,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 404"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 409,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 409"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 422,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 422"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 500,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 500"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 503,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 503"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/v1/context-rules": {
+      "get": {
+        "operationId": "getV1Context-rules",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "slot",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "revision",
+            "required": false,
+            "schema": {
+              "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "actingSubject",
+            "required": true,
+            "schema": {
+              "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "context": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "type": "string"
+                    },
+                    "generation": {
+                      "type": "string"
+                    },
+                    "modelGeneration": {
+                      "type": "string"
+                    },
+                    "predecessor": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "profile": {
+                      "const": "context-rule-v1",
+                      "type": "string"
+                    },
+                    "realm": {
+                      "type": "string"
+                    },
+                    "revision": {
+                      "type": "string"
+                    },
+                    "rule": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "body": {
+                          "items": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "object": {
+                                "type": "string"
+                              },
+                              "predicate": {
+                                "pattern": "^https?://[^\\s<>\"{}|\\\\^`]{1,2040}$",
+                                "type": "string"
+                              },
+                              "subject": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "subject",
+                              "predicate",
+                              "object"
+                            ],
+                            "type": "object"
+                          },
+                          "maxItems": 4,
+                          "minItems": 1,
+                          "type": "array"
+                        },
+                        "budget": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "inferences": {
+                              "maximum": 2048,
+                              "minimum": 1,
+                              "type": "integer"
+                            },
+                            "inspections": {
+                              "maximum": 50000,
+                              "minimum": 1,
+                              "type": "integer"
+                            },
+                            "rounds": {
+                              "maximum": 8,
+                              "minimum": 1,
+                              "type": "integer"
+                            }
+                          },
+                          "required": [
+                            "rounds",
+                            "inferences",
+                            "inspections"
+                          ],
+                          "type": "object"
+                        },
+                        "head": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "object": {
+                              "type": "string"
+                            },
+                            "subject": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "subject",
+                            "object"
+                          ],
+                          "type": "object"
+                        },
+                        "inputPredicates": {
+                          "items": {
+                            "pattern": "^https?://[^\\s<>\"{}|\\\\^`]{1,2040}$",
+                            "type": "string"
+                          },
+                          "maxItems": 4,
+                          "minItems": 1,
+                          "type": "array"
+                        },
+                        "outputPredicate": {
+                          "pattern": "^https?://[^\\s<>\"{}|\\\\^`]{1,2040}$",
+                          "type": "string"
+                        },
+                        "profile": {
+                          "const": "finite-positive-rule-v1",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "profile",
+                        "inputPredicates",
+                        "outputPredicate",
+                        "body",
+                        "head",
+                        "budget"
+                      ],
+                      "type": "object"
+                    },
+                    "semanticRevision": {
+                      "type": "string"
+                    },
+                    "slot": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "profile",
+                    "slot",
+                    "revision",
+                    "predecessor",
+                    "context",
+                    "semanticRevision",
+                    "realm",
+                    "generation",
+                    "modelGeneration",
+                    "currentHead",
+                    "rule"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 200"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 400,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 400"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 401,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 401"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 403,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 403"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 404,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 404"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 409,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 409"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 500,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 500"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 503,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 503"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      },
+      "post": {
+        "operationId": "postV1Context-rules",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 128,
+              "minLength": 1,
+              "pattern": "^[A-Za-z0-9:_./-]{1,128}$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "actingSubject": {
+                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                    "type": "string"
+                  },
+                  "context": {
+                    "anyOf": [
+                      {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      },
+                      {
+                        "const": "urn:rezics:semantic-context:global",
+                        "type": "string"
+                      }
+                    ]
+                  },
+                  "expectedHead": {
+                    "~elyTyp": 7,
+                    "nullable": true,
+                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "profile": {
+                    "const": "context-rule-v1",
+                    "type": "string"
+                  },
+                  "realm": {
+                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                    "type": "string"
+                  },
+                  "rule": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "body": {
+                        "items": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "object": {
+                              "type": "string"
+                            },
+                            "predicate": {
+                              "pattern": "^https?://[^\\s<>\"{}|\\\\^`]{1,2040}$",
+                              "type": "string"
+                            },
+                            "subject": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "subject",
+                            "predicate",
+                            "object"
+                          ],
+                          "type": "object"
+                        },
+                        "maxItems": 4,
+                        "minItems": 1,
+                        "type": "array"
+                      },
+                      "budget": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "inferences": {
+                            "maximum": 2048,
+                            "minimum": 1,
+                            "type": "integer"
+                          },
+                          "inspections": {
+                            "maximum": 50000,
+                            "minimum": 1,
+                            "type": "integer"
+                          },
+                          "rounds": {
+                            "maximum": 8,
+                            "minimum": 1,
+                            "type": "integer"
+                          }
+                        },
+                        "required": [
+                          "rounds",
+                          "inferences",
+                          "inspections"
+                        ],
+                        "type": "object"
+                      },
+                      "head": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "object": {
+                            "type": "string"
+                          },
+                          "subject": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "subject",
+                          "object"
+                        ],
+                        "type": "object"
+                      },
+                      "inputPredicates": {
+                        "items": {
+                          "pattern": "^https?://[^\\s<>\"{}|\\\\^`]{1,2040}$",
+                          "type": "string"
+                        },
+                        "maxItems": 4,
+                        "minItems": 1,
+                        "type": "array"
+                      },
+                      "outputPredicate": {
+                        "pattern": "^https?://[^\\s<>\"{}|\\\\^`]{1,2040}$",
+                        "type": "string"
+                      },
+                      "profile": {
+                        "const": "finite-positive-rule-v1",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "profile",
+                      "inputPredicates",
+                      "outputPredicate",
+                      "body",
+                      "head",
+                      "budget"
+                    ],
+                    "type": "object"
+                  },
+                  "semanticRevision": {
+                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "profile",
+                  "context",
+                  "semanticRevision",
+                  "realm",
+                  "expectedHead",
+                  "rule",
+                  "actingSubject"
+                ],
+                "type": "object"
+              }
+            },
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "actingSubject": {
+                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                    "type": "string"
+                  },
+                  "context": {
+                    "anyOf": [
+                      {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      },
+                      {
+                        "const": "urn:rezics:semantic-context:global",
+                        "type": "string"
+                      }
+                    ]
+                  },
+                  "expectedHead": {
+                    "~elyTyp": 7,
+                    "nullable": true,
+                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "profile": {
+                    "const": "context-rule-v1",
+                    "type": "string"
+                  },
+                  "realm": {
+                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                    "type": "string"
+                  },
+                  "rule": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "body": {
+                        "items": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "object": {
+                              "type": "string"
+                            },
+                            "predicate": {
+                              "pattern": "^https?://[^\\s<>\"{}|\\\\^`]{1,2040}$",
+                              "type": "string"
+                            },
+                            "subject": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "subject",
+                            "predicate",
+                            "object"
+                          ],
+                          "type": "object"
+                        },
+                        "maxItems": 4,
+                        "minItems": 1,
+                        "type": "array"
+                      },
+                      "budget": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "inferences": {
+                            "maximum": 2048,
+                            "minimum": 1,
+                            "type": "integer"
+                          },
+                          "inspections": {
+                            "maximum": 50000,
+                            "minimum": 1,
+                            "type": "integer"
+                          },
+                          "rounds": {
+                            "maximum": 8,
+                            "minimum": 1,
+                            "type": "integer"
+                          }
+                        },
+                        "required": [
+                          "rounds",
+                          "inferences",
+                          "inspections"
+                        ],
+                        "type": "object"
+                      },
+                      "head": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "object": {
+                            "type": "string"
+                          },
+                          "subject": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "subject",
+                          "object"
+                        ],
+                        "type": "object"
+                      },
+                      "inputPredicates": {
+                        "items": {
+                          "pattern": "^https?://[^\\s<>\"{}|\\\\^`]{1,2040}$",
+                          "type": "string"
+                        },
+                        "maxItems": 4,
+                        "minItems": 1,
+                        "type": "array"
+                      },
+                      "outputPredicate": {
+                        "pattern": "^https?://[^\\s<>\"{}|\\\\^`]{1,2040}$",
+                        "type": "string"
+                      },
+                      "profile": {
+                        "const": "finite-positive-rule-v1",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "profile",
+                      "inputPredicates",
+                      "outputPredicate",
+                      "body",
+                      "head",
+                      "budget"
+                    ],
+                    "type": "object"
+                  },
+                  "semanticRevision": {
+                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "profile",
+                  "context",
+                  "semanticRevision",
+                  "realm",
+                  "expectedHead",
+                  "rule",
+                  "actingSubject"
+                ],
+                "type": "object"
+              }
+            },
+            "multipart/form-data": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "actingSubject": {
+                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                    "type": "string"
+                  },
+                  "context": {
+                    "anyOf": [
+                      {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      },
+                      {
+                        "const": "urn:rezics:semantic-context:global",
+                        "type": "string"
+                      }
+                    ]
+                  },
+                  "expectedHead": {
+                    "~elyTyp": 7,
+                    "nullable": true,
+                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "profile": {
+                    "const": "context-rule-v1",
+                    "type": "string"
+                  },
+                  "realm": {
+                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                    "type": "string"
+                  },
+                  "rule": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "body": {
+                        "items": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "object": {
+                              "type": "string"
+                            },
+                            "predicate": {
+                              "pattern": "^https?://[^\\s<>\"{}|\\\\^`]{1,2040}$",
+                              "type": "string"
+                            },
+                            "subject": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "subject",
+                            "predicate",
+                            "object"
+                          ],
+                          "type": "object"
+                        },
+                        "maxItems": 4,
+                        "minItems": 1,
+                        "type": "array"
+                      },
+                      "budget": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "inferences": {
+                            "maximum": 2048,
+                            "minimum": 1,
+                            "type": "integer"
+                          },
+                          "inspections": {
+                            "maximum": 50000,
+                            "minimum": 1,
+                            "type": "integer"
+                          },
+                          "rounds": {
+                            "maximum": 8,
+                            "minimum": 1,
+                            "type": "integer"
+                          }
+                        },
+                        "required": [
+                          "rounds",
+                          "inferences",
+                          "inspections"
+                        ],
+                        "type": "object"
+                      },
+                      "head": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "object": {
+                            "type": "string"
+                          },
+                          "subject": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "subject",
+                          "object"
+                        ],
+                        "type": "object"
+                      },
+                      "inputPredicates": {
+                        "items": {
+                          "pattern": "^https?://[^\\s<>\"{}|\\\\^`]{1,2040}$",
+                          "type": "string"
+                        },
+                        "maxItems": 4,
+                        "minItems": 1,
+                        "type": "array"
+                      },
+                      "outputPredicate": {
+                        "pattern": "^https?://[^\\s<>\"{}|\\\\^`]{1,2040}$",
+                        "type": "string"
+                      },
+                      "profile": {
+                        "const": "finite-positive-rule-v1",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "profile",
+                      "inputPredicates",
+                      "outputPredicate",
+                      "body",
+                      "head",
+                      "budget"
+                    ],
+                    "type": "object"
+                  },
+                  "semanticRevision": {
+                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "profile",
+                  "context",
+                  "semanticRevision",
+                  "realm",
+                  "expectedHead",
+                  "rule",
+                  "actingSubject"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "component": {
+                      "type": "string"
+                    },
+                    "expectedHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "generation": {
+                      "type": "string"
+                    },
+                    "profile": {
+                      "const": "context-rule-v1",
+                      "type": "string"
+                    },
+                    "replayed": {
+                      "type": "boolean"
+                    },
+                    "revision": {
+                      "type": "string"
+                    },
+                    "slot": {
+                      "type": "string"
+                    },
+                    "sourcePosition": {
+                      "properties": {
+                        "dataEpoch": {
+                          "type": "string"
+                        },
+                        "datasetId": {
+                          "const": "product",
+                          "type": "string"
+                        },
+                        "sequence": {
+                          "pattern": "^[0-9]+$",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "datasetId",
+                        "dataEpoch",
+                        "sequence"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "profile",
+                    "slot",
+                    "generation",
+                    "component",
+                    "revision",
+                    "expectedHead",
+                    "sourcePosition",
+                    "replayed"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 200"
+          },
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "component": {
+                      "type": "string"
+                    },
+                    "expectedHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "generation": {
+                      "type": "string"
+                    },
+                    "profile": {
+                      "const": "context-rule-v1",
+                      "type": "string"
+                    },
+                    "replayed": {
+                      "type": "boolean"
+                    },
+                    "revision": {
+                      "type": "string"
+                    },
+                    "slot": {
+                      "type": "string"
+                    },
+                    "sourcePosition": {
+                      "properties": {
+                        "dataEpoch": {
+                          "type": "string"
+                        },
+                        "datasetId": {
+                          "const": "product",
+                          "type": "string"
+                        },
+                        "sequence": {
+                          "pattern": "^[0-9]+$",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "datasetId",
+                        "dataEpoch",
+                        "sequence"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "profile",
+                    "slot",
+                    "generation",
+                    "component",
+                    "revision",
+                    "expectedHead",
+                    "sourcePosition",
+                    "replayed"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 201"
+          },
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "operationId": {
+                      "type": "string"
+                    },
+                    "phase": {
+                      "type": "string"
+                    },
+                    "result": {
+                      "type": "null"
+                    },
+                    "retry": {
+                      "properties": {
+                        "afterMs": {
+                          "type": "number"
+                        },
+                        "allowed": {
+                          "const": true,
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "allowed",
+                        "afterMs"
+                      ],
+                      "type": "object"
+                    },
+                    "status": {
+                      "const": "reconciling",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "operationId",
+                    "status",
+                    "phase",
+                    "result",
+                    "retry"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 202"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 400,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 400"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 401,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 401"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 403,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 403"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 409,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 409"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 422,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 422"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 500,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 500"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 503,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 503"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
     "/v1/contexts": {
       "post": {
         "operationId": "postV1Contexts",
