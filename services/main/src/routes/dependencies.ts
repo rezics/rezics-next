@@ -92,6 +92,7 @@ import type { ReaderLibraryStatusStore } from '../modules/library/status.ts';
 import type { ReaderLibraryRatings } from '../modules/library/ratings.ts';
 
 export interface MainWorkDependencies {
+  realmAdmin?: import('../modules/access/realm-management.ts').AccessRealmManagement;
   maintainers?: import('../modules/work/maintainers.ts').WorkMaintainers;
   discovery?: import('../modules/discovery/store.ts').DiscoveryProjection;
   profiles?: ProfilesAccess;

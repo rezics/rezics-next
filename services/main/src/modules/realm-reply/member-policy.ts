@@ -7,7 +7,8 @@ export async function realmMemberProof(client: PoolClient, realm: string,
   const bans = await client.query(`SELECT 1 FROM access.private_membership_ban
     WHERE kind = 'realm' AND owner_subject = $1 AND principal_id = $2 AND active
     UNION ALL SELECT 1 FROM access.membership_ban
-    WHERE kind = 'realm' AND owner_subject = $1 AND member_subject = $3 AND active LIMIT 1`,
+    WHERE kind = 'realm' AND owner_subject = $1 AND member_subject = $3 AND active
+      AND (expires_at IS NULL OR expires_at > clock_timestamp()) LIMIT 1`,
   [realm, principal, actor]);
   if (bans.rowCount) return null;
   const privateMember = (await client.query<{ id: string; generation: string }>(`

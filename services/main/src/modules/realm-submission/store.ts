@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { requireRealmSubmissionPolicy } from '../access/realm-management-settings.ts';
 import type { Pool, PoolClient } from 'pg';
 import { fusekiReadBudget } from '../../infrastructure/fuseki.ts';
 import { AdmissionConflict, AdmissionDenied, AdmissionExpired, type AccessAdmissionRegistry,
@@ -128,6 +129,7 @@ export class RealmSubmissionStore {
     }
     return this.command(principal, input.actingSubject, 'submission.submit', `submission:submit:${realm}`,
       key, input, async (client, admission) => {
+        await requireRealmSubmissionPolicy(client, realm, admission.principalId, input.actingSubject);
         await requireCandidate(this.env, realm, input);
         const row = (await client.query<SubmissionRow>(`INSERT INTO access.realm_submission
           (id, realm, kind, work, main_version, contribution, publication_decision, selected_draft,

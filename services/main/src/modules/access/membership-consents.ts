@@ -110,7 +110,8 @@ export class AccessMembershipConsents {
       }
       if (state.rows[0]?.state === 'joined') throw new MembershipDenied('already joined');
       const ban = await client.query(`SELECT 1 FROM access.membership_ban
-        WHERE kind = $1 AND owner_subject = $2 AND member_subject = $3 AND active FOR SHARE`,
+        WHERE kind = $1 AND owner_subject = $2 AND member_subject = $3 AND active
+          AND (expires_at IS NULL OR expires_at > clock_timestamp()) FOR SHARE`,
       [input.kind, input.ownerSubject, input.memberSubject]);
       if (ban.rows[0]) throw new MembershipDenied('member is banned');
       const mandate = await client.query<{ member_generation: string;

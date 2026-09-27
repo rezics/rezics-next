@@ -1,9 +1,15 @@
 import type { Pool, PoolClient } from 'pg';
+import { t } from 'elysia';
+import { Value } from 'typebox/value';
+import { communityRule, MAX_RULES } from '../realm-profile/schema.ts';
 import type { VerifiedPrincipal } from '../access/admission.ts';
 import { GovernanceConflict, GovernanceDenied, GovernanceInvalid, GovernanceStale, GovernanceUnavailable,
   sha256, type RuleBasis } from './store.ts';
 
 export const RULE_PUBLISH_ACTION = 'governance.rule.publish';
+export const publicRealmRules = t.Object({ profile: t.Literal('realm-settings-rules-v1'),
+  public: t.Literal(true), rules: t.Array(communityRule, { maxItems: MAX_RULES }) }, { additionalProperties: false });
+export const realmRulesRef = (realm: string) => `urn:rezics:realm-rules:${realm.slice(-36)}`;
 const keyPattern = /^[A-Za-z0-9:_./-]{1,128}$/;
 const agentPattern = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
 
@@ -23,6 +29,19 @@ export interface PublishedRule {
 /** One Access transaction publishes an immutable rule revision and advances its CAS head. */
 export class GovernanceRules implements RuleBasis {
   constructor(private readonly pool: Pool) {}
+
+  /** Only the explicit public profile crosses into Realm home reads. Generic
+   * governance documents may contain private material and never fall through.
+   * Localized maps use the existing Realm profile schema and read-side fallback. */
+  async publishedRealmRules(realm: string) {
+    const row = (await this.pool.query<{ open: boolean; document: unknown }>(`SELECT f.open,r.document
+      FROM access.recovery_fence f LEFT JOIN access.governance_rule_head h
+        ON h.ref = $1 AND h.scope_id = $2
+      LEFT JOIN access.governance_rule_revision r ON r.ref = h.ref AND r.revision = h.revision
+      WHERE f.id`, [realmRulesRef(realm), `governance:realm:${realm}`])).rows[0];
+    if (!row?.open) throw new GovernanceUnavailable('Access is held for recovery');
+    return Value.Check(publicRealmRules, row.document) ? row.document.rules : null;
+  }
 
   private async transaction<T>(work: (client: PoolClient) => Promise<T>): Promise<T> {
     const client = await this.pool.connect().catch(() => {
@@ -59,7 +78,7 @@ export class GovernanceRules implements RuleBasis {
         AND g.action = $5 AND g.active AND g.valid_until > clock_timestamp()
       JOIN access.scope_gate s ON s.id = g.scope_id AND s.open AND s.dispatch_open
       WHERE p.account_issuer = $1 AND p.account_subject = $2 AND p.active
-        AND r.valid_until > clock_timestamp() LIMIT 1`,
+        AND r.valid_until > clock_timestamp() LIMIT 1 FOR SHARE OF p, r, a, g, s`,
     [principal.issuer, principal.subject, actingSubject, scopeId, RULE_PUBLISH_ACTION])).rows[0];
     if (!row) throw new GovernanceDenied('rule authority is missing');
     return row.id;

@@ -61,7 +61,7 @@ export function managementReadRoutes(work: MainWorkDependencies) {
     .get('/v1/realms/:realm/audit', { params, detail,
       query: t.Object({ ...managementQuery,
         kind: t.Optional(t.Union([t.Literal('content_moderation'), t.Literal('rights_disposition'),
-          t.Literal('organization_publication_rejection')])) }, { additionalProperties: false }),
+          t.Literal('organization_publication_rejection'), t.Literal('realm_management')])) }, { additionalProperties: false }),
       response: { 200: auditPage, ...problems },
     }, async ({ request, params: path, query }) => {
       try {

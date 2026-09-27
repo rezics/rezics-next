@@ -47,7 +47,9 @@ export async function readRealmHeader(session: WorkReadSession, realm: string) {
     : profile ? fallbackAvatar('realm', realm) : summary.avatar;
   const moderators = profile ? [...await chosenModerators(session.deps.environment,
     realm, profile.moderators)] : [];
-  const rules = profile ? await Promise.all(profile.rules.map(async rule => {
+  const managedRules = await session.deps.governance?.rules?.publishedRealmRules(realm);
+  const sourceRules = managedRules ?? profile?.rules;
+  const rules = sourceRules ? await Promise.all(sourceRules.map(async rule => {
     let governanceRule = rule.governanceRule;
     if (governanceRule) {
       if (!session.deps.governance?.rules) governanceRule = null;

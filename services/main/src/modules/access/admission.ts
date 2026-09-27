@@ -1,3 +1,4 @@
+import { requireRealmParticipation } from './realm-management-settings.ts';
 import { RealmDirectoryIndex } from '../realm-directory/index.ts';
 import { createHash } from 'node:crypto';
 import { receiptFamilyFor } from './receipt-families.ts';
@@ -859,6 +860,7 @@ export class AccessAdmissionRegistry {
       let roleBindingGeneration: string | null = null;
       let roleFamilyId: string | null = null;
       let roleRevision: string | null = null;
+      await requireRealmParticipation(client, request.scope, request.action, principalId, request.actingSubject);
       const baseline = !existing ? await newBaselineProof(client, this.baselineGraph, request, principalId) : null;
       if (baseline) {
         // A named grant source with its own pinned proof, recorded below in the
@@ -1072,6 +1074,7 @@ export class AccessAdmissionRegistry {
         'SELECT active, enforcement_epoch, account_issuer, account_subject FROM access.principal WHERE id = $1 FOR SHARE',
         [row.principal_id]);
       if (principal.rows[0]?.active !== true) throw new AdmissionDenied('principal dispatch is fenced');
+      await requireRealmParticipation(client, row.scope_id, row.action, row.principal_id, row.acting_subject);
       const baseline = await savedBaselineProof(client, row.id);
       if (baseline) {
         const identity = principal.rows[0]!;

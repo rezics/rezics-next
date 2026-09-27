@@ -94,6 +94,7 @@ import { DATASET } from './modules/work/activate.ts';
 import { RelayHandoffPositions } from './modules/outbox/relay-position.ts';
 import { OwnerOperations } from './modules/owner/operations.ts';
 import { governanceServices } from './modules/governance/composition.ts';
+import { AccessRealmManagement } from './modules/access/realm-management.ts';
 import { ManagementReadStore } from './modules/management-reads/read-store.ts';
 import { RealmSubmissionStore } from './modules/realm-submission/store.ts';
 import { RealmSubmissionReads } from './modules/realm-submission/reads.ts';
@@ -288,6 +289,7 @@ const app = createMainApp(fuseki, {
   recommendations,
   governance: governanceServices(pool, contentPool, content, sourceIntake, access, environment),
   managementReads: new ManagementReadStore(pool, environment),
+  realmAdmin: new AccessRealmManagement(pool),
   realmSubmissions: new RealmSubmissionStore(pool, access, environment),
   realmSubmissionReads: new RealmSubmissionReads(pool),
   ...(relayPool ? { notifications: { store: notificationStore, realtime: notificationRealtime,
