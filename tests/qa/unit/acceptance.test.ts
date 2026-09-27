@@ -4,6 +4,7 @@ import { join, resolve } from 'node:path';
 import { acceptanceStatuses, caseInventory, e2eArgs, failedSelection, parseJUnit, testArgs, titleIds } from '../../../scripts/qa/acceptance.ts';
 import { parseArgs, writeSummary, type Tier } from '../../../scripts/qa/core.ts';
 import { inventoryFingerprint, selectBackendCases } from '../../../scripts/qa/backend-scope.ts';
+import { integrationGateFiles } from '../../../scripts/qa/integration-gate-files.ts';
 import { declaredCases } from '../../../scripts/qa/cases/index.ts';
 import { createHash } from 'node:crypto';
 
@@ -96,22 +97,8 @@ test('QA06: failure rerun selects failed names without borrowing prior passes', 
       'model/tests/claim-analysis.test.ts',
       'model/tests/release-rating.test.ts',
       'scripts/operations/search-state.test.ts']);
-    expect(testArgs('integration')).toEqual(['tests/qa/integration',
-      'services/account/tests/account.integration.test.ts',
-      'services/account/tests/consent-revocation.integration.test.ts',
-      'services/account/tests/oidc-authorization.integration.test.ts',
-      'services/main/tests/access.integration.test.ts',
-      'services/main/tests/account-assertion.integration.test.ts',
-      'services/main/tests/acting-context.integration.test.ts',
-      'services/main/tests/represented-work-proof.integration.test.ts',
-      'services/main/tests/immutable-objects.integration.test.ts',
-      'services/main/tests/search-read-lease.integration.test.ts',
-      'services/main/tests/content-publication.integration.test.ts',
-      'services/main/tests/content-projection.integration.test.ts',
-      'services/main/tests/content-revision-read.integration.test.ts',
-      'services/main/tests/context-schema.integration.test.ts',
-      'services/main/tests/work-read.integration.test.ts',
-      'services/content/tests/core.integration.test.ts']);
+    expect(integrationGateFiles).toContain('services/main/tests/work-activity.integration.test.ts');
+    expect(testArgs('integration')).toEqual(['tests/qa/integration', ...integrationGateFiles]);
     expect(testArgs('model')).toEqual(['infra/jena/tests/command.integration.test.ts',
       'model/compiler/generate.test.ts', 'model/tests/native-equivalence.test.ts', 'model/tests/daily-rating.test.ts',
       'model/tests/experience-rating.test.ts',
