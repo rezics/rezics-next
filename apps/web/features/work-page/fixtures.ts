@@ -64,6 +64,7 @@ export const noAgentCredits = ok<AgentCreditPage>(page([]));
 
 const credited = (uuid: string, title: string, key: string) => ({ id: iri(uuid), title: name(title),
   cover: { kind: 'fallback' as const, policy: 'avatar-fallback-v1', key, resourceType: 'work' },
+  types: [], tagline: null, completionStatus: null, rating: null,
   attribution: [{ credit: iri('f2b4d6f8-0a1c-4e3a-8b5d-7f9b1d3f5a71'), role: 'author' as const }] });
 /** Other Works Maren Osei is credited on, with this one among them as Main lists it. */
 export const agentWorks = ok<AgentWorksPage>(page([
