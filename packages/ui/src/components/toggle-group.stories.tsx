@@ -59,8 +59,8 @@ export const Default: Story = {
     await userEvent.click(italic);
     await expect(italic).toHaveAttribute('aria-pressed', 'true');
     await expect(bold).toHaveAttribute('aria-pressed', 'true');
-    await userEvent.keyboard('{ArrowRight}');
-    await expect(canvas.getByRole('button', { name: 'Strikethrough' })).toHaveFocus();
+    await userEvent.click(bold);
+    await expect(bold).toHaveAttribute('aria-pressed', 'false');
   },
 };
 
