@@ -27,7 +27,7 @@ import { PUBLIC_SEARCH_GRAPH } from '../../../services/main/src/modules/work/sel
 import { composeProcessEnvironment, projectName, readEnv, stackDirectory }
   from '../../../scripts/dev/config.ts';
 import { loadDockerEnvironment } from '../../../scripts/load/docker-env.ts';
-import { seedLoadCorpus } from '../load/corpus.ts';
+import { seedRecoveryContent } from './search-content-fixture.ts';
 
 const root = resolve(import.meta.dir, '../../..');
 const LUCENE = '/fuseki/databases/rezics/lucene';
@@ -92,7 +92,7 @@ test('SEARCH15/OPS16: a crash between the TDB2 and Lucene commits suspends searc
       const cursor = new ContentProjectionCursor(contentPool);
       const consumer = apps.CONTENT_PROJECTION_CONSUMER ?? 'main-content-public-search-v1';
       const env = { fuseki, lineage, objectDirectory: apps.MAIN_OBJECT_DIRECTORY! };
-      const corpus = await seedLoadCorpus(env, contentPool, accessPool);
+      const corpus = await seedRecoveryContent(env, contentPool, accessPool);
       const access = new AccessAdmissionRegistry(accessPool);
       const relayTo = async (target: string, reader = consumer) => {
         const dispositions: string[] = [];

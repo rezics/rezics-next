@@ -1,9 +1,10 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { acquireFullLock, acquireQaSlots, artifactRoots, backendTiers, command, commandAsync, concurrencyGate, estimatedDurations,
-  expandTestPaths, goalSlotDirectory, implementedTiers, isolatedFaultFiles, isolatedIntegrationFiles, isolationCandidates,
+  expandTestPaths, faultRecoveryBaselineDurations, goalSlotDirectory, implementedTiers, isolatedFaultFiles,
+  isolatedIntegrationFiles, isolationCandidates,
   junitSuites, matchedNoTests, maximumShards, mergeJUnit, newRunId, parseArgs, planStackProjects,
-  recordedFileDurations, shardCount,
+  recordedFileDurations, selfManagedFaultFiles, shardCount,
   shardResolved, sourceIdentity, splitTestArgs,
   tierArtifactName, uncoveredTiers, writeSummary, xmlForCommand, type IsolationRecord, type ShardRecord,
   type Tier } from './core.ts';
@@ -56,45 +57,50 @@ interface ShardRun { record: ShardRecord; xml?: string; timedOut: boolean; noMat
 async function runShard(tier: StackTier, projectRunId: string, files: string[], flags: string[],
   budget: number, isolated = false,
   startStack?: <T>(work: () => Promise<T>) => Promise<T>): Promise<ShardRun> {
+  const needsStack = tier !== 'fault/recovery' || !files.every(file => selfManagedFaultFiles.has(file));
   const label = `${tierArtifactName(tier)}-${projectRunId.slice(runId.length + 1)}`;
   const record: ShardRecord = { project: projectRunId, files, status: 'failed', stage: 'stack',
     ...(isolated ? { isolation: true } : {}) };
   const finish = async (run: Omit<ShardRun, 'record'>): Promise<ShardRun> => {
-    if (!run.ok) {
+    if (!run.ok && needsStack) {
       const stackLogs = await commandAsync(root, 'corepack', ['yarn', 'stack:logs', '--profile', 'qa', '--run-id', projectRunId], 20_000);
       writeFileSync(join(logs, `${label}-stack.log`), stackLogs.output);
     }
-    if (!options.keep) {
+    if (!options.keep && needsStack) {
       const down = await commandAsync(root, 'corepack', ['yarn', 'stack:reset', '--profile', 'qa', '--run-id', projectRunId], 120_000);
       if (down.ok) startedProjects.splice(startedProjects.indexOf(projectRunId), 1);
     }
     record.status = run.ok ? 'passed' : 'failed';
     return { record, ...run };
   };
-  startedProjects.push(projectRunId);
-  const upCommand = () => commandAsync(root, 'corepack',
-    ['yarn', 'stack:up', '--profile', 'qa', '--run-id', projectRunId], 180_000);
-  const up = await (startStack ? startStack(upCommand) : upCommand());
-  if (!up.ok) {
-    writeFileSync(join(logs, `${label}-startup.log`), up.output);
-    errors.push(`${tier} stack startup failed: ${projectRunId} (see logs/${label}-startup.log)`);
-    return finish({ ok: false, timedOut: up.timedOut, noMatch: false,
-      xml: xmlForCommand(tier, false, up.elapsedMs, up.output) });
-  }
-  const stackDir = join(root, '.temp', 'stack', `rezics-qa-${projectRunId}`);
-  const apps = readEnv(join(stackDir, 'apps.env'));
-  const compose = readEnv(join(stackDir, 'compose.env'));
-  const appsPath = join(stackDir, 'qa-apps.json');
-  const composePath = join(stackDir, 'qa-compose.json');
-  writeFileSync(appsPath, JSON.stringify(apps), { mode: 0o600 });
-  writeFileSync(composePath, JSON.stringify(compose), { mode: 0o600 });
-  record.stage = 'bootstrap';
-  const bootstrap = await commandAsync(root, 'bun', ['scripts/qa/bootstrap.ts', appsPath, composePath], 180_000);
-  if (!bootstrap.ok) {
-    errors.push(`${tier} shared bootstrap failed: ${projectRunId} (see logs/${label}-bootstrap.log)`);
-    writeFileSync(join(logs, `${label}-bootstrap.log`), bootstrap.output);
-    return finish({ ok: false, timedOut: bootstrap.timedOut, noMatch: false,
-      xml: xmlForCommand(tier, false, bootstrap.elapsedMs, bootstrap.output) });
+  let apps: Record<string, string> = {};
+  let compose: Record<string, string> = {};
+  if (needsStack) {
+    startedProjects.push(projectRunId);
+    const upCommand = () => commandAsync(root, 'corepack',
+      ['yarn', 'stack:up', '--profile', 'qa', '--run-id', projectRunId], 180_000);
+    const up = await (startStack ? startStack(upCommand) : upCommand());
+    if (!up.ok) {
+      writeFileSync(join(logs, `${label}-startup.log`), up.output);
+      errors.push(`${tier} stack startup failed: ${projectRunId} (see logs/${label}-startup.log)`);
+      return finish({ ok: false, timedOut: up.timedOut, noMatch: false,
+        xml: xmlForCommand(tier, false, up.elapsedMs, up.output) });
+    }
+    const stackDir = join(root, '.temp', 'stack', `rezics-qa-${projectRunId}`);
+    apps = readEnv(join(stackDir, 'apps.env'));
+    compose = readEnv(join(stackDir, 'compose.env'));
+    const appsPath = join(stackDir, 'qa-apps.json');
+    const composePath = join(stackDir, 'qa-compose.json');
+    writeFileSync(appsPath, JSON.stringify(apps), { mode: 0o600 });
+    writeFileSync(composePath, JSON.stringify(compose), { mode: 0o600 });
+    record.stage = 'bootstrap';
+    const bootstrap = await commandAsync(root, 'bun', ['scripts/qa/bootstrap.ts', appsPath, composePath], 180_000);
+    if (!bootstrap.ok) {
+      errors.push(`${tier} shared bootstrap failed: ${projectRunId} (see logs/${label}-bootstrap.log)`);
+      writeFileSync(join(logs, `${label}-bootstrap.log`), bootstrap.output);
+      return finish({ ok: false, timedOut: bootstrap.timedOut, noMatch: false,
+        xml: xmlForCommand(tier, false, bootstrap.elapsedMs, bootstrap.output) });
+    }
   }
   record.stage = 'test';
   const outfile = join(directory, 'shards', `${label}.xml`);
@@ -102,10 +108,10 @@ async function runShard(tier: StackTier, projectRunId: string, files: string[], 
   const result = await commandAsync(root, 'bun', ['test', ...files, ...flags, '--reporter=junit',
     `--reporter-outfile=${outfile}`], budget,
   { ...process.env, ...apps, REZICS_QA_RUN_ID: projectRunId,
-    REZICS_S3_GATE_PROJECT: projectRunId,
     REZICS_QA_ARTIFACT_DIR: directory,
-    TOXIPROXY_API_URL: `http://127.0.0.1:${compose.TOXIPROXY_API_PORT}`,
-    TOXIPROXY_FUSEKI_URL: `http://127.0.0.1:${compose.TOXIPROXY_FUSEKI_PORT}/rezics/` });
+    ...(needsStack ? { REZICS_S3_GATE_PROJECT: projectRunId,
+      TOXIPROXY_API_URL: `http://127.0.0.1:${compose.TOXIPROXY_API_PORT}`,
+      TOXIPROXY_FUSEKI_URL: `http://127.0.0.1:${compose.TOXIPROXY_FUSEKI_PORT}/rezics/` } : {}) });
   const testEnd = Date.now();
   record.elapsedMs = result.elapsedMs;
   const noMatch = !result.ok && !result.timedOut && matchedNoTests(result.output);
@@ -137,7 +143,11 @@ async function runStackTier(tier: StackTier): Promise<void> {
   const artifact = tierArtifactName(tier);
   const budget = tier === 'integration' ? 480_000 : 360_000;
   const { paths, flags } = splitTestArgs(testArgs(tier, selection, chosen));
-  const estimates = estimatedDurations(expandTestPaths(root, paths), recordedFileDurations(artifactRoots(root), tier));
+  const recorded = recordedFileDurations(artifactRoots(root), tier);
+  const local = tier === 'fault/recovery'
+    ? recordedFileDurations([join(root, '.artifacts', 'qa')], tier, 60, 1) : new Map<string, number>();
+  const estimates = estimatedDurations(expandTestPaths(root, paths),
+    tier === 'fault/recovery' ? new Map([...recorded, ...faultRecoveryBaselineDurations, ...local]) : recorded);
   const ownProjects = tier === 'integration' ? isolatedIntegrationFiles : isolatedFaultFiles;
   const isolated = [...estimates.keys()].filter(file => ownProjects.has(file)).length;
   const maximum = maximumShards(process.env, tier);

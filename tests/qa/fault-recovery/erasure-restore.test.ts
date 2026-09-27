@@ -1,9 +1,10 @@
 import { expect, test } from 'bun:test';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
-import { appendFileSync, cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:net';
 import { join, resolve } from 'node:path';
+import { copyRecoveryTree } from '../support/recovery-copy.ts';
 import { getMigrations } from 'better-auth/db/migration';
 import { Pool } from 'pg';
 import { accountAuthOptions, createAccountAuth } from '../../../services/account/src/auth.ts';
@@ -242,7 +243,7 @@ test('OPS11/OPS12/IAM11/SEARCH20: restored backups keep erased payloads and cred
     const restore = async (backup: string, name: string) => {
       const data = join(state, name);
       replayData.push(data);
-      cpSync(backup, data, { recursive: true });
+      copyRecoveryTree(backup, data);
       appendFileSync(join(data, 'postgresql.auto.conf'), "\narchive_mode = off\nrestore_command = 'false'\n");
       writeFileSync(join(data, 'recovery.signal'), '');
       const replayPort = await freePort();
@@ -583,12 +584,16 @@ test('OPS11/OPS12/IAM11/SEARCH20: restored backups keep erased payloads and cred
   } finally {
     await app?.stop();
     await Promise.allSettled(pools.map(pool => pool.end()));
-    for (const data of replayData) {
-      if (spawnSync('pg_ctl', ['-D', data, 'status'], { cwd: state, timeout: 5_000 }).status === 0) {
-        execFileSync('pg_ctl', ['-D', data, '-m', 'fast', '-t', '10', '-w', 'stop'], { cwd: state, timeout: 15_000 });
+    try {
+      for (const data of replayData) {
+        if (spawnSync('pg_ctl', ['-D', data, 'status'], { cwd: state, timeout: 5_000 }).status === 0) {
+          execFileSync('pg_ctl', ['-D', data, '-m', 'immediate', '-t', '10', '-w', 'stop'],
+            { cwd: state, timeout: 15_000 });
+        }
       }
+    } finally {
+      try { if (started) rootCommand(['stack:reset', ...stackArgs], 120_000); }
+      finally { rmSync(state, { recursive: true, force: true }); }
     }
-    try { if (started) rootCommand(['stack:reset', ...stackArgs], 120_000); }
-    finally { rmSync(state, { recursive: true, force: true }); }
   }
 }, 420_000);

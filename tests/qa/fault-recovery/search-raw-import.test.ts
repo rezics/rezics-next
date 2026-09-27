@@ -17,7 +17,7 @@ import { assertPublicTextReady, SearchIndexUnavailable }
   from '../../../services/main/src/modules/work/search-readiness.ts';
 import { PUBLIC_SEARCH_GRAPH } from '../../../services/main/src/modules/work/select-main.ts';
 import { readEnv, stackDirectory } from '../../../scripts/dev/config.ts';
-import { seedLoadCorpus } from '../load/corpus.ts';
+import { seedRecoveryContent } from './search-content-fixture.ts';
 
 const root = resolve(import.meta.dir, '../../..');
 const original = { phrase: 'exact content beacon', language: 'en' };
@@ -73,7 +73,7 @@ test('SEARCH17: quarantined bare-TDB2 import stays unavailable until exact offli
       const cursor = new ContentProjectionCursor(contentPool);
       const consumer = apps.CONTENT_PROJECTION_CONSUMER ?? 'main-content-public-search-v1';
       const env = { fuseki, lineage, objectDirectory: apps.MAIN_OBJECT_DIRECTORY! };
-      const corpus = await seedLoadCorpus(env, contentPool, accessPool);
+      const corpus = await seedRecoveryContent(env, contentPool, accessPool);
       const cut = await content.ownerPosition();
       await cursor.initialize(consumer);
       for (let i = 0; i < 10 && (await cursor.read(consumer)).sequence !== cut.sequence; i++) {

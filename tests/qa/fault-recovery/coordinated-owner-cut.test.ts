@@ -1,9 +1,10 @@
 import { expect, test } from 'bun:test';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
-import { appendFileSync, cpSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { appendFileSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:net';
 import { join, resolve } from 'node:path';
+import { copyRecoveryTree } from '../support/recovery-copy.ts';
 import { getMigrations } from 'better-auth/db/migration';
 import { Pool } from 'pg';
 import { accountAuthOptions, createAccountAuth } from '../../../services/account/src/auth.ts';
@@ -432,7 +433,7 @@ test('OPS03/PKG14/SYS12: signed owner cut restores Content and exact Go checksum
     const baseBackup = rootCommand(['stack:backup', ...stackArgs], 100_000);
     execFileSync('pg_verifybackup', ['--no-parse-wal', baseBackup],
       { cwd: state, timeout: 15_000 });
-    cpSync(baseBackup, restoredData, { recursive: true });
+    copyRecoveryTree(baseBackup, restoredData);
     appendFileSync(join(restoredData, 'postgresql.auto.conf'),
       "\narchive_mode = off\nrestore_command = 'false'\n");
     writeFileSync(join(restoredData, 'recovery.signal'), '');
@@ -720,7 +721,7 @@ test('OPS03/PKG14/SYS12: signed owner cut restores Content and exact Go checksum
       if (restoredStartAttempted && spawnSync('pg_ctl', ['-D', restoredData, 'status'],
         { cwd: state, timeout: 5_000 }).status === 0) {
         execFileSync('pg_ctl', ['-D', restoredData,
-          '-m', 'fast', '-t', '10', '-w', 'stop'], { cwd: state, timeout: 15_000 });
+          '-m', 'immediate', '-t', '10', '-w', 'stop'], { cwd: state, timeout: 15_000 });
       }
     } finally {
       try { if (started) rootCommand(['stack:reset', ...stackArgs], 120_000); }

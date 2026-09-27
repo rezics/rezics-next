@@ -86,7 +86,7 @@ test('OPS02/OPS04: principal crash requires manual second-host restore; failed b
     const samples = await seedOwners(source);
     stack('stack:down', source);
     await createStoppedRecoveryCut(id, source, samples);
-    command('corepack', installArgs(source));
+    command('corepack', ['yarn', 'stack:up', '--profile', 'qa', '--run-id', source.runId!, '--persistent']);
     const outage = capturePrincipalHost(source);
     await restoreRecoveryCut(id, second);
     await expect(qualifyManualFailover(outage, second)).rejects.toThrow('Principal is still live');

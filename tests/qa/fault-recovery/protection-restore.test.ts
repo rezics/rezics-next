@@ -1,9 +1,10 @@
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { execFileSync, spawnSync } from 'node:child_process';
-import { appendFileSync, cpSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { appendFileSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:net';
 import { join, resolve } from 'node:path';
+import { copyRecoveryTree } from '../support/recovery-copy.ts';
 import { Pool } from 'pg';
 import { projectName, readEnv, stackDirectory } from '../../../scripts/dev/config.ts';
 import { loadDockerEnvironment } from '../../../scripts/load/docker-env.ts';
@@ -252,7 +253,7 @@ test('SYS13: stopped graph cut retains old intent and delivery until protected c
     const baseBackup = backup(sourceId, recoveryDir);
     execFileSync('pg_verifybackup', ['--no-parse-wal', baseBackup],
       { cwd: recoveryDir, timeout: 15_000 });
-    cpSync(baseBackup, restoredData, { recursive: true });
+    copyRecoveryTree(baseBackup, restoredData);
     appendFileSync(join(restoredData, 'postgresql.auto.conf'),
       "\narchive_mode = off\nrestore_command = 'false'\n");
     writeFileSync(join(restoredData, 'recovery.signal'), '');

@@ -4,7 +4,8 @@ import { join } from 'node:path';
 import { acquireFullLock, acquireQaSlots, concurrencyGate, estimatedDurations, expandTestPaths, expectedFusekiModuleVersion,
   isolatedFaultFiles, isolatedIntegrationFiles, isolationCandidates, junitSuites, matchedNoTests, maximumShards,
   mergeJUnit, parseArgs, planShards, planStackProjects,
-  recordedFileDurations, shardCount, shardResolved, splitTestArgs, testLogEnvironment, writeSummary,
+  recordedFileDurations, selfManagedFaultFiles, shardCount, shardResolved, splitTestArgs,
+  testLogEnvironment, writeSummary,
   implementedTiers, tierArtifactName,
   xmlForCommand, type Tier } from '../../../scripts/qa/core.ts';
 import { parseJUnit } from '../../../scripts/qa/acceptance.ts';
@@ -164,6 +165,9 @@ test('QA shards: recorded durations use the latest merged JUnit, killed-run logs
     expect(Object.fromEntries(estimatedDurations(['a.test.ts', 'new.test.ts', 'b.test.ts'], durations)))
       .toEqual({ 'a.test.ts': 7000, 'new.test.ts': 7000, 'b.test.ts': 250 });
     expect(Object.fromEntries(estimatedDurations(['new.test.ts'], new Map()))).toEqual({ 'new.test.ts': 30_000 });
+    run('20260907t000000-abcdef', { 'integration.xml': junit(suite('a.test.ts',
+      '<testcase name="one" time="1" file="a.test.ts" />')) });
+    expect(recordedFileDurations([dir], 'integration', 60, 1).get('a.test.ts')).toBe(1000);
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 
@@ -208,6 +212,19 @@ test('QA shards: graph reset and outbox gap files get singleton integration proj
   expect(faultPlan.flat().sort()).toEqual([...faultFiles.keys()].sort());
   expect(faultPlan.filter(project => project.some(file => isolatedFaultFiles.has(file))))
     .toEqual([...isolatedFaultFiles].sort().map(file => [file]));
+  const recoveryFiles = new Map<string, number>([
+    ['tests/qa/fault-recovery/content-rebuild.test.ts', 100],
+    ['tests/qa/fault-recovery/search-ops-lock.test.ts', 80],
+    ['tests/qa/fault-recovery/zone-wiki.test.ts', 30],
+    ['tests/qa/fault-recovery/partition-relocation.test.ts', 20],
+  ]);
+  const recoveryPlan = planStackProjects(recoveryFiles, 2, 'fault/recovery');
+  expect(recoveryPlan.flat().sort()).toEqual([...recoveryFiles.keys()].sort());
+  expect(recoveryPlan.filter(project => project.some(file => selfManagedFaultFiles.has(file))))
+    .toEqual([['tests/qa/fault-recovery/content-rebuild.test.ts',
+      'tests/qa/fault-recovery/search-ops-lock.test.ts']]);
+  expect(recoveryPlan).toContainEqual(['tests/qa/fault-recovery/zone-wiki.test.ts']);
+  expect(recoveryPlan).toContainEqual(['tests/qa/fault-recovery/partition-relocation.test.ts']);
   const one = new Map([['tests/qa/integration/validation-command.test.ts', 1]]);
   expect(planStackProjects(one, 1, 'integration'))
     .toEqual([['tests/qa/integration/validation-command.test.ts']]);

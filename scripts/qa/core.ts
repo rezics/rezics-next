@@ -257,7 +257,8 @@ function logDurations(text: string): Map<string, number> {
 
 // Recorded per-file time for a tier: the largest of the last three observations
 // across the given artifact roots, from merged JUnit or, for killed runs, logs.
-export function recordedFileDurations(artifactRoots: string[], tier: Tier, maxRuns = 60): Map<string, number> {
+export function recordedFileDurations(artifactRoots: string[], tier: Tier, maxRuns = 60,
+  observations = 3): Map<string, number> {
   const artifact = tierArtifactName(tier);
   const logName = new RegExp(`^${artifact}(?:-f?r?\\d+)?\\.log$`);
   const runs = artifactRoots.filter(existsSync).flatMap(dir => readdirSync(dir, { withFileTypes: true })
@@ -288,7 +289,7 @@ export function recordedFileDurations(artifactRoots: string[], tier: Tier, maxRu
     }
     for (const [file, ms] of perRun) {
       const list = observed.get(file) ?? [];
-      if (list.length < 3) observed.set(file, [...list, ms]);
+      if (list.length < observations) observed.set(file, [...list, ms]);
     }
   }
   return new Map([...observed].map(([file, list]) => [file, Math.round(Math.max(...list))]));
@@ -299,6 +300,19 @@ export function estimatedDurations(files: string[], recorded: ReadonlyMap<string
   const fallback = known.length ? known[Math.floor(known.length / 2)]! : 30_000;
   return new Map(files.map(file => [file, recorded.get(file) ?? fallback]));
 }
+
+// G-137's complete fault run was retained outside this checkout and its worktree
+// has since been removed. Use these observations until this worktree measures
+// the same files with its current test code.
+export const faultRecoveryBaselineDurations = new Map([
+  ['tests/qa/fault-recovery/second-host-format-upgrade.test.ts', 177_000],
+  ['tests/qa/fault-recovery/content-projection-crash.test.ts', 146_000],
+  ['tests/qa/fault-recovery/content-rebuild-positive.test.ts', 143_000],
+  ['tests/qa/fault-recovery/search-ops-cold-rebuild.test.ts', 122_000],
+  ['tests/qa/fault-recovery/search-ops-generation.test.ts', 121_000],
+  ['tests/qa/fault-recovery/search-raw-import.test.ts', 120_000],
+  ['tests/qa/fault-recovery/tdb2-compact-history.test.ts', 98_000],
+]);
 
 // Enough shards to keep each at half its budget (parallel projects slow each
 // other), never more than the files or the allowed maximum.
@@ -358,11 +372,62 @@ export const isolatedFaultFiles = new Set([
   'tests/qa/fault-recovery/semantic-lost-response.test.ts',
 ]);
 
+// These files create and reset their own named QA projects (or one standalone
+// Fuseki container). They need a run ID and artifact directory, not a second
+// bootstrapped project held open by the shard harness.
+export const selfManagedFaultFiles = new Set([
+  'services/account/tests/account-pitr.integration.test.ts',
+  'services/account/tests/account-access-recovery.integration.test.ts',
+  'services/main/tests/access-pitr.integration.test.ts',
+  'services/main/tests/content-recovery.integration.test.ts',
+  'tests/qa/fault-recovery/account-erasure-frontier.test.ts',
+  'tests/qa/fault-recovery/content-projection-crash.test.ts',
+  'tests/qa/fault-recovery/content-publication-recovery.test.ts',
+  'tests/qa/fault-recovery/content-rebuild-positive.test.ts',
+  'tests/qa/fault-recovery/content-rebuild.test.ts',
+  'tests/qa/fault-recovery/coordinated-owner-cut.test.ts',
+  'tests/qa/fault-recovery/erasure-graph-purge.test.ts',
+  'tests/qa/fault-recovery/erasure-restore.test.ts',
+  'tests/qa/fault-recovery/erasure-search-command.test.ts',
+  'tests/qa/fault-recovery/erasure-search-rebuild.test.ts',
+  'tests/qa/fault-recovery/fixed-release-recovery.test.ts',
+  'tests/qa/fault-recovery/organization-publication-recovery.test.ts',
+  'tests/qa/fault-recovery/protection-restore.test.ts',
+  'tests/qa/fault-recovery/rating-daily.test.ts',
+  'tests/qa/fault-recovery/recovery-coverage-discovery.test.ts',
+  'tests/qa/fault-recovery/rights-restriction-replay.test.ts',
+  'tests/qa/fault-recovery/search-candidate-overflow.test.ts',
+  'tests/qa/fault-recovery/search-ops-cold-rebuild.test.ts',
+  'tests/qa/fault-recovery/search-ops-generation.test.ts',
+  'tests/qa/fault-recovery/search-ops-lock.test.ts',
+  'tests/qa/fault-recovery/search-ops-quickstart.test.ts',
+  'tests/qa/fault-recovery/search-raw-import.test.ts',
+  'tests/qa/fault-recovery/second-host-format-upgrade.test.ts',
+  'tests/qa/fault-recovery/source-author-credit.test.ts',
+  'tests/qa/fault-recovery/source-field-child.test.ts',
+  'tests/qa/fault-recovery/source-projection-recovery.test.ts',
+  'tests/qa/fault-recovery/tdb2-compact-history.test.ts',
+  'tests/qa/fault-recovery/translated-work-recovery.test.ts',
+  'tests/qa/fault-recovery/work-derivation-recovery.test.ts',
+  'tests/qa/fault-recovery/work-scalar-recovery.test.ts',
+  'tests/qa/fault-recovery/work-title-control.test.ts',
+]);
+
 export function planStackProjects(estimates: ReadonlyMap<string, number>, count: number,
   tier: 'integration' | 'fault/recovery'): string[][] {
   const ownProjects = tier === 'integration' ? isolatedIntegrationFiles : isolatedFaultFiles;
   const isolated = [...estimates.keys()].filter(file => ownProjects.has(file)).sort();
   const shared = new Map([...estimates].filter(([file]) => !ownProjects.has(file)));
+  if (tier === 'fault/recovery') {
+    const selfManaged = new Map([...shared].filter(([file]) => selfManagedFaultFiles.has(file)));
+    const harnessManaged = new Map([...shared].filter(([file]) => !selfManagedFaultFiles.has(file)));
+    const selfSlots = Math.max(1, count - Number(harnessManaged.size > 0));
+    const selfPlans = selfManaged.size ? planShards(selfManaged, selfSlots) : [];
+    const harnessPlans = harnessManaged.size ? planShards(harnessManaged, selfManaged.size ? 1 : count) : [];
+    // Keep the harness-managed files running beside the long drills; queuing
+    // their full stack until a long drill ends would extend the tier wall time.
+    return [...selfPlans, ...harnessPlans, ...isolated.map(file => [file])];
+  }
   const sharedSlots = Math.max(1, count - Number(isolated.length > 0 && shared.size > 0));
   return [...(shared.size ? planShards(shared, sharedSlots) : []), ...isolated.map(file => [file])];
 }

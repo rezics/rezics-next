@@ -1,9 +1,10 @@
 import { expect, test } from 'bun:test';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
-import { appendFileSync, cpSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { appendFileSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:net';
 import { join, resolve } from 'node:path';
+import { copyRecoveryTree } from '../support/recovery-copy.ts';
 import { Pool } from 'pg';
 import { FusekiClient } from '../../../services/main/src/infrastructure/fuseki.ts';
 import { engageAccessRecoveryFence } from '../../../services/main/src/modules/access/admission.ts';
@@ -135,7 +136,7 @@ test('GOV25: replaying an Access backup preserves its restriction fence through 
     const backup = rootCommand(['stack:backup', ...stackArgs], 100_000);
     execFileSync('pg_verifybackup', ['--no-parse-wal', backup], { cwd: state, timeout: 15_000 });
     restoredData = join(state, 'restored');
-    cpSync(backup, restoredData, { recursive: true });
+    copyRecoveryTree(backup, restoredData);
     appendFileSync(join(restoredData, 'postgresql.auto.conf'), "\narchive_mode = off\nrestore_command = 'false'\n");
     writeFileSync(join(restoredData, 'recovery.signal'), '');
     const replayPort = await freePort();
@@ -173,7 +174,7 @@ test('GOV25: replaying an Access backup preserves its restriction fence through 
     await Promise.allSettled(pools.map(pool => pool.end()));
     if (restoredData && spawnSync('pg_ctl', ['-D', restoredData, 'status'],
       { cwd: state, timeout: 5_000 }).status === 0) {
-      execFileSync('pg_ctl', ['-D', restoredData, '-m', 'fast', '-t', '10', '-w', 'stop'],
+      execFileSync('pg_ctl', ['-D', restoredData, '-m', 'immediate', '-t', '10', '-w', 'stop'],
         { cwd: state, timeout: 15_000 });
     }
     try { if (started) rootCommand(['stack:reset', ...stackArgs], 120_000); }
