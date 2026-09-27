@@ -39,6 +39,15 @@ export const catalogs = {
     fr: () => import('../features/home/messages/fr.ts').then(module => module.default),
     es: () => import('../features/home/messages/es.ts').then(module => module.default),
   }),
+  profile: splitCatalog(() => import('../features/profile/messages.ts').then(module => module.messages), {
+    'zh-Hant': () => import('../features/profile/messages/zh-Hant.ts').then(module => module.default),
+    'zh-Hans': () => import('../features/profile/messages/zh-Hans.ts').then(module => module.default),
+    ja: () => import('../features/profile/messages/ja.ts').then(module => module.default),
+    ko: () => import('../features/profile/messages/ko.ts').then(module => module.default),
+    de: () => import('../features/profile/messages/de.ts').then(module => module.default),
+    fr: () => import('../features/profile/messages/fr.ts').then(module => module.default),
+    es: () => import('../features/profile/messages/es.ts').then(module => module.default),
+  }),
   realm: splitCatalog(() => import('../features/realm/messages.ts').then(module => module.messages), {
     'zh-Hans': () => import('../features/realm/messages/zh-Hans.ts').then(module => module.default),
   }),

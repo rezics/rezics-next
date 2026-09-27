@@ -1,0 +1,44 @@
+import { cn } from '@rezics/ui/utils';
+import { BFF_PREFIX } from '../api/browser.ts';
+import type { AgentKind } from './types.ts';
+
+// Han, Hiragana, Katakana and Hangul: a name that starts in one of these scripts is marked by its first character.
+const cjk = /^[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]/u;
+
+/**
+ * The letters a profile without a photo shows: the first character of a CJK
+ * name ("月下书生" → 月), otherwise the first letters of its first two words
+ * ("North Star Editions" → NS).
+ */
+export function initials(name: string): string {
+  const words = name.split(/[\s·・,，/|]+/u).filter(word => /\p{L}/u.test(word));
+  const first = words[0] ?? name;
+  if (cjk.test(first)) return [...first][0]!;
+  return words.slice(0, 2).map(word => [...word.replace(/^\P{L}+/u, '')][0] ?? '').join('').toLocaleUpperCase();
+}
+
+const sizes = {
+  sm: 'size-10 text-base',
+  /** The profile header: small beside the name on phones, Goodreads-sized beside the text on wider screens. */
+  lg: 'size-20 text-3xl sm:size-40 sm:text-6xl',
+};
+
+/**
+ * A profile's photo, or its initials on the accent surface. People are
+ * round; organizations and services are rounded squares, as on most sites
+ * that list both. The photo comes through the BFF, which adds the token Main
+ * needs for the reader's Agent.
+ */
+export function ProfileAvatar({ name, kind, avatarUrl, avatarQuery = '', size = 'lg', className }: {
+  name: string; kind: AgentKind; avatarUrl: string | null; avatarQuery?: string; size?: keyof typeof sizes;
+  className?: string;
+}) {
+  const shape = kind === 'person' ? 'rounded-full' : 'rounded-[22%]';
+  const src = avatarUrl?.startsWith('/v1/media/') ? `${BFF_PREFIX}${avatarUrl}${avatarQuery}` : null;
+  return <span className={cn('relative grid shrink-0 place-items-center overflow-hidden bg-accent',
+    'text-accent-foreground after:absolute after:inset-0 after:rounded-[inherit] after:border',
+    'after:border-foreground/8', shape, sizes[size], className)}>
+    {src ? <img src={src} alt="" className="size-full object-cover" />
+      : <span aria-hidden="true" className="font-semibold font-work-title leading-none">{initials(name)}</span>}
+  </span>;
+}

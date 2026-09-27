@@ -21,7 +21,9 @@ export function withoutLocale(pathname: string): string {
 export function isPublicPagePath(pathname: string): boolean {
   const bare = withoutLocale(pathname);
   return bare === '/' || /^\/(?:discover|manage|notifications|r|search|studio|w|works)(?:\/|$)/.test(bare)
-    || bare === '/identity';
+    || bare === '/identity'
+    // Profiles, `/@{handle}` (app/[locale]/[handle]).
+    || /^\/(?:@|%40)[^/]/.test(bare);
 }
 
 export function localizedPath(path: string, locale: UiLocale): string {

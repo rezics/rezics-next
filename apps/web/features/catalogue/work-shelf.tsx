@@ -100,15 +100,18 @@ export function WorkShelf({ heading, works, avatarQuery, locale, className }: {
 }
 
 /** Works in rows that wrap, for a full list with "Show more". */
-export function WorkGrid({ works, avatarQuery, locale, listRef, className }: {
-  works: readonly CatalogueWork[]; avatarQuery?: string; locale: UiLocale;
+export function WorkGrid({ works, headingLevel, avatarQuery, locale, listRef, className }: {
+  works: readonly CatalogueWork[];
+  /** The tiles' title level: 2 where the grid sits right under the page's <h1>. */
+  headingLevel?: 2 | 3 | 4;
+  avatarQuery?: string; locale: UiLocale;
   listRef?: Ref<HTMLUListElement>; className?: string;
 }) {
   const slot = slotRatio(works);
   return <ul ref={listRef} className={cn('grid grid-cols-2 gap-x-4 gap-y-8 sm:grid-cols-3 sm:gap-x-6 md:grid-cols-4',
     'lg:grid-cols-5', className)}>
     {works.map(work => <li key={work.id} className="min-w-0">
-      <WorkTile work={work} slot={slot} avatarQuery={avatarQuery} locale={locale} />
+      <WorkTile work={work} slot={slot} headingLevel={headingLevel} avatarQuery={avatarQuery} locale={locale} />
     </li>)}
   </ul>;
 }
