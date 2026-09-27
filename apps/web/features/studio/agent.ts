@@ -1,4 +1,5 @@
 import type { AgentOption } from '../auth/acting-identity.ts';
+import { idOf } from './types.ts';
 
 // Studio carries its Agent in the route, `/studio/@{agent}/…`: a workspace
 // layer (docs/contracts/identity-and-access.md#acting-identity-layers) that
@@ -39,4 +40,23 @@ export function resolveStudioAgent(segment: string, options: readonly AgentOptio
     || (uuid.test(id) && option.iri.slice(-36) === id));
   if (agent) return { kind: 'agent', agent };
   return /^[a-z0-9][a-z0-9_-]*$/.test(slug) ? { kind: 'foreign', slug } : { kind: 'invalid' };
+}
+
+export type WorkTab = 'chapters' | 'text' | 'details' | 'realms';
+
+/** A Work's Studio page, on one of its tabs. */
+export function workHref(agent: Pick<AgentOption, 'iri' | 'handle'>, work: string, tab?: WorkTab): string {
+  return studioHref(agent, `/works/${idOf(work)}${tab ? `?tab=${tab}` : ''}`);
+}
+
+/** The editor address for one text, pinned to the revision Studio last saw so a reload opens it exactly. */
+export function textHref(agent: Pick<AgentOption, 'iri' | 'handle'>, work: string, text: string, revision?: string | null):
+  string {
+  return studioHref(agent, `/works/${idOf(work)}/write/${idOf(text)}${revision ? `?revision=${idOf(revision)}` : ''}`);
+}
+
+/** The editor address for one chapter of a Book, pinned like a text's. */
+export function chapterHref(agent: Pick<AgentOption, 'iri' | 'handle'>, book: string, chapter: string,
+  revision?: string | null): string {
+  return studioHref(agent, `/works/${idOf(book)}/chapters/${idOf(chapter)}${revision ? `?revision=${idOf(revision)}` : ''}`);
 }

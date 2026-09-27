@@ -3,8 +3,8 @@ import type { AutosaveState } from '@rezics/ui/autosave-status';
 /** What one draft save did, as the editor needs to react to it. */
 export type SaveOutcome =
   | { kind: 'saved'; head: string }
-  /** The expected head moved: someone saved first. Nothing was written. */
-  | { kind: 'conflict' }
+  /** The expected head moved: someone saved first. Nothing was written. `head` is the one that won, when Main says. */
+  | { kind: 'conflict'; head?: string | null }
   /** The request never reached Main (or its answer never came back). */
   | { kind: 'offline' }
   /** Main refused this Agent; retrying cannot help. */
@@ -19,6 +19,8 @@ export interface AutosaveSnapshot {
   /** The text at `head`, what Main holds. */
   saved: string;
   denied: boolean;
+  /** At a conflict: the head that won, when Main named it. */
+  theirs: string | null;
 }
 
 export interface AutosaveOptions {
@@ -58,7 +60,7 @@ export class DraftAutosave {
   constructor(options: AutosaveOptions) {
     this.#options = { delay: 1_500, now: () => new Date(), newKey: () => crypto.randomUUID(), ...options };
     this.#current = options.body;
-    this.#snapshot = { state: 'idle', head: options.head, savedAt: null, saved: options.body, denied: false };
+    this.#snapshot = { state: 'idle', head: options.head, savedAt: null, saved: options.body, denied: false, theirs: null };
   }
 
   get snapshot(): AutosaveSnapshot { return this.#snapshot; }
@@ -126,7 +128,7 @@ export class DraftAutosave {
         return;
       }
       case 'conflict':
-        this.#set({ state: 'conflict' });
+        this.#set({ state: 'conflict', theirs: outcome.head ?? null });
         return;
       case 'denied':
         this.#set({ state: 'error', denied: true });
@@ -147,15 +149,15 @@ export class DraftAutosave {
   }
 
   /** Main moved while this device held unsaved text (found on load): stop until the writer chooses. */
-  markConflict(mine: string) {
+  markConflict(mine: string, theirs: string | null = null) {
     this.#current = mine;
-    this.#set({ state: 'conflict' });
+    this.#set({ state: 'conflict', theirs });
   }
 
   /** Keep my text: save it on top of the head someone else wrote. */
   keepMine(theirHead: string | null) {
     this.#doubt = null;
-    this.#set({ state: 'unsaved', head: theirHead });
+    this.#set({ state: 'unsaved', head: theirHead, theirs: null });
     this.#options.keep(this.#current, theirHead);
     void this.flush();
   }
@@ -166,7 +168,7 @@ export class DraftAutosave {
     this.#doubt = null;
     this.#current = theirBody;
     this.#options.release();
-    this.#set({ state: 'saved', head: theirHead, saved: theirBody, savedAt: this.#options.now() });
+    this.#set({ state: 'saved', head: theirHead, saved: theirBody, savedAt: this.#options.now(), theirs: null });
   }
 
   /** Stops a pending save; the device copy stays for the next visit. Subscribers unsubscribe themselves. */

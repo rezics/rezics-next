@@ -26,6 +26,8 @@ async function signIn(page: Page, next = sessionStudio()): Promise<void> {
 async function createWork(page: Page, title: string): Promise<string> {
   await page.goto(`${sessionStudio()}/new`);
   await page.getByRole('textbox', { name: 'Title' }).fill(title);
+  // A story opens its editor; a book opens its chapters.
+  await page.getByText('A story', { exact: true }).click();
   await page.getByRole('button', { name: /^Create as / }).click();
   await page.waitForURL(new RegExp(`^[^?]*${sessionStudio()}/works/[0-9a-f-]{36}/write\\?language=en$`));
   return /\/works\/([0-9a-f-]{36})\//.exec(page.url())![1]!;

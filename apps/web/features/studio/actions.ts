@@ -7,7 +7,7 @@ import { mainApi } from '../api/main.ts';
 import type { AgentOption } from '../auth/acting-identity.ts';
 import { signInPath } from '../auth/paths.ts';
 import { readSession } from '../auth/session.ts';
-import { studioHref } from './agent.ts';
+import { studioHref, workHref } from './agent.ts';
 import type { NewWorkState } from './new-work-form.tsx';
 import { idOf, type WorkType, workTypes } from './types.ts';
 
@@ -48,6 +48,7 @@ export async function createWork(previous: NewWorkState, form: FormData): Promis
     return { status: 'error', message: denied ? t.createDenied : t.createUnavailable, key: crypto.randomUUID(), values };
   }
   if (!response.data || 'operationId' in response.data) return { status: 'pending', message: t.createPending, key, values };
-  redirect(localizedPath(`${studioHref(agent, `/works/${idOf(response.data.work)}/write`)}?language=${
-    encodeURIComponent(writing)}`, locale));
+  // A book is written chapter by chapter; anything else starts on its text.
+  redirect(localizedPath(type === 'book' ? workHref(agent, response.data.work, 'chapters')
+    : `${studioHref(agent, `/works/${idOf(response.data.work)}/write`)}?language=${encodeURIComponent(writing)}`, locale));
 }

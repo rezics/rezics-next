@@ -5,7 +5,7 @@ import { DraftAutosave, type SaveOutcome } from '../features/studio/autosave.ts'
 import { diffParagraphs } from '../features/studio/diff.ts';
 import { type DraftStorage, localDraftKey, readLocalDraft, restoreDecision, writeLocalDraft }
   from '../features/studio/local-draft.ts';
-import { saveOutcomeOf } from '../features/studio/text-api.ts';
+import { saveOutcomeOf } from '../features/studio/content-api.ts';
 
 const head = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
 const tick = () => new Promise(resolve => setTimeout(resolve, 0));
@@ -77,6 +77,16 @@ describe('Studio autosave', () => {
     await tick();
     expect(sent.at(-1)).toEqual({ body: 'Mine, edited', head: head(3), key: 'key-2' });
     expect(autosave.snapshot).toMatchObject({ state: 'saved', head: head(4) });
+    autosave.dispose();
+  });
+
+  test('a conflict keeps the head Main named as the one that won', async () => {
+    const { autosave } = harness([{ kind: 'conflict', head: head(5) }]);
+    autosave.edit('Mine');
+    await autosave.flush();
+    expect(autosave.snapshot).toMatchObject({ state: 'conflict', theirs: head(5) });
+    autosave.takeTheirs(head(5), 'Theirs');
+    expect(autosave.snapshot.theirs).toBeNull();
     autosave.dispose();
   });
 
@@ -198,7 +208,10 @@ describe('Studio Agent addresses', () => {
 
 describe('Studio save outcomes', () => {
   test('Main’s answers map to what autosave does next', () => {
-    expect(saveOutcomeOf({ status: 409, value: { code: 'stale_head' } })).toEqual({ kind: 'conflict' });
+    // A stale head names the head that won, so the editor reads that exact version to compare.
+    expect(saveOutcomeOf({ status: 409, value: { code: 'stale_head', currentHead: head(7) } }))
+      .toEqual({ kind: 'conflict', head: head(7) });
+    expect(saveOutcomeOf({ status: 409, value: { code: 'stale_head' } })).toEqual({ kind: 'conflict', head: null });
     expect(saveOutcomeOf({ status: 409, value: { code: 'idempotency_conflict' } })).toEqual({ kind: 'failed', retryable: false });
     expect(saveOutcomeOf({ status: 403, value: { code: 'authority_denied' } })).toEqual({ kind: 'denied' });
     expect(saveOutcomeOf({ status: 503 })).toEqual({ kind: 'failed', retryable: true });

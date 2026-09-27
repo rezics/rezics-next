@@ -1,150 +1,160 @@
-import { Alert, AlertDescription, AlertTitle } from '@rezics/ui/alert';
 import { Badge } from '@rezics/ui/badge';
 import { buttonVariants } from '@rezics/ui/button';
-import { FeatherIcon, PenLineIcon, PlusIcon, TriangleAlertIcon } from 'lucide-react';
+import { cn } from '@rezics/ui/utils';
+import { FeatherIcon, ListOrderedIcon, PenLineIcon, PlusIcon, SendIcon } from 'lucide-react';
 import { type ContractOf, materializeData } from 'native-i18n';
-import type { ReactNode } from 'react';
 import type { UiLocale } from '../../i18n/define.ts';
 import type { AgentOption } from '../auth/acting-identity.ts';
+import { relativeTime } from '../feed/time.ts';
 import { EmptyState } from '../shell/empty-state.tsx';
 import Link from '../shell/localized-link.tsx';
 import { PageContainer, PageHeader } from '../shell/page.tsx';
-import { RetryButton } from '../work-page/retry-button.tsx';
-import { studioHref } from './agent.ts';
-import { ManuscriptCover } from './manuscript-cover.tsx';
+import { studioHref, textHref, workHref } from './agent.ts';
 import type { StudioMessages } from './messages.ts';
-import type { StudioHome as Home } from './read.ts';
+import { Failure, formatDate, kindLabel, languageName, openStates, reviewModeText, StateBadge, SubmissionBadge } from './parts.tsx';
+import type { BookChapters, InventoryView, ReviewPage } from './read.ts';
+import { StudioCover } from './studio-cover.tsx';
 import { studioAgentName } from './studio-frame.tsx';
-import { idOf, type MyText, type Submission, type SubmissionState } from './types.ts';
+import { canonicalLanguage, idOf, type InventoryState, type InventoryWork, type Loaded, workKind }
+  from './types.ts';
 
 type T = ContractOf<StudioMessages>;
 
-/** A BCP 47 tag's name in the interface language ("zh-Hans" → "简体中文"), or the tag itself. */
-export function languageName(tag: string, locale: UiLocale): string {
-  try { return new Intl.DisplayNames([locale], { type: 'language', fallback: 'code' }).of(tag) ?? tag; }
-  catch { return tag; }
-}
+export type HomeView = 'all' | InventoryState | 'review';
+/** The views a Studio home address may name; `empty` Works show under All. */
+export const homeViews = ['all', 'draft', 'published', 'review'] as const;
 
-/** The editor address for one text, pinned to the revision Studio last saw so a reload opens it exactly. */
-export function textHref(agent: AgentOption, work: string, text: string, revision?: string | null): string {
-  return studioHref(agent, `/works/${idOf(work)}/write/${idOf(text)}${revision ? `?revision=${idOf(revision)}` : ''}`);
-}
+export type HomeContent =
+  | { view: Exclude<HomeView, 'review'>; works: Loaded<InventoryView> }
+  | { view: 'review'; review: ReviewPage };
 
-export function publicationBadge(state: MyText['publication'], t: T) {
-  if (state === 'public') return <Badge variant="success">{t.statePublic}</Badge>;
-  if (state === 'private') return <Badge variant="secondary">{t.statePrivate}</Badge>;
-  return <Badge variant="outline">{t.stateDraft}</Badge>;
-}
-
-export function submissionState(state: SubmissionState, t: T): { text: string; variant: 'info' | 'success' | 'warning' | 'outline' } {
-  switch (state) {
-    case 'pending': return { text: t.submissionPending, variant: 'info' };
-    case 'deciding': return { text: t.submissionDeciding, variant: 'info' };
-    case 'accepted': return { text: t.submissionAccepted, variant: 'success' };
-    case 'changes-requested': return { text: t.submissionChanges, variant: 'warning' };
-    case 'rejected': return { text: t.submissionRejected, variant: 'outline' };
-    case 'withdrawn': return { text: t.submissionWithdrawn, variant: 'outline' };
-    case 'stale': return { text: t.submissionStale, variant: 'outline' };
-    default: return { text: t.submissionPending, variant: 'info' };
-  }
-}
-
-function Section({ id, title, count, children }: { id: string; title: string; count?: number; children: ReactNode }) {
-  return <section aria-labelledby={id} className="grid gap-3">
-    <h2 id={id} className="flex items-baseline gap-2 font-semibold text-lg">{title}
-      {count ? <span className="font-normal text-muted-foreground text-sm tabular-nums">{count}</span> : null}</h2>
-    {children}
-  </section>;
-}
-
-function TextRow({ text, agent, locale, t }: { text: MyText; agent: AgentOption; locale: UiLocale; t: T }) {
-  const title = text.work?.title.value ?? t.untitled;
-  const work = text.work?.id ?? null;
-  return <li className="flex items-center gap-4 rounded-2xl border border-border/60 bg-card p-3 shadow-(--aura-shadow-card)">
-    <ManuscriptCover cover={text.work?.cover ?? null} title={title} language={text.work?.title.language}
-      fallbackKey={text.id} actingSubject={agent.iri} />
-    <div className="grid min-w-0 flex-1 gap-1.5">
-      {work ? <Link href={studioHref(agent, `/works/${idOf(work)}`)} lang={text.work?.title.language}
-        className="truncate font-medium font-work-title text-lg hover:underline">{title}</Link>
-        : <p className="truncate font-medium font-work-title text-lg">{title}</p>}
-      <p className="flex flex-wrap items-center gap-2 text-muted-foreground text-sm">
-        {publicationBadge(text.publication, t)}<span>{languageName(text.language, locale)}</span></p>
-    </div>
-    {work ? <Link href={textHref(agent, work, text.id, text.revision)}
-      className={buttonVariants({ variant: 'outline', size: 'sm', className: 'shrink-0' })}>
-      <PenLineIcon aria-hidden="true" /><span className="max-sm:sr-only">{t.continueWriting}</span></Link> : null}
-  </li>;
-}
-
-function SubmissionRow({ submission, realm, agent, titles, t }: {
-  submission: Submission; realm: string; agent: AgentOption; titles: Record<string, string>; t: T;
+function WorkItem({ work, chapters, agent, now, locale, t }: {
+  work: InventoryWork; chapters: BookChapters | undefined; agent: AgentOption; now: number; locale: UiLocale; t: T;
 }) {
-  const state = submissionState(submission.state, t);
-  const title = titles[submission.work] ?? t.untitled;
-  return <li className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-border/60 bg-card px-4 py-3">
-    <Link href={studioHref(agent, `/works/${idOf(submission.work)}`)} className="min-w-0 truncate font-medium hover:underline">
-      {title}</Link>
-    <span className="flex flex-wrap items-center gap-2 text-sm">
-      <Badge variant={state.variant}>{state.text}</Badge><span className="text-muted-foreground">{realm}</span></span>
-    {submission.publicReason ? <p className="basis-full text-muted-foreground text-sm">{submission.publicReason}</p> : null}
+  const kind = workKind(work.types);
+  const open = work.submissions.filter(item => openStates.has(item.state as never)).length;
+  // A book is written chapter by chapter; other Works go straight back to their latest text.
+  const latest = kind === 'book' ? undefined : work.texts[0];
+  const languages = [...new Set(work.texts.map(text => languageName(text.language, locale)))];
+  return <li className="grid grid-cols-[4rem_minmax(0,1fr)] items-start gap-x-4 gap-y-3 rounded-2xl border
+    border-border/60 bg-card p-3 shadow-(--aura-shadow-card) sm:grid-cols-[4rem_minmax(0,1fr)_auto] sm:items-center sm:p-4">
+    <StudioCover id={work.id} title={work.title} cover={work.cover} types={work.types} actingSubject={agent.iri} />
+    <div className="grid min-w-0 gap-1.5">
+      <h2 lang={work.title.language} className="font-medium font-work-title text-lg/snug [overflow-wrap:anywhere]">
+        <Link href={workHref(agent, work.id)} className="rounded-sm hover:underline">{work.title.value}</Link></h2>
+      <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-muted-foreground text-sm">
+        <span>{kindLabel(kind, t)}</span>
+        {chapters ? <><span aria-hidden="true">·</span><span>{chapters.more ? t.chapterCountMore(chapters.count)
+          : t.chapterCount(chapters.count)}</span></> : null}
+        {chapters?.published ? <><span aria-hidden="true">·</span><span>{t.publishedCount(chapters.published)}</span></>
+          : null}
+        {languages.length ? <><span aria-hidden="true">·</span><span>{languages.join(', ')}</span></> : null}
+        <span aria-hidden="true">·</span>
+        <time dateTime={work.updatedAt}>{t.updated({ time: relativeTime(work.updatedAt, now, locale, 'long') })}</time>
+      </p>
+      <p className="flex flex-wrap items-center gap-1.5">
+        <StateBadge state={work.state} t={t} />
+        {work.disclosure === 'public' ? <Badge variant="soft">{t.publicWork}</Badge> : null}
+        {open ? <Badge variant="info"><SendIcon aria-hidden="true" />{t.openSubmissions(open)}</Badge> : null}
+      </p>
+    </div>
+    <div className="col-span-2 flex flex-wrap gap-2 sm:col-span-1 sm:justify-end">
+      {kind === 'book' ? <Link href={workHref(agent, work.id, 'chapters')}
+        className={buttonVariants({ variant: 'outline', size: 'sm' })}>
+        <ListOrderedIcon aria-hidden="true" />{t.tabChapters}</Link>
+        : <Link href={latest ? textHref(agent, work.id, latest.contribution, latest.draftHead)
+          : `${studioHref(agent, `/works/${idOf(work.id)}/write`)}?language=${
+            encodeURIComponent(canonicalLanguage(work.title.language))}`}
+        className={buttonVariants({ variant: 'outline', size: 'sm' })}>
+          <PenLineIcon aria-hidden="true" />{latest ? t.continueWriting : t.writeFirst}</Link>}
+    </div>
   </li>;
 }
 
-function Failure({ title, help, retry, t }: { title: string; help?: string; retry: boolean; t: T }) {
-  return <Alert variant={retry ? 'destructive' : 'warning'}>
-    <TriangleAlertIcon aria-hidden="true" />
-    <AlertTitle>{title}</AlertTitle>
-    {help || retry ? <AlertDescription className="grid justify-items-start gap-2">{help ? <p>{help}</p> : null}
-      {retry ? <RetryButton label={t.retry} pendingLabel={t.retry} /> : null}</AlertDescription> : null}
-  </Alert>;
+function Works({ works, view, agent, now, locale, t }: {
+  works: Loaded<InventoryView>; view: Exclude<HomeView, 'review'>; agent: AgentOption; now: number; locale: UiLocale; t: T;
+}) {
+  if (!works.ok) {
+    return works.failure === 'denied' ? <Failure title={t.worksDenied} help={t.worksDeniedHelp} retry={false} t={t} />
+      : <Failure title={t.worksFailed} retry t={t} />;
+  }
+  // Chapters are Works of their own; they are listed in their Book, not here.
+  const chapters = new Set(works.data.chapters);
+  const items = works.data.page.items.filter(work => workKind(work.types) !== 'chapter' && !chapters.has(work.id));
+  if (!items.length) {
+    return <p className="rounded-2xl border border-border/80 border-dashed px-4 py-8 text-center text-muted-foreground text-sm">
+      {view === 'draft' ? t.draftsEmpty : view === 'published' ? t.publishedEmpty : t.worksEmpty}</p>;
+  }
+  return <ul className="grid gap-3">{items.map(work =>
+    <WorkItem key={work.id} work={work} chapters={works.data.books[work.id]} agent={agent} now={now} locale={locale}
+      t={t} />)}</ul>;
 }
 
-// Submissions still open with the Realm come first, then decisions, newest first.
-const open = new Set<SubmissionState>(['pending', 'deciding', 'changes-requested']);
+function Review({ review, agent, locale, t }: { review: ReviewPage; agent: AgentOption; locale: UiLocale; t: T }) {
+  if (!review.submissions.ok) {
+    return review.submissions.failure === 'unavailable' ? <Failure title={t.reviewsFailed} retry t={t} />
+      : <p className="text-muted-foreground text-sm">{t.reviewEmpty}</p>;
+  }
+  // Still open with the Realm first, then decisions, newest first.
+  const items = [...review.submissions.data.items].sort((a, b) =>
+    Number(openStates.has(b.state)) - Number(openStates.has(a.state)) || b.updatedAt.localeCompare(a.updatedAt));
+  if (!items.length) {
+    return <p className="rounded-2xl border border-border/80 border-dashed px-4 py-8 text-center text-muted-foreground text-sm">
+      {t.reviewEmpty}</p>;
+  }
+  return <ul className="grid gap-3">{items.map(submission => {
+    const realm = review.realms[submission.realm];
+    const title = review.works[submission.work];
+    return <li key={submission.id} className="grid gap-2 rounded-2xl border border-border/60 bg-card px-4 py-3">
+      <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
+        <div className="grid min-w-0 gap-0.5">
+          <h2 lang={title?.language} className="font-medium font-work-title text-lg/snug [overflow-wrap:anywhere]">
+            <Link href={workHref(agent, submission.work, 'realms')} className="rounded-sm hover:underline">
+              {title?.value ?? t.untitled}</Link></h2>
+          <p className="text-muted-foreground text-sm"><span lang={realm?.language}>{realm?.name ?? t.realmFallback}</span>
+            {' · '}{reviewModeText(realm?.reviewMode ?? null, t)}</p>
+        </div>
+        <SubmissionBadge state={submission.state} t={t} />
+      </div>
+      {submission.publicReason ? <p className="text-sm">{submission.publicReason}</p> : null}
+      <p className="text-muted-foreground text-xs">{t.submittedOn({ date: formatDate(submission.openedAt, locale) })}</p>
+    </li>;
+  })}</ul>;
+}
 
-/** Studio's home for one Agent: its drafts, what it published and what Realms are reviewing. */
-export function StudioHome({ agent, home, moreHref, locale, messages }: {
-  agent: AgentOption; home: Home; moreHref: string | null; locale: UiLocale; messages: StudioMessages;
+/**
+ * Studio's home for one Agent: every Work it writes, from Main's inventory,
+ * filtered by where each stands, and what Realms are reviewing. Each view is
+ * one page of one read; "Show more" follows Main's cursor.
+ */
+export function StudioHome({ agent, content, moreHref, now, locale, messages }: {
+  agent: AgentOption; content: HomeContent; moreHref: string | null;
+  /** The render time, so the server and the browser print the same relative times. */
+  now: number; locale: UiLocale; messages: StudioMessages;
 }) {
   const t = materializeData(messages, { locale });
-  const newWork = <Link href={studioHref(agent, '/new')} className={buttonVariants({ size: 'lg' })}>
-    <PlusIcon aria-hidden="true" />{t.newWork}</Link>;
-  const texts = home.texts.ok ? home.texts.data.items : [];
-  const drafts = texts.filter(text => text.publication === 'draft');
-  const published = texts.filter(text => text.publication !== 'draft');
-  const submissions = home.submissions.ok ? [...home.submissions.data].sort((a, b) =>
-    Number(open.has(b.state)) - Number(open.has(a.state)) || b.updatedAt.localeCompare(a.updatedAt)) : [];
-  const titles = Object.fromEntries(texts.flatMap(text => text.work ? [[text.work.id, text.work.title.value]] : []));
-  const empty = home.texts.ok && !texts.length && (!home.submissions.ok || !submissions.length);
-  return <PageContainer className="grid gap-8">
-    <PageHeader title={t.studio} description={t.homeDescription({ agent: studioAgentName(agent, t) })} actions={newWork} />
-    {empty ? <EmptyState icon={FeatherIcon} title={t.emptyTitle} description={t.emptyBody}>
+  const views: Array<{ view: HomeView; label: string }> = [{ view: 'all', label: t.viewAll },
+    { view: 'draft', label: t.viewDrafts }, { view: 'published', label: t.viewPublished }, { view: 'review', label: t.viewReview }];
+  const nothing = content.view === 'all' && content.works.ok && !content.works.data.page.items.length && !moreHref;
+  return <PageContainer className="grid gap-6">
+    <PageHeader title={t.studio} description={t.homeDescription({ agent: studioAgentName(agent, t) })}
+      actions={<Link href={studioHref(agent, '/new')} className={buttonVariants({ size: 'lg' })}>
+        <PlusIcon aria-hidden="true" />{t.newWork}</Link>} />
+    {nothing ? <EmptyState icon={FeatherIcon} title={t.emptyTitle} description={t.emptyBody}>
       <Link href={studioHref(agent, '/new')} className={buttonVariants()}><PlusIcon aria-hidden="true" />{t.startWriting}</Link>
     </EmptyState> : <>
-      {home.texts.ok ? <>
-        <Section id="studio-drafts" title={t.drafts} count={drafts.length}>
-          {drafts.length ? <ul className="grid gap-3">{drafts.map(text =>
-            <TextRow key={text.id} text={text} agent={agent} locale={locale} t={t} />)}</ul>
-            : <p className="text-muted-foreground text-sm">{t.draftsEmpty}</p>}
-        </Section>
-        <Section id="studio-published" title={t.published} count={published.length}>
-          {published.length ? <ul className="grid gap-3">{published.map(text =>
-            <TextRow key={text.id} text={text} agent={agent} locale={locale} t={t} />)}</ul>
-            : <p className="text-muted-foreground text-sm">{t.publishedEmpty}</p>}
-        </Section>
+      <nav aria-label={t.viewsLabel} className="-mx-1 flex gap-1 overflow-x-auto border-border/60 border-b px-1">
+        {views.map(({ view, label }) => <Link key={view} href={view === 'all' ? studioHref(agent) : `${studioHref(agent)}?view=${view}`}
+          aria-current={content.view === view ? 'page' : undefined}
+          className={cn('-mb-px shrink-0 border-transparent border-b-2 px-3 py-2 font-medium text-muted-foreground text-sm',
+            'hover:text-foreground aria-[current=page]:border-primary aria-[current=page]:text-foreground')}>{label}</Link>)}
+      </nav>
+      <section aria-label={views.find(item => item.view === content.view)?.label} className="grid gap-4">
+        {content.view === 'review' ? <Review review={content.review} agent={agent} locale={locale} t={t} />
+          : <Works works={content.works} view={content.view} agent={agent} now={now} locale={locale} t={t} />}
         {moreHref ? <Link href={moreHref} className={buttonVariants({ variant: 'outline', className: 'justify-self-start' })}>
           {t.loadMore}</Link> : null}
-      </> : home.texts.failure === 'denied'
-        ? <Failure title={t.worksDenied} help={t.worksDeniedHelp} retry={false} t={t} />
-        : <Failure title={t.worksFailed} retry t={t} />}
-      <Section id="studio-review" title={t.inReview} count={submissions.length}>
-        {home.submissions.ok ? submissions.length ? <ul className="grid gap-2">{submissions.map(submission =>
-          <SubmissionRow key={submission.id} submission={submission} agent={agent} titles={titles} t={t}
-            realm={home.realms[submission.realm] ?? t.realmFallback} />)}</ul>
-          : <p className="text-muted-foreground text-sm">{t.reviewEmpty}</p>
-          : home.submissions.failure === 'unavailable' ? <Failure title={t.reviewsFailed} retry t={t} />
-            : <p className="text-muted-foreground text-sm">{t.reviewsDenied}</p>}
-      </Section>
+      </section>
     </>}
   </PageContainer>;
 }

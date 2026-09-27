@@ -1,24 +1,26 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, userEvent, waitFor, within } from 'storybook/test';
-import { agents, header, realms, storyMain } from './fixtures.ts';
+import { agents, ids, storyMain, workHeader } from './fixtures.ts';
 import { localDraftKey } from './local-draft.ts';
 import { messages } from './messages.ts';
+import zhHans from './messages/zh-Hans.ts';
 import { TextEditor, type TextEditorProps } from './text-editor.tsx';
 
 // The writing page with an in-memory Main (fixtures.ts): autosave, offline,
 // a conflict from another tab, a restored device copy and publishing. Each
 // story makes its own Main so stories never share state.
 
-const text = 'https://rezics.com/id/00000000-0000-4000-8000-000000000201';
+const text = ids.texts.story;
 const opening = '第三章 最后一班车\n末班车到站时，整座站台只有她一个人。';
-const work = { id: header.id, title: header.title, mainVersion: header.mainVersion };
+const header = workHeader(ids.story, '雨夜书店 · 短篇', 'zh-Hans', 'document');
+const work = { id: header.id, title: header.title, mainVersion: header.mainVersion, book: false };
 
 function page(options: Parameters<typeof storyMain>[0] = {}, seeded = true): TextEditorProps & { story: ReturnType<typeof storyMain> } {
   const story = storyMain(options);
   const head = seeded ? story.seed(text, opening, 'zh-Hans', header.id) : null;
   return { story, agent: agents[0]!, work, language: 'zh-Hans', text: seeded ? text : null,
-    initial: { head, body: seeded ? opening : '', publication: 'draft' }, realms: { ok: true, data: realms },
-    locale: 'en', messages: messages.en, delay: 150, main: story.main };
+    initial: { head, body: seeded ? opening : '', publication: 'draft', publicationHead: null },
+    locale: 'en', messages, delay: 150, main: story.main };
 }
 
 const meta = {
@@ -56,7 +58,8 @@ export const Autosave: Story = {
     await waitFor(() => expect(status(canvasElement)).toHaveTextContent(/^Saved · /));
     await expect(args.story!.calls).toEqual(['edit']);
     await expect(localStorage.getItem(localDraftKey(agents[0]!.iri, header.id, text))).toBeNull();
-    await expect(canvas.getByText(/\d+ words/)).toBeInTheDocument();
+    // Chinese is counted in characters, not in a segmenter's words.
+    await expect(canvas.getByText('34 characters')).toBeInTheDocument();
   },
 };
 
@@ -119,28 +122,15 @@ export const ConflictTakeTheirs: Story = {
   },
 };
 
-/** Without Main's text list the other version cannot be read: nothing to compare, the text stays and can be copied. */
-export const ConflictUnreadable: Story = {
-  args: page({ listTexts: false }),
-  async play({ canvasElement, args }) {
-    const canvas = within(canvasElement);
-    args.story!.writeElsewhere(text, 'elsewhere');
-    await append(canvas.getByRole('textbox', { name: 'Text' }), '\n我的。');
-    await expect(await canvas.findByText(/saved version can’t be loaded yet/, {}, { timeout: 3_000 })).toBeInTheDocument();
-    await expect(canvas.queryByRole('button', { name: 'Keep mine' })).toBeNull();
-    await expect(canvas.getByRole('button', { name: 'Copy mine' })).toBeInTheDocument();
-  },
-};
-
-/** Another tab on this device saved first: its announcement lets this tab compare even where Main cannot list texts. */
+/** Another tab on this device saved first: its announcement is compared at once, without reading Main again. */
 export const ConflictFromAnotherTab: Story = {
-  args: page({ listTexts: false }),
+  args: page(),
   async play({ canvasElement, args }) {
     const canvas = within(canvasElement);
     const body = `${opening}\n另一个标签页写下的一段。`;
     args.story!.writeElsewhere(text, body);
     const tab = new BroadcastChannel('rezics:studio:saves');
-    tab.postMessage({ agent: agents[0]!.iri, text, head: args.story!.head(text), body });
+    tab.postMessage({ channel: text, head: args.story!.head(text), body });
     tab.close();
     await new Promise(resolve => setTimeout(resolve, 50));
     await append(canvas.getByRole('textbox', { name: 'Text' }), '\n这个标签页的一段。');
@@ -179,25 +169,27 @@ export const Publish: Story = {
     await expect(dialog.getByText('On REZICS, for everyone to read')).toBeInTheDocument();
     await expect(dialog.getByRole('button', { name: 'Publish' })).toBeDisabled();
     await userEvent.click(dialog.getByRole('checkbox', { name: /I wrote this text/ }));
-    await userEvent.click(dialog.getByRole('checkbox', { name: /Classic Literature/ }));
     await userEvent.click(dialog.getByRole('button', { name: 'Publish' }));
     const steps = await dialog.findByRole('list', { name: 'Publish' });
-    await waitFor(() => expect(within(steps).getAllByText('Done')).toHaveLength(3));
-    await expect(args.story!.calls).toEqual(['publish', 'select', 'submit']);
+    await waitFor(() => expect(within(steps).getAllByText('Done')).toHaveLength(2));
+    await expect(args.story!.calls).toEqual(['publish', 'select']);
+    await userEvent.click(dialog.getAllByRole('button', { name: 'Close' }).at(-1)!);
+    // The next publication is an update of this one.
+    await expect(await canvas.findByRole('button', { name: 'Publish update' })).toBeInTheDocument();
   },
 };
 
-export const PublishRealmRefused: Story = {
-  args: page({ submit: 'denied' }),
+/** Main would not make this text the Work's main one: the publication stands, and the refusal is said. */
+export const PublishMainRefused: Story = {
+  args: page({ select: 'denied' }),
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     await userEvent.click(canvas.getByRole('button', { name: 'Publish' }));
     const dialog = within(await within(document.body).findByRole('dialog'));
     await userEvent.click(dialog.getByRole('checkbox', { name: /I wrote this text/ }));
-    await userEvent.click(dialog.getByRole('checkbox', { name: /Chinese Web Fiction/ }));
     await userEvent.click(dialog.getByRole('button', { name: 'Publish' }));
-    await expect(await dialog.findByText('This identity can’t submit to this Realm yet.')).toBeInTheDocument();
-    await expect(dialog.getAllByText('Done')).toHaveLength(2);
+    await expect(await dialog.findByText('This identity can’t choose the main text for this work.')).toBeInTheDocument();
+    await expect(dialog.getAllByText('Done')).toHaveLength(1);
   },
 };
 
@@ -214,13 +206,13 @@ export const PublishDenied: Story = {
 };
 
 export const Chinese: Story = {
-  args: { ...page(), locale: 'zh-Hans', messages: messages['zh-Hans'] },
+  args: { ...page(), locale: 'zh-Hans', messages: { ...messages, ...zhHans } },
   globals: { locale: 'zh-Hans' },
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     await expect(canvas.getByRole('textbox', { name: '正文' })).toHaveAttribute('placeholder', '开始写作。每一行是一个段落。');
     await expect(canvas.getByRole('button', { name: '发布' })).toBeInTheDocument();
-    await expect(canvas.getByText(/\d+ 字/)).toBeInTheDocument();
+    await expect(canvas.getByText('26 字')).toBeInTheDocument();
   },
 };
 

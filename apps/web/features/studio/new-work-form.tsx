@@ -12,7 +12,7 @@ import type { UiLocale } from '../../i18n/define.ts';
 import type { AgentOption } from '../auth/acting-identity.ts';
 import type { StudioMessages } from './messages.ts';
 import { AgentIdentity, studioAgentName } from './studio-frame.tsx';
-import { languageName } from './studio-home.tsx';
+import { languageName } from './parts.tsx';
 import { type WorkType, writingLanguages } from './types.ts';
 
 interface Values { title: string; type: string; language: string }

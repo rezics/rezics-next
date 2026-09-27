@@ -2,7 +2,7 @@
 
 import { Alert, AlertDescription, AlertTitle } from '@rezics/ui/alert';
 import { Button } from '@rezics/ui/button';
-import { Field, FieldLabel } from '@rezics/ui/field';
+import { Field, FieldHelper, FieldLabel } from '@rezics/ui/field';
 import { Input } from '@rezics/ui/input';
 import { NativeSelect, NativeSelectOption } from '@rezics/ui/native-select';
 import { Textarea } from '@rezics/ui/textarea';
@@ -13,11 +13,20 @@ import type { UiLocale } from '../../i18n/define.ts';
 import type { AgentOption } from '../auth/acting-identity.ts';
 import { saveWorkDetails } from './details-api.ts';
 import type { StudioMessages } from './messages.ts';
-import { languageName } from './studio-home.tsx';
+import { languageName } from './parts.tsx';
 import { writingLanguages } from './types.ts';
 
-export interface DetailsEntry { language: string; title: string; description: string }
-export interface DetailsValues { originalTitle: string; originalLanguage: string; entries: DetailsEntry[] }
+export interface DetailsEntry {
+  language: string; title: string; description: string; tagline: string;
+  /** The language's Main Version label: not edited here, sent back as it was read. */
+  label: string | null;
+}
+export interface DetailsValues {
+  originalTitle: string; originalLanguage: string;
+  /** A serial's state; empty when the writer has not said. */
+  completion: '' | 'ongoing' | 'completed' | 'hiatus';
+  entries: DetailsEntry[];
+}
 
 export interface DetailsState {
   status: 'idle' | 'saved' | 'error' | 'denied' | 'stale';
@@ -33,14 +42,19 @@ export interface DetailsState {
 export type SaveDetails = (input: { actingSubject: string; work: string; head: string | null; values: DetailsValues }) =>
   Promise<Omit<DetailsState, 'message'>>;
 
+const blank = (language = ''): DetailsEntry => ({ language, title: '', description: '', tagline: '', label: null });
+
 /**
- * A Work's details as readers see them: a title and description per language
- * and the original title. The fields belong to the writer until a save
- * succeeds; a refusal or a stale head only adds a note, and after a stale
- * head the next save is a deliberate overwrite of the version shown.
+ * A Work's details as readers see them: per language a title, a one-line
+ * tagline and a description, the original title, and a serial's status. The
+ * fields belong to the writer until a save succeeds; a refusal or a stale head
+ * only adds a note, and after a stale head the next save is a deliberate
+ * overwrite of the version shown.
  */
-export function DetailsForm({ agent, work, initialState, save = saveWorkDetails, locale, messages }: {
-  agent: AgentOption; work: string; initialState: DetailsState;
+export function DetailsForm({ agent, work, book, initialState, save = saveWorkDetails, locale, messages }: {
+  agent: AgentOption; work: string;
+  /** Books are serials and say whether they are ongoing. */
+  book: boolean; initialState: DetailsState;
   /** Stories pass a stand-in; the app saves through the BFF. */
   save?: SaveDetails; locale: UiLocale; messages: StudioMessages;
 }) {
@@ -49,9 +63,10 @@ export function DetailsForm({ agent, work, initialState, save = saveWorkDetails,
   const keyed = (entry: DetailsEntry) => ({ ...entry, key: ++keys.current });
   const [state, setState] = useState(initialState);
   const [entries, setEntries] = useState(() => (initialState.values.entries.length ? initialState.values.entries
-    : [{ language: '', title: '', description: '' }]).map(keyed));
+    : [blank()]).map(keyed));
   const [original, setOriginal] = useState({ title: initialState.values.originalTitle,
     language: initialState.values.originalLanguage });
+  const [completion, setCompletion] = useState(initialState.values.completion);
   const [pending, setPending] = useState(false);
   const edit = (index: number, patch: Partial<DetailsEntry>) =>
     setEntries(current => current.map((entry, other) => other === index ? { ...entry, ...patch } : entry));
@@ -60,20 +75,30 @@ export function DetailsForm({ agent, work, initialState, save = saveWorkDetails,
   const submit = async (event: FormEvent) => {
     event.preventDefault();
     setPending(true);
-    const values = { originalTitle: original.title, originalLanguage: original.language,
+    const values = { originalTitle: original.title, originalLanguage: original.language, completion,
       entries: entries.map(({ key: _key, ...entry }) => entry) };
     setState(await save({ actingSubject: agent.iri, work, head: state.head, values }));
     setPending(false);
   };
   const error = state.reason === 'invalid' ? t.detailsInvalid : state.reason === 'pending' ? t.detailsPending : t.detailsFailed;
-  return <form onSubmit={event => void submit(event)} className="grid gap-5">
+  return <form onSubmit={event => void submit(event)} className="grid gap-6">
+    {book ? <Field className="sm:max-w-72">
+      <FieldLabel>{t.completionStatus}</FieldLabel>
+      <NativeSelect value={completion} onChange={event => setCompletion(event.target.value as DetailsValues['completion'])}>
+        <NativeSelectOption value="">{t.completionUnset}</NativeSelectOption>
+        <NativeSelectOption value="ongoing">{t.completionOngoing}</NativeSelectOption>
+        <NativeSelectOption value="completed">{t.completionCompleted}</NativeSelectOption>
+        <NativeSelectOption value="hiatus">{t.completionHiatus}</NativeSelectOption>
+      </NativeSelect>
+      <FieldHelper>{t.completionHelp}</FieldHelper>
+    </Field> : null}
     <ul className="grid gap-4">
-      {entries.map((entry, index) => <li key={entry.key} className="grid gap-3 rounded-2xl border border-border/60 p-4">
+      {entries.map((entry, index) => <li key={entry.key} className="grid gap-4 rounded-2xl border border-border/60 bg-card p-4">
         <div className="flex flex-wrap items-end justify-between gap-3">
           <Field className="w-full sm:w-64">
             <FieldLabel>{t.detailsLanguage}</FieldLabel>
             <NativeSelect value={entry.language} onChange={event => edit(index, { language: event.target.value })}
-              required={Boolean(entry.title || entry.description)} size="sm">
+              required={Boolean(entry.title || entry.description || entry.tagline)} size="sm">
               <NativeSelectOption value="">—</NativeSelectOption>
               {choices(entry.language).map(tag => <NativeSelectOption key={tag} value={tag} lang={tag}>
                 {languageName(tag, locale)}</NativeSelectOption>)}
@@ -89,23 +114,30 @@ export function DetailsForm({ agent, work, initialState, save = saveWorkDetails,
             lang={entry.language || undefined} className="font-work-title" />
         </Field>
         <Field>
+          <FieldLabel>{t.tagline}</FieldLabel>
+          <Input value={entry.tagline} onChange={event => edit(index, { tagline: event.target.value })} maxLength={180}
+            lang={entry.language || undefined} />
+          <FieldHelper>{t.taglineHelp}</FieldHelper>
+        </Field>
+        <Field>
           <FieldLabel>{t.description}</FieldLabel>
           <Textarea value={entry.description} onChange={event => edit(index, { description: event.target.value })}
-            maxLength={4000} rows={4} lang={entry.language || undefined} className="[text-autospace:normal]" />
+            maxLength={4000} rows={5} lang={entry.language || undefined} className="[text-autospace:normal]" />
         </Field>
       </li>)}
     </ul>
     <Button type="button" variant="outline" size="sm" className="justify-self-start" disabled={entries.length >= 20}
-      onClick={() => setEntries(current => [...current, keyed({ language: '', title: '', description: '' })])}>
+      onClick={() => setEntries(current => [...current, keyed(blank())])}>
       <PlusIcon aria-hidden="true" />{t.addLanguage}</Button>
     <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_14rem]">
       <Field>
         <FieldLabel>{t.originalTitle}</FieldLabel>
         <Input value={original.title} onChange={event => setOriginal(current => ({ ...current, title: event.target.value }))}
           maxLength={500} lang={original.language || undefined} className="font-work-title" />
+        <FieldHelper>{t.originalTitleHelp}</FieldHelper>
       </Field>
       <Field>
-        <FieldLabel>{t.detailsLanguage}</FieldLabel>
+        <FieldLabel>{t.originalLanguage}</FieldLabel>
         <NativeSelect value={original.language} required={Boolean(original.title)}
           onChange={event => setOriginal(current => ({ ...current, language: event.target.value }))}>
           <NativeSelectOption value="">—</NativeSelectOption>
@@ -126,8 +158,8 @@ export function DetailsForm({ agent, work, initialState, save = saveWorkDetails,
       {state.theirs?.length ? <AlertDescription><dl className="grid gap-1">{state.theirs.map(entry =>
         <div key={entry.language} className="flex flex-wrap gap-x-2"><dt className="font-medium">
           {languageName(entry.language, locale)}</dt>
-          <dd lang={entry.language}>{[entry.title, entry.description].filter(Boolean).join(' — ')}</dd></div>)}</dl>
-      </AlertDescription> : null}</Alert> : null}
+          <dd lang={entry.language}>{[entry.title, entry.tagline, entry.description].filter(Boolean).join(' — ')}</dd></div>)}
+      </dl></AlertDescription> : null}</Alert> : null}
     <Button type="submit" className="justify-self-start" isLoading={pending} disabled={pending}>
       {pending ? t.savingDetails : t.saveDetails}</Button>
   </form>;

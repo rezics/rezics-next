@@ -11,28 +11,41 @@ export const useImageCropper = useArkImageCropper;
 
 interface ImageCropperProps extends React.ComponentProps<typeof ArkImageCropper.Root> {}
 
+const rootClassName = (className?: string) => cn(
+  '[--cropper-accent:var(--color-white)] [--cropper-handler-size:--spacing(2)] [--cropper-handler-width:--spacing(1)]',
+  'relative',
+  'w-full',
+  'aspect-video',
+  className,
+);
+
+const Viewport = ({ children }: { children?: React.ReactNode }) => (
+  <ArkImageCropper.Viewport
+    className={cn('size-full', 'overflow-hidden')}
+    data-slot="image-cropper-viewport"
+  >
+    {children}
+  </ArkImageCropper.Viewport>
+);
+
 export const ImageCropper = (props: ImageCropperProps) => {
   const { className, children, ...rest } = props;
 
   return (
-    <ArkImageCropper.Root
-      className={cn(
-        '[--cropper-accent:var(--color-white)] [--cropper-handler-size:--spacing(2)] [--cropper-handler-width:--spacing(1)]',
-        'relative',
-        'w-full',
-        'aspect-video',
-        className,
-      )}
-      data-slot="image-cropper"
-      {...rest}
-    >
-      <ArkImageCropper.Viewport
-        className={cn('size-full', 'overflow-hidden')}
-        data-slot="image-cropper-viewport"
-      >
-        {children}
-      </ArkImageCropper.Viewport>
+    <ArkImageCropper.Root className={rootClassName(className)} data-slot="image-cropper" {...rest}>
+      <Viewport>{children}</Viewport>
     </ArkImageCropper.Root>
+  );
+};
+
+/** An ImageCropper driven by `useImageCropper()`, for callers that read the result (`getCroppedImage()`). */
+export const ImageCropperRootProvider = (props: React.ComponentProps<typeof ArkImageCropper.RootProvider>) => {
+  const { className, children, ...rest } = props;
+
+  return (
+    <ArkImageCropper.RootProvider className={rootClassName(className)} data-slot="image-cropper" {...rest}>
+      <Viewport>{children}</Viewport>
+    </ArkImageCropper.RootProvider>
   );
 };
 
