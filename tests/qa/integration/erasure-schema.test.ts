@@ -309,6 +309,23 @@ test('erasure lifecycle reports suppression and destruction separately per reten
     WHERE erasure_id = $1 AND domain_id = $2`, [erasure, live]), '23514');
   await usesIndex(relay, `SELECT erasure_id FROM relay.erasure_disposition
     WHERE domain_id = $1 AND destruction = 'retained'`, [backup], 'erasure_disposition_domain');
+  const snapshot = randomUUID();
+  await relay.query(`INSERT INTO relay.retention_domain
+    (id, label, owner, store, custody, hold_reason)
+    VALUES ($1, 'graph:snapshot:unverified', 'graph', 'snapshot', 'archive',
+      'destruction evidence is required')`, [snapshot]);
+  await rejects(relay.query(`INSERT INTO relay.erasure_disposition
+    (erasure_id, domain_id, suppression, destruction)
+    VALUES ($1, $2, 'not_applicable', 'unverified')`, [erasure, snapshot]), '23514');
+  await relay.query(`INSERT INTO relay.erasure_disposition
+    (erasure_id, domain_id, suppression, destruction, reason)
+    VALUES ($1, $2, 'not_applicable', 'unverified', 'destruction evidence is required')`,
+  [erasure, snapshot]);
+  await rejects(relay.query(`UPDATE relay.erasure_disposition SET destruction = 'destroyed'
+    WHERE erasure_id = $1 AND domain_id = $2`, [erasure, snapshot]), '23514');
+  await relay.query(`UPDATE relay.erasure_disposition
+    SET destruction = 'destroyed', evidence_digest = $3
+    WHERE erasure_id = $1 AND domain_id = $2`, [erasure, snapshot, digest('snapshot-erasure')]);
 
   // Verified completion may keep an explicitly retained backup copy.
   await relay.query(`UPDATE relay.erasure SET stage = 'verified', destruction_status = 'retained',

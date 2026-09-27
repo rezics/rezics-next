@@ -1,12 +1,18 @@
 import { expect, test } from 'bun:test';
 import { spawnSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
+import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { Pool } from 'pg';
 import { FusekiClient } from '../../../services/main/src/infrastructure/fuseki.ts';
 import { initializeFreshGraph } from '../../../services/main/src/modules/work/activate.ts';
 import { cutoverRestoredGraphLineage } from '../../../services/main/src/modules/work/restore-lineage.ts';
 import { assertPublicTextReady, SearchIndexUnavailable }
   from '../../../services/main/src/modules/work/search-readiness.ts';
+import { ensureRetentionDomain, journalErasure, markErasureSuppressed,
+  readErasure, recordErasureInventory, retireRetentionDomain, sha256 }
+  from '../../../services/main/src/modules/erasure/journal.ts';
+import { GRAPH_LIVE_RETENTION } from '../../../services/main/src/modules/erasure/request.ts';
 import { fusekiSecrets, pinnedImage, qaStack, requireFaultTier, root,
   rootCommand, standaloneFuseki } from './search-ops-support.ts';
 
@@ -20,17 +26,31 @@ test('OPS10/SEARCH08/SEARCH20/WORK10: offline sanitized graph and Lucene copy ex
   const candidateName = `rezics-erasure-${randomUUID().slice(0, 12)}`;
   const retirementId = `qa-${randomUUID().slice(0, 12)}`;
   let started = false;
+  let relay: Pool | undefined;
   let candidate: Awaited<ReturnType<typeof standaloneFuseki>> | undefined;
   try {
     started = true;
     rootCommand(['stack:up', ...stack.args], 180_000);
+    relay = new Pool({ connectionString: stack.apps.ACCOUNT_RELAY_DATABASE_URL });
+    const migrations = join(root, 'services/main/migrations/relay');
+    for (const file of [...new Bun.Glob('*.sql').scanSync({ cwd: migrations })].sort()) {
+      await relay.query(readFileSync(join(migrations, file), 'utf8'));
+    }
     const lineage = { dataEpoch: stack.apps.MAIN_DATA_EPOCH!, routingEpoch: '1' };
     await initializeFreshGraph(stack.fuseki, lineage);
     stack.runner.stop();
     const revision = `urn:rezics:content:revision:${randomUUID()}`;
+    const journal = await journalErasure(relay, { operationId: `purge-${randomUUID()}`,
+      requestDigest: sha256(revision), kind: 'revision', principalId: randomUUID(),
+      admissionId: randomUUID(), authorityEpoch: '0', targets: [{ kind: 'content_revision',
+        ref: revision.slice('urn:rezics:content:revision:'.length) }] });
+    const erasureEpoch = journal.erasureEpoch;
     const projection = `urn:rezics:content:projection:${randomUUID()}`;
+    const privateProjection = `urn:rezics:content:private-projection:${randomUUID()}`;
+    const privateState = `urn:rezics:content:private-state:${randomUUID()}`;
     const erasedUnit = `urn:rezics:content:match-unit:${randomUUID()}`;
-    const privateUnit = `urn:rezics:content:match-unit:${randomUUID()}`;
+    const privateUnit = `urn:rezics:content:private-unit:${randomUUID()}`;
+    const retainedPrivateUnit = `urn:rezics:content:private-unit:${randomUUID()}`;
     const retainedUnit = `urn:rezics:content:match-unit:${randomUUID()}`;
     const seed = `
 <${projection}> <${RV}contentRevision> <${revision}> <urn:rezics:graph:revisions> .
@@ -40,9 +60,16 @@ test('OPS10/SEARCH08/SEARCH20/WORK10: offline sanitized graph and Lucene copy ex
 <${erasedUnit}> <${RV}revision> <${revision}> <${GRAPH}> .
 <${erasedUnit}> <${RV}projection> <${projection}> <${GRAPH}> .
 <${erasedUnit}> <${RV}searchBody> "forbidden lighthouse payload"@en <${GRAPH}> .
+<${privateState}> <${RV}privateSearchHead> <${privateProjection}> <urn:rezics:graph:current> .
+<${privateProjection}> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <${RV}ContentPrivateProjection> <urn:rezics:graph:revisions> .
+<${privateProjection}> <${RV}contentRevision> <${revision}> <urn:rezics:graph:revisions> .
+<${privateProjection}> <${RV}matchUnit> <${privateUnit}> <urn:rezics:graph:revisions> .
 <${privateUnit}> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <${RV}MatchUnit> <${PRIVATE_GRAPH}> .
 <${privateUnit}> <${RV}revision> <${revision}> <${PRIVATE_GRAPH}> .
+<${privateUnit}> <${RV}projection> <${privateProjection}> <${PRIVATE_GRAPH}> .
 <${privateUnit}> <${RV}privateSearchBody> "hidden forbidden payload"@en <${PRIVATE_GRAPH}> .
+<${retainedPrivateUnit}> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <${RV}MatchUnit> <${PRIVATE_GRAPH}> .
+<${retainedPrivateUnit}> <${RV}privateSearchBody> "retained private payload"@en <${PRIVATE_GRAPH}> .
 <${retainedUnit}> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <${RV}MatchUnit> <${GRAPH}> .
 <${retainedUnit}> <${RV}searchBody> "retained lighthouse payload"@en <${GRAPH}> .
 <urn:rezics:search:public:anchor> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <${RV}SearchGraphAnchor> <${GRAPH}> .
@@ -57,18 +84,21 @@ java -Xmx2g -cp /opt/apache-jena-fuseki-6.2.0/fuseki-server.jar \
     const mount = `${join(root, 'infra/jena/purge-tdb2.sh')}:/tmp/purge-tdb2.sh:ro`;
     const active = stack.compose(['run', '--rm', '--no-deps', '-T', '--volume', mount,
       '--entrypoint', 'sh', 'fuseki', '-ec',
-      `sh /tmp/purge-tdb2.sh /fuseki/databases/erasure-candidate '${revision}' 7`], 300_000);
-    expect(active.status).toBe(0);
+      `sh /tmp/purge-tdb2.sh /fuseki/databases/erasure-candidate '${revision}' ${erasureEpoch}`], 300_000);
+    if (active.status !== 0) throw new Error(`purge build failed: ${active.output}`);
     expect(active.output).toContain('sanitized candidate built');
     const duplicate = stack.compose(['run', '--rm', '--no-deps', '-T', '--volume', mount,
       '--entrypoint', 'sh', 'fuseki', '-ec',
-      `sh /tmp/purge-tdb2.sh /fuseki/databases/erasure-candidate '${revision}' 7`], 30_000);
+      `sh /tmp/purge-tdb2.sh /fuseki/databases/erasure-candidate '${revision}' ${erasureEpoch}`], 30_000);
     expect(duplicate.status).toBe(75);
     const source = stack.runner.offline('java -cp /opt/apache-jena-fuseki-6.2.0/fuseki-server.jar tdb2.tdbdump --loc=/fuseki/databases/rezics/tdb2');
     expect(source).toContain('forbidden lighthouse payload');
     const copied = stack.runner.offline('java -cp /opt/apache-jena-fuseki-6.2.0/fuseki-server.jar tdb2.tdbdump --loc=/fuseki/databases/erasure-candidate/databases/rezics/tdb2');
     expect(copied).not.toContain('forbidden lighthouse payload');
     expect(copied).not.toContain('hidden forbidden payload');
+    expect(copied).not.toContain(privateProjection);
+    expect(copied).not.toContain(privateUnit);
+    expect(copied).toContain('retained private payload');
     expect(copied).toContain(revision);
     expect(copied).toContain('ErasedRevision');
     expect(copied).toContain('erasureEpoch');
@@ -93,7 +123,30 @@ java -Xmx2g -cp /opt/apache-jena-fuseki-6.2.0/fuseki-server.jar \
     expect(await query('forbidden lighthouse payload')).not.toContain(erasedUnit);
     expect(await query('hidden forbidden payload', PRIVATE_GRAPH, 'privateSearchBody'))
       .not.toContain(privateUnit);
+    expect(await query('retained private payload', PRIVATE_GRAPH, 'privateSearchBody'))
+      .toContain(retainedPrivateUnit);
     expect(await query('retained lighthouse payload')).toContain(retainedUnit);
+    await markErasureSuppressed(relay, journal.erasureId);
+    for (const [store, label] of [
+      ['tdb2_generation', `graph:tdb2:live:${lineage.dataEpoch}`],
+      ['lucene', `graph:lucene:live:${lineage.dataEpoch}`],
+    ] as const) {
+      await ensureRetentionDomain(relay, { label, owner: 'graph', store, custody: 'live' });
+    }
+    for (const [store, label, custody] of [
+      ['snapshot', 'graph:snapshot:unverified', 'archive'],
+      ['tdb2', 'graph:backup:unverified', 'backup'],
+      ['media', 'graph:media:unverified', 'archive'],
+    ] as const) {
+      await ensureRetentionDomain(relay, { label, owner: 'graph', store, custody,
+        holdReason: `${store} destruction evidence is required` });
+    }
+    await recordErasureInventory(relay, journal.erasureId,
+      { owners: ['graph'], liveRetentionReason: GRAPH_LIVE_RETENTION });
+    const beforeRetirement = await readErasure(relay, journal.erasureId);
+    expect(beforeRetirement).toMatchObject({ suppression: 'suppressed', destruction: 'retained' });
+    expect(beforeRetirement.dispositions.filter(copy => copy.destruction === 'unverified'))
+      .toHaveLength(3);
     const receipt = `urn:rezics:receipt:erasure-replay-test:${randomUUID()}`;
     const replay = await fetch(new URL('command', candidate.url), { method: 'POST',
       headers: { 'content-type': 'application/json', authorization:
@@ -105,6 +158,24 @@ java -Xmx2g -cp /opt/apache-jena-fuseki-6.2.0/fuseki-server.jar \
         } WHERE { }` }) });
     expect(replay.status).toBe(200);
     expect(await replay.json()).toMatchObject({ status: 'invalid',
+      report: 'erased exact revision cannot be reactivated' });
+    const privateReplayReceipt = `urn:rezics:receipt:erasure-private-replay-test:${randomUUID()}`;
+    const privateReplay = await fetch(new URL('command', candidate.url), { method: 'POST',
+      headers: { 'content-type': 'application/json', authorization:
+        `Bearer ${stack.composeEnv.FUSEKI_COMMAND_TOKEN}` },
+      body: JSON.stringify({ receipt: privateReplayReceipt, digest: 'b'.repeat(64),
+        deadlineMs: 10_000, validations: [], update: `PREFIX rv: <${RV}> INSERT {
+          GRAPH <urn:rezics:graph:current> {
+            <${privateState}> rv:privateSearchHead <${privateProjection}> . }
+          GRAPH <urn:rezics:graph:revisions> {
+            <${privateProjection}> a rv:ContentPrivateProjection ; rv:contentRevision <${revision}> . }
+          GRAPH <${PRIVATE_GRAPH}> { <${privateUnit}> rv:revision <${revision}> ;
+            rv:privateSearchBody "retargeted private payload"@en . }
+          GRAPH <urn:rezics:graph:receipts> {
+            <${privateReplayReceipt}> a rv:OperationReceipt . }
+        } WHERE { }` }) });
+    if (privateReplay.status !== 200) throw new Error(`private replay failed: ${await privateReplay.text()}`);
+    expect(await privateReplay.json()).toMatchObject({ status: 'invalid',
       report: 'erased exact revision cannot be reactivated' });
     const candidateClient = new FusekiClient(candidate.url,
       stack.composeEnv.FUSEKI_MAINTENANCE_TOKEN, stack.composeEnv.FUSEKI_COMMAND_TOKEN);
@@ -120,7 +191,7 @@ java -Xmx2g -cp /opt/apache-jena-fuseki-6.2.0/fuseki-server.jar \
     const activateMount = `${join(root, 'infra/jena/purge-activate.sh')}:/tmp/purge-activate.sh:ro`;
     const activate = (mode: string, candidateBase: string) => stack.compose(['run', '--rm', '--no-deps',
       '-T', '--volume', activateMount, '--entrypoint', 'sh', 'fuseki', '-ec',
-      `sh /tmp/purge-activate.sh ${mode} ${candidateBase} '${revision}' 7 ${retirementId}`], 60_000);
+      `sh /tmp/purge-activate.sh ${mode} ${candidateBase} '${revision}' ${erasureEpoch} ${retirementId}`], 60_000);
     expect(activate('activate', '/fuseki/databases/erasure-candidate').status).toBe(75);
     stack.runner.offline(`cp /fuseki/databases/erasure-candidate/databases/rezics/erasure-purge.ready \
       /fuseki/databases/erasure-candidate/databases/rezics/erasure-purge.verified`);
@@ -143,11 +214,25 @@ java -Xmx2g -cp /opt/apache-jena-fuseki-6.2.0/fuseki-server.jar \
     const destroyed = activate('destroy', retirementId);
     expect(destroyed.status).toBe(0);
     expect(destroyed.output).toContain('retired fileset unlinked');
+    const evidence = /evidence-sha256=([0-9a-f]{64})/.exec(destroyed.output)?.[1];
+    if (!evidence) throw new Error('retired fileset lacks evidence digest');
+    await retireRetentionDomain(relay, `graph:tdb2:live:${lineage.dataEpoch}`, 'destroyed', evidence);
+    await retireRetentionDomain(relay, `graph:lucene:live:${lineage.dataEpoch}`, 'destroyed', evidence);
+    const report = await readErasure(relay, journal.erasureId);
+    for (const label of [`graph:tdb2:live:${lineage.dataEpoch}`,
+      `graph:lucene:live:${lineage.dataEpoch}`]) {
+      expect(report.dispositions.find(copy => copy.domain === label)).toMatchObject({
+        suppression: 'suppressed', destruction: 'destroyed', evidenceDigest: evidence });
+    }
+    expect(report.dispositions.filter(copy => copy.destruction === 'unverified'))
+      .toHaveLength(3);
+    expect(report.destruction).toBe('retained');
     expect(stack.runner.offline(`test ! -e /fuseki/databases/rezics-retired-${retirementId}
       test -f /fuseki/databases/rezics/erasure-purge.retired-${retirementId}
       test ! -e /fuseki/databases/purge.incomplete
       echo destroyed`)).toContain('destroyed');
   } finally {
+    await relay?.end();
     candidate?.remove();
     spawnSync('docker', ['rm', '-f', candidateName], { env: stack.dockerEnv, timeout: 60_000 });
     if (started) rootCommand(['stack:reset', ...stack.args], 120_000);

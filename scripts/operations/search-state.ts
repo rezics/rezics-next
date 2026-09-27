@@ -213,7 +213,7 @@ export const OFFLINE_INDEX_SCRIPT = `exec 9>>${STATE_DIRECTORY}/owner.lock
 flock -n 9 || { echo "offline index: another process owns ${STATE_DIRECTORY}" >&2; exit 75; }
 : > ${STATE_DIRECTORY}/lucene.uncertain
 rm -rf ${STATE_DIRECTORY}/lucene && mkdir ${STATE_DIRECTORY}/lucene
-java -Xmx2g -cp ${JENA_JAR} jena.textindexer --desc=${INDEXER_ASSEMBLER}
+java -Xmx2g -cp ${COMMAND_JAR}:${JENA_JAR} com.rezics.jena.ErasureTextIndexer --desc=${INDEXER_ASSEMBLER}
 rm -f ${STATE_DIRECTORY}/lucene.uncertain && sync`;
 
 export async function offlineTextIndex(runner: FusekiStateRunner): Promise<string> {

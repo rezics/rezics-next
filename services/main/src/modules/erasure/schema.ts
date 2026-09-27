@@ -62,7 +62,8 @@ export interface ErasureTargetRow {
 export const RETENTION_OWNERS = ['account', 'access', 'content', 'source', 'graph', 'object',
   'relay'] as const;
 export const RETENTION_STORES = ['postgresql', 'postgresql_wal', 'tdb2', 'tdb2_generation',
-  'lucene', 'object_store', 'cache', 'delivery', 'log', 'audit', 'export_artifact'] as const;
+  'lucene', 'object_store', 'cache', 'delivery', 'log', 'audit', 'export_artifact',
+  'snapshot', 'media'] as const;
 /** Backup, archive and retired custody require an expiry or an explicit hold. */
 export const RETENTION_CUSTODY = ['live', 'derived', 'backup', 'archive', 'retired'] as const;
 export const RETENTION_DOMAIN_STATES = ['active', 'expired', 'destroyed'] as const;
@@ -84,7 +85,7 @@ export interface RetentionDomainRow {
 export const DISPOSITION_SUPPRESSION = ['not_applicable', 'pending', 'suppressed'] as const;
 /** Terminal values need evidence; `retained` needs an expiry or a hold reason. */
 export const DISPOSITION_DESTRUCTION = ['pending', 'not_present', 'destroyed', 'sanitized',
-  'expired', 'retained', 'blocked'] as const;
+  'expired', 'retained', 'blocked', 'unverified'] as const;
 
 /** `relay.erasure_disposition`: per-erasure, per-domain suppression and destruction. */
 export interface ErasureDispositionRow {

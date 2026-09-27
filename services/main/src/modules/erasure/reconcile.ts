@@ -12,8 +12,10 @@ import { assertRetainedAuthorityCoverage, type RetainedAuthorityCoverage } from 
 import { applyContentErasure, ContentErasureGraphRequired, contentErasureResource,
   ContentErasureStale, probeContentErasure } from './content.ts';
 import { ErasureUnavailable, readErasure, relayTransaction, sha256 } from './journal.ts';
+import { readGraphErasureProof, type GraphSuppressionProof } from './graph.ts';
 import { assertGraphErasure, graphLineageSequence, replayGraphErasure } from './replay-graph.ts';
 import { objectErasureAbsent, protectedObjectDigests, replayObjectErasure } from './replay-objects.ts';
+import { publicationSupersessionsMatch } from './replay-supersessions.ts';
 
 /** The restored owners stay fenced: a later journal entry or authority fact is unreconciled. */
 export class ErasureRestoreHold extends Error {}
@@ -142,7 +144,7 @@ export async function verifyErasure(relay: Pool, owners: { content?: Pool; accou
   for (const disposition of report.dispositions) {
     items.push({ owner: disposition.owner, kind: 'retention_pin', ref: disposition.domain,
       disposition: ['pending', 'blocked'].includes(disposition.destruction) ? 'conflict'
-        : disposition.destruction === 'retained' ? 'preserved' : 'retired' });
+        : ['retained', 'unverified'].includes(disposition.destruction) ? 'preserved' : 'retired' });
   }
   if (!report.dispositions.length) {
     items.push({ owner: 'relay', kind: 'retention_pin', ref: 'inventory', disposition: 'gap' });
@@ -234,11 +236,24 @@ export async function reconcileRestoredErasures(relay: Pool, restored: RestoredO
       }
       const probes = await probeContentErasure(restored.content, entry.id, entry.refs);
       const available = entry.refs.filter(ref => probes.get(ref) === 'available');
+      let graphProof: GraphSuppressionProof | null = null;
+      if (restored.graph) {
+        let disposition: Item['disposition'] = entry.refs.length > 64 ? 'conflict'
+          : await replayGraphErasure(restored.graph.fuseki, restored.graph.lineage,
+            entry.id, entry.epoch, entry.refs, input.replay);
+        if (disposition === 'erased' || disposition === 'replayed') {
+          try { graphProof = await readGraphErasureProof(restored.graph.fuseki,
+            restored.graph.lineage, entry.id, entry.epoch, entry.refs); }
+          catch { disposition = 'conflict'; }
+        }
+        graph.push({ owner: 'graph', kind: 'erasure', ref: entry.id, disposition });
+      }
       let replayed = false;
       if (available.length && input.replay) {
         try {
           await applyContentErasure(restored.content, { erasureId: entry.id, erasureEpoch: entry.epoch,
-            resourceId: await contentErasureResource(restored.content, available), revisionIds: available });
+            resourceId: await contentErasureResource(restored.content, available),
+            revisionIds: available, ...(graphProof ? { graphProof } : {}) });
           replayed = true;
         } catch (error) {
           if (!(error instanceof ContentErasureGraphRequired || error instanceof ContentErasureStale)) throw error;
@@ -250,11 +265,10 @@ export async function reconcileRestoredErasures(relay: Pool, restored: RestoredO
           disposition: probe === 'erased' || probe === 'absent' ? 'erased'
             : probe === 'available' && replayed ? 'replayed' : 'conflict' });
       }
-      if (restored.graph) {
-        const disposition = entry.refs.length > 64 ? 'conflict'
-          : await replayGraphErasure(restored.graph.fuseki, restored.graph.lineage,
-            entry.id, entry.epoch, entry.refs, input.replay);
-        graph.push({ owner: 'graph', kind: 'erasure', ref: entry.id, disposition });
+      if (!await publicationSupersessionsMatch(restored.content, entry.refs,
+        entry.id, entry.epoch, graphProof)) {
+        content.push({ owner: 'content', kind: 'retention_pin',
+          ref: `publication:${entry.id}`, disposition: 'conflict' });
       }
     }
     if (entries.length < JOURNAL_PAGE) break;
@@ -405,9 +419,19 @@ async function assertRestoredErasuresCurrent(relay: PoolClient, restored: Restor
       if (entry.refs.some(ref => !['erased', 'absent'].includes(probes.get(ref) ?? 'foreign'))) {
         throw new ErasureRestoreHold('restored Content still exposes an erased revision');
       }
-      if (restored.graph && (entry.refs.length > 64 || !await assertGraphErasure(
-        restored.graph.fuseki, restored.graph.lineage, entry.id, entry.epoch, entry.refs))) {
-        throw new ErasureRestoreHold('restored graph still exposes an erased revision');
+      let graphProof: GraphSuppressionProof | null = null;
+      if (restored.graph) {
+        if (entry.refs.length > 64 || !await assertGraphErasure(
+          restored.graph.fuseki, restored.graph.lineage, entry.id, entry.epoch, entry.refs)) {
+          throw new ErasureRestoreHold('restored graph still exposes an erased revision');
+        }
+        try { graphProof = await readGraphErasureProof(restored.graph.fuseki,
+          restored.graph.lineage, entry.id, entry.epoch, entry.refs); }
+        catch { throw new ErasureRestoreHold('restored graph erasure receipt is unavailable'); }
+      }
+      if (!await publicationSupersessionsMatch(restored.content, entry.refs,
+        entry.id, entry.epoch, graphProof)) {
+        throw new ErasureRestoreHold('restored publication supersession differs from erasure proof');
       }
     }
     if (entries.length < JOURNAL_PAGE) break;

@@ -18,9 +18,12 @@ import { contentSearchEligibilityDigest, selectPublicContentSearch,
 import { ContentProjectionUnavailable, relayContentProjectionOnce }
   from '../../../services/main/src/modules/content-publication/relay.ts';
 import { queryPublicContentPhrase } from '../../../services/main/src/modules/content-publication/search.ts';
+import { projectPrivateContentDraft, ContentPrivateProjectionUnavailable } from
+  '../../../services/main/src/modules/content-publication/search-private-projection.ts';
 import { ErasureService } from '../../../services/main/src/modules/erasure/request.ts';
 import { activateMetadataWork, initializeFreshGraph, metadataWorkRequestDigest }
   from '../../../services/main/src/modules/work/activate.ts';
+import { PRIVATE_SEARCH_GRAPH } from '../../../services/main/src/modules/contribution/private-projection.ts';
 
 const root = resolve(import.meta.dir, '../../..');
 
@@ -137,6 +140,13 @@ test('WORK10/SEARCH20/SEARCH08/OPS10: published erasure fences replay and replac
     };
     const oldBody = `erasebody${randomUUID().replaceAll('-', '')}`;
     const old = await publish(oldBody);
+    const privateUnit = await projectPrivateContentDraft(env, content, work.work, variantId,
+      old.revisionId, (await content.ownerPosition()).dataEpoch);
+    const privateBytes = async () => (await fuseki.query(`PREFIX rv: <https://rezics.com/vocab/>
+      SELECT ?body WHERE { GRAPH <${PRIVATE_SEARCH_GRAPH}> {
+        <${privateUnit.unit}> rv:revision <urn:rezics:content:revision:${old.revisionId}> ;
+          rv:privateSearchBody ?body . } }`, 65_536)).results?.bindings ?? [];
+    expect((await privateBytes()).map(row => row.body?.value)).toEqual([oldBody]);
     const kept = await publish(oldBody, retained);
     await relayToHead();
     expect((await queryPublicContentPhrase(env, content, cursor, consumer,
@@ -164,6 +174,10 @@ test('WORK10/SEARCH20/SEARCH08/OPS10: published erasure fences replay and replac
       body: { suppression: 'suppressed' } });
     expect((await content.readExactBatch([old.revisionId], async ids => new Set(ids)))[0]?.status)
       .toBe('erased');
+    expect(await privateBytes()).toHaveLength(0);
+    await expect(projectPrivateContentDraft(env, content, work.work, variantId,
+      old.revisionId, (await content.ownerPosition()).dataEpoch))
+      .rejects.toBeInstanceOf(ContentPrivateProjectionUnavailable);
     await expect(queryPublicContentPhrase(env, content, cursor, consumer,
       { phrase: oldBody, language: 'en' })).rejects.toBeInstanceOf(ContentProjectionUnavailable);
     expect((await page(pageBody.next)).status).toBe(503);

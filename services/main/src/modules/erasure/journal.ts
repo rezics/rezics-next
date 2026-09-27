@@ -223,11 +223,14 @@ export async function ensureRetentionDomain(relay: Pool, spec: RetentionDomainSp
       // every suppressed erasure of this owner is retained there until expiry.
       await client.query(`INSERT INTO relay.erasure_disposition
           (erasure_id, domain_id, suppression, destruction, retained_until, reason)
-        SELECT e.id, $1, 'not_applicable', 'retained', $3, $4 FROM relay.erasure e
+        SELECT e.id, $1, 'not_applicable',
+          CASE WHEN $2 = 'graph' AND ($5 = 'backup' OR $6 IN ('snapshot', 'media'))
+            THEN 'unverified' ELSE 'retained' END, $3, $4 FROM relay.erasure e
         WHERE e.suppression_status = 'suppressed'
           AND ((e.kind = 'account' AND $2 = 'account') OR EXISTS (SELECT 1 FROM relay.erasure_target t
             WHERE t.erasure_id = e.id AND t.owner = $2))
-        ON CONFLICT DO NOTHING`, [row.id, spec.owner, row.expires_at, row.hold_reason]);
+        ON CONFLICT DO NOTHING`, [row.id, spec.owner, row.expires_at, row.hold_reason,
+        row.custody, row.store]);
       await client.query(`UPDATE relay.erasure e SET destruction_status = 'retained'
         WHERE e.destruction_status = 'destroyed' AND EXISTS (SELECT 1 FROM relay.erasure_disposition x
           WHERE x.erasure_id = e.id AND x.domain_id = $1)`, [row.id]);
@@ -241,13 +244,14 @@ export interface InventoryFacts {
   owners: readonly (typeof RETENTION_OWNERS[number])[];
   /** Why live row bytes are not yet physically destroyed. */
   liveRetentionReason: string;
+  liveRetentionReasons?: Partial<Record<typeof RETENTION_OWNERS[number], string>>;
 }
 
 function summarize(values: readonly string[]): typeof DESTRUCTION_STATUSES[number] {
   if (!values.length) return 'pending';
   if (values.includes('blocked')) return 'blocked';
   if (values.includes('pending')) return 'in_progress';
-  if (values.includes('retained')) return 'retained';
+  if (values.includes('retained') || values.includes('unverified')) return 'retained';
   return 'destroyed';
 }
 
@@ -264,8 +268,9 @@ export async function recordErasureInventory(relay: Pool, erasureId: string,
       [erasureId])).rows[0];
     if (!header) throw new ErasureNotFound('erasure is unavailable');
     if (header.suppression_status !== 'suppressed') return;
-    const domains = (await client.query<{ id: string; custody: string; expires_at: Date | null;
-      hold_reason: string | null }>(`SELECT id, custody, expires_at, hold_reason
+    const domains = (await client.query<{ id: string; owner: typeof RETENTION_OWNERS[number];
+      store: string; custody: string; expires_at: Date | null;
+      hold_reason: string | null }>(`SELECT id, owner, store, custody, expires_at, hold_reason
       FROM relay.retention_domain WHERE state = 'active' AND owner = ANY($1::text[])
       ORDER BY id LIMIT ${MAX_ERASURE_DISPOSITIONS + 1}`, [facts.owners])).rows;
     if (domains.length > MAX_ERASURE_DISPOSITIONS) {
@@ -275,9 +280,11 @@ export async function recordErasureInventory(relay: Pool, erasureId: string,
     const derived = domains.filter(domain => domain.custody === 'derived');
     const copies = domains.filter(domain => !live.includes(domain) && !derived.includes(domain));
     await client.query(`INSERT INTO relay.erasure_disposition
-        (erasure_id, domain_id, suppression, destruction, reason)
-      SELECT $1, unnest($2::uuid[]), 'suppressed', 'retained', $3 ON CONFLICT DO NOTHING`,
-    [erasureId, live.map(domain => domain.id), facts.liveRetentionReason]);
+      (erasure_id, domain_id, suppression, destruction, reason)
+      SELECT $1, domain, 'suppressed', 'retained', reason
+      FROM unnest($2::uuid[], $3::text[]) AS c(domain, reason) ON CONFLICT DO NOTHING`,
+    [erasureId, live.map(domain => domain.id),
+      live.map(domain => facts.liveRetentionReasons?.[domain.owner] ?? facts.liveRetentionReason)]);
     // Derived copies have no qualified purge in this owner; they stay explicit.
     await client.query(`INSERT INTO relay.erasure_disposition
         (erasure_id, domain_id, suppression, destruction, reason)
@@ -285,10 +292,14 @@ export async function recordErasureInventory(relay: Pool, erasureId: string,
       ON CONFLICT DO NOTHING`, [erasureId, derived.map(domain => domain.id)]);
     await client.query(`INSERT INTO relay.erasure_disposition
         (erasure_id, domain_id, suppression, destruction, retained_until, reason)
-      SELECT $1, domain, 'not_applicable', 'retained', until, hold
-      FROM unnest($2::uuid[], $3::timestamptz[], $4::text[]) AS c(domain, until, hold)
+      SELECT $1, domain, 'not_applicable', destruction, until, reason
+      FROM unnest($2::uuid[], $3::timestamptz[], $4::text[], $5::text[])
+        AS c(domain, until, reason, destruction)
       ON CONFLICT DO NOTHING`, [erasureId, copies.map(domain => domain.id),
-      copies.map(domain => domain.expires_at), copies.map(domain => domain.hold_reason)]);
+      copies.map(domain => domain.expires_at), copies.map(domain => domain.hold_reason),
+      copies.map(domain => domain.owner === 'graph'
+        && (domain.custody === 'backup' || ['snapshot', 'media'].includes(domain.store))
+        ? 'unverified' : 'retained')]);
     const values = (await client.query<{ destruction: string }>(
       'SELECT destruction FROM relay.erasure_disposition WHERE erasure_id = $1', [erasureId]))
       .rows.map(row => row.destruction);
@@ -314,7 +325,7 @@ export async function retireRetentionDomain(relay: Pool, label: string,
     if (!domain) throw new ErasureNotFound('active retention domain is unavailable');
     const changed = (await client.query<{ erasure_id: string }>(`UPDATE relay.erasure_disposition
       SET destruction = $2, evidence_digest = $3, updated_at = clock_timestamp()
-      WHERE domain_id = $1 AND destruction IN ('pending', 'retained', 'blocked')
+      WHERE domain_id = $1 AND destruction IN ('pending', 'retained', 'blocked', 'unverified')
       RETURNING erasure_id`, [domain.id, outcome === 'expired' ? 'expired' : 'destroyed',
       evidenceDigest])).rows.map(row => row.erasure_id);
     await client.query(`UPDATE relay.erasure e SET destruction_status = CASE
@@ -323,7 +334,7 @@ export async function retireRetentionDomain(relay: Pool, label: string,
       FROM (SELECT erasure_id,
           bool_or(destruction = 'blocked') AS bool_or_blocked,
           bool_or(destruction = 'pending') AS bool_or_pending,
-          bool_or(destruction = 'retained') AS bool_or_retained
+          bool_or(destruction IN ('retained', 'unverified')) AS bool_or_retained
         FROM relay.erasure_disposition WHERE erasure_id = ANY($1::uuid[]) GROUP BY erasure_id) s
       WHERE e.id = s.erasure_id AND e.destruction_status <> 'blocked'`, [changed]);
   });

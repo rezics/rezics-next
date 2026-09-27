@@ -22,6 +22,8 @@ export const CONTENT_LIVE_DOMAIN = 'content:postgresql:live';
 export const CONTENT_WAL_DOMAIN = 'content:postgresql-wal:live';
 export const CONTENT_LIVE_RETENTION =
   'PostgreSQL keeps prior row versions and WAL until a qualified rewrite and WAL recycling';
+export const GRAPH_LIVE_RETENTION =
+  'TDB2 and Lucene old filesets remain until a verified sanitized cutover and retirement';
 
 type ErasureAccess = Pick<AccessAdmissionRegistry,
   'register' | 'claim' | 'recordGraphOutcome' | 'activePrincipalId'>;
@@ -94,8 +96,22 @@ async function completeContentErasure(service: ErasureService, graph: WorkActiva
     store: 'postgresql', custody: 'live' });
   await ensureRetentionDomain(service.relay, { label: CONTENT_WAL_DOMAIN, owner: 'content',
     store: 'postgresql_wal', custody: 'live' });
+  for (const [store, label] of [
+    ['tdb2_generation', `graph:tdb2:live:${graph.lineage.dataEpoch}`],
+    ['lucene', `graph:lucene:live:${graph.lineage.dataEpoch}`],
+  ] as const) {
+    await ensureRetentionDomain(service.relay, { label, owner: 'graph', store, custody: 'live' });
+  }
+  for (const [store, label, holdReason, custody] of [
+    ['snapshot', 'graph:snapshot:unverified', 'Snapshot destruction evidence is required', 'archive'],
+    ['tdb2', 'graph:backup:unverified', 'Backup destruction evidence is required', 'backup'],
+    ['media', 'graph:media:unverified', 'Media destruction evidence is required', 'archive'],
+  ] as const) {
+    await ensureRetentionDomain(service.relay, { label, owner: 'graph', store, custody, holdReason });
+  }
   await recordErasureInventory(service.relay, erasureId,
-    { owners: ['content'], liveRetentionReason: CONTENT_LIVE_RETENTION });
+    { owners: ['content', 'graph'], liveRetentionReason: CONTENT_LIVE_RETENTION,
+      liveRetentionReasons: { graph: GRAPH_LIVE_RETENTION } });
 }
 
 async function cancel(access: ErasureAccess, admission: RegisteredAdmission, error: Error): Promise<never> {

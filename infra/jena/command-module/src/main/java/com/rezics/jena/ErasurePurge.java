@@ -26,6 +26,7 @@ public final class ErasurePurge {
     private static final Node RV_PUBLICATION_DECISION = uri("https://rezics.com/vocab/publicationDecision");
     private static final Node MATCH_UNIT = uri("https://rezics.com/vocab/MatchUnit");
     private static final Node CONTENT_PROJECTION = uri("https://rezics.com/vocab/ContentProjection");
+    private static final Node CONTENT_PRIVATE_PROJECTION = uri("https://rezics.com/vocab/ContentPrivateProjection");
     private static final Node PUBLIC_SEARCH = uri(CommandPolicy.PUBLIC_SEARCH);
     private static final Node PRIVATE_SEARCH = uri(CommandPolicy.PRIVATE_SEARCH);
     private static final Node REVISIONS = uri(CommandPolicy.REVISIONS);
@@ -55,7 +56,8 @@ public final class ErasurePurge {
                 Node subject = quad.getSubject();
                 Node graph = quad.getGraph();
                 boolean projection = REVISIONS.equals(graph)
-                    && source.contains(graph, subject, RDF.type.asNode(), CONTENT_PROJECTION)
+                    && (source.contains(graph, subject, RDF.type.asNode(), CONTENT_PROJECTION)
+                        || source.contains(graph, subject, RDF.type.asNode(), CONTENT_PRIVATE_PROJECTION))
                     && Set.of(RV_CONTENT_REVISION, RV_MATCH_UNIT, RV_PUBLICATION_DECISION).contains(quad.getPredicate());
                 boolean unit = (PUBLIC_SEARCH.equals(graph) || PRIVATE_SEARCH.equals(graph))
                     && source.contains(graph, subject, RDF.type.asNode(), MATCH_UNIT)

@@ -41,7 +41,15 @@ EXACT_REVISION_IRI ERASURE_EPOCH RETIRE_ID` promotes it. A parent marker blocks
 startup across an interrupted rename. The old fileset stays inaccessible under
 `rezics-retired-RETIRE_ID` until `purge-activate.sh destroy RETIRE_ID
 EXACT_REVISION_IRI ERASURE_EPOCH RETIRE_ID` unlinks it after verification.
-Snapshot, backup and physical media disposition remain separate inventory items.
+`purge-activate.sh destroy` reports a digest of the retired-fileset marker only
+after unlinking the old generation. Record that evidence against the live TDB2
+and Lucene retention domains. Snapshot, backup and media domains remain
+`unverified` with a required evidence reason; the erasure's destruction summary
+remains `retained` until each copy is resolved. Suppression is reported
+separately. The sanitizer follows public and private Content projection anchors,
+including `ContentPrivateProjection`, so retained private MatchUnit bytes for
+the exact erased revision are excluded from the candidate. The native gate
+prevents either public or private references from retargeting that revision.
 
 `graph.ts` supplies the bounded live suppression primitive for one journal
 identity and up to 64 exact Content revisions. It inventories public and private
@@ -53,12 +61,21 @@ the graph first and passes the exact receipt to Content. Migration 122 retains
 an immutable supersession of each active preparation while keeping its original
 settlement proof. `content-publication/relay.ts` acknowledges old active outbox
 events only after checking that supersession against the current graph tombstone
-and receipt. A replacement publication yields a new projection; a lost index is
-replayed by `yarn search:rebuild` from the retained Content cut.
+and receipt. `replay-supersessions.ts` applies the same exact check to every
+active pin in a restored Content owner before `reconcile.ts` releases its
+restore hold; the graph erasure is replayed first, and an unavailable or
+different receipt keeps that restore held. A replacement publication yields a
+new projection; a lost index is replayed by `yarn search:rebuild` from the
+retained Content cut.
+Both offline Lucene rebuild paths use `ErasureTextIndexer` to register the
+server's filtered-graph text assembler before opening the candidate index.
 
 Cost: preflight and Content erase touch at most 64 exact revisions and their
 preparations; the graph command inventories at most 64 indexed units and makes
-at most three bounded attempts. Projection replay checks one supersession per
-old active event. The offline sanitizer copies and compacts the complete TDB2
+at most three bounded attempts. Five fixed graph copy domains add constant
+relay registration work. Projection replay checks one supersession per old
+active event. Restore reconciliation uses one indexed anti-join per journal
+entry, with at most 64 target revisions, and reads no Content bodies for that
+proof. The offline sanitizer copies and compacts the complete TDB2
 dataset and rebuilds Lucene once, so it scales with stored bytes and requires
 capacity for the candidate and retained old generation until retirement.

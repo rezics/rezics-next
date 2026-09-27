@@ -65,7 +65,7 @@ async function migrate(pool: Pool, owner: 'access' | 'relay'): Promise<void> {
   }
 }
 
-test('OPS11/OPS12/IAM11: restored backups keep erased payloads and credentials offline until the retained erasure journal reconciles', async () => {
+test('OPS11/OPS12/IAM11/SEARCH20: restored backups keep erased payloads and credentials offline until the retained erasure journal reconciles', async () => {
   if (!Bun.env.REZICS_QA_RUN_ID) throw new Error('Run through the isolated fault/recovery QA tier');
   const runId = `owner-cut-${randomUUID().replaceAll('-', '').slice(0, 12)}`;
   const stackArgs = ['--profile', 'qa', '--run-id', runId];
@@ -292,6 +292,16 @@ test('OPS11/OPS12/IAM11: restored backups keep erased payloads and credentials o
     // OPS12: a later Access scope closure is absent from backup 2. A newer
     // signed, separately retained capture supersedes that backup's authority.
     expect(await registry.closeScope(laterAuthorityScope, '0')).toMatchObject({ authorityEpoch: '1' });
+    // A historical active publication pin is present in backup 3. Its graph
+    // erasure and Content supersession will be newer than that backup.
+    const laterExact = (await content.readExactBatch([later], async ids => new Set(ids)))[0];
+    if (laterExact?.status !== 'available') throw new Error('later Content revision is unavailable');
+    const laterPreparation = `erasure-restore-active-${randomUUID()}`;
+    await content.preparePublication(laterPreparation, later, laterExact.reference.byteDigest);
+    await content.settlePublication(`erasure-restore-settle-${randomUUID()}`,
+      laterPreparation, { outcome: 'active', revisionId: later,
+        receipt: `urn:rezics:receipt:active:${randomUUID()}`,
+        dataEpoch: lineage.dataEpoch, sequence: '1' });
     const third = await captureAndBackup('after-authority');
     expect((await second.restored.access.query<{ open: boolean }>(
       'SELECT open FROM access.scope_gate WHERE id = $1', [laterAuthorityScope])).rows[0]?.open).toBe(true);
@@ -398,10 +408,15 @@ test('OPS11/OPS12/IAM11: restored backups keep erased payloads and credentials o
       third.restoredFence, third.authority))
       .rejects.toBeInstanceOf(ErasureRestoreHold);
     expect((await readJournal(currentMain)).status).toBe(503);
-    const final = await reconcileRestoredErasures(relay, current,
+    const currentWithGraph = { ...current, graph: { fuseki, lineage } };
+    const final = await reconcileRestoredErasures(relay, currentWithGraph,
       { operationId: `restore-final-${runId}`, consumer: third.consumer, replay: true,
         authority: third.authority });
     expect(final).toMatchObject({ state: 'reconciled', erasureEpoch: laterErasure.erasureEpoch });
+    expect((await current.content.query(`SELECT erasure_id, erasure_epoch::text AS erasure_epoch
+      FROM content.publication_erasure_supersession WHERE operation_id = $1`,
+    [laterPreparation])).rows).toEqual([{ erasure_id: laterErasure.erasureId,
+      erasure_epoch: laterErasure.erasureEpoch }]);
     // Simulate an unsafe copy replacement after reconciliation. Release checks
     // the owner again under the retained journal lock, then refuses resurrection.
     const unsafe = await current.content.connect();
@@ -417,12 +432,34 @@ test('OPS11/OPS12/IAM11: restored backups keep erased payloads and credentials o
       throw error;
     } finally { unsafe.release(); }
     expect(await exact(current.content, payload)).toMatchObject({ status: 'available' });
-    await expect(releaseErasureRestoreHold(relay, current, final.reconciliationId,
+    await expect(releaseErasureRestoreHold(relay, currentWithGraph, final.reconciliationId,
       third.restoredFence, third.authority)).rejects.toBeInstanceOf(ErasureRestoreHold);
     expect((await readJournal(currentMain)).status).toBe(503);
     await current.content.query(`UPDATE content.revision SET availability = 'erased',
       serialized_bytes = NULL, body = NULL WHERE id = $1`, [payload]);
-    await releaseErasureRestoreHold(relay, current, final.reconciliationId,
+    const supersessionSequence = (await current.content.query<{ graph_sequence: string }>(
+      `SELECT graph_sequence::text FROM content.publication_erasure_supersession
+       WHERE operation_id = $1`, [laterPreparation])).rows[0]!.graph_sequence;
+    const altered = await current.content.connect();
+    try {
+      await altered.query('BEGIN');
+      await altered.query('SET LOCAL session_replication_role = replica');
+      await altered.query(`UPDATE content.publication_erasure_supersession
+        SET graph_sequence = graph_sequence + 1 WHERE operation_id = $1`, [laterPreparation]);
+      await altered.query('COMMIT');
+    } finally { altered.release(); }
+    await expect(releaseErasureRestoreHold(relay, currentWithGraph, final.reconciliationId,
+      third.restoredFence, third.authority)).rejects.toBeInstanceOf(ErasureRestoreHold);
+    const repaired = await current.content.connect();
+    try {
+      await repaired.query('BEGIN');
+      await repaired.query('SET LOCAL session_replication_role = replica');
+      await repaired.query(`UPDATE content.publication_erasure_supersession
+        SET graph_sequence = $2::bigint WHERE operation_id = $1`,
+      [laterPreparation, supersessionSequence]);
+      await repaired.query('COMMIT');
+    } finally { repaired.release(); }
+    await releaseErasureRestoreHold(relay, currentWithGraph, final.reconciliationId,
       third.restoredFence, third.authority);
 
     // Reopened restore: no resurrection, credentials absent, unrelated content intact.

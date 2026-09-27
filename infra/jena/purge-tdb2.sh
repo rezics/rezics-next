@@ -50,8 +50,8 @@ java -Xmx2g -cp "$module:$jar" com.rezics.jena.ErasurePurge \
 FUSEKI_BASE="$destination" "${ERASURE_COMPACTOR:-/usr/local/bin/tdb2-compact}"
 cp "${ERASURE_ASSEMBLER:-/fuseki/fuseki-text.ttl}" "$destination/fuseki-text.ttl"
 : > "$destination/databases/rezics/lucene.uncertain"
-(cd "$destination" && FUSEKI_BASE="$destination" java -Xmx2g -cp "$jar" \
-  jena.textindexer --desc="$destination/fuseki-text.ttl")
+(cd "$destination" && FUSEKI_BASE="$destination" java -Xmx2g -cp "$module:$jar" \
+  com.rezics.jena.ErasureTextIndexer --desc="$destination/fuseki-text.ttl")
 rm "$destination/databases/rezics/lucene.uncertain"
 printf '%s\n%s\n' "$target" "$epoch" > "$destination/databases/rezics/erasure-purge.ready"
 sync

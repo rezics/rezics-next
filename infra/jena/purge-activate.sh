@@ -77,7 +77,9 @@ elif [ "$mode" = destroy ]; then
   rm -rf "$retired"
   printf '%s\n%s\n' "$target" "$epoch" > "$state/erasure-purge.retired-$retire_id"
   sync
-  echo 'purge-activate: retired fileset unlinked; separately inventory snapshots, backups and media disposition'
+  evidence=$(sha256sum "$state/erasure-purge.retired-$retire_id")
+  evidence=${evidence%% *}
+  echo "purge-activate: retired fileset unlinked; evidence-sha256=$evidence; snapshots, backups and media remain unverified"
 else
   echo "$usage" >&2
   exit 64

@@ -78,7 +78,7 @@ test('OPS13/OPS15: the offline indexer takes the owner lock and clears doubt onl
   const lines = OFFLINE_INDEX_SCRIPT.split('\n');
   expect(lines[0]).toMatch(/^exec 9>>\/fuseki\/databases\/rezics\/owner\.lock$/);
   expect(lines[1]).toMatch(/^flock -n 9 \|\| /);
-  const indexer = lines.findIndex(line => line.includes('jena.textindexer'));
+  const indexer = lines.findIndex(line => line.includes('com.rezics.jena.ErasureTextIndexer'));
   const mark = lines.findIndex(line => line.includes(': > /fuseki/databases/rezics/lucene.uncertain'));
   const empty = lines.findIndex(line => line.includes('rm -rf /fuseki/databases/rezics/lucene'));
   const clear = lines.findIndex(line => line.includes('rm -f /fuseki/databases/rezics/lucene.uncertain'));

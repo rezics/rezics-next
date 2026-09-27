@@ -13,6 +13,8 @@ import { AccessAdmissionRegistry, engageAccessRecoveryFence, releaseAccessRecove
 import { ensureRetentionDomain, ERASURE_JOURNAL_EPOCH, retireRetentionDomain } from
   '../../../services/main/src/modules/erasure/journal.ts';
 import { verifyErasure } from '../../../services/main/src/modules/erasure/reconcile.ts';
+import { publicationSupersessionsMatch } from
+  '../../../services/main/src/modules/erasure/replay-supersessions.ts';
 import { CONTENT_LIVE_DOMAIN, CONTENT_LIVE_RETENTION, CONTENT_WAL_DOMAIN, completePendingContentErasures,
   erasureReceiptIri, ErasureService } from '../../../services/main/src/modules/erasure/request.ts';
 import { initializeFreshGraph } from '../../../services/main/src/modules/work/activate.ts';
@@ -48,7 +50,7 @@ interface Report {
     retainedUntil: string | null; reason: string | null; evidenceDigest: string | null }[];
 }
 
-test('OPS11: Content erasure journals exact targets with receipts, denial, stale and recovery outcomes and explicit per-store retention', async () => {
+test('OPS10/OPS11: Content erasure journals exact targets with receipts, denial, stale and recovery outcomes and explicit per-store retention', async () => {
   const runId = Bun.env.REZICS_QA_RUN_ID;
   if (!runId || !Bun.env.FUSEKI_URL || !Bun.env.MAIN_DATA_EPOCH || !Bun.env.MAIN_ROUTING_EPOCH
     || !Bun.env.CONTENT_DATABASE_URL || !Bun.env.ACCOUNT_RELAY_DATABASE_URL) {
@@ -193,13 +195,22 @@ test('OPS11: Content erasure journals exact targets with receipts, denial, stale
     expect((await contentPool.query(`SELECT status, pin_active FROM content.publication_preparation
       WHERE operation_id = $1`, [activePreparation])).rows)
       .toEqual([{ status: 'active', pin_active: true }]);
-    expect((await contentPool.query(`SELECT erasure_id, erasure_epoch::text AS epoch,
-      graph_receipt, graph_sequence::text AS graph_sequence
+    const supersession = (await contentPool.query(`SELECT erasure_id, erasure_epoch::text AS epoch,
+      graph_receipt, graph_data_epoch, graph_sequence::text AS graph_sequence
       FROM content.publication_erasure_supersession WHERE operation_id = $1`,
-    [activePreparation])).rows).toEqual([{ erasure_id: activeReport.erasureId,
+    [activePreparation])).rows;
+    expect(supersession).toEqual([{ erasure_id: activeReport.erasureId,
       epoch: activeReport.erasureEpoch,
       graph_receipt: `urn:rezics:receipt:erasure-graph:${sha(activeReport.erasureId)}`,
+      graph_data_epoch: environment.lineage.dataEpoch,
       graph_sequence: expect.any(String) }]);
+    const activeProof = { receipt: supersession[0]!.graph_receipt,
+      dataEpoch: supersession[0]!.graph_data_epoch,
+      sequence: supersession[0]!.graph_sequence };
+    expect(await publicationSupersessionsMatch(contentPool, [activePublished],
+      activeReport.erasureId, activeReport.erasureEpoch, activeProof)).toBe(true);
+    expect(await publicationSupersessionsMatch(contentPool, [activePublished],
+      activeReport.erasureId, activeReport.erasureEpoch, null)).toBe(false);
     expect((await call('POST', '/v1/erasures', account.tokenA,
       request([activePublished]), activeKey)).status).toBe(200);
     const activeEvent = (await contentPool.query<{ sequence: string }>(
@@ -230,6 +241,17 @@ test('OPS11: Content erasure journals exact targets with receipts, denial, stale
       suppression: 'suppressed', destruction: 'retained', reason: CONTENT_LIVE_RETENTION });
     expect(dispositions.get(CONTENT_WAL_DOMAIN)).toMatchObject({ store: 'postgresql_wal',
       suppression: 'suppressed', destruction: 'retained', reason: CONTENT_LIVE_RETENTION });
+    for (const label of [`graph:tdb2:live:${environment.lineage.dataEpoch}`,
+      `graph:lucene:live:${environment.lineage.dataEpoch}`]) {
+      expect(dispositions.get(label)).toMatchObject({ owner: 'graph', suppression: 'suppressed',
+        destruction: 'retained', evidenceDigest: null });
+    }
+    for (const [label, store] of [['graph:snapshot:unverified', 'snapshot'],
+      ['graph:backup:unverified', 'tdb2'], ['graph:media:unverified', 'media']] as const) {
+      expect(dispositions.get(label)).toMatchObject({ owner: 'graph', store,
+        suppression: 'not_applicable', destruction: 'unverified', evidenceDigest: null,
+        reason: expect.stringContaining('evidence is required') });
+    }
     expect(dispositions.get(backupLabel)).toMatchObject({ custody: 'backup',
       suppression: 'not_applicable', destruction: 'retained', retainedUntil: expiry.toISOString() });
     expect(await status(erased)).toBe('erased');
@@ -363,7 +385,8 @@ test('OPS11: Content erasure journals exact targets with receipts, denial, stale
     expect(wide.relay.calls).toBe(small.relay.calls);
     expect(wide.content.calls).toBe(small.content.calls);
     expect(wide.relay.rows).toBeLessThanOrEqual(small.relay.rows + 7 * 2);
-    expect(small.relay.calls).toBeLessThanOrEqual(40);
+    // Five graph copy classes add constant inventory registration work.
+    expect(small.relay.calls).toBeLessThanOrEqual(80);
     expect(small.content.calls).toBeLessThanOrEqual(12);
     relayCosts.calls = relayCosts.rows = 0;
     expect((await call('GET', `/v1/erasures/${report.erasureId}`, account.tokenA)).status).toBe(200);

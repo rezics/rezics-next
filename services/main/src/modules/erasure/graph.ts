@@ -169,7 +169,8 @@ export async function readGraphErasureProof(fuseki: FusekiClient, lineage: Graph
   const targets = checkedTargets(revisionIds);
   const receipt = graphErasureReceipt(erasureId);
   const digest = hash(JSON.stringify({ family: 'erasure-graph-v1', erasureId, epoch, targets }));
-  const result = await fuseki.query(`PREFIX rv: <${RV}> SELECT DISTINCT ?target ?sequence WHERE {
+  const result = await fuseki.query(`PREFIX rv: <${RV}>
+    SELECT DISTINCT ?target ?sequence ?receiptEpoch ?currentSequence WHERE {
     VALUES ?target { ${targets.map(iri).join(' ')} }
     GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:dataEpoch ${lit(lineage.dataEpoch)} ;
       rv:routingEpoch ${lit(lineage.routingEpoch)} ; rv:sequence ?currentSequence .
@@ -178,8 +179,7 @@ export async function readGraphErasureProof(fuseki: FusekiClient, lineage: Graph
     GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} a rv:OperationReceipt ;
       rv:requestDigest ${lit(digest)} ; rv:outcome rv:Succeeded ;
       rv:erasureId ${lit(erasureId)} ; rv:erasureEpoch ${epoch} ;
-      rv:dataEpoch ${lit(lineage.dataEpoch)} ; rv:sequence ?sequence . }
-    FILTER(?sequence <= ?currentSequence)
+      rv:dataEpoch ?receiptEpoch ; rv:sequence ?sequence . }
     FILTER NOT EXISTS { GRAPH ${iri(PUBLIC)} { ?unit ?reference ?target
       FILTER(?reference IN (rv:revision, rv:contentRevision)) } }
     FILTER NOT EXISTS { GRAPH ${iri(PRIVATE)} { ?unit ?reference ?target
@@ -187,13 +187,18 @@ export async function readGraphErasureProof(fuseki: FusekiClient, lineage: Graph
   }`, 65_536);
   const rows = result.results?.bindings ?? [];
   const sequence = rows[0]?.sequence?.value;
+  const receiptEpoch = rows[0]?.receiptEpoch?.value;
   if (rows.length !== targets.length || !/^[1-9][0-9]*$/.test(sequence ?? '')
+    || !UUID.test(receiptEpoch ?? '')
     || new Set(rows.map(row => row.target?.value)).size !== targets.length
     || rows.some(row => !targets.includes(row.target?.value ?? '')
-      || row.sequence?.value !== sequence)) {
+      || row.sequence?.value !== sequence || row.receiptEpoch?.value !== receiptEpoch
+      || !/^(0|[1-9][0-9]*)$/.test(row.currentSequence?.value ?? '')
+      || (receiptEpoch === lineage.dataEpoch
+        && BigInt(sequence!) > BigInt(row.currentSequence!.value)))) {
     throw new GraphErasureUnavailable('exact graph suppression proof is unavailable');
   }
-  return { receipt, dataEpoch: lineage.dataEpoch, sequence: sequence! };
+  return { receipt, dataEpoch: receiptEpoch!, sequence: sequence! };
 }
 
 /** One bounded native command, with at most three retries for a racing projection. */
