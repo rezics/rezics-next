@@ -144,6 +144,8 @@ log is kept in [its history](../goals/history/codex-program-2026-09-26.md).
 | [G-139](../goals/tasks/G-139.md) / SEARCH16 | GPT-6 Sol high: private paging after graph, index or authority change. | Dispatched 00:28 UTC. |
 | [G-140](../goals/tasks/G-140.md) / SEARCH07/SEARCH10 | GPT-6 Sol high: search refresh growth and budget exhaustion measurements. | Dispatched 01:20 UTC. |
 | [G-141](../goals/tasks/G-141.md) / phase D | GPT-6 Sol xhigh: fault/recovery tier within its 6-minute budget. | Dispatched 02:02 UTC. |
+| [G-142](../goals/tasks/G-142.md) / record 1 | GPT-6 Sol xhigh: repair record run 1 integration and isolation failures. | Dispatched 04:40 UTC. |
+| [G-143](../goals/tasks/G-143.md) / record 1 | GPT-6 Luna max: repair record run 1 model digests and the Nix oracle check. | Dispatched 04:40 UTC. |
 | Authority and model backlog | IAM07–IAM37 and MODEL05–MODEL27 gaps, sequenced behind required Access and semantic owner decisions. | Planned at the [operation map](backend-operations.md); create bounded briefs when interfaces stabilize. |
 | Content, Space and community backlog | CTX, WORK, RATE, GRAPH, VIEW, BOOK, RECIPE, SUB and other M01–M10 gaps. | Planned at the operation map; retain all backend assertions. |
 | Search, sources and packages backlog | SEARCH, LIVE, PKG and HUB gaps after B75, with source/owner integration and recovery. | Planned at the operation map; selected B14–B74 evidence remains partial where named. |
