@@ -10,3 +10,4 @@ apps/web/i18n/catalogs.ts merge=union
 apps/web/features/shell/navigation.ts merge=union
 # QA registries: Goal branches register new owner integration tests by appending a line.
 scripts/qa/integration-gate-files.ts merge=union
+scripts/qa/isolated-integration-files.ts merge=union
