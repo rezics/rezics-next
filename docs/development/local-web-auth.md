@@ -63,7 +63,19 @@ hours; resource access tokens expire after five minutes and the web app
 refreshes them. Create a new QA project after the grant expires.
 
 `task dev -- --profile qa --run-id <id>` creates or loads this fixture and launches
-Account, Main and the web development app with its registered credentials.
+Account, Main, the Accounts app and the web development app with its registered
+credentials.
+
+Wherever `task dev` runs, the Accounts app (`apps/accounts`) is the public
+Account origin: `ACCOUNT_BASE_URL`, the OAuth issuer and the web app's
+`ACCOUNT_ORIGIN` point at it (port 3004 in the main checkout, the stack's own
+`ACCOUNTS_PORT` in a worktree backend), and it proxies the service's
+`/api/auth`, `/api/account`, `/oauth2` and `/.well-known` paths so the session
+cookie stays on its origin. Main still reads JWKS and introspection from the
+service. QA tier stacks run the service alone and keep it as the public origin.
+Access principals are bound to the issuer, so when a stack's issuer moves,
+`task dev` keeps the old fixture as `web-auth.retired-<time>` and registers a
+new one; principals created under the old issuer no longer match.
 The built-Worker QA tier uses the same fixture in its own isolated stack. The
 integration test proves the registered PKCE client can issue a member token and
 that Main accepts it for a
