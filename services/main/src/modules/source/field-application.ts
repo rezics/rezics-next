@@ -3,6 +3,7 @@ import type { AccountAssertionVerifier } from '../account/verify-assertion.ts';
 import type { AccessAdmissionRegistry, VerifiedPrincipal } from '../access/admission.ts';
 import type { WorkActivationEnvironment } from '../work/activate.ts';
 import { hash } from '../work/activate.ts';
+import { RightsDenied, type RightsStore } from '../rights/store.ts';
 import type { OpenLibraryConversionStore } from './open-library-conversion.ts';
 import type { SourceNativeWorkAdoptionStore } from './native-work-adoption.ts';
 import { changeNativeFieldControl, nativeFieldDigest, readNativeFieldReceipt,
@@ -29,7 +30,8 @@ export class SourceFieldApplicationStore {
       'withWorkEditAuthority' | 'register' | 'claim' | 'recordGraphOutcome' | 'issueTitleAdmission'>,
     private readonly conversions: OpenLibraryConversionStore,
     private readonly adoptions: SourceNativeWorkAdoptionStore,
-    private readonly withdrawals: SourceFieldWithdrawalStore) {}
+    private readonly withdrawals: SourceFieldWithdrawalStore,
+    private readonly rights: Pick<RightsStore, 'sourceSynopsisRestricted'>) {}
 
   async apply(principal: VerifiedPrincipal, principalId: string, request: Request,
     key: string, intent: NativeFieldControlIntent & { actingSubject: string }):
@@ -48,6 +50,10 @@ export class SourceFieldApplicationStore {
       || evidence.conversion.projection.description !== intent.value
       || evidence.conversion.mappingRevision !== source.mapping) {
       throw new NativeFieldConflict('Source description or binding changed');
+    }
+    if (await this.rights.sourceSynopsisRestricted(source.record,
+      source.observation, ['source_apply'])) {
+      throw new RightsDenied('Source synopsis is restricted from native application');
     }
     const valueDigest = hash(JSON.stringify(intent.value));
     const requestDigest = hash(JSON.stringify([principalId, nativeFieldDigest(intent),

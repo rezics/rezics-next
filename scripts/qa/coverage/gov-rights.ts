@@ -37,4 +37,10 @@ export const rightsCases: CaseDeclarations = {
     { tier: 'integration', file: 'tests/qa/integration/rights-complaint.test.ts',
       name: 'GOV24/GOV25/LIVE17/LIVE18: a source synopsis restriction stays exact through decision replay and refresh' },
   ],
+  LIVE18: [
+    { tier: 'integration', file: 'tests/qa/integration/rights-complaint.test.ts',
+      name: 'LIVE18: a complaint fence survives synopsis refresh and human confirmation while facts and Work identity survive' },
+    { tier: 'integration', file: 'tests/qa/integration/rights-complaint.test.ts',
+      name: 'GOV24/GOV25/LIVE17/LIVE18: a source synopsis restriction stays exact through decision replay and refresh' },
+  ],
 };

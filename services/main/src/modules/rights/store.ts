@@ -115,6 +115,56 @@ function validMaterial(material: MaterialScope): boolean {
 export class RightsStore {
   constructor(private readonly content: Pool, private readonly access: Pool) {}
 
+  /** A source component fence follows its exact observation or the whole record. */
+  async sourceSynopsisRestricted(record: string, observation: string, effects: readonly string[]): Promise<boolean> {
+    if (!agentPattern.test(record) || !agentPattern.test(observation) || effects.length < 1) {
+      throw new RightsInvalid('invalid synopsis fence target');
+    }
+    try {
+      return (await this.access.query(`SELECT 1 FROM access.governance_enforcement
+        WHERE owner = 'source' AND resource = $1 AND component = 'synopsis'
+          AND state = 'restricted' AND effect = ANY($3::text[])
+          AND context = 'urn:rezics:context:global'
+          AND (revision IS NULL OR revision = $2) LIMIT 1`,
+      [record, observation, effects])).rowCount !== 0;
+    } catch { throw new RightsUnavailable('synopsis fence is unavailable'); }
+  }
+
+  /** One indexed Work/slot lookup, then one batched Access probe for at most 64 source snapshots.
+   * A pending Content certificate can follow a committed graph write, so it remains tainted.
+   * A 65th matching support fails closed instead of making disclosure depend on a truncated result. */
+  async nativeSynopsisRestricted(work: string, value: string, effects: readonly string[]): Promise<boolean> {
+    if (!agentPattern.test(work) || value.length < 1 || value.length > 8000) {
+      throw new RightsInvalid('invalid native synopsis fence target');
+    }
+    const valueDigest = sha256(JSON.stringify(value));
+    let rows: Array<{ record: string; observation: string }>;
+    try {
+      rows = (await this.content.query<{ record: string; observation: string }>(`
+        SELECT DISTINCT 'https://rezics.com/id/' || s.record_id AS record,
+          'https://rezics.com/id/' || c.observation_id AS observation
+        FROM source.field_support s
+        JOIN source.field_support_step st ON st.support_id = s.id
+        LEFT JOIN source.field_support_outcome out ON out.step_id = st.id
+        JOIN source.conversion c ON c.id = st.conversion_id
+        WHERE s.target = $1 AND s.slot = 'work-editorial-field-v1#synopsis'
+          AND s.context = 'global' AND st.value_digest = $2
+          AND (out.outcome = 'applied' OR out.step_id IS NULL)
+        LIMIT 65`, [work, valueDigest])).rows;
+    } catch { throw new RightsUnavailable('native synopsis provenance is unavailable'); }
+    if (rows.length > 64) throw new RightsUnavailable('native synopsis provenance exceeds the read bound');
+    if (!rows.length) return false;
+    try {
+      return (await this.access.query(`SELECT 1 FROM unnest($1::text[], $2::text[])
+        AS source(record, observation) JOIN access.governance_enforcement e
+          ON e.owner = 'source' AND e.resource = source.record AND e.component = 'synopsis'
+          AND e.state = 'restricted' AND e.effect = ANY($3::text[])
+          AND e.context = 'urn:rezics:context:global'
+          AND (e.revision IS NULL OR e.revision = source.observation) LIMIT 1`,
+      [rows.map(row => row.record), rows.map(row => row.observation), effects])).rowCount !== 0;
+    } catch { throw new RightsUnavailable('native synopsis fence is unavailable'); }
+  }
+
   private async assessor(principal: VerifiedPrincipal, actingSubject: string): Promise<string> {
     const row = (await this.access.query<{ id: string }>(`SELECT p.id FROM access.principal p
       JOIN access.representation r ON r.principal_id = p.id

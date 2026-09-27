@@ -314,7 +314,7 @@ const app = createMainApp(fuseki, {
     sourceCorrespondences, environment, account, access),
   sourceFieldWithdrawals,
   sourceFieldApplications: new SourceFieldApplicationStore(contentPool, environment,
-    account, access, sourceConversions, sourceAdoptions, sourceFieldWithdrawals),
+    account, access, sourceConversions, sourceAdoptions, sourceFieldWithdrawals, rightsStore),
   sourceNativeChildren: new SourceNativeChildStore(contentPool, sourceProposals, sourceConversions,
     sourceCorrespondences, environment, account, access),
   sourceFieldAttachments: new SourceFieldAttachmentStore(contentPool, environment, access),

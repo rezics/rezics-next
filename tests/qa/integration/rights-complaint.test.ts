@@ -1,6 +1,8 @@
 import { expect, test } from 'bun:test';
 import { createHash, randomUUID } from 'node:crypto';
 import { Elysia } from 'elysia';
+import { rmSync } from 'node:fs';
+import { join, resolve } from 'node:path';
 import { Pool } from 'pg';
 import { migrateContent } from '../../../services/content/src/migrate.ts';
 import { ownerEvidenceCapture } from '../../../services/main/src/modules/governance/evidence.ts';
@@ -13,9 +15,139 @@ import { reportRoutes } from '../../../services/main/src/routes/reports.ts';
 import { rightsRoutes } from '../../../services/main/src/routes/rights.ts';
 import { cloneQaOwnerDatabases } from '../support/fake-delivery.ts';
 import { ratingAccount } from '../support/rating-account.ts';
+import { authorCreditFixture, author, shortId } from '../fixtures/author-credit.ts';
 
 const agent = () => `https://rezics.com/id/${randomUUID()}`;
 const digest = (value: string) => createHash('sha256').update(value).digest('hex');
+
+test('LIVE18: a complaint fence survives synopsis refresh and human confirmation while facts and Work identity survive',
+  async () => {
+    if (!Bun.env.REZICS_QA_RUN_ID) throw new Error('Use the QA integration tier');
+    const directory = join(resolve(import.meta.dir, '../../..'), '.temp', `rights-synopsis-${randomUUID()}`);
+    const scopes = 'openid work:create work:edit work:read work:protect source:intake source:acquire '
+      + 'source:convert source:propose source:adopt source:correspond source:read governance:report rights:decide';
+    const h = await authorCreditFixture(Bun.env as Record<string, string>, directory, scopes);
+    try {
+      const initial = await h.propose('OL993418W', [author('/authors/OL1A')],
+        'Independently supported title', 'Restricted copied synopsis', ['history']);
+      const work = await h.adoptWork(initial);
+      await h.grant(`work:edit:${work.work}`, 'work.edit');
+      await h.grant(`work:read:${work.work}`, 'work.read');
+      const path = `/v1/works/${shortId(work.work)}/fields/synopsis/control`;
+      const read = async () => h.json<{ work: string; workHead: string; contentHead: string | null;
+        controlHead: string | null; controlEpoch: string; protectionHead: string | null;
+        value: string | null; rightsStatus: string | null }>(
+        await h.call('GET', `${path}?actingSubject=${encodeURIComponent(h.actor)}`), 200);
+      const before = await read();
+      const basis = (state: typeof before) => ({ contentHead: state.contentHead,
+        head: state.controlHead, epoch: state.controlEpoch, protection: state.protectionHead });
+      const sourceIntent = (proposal: typeof initial, value: string, state: typeof before) => ({
+        profile: 'work-editorial-field-control-v1', field: 'synopsis',
+        expectedWorkHead: work.workRevision, basis: basis(state), value, origin: 'source',
+        source: { record: proposal.record, observation: proposal.observation,
+          conversion: proposal.conversion, mapping: 'open-library-work-map-v1' },
+        actingSubject: h.actor });
+      h.failFieldCertificate();
+      expect((await h.call('POST', path, sourceIntent(initial, 'Restricted copied synopsis', before))).status).toBe(503);
+      const imported = await read();
+      expect(imported.value).toBe('Restricted copied synopsis');
+      expect((await h.pool.query<{ pending_step_id: string }>(`SELECT h.pending_step_id
+        FROM source.field_support s JOIN source.field_support_head h ON h.support_id = s.id
+        WHERE s.target = $1 AND s.slot = 'work-editorial-field-v1#synopsis'`,
+      [work.work])).rows[0]?.pending_step_id).not.toBeNull();
+
+      const scope = 'governance:platform:source-synopsis';
+      await h.grant(scope, 'governance.appeal');
+      const decider = agent();
+      await h.accessPool.query(`INSERT INTO access.authority_subject (id,kind) VALUES ($1,'agent')`, [decider]);
+      await h.accessPool.query('INSERT INTO access.scope_gate (id) VALUES ($1) ON CONFLICT DO NOTHING', [scope]);
+      await h.accessPool.query(`INSERT INTO access.representation (id,principal_id,subject_id,action,valid_until)
+        VALUES ($1,$2,$3,'governance.rights.decide',now() + interval '1 hour')`,
+      [randomUUID(), h.otherPrincipal, decider]);
+      await h.accessPool.query(`INSERT INTO access.permission_grant
+        (id,issuer_subject,recipient_subject,scope_id,action,valid_until)
+        VALUES ($1,$2,$2,$3,'governance.rights.decide',now() + interval '1 hour')`,
+      [randomUUID(), decider, scope]);
+      const evidence = [{ owner: 'source', resource: initial.record, component: 'synopsis',
+        revision: initial.observation, locator: null }];
+      const complaintKey = randomUUID(), decisionKey = randomUUID();
+      const complaint = await h.json<{ caseId: string; evidenceDigest: string }>(await h.call('POST',
+        '/v1/rights/complaints', { profile: 'rights-complaint-v1', actingSubject: h.actor,
+          authority: { kind: 'platform', scopeId: scope }, context: 'urn:rezics:context:global',
+          target: { owner: 'source', resource: initial.record, component: 'synopsis' },
+          disclosure: 'parties', reasonCode: 'claimed_synopsis', statement: 'Copied synopsis is disputed.',
+          evidence, idempotencyKey: complaintKey, complaint: { process: 'dmca_512',
+            claimantKind: 'rights_holder', claimantName: 'Fixture claimant', claimantContact: null,
+            claimedWork: 'Restricted synopsis', claimedRight: 'copyright',
+            noticeDigest: digest('synopsis notice'), noticeReceivedAt: new Date().toISOString() } },
+        complaintKey), 201);
+      const targets = ['disclosure', 'source_apply', 'search', 'export'].map(effect => ({
+        owner: 'source', resource: initial.record, component: 'synopsis', locator: null,
+        scopeKind: 'component', revision: null, expectedHead: null, effect }));
+      const decision = await h.json<{ enforcement: Array<{ state: string }> }>(await h.call('POST',
+        '/v1/rights/restrictions', { profile: 'rights-restriction-v1', outcome: 'interim_restrict',
+          caseId: complaint.caseId, expectedGeneration: '0', actingSubject: decider,
+          targets, rule: { ref: 'urn:rezics:rule:source-rights', revision: 'v1', digest: h.ruleDigest },
+          evidenceDigest: complaint.evidenceDigest, reversesDecisionId: null, answersStepId: null,
+          rationale: 'Restrict copied synopsis while the claim is reviewed.', disclosure: 'parties',
+          idempotencyKey: decisionKey }, decisionKey, h.account.tokenB), 201);
+      expect(decision.enforcement).toHaveLength(4);
+      expect(decision.enforcement.every(item => item.state === 'restricted')).toBe(true);
+
+      const fenced = await read();
+      expect(fenced).toMatchObject({ work: work.work, workHead: work.workRevision,
+        value: null, rightsStatus: 'restricted', controlHead: imported.controlHead });
+      const refreshed = await h.propose('OL993418W', [author('/authors/OL1A')],
+        'Independently supported title', 'Refreshed copied synopsis', ['history']);
+      expect(refreshed.record).toBe(initial.record);
+      expect((await h.call('POST', path, sourceIntent(refreshed, 'Refreshed copied synopsis', imported))).status)
+        .toBe(403);
+      expect((await h.call('POST', path, { ...sourceIntent(initial, 'Restricted copied synopsis', imported),
+        origin: 'human', source: null })).status).toBe(403);
+      expect(await read()).toEqual(fenced);
+      const independentlyWritten = await h.json<{ content: string }>(await h.call('POST', path,
+        { ...sourceIntent(initial, 'A new independent synopsis', imported), origin: 'human', source: null }), 201);
+      const afterHuman = await read();
+      expect(afterHuman).toMatchObject({ work: work.work, workHead: work.workRevision,
+        value: 'A new independent synopsis', rightsStatus: 'undetermined', mode: 'human-controlled' });
+      expect(afterHuman.contentHead).toBe(independentlyWritten.content);
+      expect((await h.call('POST', path, { ...sourceIntent(initial, 'Restricted copied synopsis', afterHuman),
+        origin: 'human', source: null })).status).toBe(403);
+      const sourceObservation = await h.intake.read(h.principalId, shortId(refreshed.observation));
+      expect(sourceObservation?.record).toBe(initial.record);
+      expect(JSON.parse(Buffer.from(sourceObservation!.rawBytesBase64!, 'base64').toString('utf8')))
+        .toMatchObject({ title: 'Independently supported title', subjects: ['history'] });
+      expect(await h.rightsStore.sourceSynopsisRestricted(initial.record, refreshed.observation,
+        ['source_apply'])).toBe(true);
+      // The native provenance probe stays bounded as unrelated source supports grow.
+      const probe = async () => {
+        const row = (await h.pool.query<{ 'QUERY PLAN': Array<{ Plan: {
+          'Actual Rows': number; 'Shared Hit Blocks': number; 'Shared Read Blocks': number;
+          'Temp Read Blocks': number } }> }>(`EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON, TIMING OFF)
+          SELECT DISTINCT 'https://rezics.com/id/' || s.record_id AS record,
+            'https://rezics.com/id/' || c.observation_id AS observation
+          FROM source.field_support s
+          JOIN source.field_support_step st ON st.support_id = s.id
+          LEFT JOIN source.field_support_outcome out ON out.step_id = st.id
+          JOIN source.conversion c ON c.id = st.conversion_id
+          WHERE s.target = $1 AND s.slot = 'work-editorial-field-v1#synopsis'
+            AND s.context = 'global' AND st.value_digest = $2
+            AND (out.outcome = 'applied' OR out.step_id IS NULL) LIMIT 65`,
+        [work.work, digest(JSON.stringify('Restricted copied synopsis'))])).rows[0]!['QUERY PLAN'][0]!.Plan;
+        expect(row['Actual Rows']).toBe(1);
+        expect(row['Temp Read Blocks']).toBe(0);
+        return row['Shared Hit Blocks'] + row['Shared Read Blocks'];
+      };
+      const smallBuffers = await probe();
+      await h.pool.query(`INSERT INTO source.field_support
+        (id,principal_id,target,slot,occurrence,context,record_id)
+        SELECT gen_random_uuid(),$1,'https://rezics.com/id/' || gen_random_uuid(),
+          'work-editorial-field-v1#synopsis',NULL,'global',$2
+        FROM generate_series(1,512)`, [h.principalId, shortId(initial.record)]);
+      await h.pool.query('ANALYZE source.field_support');
+      expect(await probe()).toBeLessThanOrEqual(smallBuffers + 32);
+    } finally { await h.close(); rmSync(directory, { recursive: true, force: true }); }
+  }, 120_000);
 
 test('GOV24/GOV25/LIVE17/LIVE18: a source synopsis restriction stays exact through decision replay and refresh',
   async () => {

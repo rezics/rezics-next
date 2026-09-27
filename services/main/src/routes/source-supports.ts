@@ -7,6 +7,7 @@ import { readAuthorCreditRetirement, retireAuthorCredit } from '../modules/work/
 import { readTitleControl } from '../modules/work/title-control.ts';
 import { changeNativeFieldControl, readNativeFieldControl, NativeFieldConflict,
   NativeFieldInvalid, NativeFieldUnavailable } from '../modules/source/field-control-native.ts';
+import { RightsDenied, RightsUnavailable } from '../modules/rights/store.ts';
 import { FieldWithdrawalConflict, FieldWithdrawalInvalid, FieldWithdrawalPending,
   FieldWithdrawalUnavailable } from '../modules/source/withdrawal.ts';
 import { NativeChildConflict, NativeChildInvalid, NativeChildUnavailable,
@@ -82,7 +83,7 @@ const synopsisState = t.Object({ profile: t.Literal('work-editorial-field-contro
   controlEpoch: t.String(), protectionHead: t.Nullable(groupAgent),
   mode: t.Union([t.Literal('unestablished'), t.Literal('human-controlled'),
     t.Literal('source-managed')]), value: t.Nullable(t.String()),
-  rightsStatus: t.Nullable(t.Literal('undetermined')) });
+  rightsStatus: t.Nullable(t.Union([t.Literal('undetermined'), t.Literal('restricted')])) });
 const synopsisReceipt = t.Object({ outcome: t.Literal('succeeded'), receipt: t.String(),
   admissionId: t.String(), requestDigest: t.String(), authorityEpoch: t.String(),
   scope: t.String(), dataEpoch: t.String(), sequence: t.String(), replayed: t.Boolean(),
@@ -252,8 +253,20 @@ export function sourceSupportRoutes(fuseki: FusekiClient, work: MainWorkDependen
           return problem(404, 'field_unavailable', 'Work field is unavailable');
         }
         const state = await readNativeFieldControl(work.environment, native);
+        const rights = work.rights?.store;
+        if (state.value && !rights) {
+          return problem(503, 'synopsis_rights_unavailable', 'Synopsis rights are unavailable');
+        }
+        if (state.value && rights && await rights.nativeSynopsisRestricted(native,
+          state.value, ['disclosure'])) {
+          return Response.json({ ...state, value: null, rightsStatus: 'restricted' },
+            { headers: { 'cache-control': 'no-store' } });
+        }
         return Response.json(state, { headers: { 'cache-control': 'no-store' } });
-      } catch (error) { return commandError(error); }
+      } catch (error) {
+        if (error instanceof RightsUnavailable) return problem(503, 'synopsis_rights_unavailable', error.message);
+        return commandError(error);
+      }
     })
     .post('/v1/works/:id/fields/synopsis/control', {
       params: t.Object({ id: groupUuid }),
@@ -291,6 +304,13 @@ export function sourceSupportRoutes(fuseki: FusekiClient, work: MainWorkDependen
             replayed: result.replayed }, { status: result.replayed ? 200 : 201,
             headers: { 'cache-control': 'no-store' } });
         }
+        if (!work.rights?.store) {
+          return problem(503, 'synopsis_rights_unavailable', 'Synopsis rights are unavailable');
+        }
+        if (await work.rights.store.nativeSynopsisRestricted(native, body.value,
+          ['source_apply', 'disclosure'])) {
+          return problem(403, 'synopsis_rights_restricted', 'This synopsis expression is restricted');
+        }
         const result = await changeNativeFieldControl(work.environment, work.account,
           { register: work.access.register.bind(work.access), claim: work.access.claim.bind(work.access),
             recordGraphOutcome: work.access.recordGraphOutcome.bind(work.access),
@@ -305,6 +325,8 @@ export function sourceSupportRoutes(fuseki: FusekiClient, work: MainWorkDependen
         if (error instanceof NativeFieldInvalid) return problem(400, 'invalid_field_control', 'Field control is invalid');
         if (error instanceof NativeFieldConflict) return problem(409, 'field_control_changed', 'Field control changed');
         if (error instanceof NativeFieldUnavailable) return problem(503, 'field_control_unavailable', 'Field control is unavailable');
+        if (error instanceof RightsDenied) return problem(403, 'synopsis_rights_restricted', error.message);
+        if (error instanceof RightsUnavailable) return problem(503, 'synopsis_rights_unavailable', error.message);
         return commandError(error);
       }
     })

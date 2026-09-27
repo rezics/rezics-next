@@ -1,5 +1,5 @@
 import { expect } from 'bun:test';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { Pool } from 'pg';
 import { createMainApp } from '../../../services/main/src/app.ts';
 import { FusekiClient, type CommandEnvelope } from '../../../services/main/src/infrastructure/fuseki.ts';
@@ -17,6 +17,9 @@ import { ProviderIdentityStore } from '../../../services/main/src/modules/source
 import { SourceFieldWithdrawalStore } from '../../../services/main/src/modules/source/withdrawal.ts';
 import { SourceFieldAttachmentStore } from '../../../services/main/src/modules/source/support-attach.ts';
 import { SourceFieldApplicationStore } from '../../../services/main/src/modules/source/field-application.ts';
+import { GovernanceStore } from '../../../services/main/src/modules/governance/store.ts';
+import { ownerEvidenceCapture } from '../../../services/main/src/modules/governance/evidence.ts';
+import { RightsStore } from '../../../services/main/src/modules/rights/store.ts';
 import { SourceNativeChildStore } from '../../../services/main/src/modules/source/child-native-support.ts';
 import { sourceChildOccurrence } from '../../../services/main/src/modules/source/child-correspondence.ts';
 import { ratingAccount } from '../support/rating-account.ts';
@@ -113,8 +116,19 @@ export async function authorCreditFixture(apps: Record<string, string>, objectDi
   };
   await grant('work:create:root', 'work.create');
   const fieldWithdrawals = new SourceFieldWithdrawalStore(pool, env);
+  const rightsStore = new RightsStore(pool, accessPool);
+  const ruleDigest = createHash('sha256').update('source-rights-rule-v1').digest('hex');
+  const governance = new GovernanceStore(accessPool, ownerEvidenceCapture({ source: async (principal,
+    recordId, observationId) => {
+    if (principal.subject !== account.a.id) return null;
+    const value = await intake.read(principalId, observationId);
+    return value && value.record.endsWith(recordId) ? { record: value.record,
+      retention: value.retention, byteDigest: value.byteDigest, mediaType: value.mediaType } : null;
+  } }), { current: async () => null }, { current: async ref =>
+    ref === 'urn:rezics:rule:source-rights' ? { revision: 'v1', digest: ruleDigest } : null });
   let source: Record<string, unknown> = {};
   const app = createMainApp(fuseki, { environment: env, account: account.verifier, access,
+    governance: { store: governance }, rights: { store: rightsStore },
     protectionSigner: new ProtectionAdmissionSigner(accessPool, apps.FUSEKI_TITLE_ADMISSION_KEY),
     sourceIntake: intake, sourceConversions: conversions, sourceGraph: graph, sourceProposals: proposals,
     sourceCorrespondences: correspondences, sourceAdoptions: adoptions, sourceAuthorCredits: credits,
@@ -122,7 +136,7 @@ export async function authorCreditFixture(apps: Record<string, string>, objectDi
     sourceProviderIdentity: new ProviderIdentityStore(pool),
     sourceFieldWithdrawals: fieldWithdrawals,
     sourceFieldApplications: new SourceFieldApplicationStore(faultPool, env, account.verifier,
-      access, conversions, adoptions, fieldWithdrawals),
+      access, conversions, adoptions, fieldWithdrawals, rightsStore),
     sourceFieldAttachments: new SourceFieldAttachmentStore(pool, env, access),
     sourceAttachments: new SourceNativeWorkAttachmentStore(pool, proposals, adoptions, env, access),
     openLibraryFetch: (async () => new Response(JSON.stringify(source), { headers: { 'content-type': 'application/json' } })) as typeof fetch });
@@ -165,7 +179,8 @@ export async function authorCreditFixture(apps: Record<string, string>, objectDi
     confirmedSourceKey: key, confirmedRoleKey: '/type/author_role',
     baseSupport: null, correspondence: null, confirmedUse: 'factual-reference-only' });
   return { account, pool, accessPool, env, access, intake, conversions, graph, proposals,
-    credits, nativeChildren, principalId, actor,
+    rightsStore, governance, ruleDigest,
+    credits, nativeChildren, principalId, otherPrincipal, actor,
     call, json, grant, propose, adoptWork, input, nativeFuseki, creditCommands, fieldCommands,
     failCertificate: () => { loseCertificate = true; }, loseGraph: () => { loseGraphResponse = true; },
     loseRetirementGraph: () => { loseRetirementResponse = true; },
