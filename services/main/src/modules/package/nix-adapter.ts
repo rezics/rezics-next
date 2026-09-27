@@ -7,6 +7,38 @@ import { admitNixRequest, localNixPaths, NIX_IMAGE, NIX_VERSION, parseNixClosure
 
 const emptyClosure = { status: 'unobserved' as const, outputPath: null, paths: [] };
 const native = 'nix --extra-experimental-features "nix-command flakes"';
+const imagePreparationTimeoutMs = 180_000;
+
+let imagePreparation: Promise<void> | undefined;
+
+async function preparePinnedImage(): Promise<void> {
+  const inspect = Bun.spawn(['docker', 'image', 'inspect', NIX_IMAGE],
+    { stdout: 'ignore', stderr: 'ignore' });
+  let inspectTimedOut = false;
+  const inspectTimeout = setTimeout(() => { inspectTimedOut = true; inspect.kill(); }, 5_000);
+  const inspectExit = await inspect.exited;
+  clearTimeout(inspectTimeout);
+  if (inspectTimedOut) throw new NixResolutionUnavailable('Nix oracle pin is unavailable');
+  if (inspectExit === 0) return;
+
+  const pull = Bun.spawn(['docker', 'pull', NIX_IMAGE], { stdout: 'pipe', stderr: 'pipe' });
+  let timedOut = false;
+  const timeout = setTimeout(() => { timedOut = true; pull.kill(); }, imagePreparationTimeoutMs);
+  const [stdout, stderr, exit] = await Promise.all([
+    new Response(pull.stdout).text(), new Response(pull.stderr).text(), pull.exited]);
+  clearTimeout(timeout);
+  if (timedOut || exit !== 0 || stdout.length > 1_000_000 || stderr.length > 1_000_000) {
+    throw new NixResolutionUnavailable('Nix oracle pin is unavailable');
+  }
+}
+
+function ensurePinnedImage(): Promise<void> {
+  imagePreparation ??= preparePinnedImage().catch(error => {
+    imagePreparation = undefined;
+    throw error;
+  });
+  return imagePreparation;
+}
 
 async function file(path: string): Promise<string | null> {
   try { return await readFile(path, 'utf8'); } catch { return null; }
@@ -17,6 +49,8 @@ export async function observeNixFlake(request: NixRequest): Promise<NixOutcome> 
   admitNixRequest(request);
   const preliminary = parseNixLock(request.flakeLock);
   const local = localNixPaths(preliminary);
+  // Keep registry download and image unpacking outside the bounded Nix evaluation.
+  await ensurePinnedImage();
   const directory = await mkdtemp(resolve('.temp/nix-run-'));
   const fixture = resolve(directory, 'fixture');
   const oracle = resolve(directory, 'oracle');
@@ -49,7 +83,7 @@ export async function observeNixFlake(request: NixRequest): Promise<NixOutcome> 
       await mkdir(dirname(target), { recursive: true });
       await writeFile(target, source.text);
     }
-    const process = Bun.spawn(['docker', 'run', '--rm', '--name', container,
+    const process = Bun.spawn(['docker', 'run', '--pull=never', '--rm', '--name', container,
       '--network', 'none', '--memory', '1g', '--cpus', '1', '--pids-limit', '128',
       '--security-opt', 'no-new-privileges', '-v', `${fixture}:/fixture:ro`,
       '-v', `${oracle}:/oracle`, '-w', '/fixture', NIX_IMAGE, 'sh', '-euc',
@@ -62,6 +96,7 @@ export async function observeNixFlake(request: NixRequest): Promise<NixOutcome> 
     if (stdout.length > 1_000_000 || stderr.length > 1_000_000) {
       throw new NixResolutionUnavailable('Nix oracle output budget exceeded');
     }
+    if (timedOut) throw new NixResolutionUnavailable('Nix oracle operation timed out');
     const version = (await file(resolve(oracle, 'version')))?.trim();
     if (version !== `nix (Nix) ${NIX_VERSION}`) {
       throw new NixResolutionUnavailable('Nix oracle pin is unavailable');
