@@ -41,8 +41,14 @@ export function resourceRoutes(fuseki: FusekiClient, work: MainWorkDependencies)
     canReadWork: async resource => work.access.canReadWork(await workPrincipal(), actingSubject, resource),
     canReadSemantic: async resource => !!work.access.canReadSemanticResource
       && work.access.canReadSemanticResource(await workPrincipal(), actingSubject, resource),
+    canReadSemantics: work.mediaAccess
+      ? async resources => work.mediaAccess!.canReadSemantics(await workPrincipal(), actingSubject, resources)
+      : undefined,
     canReadPrivateContext: async context => !!work.contextSelections
-      && work.contextSelections.canReadPrivate(await contextPrincipal(), actingSubject, context) };
+      && work.contextSelections.canReadPrivate(await contextPrincipal(), actingSubject, context),
+    canReadPrivateContexts: work.mediaAccess
+      ? async contexts => work.mediaAccess!.canReadPrivateContexts(await contextPrincipal(), actingSubject, contexts)
+      : undefined };
   };
   const summarize = async (request: Request, input: { resources: string[]; actingSubject?: string;
     context?: string; language?: string }) => {
@@ -125,6 +131,11 @@ export function resourceRoutes(fuseki: FusekiClient, work: MainWorkDependencies)
                   ?main rv:selectionHead ?selection . }
                 GRAPH ${iri(GRAPHS.revisions)} { ?selection rv:publicationDecision ?decision .
                   ?decision rv:disclosure rv:Public . }
+                FILTER NOT EXISTS {
+                  GRAPH ${iri(GRAPHS.current)} { ?variant rv:resource ?work ; rv:contentPublicationHead ?pin }
+                  GRAPH ${iri(GRAPHS.revisions)} { ?pin rv:contentRevision ?contentRevision .
+                    ?contentRevision a rv:ErasedRevision }
+                }
                 ${query.after ? `FILTER(STR(?work) > ${lit(query.after)})` : ''}
               } ORDER BY ?work LIMIT ${SITEMAP_PAGE + 1} }
             }

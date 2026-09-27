@@ -157,7 +157,7 @@ export interface MainWorkDependencies {
   realmRecommendations?: RealmVariantRecommendationStore;
   verification?: VerificationStore;
   /** Current Access authority for bounded resource-summary batches. */
-  mediaAccess?: Pick<MediaAccessBatchReader, 'canReadWorks'>;
+  mediaAccess?: Pick<MediaAccessBatchReader, 'canReadWorks' | 'canReadSemantics' | 'canReadPrivateContexts'>;
   /** Relay erasure journal and Content owner; absent means erasure is unavailable. */
   erasures?: ErasureService;
   realmReplies?: RealmReplyStore;

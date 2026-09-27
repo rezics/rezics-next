@@ -1,8 +1,9 @@
 import { createHash } from 'node:crypto';
 import { DATASET, GRAPHS, RV, iri, type WorkActivationEnvironment } from '../work/activate.ts';
 import { listEligibleNativeVariants } from '../work/native-variants.ts';
-import { readContextRevision, ContextNotFound } from '../context/read.ts';
-import { readSemanticCurrent } from '../semantic/read.ts';
+import { readContextSummaryBatch } from '../context/summary-read.ts';
+import { PROFILES } from '../semantic/schema.ts';
+import { readWorkComponentState } from '../work/history.ts';
 import { readPublicRealmNames } from '../space/read.ts';
 import { AVATAR_POLICY, avatarImageEligible, DEFAULT_MEDIA_CONTEXT, MediaInvalid, MediaUnavailable,
   type AvatarRow, type MediaStore } from './store.ts';
@@ -26,8 +27,10 @@ export interface SummaryReader {
     Promise<ReadonlySet<string>>;
   /** The exact semantic Resource must have a current Access read grant. */
   canReadSemantic?: (resource: string) => Promise<boolean>;
+  canReadSemantics?: (resources: readonly string[]) => Promise<ReadonlySet<string>>;
   /** The Context owner checks private disclosure; public Contexts need no grant. */
   canReadPrivateContext?: (context: string) => Promise<boolean>;
+  canReadPrivateContexts?: (contexts: readonly string[]) => Promise<ReadonlySet<string>>;
 }
 
 export interface SummaryInput {
@@ -43,7 +46,8 @@ export type AvatarDescriptor =
 
 export type ResourceSummary =
   | { reference: string; status: 'available'; type: ResourceType; disclosure: 'public' | 'restricted';
-    name: { value: string; language: string; direction: 'ltr' | 'rtl'; basis: 'requested' | 'fallback' };
+    name: { value: string; language: string; direction: 'ltr' | 'rtl'; basis: 'requested' | 'fallback';
+      context?: string; preferenceRevision?: string };
     avatar: AvatarDescriptor }
   | { reference: string; status: 'unavailable' };
 
@@ -56,6 +60,70 @@ export interface SummaryBatch {
 
 interface GraphRow { type: ResourceType; work: string | null; head: string | null;
   public: boolean; labels: Map<string, string> }
+
+/** Definition projections and exact sealed heads are read together, independent of batch size. */
+async function readRelationDefinitionNames(env: WorkActivationEnvironment, resources: readonly string[],
+  contextualNames: ReadonlyMap<string, Map<string, string>>) {
+  const names = new Map<string, Map<string, string>>();
+  if (!resources.length) return names;
+  const result = await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?resource ?head ?manifest WHERE {
+    VALUES ?resource { ${resources.map(iri).join(' ')} }
+    GRAPH ${iri(GRAPHS.current)} { ?resource a rv:SemanticDefinition ;
+      rv:definitionKind rv:RelationDefinition ; rv:definitionHead ?head . }
+    GRAPH ${iri(GRAPHS.revisions)} { ?head a rv:DefinitionRevision ; rv:component ?resource ;
+      rv:lifecycle rv:Active ; rv:manifest ?manifest . }
+  } LIMIT ${MAX_SUMMARY_BATCH + 1}`);
+  const rows = result.results?.bindings ?? [];
+  if (rows.length > MAX_SUMMARY_BATCH) throw new MediaUnavailable('definition summary batch exceeds its bound');
+  for (const row of rows) {
+    if (!row.resource || !row.head || !row.manifest) continue;
+    const state = await readWorkComponentState(env, row.manifest.value, row.resource.value, PROFILES.definition);
+    if (state.component === 'definition' && state.kind === 'relation' && state.lifecycle === 'active') {
+      const reference = row.resource.value;
+      names.set(reference, contextualNames.get(reference)
+        ?? new Map([['en', `Relation definition ${reference.slice(-8)}`]]));
+    }
+  }
+  return names;
+}
+
+/** Character and Role names from exact current semantic manifests in one graph read. */
+async function readSemanticResourceNames(env: WorkActivationEnvironment,
+  resources: ReadonlyMap<string, 'character' | 'role'>) {
+  const names = new Map<string, Map<string, string>>();
+  if (!resources.size) return names;
+  const result = await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?resource ?manifest WHERE {
+    VALUES ?resource { ${[...resources.keys()].map(iri).join(' ')} }
+    GRAPH ${iri(GRAPHS.current)} { ?resource rv:semanticHead ?head }
+    GRAPH ${iri(GRAPHS.revisions)} { ?head a rv:SemanticRevision ; rv:component ?resource ;
+      rv:lifecycle rv:Active ; rv:manifest ?manifest . }
+  } LIMIT ${MAX_SUMMARY_BATCH + 1}`);
+  const rows = result.results?.bindings ?? [];
+  if (rows.length > MAX_SUMMARY_BATCH) throw new MediaUnavailable('semantic summary batch exceeds its bound');
+  for (const row of rows) {
+    if (!row.resource || !row.manifest) continue;
+    const type = resources.get(row.resource.value);
+    if (!type) continue;
+    const state = await readWorkComponentState(env, row.manifest.value, row.resource.value, PROFILES.resource);
+    if (state.component !== 'resource' || state.lifecycle !== 'active' || !Array.isArray(state.types)
+      || !state.types.includes(`${RV}${type === 'character' ? 'Character' : 'Role'}`)
+      || !Array.isArray(state.properties)) continue;
+    const labels = new Map<string, string>();
+    const ambiguous = new Set<string>();
+    for (const property of state.properties as Array<{ predicate?: string;
+      value?: { kind?: string; lexical?: string; language?: string } }>) {
+      if (property.predicate !== 'https://schema.org/name' || !property.value?.lexical?.trim()) continue;
+      const language = property.value.kind === 'language-string' ? property.value.language?.toLowerCase()
+        : property.value.kind === 'string' ? 'en' : undefined;
+      if (!language || !languageTag.test(language)) continue;
+      if (labels.has(language) && labels.get(language) !== property.value.lexical) ambiguous.add(language);
+      labels.set(language, property.value.lexical);
+    }
+    for (const language of ambiguous) labels.delete(language);
+    names.set(row.resource.value, labels);
+  }
+  return names;
+}
 const typePriority: readonly ResourceType[] = [
   'work', 'main-version', 'space', 'realm', 'concept', 'context', 'character', 'role', 'relation-definition',
 ];
@@ -92,7 +160,7 @@ function avatar(type: ResourceType, reference: string, row: AvatarRow | undefine
 async function graphRows(env: WorkActivationEnvironment, resources: readonly string[]) {
   const result = await env.fuseki.query(`PREFIX rv: <${RV}> PREFIX schema: <https://schema.org/>
     PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#> PREFIX skos: <http://www.w3.org/2004/02/skos/core#>
-    SELECT ?epoch ?sequence ?hold ?r ?type ?work ?head ?public ?label WHERE {
+    SELECT ?epoch ?sequence ?hold ?r ?type ?work ?head ?public ?label ?erased WHERE {
       GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:dataEpoch ?epoch ; rv:sequence ?sequence .
         OPTIONAL { ${iri(DATASET)} rv:restoreHold ?hold } }
       OPTIONAL {
@@ -115,6 +183,11 @@ async function graphRows(env: WorkActivationEnvironment, resources: readonly str
           GRAPH ${iri(GRAPHS.current)} { ?work rv:head ?head } }
         OPTIONAL { FILTER(?type = "space") GRAPH ${iri(GRAPHS.current)} { ?r rdfs:label ?label } }
         OPTIONAL { FILTER(?type = "concept") GRAPH ${iri(GRAPHS.current)} { ?r skos:prefLabel ?label } }
+        BIND(IF(?type = "work" || ?type = "main-version", EXISTS {
+          GRAPH ${iri(GRAPHS.current)} { ?variant rv:resource ?work ; rv:contentPublicationHead ?pin }
+          GRAPH ${iri(GRAPHS.revisions)} { ?pin rv:contentRevision ?contentRevision .
+            ?contentRevision a rv:ErasedRevision }
+        }, false) AS ?erased)
         BIND(IF(?type = "concept" || ?type = "realm", true,
           IF(?type = "context", EXISTS { GRAPH ${iri(GRAPHS.current)} { ?r rv:disclosure rv:Public } },
           IF(?type = "space",
@@ -132,7 +205,7 @@ async function graphRows(env: WorkActivationEnvironment, resources: readonly str
   const rows = new Map<string, GraphRow>();
   for (const binding of bindings) {
     const reference = binding.r?.value;
-    if (!reference || !binding.type) continue;
+    if (!reference || !binding.type || binding.erased?.value === 'true') continue;
     const type = binding.type.value as ResourceType;
     const previous = rows.get(reference);
     if (previous && typePriority.indexOf(previous.type) < typePriority.indexOf(type)) continue;
@@ -196,6 +269,44 @@ export async function readResourceSummaries(env: WorkActivationEnvironment, medi
   const realms = [...special].filter(([, row]) => row.type === 'realm').map(([reference]) => reference);
   const realmNames = await readPublicRealmNames(env, realms);
   if (realms.length) cost.graphQueries += 2;
+  const contextRefs = [...special].filter(([, row]) => row.type === 'context').map(([reference]) => reference);
+  const contextBatch = await readContextSummaryBatch(env, contextRefs,
+    input.context === DEFAULT_MEDIA_CONTEXT ? null : input.context,
+    async contexts => {
+      if (reader.canReadPrivateContexts) return reader.canReadPrivateContexts(contexts);
+      if (!reader.canReadPrivateContext) return new Set<string>();
+      return new Set((await Promise.all(contexts.map(async context =>
+        await reader.canReadPrivateContext!(context) ? context : null)))
+        .filter((context): context is string => context !== null));
+    },
+    count => { cost.accessChecks += count;
+      if (reader.canReadPrivateContexts) cost.accessQueries++;
+      else if (reader.canReadPrivateContext) cost.accessQueries += count; });
+  cost.graphQueries += contextBatch.graphQueries;
+  const relationRefs = [...special].filter(([, row]) => row.type === 'relation-definition')
+    .map(([reference]) => reference);
+  const semanticRefs = new Map([...special].filter(([, row]) => row.type === 'character' || row.type === 'role')
+    .map(([reference, row]) => [reference, row.type as 'character' | 'role']));
+  const semanticResources = [...new Set([...semanticRefs.keys(), ...relationRefs])];
+  let admittedSemantics = new Set<string>();
+  if (semanticResources.length && reader.canReadSemantics) {
+    cost.accessChecks += semanticResources.length;
+    admittedSemantics = new Set(await reader.canReadSemantics(semanticResources));
+    cost.accessQueries++;
+  } else if (semanticResources.length && reader.canReadSemantic) {
+    cost.accessChecks += semanticResources.length;
+    const decisions = await Promise.all(semanticResources.map(async resource =>
+      await reader.canReadSemantic!(resource) ? resource : null));
+    admittedSemantics = new Set(decisions.filter((resource): resource is string => resource !== null));
+    cost.accessQueries += semanticResources.length;
+  }
+  const admittedRelations = relationRefs.filter(reference => admittedSemantics.has(reference));
+  const relationDefinitions = await readRelationDefinitionNames(env, admittedRelations,
+    contextBatch.selectedNames);
+  if (admittedRelations.length) cost.graphQueries++;
+  const admittedResources = new Map([...semanticRefs].filter(([reference]) => admittedSemantics.has(reference)));
+  const semanticNames = await readSemanticResourceNames(env, admittedResources);
+  if (admittedResources.size) cost.graphQueries++;
   for (const [reference, row] of special) {
     if (row.type === 'realm') {
       const name = realmNames.get(reference);
@@ -203,50 +314,22 @@ export async function readResourceSummaries(env: WorkActivationEnvironment, medi
       continue;
     }
     if (row.type === 'context') {
-      try {
-        cost.graphQueries += 2;
-        const context = await readContextRevision(env, reference, null, async context => {
-          if (!reader.canReadPrivateContext) return false;
-          cost.accessChecks++;
-          cost.accessQueries++;
-          return reader.canReadPrivateContext(context);
-        });
-        if (context.state !== 'active') continue;
-        row.public = context.disclosure === 'public';
-        row.labels.set('en', `Context ${reference.slice(-8)}`);
-        readable.set(reference, row);
-      } catch (error) { if (!(error instanceof ContextNotFound)) throw error; }
+      const context = contextBatch.contexts.get(reference);
+      if (!context) continue;
+      row.public = context.disclosure === 'public';
+      row.labels.set('en', `Context ${reference.slice(-8)}`);
+      readable.set(reference, row);
       continue;
     }
-    if (!reader.canReadSemantic) continue;
-    cost.accessChecks++;
-    cost.accessQueries++;
-    if (!await reader.canReadSemantic(reference)) continue;
-    const semantic = await readSemanticCurrent(env, reference, async () => false);
-    cost.graphQueries += 4;
-    if (!semantic || semantic.state.lifecycle !== 'active') continue;
+    if (!admittedSemantics.has(reference)) continue;
     if (row.type === 'relation-definition') {
-      if (semantic.state.component !== 'definition' || semantic.state.kind !== 'relation') continue;
+      const names = relationDefinitions.get(reference);
+      if (!names) continue;
+      row.labels = names;
     } else {
-      if (semantic.state.component !== 'resource'
-        || !semantic.state.types.includes(`${RV}${row.type === 'character' ? 'Character' : 'Role'}`)) continue;
-      const names = new Map<string, string>();
-      const ambiguous = new Set<string>();
-      for (const property of semantic.state.properties) {
-        if (property.predicate !== 'https://schema.org/name') continue;
-        let language: string;
-        let value: string;
-        if (property.value.kind === 'language-string' && property.value.lexical.trim()) {
-          language = property.value.language.toLowerCase();
-          value = property.value.lexical;
-        } else if (property.value.kind === 'string' && property.value.lexical.trim()) {
-          language = 'en';
-          value = property.value.lexical;
-        } else continue;
-        if (names.has(language) && names.get(language) !== value) ambiguous.add(language);
-        names.set(language, value);
-      }
-      for (const [language, value] of names) if (!ambiguous.has(language)) row.labels.set(language, value);
+      const names = semanticNames.get(reference);
+      if (!names) continue;
+      row.labels = names;
     }
     if (!row.labels.size) {
       const kind = row.type === 'character' ? 'Character' : row.type === 'role' ? 'Role' : 'Relation definition';
@@ -254,6 +337,10 @@ export async function readResourceSummaries(env: WorkActivationEnvironment, medi
     }
     row.public = false;
     readable.set(reference, row);
+  }
+  for (const [reference, row] of readable) {
+    const selected = contextBatch.selectedNames.get(reference);
+    if (selected?.size) row.labels = selected;
   }
   if (reader.restrictedTitles && readable.size) {
     for (const [reference, row] of readable) {
@@ -269,7 +356,7 @@ export async function readResourceSummaries(env: WorkActivationEnvironment, medi
   }
   let avatars = new Map<string, AvatarRow>();
   let mediaGeneration: string | null = null;
-  if (media && readable.size) {
+  if (media && readable.size && !contextBatch.selectedContextDenied) {
     const hydrated = await media.avatarRows([...readable.keys()], input.context);
     cost.mediaQueries = 1;
     avatars = hydrated.rows;
@@ -278,8 +365,13 @@ export async function readResourceSummaries(env: WorkActivationEnvironment, medi
   const summaries = input.resources.map((reference): ResourceSummary => {
     const row = readable.get(reference);
     if (!row) return { reference, status: 'unavailable' };
+    const selectedContext = contextBatch.selectedNames.has(reference)
+      ? contextBatch.contexts.get(input.context) : undefined;
     return { reference, status: 'available', type: row.type,
-      disclosure: row.public ? 'public' : 'restricted', name: selectName(row.labels, input.language)!,
+      disclosure: row.public ? 'public' : 'restricted',
+      name: { ...selectName(row.labels, input.language)!,
+        ...(selectedContext?.preferenceRevision
+          ? { context: input.context, preferenceRevision: selectedContext.preferenceRevision } : {}) },
       avatar: avatar(row.type, reference, avatars.get(reference)) };
   });
   return { summaries, generation: { graph: graph.generation, media: mediaGeneration }, cost };

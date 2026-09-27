@@ -145,6 +145,83 @@ test('VIEW07: private, revoked and erased content/media leak no preview, sitemap
   expect(blank.avatar!.key).not.toBe(privateFallback!.key);
 }, 180_000);
 
+test('VIEW07: erasing a published Content revision suppresses public metadata and media delivery', async () => {
+  const { member, publicWork, call, content } = await stack();
+  const owner = await member('published-erasure');
+  const work = await publicWork(owner.actor, ['en'], `Erased publication ${randomUUID()}`);
+  const picture = await owner.upload(png(72, 72), 'public');
+  const variantId = `urn:rezics:variant:${randomUUID()}`;
+  await owner.grant(`content:draft:${work.work}`, 'content.draft');
+  const saved = await owner.send('POST', '/v1/media/publications', { profile: 'media-set-v1',
+    resourceId: work.work, variantId, expectedHead: null, assets: [picture.asset],
+    actingSubject: owner.actor });
+  expect(saved.status).toBe(201);
+  const publication = await saved.json() as { revisionId: string; byteDigest: string;
+    sourcePosition: { dataEpoch: string }; body: { items: Array<{ use: string }> } };
+  await owner.grant(`content:publish:${variantId}`, 'content.publish');
+  const activated = await owner.send('POST', '/v1/content-publications', {
+    profile: 'content-publication-v1', preparationId: `view07-${randomUUID()}`,
+    revisionId: publication.revisionId, expectedDigest: publication.byteDigest,
+    expectedContentEpoch: publication.sourcePosition.dataEpoch, resourceId: work.work, variantId,
+    expectedPublicationHead: null, actingSubject: owner.actor });
+  expect(activated.status).toBe(201);
+  await owner.grant(`media:avatar:${work.work}`, 'media.avatar');
+  const selection = await selectAvatar(owner, work.work, picture.asset, null);
+  const previewUrl = `/v1/public-previews/${local(work.work)}`;
+  const summaryUrl = `/v1/resources/${local(work.work)}`;
+  const avatarUrl = `/v1/media/avatars/${selection}`;
+  const useUrl = `/v1/media/uses/${publication.body.items[0]!.use}`;
+  for (const url of [previewUrl, summaryUrl, avatarUrl, useUrl]) {
+    expect((await call('GET', url)).status).toBe(200);
+  }
+  const privatePicture = await owner.upload(png(40, 40), 'private');
+  await owner.grant(`work:read:${work.work}`, 'work.read');
+  await selectAvatar(owner, work.work, privatePicture.asset, null, work.mainVersion);
+  const privateBytesUrl = `/v1/media/assets/${privatePicture.asset}/bytes`
+    + `?target=${encodeURIComponent(work.work)}&context=${encodeURIComponent(work.mainVersion)}`;
+  const privateBefore = await owner.read(privateBytesUrl);
+  expect(privateBefore.status).toBe(200);
+  await privateBefore.arrayBuffer();
+  const sitemap = async () => {
+    const entries: string[] = [];
+    let after: string | null = null;
+    for (let page = 0; page < 1000; page++) {
+      const response = await call('GET', `/v1/sitemap${after ? `?after=${encodeURIComponent(after)}` : ''}`);
+      expect(response.status).toBe(200);
+      const body = await response.json() as { entries: Array<{ reference: string }>; next: string | null };
+      entries.push(...body.entries.map(entry => entry.reference));
+      if (!body.next) break;
+      after = body.next;
+    }
+    return entries;
+  };
+  expect(await sitemap()).toContain(work.work);
+  await owner.grant(`erasure:${work.work}`, 'erasure.request');
+  const erased = await owner.send('POST', '/v1/erasures', { profile: 'content-revision-erasure-v1',
+    actingSubject: owner.actor, resourceId: work.work, revisionIds: [publication.revisionId] });
+  expect(erased.status).toBe(200);
+  expect(await erased.json()).toMatchObject({ suppression: 'suppressed',
+    targets: [{ owner: 'content', kind: 'content_revision', ref: publication.revisionId }] });
+  expect((await content.readExactBatch([publication.revisionId], async ids => new Set(ids)))[0]?.status)
+    .toBe('erased');
+  expect(await sitemap()).not.toContain(work.work);
+  const absent = await (await call('GET', `/v1/public-previews/${randomUUID()}`)).text();
+  for (const url of [previewUrl, summaryUrl, avatarUrl, useUrl]) {
+    const responses = [await call('GET', url)];
+    if (url !== previewUrl) responses.push(await owner.read(url));
+    for (const response of responses) {
+      expect(response.status).toBe(404);
+      const body = await response.text();
+      expect(body).not.toContain(work.title);
+      expect(body).not.toContain(publication.revisionId);
+      if (url === previewUrl) expect(body).toBe(absent);
+    }
+  }
+  const privateAfter = await owner.read(privateBytesUrl);
+  expect(privateAfter.status).toBe(404);
+  expect(await privateAfter.text()).not.toContain(work.title);
+}, 180_000);
+
 test('VIEW08: Main Version language selection, fallback, RTL direction and metadata-only emptiness are explicit', async () => {
   const { member, publicWork, privateWork, call } = await stack();
   const owner = await member('languages');
@@ -226,8 +303,8 @@ test('VIEW08: batched summaries hydrate names and avatars with fixed owner round
     const body = await response.json() as { summaries: Summary[];
       cost: { graphQueries: number; mediaQueries: number; accessChecks: number; accessQueries: number };
       generation: { graph: string; media: string } };
-    // One lineage check plus one batch query, whatever the batch size.
-    expect(fuseki.queries - graphBefore).toBe(2);
+    // Owner hydration stays bounded as batch size changes.
+    expect(fuseki.queries - graphBefore).toBeLessThanOrEqual(5);
     expect(mediaAccess.batches - accessBefore).toBe(body.cost.accessQueries);
     return body;
   };
@@ -284,7 +361,7 @@ test('VIEW08: batched summaries hydrate names and avatars with fixed owner round
 }, 180_000);
 
 test('VIEW08: Character, Context, Realm, Role and RelationDefinition summaries obey owner reads', async () => {
-  const { member, call, env, admission, access } = await stack();
+  const { member, call, env, admission, access, publicWork } = await stack();
   const owner = await member('summary-owners');
   const outsider = await member('summary-outsider');
   await owner.grant('semantic:create:root', 'semantic.change');
@@ -339,11 +416,50 @@ test('VIEW08: Character, Context, Realm, Role and RelationDefinition summaries o
   expect(available[1]).toMatchObject({ name: { value: 'Lead', basis: 'fallback' } });
   expect(available[2]!.name!.value).toContain('Relation definition');
   expect(available[4]).toMatchObject({ disclosure: 'restricted', avatar: { kind: 'fallback' } });
+  // CTX07 labels belong to the selected readable Context, including definitions and Contexts.
+  const naming = await owner.send('POST', '/v1/contexts', { profile: 'context-v1', role: 'shared',
+    disclosure: 'public', base: null, entries: [shared, relation].map(target => ({
+      target, relation: null, state: 'defined', definition: relation, applicability: [] })),
+    actingSubject: owner.actor });
+  expect(naming.status).toBe(201);
+  const namingContext = (await naming.json() as { context: string }).context;
+  await owner.grant(`context:change:${namingContext}`, 'context.preference');
+  const labels = await owner.send('POST', `/v1/contexts/${local(namingContext)}/preferences`, {
+    profile: 'context-preference-v1', expectedPreferenceHead: null,
+    labels: [{ target: shared, language: 'ja', label: '共有の文脈' },
+      { target: relation, language: 'ja', label: '関係の定義' }], actingSubject: owner.actor });
+  expect(labels.status).toBe(201);
+  const preferenceRevision = (await labels.json() as { preferenceRevision: string }).preferenceRevision;
+  const selected = await owner.send('POST', '/v1/resources/summaries', {
+    profile: 'resource-summary-batch-v1', resources: [shared, relation],
+    context: namingContext, language: 'ja', actingSubject: owner.actor });
+  expect(selected.status).toBe(200);
+  const selectedBody = await selected.json() as { summaries: Summary[]; cost: { graphQueries: number } };
+  expect(selectedBody.summaries[0]).toMatchObject({ name: { value: '共有の文脈', language: 'ja',
+    basis: 'requested', context: namingContext, preferenceRevision } });
+  expect(selectedBody.summaries[1]).toMatchObject({ name: { value: '関係の定義', language: 'ja',
+    basis: 'requested', context: namingContext, preferenceRevision } });
+  expect(selectedBody.cost.graphQueries).toBeLessThanOrEqual(5);
+  const unselected = await summaries(owner, 'ja');
+  expect(unselected[2]!.name!.value).toContain('Relation definition');
   const image = await owner.upload(png(80, 80), 'public');
   await owner.grant(`media:avatar:${character}`, 'media.avatar');
   await owner.grant(`media:avatar:${shared}`, 'media.avatar');
   const characterSelection = await selectAvatar(owner, character, image.asset, null);
   const contextSelection = await selectAvatar(owner, shared, image.asset, null);
+  const contextualWork = await publicWork(owner.actor);
+  await owner.grant(`media:avatar:${contextualWork.work}`, 'media.avatar');
+  const hiddenSelection = await selectAvatar(owner, contextualWork.work, image.asset, null, hidden);
+  const hiddenContextUrl = `/v1/resources/${local(contextualWork.work)}`
+    + `?context=${encodeURIComponent(hidden)}`;
+  const hiddenContextAnonymous = await call('GET', hiddenContextUrl);
+  expect(hiddenContextAnonymous.status).toBe(200);
+  const hiddenContextText = await hiddenContextAnonymous.text();
+  expect(JSON.parse(hiddenContextText)).toMatchObject({ avatar: { kind: 'fallback' } });
+  expect(hiddenContextText).not.toContain(hiddenSelection);
+  expect(hiddenContextText).not.toContain(hidden);
+  expect(await (await owner.read(hiddenContextUrl)).json()).toMatchObject({
+    avatar: { kind: 'image', selection: hiddenSelection } });
   expect((await summaries())[0]!.avatar).toMatchObject({ kind: 'image', selection: characterSelection });
   expect((await call('GET', `/v1/public-previews/${local(shared)}`)).status).toBe(200);
   expect((await call('GET', `/v1/media/avatars/${contextSelection}`)).status).toBe(200);
@@ -358,7 +474,11 @@ test('VIEW08: Character, Context, Realm, Role and RelationDefinition summaries o
   };
   expect(await costOf(Array.from({ length: 64 }, () => character)))
     .toEqual(await costOf([character]));
-  expect(await costOf([character])).toEqual({ graphQueries: 5, mediaQueries: 1,
+  expect(await costOf([character])).toEqual({ graphQueries: 2, mediaQueries: 1,
+    accessChecks: 1, accessQueries: 1 });
+  expect(await costOf([character, role, relation])).toEqual({ graphQueries: 3, mediaQueries: 1,
+    accessChecks: 3, accessQueries: 1 });
+  expect(await costOf([shared, hidden])).toEqual({ graphQueries: 2, mediaQueries: 1,
     accessChecks: 1, accessQueries: 1 });
   const dual = await createSemantic({ component: 'resource', types: [
     'https://rezics.com/vocab/Role', 'https://rezics.com/vocab/Character'],

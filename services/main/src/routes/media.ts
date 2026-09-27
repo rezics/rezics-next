@@ -112,9 +112,15 @@ export function mediaRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
     canReadWork: async (resource: string) => work.access.canReadWork(await workPrincipal(), actingSubject, resource),
     canReadSemantic: async (resource: string) => !!work.access.canReadSemanticResource
       && work.access.canReadSemanticResource(await workPrincipal(), actingSubject, resource),
+    canReadSemantics: work.mediaAccess
+      ? async (resources: readonly string[]) => work.mediaAccess!.canReadSemantics(
+        await workPrincipal(), actingSubject, resources) : undefined,
     canReadPrivateContext: async (context: string) => !!work.contextSelections
       && work.contextSelections.canReadPrivate(await work.account.verify(request, ['context:read']),
-        actingSubject, context) };
+        actingSubject, context),
+    canReadPrivateContexts: work.mediaAccess
+      ? async (contexts: readonly string[]) => work.mediaAccess!.canReadPrivateContexts(
+        await work.account.verify(request, ['context:read']), actingSubject, contexts) : undefined };
   };
   return new Elysia()
     .post('/v1/media/uploads', {
@@ -259,6 +265,14 @@ export function mediaRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
           || !Number.isSafeInteger(basis.byteLength) || basis.byteLength < 1
           || basis.byteLength > MAX_UPLOAD_BYTES) return unavailable();
         lease = await work.downloadLeases.admit(principal, query.actingSubject, query.target, params.asset);
+        const target = (await readResourceSummaries(work.environment, undefined,
+          await readerFor(request, query.actingSubject), { resources: [query.target],
+            context: DEFAULT_MEDIA_CONTEXT, language: null })).summaries[0]!;
+        if (target.status !== 'available') {
+          await work.downloadLeases.finish(lease.id, 'aborted');
+          lease = undefined;
+          return unavailable();
+        }
         await work.downloadLeases.begin(lease, principal);
         const bytes = await work.media.objects(basis.objectNamespace).get(basis.sha256);
         if (bytes.byteLength !== basis.byteLength) throw new ObjectIntegrityError('media byte length differs');
