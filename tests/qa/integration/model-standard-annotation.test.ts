@@ -10,7 +10,7 @@ import { FusekiClient } from '../../../services/main/src/infrastructure/fuseki.t
 import { AccessAdmissionRegistry } from '../../../services/main/src/modules/access/admission.ts';
 import { ratingAccount } from '../support/rating-account.ts';
 
-test('MODEL13 Annotation: Content comment API retains OA type, target, selector and local revision evidence', async () => {
+test('MODEL13: Annotation through the Content comment API retains OA type, target, selector and local revision evidence', async () => {
   if (!Bun.env.REZICS_QA_RUN_ID) throw new Error('Run through the isolated integration tier');
   const apps = Bun.env as Record<string, string>;
   const account = await ratingAccount(apps,

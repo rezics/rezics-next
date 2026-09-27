@@ -5,7 +5,7 @@ import { contextFixture, nativeId, RV } from './context-fixture.ts';
 
 const short = (id: string) => id.split('/').at(-1)!;
 
-test('MODEL13 Label: scoped SKOS labels retain lexical value, language and exact Context qualifiers', async () => {
+test('MODEL13: Label as scoped SKOS labels retain lexical value, language and exact Context qualifiers', async () => {
   const f = await contextFixture(Bun.env as Record<string, string>);
   try {
     const target = nativeId();
