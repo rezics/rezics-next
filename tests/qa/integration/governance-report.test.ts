@@ -335,6 +335,11 @@ test('GOV01: reports anchor exact name, body, Structure and media use with empty
     const key = randomUUID();
     const structureReport = { ...reportBody(s, context, scope, evidence, key, 'structure'),
       target: { owner: 'graph', resource: structure, component: 'structure' } };
+    const wrongRealm = realm();
+    expect((await s.call('POST', '/v1/reports', s.account.tokenA,
+      { ...structureReport, authority: { kind: 'realm', scopeId: `governance:realm:${wrongRealm}` } }))
+      .status).toBe(400);
+    expect((await s.pool.query('SELECT count(*)::int AS n FROM access.governance_report')).rows[0].n).toBe(0);
     const created = await s.call('POST', '/v1/reports', s.account.tokenA, structureReport);
     expect(created.status, JSON.stringify(created.body)).toBe(201);
     const exactBody = (await new ContentCore(s.contentPool).readExactBatch([bodyRevision], async ids => new Set(ids)))[0]!;

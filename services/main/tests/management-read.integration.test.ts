@@ -51,6 +51,13 @@ test('Realm management: private report queue, decision audit, pagination, scope 
       [randomUUID(), caseId, a.principalId, a.actor, `report-${n}`, digest(`request-${n}`), digest(`evidence-${n}`)]);
       cases.push({ caseId, target });
     }
+    const otherRealm = `https://rezics.com/id/${randomUUID()}`;
+    const otherScope = realmGovernanceScope(otherRealm);
+    await stack.accessPool.query('INSERT INTO access.scope_gate (id) VALUES ($1)', [otherScope]);
+    await expect(stack.accessPool.query(`INSERT INTO access.governance_case (id, kind, authority_kind,
+      authority_scope_id, context, target_owner, target_resource, target_component, disclosure)
+      VALUES ($1, 'content_report', 'realm', $2, $3, 'graph', $4, 'title', 'private')`,
+    [randomUUID(), scope, otherRealm, `https://rezics.com/id/${randomUUID()}`])).rejects.toMatchObject({ code: '23514' });
     expect((await get(`${root}/moderation?actingSubject=${encodeURIComponent(a.actor)}`)).status).toBe(401);
     expect((await moderation('', b.token, b.actor)).status).toBe(404);
     expect((await get(`/v1/realms/${randomUUID()}/moderation?actingSubject=${encodeURIComponent(a.actor)}`,
@@ -58,10 +65,19 @@ test('Realm management: private report queue, decision audit, pagination, scope 
     const first = await moderation('&limit=1');
     expect(first.status).toBe(200);
     expect(first.headers.get('cache-control')).toBe('private, no-store');
-    const page = await first.json() as Page<{ id: string; target: { resource: string } }>;
+    const page = await first.json() as Page<{ id: string; target: { resource: string };
+      authorAgent: string; reasonCode: string }>;
     expect(page.count).toEqual({ value: 1, kind: 'exact-page', total: null });
     expect(page.nextCursor).toBeString();
     expect(cases.some(item => item.caseId === page.items[0]?.id)).toBe(true);
+    expect(page.items[0]).toMatchObject({ authorAgent: a.actor, reasonCode: 'incorrect' });
+    await stack.accessPool.query(`INSERT INTO access.governance_case (id, kind, authority_kind,
+      authority_scope_id, context, target_owner, target_resource, target_component, disclosure)
+      VALUES ($1, 'content_report', 'realm', $2, $3, 'graph', $4, 'title', 'private')`,
+    [randomUUID(), otherScope, otherRealm, `https://rezics.com/id/${randomUUID()}`]);
+    expect((await moderation('&type=rights_complaint').then(r => r.json()) as Page<unknown>).items).toEqual([]);
+    expect((await moderation('&type=content_report').then(r => r.json()) as Page<unknown>).items)
+      .toHaveLength(3);
     const second = await moderation(`&limit=1&cursor=${page.nextCursor}`);
     expect(second.status).toBe(200);
     const next = await second.json() as Page<{ id: string }>;
@@ -95,8 +111,27 @@ test('Realm management: private report queue, decision audit, pagination, scope 
     await stack.fuseki.update(`DELETE DATA { GRAPH ${iri(GRAPHS.current)} { ${iri(realm)} a <${RV}Realm> . } }`);
     expect((await moderation()).status).toBe(404);
     await stack.fuseki.update(`INSERT DATA { GRAPH ${iri(GRAPHS.current)} { ${iri(realm)} a <${RV}Realm> . } }`);
-    await stack.accessPool.query(`UPDATE access.permission_grant SET active = false
+    const query = stack.fuseki.query.bind(stack.fuseki);
+    let resumeRead!: () => void;
+    let readReached!: () => void;
+    const paused = new Promise<void>(resolve => { readReached = resolve; });
+    const resumed = new Promise<void>(resolve => { resumeRead = resolve; });
+    let basisCalls = 0;
+    stack.fuseki.query = async (...args) => {
+      if (args[0].includes('SELECT ?epoch ?sequence ?realm') && ++basisCalls === 2) {
+        readReached();
+        await resumed;
+      }
+      return query(...args);
+    };
+    const inFlight = moderation();
+    await paused;
+    const revoke = stack.accessPool.query(`UPDATE access.permission_grant SET active = false
       WHERE scope_id = $1 AND recipient_subject = $2`, [scope, a.actor]);
+    resumeRead();
+    expect((await inFlight).status).toBe(200);
+    await revoke;
+    stack.fuseki.query = query;
     expect((await moderation()).status).toBe(404);
     expect((await audit()).status).toBe(404);
   } finally { await stack.stop(); }

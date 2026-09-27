@@ -139,7 +139,7 @@ lands; composition-root additions follow the worker protocol.
 | Discovery filters: `routes/discovery.ts`, `modules/discovery/**`, `tests/discovery*.ts` | `/works?sort=recent|top-rated&type&term&scope&context`; explicit standing rating Context for top-rated/Mine, Sense term, decision reasons, exact page and cumulative exact/lower-bound match counts. Phrase profiles are preserved. | Access migration 315 and explicit bounded build/activation APIs provide the eligible projection. Native tests measure one seek and ≤21 candidates for every filter/order combination. Graph or relevant Access changes invalidate the generation; refresh is explicit. GET never aggregates Work ratings. |
 | Agent/profile/library: `routes/profiles.ts`, `modules/profiles/**`, `tests/profiles*.ts` plus separately claimed Agent/address owners | `GET /agents/{id}`, `/handles/{handle}`, `/agents/{id}/works`, `/agents/{id}/collections`, `/me/contributions`, `/me/ratings`; public display name/kind/handle, attribution, shelf cards and ratings. Define native credit links, handle allocation and public profile disclosure first. | ≤20 items, batch summaries; public/private collection partition before pagination, Account identity and private contributions require current principal/representation proof. Reuse collections and ratings. |
 | Realm home/log: `routes/realm-reads.ts`, `modules/realm-reads/**`, `tests/realm-read*.ts` | `GET /realms/{realm}`, `/realms/{realm}/works`, `/realms/{realm}/decisions`; public Space name/icon, adopted Works, adoption/classification/semantic-Context-rule revisions. Description, banner, community rules, public moderators and public roster have no published owner yet, so the header reports null or unknown rather than inferring them from Access grants. | ≤20 records and exact page count, unknown membership total. Public graph revisions supply the decision relation without receipts or private actors; the first implementation has an O(D log D) scan/sort bound for D eligible revisions, not a measured seek bound. A materialized public decision index and public community-rule/roster publication need separate write owners before large-scale browsing or those fields become available. Private Realm reads need an Access lease owner. |
-| Management: `routes/management-reads.ts`, `modules/management-reads/**`, `tests/management-read*.ts` | `GET /realms/{realm}/moderation?state&type&cursor` pages Realm-scoped governance report cases; `/realms/{realm}/audit?kind&cursor` pages attributable governance and organization-publication decisions. A Realm governance reader must represent an active Agent with `governance.moderate` on `governance:realm:{realm IRI}`. | ≤20 rows; private, no-store; final Access authority and graph Realm/restore checks. The existing Access indexes seek by scope/state/time (case) or scope/time (decision); kind filtering can scan earlier nonmatches, bounded by the 5-second SQL statement timeout. The cursor binds the graph position and selected Access head identities. Pending contribution and correction queues need their own Realm-keyed owner indexes and admission contract; they are not represented as empty report pages. |
+| Management: `routes/management-reads.ts`, `modules/management-reads/**`, `tests/management-read*.ts` | `GET /realms/{realm}/moderation?state&type&cursor` pages Realm-scoped governance report cases with the first reporter Agent and reason code; `/realms/{realm}/audit?kind&cursor` pages attributable governance and organization-publication decisions. A Realm governance reader must represent an active Agent with `governance.moderate` on `governance:realm:{realm IRI}`. | ≤20 rows; private, no-store; final Access authority and graph Realm/restore checks. Access indexes seek by scope/state/kind/time (case) or scope/kind/time (decision), with the original indexes serving unfiltered pages. The cursor binds the graph position and a durable per-Realm Access revision. Pending contribution and correction queues require Realm-scoped review admission in their write owners; they are not represented as empty report pages. |
 | Metadata completeness: separately claim Work metadata/model, Agent credit and classification owners | Original-language title and localized metadata writes, native Agent credits/handles, bibliographic editions, and a defined relevance policy. The template's null fields can become meaningful only with these writes. | Owner schema and command validation precede reader extensions; no derived display value presented as recorded fact. |
 
 The reader selects the one Book composition attached to the Work's current Main
@@ -159,18 +159,18 @@ high-degree parent (conservatively O(D log D)); this is a logical bound, not
 large-corpus Jena qualification. A reader navigation index is needed if measured
 high-degree parents exceed the 10-second read deadline.
 
-G-240 implements the existing Access governance cases and decisions as private
-Realm reads. The earlier management row described pending contribution and
-correction items as if Realm-keyed owner indexes and review admission already
-existed. They do not, so the API accepts report-case types only; it does not
-return an empty page for unsupported queue types. The report writer currently
-accepts a caller-supplied authority scope: only reports written with the exact
-`governance:realm:{realm IRI}` scope and matching Realm context appear here.
-An owner change must enforce that relationship before this queue can claim
-complete Realm report coverage. The selected Access head identities are a
-conservative cursor fence for current writes; a durable Realm read revision is
-needed for precise continuation across every Access update at scale. G-250 owns
-those follow-up indexes and report-scope enforcement.
+The moderation read accepts report-case types only; it does not return an empty
+page for unsupported queue types. The report writer and Access case constraint
+require a Realm report's authority scope to equal
+`governance:realm:{context Realm IRI}`. A per-Realm Access revision advances for
+case changes and decisions, including organization-publication rejections; a
+continuation restarts when that revision or the graph position changes. The
+queue records the first reporter Agent and reason alongside the target grain,
+opened time, case state and decision head. Native TextContribution drafts have
+no Realm assignment or review admission, and the implemented correction write
+paths target a Global Work title or Content draft variant without a Realm review
+contract. Their owners must introduce explicit Realm identity, pending/decision
+state and bounded owner indexes before this read can include them.
 
 G-237's expanded claim implemented the missing projection as a separate derived
 family. The [discovery owner](../../services/main/src/modules/discovery/README.md)

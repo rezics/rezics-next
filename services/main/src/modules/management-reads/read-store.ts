@@ -19,7 +19,8 @@ const organizationScope = (realm: string) => `publication:reject:${realm}`;
 interface Options { actingSubject: string; limit?: number; cursor?: string }
 interface CaseRow { id: string; kind: 'content_report' | 'rights_complaint'; state: 'open' | 'closed';
   generation: string; decision_head: string | null; opened_at: Date; opened_key: string; target_owner: string;
-  target_resource: string; target_component: string; context: string }
+  target_resource: string; target_component: string; context: string; author_agent: string | null;
+  reason_code: string | null }
 interface DecisionRow { id: string; case_id: string | null; kind: 'content_moderation' | 'rights_disposition'
   | 'organization_publication_rejection'; outcome: string; acting_subject: string; decided_at: Date;
   decided_key: string;
@@ -59,28 +60,12 @@ export class ManagementReadStore {
     if (!row) throw new ManagementReadMissing('Realm management is unavailable');
   }
 
-  private async revision(client: PoolClient, realm: string, family: 'moderation' | 'audit',
-    filter: string | null): Promise<string> {
-    const scope = realmGovernanceScope(realm);
-    const [state, kind] = family === 'moderation' ? filter!.split(':') : [null, filter];
-    const cases = family === 'moderation' ? (await client.query<{ id: string; generation: string }>(
-      `SELECT id, generation::text FROM access.governance_case
-        WHERE authority_scope_id = $1 AND authority_kind = 'realm' AND context = $2
-          AND state = $3 AND ($4::text = '*' OR kind = $4)
-        ORDER BY opened_at DESC, id DESC LIMIT 1`, [scope, realm, state, kind])).rows[0] : undefined;
-    const decisions = (await client.query<{ id: string }>(`SELECT id FROM (
-      (SELECT id, decided_at FROM access.moderation_decision
-        WHERE authority_kind = 'realm' AND context = $1 AND authority_scope_id = $2
-          AND ($4::text IS NULL OR kind = $4)
-        ORDER BY decided_at DESC, id DESC LIMIT 1)
-      UNION ALL
-      (SELECT id, decided_at FROM access.moderation_decision
-        WHERE authority_kind = 'realm' AND context = $1 AND authority_scope_id = $3
-          AND ($4::text IS NULL OR kind = $4)
-        ORDER BY decided_at DESC, id DESC LIMIT 1)
-      ) heads ORDER BY decided_at DESC, id DESC LIMIT 1`,
-    [realm, scope, organizationScope(realm), family === 'audit' ? filter : null])).rows[0];
-    return `${cases?.id ?? '-'}:${cases?.generation ?? '-'}:${decisions?.id ?? '-'}`;
+  private async revision(client: PoolClient, realm: string, final: boolean): Promise<string> {
+    const row = (await client.query<{ revision: string }>(`SELECT revision::text FROM
+      access.realm_management_read_revision WHERE realm = $1${final ? ' FOR SHARE' : ''}`,
+    [realm])).rows[0];
+    if (!row) throw new ManagementReadUnavailable('Realm Access position is unavailable');
+    return row.revision;
   }
 
   private async page<T extends { id: string }>(principal: VerifiedPrincipal, realm: string, options: Options,
@@ -105,7 +90,11 @@ export class ManagementReadStore {
       await this.authority(client, principal, options.actingSubject, scope);
       const start = await this.graphBasis(realm);
       if (!start.exists) throw new ManagementReadMissing('Realm management is unavailable');
-      const revision = await this.revision(client, realm, family, filter);
+      // Materialize an empty Realm position before reading it; this also fences
+      // the first concurrent write when a Realm has no earlier queue records.
+      await client.query(`INSERT INTO access.realm_management_read_revision (realm, revision)
+        VALUES ($1, 0) ON CONFLICT DO NOTHING`, [realm]);
+      const revision = await this.revision(client, realm, false);
       const position: ManagementPosition = { dataEpoch: start.epoch,
         sequence: `${start.sequence}:${revision}` };
       const binding = [family, realm, options.actingSubject, principal.issuer, principal.subject, filter];
@@ -123,7 +112,7 @@ export class ManagementReadStore {
       if (!end.exists || end.epoch !== start.epoch || end.sequence !== start.sequence) {
         throw new WorkReadMoved('Realm basis changed');
       }
-      if (await this.revision(client, realm, family, filter) !== revision) {
+      if (await this.revision(client, realm, true) !== revision) {
         throw new WorkReadMoved('Access basis changed');
       }
       await this.authority(client, principal, options.actingSubject, scope);
@@ -148,17 +137,22 @@ export class ManagementReadStore {
     state: 'open' | 'closed', kind: CaseRow['kind'] | null) {
     const scope = realmGovernanceScope(realm);
     return this.page(principal, realm, options, 'moderation', `${state}:${kind ?? '*'}`,
-      async (client, after, limit) => (await client.query<CaseRow>(`SELECT id, kind, state,
-        generation::text, decision_head, opened_at,
-        to_char(opened_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS opened_key,
-        target_owner, target_resource, target_component, context
-        FROM access.governance_case WHERE authority_scope_id = $1 AND authority_kind = 'realm'
-          AND context = $2 AND state = $3 AND ($4::text IS NULL OR kind = $4)
-          AND ($5::timestamptz IS NULL OR (opened_at, id) > ($5::timestamptz, $6::uuid))
-        ORDER BY opened_at, id LIMIT $7`, [scope, realm, state, kind, after?.time ?? null,
+      async (client, after, limit) => (await client.query<CaseRow>(`SELECT cases.*,
+          first_report.acting_subject AS author_agent, first_report.reason_code
+        FROM (SELECT id, kind, state, generation::text, decision_head, opened_at,
+          to_char(opened_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS opened_key,
+          target_owner, target_resource, target_component, context
+          FROM access.governance_case WHERE authority_scope_id = $1 AND authority_kind = 'realm'
+            AND context = $2 AND state = $3 AND ${kind ? 'kind = $4' : '$4::text IS NULL'}
+            AND ($5::timestamptz IS NULL OR (opened_at, id) > ($5::timestamptz, $6::uuid))
+          ORDER BY opened_at, id LIMIT $7) cases
+        LEFT JOIN LATERAL (SELECT acting_subject, reason_code FROM access.governance_report
+          WHERE case_id = cases.id ORDER BY received_at, id LIMIT 1) first_report ON true
+        ORDER BY cases.opened_at, cases.id`, [scope, realm, state, kind, after?.time ?? null,
         after?.id ?? null, limit])).rows,
       row => ({ id: row.id, kind: row.kind, state: row.state, generation: row.generation,
         decisionHead: row.decision_head, openedAt: row.opened_at.toISOString(),
+        authorAgent: row.author_agent, reasonCode: row.reason_code,
         target: { owner: row.target_owner, resource: row.target_resource,
           component: row.target_component }, context: row.context }), row => row.opened_key);
   }
@@ -173,14 +167,14 @@ export class ManagementReadStore {
         (SELECT id, case_id, kind, outcome, acting_subject, decided_at, case_sequence
           FROM access.moderation_decision
           WHERE authority_kind = 'realm' AND context = $1 AND authority_scope_id = $2
-            AND ($4::text IS NULL OR kind = $4)
+            AND ${kind ? 'kind = $4' : '$4::text IS NULL'}
             AND ($5::timestamptz IS NULL OR (decided_at, id) > ($5::timestamptz, $6::uuid))
           ORDER BY decided_at, id LIMIT $7)
         UNION ALL
         (SELECT id, case_id, kind, outcome, acting_subject, decided_at, case_sequence
           FROM access.moderation_decision
           WHERE authority_kind = 'realm' AND context = $1 AND authority_scope_id = $3
-            AND ($4::text IS NULL OR kind = $4)
+            AND ${kind ? 'kind = $4' : '$4::text IS NULL'}
             AND ($5::timestamptz IS NULL OR (decided_at, id) > ($5::timestamptz, $6::uuid))
           ORDER BY decided_at, id LIMIT $7)
         ) candidates ORDER BY decided_at, id LIMIT $7`, [realm, scope, organizationScope(realm), kind,

@@ -203,6 +203,11 @@ export class GovernanceStore {
     const request = sha256(canonical({ ...input, idempotencyKey: undefined }));
     const replay = await this.replayReport(principal, input.idempotencyKey, request);
     if (replay) return replay;
+    if (input.authority.kind === 'realm'
+      && (!agentPattern.test(input.context)
+        || input.authority.scopeId !== `governance:realm:${input.context}`)) {
+      throw new GovernanceInvalid('Realm report scope must match its context');
+    }
     // Capture happens before the write, while the reporter is authorized; the
     // write rechecks representation so a revoked reporter cannot commit.
     const captured: CapturedEvidence[] = [];

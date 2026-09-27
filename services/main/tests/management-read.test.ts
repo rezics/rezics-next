@@ -16,9 +16,10 @@ test('Management reads expose concrete private pages to the web Eden client', ()
       actingSubject: 'https://rezics.com/id/00000000-0000-4000-8000-000000000002',
       kind: 'content_moderation', limit: 2 } });
     const target: string | undefined = moderation.data?.items[0]?.target.resource;
+    const author: string | null | undefined = moderation.data?.items[0]?.authorAgent;
     const actor: string | undefined = audit.data?.items[0]?.actingSubject;
     const next: string | null | undefined = audit.data?.nextCursor;
-    return { target, actor, next };
+    return { target, author, actor, next };
   };
   expect(typedReads).toBeFunction();
   const graph = new FusekiClient('http://127.0.0.1:1/rezics');
