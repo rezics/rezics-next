@@ -188,8 +188,12 @@ test('IAM11/OPS03: deletion frontiers preserve unrelated public Work and Content
       clientId: verifierClient.client_id, clientSecret: verifierClient.client_secret! });
     const request = new Request('https://main.rezics.test/v1/works', {
       headers: { authorization: bearer } });
+    const expectedUnaffectedAccount = { issuer, subject: unaffected.id, accountAuthMode: 'trusted',
+      accountAudiences: [apps.ACCOUNT_MAIN_RESOURCE!, `${baseURL}/api/auth/oauth2/userinfo`],
+      accountClientId: browserClient.client_id, accountConsentGeneration: undefined,
+      accountConsentId: undefined, accountScopes: ['openid', 'work:create', 'work:edit'] };
     expect(await verifierAccount.verify(request, ['work:create']))
-      .toEqual({ issuer, subject: unaffected.id });
+      .toEqual(expectedUnaffectedAccount);
     const publicPrincipal = randomUUID();
     const publicActor = `https://rezics.com/id/${randomUUID()}`;
     await access.query(
@@ -341,7 +345,7 @@ test('IAM11/OPS03: deletion frontiers preserve unrelated public Work and Content
     expect((await access.query<{ active: boolean }>(
       'SELECT active FROM access.principal WHERE id = $1', [publicPrincipal])).rows[0]?.active).toBe(true);
     expect(await verifierAccount.verify(request, ['work:create']))
-      .toEqual({ issuer, subject: unaffected.id });
+      .toEqual(expectedUnaffectedAccount);
     expect((await publicGraph()).boolean).toBe(true);
     expect((await content.readExactBatch([publicRevision],
       async ids => new Set(ids)))[0]).toMatchObject({ status: 'available',

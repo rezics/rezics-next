@@ -376,6 +376,8 @@ test('WORK09/WORK10/SEARCH03/SEARCH19: Content CAS, private drafts and exact pub
       consumer, { phrase: 'native Content', language: 'en' });
     expect(selectedAfterDraftEdit.results[0]?.revision)
       .toBe(`urn:rezics:content:revision:${saved.revisionId}`);
+    const graphBeforeLostEdit = await graphSequence();
+    expect(graphBeforeLostEdit).toBe(graphAfterPrivateSearch);
 
     const lostKey = `lost-edit-${randomUUID()}`;
     const lostBody = 'Committed Content edit with lost HTTP response';
@@ -409,7 +411,7 @@ test('WORK09/WORK10/SEARCH03/SEARCH19: Content CAS, private drafts and exact pub
       'SELECT revision_id FROM content.receipt WHERE operation_id = $1',
       [`content-draft:${recoveredAdmission.rows[0]!.id}`]);
     expect(recoveredReceipt.rows).toEqual([{ revision_id: recoveredBody.revisionId }]);
-    expect(await graphSequence()).toBe(graphAfterPrivateSearch);
+    expect(await graphSequence()).toBe(graphBeforeLostEdit);
 
     const replacementInput: PublishPinnedContentInput = {
       ...input, preparationId: `publish-${randomUUID()}`,

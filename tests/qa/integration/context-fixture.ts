@@ -6,11 +6,13 @@ import { createMainApp, type MainWorkDependencies } from '../../../services/main
 import { FusekiClient, type CommandEnvelope } from '../../../services/main/src/infrastructure/fuseki.ts';
 import { AccessAdmissionRegistry, type RegisteredAdmission }
   from '../../../services/main/src/modules/access/admission.ts';
+import { AccessPolicyOwner } from '../../../services/main/src/modules/access/policy-owner.ts';
 import { classificationContextDigest, createClassificationContext }
   from '../../../services/main/src/modules/classification/context.ts';
 import { classificationPropositionDigest, createClassificationProposition }
   from '../../../services/main/src/modules/classification/proposition.ts';
 import { PrivateContextSelections } from '../../../services/main/src/modules/context/private-selection.ts';
+import { AccessJudgments } from '../../../services/main/src/modules/judgment/access.ts';
 import { createRealmSpace, spaceCreationDigest } from '../../../services/main/src/modules/space/create.ts';
 import { activateMetadataWork, ID, metadataWorkRequestDigest,
   type WorkActivationEnvironment } from '../../../services/main/src/modules/work/activate.ts';
@@ -82,7 +84,8 @@ export async function contextFixture(apps: Record<string, string>) {
   const access = new AccessAdmissionRegistry(accessPool, apps.FUSEKI_TITLE_ADMISSION_KEY);
   const selections = new PrivateContextSelections(accessPool);
   const dependencies: MainWorkDependencies & ContextRouteDependencies = { environment: env,
-    account: account.verifier, access, contextSelections: selections };
+    account: account.verifier, access, accessPolicy: new AccessPolicyOwner(accessPool),
+    contextSelections: selections, judgments: new AccessJudgments(accessPool) };
   const app = createMainApp(fuseki, dependencies);
 
   const principalA = randomUUID();

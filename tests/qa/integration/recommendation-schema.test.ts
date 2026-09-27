@@ -6,6 +6,7 @@ import { Client, Pool } from 'pg';
 import { Value } from 'typebox/value';
 import { renderProfile } from '../../../model/compiler/ir.ts';
 import { eventTimeProfile } from '../../../model/definitions/event-time-v1.ts';
+import { valueExactProfile } from '../../../model/definitions/value-exact-v1.ts';
 import { readEnv } from '../../../scripts/dev/config.ts';
 import { ContentCore } from '../../../services/content/src/core.ts';
 import { migrateContent } from '../../../services/content/src/migrate.ts';
@@ -407,16 +408,15 @@ test('GRAPH06 partial: saved layout binds a non-linguistic Content variant, neve
     .toEqual([{ model: GRAPH_LAYOUT_MODEL, language_kind: 'zxx', current: true }]);
 });
 
-test('RATE08 partial: event time and topic binding profiles render one date authority per Event', async () => {
+test('RATE08 partial: known Event time uses one exact temporal value', () => {
   const time = renderProfile(eventTimeProfile);
   for (const shape of ['event', 'slot', 'revision', 'point']) {
     expect(time).toContain(`<https://rezics.com/definition/event-time-v1/${shape}-shape>`);
   }
   expect(time).toContain('sh:in ( rv:ActualTime rv:PlannedTime )');
-  expect(time).toContain('sh:path rv:sourceLexical ; sh:minCount 1');
-  const bindingModule = '../../../model/definitions/event-topic-binding-v1.ts';
-  const binding = renderProfile((await import(bindingModule)).eventTopicBindingProfile);
-  expect(binding).toContain('sh:path rv:boundEvent ; sh:minCount 1 ; sh:maxCount 1 ; sh:class rv:Event');
-  expect(binding).not.toContain('rv:temporal');
-  expect(binding).not.toContain('rv:eventStart');
+  expect(time).toContain('sh:path rv:temporalValue ; sh:minCount 1 ; sh:maxCount 1');
+  expect(time).not.toContain('rv:sourceLexical');
+  const exactValues = renderProfile(valueExactProfile);
+  expect(exactValues).toContain('<https://rezics.com/definition/value-exact-v1/temporal-shape>');
+  expect(exactValues).toContain('sh:path rv:lexicalForm ; sh:minCount 1 ; sh:maxCount 1');
 });

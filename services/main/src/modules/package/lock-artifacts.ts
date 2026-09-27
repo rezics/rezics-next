@@ -36,7 +36,7 @@ export class PackageArtifactStore {
     await db.query(`INSERT INTO pkg.artifact (id, retention_domain, owner_principal_id, sha256,
         byte_length, media_type, object_key, state, settled_at)
       VALUES ($1, $2, $3, $4, $5, $6, $7, 'verified', clock_timestamp())
-      ON CONFLICT (object_key) DO NOTHING`,
+      ON CONFLICT DO NOTHING`,
     [randomUUID(), owner ? 'principal-private' : 'public-origin', owner, digest, bytes.byteLength,
       mediaType, objectKey]);
     const row = (await db.query<ArtifactRow>(`SELECT * FROM pkg.artifact

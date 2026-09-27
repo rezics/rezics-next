@@ -377,7 +377,7 @@ export async function exerciseRatingAggregates(f: Fixture) {
   }
   for (const node of nodes((plans.at(-1) as { Plan: Record<string, unknown> }[])[0]!.Plan)
     .filter(node => node['Relation Name'] === 'admission')) {
-    expect(node['Index Name']).toBe('admission_pkey');
+    expect(node['Index Name']).toBe('admission_id_principal_unique');
     expect(node['Actual Rows']).toBeLessThanOrEqual(1);
   }
   await unrelated.clear();

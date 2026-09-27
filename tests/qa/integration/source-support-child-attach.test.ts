@@ -115,8 +115,8 @@ test('LIVE04/RECIPE06: a child occurrence has exact source support that withdraw
     expect(64 - budget.callsLeft).toBeLessThanOrEqual(24);
     expect(262_144 - budget.bytesLeft).toBeLessThan(96_000);
     const graph = await h.env.fuseki.query(`PREFIX rv: <${RV}> ASK { GRAPH <${GRAPHS.current}> {
-      <${changed.occurrences[0]}> a rv:StructureOccurrence .
-      <${changed.occurrences[1]}> a rv:StructureOccurrence . } }`);
+      <${changed.occurrences[0]}> a <https://schema.org/ListItem> .
+      <${changed.occurrences[1]}> a <https://schema.org/ListItem> . } }`);
     expect(graph.boolean).toBe(true);
   } finally { await h.close(); rmSync(directory, { recursive: true, force: true }); }
 }, 120_000);

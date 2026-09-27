@@ -15,6 +15,7 @@ const RDF_TYPE = 'http://www.w3.org/1999/02/22-rdf-syntax-ns#type';
 const RDFS_LABEL = 'http://www.w3.org/2000/01/rdf-schema#label';
 const XSD_INTEGER = 'http://www.w3.org/2001/XMLSchema#integer';
 const JAR = '/opt/apache-jena-fuseki-6.2.0/fuseki-server.jar';
+const COMMAND_JAR = '/fuseki/extra/fuseki-command.jar';
 const TDB2 = '/fuseki/databases/rezics/tdb2';
 const LUCENE = '/fuseki/databases/rezics/lucene';
 
@@ -141,7 +142,7 @@ export const graphOwner: FixtureOwner = {
     const loaded = performance.now();
     // Same offline index construction as search:rebuild, for this new generation only.
     const indexer = await target.fusekiOffline(`rm -rf ${LUCENE} && mkdir -p ${LUCENE} && cd /fuseki `
-      + `&& java -Xmx4g -cp ${JAR} jena.textindexer --desc=/fuseki/fuseki-text.ttl`);
+      + `&& java -Xmx4g -cp ${COMMAND_JAR}:${JAR} com.rezics.jena.ErasureTextIndexer --desc=/fuseki/fuseki-text.ttl`);
     return { elapsedMs: performance.now() - started, detail: {
       loaderMs: Math.round(loaded - started), textIndexMs: Math.round(performance.now() - loaded),
       loaderTail: loader.trim().split('\n').slice(-3), indexerTail: indexer.trim().split('\n').slice(-2) } };

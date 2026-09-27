@@ -85,6 +85,8 @@ test('SEARCH12 foundation: durable private read admission, fences and two Main r
       '012_direct_principal_work_create.sql'), 'utf8'));
     await pool.query(readFileSync(join(root, 'services/main/migrations/access',
       '013_group_work_create.sql'), 'utf8'));
+    await pool.query(readFileSync(join(root, 'services/main/migrations/access',
+      '240_content_search_read.sql'), 'utf8'));
     const upgraded = (await pool.query<{
       state: string; send_started_at: Date | null; receipt_digest: string | null;
     }>('SELECT state, send_started_at, receipt_digest FROM access.search_read_lease WHERE id = $1',
@@ -265,7 +267,7 @@ test('SEARCH12 foundation: durable private read admission, fences and two Main r
     // fence against the current owner schema, including download read leases.
     const migrationDirectory = join(root, 'services/main/migrations/access');
     for (const file of [...new Bun.Glob('*.sql').scanSync({ cwd: migrationDirectory })]
-      .filter(file => Number(file.slice(0, 3)) >= 14).sort()) {
+      .filter(file => Number(file.slice(0, 3)) >= 14 && file !== '240_content_search_read.sql').sort()) {
       await pool.query(readFileSync(join(migrationDirectory, file), 'utf8'));
     }
     const generation = await engageAccessRecoveryFence(pool);

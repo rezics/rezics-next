@@ -82,6 +82,9 @@ test('GOV23: adopted proposal executes one scoped roster effect and recovers the
         }
         GRAPH ${iri(GRAPHS.revisions)} {
           ${iri(proposalRevision)} a rv:ProposalRevision ; rv:proposal ${iri(proposal)} ;
+            rv:ruleRevision <urn:rezics:governance-rule:proposal-v1> ;
+            rv:operation <urn:rezics:operation:${proposalDigest(proposalRevision)}> ;
+            rv:revisedAt ${lit(new Date().toISOString())}^^<http://www.w3.org/2001/XMLSchema#dateTime> ;
             rv:effectDigest ${lit(approvedDigest)} ; rv:effectTarget ${iri(fixture.org)} ;
             rv:effectCapability ${lit(capability)} ; rv:expectedTargetState ${lit(approvedState)} .
           ${iri(resolution)} a rv:PollResolution ; rv:poll ${iri(poll)} ;

@@ -109,7 +109,17 @@ async function seedContentSearchBase(name: string, withEligibility: boolean, rig
     GRAPH <${graphs.revisions}> {
       <${publication}> a rv:ContentPublicationDecision, rv:RevisionAnchor ;
         rv:component <${variant}> ; rv:resource <${work}> ;
-        rv:contentRevision <${contentRevision}> .
+        rv:operation <urn:rezics:operation:${'a'.repeat(64)}> ;
+        rv:contentRevision <${contentRevision}> ;
+        rv:contentPreparation "prepared" ; rv:byteDigest "${'b'.repeat(64)}" ;
+        rv:contentFormat "rezics-content-json-v1" ;
+        rv:contentModel "rezics-content-json-v1" ;
+        rv:contentLanguageKind "missing" ; rv:contentDirection "none" ;
+        rv:ownerDataEpoch ${JSON.stringify(epoch)} ; rv:ownerSequence "1" ;
+        rv:modelRevision <https://rezics.com/definition/content-publication-v1> ;
+        rv:shapeRevision <https://rezics.com/definition/content-publication-v1> ;
+        rv:datasetId <${dataset}> ; rv:dataEpoch ${JSON.stringify(epoch)} ;
+        rv:sequence 1 .
       ${withEligibility ? `<${eligibility}> a rv:ContentSearchEligibilityDecision, rv:RevisionAnchor ;
         rv:component <${variant}> ; rv:variant <${variant}> ; rv:resource <${work}> ;
         rv:publicationDecision <${publication}> ;

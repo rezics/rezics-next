@@ -186,7 +186,11 @@ test('OPS03/PKG14/SYS12: signed owner cut restores Content and exact Go checksum
     const request = new Request('https://main.rezics.test/v1/works', {
       headers: { authorization: bearer } });
     const principal = await account.verify(request, ['work:create']);
-    expect(principal).toEqual({ issuer: `${base}/api/auth`, subject: member.id });
+    expect(principal).toEqual({ issuer: `${base}/api/auth`, subject: member.id,
+      accountAudiences: [apps.ACCOUNT_MAIN_RESOURCE!, `${base}/api/auth/oauth2/userinfo`],
+      accountAuthMode: 'trusted', accountClientId: browserClient.client_id,
+      accountConsentGeneration: undefined, accountConsentId: undefined,
+      accountScopes: ['openid', 'work:create', 'work:edit', 'owner:operate'] });
 
     const actor = `https://rezics.com/id/${randomUUID()}`;
     const principalId = randomUUID();

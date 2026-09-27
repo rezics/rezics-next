@@ -194,13 +194,13 @@ test('QA08: SEARCH03 public Content phrase remains partial without statement dis
     .toBe('failed');
 });
 
-test('QA08: CTX02/CTX03 installed v1 decisions remain partial after the Statement contract change', () => {
+test('QA08: CTX02/CTX03 need all declared Statement decisions before completion', () => {
   const coverage = declaredCaseCoverage(cases, 'backend');
   const result = { tier: 'integration', file: 'tests/qa/integration/public-selection-oracle.test.ts',
     name: 'CTX02/CTX03/WORK03/SEARCH07/SEARCH19: joined decisions and Realm selection refresh only affected roots',
     failed: false, skipped: false } as TestResult;
   for (const id of ['CTX02', 'CTX03'] as const) {
-    expect(coverage.has(id)).toBe(false);
+    expect(coverage.has(id)).toBe(true);
     expect(acceptanceStatuses(cases, [result], true, coverage)[id].status).toBe('partial-pass');
   }
 });

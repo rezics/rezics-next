@@ -332,20 +332,44 @@ export const isolatedIntegrationFiles = new Set([
   'tests/qa/integration/owner-outbox-recovery.test.ts',
   'tests/qa/integration/sys-receipt-relay-gap.test.ts',
   'tests/qa/integration/rating-release-target.test.ts',
+  'tests/qa/integration/content-publication-native.test.ts',
+  'tests/qa/integration/context-statement-cases.test.ts',
+  'tests/qa/integration/erasure-api.test.ts',
+  'tests/qa/integration/erasure-published-search.test.ts',
+  'tests/qa/integration/hub-api.test.ts',
+  'tests/qa/integration/judgment-api.test.ts',
+  'tests/qa/integration/protection-content-api.test.ts',
+  'tests/qa/integration/protection-work-api.test.ts',
+  'tests/qa/integration/public-search-scale.test.ts',
+  'tests/qa/integration/recommendation-context.test.ts',
+  'tests/qa/integration/realm-reply-api.test.ts',
+  'tests/qa/integration/source-graph-projection.test.ts',
+  'tests/qa/integration/source-authenticated-api.test.ts',
+  'tests/qa/integration/source-field.test.ts',
+  'tests/qa/integration/source-support-attach.test.ts',
+  'tests/qa/integration/translated-work-links.test.ts',
+  'tests/qa/integration/web-auth-bootstrap.test.ts',
+  'tests/qa/integration/work-address-api.test.ts',
+  'tests/qa/integration/work-derivation.test.ts',
+]);
+
+export const isolatedFaultFiles = new Set([
+  'tests/qa/fault-recovery/partition-relocation.test.ts',
+  'tests/qa/fault-recovery/semantic-lost-response.test.ts',
 ]);
 
 export function planStackProjects(estimates: ReadonlyMap<string, number>, count: number,
   tier: 'integration' | 'fault/recovery'): string[][] {
-  if (tier !== 'integration') return planShards(estimates, count);
-  const isolated = [...estimates.keys()].filter(file => isolatedIntegrationFiles.has(file)).sort();
-  const shared = new Map([...estimates].filter(([file]) => !isolatedIntegrationFiles.has(file)));
+  const ownProjects = tier === 'integration' ? isolatedIntegrationFiles : isolatedFaultFiles;
+  const isolated = [...estimates.keys()].filter(file => ownProjects.has(file)).sort();
+  const shared = new Map([...estimates].filter(([file]) => !ownProjects.has(file)));
   const sharedSlots = Math.max(1, count - Number(isolated.length > 0 && shared.size > 0));
   return [...(shared.size ? planShards(shared, sharedSlots) : []), ...isolated.map(file => [file])];
 }
 
-export function maximumShards(env: NodeJS.ProcessEnv): number {
+export function maximumShards(env: NodeJS.ProcessEnv, tier: 'integration' | 'fault/recovery'): number {
   const value = env.REZICS_QA_SHARDS;
-  if (value === undefined) return 4;
+  if (value === undefined) return tier === 'integration' ? 6 : 8;
   if (!/^[1-8]$/.test(value)) throw new Error('REZICS_QA_SHARDS must be an integer from 1 to 8');
   return Number(value);
 }

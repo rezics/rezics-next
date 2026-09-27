@@ -131,9 +131,17 @@ export async function runNativeEquivalence(baseUrl: string,
         const scopeEvent = `${scopeReceipt}:event`;
         const subject = candidate.focus.find(item => item.shape.endsWith('/context-shape'))?.focus;
         if (!subject) throw new Error('classification context fixture has no context focus');
+        const realm = candidate.args.realm;
+        if (!realm) throw new Error('classification context fixture has no Realm binding');
         const scopedUpdate = command.replaceAll(receipt, scopeReceipt)
           .replace(`GRAPH <${receipts}> {`,
-            `GRAPH <${current}> { <${subject}> <${rv}contextState> <${rv}Active> . }\n        GRAPH <${receipts}> {`)
+            `GRAPH <${current}> {
+              <${subject}> <${rv}contextState> <${rv}Active> .
+              <${realm}> <${rv}space> <urn:rezics:model-equivalence:space> ;
+                <${rv}selectionPolicy> <https://rezics.com/definition/realm-manager-fixed-main-fallback-v1> ;
+                <${rv}membershipPolicy> <https://rezics.com/definition/realm-closed-v1> ;
+                <${rv}reviewPolicy> <https://rezics.com/definition/realm-manager-reviewed-v1> .
+            }\n        GRAPH <${receipts}> {`)
           .replace('rv:eventCount 0 .',
             `rv:eventCount 1 ; rv:event <${scopeEvent}> .\n          <${scopeEvent}> a rv:ModelProbeEvent ; rv:ordinal 0 ; rv:receipt <${scopeReceipt}> .`);
         const wrongProfile = 'work-metadata-v1';
@@ -143,7 +151,7 @@ export async function runNativeEquivalence(baseUrl: string,
           body: JSON.stringify({ receipt: scopeReceipt, digest, update: scopedUpdate, deadlineMs: 10000,
             validations: [{ profile: wrongProfile, sha256: health.profiles[wrongProfile],
               shape: `https://rezics.com/definition/${wrongProfile}/work-shape`,
-              focus: [subject], graphs: [current] }] }),
+              focus: [subject, realm], graphs: [current] }] }),
         });
         const scopeOutcome = await scopeProbe.json() as Outcome;
         if (scopeOutcome.status !== 'invalid'

@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { acquireFullLock, acquireQaSlots, artifactRoots, backendTiers, command, commandAsync, concurrencyGate, estimatedDurations,
-  expandTestPaths, goalSlotDirectory, implementedTiers, isolatedIntegrationFiles, isolationCandidates,
+  expandTestPaths, goalSlotDirectory, implementedTiers, isolatedFaultFiles, isolatedIntegrationFiles, isolationCandidates,
   junitSuites, matchedNoTests, maximumShards, mergeJUnit, newRunId, parseArgs, planStackProjects,
   recordedFileDurations, shardCount,
   shardResolved, sourceIdentity, splitTestArgs,
@@ -138,11 +138,12 @@ async function runStackTier(tier: StackTier): Promise<void> {
   const budget = tier === 'integration' ? 480_000 : 360_000;
   const { paths, flags } = splitTestArgs(testArgs(tier, selection, chosen));
   const estimates = estimatedDurations(expandTestPaths(root, paths), recordedFileDurations(artifactRoots(root), tier));
-  const isolated = tier === 'integration'
-    ? [...estimates.keys()].filter(file => isolatedIntegrationFiles.has(file)).length : 0;
-  const maximum = maximumShards(process.env);
-  const wanted = Math.min(maximum, estimates.size, Math.max(
-    shardCount(estimates, budget, maximum) + Number(isolated > 0 && isolated < estimates.size), isolated));
+  const ownProjects = tier === 'integration' ? isolatedIntegrationFiles : isolatedFaultFiles;
+  const isolated = [...estimates.keys()].filter(file => ownProjects.has(file)).length;
+  const maximum = maximumShards(process.env, tier);
+  const wanted = tier === 'fault/recovery' ? Math.min(maximum, estimates.size)
+    : Math.min(maximum, estimates.size, Math.max(
+      shardCount(estimates, budget, maximum) + Number(isolated > 0 && isolated < estimates.size), isolated));
   const slots = acquireQaSlots(goalSlotDirectory(root), wanted);
   mkdirSync(join(directory, 'shards'), { recursive: true });
   try {
@@ -150,10 +151,12 @@ async function runStackTier(tier: StackTier): Promise<void> {
     const projects = planStackProjects(estimates, slots.count, tier);
     const runs = new Array<ShardRun>(projects.length);
     let project = 0;
+    const startInitialStack = concurrencyGate(1);
     await Promise.all(Array.from({ length: Math.min(slots.count, projects.length) }, async () => {
       while (project < projects.length) {
         const index = project++;
-        runs[index] = await runShard(tier, `${runId}-${prefix}${index + 1}`, projects[index]!, flags, budget);
+        runs[index] = await runShard(tier, `${runId}-${prefix}${index + 1}`, projects[index]!, flags,
+          budget, false, startInitialStack);
       }
     }));
     const candidates = runs.filter(run => !run.ok && !run.timedOut && run.record.stage === 'test'
@@ -162,7 +165,7 @@ async function runStackTier(tier: StackTier): Promise<void> {
         .map(candidate => ({ run, ...candidate })));
     const reruns: (ShardRun | undefined)[] = [];
     let next = 0;
-    const startRerunStack = concurrencyGate(2);
+    const startRerunStack = concurrencyGate(1);
     await Promise.all(Array.from({ length: Math.min(slots.count, candidates.length) }, async () => {
       while (next < candidates.length) {
         const index = next++;

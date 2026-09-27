@@ -43,6 +43,10 @@ public final class CommandModule implements FusekiAutoModule {
     @Override public String name() { return "rezics-command"; }
 
     @Override public void start() {
+        registerTextAssembler();
+    }
+
+    static void registerTextAssembler() {
         org.apache.jena.query.text.TextQuery.init();
         Assembler.general().implementWith(
             ResourceFactory.createResource("https://rezics.com/fuseki/FilteredGraphTextIndex"),

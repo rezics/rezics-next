@@ -14,7 +14,10 @@ test('STRUCTURE target policy: a profile decides native target disclosure and ca
     const seen: string[] = [];
     const authority = { principal: { issuer: 'test', subject: 'reader' },
       actingSubject: id(), target,
-      access: { canReadWork: async () => { seen.push('work'); return false; } } };
+      access: {
+        canReadWork: async () => { seen.push('work'); return false; },
+        canReadSemanticResource: async () => { seen.push('semantic'); return false; },
+      } };
     const custom = { ...zone, authorizeTarget: async (input: typeof authority) => {
       seen.push(input.target);
       return input.target === target;
@@ -22,12 +25,14 @@ test('STRUCTURE target policy: a profile decides native target disclosure and ca
     expect(await canReadStructureTarget(custom, authority)).toBe(true);
     expect(seen).toEqual([target]);
     expect(await canReadStructureTarget(zone, authority)).toBe(false);
-    expect(seen).toEqual([target, 'work']);
+    expect(seen).toEqual([target, 'semantic']);
     expect(await canReadStructureTarget(custom, { ...authority, target: 'https://example.org/private' }))
       .toBe(false);
     const book = structureProfileFor('book-composition');
     expect(await canReadStructureTarget(book, { ...authority, target: 'https://schema.org/Book' }))
       .toBe(true);
+    expect(await canReadStructureTarget(book, authority)).toBe(false);
+    expect(seen).toEqual([target, 'semantic', 'work']);
   });
 
 test('STRUCTURE owner bootstrap: receipts resume after crashes on either side of Structure creation',

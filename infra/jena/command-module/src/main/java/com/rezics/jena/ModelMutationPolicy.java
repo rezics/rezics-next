@@ -70,13 +70,16 @@ final class ModelMutationPolicy {
             // not these mutable scalar fields; validating each sibling would turn a
             // bounded edit into a whole-Structure dependency scan.
             if (stableStructureType(data, entry.getKey(), entry.getValue())) continue;
+            boolean agentTombstone = agentCompensation(data, receipt, entry.getKey(), entry.getValue());
             String overflow = dependents(profiles, data, entry.getKey(), plan,
-                dependentCurrent, dependentRevisions, inboundQuads, typeChanged(data, entry.getKey(), entry.getValue()));
+                dependentCurrent, dependentRevisions, inboundQuads,
+                typeChanged(data, entry.getKey(), entry.getValue()), agentTombstone);
             if (overflow != null) return CommandService.invalid(overflow);
         }
         for (var entry : before.revisions().entrySet()) {
             String overflow = dependents(profiles, data, entry.getKey(), plan,
-                dependentCurrent, dependentRevisions, inboundQuads, typeChanged(data, entry.getKey(), entry.getValue()));
+                dependentCurrent, dependentRevisions, inboundQuads,
+                typeChanged(data, entry.getKey(), entry.getValue()), false);
             if (overflow != null) return CommandService.invalid(overflow);
         }
         for (String subject : dependentCurrent) {
@@ -95,8 +98,11 @@ final class ModelMutationPolicy {
         CanonicalPolicy.Selection selected = before.selection();
         if (selected == null) return null;
         Node node = NodeFactory.createURI(name);
-        if (!data.contains(before.graph(), node, RDF.type.asNode(), NodeFactory.createURI(selected.type())))
+        if (!data.contains(before.graph(), node, RDF.type.asNode(), NodeFactory.createURI(selected.type()))) {
+            if (agentCompensation(data, receipt, name, before))
+                return CanonicalPolicy.validate(profiles, data, name, false);
             return CommandService.invalid("prestate canonical type removed: " + name);
+        }
         boolean changed = before.selectors().entrySet().stream().anyMatch(entry ->
             !entry.getValue().equals(values(data, before.graph(), node, NodeFactory.createURI(entry.getKey()))));
         if (changed) {
@@ -105,6 +111,26 @@ final class ModelMutationPolicy {
             return null;
         }
         return CanonicalPolicy.validateSelected(profiles, data, name, selected);
+    }
+
+    /** A receipted Agent compensation replaces its public identity with a
+     * canonical tombstone while retaining the creation receipt. */
+    private static boolean agentCompensation(DatasetGraph data, String receipt,
+                                             String name, Subject before) {
+        if (!before.graph().equals(CURRENT) || before.selection() == null
+            || !before.selection().type().equals(RV + "Agent")
+            || !receipt.startsWith("urn:rezics:receipt:agent-compensation:")) return false;
+        String id = receipt.substring("urn:rezics:receipt:agent-compensation:".length());
+        Node agent = NodeFactory.createURI(name);
+        Node compensatedFrom = NodeFactory.createURI("urn:rezics:receipt:agent-provision:" + id);
+        Node receiptNode = NodeFactory.createURI(receipt);
+        return data.contains(CURRENT, agent, RDF.type.asNode(), NodeFactory.createURI(RV + "AgentTombstone"))
+            && !data.contains(CURRENT, agent, RDF.type.asNode(), NodeFactory.createURI(RV + "Agent"))
+            && data.contains(CURRENT, agent, NodeFactory.createURI(RV + "compensatedFrom"), compensatedFrom)
+            && data.contains(RECEIPTS, compensatedFrom, NodeFactory.createURI(RV + "agent"), agent)
+            && data.contains(RECEIPTS, receiptNode, RDF.type.asNode(), NodeFactory.createURI(RV + "OperationReceipt"))
+            && data.contains(RECEIPTS, receiptNode, NodeFactory.createURI(RV + "outcome"),
+                NodeFactory.createURI(RV + "Succeeded"));
     }
 
     /** Current RouteBinding may advance only with the exact successor revision and receipt. */
@@ -149,12 +175,13 @@ final class ModelMutationPolicy {
 
     private static String dependents(ProfileRegistry profiles, DatasetGraph data, String child,
                                      CommandPolicy.Plan plan, Set<String> current, Set<String> revisions,
-                                     int[] inboundQuads, boolean typeChanged) {
+                                     int[] inboundQuads, boolean typeChanged, boolean agentTombstone) {
         Node object = NodeFactory.createURI(child);
         for (Node graph : new Node[] { CURRENT, REVISIONS }) {
             var matches = data.find(graph, Node.ANY, Node.ANY, object);
             while (matches.hasNext()) {
-                Node parent = matches.next().getSubject();
+                var inbound = matches.next();
+                Node parent = inbound.getSubject();
                 if (++inboundQuads[0] > MAX_INBOUND_QUADS)
                     return "reverse dependency inbound footprint exceeds " + MAX_INBOUND_QUADS;
                 if (!parent.isURI()) continue;
@@ -164,7 +191,12 @@ final class ModelMutationPolicy {
                 } else if (!plan.revisions().contains(name)) {
                     // Untyped/generic historical revisions have no registry-selected shape.
                     // Their dependency on a changed child type cannot be certified here.
-                    if (typeChanged && CanonicalPolicy.select(profiles, data, name, true) == null)
+                    boolean historicalAgentAnchor = agentTombstone
+                        && inbound.getPredicate().equals(NodeFactory.createURI(RV + "component"))
+                        && data.contains(REVISIONS, parent, RDF.type.asNode(),
+                            NodeFactory.createURI(RV + "RevisionAnchor"));
+                    if (typeChanged && !historicalAgentAnchor
+                        && CanonicalPolicy.select(profiles, data, name, true) == null)
                         return "uncanonical reverse revision dependency requires staged lifecycle: " + name;
                     revisions.add(name);
                 }

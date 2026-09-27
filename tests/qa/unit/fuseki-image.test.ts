@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { cpSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { dockerfileCopySources, fusekiBuildInputs, fusekiImageTag, stampFusekiImage }
@@ -11,8 +11,11 @@ const root = join(import.meta.dir, '../../..');
 
 function fixture(): string {
   const directory = mkdtempSync(join(tmpdir(), 'rezics-fuseki-image-'));
+  mkdirSync(join(directory, 'scripts/dev'), { recursive: true });
   for (const path of ['infra/jena', 'infra/dev/compose.yaml', 'generated/model/manifest.json',
-    'generated/model/shapes']) cpSync(join(root, path), join(directory, path), { recursive: true });
+    'generated/model/shapes', 'scripts/dev/release-manifest.ts']) {
+    cpSync(join(root, path), join(directory, path), { recursive: true });
+  }
   return directory;
 }
 

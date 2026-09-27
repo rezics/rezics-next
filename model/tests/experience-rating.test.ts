@@ -126,7 +126,11 @@ test('RATE05/MODEL17: native policy successor keeps the question head and reject
       CLEAR SILENT GRAPH <${control}>; CLEAR SILENT GRAPH <${receipts}>; CLEAR SILENT GRAPH <${outbox}>`);
     await upload(`PREFIX rv: <${rv}> INSERT DATA {
       GRAPH <${current}> { <https://rezics.com/id/019cb49e-0ea2-7000-8000-000000000050>
-        a rv:Realm ; rv:realmState rv:Active ; rv:ratingContext <${context}> .
+        a rv:Realm ; rv:realmState rv:Active ; rv:ratingContext <${context}> ;
+        rv:space <urn:rezics:rating-policy-model:space> ;
+        rv:selectionPolicy <https://rezics.com/definition/realm-manager-fixed-main-fallback-v1> ;
+        rv:membershipPolicy <https://rezics.com/definition/realm-closed-v1> ;
+        rv:reviewPolicy <https://rezics.com/definition/realm-manager-reviewed-v1> .
         <${context}> a rv:RatingContext, rv:ExperienceRatingContext ;
         rv:contextState rv:Active ; rv:realm <https://rezics.com/id/019cb49e-0ea2-7000-8000-000000000050> ;
         rv:question "Aggregate experience quality"@en ; rv:targetGrain rv:MainVersion ;

@@ -56,6 +56,12 @@ test('CTX02/CTX09: v1 heads migrate exactly before the Statement decision fence 
       f.admission('classification:define:global', 'classification.proposition.define',
         classificationPropositionDigest(propositionInput)), propositionInput);
     const sense = proposition.definitions!.sense;
+    await f.grant('classification:decide:global', 'statement.decide');
+    await f.json(await f.call('POST',
+      `/v1/concepts/${proposition.definitions!.concept.split('/').at(-1)}/spoiler-hints`, {
+        profile: 'concept-spoiler-hint-v1', context: { kind: 'global' },
+        hint: 'not-spoiler', expectedGeneration: '0', actingSubject: f.actorA,
+      }), 201);
     const decisionInput = { context: { kind: 'global' as const }, work: work.work!,
       mainVersion: work.mainVersion!, sense, expectedDecisionHead: null,
       outcome: 'accepted' as const, actingSubject: f.actorA };

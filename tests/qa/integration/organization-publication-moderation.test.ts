@@ -7,6 +7,7 @@ import { createMainApp } from '../../../services/main/src/app.ts';
 import { FusekiClient } from '../../../services/main/src/infrastructure/fuseki.ts';
 import { AdmissionDenied, AdmissionUnavailable, AccessAdmissionRegistry }
   from '../../../services/main/src/modules/access/admission.ts';
+import { AccessPolicyOwner } from '../../../services/main/src/modules/access/policy-owner.ts';
 import { AccessOrgRealmParticipation } from '../../../services/main/src/modules/access/org-realm-participation.ts';
 import { AccessOrganizationModeration } from '../../../services/main/src/modules/access/organization-moderation.ts';
 import { ORGANIZATION_MODERATION_ACTION, ORGANIZATION_MODERATION_PROFILE }
@@ -65,6 +66,7 @@ test('IAM23/IAM24: exact organization publication moderation and suspension affe
   const access = new AccessAdmissionRegistry(pool);
   const owner = new AccessOrganizationModeration(measured);
   const deps = { environment: env, account: account.verifier, access,
+    accessPolicy: new AccessPolicyOwner(pool),
     orgRealmParticipation: new AccessOrgRealmParticipation(pool), organizationModeration: owner };
   const app = createMainApp(fuseki, deps);
   const post = (path: string, token: string, body: object, key = randomUUID(), main = app) =>

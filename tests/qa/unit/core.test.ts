@@ -2,7 +2,7 @@ import { expect, test } from 'bun:test';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { acquireFullLock, acquireQaSlots, concurrencyGate, estimatedDurations, expandTestPaths, expectedFusekiModuleVersion,
-  isolatedIntegrationFiles, isolationCandidates, junitSuites, matchedNoTests, maximumShards,
+  isolatedFaultFiles, isolatedIntegrationFiles, isolationCandidates, junitSuites, matchedNoTests, maximumShards,
   mergeJUnit, parseArgs, planShards, planStackProjects,
   recordedFileDurations, shardCount, shardResolved, splitTestArgs, testLogEnvironment, writeSummary,
   implementedTiers, tierArtifactName,
@@ -181,10 +181,11 @@ test('QA shards: shard count keeps each project near half its budget and plannin
   expect(plan.flat().sort()).toEqual([...estimates.keys()].sort());
   expect(planShards(new Map([...estimates].reverse()), 4)).toEqual(plan);
   expect(planShards(new Map([['a', 1]]), 4)).toEqual([['a']]);
-  expect(maximumShards({})).toBe(4);
-  expect(maximumShards({ REZICS_QA_SHARDS: '6' })).toBe(6);
-  expect(() => maximumShards({ REZICS_QA_SHARDS: '0' })).toThrow('1 to 8');
-  expect(() => maximumShards({ REZICS_QA_SHARDS: '9' })).toThrow('1 to 8');
+  expect(maximumShards({}, 'integration')).toBe(6);
+  expect(maximumShards({}, 'fault/recovery')).toBe(8);
+  expect(maximumShards({ REZICS_QA_SHARDS: '6' }, 'fault/recovery')).toBe(6);
+  expect(() => maximumShards({ REZICS_QA_SHARDS: '0' }, 'integration')).toThrow('1 to 8');
+  expect(() => maximumShards({ REZICS_QA_SHARDS: '9' }, 'fault/recovery')).toThrow('1 to 8');
 });
 
 test('QA shards: graph reset and outbox gap files get singleton integration projects', () => {
@@ -199,6 +200,14 @@ test('QA shards: graph reset and outbox gap files get singleton integration proj
     .toEqual([...isolatedIntegrationFiles].sort().map(file => [file]));
   expect(planStackProjects(new Map([...files].reverse()), 3, 'integration')).toEqual(plan);
   expect(planStackProjects(files, 3, 'fault/recovery')).toEqual(planShards(files, 3));
+  const faultFiles = new Map<string, number>([
+    ['tests/qa/fault-recovery/content-rebuild.test.ts', 100],
+    ...[...isolatedFaultFiles].map(file => [file, 10] as const),
+  ]);
+  const faultPlan = planStackProjects(faultFiles, 3, 'fault/recovery');
+  expect(faultPlan.flat().sort()).toEqual([...faultFiles.keys()].sort());
+  expect(faultPlan.filter(project => project.some(file => isolatedFaultFiles.has(file))))
+    .toEqual([...isolatedFaultFiles].sort().map(file => [file]));
   const one = new Map([['tests/qa/integration/validation-command.test.ts', 1]]);
   expect(planStackProjects(one, 1, 'integration'))
     .toEqual([['tests/qa/integration/validation-command.test.ts']]);
