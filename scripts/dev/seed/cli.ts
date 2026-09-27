@@ -9,6 +9,10 @@ import { seedReply } from './replies.ts';
 import { seedRealmManagement } from './realm-management.ts';
 import { seedFeed } from './feed.ts';
 import { seedChapterProgress } from './progress.ts';
+import { grantCuratedCollectionSeed, grantOfficialZoneSeed, operatorSeedSession }
+  from './operator.ts';
+import { DEFAULT_ZONE_PRESENTATION, ZONE_PRESETS }
+  from '../../../services/main/src/modules/zone/presentation-format.ts';
 
 interface Options { dryRun: boolean; resetOwn: boolean }
 interface WorkReceipt { work: string; mainVersion: string; workRevision: string; mainRevision: string;
@@ -33,17 +37,22 @@ function commonRoot(): string {
   return dirname(isAbsolute(common) ? common : resolve(root, common));
 }
 
-function configuration(): { endpoints: SeedEndpoints } {
+function configuration(): { endpoints: SeedEndpoints; operator: { id: string; email: string;
+  password: string }; accountDatabaseUrl: string; accountSecret: string;
+  accessDatabaseUrl: string } {
   const directory = Bun.env.REZICS_SEED_STACK_DIRECTORY
     ? resolve(Bun.env.REZICS_SEED_STACK_DIRECTORY) : join(commonRoot(), '.temp/stack/rezics-dev');
   const envPath = join(directory, 'dev.env');
   const publicPath = join(directory, 'web-auth/public.json');
-  if (![envPath, publicPath].every(existsSync)) {
+  const privatePath = join(directory, 'web-auth/private.json');
+  if (![envPath, publicPath, privatePath].every(existsSync)) {
     throw new Error('Shared dev stack is absent; start it from the main checkout with task dev');
   }
   const env = readEnv(envPath);
   const publicConfig = JSON.parse(readFileSync(publicPath, 'utf8')) as {
     clientId: string; redirectUris: string[]; scope: string; resource: string };
+  const privateConfig = JSON.parse(readFileSync(privatePath, 'utf8')) as {
+    operator: { id: string; email: string; password: string } };
   const account = env.ACCOUNT_ORIGIN ?? env.ACCOUNT_BASE_URL;
   const main = env.MAIN_ORIGIN;
   if (!account || !main || !publicConfig.redirectUris[0] || !publicConfig.scope) {
@@ -54,7 +63,11 @@ function configuration(): { endpoints: SeedEndpoints } {
       throw new Error('The demo seed accepts loopback Account and Main APIs only');
     }
   }
-  return { endpoints: { account, main,
+  if (!privateConfig.operator?.id || !env.ACCOUNT_DATABASE_URL || !env.ACCESS_DATABASE_URL
+    || !env.ACCOUNT_SECRET) throw new Error('Dev stack lacks its operator grant fixture');
+  return { operator: privateConfig.operator, accountDatabaseUrl: env.ACCOUNT_DATABASE_URL,
+    accessDatabaseUrl: env.ACCESS_DATABASE_URL, accountSecret: env.ACCOUNT_SECRET,
+    endpoints: { account, main,
     mailpit: `http://127.0.0.1:${env.MAILPIT_HTTP_PORT ?? '8025'}`,
     clientId: publicConfig.clientId,
     redirectUri: publicConfig.redirectUris[0], resource: publicConfig.resource,
@@ -86,14 +99,14 @@ async function run(options: Options): Promise<boolean> {
     throw new Error('--reset-own is unavailable: public APIs cannot remove seed-owned Works, '
       + 'Agents, Spaces and Access grants together. No data was changed.');
   }
-  const { endpoints } = configuration();
+  const { endpoints, operator, accountDatabaseUrl, accountSecret, accessDatabaseUrl } = configuration();
   const api = new SeedApi(endpoints);
   const findings = new Set<string>();
   async function optional<T>(label: string, operation: () => Promise<T>): Promise<T | null> {
     try { return await operation(); }
     catch (error) { findings.add(`${label}: ${describe(error)}`); return null; }
   }
-  const sessions: Array<{ id: string; token: string; actingSubject: string }> = [];
+  const sessions: Array<{ id: string; accountId: string; token: string; actingSubject: string }> = [];
   let agentCount = 0;
   for (const person of people) {
     const signed = await api.signInOrUp(person);
@@ -105,11 +118,15 @@ async function run(options: Options): Promise<boolean> {
     await api.put(`/v1/agents/${agent.agent.slice(-36)}/handle`,
       { profile: 'agent-handle-v1', handle: person.handle, expectedHandle: null },
       token, seedKey('handle', person.id));
-    sessions.push({ id: person.id, token, actingSubject: agent.agent });
+    sessions.push({ id: person.id, accountId: signed.id, token, actingSubject: agent.agent });
     agentCount++;
   }
   const owner = sessions[0]!;
   const ownerToken = owner.token;
+  const operatorInput = { endpoints, credentials: operator, accountDatabaseUrl,
+    accountSecret, accessDatabaseUrl, accountSubject: operator.id,
+    ownerAccountSubject: owner.accountId, actingSubject: owner.actingSubject };
+  const operatorSession = await operatorSeedSession(operatorInput);
   for (const [id, displayName, kind] of [
     ['moonlight', '月下书生 · Moonlit Scribe', 'person'],
     ['northstar', 'North Star Editions · 北辰出版', 'organization'],
@@ -133,12 +150,53 @@ async function run(options: Options): Promise<boolean> {
         actingSubject: owner.actingSubject }, ownerToken, seedKey('serial-metadata', work.id)));
     console.log(`Work ${created.size}/${works.length}: ${work.title}${receipt.replayed ? ' (replayed)' : ''}`);
   }
-  const createdRealms: Array<{ id: string; receipt: SpaceReceipt }> = [];
-  for (const realm of realms) {
+  const createdRealms: Array<{ id: string; receipt: SpaceReceipt;
+    steward: typeof owner }> = [];
+  for (const [index, realm] of realms.entries()) {
+    // Give each official Realm its own member quota, including on a stack
+    // previously seeded with the original three Realms under the Work owner.
+    const steward = sessions[index + 1]!;
     const receipt = await optional('Space / Realm creation', () => api.post<SpaceReceipt>('/v1/spaces', {
       profile: 'space-realm-v1', name: realm.name, capabilities: ['realm'],
-      actingSubject: owner.actingSubject }, ownerToken, seedKey('realm', realm.id)));
-    if (receipt) createdRealms.push({ id: realm.id, receipt });
+      actingSubject: steward.actingSubject }, steward.token, seedKey('realm', realm.id)));
+    if (receipt) createdRealms.push({ id: realm.id, receipt, steward });
+  }
+  const seededZones: string[] = [];
+  for (const realm of realms) {
+    const parent = createdRealms.find(item => item.id === realm.id);
+    if (!parent) continue;
+    const collection = `https://rezics.com/id/${stableId(`curated:${realm.id}`)}`;
+    const zone = `https://rezics.com/id/${stableId(`zone:${realm.id}`)}`;
+    await grantCuratedCollectionSeed(operatorInput, collection);
+    const curated = await api.post<{ structure: string; revision: string }>('/v1/collections', {
+      collection, name: `${realm.name} · Featured`, disclosure: 'public',
+      actingSubject: owner.actingSubject }, ownerToken, seedKey('curated-collection', realm.id));
+    await api.post(`/v1/collections/${collection.slice(-36)}/changes`, {
+      expectedHead: curated.revision, actingSubject: owner.actingSubject,
+      operations: realm.featured.map(work => ({ op: 'insert', role: 'member',
+        parent: curated.structure, position: 'last',
+        target: created.get(work)!.work, selection: { mode: 'follow-context' } })),
+    }, ownerToken, seedKey('curated-members', realm.id));
+    const stewardInput = { ...operatorInput, ownerAccountSubject: parent.steward.accountId,
+      actingSubject: parent.steward.actingSubject };
+    await grantOfficialZoneSeed(stewardInput, zone);
+    await api.post('/v1/zones', {
+      zone, space: parent.receipt.space, disclosure: 'public',
+      actingSubject: parent.steward.actingSubject,
+    }, parent.steward.token, seedKey('zone', realm.id));
+    const currentZone = await api.get<{ revision: string }>(
+      `/v1/zones/${zone.slice(-36)}/configuration?actingSubject=${encodeURIComponent(parent.steward.actingSubject)}`,
+      parent.steward.token);
+    const preset = realm.preset;
+    await operatorSession.api.put(`/v1/zones/${zone.slice(-36)}/configuration`, {
+      expectedHead: currentZone.revision, actingSubject: parent.steward.actingSubject,
+      defaultRealm: parent.receipt.realm, official: { routeSegment: realm.id },
+      presentation: { ...DEFAULT_ZONE_PRESENTATION, preset, tokens: ZONE_PRESETS[preset],
+        navigation: [{ label: realm.name, href: `/r/${realm.id}` }],
+        modules: [{ id: 'featured', type: 'editorial-list', title: 'Featured works',
+          source: { kind: 'collection', collection }, options: { layout: 'covers', limit: 12 } }] },
+    }, operatorSession.token, seedKey('official-zone', realm.id));
+    seededZones.push(zone);
   }
   const original = created.get('pride');
   const translation = created.get('pride-zh');
@@ -216,9 +274,11 @@ async function run(options: Options): Promise<boolean> {
 
   await optional('Chapter reading progress', () => seedChapterProgress(api, owner, sessions, created));
 
-  const managed = createdRealms.find(realm => realm.id === 'classics');
+  const managed = createdRealms.find(realm => realm.id === 'fiction');
   if (managed) await optional('Realm moderation team and queue', () => seedRealmManagement(api,
-    managed.receipt.realm, owner, sessions.slice(1, 3), [...created.values()]));
+    managed.receipt.realm, managed.steward,
+    sessions.filter(session => session.id !== managed.steward.id).slice(0, 2),
+    [...created.values()]));
 
   const feed = await optional('Home follows and votes', () => seedFeed(api, sessions, createdRealms));
   if (feed) console.log(`Home: ${feed.activities} activities, ${feed.followed} follows, ${feed.votes} votes.`);
@@ -234,7 +294,7 @@ async function run(options: Options): Promise<boolean> {
     findings.add('Public Work list: zero visible Works; metadata-only records need a selected publication');
   }
 
-  console.log(`\nSeeded ${created.size} Works, ${createdRealms.length} Realms, ${people.length} Account users, ${agentCount} Agents, ${publishedCount} published contributions, ${selectedCount} Main selections, ${commentCount} comments, ${replyCount} replies.`);
+  console.log(`\nSeeded ${created.size} Works, ${createdRealms.length} Realms, ${seededZones.length} official Zones, ${people.length} Account users, ${agentCount} Agents, ${publishedCount} published contributions, ${selectedCount} Main selections, ${commentCount} comments, ${replyCount} replies.`);
   console.log('Demo sign-in credentials:');
   for (const person of people) console.log(`  ${person.name}: ${person.email} / ${person.password}`);
   console.log('Search URLs:');
@@ -249,7 +309,8 @@ async function run(options: Options): Promise<boolean> {
     console.log('Public API gaps or unavailable outcomes:');
     for (const finding of findings) console.log(`  ${finding}`);
   }
-  return findings.size === 0 && createdRealms.length === realms.length;
+  return findings.size === 0 && createdRealms.length === realms.length
+    && seededZones.length === realms.length;
 }
 
 if (import.meta.main) {

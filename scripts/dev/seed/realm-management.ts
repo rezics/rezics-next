@@ -23,7 +23,7 @@ export async function seedRealmManagement(api: SeedApi, realm: string, owner: Se
   const change = async (value: object, label: string, skipEmpty = false) => {
     const current = await roles();
     const input = { actingSubject: owner.actingSubject, expectedGeneration: current.generation,
-      reason: 'Set up the Classic Literature moderation team', change: value };
+      reason: 'Set up the Fiction moderation team', change: value };
     const preview = await api.post<{ digest: string; affectedCount: number }>(`${root}/role-impact`, input,
       owner.token, seedKey('realm-impact', label));
     if (skipEmpty && preview.affectedCount === 0) return;

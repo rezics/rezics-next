@@ -110,18 +110,29 @@ export class SeedApi {
   }
 
   async put<T>(path: string, body: unknown, token: string, key: string): Promise<T> {
-    const response = await fetch(`${this.endpoints.main}${path}`, { method: 'PUT',
-      headers: { 'content-type': 'application/json', authorization: `Bearer ${token}`,
-        'idempotency-key': key }, body: JSON.stringify(body) });
+    return this.write('PUT', path, body, token, key);
+  }
+
+  async get<T>(path: string, token: string): Promise<T> {
+    const response = await fetch(`${this.endpoints.main}${path}`, {
+      headers: { authorization: `Bearer ${token}` } });
     return payload<T>(response, `Main ${path}`);
   }
 
   async post<T>(path: string, body: unknown, token: string, key: string): Promise<T> {
-    const response = await fetch(`${this.endpoints.main}${path}`, { method: 'POST',
-      headers: { 'content-type': 'application/json', authorization: `Bearer ${token}`,
-        'idempotency-key': key }, body: JSON.stringify(body) });
-    const result = await payload<T>(response, `Main ${path}`);
-    if (response.status === 202) throw new Error(`Main ${path}: pending; rerun with the same key`);
-    return result;
+    return this.write('POST', path, body, token, key);
+  }
+
+  private async write<T>(method: 'PUT' | 'POST', path: string, body: unknown,
+    token: string, key: string): Promise<T> {
+    for (let attempt = 0; attempt < 8; attempt++) {
+      const response = await fetch(`${this.endpoints.main}${path}`, { method,
+        headers: { 'content-type': 'application/json', authorization: `Bearer ${token}`,
+          'idempotency-key': key }, body: JSON.stringify(body) });
+      if (response.status !== 202) return payload<T>(response, `Main ${path}`);
+      await response.body?.cancel();
+      await new Promise(resolve => setTimeout(resolve, 500));
+    }
+    throw new Error(`Main ${path}: pending after retries; rerun with the same key`);
   }
 }

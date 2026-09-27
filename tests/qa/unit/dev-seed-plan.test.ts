@@ -9,7 +9,11 @@ describe('dev seed plan', () => {
     expect(works.length).toBeGreaterThanOrEqual(25);
     expect(works.length).toBeLessThanOrEqual(40);
     expect(new Set(works.map(work => work.id)).size).toBe(works.length);
-    expect(new Set(realms.map(realm => realm.id)).size).toBe(3);
+    expect(realms.map(realm => realm.id)).toEqual([
+      'fiction', 'books', 'mods', 'ai-workshop', 'software', 'kitchen',
+    ]);
+    expect(realms.every(realm => realm.featured.length > 0
+      && realm.featured.every(id => works.some(work => work.id === id)))).toBe(true);
     expect(new Set(works.map(work => work.language))).toEqual(new Set(['en', 'zh-Hans']));
     expect(new Set(works.map(work => work.type))).toEqual(new Set(['book', 'document', 'recipe']));
     expect(works.filter(work => work.excerpt).length).toBeGreaterThanOrEqual(5);
