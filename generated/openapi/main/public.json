@@ -186978,6 +186978,164 @@
                         ],
                         "type": "object"
                       },
+                      "contexts": {
+                        "items": {
+                          "pattern": "^(https://rezics\\.com/id/[0-9a-f-]{36}|urn:rezics:semantic-context:global)$",
+                          "type": "string"
+                        },
+                        "maxItems": 8,
+                        "type": "array"
+                      },
+                      "language": {
+                        "maxLength": 35,
+                        "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$",
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "mediaContext": {
+                        "anyOf": [
+                          {
+                            "const": "urn:rezics:media:context:default",
+                            "type": "string"
+                          },
+                          {
+                            "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                            "type": "string"
+                          }
+                        ]
+                      },
+                      "phrase": {
+                        "maxLength": 80,
+                        "minLength": 2,
+                        "type": "string"
+                      },
+                      "profile": {
+                        "const": "public-disclosed-fields-phrase-v1",
+                        "type": "string"
+                      },
+                      "resources": {
+                        "items": {
+                          "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                          "type": "string"
+                        },
+                        "maxItems": 32,
+                        "type": "array"
+                      },
+                      "sourcePolicy": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "datasetIds": {
+                            "items": {
+                              "maxLength": 200,
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "maxItems": 8,
+                            "minItems": 2,
+                            "type": "array"
+                          },
+                          "kind": {
+                            "const": "multi-dataset",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "datasetIds"
+                        ],
+                        "type": "object"
+                      },
+                      "statements": {
+                        "items": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "acceptance": {
+                              "anyOf": [
+                                {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "kind": {
+                                      "const": "global",
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "kind"
+                                  ],
+                                  "type": "object"
+                                },
+                                {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "kind": {
+                                      "const": "realm",
+                                      "type": "string"
+                                    },
+                                    "realm": {
+                                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "kind",
+                                    "realm"
+                                  ],
+                                  "type": "object"
+                                }
+                              ]
+                            },
+                            "statement": {
+                              "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "statement",
+                            "acceptance"
+                          ],
+                          "type": "object"
+                        },
+                        "maxItems": 16,
+                        "type": "array"
+                      }
+                    },
+                    "required": [
+                      "profile",
+                      "phrase",
+                      "contexts",
+                      "statements",
+                      "resources",
+                      "mediaContext",
+                      "language"
+                    ],
+                    "type": "object"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "asOf": {
+                        "properties": {
+                          "dataEpoch": {
+                            "type": "string"
+                          },
+                          "datasetId": {
+                            "const": "product",
+                            "type": "string"
+                          },
+                          "sequence": {
+                            "pattern": "^[0-9]+$",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "datasetId",
+                          "dataEpoch",
+                          "sequence"
+                        ],
+                        "type": "object"
+                      },
                       "language": {
                         "maxLength": 35,
                         "minLength": 2,
@@ -187591,6 +187749,164 @@
             "application/x-www-form-urlencoded": {
               "schema": {
                 "anyOf": [
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "asOf": {
+                        "properties": {
+                          "dataEpoch": {
+                            "type": "string"
+                          },
+                          "datasetId": {
+                            "const": "product",
+                            "type": "string"
+                          },
+                          "sequence": {
+                            "pattern": "^[0-9]+$",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "datasetId",
+                          "dataEpoch",
+                          "sequence"
+                        ],
+                        "type": "object"
+                      },
+                      "contexts": {
+                        "items": {
+                          "pattern": "^(https://rezics\\.com/id/[0-9a-f-]{36}|urn:rezics:semantic-context:global)$",
+                          "type": "string"
+                        },
+                        "maxItems": 8,
+                        "type": "array"
+                      },
+                      "language": {
+                        "maxLength": 35,
+                        "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$",
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "mediaContext": {
+                        "anyOf": [
+                          {
+                            "const": "urn:rezics:media:context:default",
+                            "type": "string"
+                          },
+                          {
+                            "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                            "type": "string"
+                          }
+                        ]
+                      },
+                      "phrase": {
+                        "maxLength": 80,
+                        "minLength": 2,
+                        "type": "string"
+                      },
+                      "profile": {
+                        "const": "public-disclosed-fields-phrase-v1",
+                        "type": "string"
+                      },
+                      "resources": {
+                        "items": {
+                          "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                          "type": "string"
+                        },
+                        "maxItems": 32,
+                        "type": "array"
+                      },
+                      "sourcePolicy": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "datasetIds": {
+                            "items": {
+                              "maxLength": 200,
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "maxItems": 8,
+                            "minItems": 2,
+                            "type": "array"
+                          },
+                          "kind": {
+                            "const": "multi-dataset",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "datasetIds"
+                        ],
+                        "type": "object"
+                      },
+                      "statements": {
+                        "items": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "acceptance": {
+                              "anyOf": [
+                                {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "kind": {
+                                      "const": "global",
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "kind"
+                                  ],
+                                  "type": "object"
+                                },
+                                {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "kind": {
+                                      "const": "realm",
+                                      "type": "string"
+                                    },
+                                    "realm": {
+                                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "kind",
+                                    "realm"
+                                  ],
+                                  "type": "object"
+                                }
+                              ]
+                            },
+                            "statement": {
+                              "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "statement",
+                            "acceptance"
+                          ],
+                          "type": "object"
+                        },
+                        "maxItems": 16,
+                        "type": "array"
+                      }
+                    },
+                    "required": [
+                      "profile",
+                      "phrase",
+                      "contexts",
+                      "statements",
+                      "resources",
+                      "mediaContext",
+                      "language"
+                    ],
+                    "type": "object"
+                  },
                   {
                     "additionalProperties": false,
                     "properties": {
@@ -188252,6 +188568,164 @@
                         ],
                         "type": "object"
                       },
+                      "contexts": {
+                        "items": {
+                          "pattern": "^(https://rezics\\.com/id/[0-9a-f-]{36}|urn:rezics:semantic-context:global)$",
+                          "type": "string"
+                        },
+                        "maxItems": 8,
+                        "type": "array"
+                      },
+                      "language": {
+                        "maxLength": 35,
+                        "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$",
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "mediaContext": {
+                        "anyOf": [
+                          {
+                            "const": "urn:rezics:media:context:default",
+                            "type": "string"
+                          },
+                          {
+                            "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                            "type": "string"
+                          }
+                        ]
+                      },
+                      "phrase": {
+                        "maxLength": 80,
+                        "minLength": 2,
+                        "type": "string"
+                      },
+                      "profile": {
+                        "const": "public-disclosed-fields-phrase-v1",
+                        "type": "string"
+                      },
+                      "resources": {
+                        "items": {
+                          "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                          "type": "string"
+                        },
+                        "maxItems": 32,
+                        "type": "array"
+                      },
+                      "sourcePolicy": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "datasetIds": {
+                            "items": {
+                              "maxLength": 200,
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "maxItems": 8,
+                            "minItems": 2,
+                            "type": "array"
+                          },
+                          "kind": {
+                            "const": "multi-dataset",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "datasetIds"
+                        ],
+                        "type": "object"
+                      },
+                      "statements": {
+                        "items": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "acceptance": {
+                              "anyOf": [
+                                {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "kind": {
+                                      "const": "global",
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "kind"
+                                  ],
+                                  "type": "object"
+                                },
+                                {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "kind": {
+                                      "const": "realm",
+                                      "type": "string"
+                                    },
+                                    "realm": {
+                                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "kind",
+                                    "realm"
+                                  ],
+                                  "type": "object"
+                                }
+                              ]
+                            },
+                            "statement": {
+                              "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "statement",
+                            "acceptance"
+                          ],
+                          "type": "object"
+                        },
+                        "maxItems": 16,
+                        "type": "array"
+                      }
+                    },
+                    "required": [
+                      "profile",
+                      "phrase",
+                      "contexts",
+                      "statements",
+                      "resources",
+                      "mediaContext",
+                      "language"
+                    ],
+                    "type": "object"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "asOf": {
+                        "properties": {
+                          "dataEpoch": {
+                            "type": "string"
+                          },
+                          "datasetId": {
+                            "const": "product",
+                            "type": "string"
+                          },
+                          "sequence": {
+                            "pattern": "^[0-9]+$",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "datasetId",
+                          "dataEpoch",
+                          "sequence"
+                        ],
+                        "type": "object"
+                      },
                       "language": {
                         "maxLength": 35,
                         "minLength": 2,
@@ -188871,6 +189345,301 @@
               "application/json": {
                 "schema": {
                   "anyOf": [
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "complete": {
+                          "const": true,
+                          "type": "boolean"
+                        },
+                        "contractVersion": {
+                          "const": "1",
+                          "type": "string"
+                        },
+                        "countPrecision": {
+                          "const": "exact",
+                          "type": "string"
+                        },
+                        "facetPrecision": {
+                          "const": "exact",
+                          "type": "string"
+                        },
+                        "facets": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "contexts": {
+                              "minimum": 0,
+                              "type": "integer"
+                            },
+                            "names": {
+                              "minimum": 0,
+                              "type": "integer"
+                            },
+                            "statements": {
+                              "minimum": 0,
+                              "type": "integer"
+                            }
+                          },
+                          "required": [
+                            "contexts",
+                            "statements",
+                            "names"
+                          ],
+                          "type": "object"
+                        },
+                        "profile": {
+                          "const": "public-disclosed-fields-phrase-v1",
+                          "type": "string"
+                        },
+                        "resultGrain": {
+                          "const": "field",
+                          "type": "string"
+                        },
+                        "results": {
+                          "items": {
+                            "anyOf": [
+                              {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "kind": {
+                                    "const": "context-label",
+                                    "type": "string"
+                                  },
+                                  "language": {
+                                    "type": "string"
+                                  },
+                                  "owner": {
+                                    "type": "string"
+                                  },
+                                  "score": {
+                                    "const": 1,
+                                    "type": "number"
+                                  },
+                                  "target": {
+                                    "type": "string"
+                                  },
+                                  "text": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "kind",
+                                  "owner",
+                                  "target",
+                                  "text",
+                                  "language",
+                                  "score"
+                                ],
+                                "type": "object"
+                              },
+                              {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "kind": {
+                                    "const": "statement-value",
+                                    "type": "string"
+                                  },
+                                  "language": {
+                                    "~elyTyp": 7,
+                                    "nullable": true,
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ]
+                                  },
+                                  "owner": {
+                                    "type": "string"
+                                  },
+                                  "score": {
+                                    "const": 1,
+                                    "type": "number"
+                                  },
+                                  "subject": {
+                                    "type": "string"
+                                  },
+                                  "text": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "kind",
+                                  "owner",
+                                  "subject",
+                                  "text",
+                                  "language",
+                                  "score"
+                                ],
+                                "type": "object"
+                              },
+                              {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "avatar": {
+                                    "anyOf": [
+                                      {
+                                        "additionalProperties": false,
+                                        "properties": {
+                                          "basis": {
+                                            "properties": {
+                                              "context": {
+                                                "type": "string"
+                                              },
+                                              "policy": {
+                                                "type": "string"
+                                              }
+                                            },
+                                            "required": [
+                                              "policy",
+                                              "context"
+                                            ],
+                                            "type": "object"
+                                          },
+                                          "crop": {
+                                            "~elyTyp": 7,
+                                            "nullable": true,
+                                            "type": [
+                                              "string",
+                                              "null"
+                                            ]
+                                          },
+                                          "height": {
+                                            "type": "number"
+                                          },
+                                          "kind": {
+                                            "const": "image",
+                                            "type": "string"
+                                          },
+                                          "mediaType": {
+                                            "type": "string"
+                                          },
+                                          "selection": {
+                                            "type": "string"
+                                          },
+                                          "url": {
+                                            "type": "string"
+                                          },
+                                          "width": {
+                                            "type": "number"
+                                          }
+                                        },
+                                        "required": [
+                                          "kind",
+                                          "selection",
+                                          "url",
+                                          "mediaType",
+                                          "width",
+                                          "height",
+                                          "crop",
+                                          "basis"
+                                        ],
+                                        "type": "object"
+                                      },
+                                      {
+                                        "additionalProperties": false,
+                                        "properties": {
+                                          "key": {
+                                            "type": "string"
+                                          },
+                                          "kind": {
+                                            "const": "fallback",
+                                            "type": "string"
+                                          },
+                                          "policy": {
+                                            "type": "string"
+                                          },
+                                          "resourceType": {
+                                            "enum": [
+                                              "work",
+                                              "main-version",
+                                              "space",
+                                              "realm",
+                                              "concept"
+                                            ],
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "kind",
+                                          "policy",
+                                          "key",
+                                          "resourceType"
+                                        ],
+                                        "type": "object"
+                                      }
+                                    ]
+                                  },
+                                  "kind": {
+                                    "const": "resource-name",
+                                    "type": "string"
+                                  },
+                                  "language": {
+                                    "type": "string"
+                                  },
+                                  "owner": {
+                                    "type": "string"
+                                  },
+                                  "score": {
+                                    "const": 1,
+                                    "type": "number"
+                                  },
+                                  "text": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "kind",
+                                  "owner",
+                                  "text",
+                                  "language",
+                                  "avatar",
+                                  "score"
+                                ],
+                                "type": "object"
+                              }
+                            ]
+                          },
+                          "type": "array"
+                        },
+                        "sourcePosition": {
+                          "properties": {
+                            "dataEpoch": {
+                              "type": "string"
+                            },
+                            "datasetId": {
+                              "const": "product",
+                              "type": "string"
+                            },
+                            "sequence": {
+                              "pattern": "^[0-9]+$",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "datasetId",
+                            "dataEpoch",
+                            "sequence"
+                          ],
+                          "type": "object"
+                        },
+                        "total": {
+                          "minimum": 0,
+                          "type": "integer"
+                        }
+                      },
+                      "required": [
+                        "contractVersion",
+                        "profile",
+                        "resultGrain",
+                        "complete",
+                        "countPrecision",
+                        "facetPrecision",
+                        "total",
+                        "results",
+                        "facets",
+                        "sourcePosition"
+                      ],
+                      "type": "object"
+                    },
                     {
                       "additionalProperties": false,
                       "properties": {
