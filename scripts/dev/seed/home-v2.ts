@@ -21,6 +21,16 @@ async function exactDigest(api: SeedApi, revision: string, session: Session): Pr
   return exact.reference.byteDigest;
 }
 
+async function selectedChapterRevisions(api: SeedApi, serial: string): Promise<Map<string, string>> {
+  const response = await fetch(`${api.endpoints.main}/v1/works/${short(serial)}/contents?language=zh-Hans&limit=20`);
+  if (response.status === 404) return new Map();
+  if (!response.ok) throw new SeedApiError('Home chapter public contents', response.status,
+    (await response.text()).slice(0, 500));
+  const page = await response.json() as { items: { target: string | null; selectedRevision: string | null }[] };
+  return new Map(page.items.flatMap(item => item.target && item.selectedRevision
+    ? [[item.target, item.selectedRevision] as const] : []));
+}
+
 /** Prepare exact public chapter Content before the shared progress step inserts
  * the Book composition. The local operator only provisions fixture authority. */
 export async function prepareHomeV2Chapters(api: SeedApi, author: Session, created: Map<string, Work>,
@@ -33,11 +43,12 @@ export async function prepareHomeV2Chapters(api: SeedApi, author: Session, creat
     ...targets.flatMap(target => [
       { action: 'work.read' as const, scope: `work:read:${target.work}` },
       { action: 'content.draft' as const, scope: `content:draft:${target.work}` },
-      { action: 'content.publish' as const, scope: `content:publish:urn:rezics:variant:${stableId(target.id)}` },
+      { action: 'content.publish' as const, scope: `content:publish:${target.work}` },
       { action: 'content.search-eligibility' as const,
-        scope: `content:search-eligibility:urn:rezics:variant:${stableId(target.id)}` },
+        scope: `content:search-eligibility:${target.work}` },
     ]),
   ]);
+  const selected = await selectedChapterRevisions(api, serial.work);
   for (const { id, work } of targets) {
     const child = created.get(id);
     const text = works.find(work => work.id === id);
@@ -48,6 +59,7 @@ export async function prepareHomeV2Chapters(api: SeedApi, author: Session, creat
         language: { kind: 'tag', tag: 'zh-Hans', originalTag: 'zh-Hans' }, direction: 'ltr',
         expectedHead: null, body: text.excerpt ?? text.title, actingSubject: author.actingSubject },
     author.token, seedKey('home-chapter-draft', id));
+    if (selected.get(work) === `urn:rezics:content:revision:${saved.revisionId}`) continue;
     const published = await api.post<{ decision: string; status: string }>('/v1/content-publications', {
       profile: 'content-publication-v1', preparationId: seedKey('home-chapter', id),
       revisionId: saved.revisionId, expectedDigest: await exactDigest(api, saved.revisionId, author),

@@ -1,6 +1,6 @@
 import { readChapter, readContents } from '../work-contents/read.ts';
 import { GRAPHS, iri } from '../work/activate.ts';
-import { WorkReadMoved, WorkReadSession, WorkReadUnavailable, WorkReadMissing }
+import { WorkReadMoved, WorkReadSession, WorkReadUnavailable }
   from '../work/read-session.ts';
 import type { FeedViewerState } from './contract.ts';
 import type { FeedReader } from './read.ts';
@@ -31,6 +31,33 @@ export class FeedViewerStateReader {
     const structures = new Map(rows.map(row => [row.work!.value, row.structure!.value]));
     if (structures.size !== rows.length) throw new WorkReadUnavailable('Work composition is ambiguous');
     const progress = await status.progress(reader.principal, [...structures.values()]);
+    const revisions = [...new Set([...progress.values()].flatMap(row =>
+      row.selectedRevision ? [row.selectedRevision] : []))];
+    const languageRows = revisions.length ? await session.query(`SELECT DISTINCT ?revision ?language WHERE {
+      VALUES ?revision { ${revisions.map(iri).join(' ')} }
+      GRAPH ${iri(GRAPHS.revisions)} { ?decision a rv:ContentPublicationDecision ;
+        rv:contentRevision ?revision ; rv:contentLanguage ?language . }
+    } LIMIT ${VIEWER_STATE_COST.activities + 1}`, VIEWER_STATE_COST.activities + 1) : [];
+    const progressLanguages = new Map(languageRows.map(row => [row.revision!.value, row.language!.value]));
+    const unkeyed = [...progress.values()].filter(row => !row.selectedRevision).map(row => row.occurrence);
+    const occurrenceRows = unkeyed.length ? await session.query(`SELECT ?occurrence
+      (MIN(LCASE(STR(?language))) AS ?firstLanguage)
+      (MAX(LCASE(STR(?language))) AS ?lastLanguage) WHERE {
+      VALUES ?occurrence { ${unkeyed.map(iri).join(' ')} }
+      GRAPH ${iri(GRAPHS.current)} {
+        ?placement a rv:OccurrencePlacement ; rv:occurrence ?occurrence ; schema:item ?target .
+        FILTER NOT EXISTS { ?placement rv:removedBy ?removal }
+        ?variant a rv:ContentVariant ; rv:resource ?target ;
+          rv:contentPublicationHead ?decision ; rv:publicSearchEligibilityHead ?eligibility . }
+      GRAPH ${iri(GRAPHS.revisions)} {
+        ?decision a rv:ContentPublicationDecision ; rv:contentLanguage ?language .
+        ?eligibility a rv:ContentSearchEligibilityDecision ;
+          rv:publicationDecision ?decision ; rv:disclosure rv:Public . }
+    } GROUP BY ?occurrence LIMIT ${VIEWER_STATE_COST.activities + 1}`,
+    VIEWER_STATE_COST.activities + 1) : [];
+    const occurrenceLanguages = new Map(occurrenceRows.flatMap(row =>
+      row.firstLanguage?.value === row.lastLanguage?.value && row.firstLanguage
+        ? [[row.occurrence!.value, row.firstLanguage.value] as const] : []));
     const byWork = new Map(shelves.map(row => [row.work, row]));
     const chapterCards = new Set(targets.filter(target => target.occurrence).map(target => target.work));
     const privateSession = new WorkReadSession(session.deps, session.request,
@@ -42,8 +69,11 @@ export class FeedViewerStateReader {
       if (!structures.has(work)) continue;
       if (byWork.get(work)?.status !== 'reading' && !progress.has(structures.get(work)!)
         && !chapterCards.has(work)) continue;
-      try { chapters.set(work, await readContents(privateSession, work, {})); }
-      catch (error) { if (!(error instanceof WorkReadMissing)) throw error; }
+      const read = progress.get(structures.get(work)!);
+      const language = read?.selectedRevision ? progressLanguages.get(read.selectedRevision)
+        : read ? occurrenceLanguages.get(read.occurrence) : undefined;
+      try { chapters.set(work, await readContents(privateSession, work, language ? { language } : {})); }
+      catch { /* An unreadable composition has no next chapter for this Work. */ }
     }
     const result = new Map<string, Available>();
     const distantNext = new Map<string, { occurrence: string; language?: string } | null>();
@@ -59,11 +89,14 @@ export class FeedViewerStateReader {
       if (work && read && (lastIndex < 0 || read.completed && !next && !!page?.nextCursor)
         && !distantNext.has(work)) {
         try {
-          const current = await readChapter(privateSession, read.occurrence, { language: page?.language ?? undefined });
+          const language = read.selectedRevision ? progressLanguages.get(read.selectedRevision)
+            : occurrenceLanguages.get(read.occurrence);
+          const current = await readChapter(privateSession, read.occurrence,
+            { language: language ?? page?.language ?? undefined });
           distantNext.set(work, read.completed
             ? current.next ? { occurrence: current.next, language: current.language } : null
             : { occurrence: current.occurrence, language: current.language });
-        } catch (error) { if (!(error instanceof WorkReadMissing)) throw error; distantNext.set(work, null); }
+        } catch { distantNext.set(work, null); }
       }
       const distant = work ? distantNext.get(work) : null;
       const itemIndex = target.occurrence ? entries.findIndex(item => item.occurrence === target.occurrence) : -1;

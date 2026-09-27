@@ -222,6 +222,7 @@ async function run(options: Options): Promise<boolean> {
 
   let publishedCount = 0;
   let selectedCount = 0;
+  const publicForRealm = new Map<string, { contribution: string; decision: string }>();
   let commentCount = 0;
   let replyCount = 0;
   for (const excerpt of works.filter(work => work.excerpt)) {
@@ -246,6 +247,8 @@ async function run(options: Options): Promise<boolean> {
       ownerToken, seedKey('selection', excerpt.id)));
       if (published) publishedCount++;
       if (selected) selectedCount++;
+      if (selected && published) publicForRealm.set(excerpt.id,
+        { contribution: contribution.contribution, decision: published.publicationDecision });
       if (published) {
         const replyTarget = { id: `comment:${excerpt.id}`, work: target.work,
           revision: contribution.draftRevision, language: 'en' };
@@ -260,6 +263,25 @@ async function run(options: Options): Promise<boolean> {
         }
       }
     }
+  }
+  // A Realm follow needs an admitted Realm activity for a new-since dot.
+  // The steward selects an already public contribution from that Realm's
+  // featured Works; the idempotency key makes reruns preserve the selection.
+  for (const realm of createdRealms) {
+    const featured = realms.find(item => item.id === realm.id)?.featured.find(id => publicForRealm.has(id));
+    if (!featured) continue;
+    const target = created.get(featured)!, publication = publicForRealm.get(featured)!;
+    const stewardInput = { ...operatorInput, ownerAccountSubject: realm.steward.accountId,
+      actingSubject: realm.steward.actingSubject };
+    await grantHomeSeedAuthority(stewardInput,
+      [{ action: 'publication.adopt', scope: `publication:adopt:${realm.receipt.realm}` }]);
+    await optional('Realm sample adoption', () => api.post('/v1/publication-selections', {
+      profile: 'realm-local-selection-v1', context: { kind: 'realm-local', id: realm.receipt.realm },
+      work: target.work, mainVersion: target.mainVersion,
+      contribution: publication.contribution, publicationDecision: publication.decision,
+      expectedSelectionHead: null, selectionBasis: 'realm-manager-review',
+      actingSubject: realm.steward.actingSubject }, realm.steward.token,
+    seedKey('realm-adoption', `${realm.id}:${featured}`)));
   }
   for (const person of sessions) await optional('Personal collection', () => api.post('/v1/collections', {
     collection: `https://rezics.com/id/${stableId(`collection:${person.id}`)}`,

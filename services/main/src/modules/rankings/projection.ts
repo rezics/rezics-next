@@ -68,7 +68,7 @@ export class ReadRankingProjection {
         rv:routingEpoch ${lit(this.env.lineage.routingEpoch)} .
         FILTER NOT EXISTS { ${iri(DATASET)} rv:restoreHold true } }
       GRAPH ${iri(GRAPHS.current)} { ${iri(structure)} a rv:Structure ; rv:structureOf ?main .
-        ?work a rv:Work ; rv:mainVersion ?main . }
+        ?work a <https://schema.org/CreativeWork> ; rv:mainVersion ?main . }
     } LIMIT ${RANKING_COST.graphRowsPerEvent}`, 8192)).results?.bindings ?? [];
     if (rows.length > 1 || rows.some(row => !ID.test(row.work?.value ?? ''))) {
       throw new RankingProjectionUnavailable('Structure maps to ambiguous Work');

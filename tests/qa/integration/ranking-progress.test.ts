@@ -5,6 +5,7 @@ import { StructureProgressStore } from '../../../services/main/src/modules/progr
 import { readProgressSignal } from '../../../services/main/src/modules/structure/progress-outbox.ts';
 import { ReadRankingProjection, rankingBuckets } from '../../../services/main/src/modules/rankings/projection.ts';
 import { createMainApp } from '../../../services/main/src/app.ts';
+import { GRAPHS, iri } from '../../../services/main/src/modules/work/activate.ts';
 import type { WorkActivationEnvironment } from '../../../services/main/src/modules/work/activate.ts';
 
 const id = () => `https://rezics.com/id/${randomUUID()}`;
@@ -29,11 +30,15 @@ test('G291: progress outbox replays once; ranking cursor and scores reset on gra
       expectedSelectionHead: null, selectionBasis: 'realm-manager-review', actingSubject: member.actor });
     expect(adoption.status).toBe(201);
     const structure = id(), occurrence = id(), work = publicWork.work;
+    // Use the graph's real schema:CreativeWork type. A mocked ?work binding
+    // masked the projection's former rv:Work lookup, which stalled live replay.
+    await stack.fuseki.update(`PREFIX rv: <https://rezics.com/vocab/> INSERT DATA {
+      GRAPH ${iri(GRAPHS.current)} { ${iri(structure)} a rv:Structure ;
+        rv:structureOf ${iri(publicWork.mainVersion)} . }
+    }`);
     const principal = { issuer: 'https://reader.example', subject: randomUUID() };
     const store = new StructureProgressStore(stack.contentPool);
-    const env = { ...stack.env, fuseki: { query: async () => ({ results: { bindings: [
-      { work: { type: 'uri', value: work } },
-    ] } }) } } as unknown as WorkActivationEnvironment;
+    const env = stack.env;
     const projection = new ReadRankingProjection(stack.accessPool, stack.content,
       stack.contentPool, env);
     for (let i = 0; i < 100 && (await projection.tick()) > 0; i++) { /* bounded catch-up */ }
@@ -95,8 +100,12 @@ test('G291: progress outbox replays once; ranking cursor and scores reset on gra
     expect(await finishingRise.json()).toMatchObject({ profile: 'rising-v1', realm,
       items: [{ id: work, score: 1, growth: 1 }] });
 
+    const restoredEnv = { ...env, lineage: { ...env.lineage, dataEpoch: randomUUID() },
+      fuseki: { query: async () => ({ results: { bindings: [
+        { work: { type: 'uri', value: work } },
+      ] } }) } } as unknown as WorkActivationEnvironment;
     const restored = new ReadRankingProjection(stack.accessPool, stack.content,
-      stack.contentPool, { ...env, lineage: { ...env.lineage, dataEpoch: randomUUID() } });
+      stack.contentPool, restoredEnv);
     for (let i = 0; i < 100 && (await restored.tick()) > 0; i++) { /* replay into new generation */ }
     const next = await restored.current();
     expect(next.generation).not.toBe(first.generation);

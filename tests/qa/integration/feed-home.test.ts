@@ -252,11 +252,25 @@ test('G282: follows and home feed use real receipts, relay progress, public read
     const interests = await json<{ kinds: { id: string; available: boolean }[];
       topicsStatus: string; topics: unknown[] }>(await call('GET', '/v1/onboarding/interests?locale=en'));
     expect(interests.kinds.map(item => item.id)).toEqual(['books', 'software', 'ai', 'recipes', 'media', 'discussions']);
-    expect(interests.kinds.map(item => item.available)).toEqual([true, false, false, true, false, false]);
+    expect(interests.kinds.map(item => item.available)).toEqual([true, true, true, true, false, true]);
     expect(interests).toMatchObject({ topicsStatus: 'empty', topics: [] });
+    await stack.fuseki.update(`PREFIX schema: <https://schema.org/> INSERT DATA { GRAPH ${iri(GRAPHS.current)} {
+      ${iri(first.work)} a schema:VideoObject } }`);
+    const mediaInterests = await json<typeof interests>(await call('GET', '/v1/onboarding/interests?locale=en'));
+    expect(mediaInterests.kinds.find(item => item.id === 'media')?.available).toBe(true);
+    await stack.fuseki.update(`PREFIX schema: <https://schema.org/> DELETE DATA { GRAPH ${iri(GRAPHS.current)} {
+      ${iri(first.work)} a schema:VideoObject } }`);
     const suggested = await json<{ items: { id: string; realm: string; sampleWorks: { id: string }[] }[] }>(
       await call('GET', '/v1/onboarding/suggested-follows?locale=en'));
     expect(suggested.items.find(item => item.realm === realm.realm)?.sampleWorks.some(item => item.id === first.work)).toBe(true);
+    await stack.fuseki.update(`PREFIX rv: <https://rezics.com/vocab/> INSERT DATA { GRAPH ${iri(GRAPHS.current)} {
+      ${iri(first.work)} a rv:SkillPackage } }`);
+    const aiSuggested = await json<{ items: { realm: string; reason: { kind: string; interest: string | null } }[] }>(
+      await call('GET', '/v1/onboarding/suggested-follows?interests=ai'));
+    expect(aiSuggested.items.find(item => item.realm === realm.realm)?.reason)
+      .toEqual({ kind: 'matching-kind', interest: 'ai' });
+    await stack.fuseki.update(`PREFIX rv: <https://rezics.com/vocab/> DELETE DATA { GRAPH ${iri(GRAPHS.current)} {
+      ${iri(first.work)} a rv:SkillPackage } }`);
     const topWeek = await json<Page>(await call('GET', '/v1/feed?sort=top&window=week'));
     expect(topWeek.window).toBe('week');
     expect(topWeek.caughtUp).toBeNull();
@@ -462,8 +476,8 @@ test('G282: follows and home feed use real receipts, relay progress, public read
       const variant = `urn:rezics:variant:${randomUUID()}`;
       await grant(`work:read:${chapter.work}`, 'work.read');
       await grant(`content:draft:${chapter.work}`, 'content.draft');
-      await grant(`content:publish:${variant}`, 'content.publish');
-      await grant(`content:search-eligibility:${variant}`, 'content.search-eligibility');
+      await grant(`content:publish:${chapter.work}`, 'content.publish');
+      await grant(`content:search-eligibility:${chapter.work}`, 'content.search-eligibility');
       const saved = await json<{ revisionId: string; sourcePosition: { dataEpoch: string } }>(await call('POST', '/v1/content-drafts', {
         profile: 'content-text-v1', resourceId: chapter.work, variantId: variant,
         language: { kind: 'tag', tag: 'zh-Hans', originalTag: 'zh-Hans' }, direction: 'ltr', expectedHead: null,
@@ -557,6 +571,31 @@ test('G282: follows and home feed use real receipts, relay progress, public read
     expect(distantFeed.items.find(item => item.target.work === second.work && item.card.kind === 'chapter'))
       .toMatchObject({ primaryAction: { kind: 'next-unread', occurrence: distant },
         viewerState: { progress: { occurrence: distant } } });
+    // The Work selects zh-Hans only. An English feed therefore has no selected
+    // Main content language, while this reader's chapter progress does.
+    for (const scope of ['following', 'all']) {
+      const languageLess = await json<Page>(await call('GET',
+        `/v1/feed?scope=${scope}&sort=best&language=en&${authQuery}`, undefined, b.token));
+      expect(languageLess.items.find(item => item.target.work === second.work && item.card.kind === 'chapter'))
+        .toMatchObject({ primaryAction: { kind: 'next-unread', occurrence: distant },
+          viewerState: { nextUnread: { occurrence: distant, language: 'zh-hans' },
+            progress: { occurrence: distant } } });
+    }
+    const absentOccurrence = native();
+    await stack.contentPool.query(`UPDATE structure.progress SET occurrence = $1
+      WHERE principal_issuer = $2 AND principal_subject = $3 AND structure = $4 AND occurrence = $5`,
+    [absentOccurrence, b.principal.issuer, b.principal.subject, composition.structure, distant]);
+    try {
+      const unreadable = await json<Page>(await call('GET',
+        `/v1/feed?scope=all&sort=best&language=en&${authQuery}`, undefined, b.token));
+      expect(unreadable.items.find(item => item.target.work === second.work && item.card.kind === 'chapter'))
+        .toMatchObject({ viewerState: { progress: { occurrence: absentOccurrence } },
+          primaryAction: { kind: 'read-chapter' } });
+    } finally {
+      await stack.contentPool.query(`UPDATE structure.progress SET occurrence = $1
+        WHERE principal_issuer = $2 AND principal_subject = $3 AND structure = $4 AND occurrence = $5`,
+      [distant, b.principal.issuer, b.principal.subject, composition.structure, absentOccurrence]);
+    }
 
     // Hub cards expose exact public previews and declared compatibility, never
     // a private draft or guessed version/changelog metadata.
@@ -566,8 +605,8 @@ test('G282: follows and home feed use real receipts, relay progress, public read
         ${iri(resource.work)} a rv:${kind === 'prompt' ? 'PromptTemplate' : 'SkillPackage'} } }`);
       const variant = `urn:rezics:variant:${randomUUID()}`;
       await grant(`content:draft:${resource.work}`, 'content.draft');
-      await grant(`content:publish:${variant}`, 'content.publish');
-      await grant(`content:search-eligibility:${variant}`, 'content.search-eligibility');
+      await grant(`content:publish:${resource.work}`, 'content.publish');
+      await grant(`content:search-eligibility:${resource.work}`, 'content.search-eligibility');
       const identity = { resourceId: resource.work, variantId: variant, language: { kind: 'tag', tag: 'en', originalTag: 'en' },
         direction: 'ltr', expectedHead: null, actingSubject: author };
       const text = 'An exact published prompt preview';

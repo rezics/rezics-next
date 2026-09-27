@@ -143,17 +143,18 @@ export async function grantCuratedCollectionSeed(input: LocalOperatorInput, coll
   } finally { client.release(); await pool.end(); }
 }
 
-/** Dev fixture authority for the seed author's exact serial and Content variants.
+/** Dev fixture authority for the seed's exact Work, Content and Realm targets.
  * Authoring and reader progress still use the ordinary Main commands. */
 export async function grantHomeSeedAuthority(input: LocalOperatorInput,
   grants: readonly { action: 'work.edit' | 'work.read' | 'content.draft'
-    | 'content.publish' | 'content.search-eligibility'; scope: string }[]) {
+    | 'content.publish' | 'content.search-eligibility' | 'publication.adopt'; scope: string }[]) {
   loopback(input.accessDatabaseUrl);
   const scopePrefix = { 'work.edit': 'work:edit:https://rezics.com/id/',
     'work.read': 'work:read:https://rezics.com/id/',
     'content.draft': 'content:draft:https://rezics.com/id/',
-    'content.publish': 'content:publish:urn:rezics:variant:',
-    'content.search-eligibility': 'content:search-eligibility:urn:rezics:variant:' } as const;
+    'content.publish': 'content:publish:https://rezics.com/id/',
+    'content.search-eligibility': 'content:search-eligibility:https://rezics.com/id/',
+    'publication.adopt': 'publication:adopt:https://rezics.com/id/' } as const;
   if (grants.length > 10 || grants.some(({ action, scope }) =>
     !scope.startsWith(scopePrefix[action])
     || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(

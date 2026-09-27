@@ -5,21 +5,88 @@ import { WorkReadInvalid, WorkReadMoved, WorkReadSession, WorkReadUnavailable } 
 import { readWorkClassifications } from '../work/read-classifications.ts';
 import { digest } from '../recommendation/derived-generation.ts';
 import { GLOBAL_CLASSIFICATION_CONTEXT } from '../classification/context.ts';
-import { GRAPHS, iri } from '../work/activate.ts';
+import { GRAPHS, iri, lit } from '../work/activate.ts';
 import { publicWork } from '../work/read-session.ts';
 import type { AvatarDescriptor } from '../media/summary.ts';
 import type { VerifiedPrincipal } from '../access/admission.ts';
 import type { HomeInterestKind } from './contract.ts';
 import { ONBOARDING_COST } from './contract.ts';
+import { interestKinds, interestSources, matchingActivityKinds, matchingWorkKinds } from './kinds.ts';
 
-const kinds: HomeInterestKind[] = ['books', 'software', 'ai', 'recipes', 'media', 'discussions'];
 const languages = ['en', 'zh-Hant', 'zh-Hans', 'ja', 'ko', 'de', 'fr', 'es'];
-// Native Work types distinguish Book and Recipe. DigitalDocument cannot split
-// software, AI or discussions; Hub SkillPackage/PromptTemplate are narrower
-// artifacts, and Video/Audio card hints are not admitted Work creation types.
-// Classification Senses have no controlled mapping to these six kind IDs.
-const typeFor = (kind: HomeInterestKind) => kind === 'books' ? 'https://schema.org/Book'
-  : kind === 'recipes' ? 'https://schema.org/Recipe' : null;
+const workTypes = [...new Set(interestKinds.flatMap(kind => interestSources[kind].workTypes))];
+const terms = [...new Set(interestKinds.flatMap(kind => interestSources[kind].classificationTerms))];
+const workTypeSet = new Set<string>(workTypes);
+const termSet = new Set<string>(terms);
+const typeValues = workTypes.map(type => `<${type}>`).join(' ');
+const termValues = terms.map(lit).join(', ');
+
+async function readMediaAvailable(session: WorkReadSession): Promise<boolean> {
+  const media = interestSources.media;
+  const rows = await session.query(`SELECT ?work WHERE {
+    { GRAPH ${iri(GRAPHS.current)} { ?work a ?type }
+      VALUES ?type { ${media.workTypes.map(type => `<${type}>`).join(' ')} } }
+    UNION {
+      GRAPH ${iri(GRAPHS.current)} {
+        ?application a rv:ClassificationApplication ; rv:targetMainVersion ?main ;
+          rv:classificationContext ${iri(GLOBAL_CLASSIFICATION_CONTEXT)} ;
+          rv:applicationState rv:Active ; rv:sense ?sense ; rv:decisionHead ?decision .
+        ?sense a rv:ClassificationSense ; rv:senseState rv:Active ; rv:expression ?expression .
+        ?expression rv:assertedConcept ?concept . ?concept skos:prefLabel ?label .
+        ?main rv:work ?work .
+      } GRAPH ${iri(GRAPHS.revisions)} { ?decision rv:outcome rv:Accepted . }
+      FILTER(LCASE(STR(?label)) IN (${media.classificationTerms.map(lit).join(', ')}))
+    }
+    ${publicWork('?work', '?main')}
+  } LIMIT 1`, 1);
+  return rows.length > 0;
+}
+
+async function readWorkKindMatches(session: WorkReadSession, works: readonly string[]) {
+  const matches = new Map<string, HomeInterestKind[]>();
+  if (!works.length) return matches;
+  const rows = await session.query(`SELECT DISTINCT ?work ?type ?term WHERE {
+    VALUES ?work { ${works.map(iri).join(' ')} }
+    { GRAPH ${iri(GRAPHS.current)} { ?work a ?type }
+      VALUES ?type { ${typeValues} } }
+    UNION {
+      GRAPH ${iri(GRAPHS.current)} {
+        ?work rv:mainVersion ?main .
+        ?application a rv:ClassificationApplication ; rv:targetMainVersion ?main ;
+          rv:classificationContext ${iri(GLOBAL_CLASSIFICATION_CONTEXT)} ;
+          rv:applicationState rv:Active ; rv:sense ?sense ; rv:decisionHead ?decision .
+        ?sense a rv:ClassificationSense ; rv:senseState rv:Active ; rv:expression ?expression .
+        ?expression rv:assertedConcept ?concept . ?concept skos:prefLabel ?label .
+      } GRAPH ${iri(GRAPHS.revisions)} { ?decision rv:outcome rv:Accepted . }
+      BIND(LCASE(STR(?label)) AS ?term)
+      FILTER(?term IN (${termValues}))
+    }
+  } LIMIT ${ONBOARDING_COST.interestRows + 1}`, ONBOARDING_COST.interestRows + 1);
+  if (rows.length > ONBOARDING_COST.interestRows || rows.some(row => !row.work
+    || !works.includes(row.work.value) || row.type && !workTypeSet.has(row.type.value)
+    || row.term && !termSet.has(row.term.value))) {
+    throw new WorkReadUnavailable('Interest Work relation exceeds its bound');
+  }
+  for (const work of works) {
+    const hits = rows.filter(row => row.work?.value === work);
+    matches.set(work, matchingWorkKinds(hits.flatMap(row => row.type ? [row.type.value] : []),
+      hits.flatMap(row => row.term ? [row.term.value] : [])));
+  }
+  return matches;
+}
+
+async function realmHasDiscussion(session: WorkReadSession, realm: string): Promise<boolean> {
+  const rows = await session.query(`SELECT ?placement WHERE {
+    GRAPH ${iri(GRAPHS.current)} {
+      ?slot a rv:RealmReplySlot ; rv:realm ${iri(realm)} ; rv:rootTarget ?work ;
+        rv:replyPlacementHead ?placement .
+    } GRAPH ${iri(GRAPHS.revisions)} {
+      ?placement a rv:RealmReplyPlacement ; rv:placementOutcome rv:Accepted .
+    }
+    ${publicWork('?work', '?main')}
+  } LIMIT 1`, 1);
+  return rows.length > 0;
+}
 export function parseChoices(value: string | undefined, allowed: readonly string[], maximum: number) {
   if (!value) return [];
   const choices = value.split(',').map(item => item.trim()).filter(Boolean);
@@ -61,15 +128,16 @@ export async function readInterests(session: WorkReadSession) {
   if (workIds.some(work => JSON.stringify(summaries.get(work)) !== JSON.stringify(fenced.get(work)))) {
     throw new WorkReadUnavailable('Interest samples changed');
   }
+  const mediaAvailable = await readMediaAvailable(session);
   return { profile: 'home-interests-v1' as const,
-    kinds: kinds.map(id => ({ id, available: typeFor(id) !== null })), languages,
+    kinds: interestKinds.map(id => ({ id, available: id !== 'media' || mediaAvailable })), languages,
     topics: [...topics.values()], topicsStatus: topics.size ? 'curated' as const : 'empty' as const,
     sourcePosition: session.position };
 }
 
 export async function readSuggestedFollows(session: WorkReadSession,
   input: { interests?: string; languages?: string }, reader?: { principal: VerifiedPrincipal; agent: string }) {
-  const selectedKinds = parseChoices(input.interests, kinds, 6) as HomeInterestKind[];
+  const selectedKinds = parseChoices(input.interests, interestKinds, 6) as HomeInterestKind[];
   const selectedLanguages = parseChoices(input.languages, languages, 8);
   const personal = reader && session.deps.homePersonal
     ? await session.deps.homePersonal.read(reader.principal, reader.agent) : null;
@@ -103,6 +171,9 @@ export async function readSuggestedFollows(session: WorkReadSession,
       && !personal?.exclusions.some(rule => rule.kind === 'work' && rule.target === work.id
         && (rule.strength === 'hide' || rule.strength === 'not-interested' || rule.strength === 'fewer'
           && Number.parseInt(digest([work.id, rule.kind, rule.target]).slice(0, 2), 16) % 4 !== 0)));
+    const kindMatches = await readWorkKindMatches(session, candidates.map(work => work.id));
+    const hasDiscussion = selectedKinds.includes('discussions')
+      && await realmHasDiscussion(session, realm.id);
     const samples = [] as typeof candidates;
     for (const work of candidates) {
       if (tagRules.length) {
@@ -115,7 +186,9 @@ export async function readSuggestedFollows(session: WorkReadSession,
       }
       samples.push(work);
     }
-    const matched = selectedKinds.find(kind => samples.some(work => work.types.includes(typeFor(kind) ?? '')));
+    const matched = selectedKinds.find(kind => samples.some(work => kindMatches.get(work.id)?.includes(kind))
+      || kind === 'discussions' && hasDiscussion
+        && matchingActivityKinds('discussion').includes(kind));
     const sampleWorks = samples.slice(0, ONBOARDING_COST.samples).map(work => ({ id: work.id,
       title: work.title, cover: work.cover }));
     const zone = zoneByRealm.get(realm.id);
