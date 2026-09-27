@@ -145261,7 +145261,8 @@
                             "graph",
                             "content",
                             "source",
-                            "media"
+                            "media",
+                            "review"
                           ],
                           "type": "string"
                         },
@@ -145477,7 +145478,8 @@
                             "graph",
                             "content",
                             "source",
-                            "media"
+                            "media",
+                            "review"
                           ],
                           "type": "string"
                         },
@@ -145693,7 +145695,8 @@
                             "graph",
                             "content",
                             "source",
-                            "media"
+                            "media",
+                            "review"
                           ],
                           "type": "string"
                         },
@@ -252692,7 +252695,8 @@
             "schema": {
               "enum": [
                 "reads",
-                "finished-chapters"
+                "finished-chapters",
+                "reviews"
               ],
               "type": "string"
             }
@@ -253040,7 +253044,8 @@
                     "metric": {
                       "enum": [
                         "reads",
-                        "finished-chapters"
+                        "finished-chapters",
+                        "reviews"
                       ],
                       "type": "string"
                     },
@@ -281389,7 +281394,8 @@
             "schema": {
               "enum": [
                 "reads",
-                "finished-chapters"
+                "finished-chapters",
+                "reviews"
               ],
               "type": "string"
             }
@@ -281737,7 +281743,8 @@
                     "metric": {
                       "enum": [
                         "reads",
-                        "finished-chapters"
+                        "finished-chapters",
+                        "reviews"
                       ],
                       "type": "string"
                     },
@@ -284544,7 +284551,8 @@
             "schema": {
               "enum": [
                 "reads",
-                "finished-chapters"
+                "finished-chapters",
+                "reviews"
               ],
               "type": "string"
             }
@@ -284892,7 +284900,8 @@
                     "metric": {
                       "enum": [
                         "reads",
-                        "finished-chapters"
+                        "finished-chapters",
+                        "reviews"
                       ],
                       "type": "string"
                     },
@@ -305376,7 +305385,8 @@
                             "graph",
                             "content",
                             "source",
-                            "media"
+                            "media",
+                            "review"
                           ],
                           "type": "string"
                         },
@@ -305453,7 +305463,8 @@
                           "graph",
                           "content",
                           "source",
-                          "media"
+                          "media",
+                          "review"
                         ],
                         "type": "string"
                       },
@@ -305562,7 +305573,8 @@
                             "graph",
                             "content",
                             "source",
-                            "media"
+                            "media",
+                            "review"
                           ],
                           "type": "string"
                         },
@@ -305639,7 +305651,8 @@
                           "graph",
                           "content",
                           "source",
-                          "media"
+                          "media",
+                          "review"
                         ],
                         "type": "string"
                       },
@@ -305748,7 +305761,8 @@
                             "graph",
                             "content",
                             "source",
-                            "media"
+                            "media",
+                            "review"
                           ],
                           "type": "string"
                         },
@@ -305825,7 +305839,8 @@
                           "graph",
                           "content",
                           "source",
-                          "media"
+                          "media",
+                          "review"
                         ],
                         "type": "string"
                       },
@@ -311220,7 +311235,8 @@
                             "graph",
                             "content",
                             "source",
-                            "media"
+                            "media",
+                            "review"
                           ],
                           "type": "string"
                         },
@@ -311297,7 +311313,8 @@
                           "graph",
                           "content",
                           "source",
-                          "media"
+                          "media",
+                          "review"
                         ],
                         "type": "string"
                       },
@@ -311475,7 +311492,8 @@
                             "graph",
                             "content",
                             "source",
-                            "media"
+                            "media",
+                            "review"
                           ],
                           "type": "string"
                         },
@@ -311552,7 +311570,8 @@
                           "graph",
                           "content",
                           "source",
-                          "media"
+                          "media",
+                          "review"
                         ],
                         "type": "string"
                       },
@@ -311730,7 +311749,8 @@
                             "graph",
                             "content",
                             "source",
-                            "media"
+                            "media",
+                            "review"
                           ],
                           "type": "string"
                         },
@@ -311807,7 +311827,8 @@
                           "graph",
                           "content",
                           "source",
-                          "media"
+                          "media",
+                          "review"
                         ],
                         "type": "string"
                       },
@@ -314108,7 +314129,8 @@
                             "graph",
                             "content",
                             "source",
-                            "media"
+                            "media",
+                            "review"
                           ],
                           "type": "string"
                         },
@@ -314325,7 +314347,8 @@
                             "graph",
                             "content",
                             "source",
-                            "media"
+                            "media",
+                            "review"
                           ],
                           "type": "string"
                         },
@@ -314542,7 +314565,8 @@
                             "graph",
                             "content",
                             "source",
-                            "media"
+                            "media",
+                            "review"
                           ],
                           "type": "string"
                         },
