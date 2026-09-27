@@ -35,11 +35,14 @@ export interface BaselineProof {
   author_generation?: string | null;
   author_work?: string | null;
   submission_contribution?: string | null;
+  avatar_control_id?: string | null;
+  avatar_control_generation?: string | null;
 }
 
 export type BaselineTarget = { kind: 'root' }
   | { kind: 'work' | 'collection' | 'contribution' | 'rating' | 'personal' | 'comment'
-    | 'maintainer' | 'reply' | 'reply-draft' | 'realm-reply' | 'author-work' | 'submission'; id: string };
+  | 'maintainer' | 'reply' | 'reply-draft' | 'realm-reply' | 'author-work' | 'submission'
+  | 'avatar'; id: string };
 
 /** Closed permission vocabulary. In particular, a public Realm does not gain
  * a baseline policy, and translation authorization is not translation proposal. */
@@ -51,7 +54,7 @@ export function baselineTarget(action: string, scope: string): BaselineTarget | 
     'content.publish': { prefix: 'content:publish:', kind: 'author-work' },
     'content.search-eligibility': { prefix: 'content:search-eligibility:', kind: 'author-work' },
     'media.upload': { prefix: 'media:owner:', kind: 'personal' },
-    'media.avatar': { prefix: 'media:avatar:', kind: 'author-work' },
+    'media.avatar': { prefix: 'media:avatar:', kind: 'avatar' },
     'submission.submit': { prefix: 'submission:submit:', kind: 'submission' },
     'contribution.create': { prefix: 'contribution:create:', kind: 'work' },
     'translation.link': { prefix: 'translation:link:', kind: 'work' },
@@ -96,8 +99,33 @@ export async function baselineMemberProof(client: PoolClient, principalId: strin
   return result.rows[0] ?? null;
 }
 
-/** Each ordinary target read is bounded to one ASK; the author fallback adds
- * one indexed sealed-creation lookup and one receipt ASK (author-baseline.ts).
+/** An Agent avatar belongs to a current direct controller. A represented
+ * organization member does not inherit control of the organization's Agent.
+ * Cost: one indexed mandate lookup and one exact 1 KiB graph ASK. */
+async function avatarControllerProof(client: PoolClient, graph: Pick<FusekiClient, 'query'> | undefined,
+  principalId: string, agent: string, exactId?: string): Promise<{ id: string; generation: string } | null> {
+  if (!graph) return null;
+  const control = (await client.query<{ id: string; generation: string }>(`
+    SELECT r.id, r.generation FROM access.representation r
+    JOIN access.authority_subject s ON s.id = r.subject_id
+    WHERE r.principal_id = $1 AND r.subject_id = $2 AND r.action = 'agent.control'
+      AND r.active AND r.valid_until > clock_timestamp()
+      AND s.active AND s.kind = 'agent' AND ($3::uuid IS NULL OR r.id = $3)
+    ORDER BY r.id LIMIT 1 FOR SHARE OF r, s`, [principalId, agent, exactId ?? null])).rows[0];
+  if (!control) return null;
+  const agentExists = await graph.query(`PREFIX rv: <https://rezics.com/vocab/> ASK {
+    GRAPH ${iri(GRAPHS.current)} {
+      ${iri(agent)} a rv:Agent ; rv:agentKind ?kind .
+      VALUES ?kind { rv:PersonAgent rv:PenNameAgent rv:OrganizationAgent }
+      FILTER NOT EXISTS { ${iri(agent)} rv:protectionHead ?protection }
+    }
+  }`, 1024);
+  return agentExists.boolean === true ? control : null;
+}
+
+/** Each ordinary target read is bounded to one ASK. Agent avatars add one
+ * indexed controller lookup; the Work author fallback adds one indexed
+ * sealed-creation lookup and one receipt ASK (author-baseline.ts).
  * Nothing enumerates a member's Works, Collections, history or peer accounts. */
 export async function baselineTargetAllowed(client: PoolClient, graph: Pick<FusekiClient, 'query'> | undefined,
   principalId: string, actingSubject: string, target: BaselineTarget,
@@ -106,6 +134,8 @@ export async function baselineTargetAllowed(client: PoolClient, graph: Pick<Fuse
   if (target.kind === 'root') return true;
   if (target.kind === 'personal') return target.id === actingSubject;
   if (!graph) return false;
+  if (target.kind === 'avatar') return !!await avatarControllerProof(client, graph, principalId, target.id)
+    || await authorWorkGeneration(client, graph, principalId, actingSubject, target.id) !== null;
   if (target.kind === 'author-work' || target.kind === 'reply-draft' && !relatedWork) {
     return await authorWorkGeneration(client, graph, principalId, actingSubject, target.id) !== null;
   }
@@ -183,16 +213,22 @@ export async function newBaselineProof(client: PoolClient, graph: Pick<FusekiCli
   if ((await client.query('SELECT id FROM access.policy WHERE scope_id = $1', [request.scope])).rowCount) return null;
   const proof = await (target.kind === 'maintainer' ? maintainerControllerProof : baselineMemberProof)(client, principalId, request.actingSubject);
   if (!proof) return null;
-  const authorWork = target.kind === 'author-work' || target.kind === 'reply-draft' && !request.baselineRelatedWork
+  const avatarControl = target.kind === 'avatar'
+    ? await avatarControllerProof(client, graph, principalId, target.id) : null;
+  const authorWork = (target.kind === 'author-work'
+    || target.kind === 'reply-draft' && !request.baselineRelatedWork
+    || target.kind === 'avatar' && !avatarControl)
     ? target.id : null;
   const authorGeneration = authorWork
     ? await authorWorkGeneration(client, graph, principalId, request.actingSubject, authorWork) : null;
   const submission = target.kind === 'submission' ? await authorSubmissionProof(client, graph, principalId,
     request.actingSubject, target.id, request.baselineContribution ?? null) : null;
-  if (authorWork ? authorGeneration === null : target.kind === 'submission' ? !submission
-    : !await baselineTargetAllowed(client, graph, principalId, request.actingSubject,
-    target, request.baselineCollectionCreate === true, request.baselineRelatedWork ?? null,
-    request.baselineSourceRevision ?? null, request.baselineContribution ?? null)) return null;
+  const allowed = avatarControl !== null || (authorWork ? authorGeneration !== null
+    : target.kind === 'submission' ? !!submission
+      : await baselineTargetAllowed(client, graph, principalId, request.actingSubject,
+        target, request.baselineCollectionCreate === true, request.baselineRelatedWork ?? null,
+        request.baselineSourceRevision ?? null, request.baselineContribution ?? null));
+  if (!allowed) return null;
   return { ...proof, realm_membership: target.kind === 'realm-reply'
     ? await realmApprovedProof(client, target.id, principalId, request.actingSubject) ?? 'open' : null,
     collection_create: request.baselineCollectionCreate === true,
@@ -200,6 +236,8 @@ export async function newBaselineProof(client: PoolClient, graph: Pick<FusekiCli
     submission_contribution: request.baselineContribution ?? null,
     author_work: authorWork ?? submission?.work ?? null,
     author_generation: authorGeneration ?? submission?.generation ?? null,
+    avatar_control_id: avatarControl?.id ?? null,
+    avatar_control_generation: avatarControl?.generation ?? null,
     maintainer_generation: target.kind === 'maintainer'
       ? await maintainerGeneration(client, target.id, request.baselineRelatedWork!, request.actingSubject) : null };
 }
@@ -227,6 +265,16 @@ export async function baselineProofCurrent(client: PoolClient, graph: Pick<Fusek
   if (target.kind === 'realm-reply' && saved.realm_membership !== 'open' && (!saved.realm_membership
     || saved.realm_membership !== await realmApprovedProof(client, target.id, admission.principal_id,
       admission.acting_subject))) return false;
+  if (target.kind === 'avatar') {
+    if (saved.avatar_control_id) {
+      const control = await avatarControllerProof(client, graph, admission.principal_id,
+        target.id, saved.avatar_control_id);
+      return control?.generation === saved.avatar_control_generation;
+    }
+    return saved.author_work === target.id && saved.author_generation != null
+      && saved.author_generation === await authorWorkGeneration(client, graph,
+        admission.principal_id, admission.acting_subject, target.id);
+  }
   if (target.kind === 'author-work' || target.kind === 'reply-draft' && !saved.related_work) {
     return saved.author_work === target.id && saved.author_generation != null
       && saved.author_generation === await authorWorkGeneration(client,
@@ -245,10 +293,11 @@ export async function saveBaselineProof(client: PoolClient, admissionId: string,
   await client.query(`INSERT INTO access.baseline_admission (admission_id, policy_id, policy_generation,
     provision_id, representation_id, representation_generation, subject_generation, principal_epoch,
     collection_create, related_work, source_revision, maintainer_generation, realm_membership,
-    author_generation, submission_contribution, author_work)
-    VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)`, [admissionId, BASELINE_MEMBER_POLICY,
+    author_generation, submission_contribution, author_work, avatar_control_id, avatar_control_generation)
+    VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)`, [admissionId, BASELINE_MEMBER_POLICY,
     proof.policy_generation, proof.provision_id, proof.representation_id, proof.representation_generation,
     proof.subject_generation, proof.principal_epoch, proof.collection_create, proof.related_work,
     proof.source_revision, proof.maintainer_generation, proof.realm_membership ?? null,
-    proof.author_generation ?? null, proof.submission_contribution ?? null, proof.author_work ?? null]);
+    proof.author_generation ?? null, proof.submission_contribution ?? null, proof.author_work ?? null,
+    proof.avatar_control_id ?? null, proof.avatar_control_generation ?? null]);
 }
