@@ -26,8 +26,6 @@ const specs: CatalogSpec[] = [
   ...accountsFeatures.map(feature => {
     const namespace = feature === 'shell' ? 'common' : feature;
     const base = `apps/accounts/features/${feature}/messages`;
-    if (feature === 'admin') return { app: 'accounts' as const, namespace,
-      english: `${base}/en.ts`, localeFiles: { 'zh-Hans': `${base}/zh-CN.ts` } };
     return { app: 'accounts' as const, namespace, english: `${base}/en.ts`, localeFiles: Object.fromEntries(
       locales.filter(locale => locale !== 'en').map(locale => [locale, `${base}/${locale}.ts`])) as
         Partial<Record<Locale, string>> };
