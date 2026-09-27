@@ -106,7 +106,6 @@ export const Hint = (props: HintProps) => {
       }}
     >
       <ark.div
-        aria-describedby={hintId}
         className={cn('relative', className)}
         data-placement={positioningValue.placement}
         data-slot="hint"
@@ -136,8 +135,15 @@ export const HintTrigger = (props: React.ComponentProps<typeof ark.button>) => {
       data-state={isVisible ? 'open' : 'closed'}
       onBlur={() => setIsVisible(false)}
       onFocus={() => setIsVisible(true)}
+      // WCAG 1.4.13: a hint shown on hover or focus must be dismissable.
+      onKeyDown={(event) => {
+        if (event.key === 'Escape' && isVisible) {
+          setIsVisible(false);
+        }
+      }}
       onMouseEnter={() => setIsVisible(true)}
       onMouseLeave={() => setIsVisible(false)}
+      type="button"
       {...rest}
     >
       {children}
@@ -152,7 +158,7 @@ const hintContentVariants = tv({
     'px-3 py-1.5',
     'bg-foreground',
     'text-background text-xs',
-    'rounded-xl shadow-md/5',
+    'rounded-xl shadow-(--aura-shadow-float)',
     'fade-in-0 zoom-in-[98%] animate-in',
     'data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-[98%] data-[state=closed]:animate-out',
     'motion-reduce:animate-none!',

@@ -15,10 +15,12 @@ export const Highlight = (props: React.ComponentProps<typeof ArkHighlight>) => {
   return (
     <ArkHighlight
       className={cn(
-        'px-1',
-        'bg-primary/20',
-        'text-primary',
-        'rounded-md',
+        'px-0.5',
+        // Accent surface with its text-safe tone; ink blue on a blue tint falls
+        // under 4.5:1.
+        'bg-accent',
+        'text-accent-foreground',
+        'rounded-sm',
         'box-decoration-clone',
         className,
       )}

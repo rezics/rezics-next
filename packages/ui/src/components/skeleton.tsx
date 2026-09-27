@@ -9,7 +9,8 @@ export const Skeleton = (props: React.ComponentProps<typeof ark.div>) => {
   return (
     <ark.div
       className={cn(
-        'rounded-md bg-muted',
+        // Aura skeletons use the control radius.
+        'rounded-xl bg-muted',
         'animate-pulse',
         'motion-reduce:animate-none!',
         className,
@@ -44,7 +45,7 @@ interface SkeletonTextProps extends React.ComponentProps<typeof ark.div> {
   /**
    * The number of lines of the skeleton text.
    *
-   * @default 1
+   * @default 2
    */
   lines?: number;
 }
@@ -68,7 +69,7 @@ export const SkeletonText = (props: SkeletonTextProps) => {
       {Array.from({ length: lines }).map((_, index) => {
         const key = `skeleton-text-${index}`;
 
-        return <div className="w-full rounded-md bg-muted last:w-3/4" key={key} />;
+        return <div className="w-full rounded-full bg-muted last:w-3/4" key={key} />;
       })}
     </ark.div>
   );

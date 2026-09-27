@@ -36,11 +36,12 @@ export const ResizableResizeTrigger = (props: ResizableResizeTriggerProps) => {
     <ArkSplitter.ResizeTrigger
       aria-label="Resize"
       className={cn(
-        'relative bg-border',
+        'relative bg-border/60',
         'flex w-px items-center justify-center',
+        'transition-colors hover:bg-primary/40 data-dragging:bg-primary/60 motion-reduce:transition-none',
         'after:-translate-x-1/2 data-[orientation=vertical]:after:-translate-y-1/2',
         'after:absolute after:inset-s-1/2 after:inset-y-0 after:w-1',
-        'focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-ring focus-visible:ring-offset-1',
+        'outline-none focus-visible:bg-primary focus-visible:ring-[3px] focus-visible:ring-ring/32',
         'data-[orientation=vertical]:h-px data-[orientation=vertical]:w-full',
         'data-[orientation=vertical]:after:inset-s-0 data-[orientation=vertical]:after:h-1 data-[orientation=vertical]:after:w-full',
         'data-[orientation=vertical]:after:translate-x-0',
@@ -51,16 +52,17 @@ export const ResizableResizeTrigger = (props: ResizableResizeTriggerProps) => {
       {...rest}
     >
       {withHandle && (
+        // Aura grip: a small card-colored pill with a hairline border.
         <div
           className={cn(
             'z-10',
-            'h-4 w-3',
+            'h-5 w-4',
             'flex items-center justify-center',
-            'bg-border',
-            'rounded-xs border',
+            'bg-background',
+            'rounded-lg border border-border/60 shadow-xs',
           )}
         >
-          <GripVertical className="size-2.5" />
+          <GripVertical className="size-3 text-muted-foreground" />
         </div>
       )}
     </ArkSplitter.ResizeTrigger>

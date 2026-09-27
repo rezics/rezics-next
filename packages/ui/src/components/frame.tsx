@@ -32,8 +32,9 @@ export const FramePanel = (props: React.ComponentProps<typeof ark.div>) => {
       className={cn(
         'relative',
         'p-5',
-        'bg-background',
-        'rounded-2xl border shadow-xs/5',
+        // Panels are Aura cards inside the muted frame.
+        'bg-card',
+        'rounded-2xl border border-border/60 shadow-(--aura-shadow-card)',
         className,
       )}
       data-slot="frame-panel"
@@ -44,11 +45,11 @@ export const FramePanel = (props: React.ComponentProps<typeof ark.div>) => {
 
 interface FrameHeaderProps extends React.ComponentProps<typeof ark.header> {
   /**
-   * The description of the dialog
+   * The description of the frame
    */
   description?: string;
   /**
-   * The title of the dialog
+   * The title of the frame
    */
   title?: string;
 }

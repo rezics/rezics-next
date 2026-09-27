@@ -1,21 +1,27 @@
 'use client';
 
 import { ark } from '@ark-ui/react/factory';
-import type React from 'react';
+import React from 'react';
 import { tv, type VariantProps } from 'tailwind-variants';
 import { cn } from '../utils.ts';
 import { Separator } from './separator.tsx';
+
+// Items inside an ItemGroup become list items of its list role; a lone Item
+// stays a plain group of content.
+const ItemGroupContext = React.createContext(false);
 
 export const ItemGroup = (props: React.ComponentProps<typeof ark.div>) => {
   const { className, ...rest } = props;
 
   return (
-    <ark.div
-      className={cn('group/item-group', 'flex w-full flex-col gap-4', className)}
-      data-slot="item-group"
-      role="list"
-      {...rest}
-    />
+    <ItemGroupContext.Provider value={true}>
+      <ark.div
+        className={cn('group/item-group', 'flex w-full flex-col gap-2', className)}
+        data-slot="item-group"
+        role="list"
+        {...rest}
+      />
+    </ItemGroupContext.Provider>
   );
 };
 
@@ -24,8 +30,9 @@ export const ItemSeparator = (props: React.ComponentProps<typeof Separator>) => 
 
   return (
     <Separator
-      className={cn('my-2', className)}
+      className={cn('my-1', className)}
       data-slot="item-separator"
+      decorative
       orientation="horizontal"
       {...rest}
     />
@@ -34,23 +41,27 @@ export const ItemSeparator = (props: React.ComponentProps<typeof Separator>) => 
 
 const itemVariants = tv({
   base: [
-    '[--space:--spacing(3)]',
     'group/item',
     'flex w-full flex-wrap items-center',
-    'gap-(--space) p-(--space)',
+    'gap-3 px-4 py-3.5',
     'in-data-[slot=menu-content]:p-0',
     'text-sm',
     'rounded-2xl border',
-    'transition-colors duration-100',
-    '[a]:transition-colors [a]:hover:bg-muted',
+    'transition-[background-color,border-color,box-shadow] duration-200',
+    'motion-reduce:transition-none',
+    '[a&]:hover:bg-accent/40',
     'outline-none focus-visible:border-primary focus-visible:ring-[3px] focus-visible:ring-ring/32',
     "[&_svg:not([class*='size-'])]:size-4 [&_svg]:pointer-events-none [&_svg]:shrink-0",
   ],
   variants: {
     variant: {
       default: 'border-transparent',
-      outline: 'border-border shadow-xs/5',
-      muted: 'border-transparent bg-muted/48 shadow-muted/5 shadow-xs',
+      // Aura: the outline item is a card with the card shadows.
+      outline: [
+        'border-border/60 bg-card shadow-(--aura-shadow-card)',
+        '[a&]:hover:border-primary/25 [a&]:hover:bg-card [a&]:hover:shadow-(--aura-shadow-card-hover)',
+      ],
+      muted: 'border-transparent bg-secondary/50',
     },
   },
   defaultVariants: {
@@ -65,10 +76,13 @@ interface ItemProps
 export const Item = (props: ItemProps) => {
   const { variant = 'default', className, ...rest } = props;
 
+  const inGroup = React.useContext(ItemGroupContext);
+
   return (
     <ark.div
       className={cn(itemVariants({ variant }), className)}
       data-slot="item"
+      role={inGroup ? 'listitem' : undefined}
       data-variant={variant}
       {...rest}
     />
@@ -84,10 +98,16 @@ const itemMediaVariants = tv({
   variants: {
     variant: {
       default: 'bg-transparent',
-      icon: ["[&_svg:not([class*='size-'])]:size-4"],
+      icon: [
+        'size-10',
+        'rounded-xl border border-border/60 bg-secondary/60',
+        'text-primary',
+        "[&_svg:not([class*='size-'])]:size-5",
+      ],
+      // Item images are usually Work covers, which use the cover radius.
       image: [
         'size-10',
-        'rounded-2xl',
+        'rounded-sm',
         'overflow-hidden',
         '[&_img]:size-full [&_img]:object-cover',
       ],

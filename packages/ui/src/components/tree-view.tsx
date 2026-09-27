@@ -6,6 +6,7 @@ import {
   createTreeCollection as arkCreateTreeCollection,
   type TreeCollection as arkTreeCollection,
   useTreeViewContext as useArkTreeViewContext,
+  useTreeViewNodeContext,
 } from '@ark-ui/react/tree-view';
 import {
   CheckIcon,
@@ -43,6 +44,13 @@ export type TreeCollection = arkTreeCollection;
 
 interface TreeViewContextProps {
   /**
+   * Whether nodes render a `TreeViewCheckbox`. Checkable nodes expose
+   * `aria-checked` and toggle with Space.
+   *
+   * @default false
+   */
+  checkable?: boolean;
+  /**
    * Custom extension icons
    */
   fileIcons?: Record<string, React.JSX.ElementType | null>;
@@ -53,10 +61,17 @@ const TreeViewContext = React.createContext({} as TreeViewContextProps);
 interface TreeViewProps extends ArkTreeView.RootComponentProps, TreeViewContextProps {}
 
 export const TreeView: ArkTreeView.RootComponent<TreeViewProps> = (props) => {
-  const { fileIcons, lazyMount = true, unmountOnExit = true, className, ...rest } = props;
+  const {
+    checkable = false,
+    fileIcons,
+    lazyMount = true,
+    unmountOnExit = true,
+    className,
+    ...rest
+  } = props;
 
   return (
-    <TreeViewContext.Provider value={{ fileIcons }}>
+    <TreeViewContext.Provider value={{ checkable, fileIcons }}>
       <ArkTreeView.Root
         className={cn(
           '[--indentation:--spacing(4)] [--item-gap:--spacing(2)]',
@@ -111,9 +126,43 @@ export const TreeViewNode = <T extends TreeNodeType>(props: NodeProviderProps<T>
   <ArkTreeView.NodeProvider data-slot="tree-view-node" {...props} />
 );
 
-export const TreeViewBranch = (props: React.ComponentProps<typeof ArkTreeView.Branch>) => (
-  <ArkTreeView.Branch className={cn('relative')} data-slot="tree-view-branch" {...props} />
-);
+// Zag renders the node checkbox inside the focusable row (a nested control that
+// Space cannot toggle). In a checkable tree the row itself carries the checked
+// state and Space toggles it; the checkbox is only a visual.
+const useCheckableNode = () => {
+  const { checkable } = _useTreeView();
+  const tree = useTreeView();
+  const node = useTreeViewNodeContext();
+
+  if (!checkable) {
+    return {};
+  }
+
+  return {
+    'aria-checked': node.checked === 'indeterminate' ? ('mixed' as const) : node.checked === true,
+    onKeyDown: (event: React.KeyboardEvent) => {
+      if (event.key !== ' ' || node.disabled) {
+        return;
+      }
+      event.preventDefault();
+      event.stopPropagation();
+      tree.toggleChecked(node.value, node.isBranch);
+    },
+  };
+};
+
+export const TreeViewBranch = (props: React.ComponentProps<typeof ArkTreeView.Branch>) => {
+  const { 'aria-checked': ariaChecked } = useCheckableNode();
+
+  return (
+    <ArkTreeView.Branch
+      aria-checked={ariaChecked}
+      className={cn('relative')}
+      data-slot="tree-view-branch"
+      {...props}
+    />
+  );
+};
 
 const treeViewControlVariants = tv({
   base: [
@@ -124,7 +173,8 @@ const treeViewControlVariants = tv({
     'py-(--padding-block) ps-[calc(var(--padding-inline)+var(--indentation)*(var(--depth)-1)+var(--icon-size)*(var(--depth)-1)*0.5)] pe-(--padding-inline)',
     'bg-transparent',
     'select-none text-start font-inherit text-muted-foreground',
-    'rounded-md border-none',
+    // Aura menu and navigation rows use the control radius.
+    'rounded-xl border-none',
     'cursor-pointer',
     'hover:bg-muted hover:text-foreground',
     'outline-none focus-visible:outline-2 focus-visible:outline-ring focus-visible:-outline-offset-2',
@@ -142,10 +192,13 @@ interface TreeViewBranchItemProps
 export const TreeViewBranchItem = (props: TreeViewBranchItemProps) => {
   const { icon, expandedIcon, className, children, ...rest } = props;
 
+  const { onKeyDown } = useCheckableNode();
+
   return (
     <ArkTreeView.BranchControl
       className={cn(treeViewControlVariants(), className)}
       data-slot="tree-view-branch-control"
+      onKeyDown={onKeyDown}
       {...rest}
     >
       <TreeViewBranchIndicator />
@@ -279,10 +332,13 @@ const TreeViewBranchIndentGuide = (
 export const TreeViewContent = (props: React.ComponentProps<typeof ArkTreeView.Item>) => {
   const { className, ...rest } = props;
 
+  const checkableProps = useCheckableNode();
+
   return (
     <ArkTreeView.Item
       className={cn(treeViewControlVariants(), className)}
       data-slot="tree-view-item"
+      {...checkableProps}
       {...rest}
     />
   );
@@ -368,8 +424,14 @@ export const TreeViewCheckbox = (props: React.ComponentProps<typeof ArkTreeView.
 
   return (
     <ArkTreeView.NodeCheckbox
+      aria-checked={null as unknown as undefined}
+      aria-hidden
       className={cn(checkboxVariants(), '[&_svg]:size-3!', className)}
       data-slot="tree-view-checkbox"
+      role="presentation"
+      // `null` overrides zag's tabIndex -1 so the visual checkbox is not a
+      // nested focus target; the row carries `aria-checked` (see useCheckableNode).
+      tabIndex={null as unknown as number}
       {...rest}
     >
       <ArkTreeView.NodeCheckboxIndicator indeterminate={<MinusIcon />}>

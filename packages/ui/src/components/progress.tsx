@@ -9,6 +9,15 @@ export const useProgress = useProgressContext;
 
 interface ProgressProps extends Omit<React.ComponentProps<typeof ArkProgress.Root>, 'value'> {
   /**
+   * Accessible name of the progress bar. Ark names the bar with its value
+   * text only, which leaves an indeterminate bar unnamed.
+   */
+  'aria-label'?: string;
+  /**
+   * Id of the element that names the progress bar, such as a `ProgressLabel`.
+   */
+  'aria-labelledby'?: string;
+  /**
    * Shows indeterminate progress
    *
    * @default false
@@ -27,6 +36,8 @@ export const Progress = (props: ProgressProps) => {
     value,
     orientation = 'horizontal',
     indeterminate = false,
+    'aria-label': ariaLabel,
+    'aria-labelledby': ariaLabelledby,
     className,
     children,
     ...rest
@@ -47,7 +58,7 @@ export const Progress = (props: ProgressProps) => {
     >
       {children}
 
-      <ProgressTrack>
+      <ProgressTrack aria-label={ariaLabel} aria-labelledby={ariaLabelledby}>
         <ProgressRange />
       </ProgressTrack>
     </ArkProgress.Root>
@@ -57,7 +68,8 @@ export const Progress = (props: ProgressProps) => {
 export const ProgressTrack = (props: React.ComponentProps<typeof ArkProgress.Track>) => (
   <ArkProgress.Track
     className={cn(
-      'bg-input',
+      // Aura track: a quiet secondary groove under a rounded ink-blue range.
+      'bg-secondary',
       'rounded-full',
       'overflow-x-hidden',
       'data-[orientation=horizontal]:h-2 data-[orientation=horizontal]:w-full',
@@ -72,6 +84,7 @@ export const ProgressRange = (props: React.ComponentProps<typeof ArkProgress.Ran
   <ArkProgress.Range
     className={cn(
       'bg-primary',
+      'rounded-full',
       'transition-all duration-300 ease-out',
       'data-[orientation=horizontal]:h-full',
       'data-[orientation=vertical]:h-full',
@@ -82,6 +95,16 @@ export const ProgressRange = (props: React.ComponentProps<typeof ArkProgress.Ran
     {...props}
   />
 );
+
+export const ProgressLabel = (props: React.ComponentProps<typeof ArkProgress.Label>) => {
+  const { className, ...rest } = props;
+
+  return (
+    <FieldLabel asChild>
+      <ArkProgress.Label className={className} data-slot="progress-label" {...rest} />
+    </FieldLabel>
+  );
+};
 
 export const ProgressValue = (props: React.ComponentProps<typeof ArkProgress.ValueText>) => {
   const { className, ...rest } = props;

@@ -226,7 +226,7 @@ export const ActionBarContent = (props: ActionBarContentProps) => {
             className={cn(
               '[--space:--spacing(2)]',
               'flex w-fit items-center gap-1',
-              'rounded-2xl border shadow-lg/5',
+              'rounded-2xl border border-border/60 shadow-(--aura-shadow-float)',
               'px-[calc(var(--space)+2px)] py-(--space)',
               'bg-popover',
               'text-popover-foreground',
@@ -324,6 +324,7 @@ export const ActionBarBody = (props: React.ComponentProps<typeof ark.div>) => {
         '**:data-[slot=action-bar-separator]:h-2',
         className,
       )}
+      data-slot="action-bar-body"
       {...rest}
     />
   );

@@ -5,21 +5,22 @@ import type React from 'react';
 import { tv, type VariantProps } from 'tailwind-variants';
 import { cn } from '../utils.ts';
 
+// Aura keyboard hint: 24px, `rounded-lg`, hairline border and a small shadow.
 const kbdVariants = tv({
   base: [
-    'h-5 min-w-5',
-    'px-1',
+    'h-6 min-w-6',
+    'px-1.5',
     'inline-flex items-center justify-center gap-1',
-    'select-none font-medium font-sans text-foreground text-xs',
-    'rounded-sm border border-transparent',
+    'select-none font-medium font-sans text-xs',
+    'rounded-lg border shadow-xs',
     'pointer-events-none',
-    'in-data-[slot=tooltip-content]:bg-background/20 in-data-[slot=tooltip-content]:text-background',
+    'in-data-[slot=tooltip-content]:border-background/30 in-data-[slot=tooltip-content]:bg-background/20 in-data-[slot=tooltip-content]:text-background',
     "[&_svg:not([class*='size-'])]:size-3",
   ],
   variants: {
     variant: {
-      default: 'bg-muted',
-      outline: 'border border-border',
+      default: 'border-border/60 bg-secondary text-muted-foreground',
+      outline: 'border-border bg-background text-foreground',
     },
   },
   defaultVariants: {
@@ -40,7 +41,7 @@ export const KbdGroup = (props: React.ComponentProps<typeof ark.div>) => {
 
   return (
     <ark.div
-      className={cn('inline-flex items-center gap-1', className)}
+      className={cn('inline-flex items-center gap-1.5', className)}
       data-slot="kbd-group"
       {...rest}
     />

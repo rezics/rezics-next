@@ -1,6 +1,6 @@
 'use client';
 
-import { ark } from '@ark-ui/react/';
+import { ark } from '@ark-ui/react/factory';
 import { Progress as ArkProgress, useProgressContext } from '@ark-ui/react/progress';
 import type React from 'react';
 import { cn } from '../utils.ts';
@@ -9,7 +9,7 @@ export const useCircularProgress = useProgressContext;
 
 interface CircularProgressProps
   extends React.ComponentProps<typeof ArkProgress.Root>,
-    Pick<CircularProgressTrackProps, 'size' | 'thickness'> {
+    Pick<CircularProgressTrackProps, 'size' | 'thickness' | 'aria-label' | 'aria-labelledby'> {
   /**
    * Shows indeterminate progress.
    *
@@ -24,6 +24,8 @@ export const CircularProgress = (props: CircularProgressProps) => {
     indeterminate = false,
     size = 32,
     thickness = 4,
+    'aria-label': ariaLabel,
+    'aria-labelledby': ariaLabelledby,
     className,
     children,
     ...rest
@@ -43,7 +45,12 @@ export const CircularProgress = (props: CircularProgressProps) => {
     >
       {children}
 
-      <CircularProgressTrack size={size} thickness={thickness} />
+      <CircularProgressTrack
+        aria-label={ariaLabel}
+        aria-labelledby={ariaLabelledby}
+        size={size}
+        thickness={thickness}
+      />
     </ArkProgress.Root>
   );
 };
@@ -64,9 +71,9 @@ interface CircularProgressTrackProps extends React.ComponentProps<typeof ark.svg
 }
 
 export const CircularProgressTrack = (props: CircularProgressTrackProps) => {
-  const { size = 32, thickness = 4, className, ...rest } = props;
+  const { size = 32, thickness = 4, 'aria-label': ariaLabel, className, ...rest } = props;
 
-  const { max, min, value } = useCircularProgress();
+  const { max, min, value, valueAsString } = useCircularProgress();
 
   const radius = size / 2 - thickness / 2;
   const circumference = 2 * Math.PI * radius;
@@ -76,8 +83,12 @@ export const CircularProgressTrack = (props: CircularProgressTrackProps) => {
   const dashOffset = circumference * (1 - percent);
 
   return (
+    // The SVG carries the progressbar role that Ark puts on the linear track.
     <ark.svg
-      aria-hidden="true"
+      aria-label={ariaLabel ?? (valueAsString || undefined)}
+      aria-valuemax={max}
+      aria-valuemin={min}
+      aria-valuenow={value ?? undefined}
       className={cn(
         'block',
         '-rotate-90',
@@ -88,12 +99,13 @@ export const CircularProgressTrack = (props: CircularProgressTrackProps) => {
       )}
       data-slot="circular-progress-circle"
       height={size}
+      role="progressbar"
       viewBox={`0 0 ${size} ${size}`}
       width={size}
       {...rest}
     >
       <circle
-        className="fill-none stroke-input"
+        className="fill-none stroke-secondary"
         cx={size / 2}
         cy={size / 2}
         data-slot="circular-progress-track"

@@ -13,12 +13,15 @@ export const statusVariants = tv({
     'ring-2 ring-background',
   ],
   variants: {
+    // Status dots are non-text marks that need 3:1 against the page. The
+    // success, info and warning fills do not reach it in light mode, so dots use
+    // the text-safe `-foreground` tones, with the page color for inner icons.
     variant: {
       default: 'bg-foreground text-background',
-      success: 'bg-success text-white',
-      info: 'bg-info text-white',
-      warning: 'bg-warning text-white',
-      destructive: 'bg-destructive text-white dark:bg-destructive-foreground',
+      success: 'bg-success-foreground text-background',
+      info: 'bg-info-foreground text-background',
+      warning: 'bg-warning-foreground text-background',
+      destructive: 'bg-destructive-foreground text-background',
     },
     size: {
       sm: "size-2 [&_svg:not([class*='size-'])]:size-1.5 [&_svg]:pointer-events-none [&_svg]:shrink-0",

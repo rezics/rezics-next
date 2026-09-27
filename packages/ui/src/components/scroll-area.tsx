@@ -8,7 +8,13 @@ import { cn } from '../utils.ts';
 export const useScrollArea = useScrollAreaContext;
 
 const scrollAreaVariants = tv({
-  base: ['h-full', 'rounded-[inherit]', 'outline-none', 'scrollbar-none', 'outline-none'],
+  base: [
+    'h-full',
+    'rounded-[inherit]',
+    'scrollbar-none',
+    'outline-none focus-visible:ring-[3px] focus-visible:ring-ring/32',
+    'transition-shadow motion-reduce:transition-none!',
+  ],
   variants: {
     scrollFade: {
       true: [
@@ -39,18 +45,29 @@ export const ScrollArea = (props: ScrollAreaProps) => {
       data-slot="scroll-area"
       {...rest}
     >
-      <ArkScrollArea.Viewport
-        className={cn(scrollAreaVariants({ scrollFade }))}
-        data-slot="scroll-area-viewport"
-      >
+      <ScrollAreaViewport className={cn(scrollAreaVariants({ scrollFade }))}>
         <ArkScrollArea.Content data-slot="scroll-area-content">{children}</ArkScrollArea.Content>
-      </ArkScrollArea.Viewport>
+      </ScrollAreaViewport>
 
       <ScrollAreaScrollbar orientation="vertical" />
       <ScrollAreaScrollbar orientation="horizontal" />
 
       <ArkScrollArea.Corner data-slot="scroll-area-corner" />
     </ArkScrollArea.Root>
+  );
+};
+
+const ScrollAreaViewport = (props: React.ComponentProps<typeof ArkScrollArea.Viewport>) => {
+  const { hasOverflowX, hasOverflowY } = useScrollArea();
+
+  return (
+    <ArkScrollArea.Viewport
+      data-slot="scroll-area-viewport"
+      // Zag only makes the viewport focusable when it overflows on both axes;
+      // keyboard users must reach any scrollable region (WCAG 2.1.1).
+      tabIndex={hasOverflowX || hasOverflowY ? 0 : undefined}
+      {...props}
+    />
   );
 };
 
@@ -80,7 +97,7 @@ export const ScrollAreaScrollbar = (
       {...rest}
     >
       <ArkScrollArea.Thumb
-        className="relative flex-1 rounded-full bg-foreground/20"
+        className="relative flex-1 rounded-full bg-primary/25 transition-colors hover:bg-primary/40 motion-reduce:transition-none"
         data-slot="scroll-area-thumb"
       />
     </ArkScrollArea.Scrollbar>
