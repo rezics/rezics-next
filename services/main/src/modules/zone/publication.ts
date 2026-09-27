@@ -2,9 +2,17 @@ import { GRAPHS, RV, hash, iri, lit, type WorkActivationEnvironment } from '../w
 import { assertGraphAdmissionOpen } from '../work/restore-lineage.ts';
 import { readZoneConfiguration, ZoneUnavailable } from './configuration.ts';
 import { DEFAULT_ZONE_PRESENTATION } from './presentation-format.ts';
+import { readDynamicDefinition, executeDynamicDefinition } from '../collection/dynamic.ts';
+import { withStableSearchSnapshot, MAX_SEARCH_REQUEST_MS } from '../work/search-readiness.ts';
+import { runZoneQueryBlocks, ZoneQueryBudgetExceeded } from './query-budget.ts';
+import type { ZoneConfiguration } from './config-format.ts';
+import { readCompositionPage } from '../structure/read.ts';
+import { PUBLIC_SEARCH_GRAPH } from '../work/select-main.ts';
 
 export const ZONE_PUBLICATION_COST = { graphReads: 1, objectReads: 2,
-  officialPageSize: 50, maxModules: 24, maxBanners: 6 } as const;
+  officialPageSize: 50, maxModules: 24, maxBanners: 6,
+  maxResolvedBlocks: 4, maxResolvedCollections: 2, maxCollectionPlacements: 8,
+  maxModuleGraphReads: 64 } as const;
 
 export async function readZonePublication(env: WorkActivationEnvironment, zone: string) {
   const state = await readZoneConfiguration(env, zone);
@@ -14,8 +22,82 @@ export async function readZonePublication(env: WorkActivationEnvironment, zone: 
   return { zone, realm: state.configuration.defaultRealm ?? null,
     official: state.configuration.official?.routeSegment ?? null,
     revision: state.revision, disclosure: state.disclosure, presentation,
+    configuration: state.configuration,
     etag: `"${hash(JSON.stringify({ revision: state.revision, presentation }))}"`,
     cost: ZONE_PUBLICATION_COST };
+}
+
+/** Public module data resolves only disclosed query definitions, within the Zone's shared budget. */
+export async function readZoneModuleData(env: WorkActivationEnvironment,
+  config: ZoneConfiguration) {
+  let graphReads = 0;
+  const boundedFuseki = new Proxy(env.fuseki, { get(target, property) {
+    if (property === 'query') return (...args: Parameters<typeof target.query>) => {
+      if (++graphReads > ZONE_PUBLICATION_COST.maxModuleGraphReads) {
+        throw new ZoneQueryBudgetExceeded('Zone presentation graph read budget exceeded');
+      }
+      return target.query(...args);
+    };
+    const value = Reflect.get(target, property, target);
+    return typeof value === 'function' ? value.bind(target) : value;
+  } });
+  const bounded = { ...env, fuseki: boundedFuseki };
+  const presentation = typeof config.presentation === 'object'
+    ? config.presentation : DEFAULT_ZONE_PRESENTATION;
+  const used = new Set(presentation.modules.flatMap(module => [module.source,
+    ...(module.tabs ?? []).map(tab => tab.source)]).filter(source => source.kind === 'query-block')
+    .map(source => source.kind === 'query-block' ? source.block : ''));
+  const selectedBlocks = [...used].slice(0, ZONE_PUBLICATION_COST.maxResolvedBlocks);
+  const query = used.size ? await withStableSearchSnapshot(boundedFuseki,
+    () => runZoneQueryBlocks({ ...config, queryBlocks: config.queryBlocks.filter(block =>
+      selectedBlocks.includes(block.block)) },
+      async definition => {
+        const saved = await readDynamicDefinition(bounded, definition);
+        if (saved.disclosure !== 'public') throw new ZoneUnavailable('private module definition');
+        return executeDynamicDefinition(bounded, saved);
+      }), Math.min(config.budget.timeMs, MAX_SEARCH_REQUEST_MS)) : null;
+  const blocks = new Map(query?.results.map(result => [result.block, result]) ?? []);
+  const collections = [...new Set(presentation.modules.flatMap(module => [module.source,
+    ...(module.tabs ?? []).map(tab => tab.source)]).filter(source => source.kind === 'collection')
+    .map(source => source.kind === 'collection' ? source.collection : ''))]
+    .slice(0, ZONE_PUBLICATION_COST.maxResolvedCollections);
+  const collectionData = new Map<string, { state: 'complete' | 'partial' | 'unavailable';
+    members: { work: string; selection?: unknown }[] }>();
+  for (const collection of collections) {
+    const match = await boundedFuseki.query(`PREFIX rv: <${RV}> SELECT ?structure WHERE {
+      GRAPH ${iri(GRAPHS.current)} { ${iri(collection)} a rv:Collection ;
+        rv:collectionState rv:Active ; rv:disclosure rv:Public ; rv:structure ?structure . }
+    } LIMIT 2`, 4096);
+    const structure = match.results?.bindings.length === 1
+      ? match.results.bindings[0]?.structure?.value : null;
+    if (!structure) {
+      collectionData.set(collection, { state: 'unavailable', members: [] });
+      continue;
+    }
+    const page = await readCompositionPage(bounded, { structure,
+      limit: ZONE_PUBLICATION_COST.maxCollectionPlacements,
+      canReadTarget: async target => {
+        const result = await boundedFuseki.query(`PREFIX rv: <${RV}> ASK {
+          GRAPH ${iri(PUBLIC_SEARCH_GRAPH)} { ?unit a rv:MatchUnit ; rv:work ${iri(target)} ;
+            rv:disclosure rv:Public ; rv:mainVersion ?main ; rv:selection ?selection . }
+          GRAPH ${iri(GRAPHS.current)} { ?main rv:selectionHead ?selection . }
+        }`, 1024);
+        return result.boolean === true;
+      } });
+    collectionData.set(collection, { state: page.next ? 'partial' : 'complete',
+      members: page.occurrences.filter(item => item.role === 'member' && !!item.target)
+        .map(item => ({ work: item.target!, ...(item.selection ? { selection: item.selection } : {}) })) });
+  }
+  return presentation.modules.map(module => ({ id: module.id,
+    sources: [module.source, ...(module.tabs ?? []).map(tab => tab.source)].map(source =>
+      source.kind === 'query-block'
+        ? { source, state: blocks.get(source.block)?.state ?? 'skipped',
+          members: blocks.get(source.block)?.members ?? [] }
+        : source.kind === 'collection'
+          ? { source, state: collectionData.get(source.collection)?.state ?? 'skipped',
+            members: collectionData.get(source.collection)?.members ?? [] }
+          : { source, state: 'reference' as const, members: [] }),
+  }));
 }
 
 export async function listOfficialZones(env: WorkActivationEnvironment,

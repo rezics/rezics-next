@@ -7,6 +7,9 @@ import { ThemeDenied, ThemeInvalid, ThemePending, ThemeStale, ThemeUnavailable,
   THEME_READ_SCOPE, activateTheme, readTheme, type ThemeActivationIntent } from '../modules/theme/activation.ts';
 import { problem } from './problems.ts';
 import { writeProblems } from '../api-responses.ts';
+import { InvalidFirstPartyBundle } from '../modules/theme/first-party-bundle.ts';
+import { readFirstPartyControl, readFirstPartyTheme, writeFirstPartyTheme, type FirstPartyCommand }
+  from '../modules/theme/first-party-lifecycle.ts';
 
 const uuid = t.String({ pattern: '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' });
 const agent = t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' });
@@ -18,6 +21,14 @@ const capabilities = t.Object({ data: t.Literal('public-only'), secrets: t.Liter
 const noStore = { headers: { 'cache-control': 'no-store' } };
 
 export const openApiOperations = {
+  '/v1/themes': { post: { bearer: true, idempotencyKey: true } },
+  '/v1/themes/execution-control': { get: { bearer: true },
+    put: { bearer: true, idempotencyKey: true } },
+  '/v1/themes/{theme}/revisions': { post: { bearer: true, idempotencyKey: true } },
+  '/v1/themes/{theme}/revisions/{revision}/reviews': { post: { bearer: true, idempotencyKey: true } },
+  '/v1/themes/{theme}/first-party-activations': { post: { bearer: true, idempotencyKey: true } },
+  '/v1/themes/{theme}/revocations': { post: { bearer: true, idempotencyKey: true } },
+  '/v1/themes/{theme}/first-party': { get: { bearer: true } },
   '/v1/themes/{theme}/activations': { post: { bearer: true, idempotencyKey: true } },
   '/v1/themes/{theme}': { get: { bearer: true } },
 } as const;
@@ -40,6 +51,7 @@ function headerKey(request: Request, bodyKey: string): Response | undefined {
 }
 
 function themeError(error: unknown): Response {
+  if (error instanceof InvalidFirstPartyBundle) return problem(400, 'invalid_theme_bundle', error.message);
   if (error instanceof AccountAssertionDenied) return problem(403, 'theme_approval_denied',
     'The token does not include the required theme permission');
   if (error instanceof AccountAssertionUnavailable) return problem(503, 'theme_unavailable',
@@ -62,7 +74,85 @@ function themeError(error: unknown): Response {
 export function themeRoutes(work: MainWorkDependencies) {
   const store = work.themes;
   const unavailable = () => problem(503, 'theme_unavailable', 'Theme approval service is unavailable');
+  const writeFirstParty = async (request: Request, input: FirstPartyCommand) => {
+    if (!work.account || !work.access) return unavailable();
+    const keyError = headerKey(request, input.idempotencyKey);
+    if (keyError) return keyError;
+    try {
+      const result = await writeFirstPartyTheme(work.environment, work.account,
+        work.access, request, input);
+      return Response.json(result, { status: result.replayed ? 200 : 201, ...noStore });
+    } catch (error) { return themeError(error); }
+  };
+  const requestKey = t.String({ pattern: '^[A-Za-z0-9:_./-]{1,128}$' });
+  const firstPartyResponse = { 200: t.Any(), 201: t.Any(), ...writeProblems };
   return new Elysia()
+    .post('/v1/themes', { body: t.Object({ theme: uuid, owner: agent, hostZone: agent,
+      actingSubject: agent, idempotencyKey: requestKey }, { additionalProperties: false }),
+      response: firstPartyResponse }, async ({ request, body }: { request: Request;
+        body: { theme: string; owner: string; hostZone: string; actingSubject: string;
+          idempotencyKey: string } }) => writeFirstParty(request,
+      { action: 'create', ...body }))
+    .post('/v1/themes/:theme/revisions', { params: t.Object({ theme: uuid }),
+      body: t.Object({ expectedRevision: t.Nullable(agent), bundle: t.Any(),
+        actingSubject: agent, idempotencyKey: requestKey }, { additionalProperties: false }),
+      response: firstPartyResponse }, async ({ request, params, body }: { request: Request;
+        params: { theme: string }; body: { expectedRevision: string | null; bundle: unknown;
+          actingSubject: string; idempotencyKey: string } }) => writeFirstParty(request,
+      { action: 'revise', theme: params.theme, ...body,
+        bundle: body.bundle as FirstPartyCommand['bundle'] }))
+    .post('/v1/themes/:theme/revisions/:revision/reviews', {
+      params: t.Object({ theme: uuid, revision: uuid }),
+      body: t.Object({ decision: t.Union([t.Literal('approved'), t.Literal('rejected')]),
+        reviewEvidenceDigest: digest,
+        actingSubject: agent, idempotencyKey: requestKey }, { additionalProperties: false }),
+      response: firstPartyResponse }, async ({ request, params, body }: { request: Request;
+        params: { theme: string; revision: string }; body: { decision: 'approved' | 'rejected';
+          reviewEvidenceDigest: string; actingSubject: string; idempotencyKey: string } }) => writeFirstParty(request,
+      { action: 'review', theme: params.theme, revision: `${'https://rezics.com/id/'}${params.revision}`,
+        ...body }))
+    .post('/v1/themes/:theme/first-party-activations', { params: t.Object({ theme: uuid }),
+      body: t.Object({ revision: agent, expectedActivation: t.Nullable(agent),
+        approvalExpiresAt: t.String({ format: 'date-time' }), actingSubject: agent,
+        idempotencyKey: requestKey }, { additionalProperties: false }),
+      response: firstPartyResponse }, async ({ request, params, body }: { request: Request;
+        params: { theme: string }; body: { revision: string; expectedActivation: string | null;
+          approvalExpiresAt: string; actingSubject: string; idempotencyKey: string } }) => writeFirstParty(request,
+      { action: 'activate', theme: params.theme, ...body }))
+    .post('/v1/themes/:theme/revocations', { params: t.Object({ theme: uuid }),
+      body: t.Object({ expectedActivation: agent, actingSubject: agent,
+        idempotencyKey: requestKey }, { additionalProperties: false }),
+      response: firstPartyResponse }, async ({ request, params, body }: { request: Request;
+        params: { theme: string }; body: { expectedActivation: string; actingSubject: string;
+          idempotencyKey: string } }) => writeFirstParty(request,
+      { action: 'revoke', theme: params.theme, ...body }))
+    .put('/v1/themes/execution-control', { body: t.Object({ disabled: t.Boolean(),
+      expectedControl: t.Nullable(agent), actingSubject: agent, idempotencyKey: requestKey },
+    { additionalProperties: false }), response: firstPartyResponse },
+    async ({ request, body }: { request: Request; body: { disabled: boolean;
+      expectedControl: string | null; actingSubject: string; idempotencyKey: string } }) =>
+      writeFirstParty(request, { action: 'control', ...body }))
+    .get('/v1/themes/execution-control', { response: { 200: t.Any(), ...writeProblems } },
+    async ({ request }: { request: Request }) => {
+      if (!work.account) return unavailable();
+      try {
+        await work.account.verify(request, ['owner:operate']);
+        return Response.json(await readFirstPartyControl(work.environment), noStore);
+      } catch (error) { return themeError(error); }
+    })
+    .get('/v1/themes/:theme/first-party', { params: t.Object({ theme: uuid }),
+      response: { 200: t.Any(), ...writeProblems } }, async ({ request, params }: {
+        request: Request; params: { theme: string } }) => {
+      if (!work.account) return unavailable();
+      try {
+        await work.account.verify(request, [THEME_READ_SCOPE]);
+        const view = await readFirstPartyTheme(work.environment, params.theme);
+        const publicView = view && Object.fromEntries(Object.entries(view).filter(([field]) =>
+          !['submitterPrincipal', 'reviewerPrincipal', 'reviewEvidenceDigest'].includes(field)));
+        return publicView ? Response.json({ profile: 'first-party-theme-view-v1', ...publicView }, noStore)
+          : problem(404, 'not_found', 'Theme is unavailable');
+      } catch (error) { return themeError(error); }
+    })
     .post('/v1/themes/:theme/activations', {
       params: t.Object({ theme: uuid }),
       body: t.Object({ profile: t.Literal('theme-activation-request-v1'), owner: agent,

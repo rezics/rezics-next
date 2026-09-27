@@ -51,7 +51,9 @@ export function checkFirstPartyBundle(value: unknown): { bundle: FirstPartyBundl
   const normalize = (items: string[]) => {
     if (new Set(items).size !== items.length) throw new InvalidFirstPartyBundle('duplicate bundle origin');
     for (const item of items) {
-      const parsed = new URL(item);
+      let parsed: URL;
+      try { parsed = new URL(item); }
+      catch { throw new InvalidFirstPartyBundle('bundle origin is not exact HTTPS'); }
       if (parsed.origin !== item || parsed.protocol !== 'https:') {
         throw new InvalidFirstPartyBundle('bundle origin is not exact HTTPS');
       }

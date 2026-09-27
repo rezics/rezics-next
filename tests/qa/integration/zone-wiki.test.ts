@@ -101,6 +101,8 @@ test('WIKI01/WIKI02/VIEW03/VIEW06/CTX01: two Zones mount one Collection without 
     const etag = publicResponse.headers.get('etag')!;
     expect(await publicResponse.json()).toMatchObject({ revision: publicationWrite.revision,
       presentation: publication, execution: { state: 'fallback', reason: 'none_approved' },
+      moduleData: [{ id: 'featured', sources: [{ source: { kind: 'collection', collection },
+        state: 'complete' }] }],
       cost: { graphReads: 1, objectReads: 2, maxModules: 24 } });
     expect((await anonymous.handle(new Request(presentationUrl,
       { headers: { 'if-none-match': etag } }))).status).toBe(304);

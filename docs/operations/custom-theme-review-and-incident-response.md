@@ -2,25 +2,28 @@
 
 ## Review
 
-1. Record the exact file manifest, transitive dependency digests, host Zone,
-   declared origins, capabilities, expiry and submitter.
-2. Have a different reviewer inspect the source, built bytes, data and origin
-   access, accessibility and failure behavior. Test the declarative fallback.
-3. Activate only the reviewed digest for its host. Changed bytes or capabilities
-   require a new review. Keep the approval and diagnostic evidence private.
+1. Submit a first-party revision with the exact file manifest, host Zone,
+   declared origins and byte budgets. Retain the built assets by digest.
+2. Have a different reviewer inspect the source, built bytes, origin access,
+   accessibility and failure behavior. Test the declarative fallback. Record
+   the decision with a digest of the private review evidence.
+3. Activate that reviewed revision for its host with an expiry. Changed files,
+   slots or origins need a new revision and review. Keep diagnostic evidence
+   private. The backend does not fetch assets; verify their bytes at review and
+   again when the host loads them.
 
 ## Incident
 
-1. Disable affected execution before asynchronous cache cleanup; use the
-   global control if the affected set is uncertain.
+1. Revoke the affected activation; use the global execution control if the
+   affected set is uncertain. Read `GET /v1/themes/execution-control`, then
+   `PUT` the same path with `disabled: true`, its `expectedControl`, an operator
+   acting subject and an idempotency key. Active presentation responses use
+   `no-store`.
 2. Record the current activation and graph receipt, preserve bounded redacted
    diagnostics, and verify that a fresh public presentation serves the fallback.
 3. Revoke the unsafe activation, invalidate cached effective presentations and
    check open sessions at their next visibility or refresh point.
-4. Restore only a newly eligible reviewed revision. Do not revive an old
-   approval through rollback.
-
-The current backend has digest and expiry approval but no execution, review,
-revoke or global kill operation. Do not deploy executable Zone packages until
-those controls and a drill for stale caches, malicious dependencies and partial
-recovery are verified.
+4. Reopen global execution only after review. The control generation fences
+   all older activations, so create a fresh activation of an eligible reviewed
+   revision. Use the current control head as `expectedControl` when reopening.
+   Do not revive an old approval through rollback.
