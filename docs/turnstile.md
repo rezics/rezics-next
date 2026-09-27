@@ -1,17 +1,15 @@
 # Registration abuse protection
 
-Account registration/recovery endpoints use explicit abuse admission policies:
-rate limits, challenge when required and verified proof before the protected effect.
-Cloudflare Turnstile is an available integration profile, not authentication or
-proof of account ownership.
+Account registration and recovery need explicit abuse admission: bounded
+attempts and, when required, a server-verified challenge before the effect.
+Cloudflare Turnstile is a prospective provider profile, not authentication
+or evidence of account ownership. No widget, hostname or secret is provisioned
+by this design.
 
-Bind challenge verification to intended action, allowed origin/hostname and
-provider token validity; validate server-side and reject replay/expired/invalid
-responses according to the provider contract. Keep secret keys server-only.
-Test credentials are admitted only in an explicit development profile and never
-accepted as a production configuration shortcut.
-
-Challenge failure preserves safe form input and supports retry without duplicating
-account creation. Accessibility, blocked-provider and unavailable-network states
-need usable typed outcomes. Select and verify the exact provider integration at
-implementation; no widget, hostname or secret is assumed provisioned by this design.
+A delivered integration must bind proof to action and allowed hostname,
+reject invalid, expired and replayed tokens, and keep secrets server-only.
+Test credentials belong only to an explicit development profile.
+Provider failure and blocked-network states need typed, accessible retry
+outcomes that preserve safe form input without creating a duplicate account.
+These requirements remain pending until an Account feature implements and
+tests the admission boundary.

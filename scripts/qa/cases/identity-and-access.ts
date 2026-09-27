@@ -1,4 +1,4 @@
-import { defineCases } from './types.ts';
+import { defineCases, type PendingSubcase } from './types.ts';
 
 export const cases = defineCases('docs/testing/identity-and-access.md', [
   {
@@ -220,3 +220,32 @@ export const cases = defineCases('docs/testing/identity-and-access.md', [
       "Apply the content owner's editing policy; the edit permission does not establish organizational control.",
   },
 ]);
+
+// These extend existing IAM IDs without changing the qualified backend case
+// inventory or treating an unimplemented client flow as a passing assertion.
+export const pendingActingIdentitySubcases = [
+  {
+    caseIds: ['IAM01'],
+    scenario: 'Switch the session Agent while a Studio workspace, another session and a prepared command exist',
+    requiredResult: 'None is retargeted; the prepared command retains its original explicit Agent.',
+    status: 'pending',
+  },
+  {
+    caseIds: ['IAM01'],
+    scenario: 'Switch the Studio Agent and act on its Works',
+    requiredResult: 'Commands carry the Studio Agent without changing the session Agent or account main-Agent preference.',
+    status: 'pending',
+  },
+  {
+    caseIds: ['IAM01'],
+    scenario: 'Resolve a saved native-book default after its Agent loses eligibility',
+    requiredResult: 'Use the eligible task-only default or session Agent in order, report the selected Agent, never admit the stale default, and reject an unknown profile.',
+    status: 'pending',
+  },
+  {
+    caseIds: ['IAM01', 'IAM02'],
+    scenario: 'Two browser product tabs complete separate authorization callbacks and select different Agents',
+    requiredResult: 'Each callback consumes its own state, validates issuer and PKCE, and leaves the other tab and selected Agent unchanged.',
+    status: 'pending',
+  },
+] as const satisfies readonly PendingSubcase[];
