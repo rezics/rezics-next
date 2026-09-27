@@ -459,6 +459,24 @@ test('OPS11/OPS12/IAM11/SEARCH20: restored backups keep erased payloads and cred
       [laterPreparation, supersessionSequence]);
       await repaired.query('COMMIT');
     } finally { repaired.release(); }
+    const detached = await current.content.connect();
+    try {
+      await detached.query('BEGIN');
+      await detached.query('SET LOCAL session_replication_role = replica');
+      await detached.query(`UPDATE content.publication_preparation
+        SET status = 'rejected', pin_active = false WHERE operation_id = $1`, [laterPreparation]);
+      await detached.query('COMMIT');
+    } finally { detached.release(); }
+    await expect(releaseErasureRestoreHold(relay, currentWithGraph, final.reconciliationId,
+      third.restoredFence, third.authority)).rejects.toBeInstanceOf(ErasureRestoreHold);
+    const reattached = await current.content.connect();
+    try {
+      await reattached.query('BEGIN');
+      await reattached.query('SET LOCAL session_replication_role = replica');
+      await reattached.query(`UPDATE content.publication_preparation
+        SET status = 'active', pin_active = true WHERE operation_id = $1`, [laterPreparation]);
+      await reattached.query('COMMIT');
+    } finally { reattached.release(); }
     await releaseErasureRestoreHold(relay, currentWithGraph, final.reconciliationId,
       third.restoredFence, third.authority);
 

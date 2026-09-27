@@ -62,11 +62,11 @@ an immutable supersession of each active preparation while keeping its original
 settlement proof. `content-publication/relay.ts` acknowledges old active outbox
 events only after checking that supersession against the current graph tombstone
 and receipt. `replay-supersessions.ts` applies the same exact check to every
-active pin in a restored Content owner before `reconcile.ts` releases its
-restore hold; the graph erasure is replayed first, and an unavailable or
-different receipt keeps that restore held. A replacement publication yields a
-new projection; a lost index is replayed by `yarn search:rebuild` from the
-retained Content cut.
+active pin and supersession row in a restored Content owner before
+`reconcile.ts` releases its restore hold; the graph erasure is replayed first,
+and an unavailable or different receipt keeps that restore held. A replacement
+publication yields a new projection; a lost index is replayed by
+`yarn search:rebuild` from the retained Content cut.
 Both offline Lucene rebuild paths use `ErasureTextIndexer` to register the
 server's filtered-graph text assembler before opening the candidate index.
 
@@ -74,7 +74,7 @@ Cost: preflight and Content erase touch at most 64 exact revisions and their
 preparations; the graph command inventories at most 64 indexed units and makes
 at most three bounded attempts. Five fixed graph copy domains add constant
 relay registration work. Projection replay checks one supersession per old
-active event. Restore reconciliation uses one indexed anti-join per journal
+active event. Restore reconciliation uses two indexed probes per journal
 entry, with at most 64 target revisions, and reads no Content bodies for that
 proof. The offline sanitizer copies and compacts the complete TDB2
 dataset and rebuilds Lucene once, so it scales with stored bytes and requires
