@@ -94,9 +94,12 @@ const evidence: Record<string, unknown> = { acceptanceIds: ['OPS05', 'SEARCH18']
   searchLimits: { fusekiCalls: MAX_SEARCH_FUSEKI_CALLS, fusekiResponseBytes: MAX_SEARCH_FUSEKI_BYTES,
     perResponseBytes: MAX_SEARCH_RESPONSE_BYTES, totalRemoteAttempts: 90,
     requestDeadlineMs: 1500, phraseCandidates: 512, publicUnits: 20_000 },
-  images: { k6: 'grafana/k6:2.3.0', fuseki: fusekiImage.image }, clients: 10,
-  offeredMix: { publicReads: 0.8, admittedWrites: 0.2, hotWorkCohort: 0.1,
-    hotReadShare: 0.5, hotRequestShare: 0.5 },
+  images: { k6: 'grafana/k6:2.3.0', fuseki: fusekiImage.image }, clients: phaseD ? 16 : 10,
+  offeredMix: { publicReads: 0.8, admittedWrites: 0.2,
+    ...(phaseD ? { readRatePerSecond: 4, writeRatePerSecond: 1,
+      writeKindCycle: ['selection', 'edit', 'rating'] } : {}),
+    hotWorkCohort: 0.1, hotReadShare: 0.5,
+    ...(!phaseD ? { hotRequestShare: 0.5 } : {}) },
   source: 'authorized product commands with Access register/claim/seal',
   startedAt: new Date().toISOString() };
 let main: ChildProcess | undefined, relay: ChildProcess | undefined;
@@ -410,6 +413,8 @@ function stackCommand(action: 'stack:down' | 'stack:up', name: string) {
 }
 
 interface PreparedSelection { contribution: string; publicationDecision: string }
+interface SelectionTrace { accessBeforeMs: number; selectionMs: number; accessAfterMs: number;
+  fuseki: { operation: 'query' | 'command'; ms: number }[] }
 
 async function prepareSelection(authority: LoadAuthority, item: PracticalCorpus['works'][number],
   iteration: number): Promise<PreparedSelection> {
@@ -428,14 +433,40 @@ async function prepareSelection(authority: LoadAuthority, item: PracticalCorpus[
 }
 
 async function selectPreparedContribution(corpus: PracticalCorpus, authority: LoadAuthority,
-  index: number, prepared: PreparedSelection) {
+  index: number, prepared: PreparedSelection, trace?: SelectionTrace) {
   const item = corpus.works[index]!;
   const selectionInput = { context: { kind: 'main-version-default' as const, id: item.main },
     work: item.work, contribution: prepared.contribution,
     publicationDecision: prepared.publicationDecision, expectedSelectionHead: item.selection,
     selectionBasis: 'main-maintainer' as const, actingSubject: authority.actor };
+  const started = performance.now();
+  let selectedAt = 0;
+  let selectionDoneAt = 0;
+  const tracedFuseki = Object.create(env.fuseki) as FusekiClient;
+  if (trace) {
+    tracedFuseki.query = async (sparql, maxResponseBytes) => {
+      const before = performance.now();
+      try { return await env.fuseki.query(sparql, maxResponseBytes); }
+      finally { trace.fuseki.push({ operation: 'query', ms: performance.now() - before }); }
+    };
+    tracedFuseki.commandWithReceipt = async envelope => {
+      const before = performance.now();
+      try { return await env.fuseki.commandWithReceipt(envelope); }
+      finally { trace.fuseki.push({ operation: 'command', ms: performance.now() - before }); }
+    };
+  }
   const selected = await authority.run(`publication:select:${item.main}`, 'publication.select',
-    mainSelectionDigest(selectionInput), admission => selectMainDefault(env, admission, selectionInput));
+    mainSelectionDigest(selectionInput), async admission => {
+      selectedAt = performance.now();
+      try { return await selectMainDefault(trace ? { ...env, fuseki: tracedFuseki } : env,
+        admission, selectionInput); }
+      finally { selectionDoneAt = performance.now(); }
+    });
+  if (trace) {
+    trace.accessBeforeMs = selectedAt - started;
+    trace.selectionMs = selectionDoneAt - selectedAt;
+    trace.accessAfterMs = performance.now() - selectionDoneAt;
+  }
   if (!selected.selection) throw new Error('mixed Main selection missing');
   item.selection = selected.selection;
   item.selectionReceipt = selected.receipt;
@@ -454,17 +485,13 @@ async function prepareMixedSelections(corpus: PracticalCorpus, authority: LoadAu
   const started = performance.now();
   const candidates = (corpus.writableIndices ?? corpus.works.map((_, index) => index))
     .filter(index => index >= 4 && index !== 7);
-  // The 550 ms writer pause caps iterations during this 20-second mix. Prepare
-  // the Contribution and publication prerequisites before timing selection.
-  const iterations = Math.ceil(durationSeconds * 1000 / 550);
-  for (let worker = 0; worker < 2; worker++) {
-    const own = writerCohorts(candidates.filter((_, offset) => offset % 2 === worker),
-      Math.max(1, Math.floor(count / 10)));
-    for (let iteration = 0; iteration < iterations; iteration += 20) {
-      const index = writerIndex(own, iteration).index;
-      prepared.set(`${worker}:${iteration}`, await prepareSelection(authority,
-        corpus.works[index]!, worker * 100_000 + iteration));
-    }
+  // One write arrival per second, with each kind offered every third slot.
+  // All prerequisites are created before the measured interval.
+  const offers = durationSeconds;
+  for (let slot = 0; slot < offers; slot += 3) {
+    const index = candidates[slot % candidates.length]!;
+    prepared.set(String(slot), await prepareSelection(authority,
+      corpus.works[index]!, slot));
   }
   await waitRelay();
   evidence.selectionPreparation = { contributions: prepared.size,
@@ -478,61 +505,97 @@ async function mixedWriters(corpus: PracticalCorpus, authority: LoadAuthority, u
     .filter(index => index >= 4 && index !== 7);
   const samples = { edit: [] as number[], selection: [] as number[], rating: [] as number[],
     errors: [] as string[], receipts: 0, hotWrites: 0 };
+  const selectionTraces: (SelectionTrace & { totalMs: number })[] = [];
+  let offered = 0;
+  let maxScheduleLagMs = 0;
+  let maxQueueMs = 0;
   const ratingHeads = new Map<number, string>();
+  const runOperation = async (worker: number, iteration: number, index: number,
+    kind: 'edit' | 'selection' | 'rating', hot: boolean, offeredAt: number) => {
+    const item = corpus.works[index]!;
+    maxQueueMs = Math.max(maxQueueMs, performance.now() - offeredAt);
+    try {
+      if (kind === 'selection') {
+        const prepared = preparedSelections.get(phaseD ? String(iteration) : `${worker}:${iteration}`);
+        if (phaseD && !prepared) throw new Error('Phase-D selection prerequisite was not prepared');
+        if (prepared) {
+          const trace: SelectionTrace = { accessBeforeMs: 0, selectionMs: 0,
+            accessAfterMs: 0, fuseki: [] };
+          await selectPreparedContribution(corpus, authority, index, prepared, phaseD ? trace : undefined);
+          if (phaseD) selectionTraces.push({ ...trace, totalMs: performance.now() - offeredAt });
+        } else await writeSelection(corpus, authority, index, worker * 100_000 + iteration);
+      } else if (kind === 'rating') {
+        const input = { context: corpus.ratingContext, work: item.work,
+          mainVersion: item.main, expectedRevisionHead: ratingHeads.get(index) ?? null,
+          value: 1 + iteration % 10, actingSubject: authority.actor };
+        const receipt = await authority.run(`rating:observe:${corpus.ratingContext}`,
+          'rating.observation.set', standingRatingDigest(input),
+          admission => setStandingRating(env, admission, input));
+        if (!receipt.revision) throw new Error('mixed rating lacks revision');
+        ratingHeads.set(index, receipt.revision);
+      } else {
+        const title = `Load Work ${index} edit ${worker}-${iteration}`;
+        const head = item.head;
+        const receipt = await authority.run(`work:edit:${item.work}`, 'work.edit',
+          metadataWorkEditDigest(item.work, head, title),
+          admission => editMetadataWork(env, { work: item.work, expectedHead: head,
+            title, admission }));
+        item.head = receipt.revision;
+        item.editReceipt = receipt.receipt;
+      }
+      samples[kind].push(performance.now() - offeredAt);
+      samples.receipts++;
+      if (hot) samples.hotWrites++;
+    } catch (error) {
+      samples.errors.push(error instanceof Error ? error.message : String(error));
+    }
+  };
+  if (phaseD) {
+    const start = performance.now();
+    const pending: Promise<void>[] = [];
+    const perWork = new Map<number, Promise<void>>();
+    for (let slot = 0; slot < durationSeconds; slot++) {
+      const due = start + slot * 1000;
+      await Bun.sleep(Math.max(0, due - performance.now()));
+      const offeredAt = performance.now();
+      maxScheduleLagMs = Math.max(maxScheduleLagMs, offeredAt - due);
+      const index = candidates[slot % candidates.length]!;
+      const kind = slot % 3 === 0 ? 'selection' : slot % 3 === 1 ? 'edit' : 'rating';
+      const prior = perWork.get(index) ?? Promise.resolve();
+      const next = prior.then(() => runOperation(slot % 2, slot, index, kind,
+        index < Math.max(1, Math.floor(count / 10)), offeredAt));
+      perWork.set(index, next);
+      pending.push(next);
+      offered++;
+    }
+    await Promise.all(pending);
+  } else {
   const runWorker = async (worker: number) => {
     const own = writerCohorts(candidates.filter((_, offset) => offset % 2 === worker),
       Math.max(1, Math.floor(count / 10)));
     let iteration = 0;
     while (Date.now() < until) {
       const choice = writerIndex(own, iteration);
-      const index = choice.index;
-      const item = corpus.works[index]!;
       const kind = iteration % 20 === 0 ? 'selection'
         : iteration % 10 === 0 ? 'rating' : 'edit';
-      const start = performance.now();
-      try {
-        if (kind === 'selection') {
-          const prepared = preparedSelections.get(`${worker}:${iteration}`);
-          if (phaseD && !prepared) throw new Error('Phase-D selection prerequisite was not prepared');
-          if (prepared) await selectPreparedContribution(corpus, authority, index, prepared);
-          else await writeSelection(corpus, authority, index, worker * 100_000 + iteration);
-        }
-        else if (kind === 'rating') {
-          const input = { context: corpus.ratingContext, work: item.work,
-            mainVersion: item.main, expectedRevisionHead: ratingHeads.get(index) ?? null,
-            value: 1 + iteration % 10, actingSubject: authority.actor };
-          const receipt = await authority.run(`rating:observe:${corpus.ratingContext}`,
-            'rating.observation.set', standingRatingDigest(input),
-            admission => setStandingRating(env, admission, input));
-          if (!receipt.revision) throw new Error('mixed rating lacks revision');
-          ratingHeads.set(index, receipt.revision);
-        } else {
-          const title = `Load Work ${index} edit ${worker}-${iteration}`;
-          const head = item.head;
-          const receipt = await authority.run(`work:edit:${item.work}`, 'work.edit',
-            metadataWorkEditDigest(item.work, head, title),
-            admission => editMetadataWork(env, { work: item.work, expectedHead: head,
-              title, admission }));
-          item.head = receipt.revision;
-          item.editReceipt = receipt.receipt;
-        }
-        samples[kind].push(performance.now() - start);
-        samples.receipts++;
-        if (choice.hot) samples.hotWrites++;
-      } catch (error) {
-        samples.errors.push(error instanceof Error ? error.message : String(error));
-      }
+      await runOperation(worker, iteration, choice.index, kind, choice.hot, performance.now());
       iteration++;
       await Bun.sleep(550);
     }
   };
   await Promise.all([runWorker(0), runWorker(1)]);
+  }
   return { counts: { edit: samples.edit.length, selection: samples.selection.length,
     rating: samples.rating.length, errors: samples.errors.length, hotWrites: samples.hotWrites },
+    arrival: { offered, ratePerSecond: phaseD ? 1 : null, maxScheduleLagMs, maxQueueMs },
+    selectionTraces,
     errorSamples: samples.errors.slice(0, 10),
-    latencyMs: { edit: { p95: percentile(samples.edit, 0.95), p99: percentile(samples.edit, 0.99) },
-      selection: { p95: percentile(samples.selection, 0.95), p99: percentile(samples.selection, 0.99) },
-      rating: { p95: percentile(samples.rating, 0.95), p99: percentile(samples.rating, 0.99) } } };
+    latencyMs: Object.fromEntries((['edit', 'selection', 'rating'] as const).map(kind =>
+      [kind, { count: samples[kind].length, min: Math.min(...samples[kind]),
+        median: percentile(samples[kind], 0.5), p95: percentile(samples[kind], 0.95),
+        p99: percentile(samples[kind], 0.99), max: Math.max(...samples[kind]) }])) as Record<
+          'edit' | 'selection' | 'rating', { count: number; min: number; median: number;
+            p95: number | null; p99: number | null; max: number }> };
 }
 
 async function runK6(corpus: PracticalCorpus, authority: LoadAuthority) {
@@ -558,6 +621,7 @@ async function runK6(corpus: PracticalCorpus, authority: LoadAuthority) {
     '--volume', `${artifacts}:/artifacts:Z`,
     '--env', `MAIN_BASE_URL=http://${loopback.host}:${needed('MAIN_PORT')}`,
     '--env', `DURATION_SECONDS=${durationSeconds}`, '--env', `WORKS=${count}`,
+    '--env', `PHASE_D=${phaseD ? 1 : 0}`,
     'grafana/k6:2.3.0', 'run', '--summary-export=/artifacts/k6-summary.json',
     '/scripts/practical.js'], { cwd: root, env: docker, stdio: ['ignore', fd, fd] });
   closeSync(fd);
@@ -597,6 +661,7 @@ async function runK6(corpus: PracticalCorpus, authority: LoadAuthority) {
   const writeCount = writer.counts.edit + writer.counts.selection + writer.counts.rating;
   const completed = reads + writeCount;
   const metrics = { reads, writes: writeCount, completed,
+    droppedReadArrivals: m.dropped_iterations?.count ?? 0,
     readShare: completed ? reads / completed : null,
     hotReadShare: reads ? hotReads / reads : null,
     hotRequests: hotReads + writer.counts.hotWrites,
@@ -610,9 +675,10 @@ async function runK6(corpus: PracticalCorpus, authority: LoadAuthority) {
     writer };
   const hostThresholds = (count === 10_000 && durationSeconds === 180)
     || (backgroundPublicUnits + count >= 10_000 && durationSeconds === 180);
-  evidence.hostThresholds = { enabled: hostThresholds,
+  evidence.hostThresholds = { enabled: hostThresholds || phaseD,
     readP95Ms: 1500, laneReadP95Ms: 1500, writeP95Ms: 2500,
-    minimumCompleted: 300, failedHttpRate: 0, checkRate: 1,
+    minimumCompleted: 300, minimumSamplesPerWriteKind: phaseD ? 20 : 1,
+    failedHttpRate: 0, checkRate: 1,
     serverErrorRate: 0, relayBacklogMustNotGrow: true };
   const recordedLatency = [metrics.readP95Ms, metrics.readP99Ms,
     ...[writer.latencyMs.edit, writer.latencyMs.selection, writer.latencyMs.rating]
@@ -622,11 +688,14 @@ async function runK6(corpus: PracticalCorpus, authority: LoadAuthority) {
   if (status !== 0 || writer.counts.errors || lagErrors.length
     || metrics.failedHttpRate !== 0 || metrics.checkRate !== 1
     || metrics.serverErrorRate !== 0 || !completed || metrics.readShare === null
+    || phaseD && (metrics.droppedReadArrivals !== 0 || writer.arrival.offered !== durationSeconds
+      || Math.abs(reads - durationSeconds * 4) > 1 || writeCount !== durationSeconds
+      || writer.counts.edit < 20 || writer.counts.selection < 20 || writer.counts.rating < 20)
     || metrics.readShare < 0.7 || metrics.readShare > 0.9
     || metrics.hotReadShare === null || metrics.hotReadShare < 0.45 || metrics.hotReadShare > 0.55
     || hostThresholds && (metrics.hotRequestShare === null
       || metrics.hotRequestShare < 0.45 || metrics.hotRequestShare > 0.55)
-    || hostThresholds && (!recordedLatency || !writer.counts.edit || !writer.counts.selection
+    || (hostThresholds || phaseD) && (!recordedLatency || !writer.counts.edit || !writer.counts.selection
       || !writer.counts.rating || trend.growingAtEnd || completed < 300
       || (metrics.readP95Ms ?? Infinity) > 1500
       || !laneReadP95Within(metrics.laneLatency, 1500)
@@ -682,7 +751,7 @@ try {
     backgroundWorks, startIndex };
   if (phaseD) {
     evidence.qualification = {
-      scope: '100,000 restored Works, 10,000 restored public units, ten fresh command Works, eight read clients and two admitted writers',
+      scope: '100,000 restored Works, 10,000 restored public units, ten fresh command Works, four scheduled reads and one admitted write per second',
       durationSeconds, host: 'development host; observed resources and latency only',
       excludes: '180-second sustained profile and 20,000-unit public search scale',
     };

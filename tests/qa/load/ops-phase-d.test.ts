@@ -13,8 +13,8 @@ test('OPS05: named 100k host mix records latency, relay lag, memory and storage 
   const fixture = phaseDFixture('OPS05');
   const artifacts = join(Bun.env.REZICS_QA_ARTIFACT_DIR, 'ops-phase-d');
   mkdirSync(artifacts, { recursive: true });
-  const result = spawnSync('bun', ['scripts/load/practical.ts', '10', '20', artifacts, '1'], {
-    cwd: root, encoding: 'utf8', timeout: 155_000,
+  const result = spawnSync('bun', ['scripts/load/practical.ts', '10', '63', artifacts, '1'], {
+    cwd: root, encoding: 'utf8', timeout: 220_000,
     env: { ...process.env, ...fixture.apps,
       REZICS_LOAD_RUN_ID: `load-${Bun.env.REZICS_QA_RUN_ID}`,
       REZICS_LOAD_STACK_RUN_ID: fixture.runId,
@@ -35,8 +35,8 @@ test('OPS05: named 100k host mix records latency, relay lag, memory and storage 
   expect(result.error?.message).toBeUndefined();
   expect(evidence.failure).toBeUndefined();
   expect(result.status).toBe(0);
-  expect(evidence.qualification?.durationSeconds).toBe(20);
-  expect(evidence.selectionPreparation?.contributions).toBeGreaterThan(0);
+  expect(evidence.qualification?.durationSeconds).toBe(63);
+  expect(evidence.selectionPreparation?.contributions).toBe(21);
   expect(evidence.selectionPreparation?.elapsedMs).toBeGreaterThan(0);
   expect(evidence.selectionPreparation?.outsideMix).toBe(true);
   expect(evidence.mixed?.reads).toBeGreaterThan(0);
@@ -51,4 +51,4 @@ test('OPS05: named 100k host mix records latency, relay lag, memory and storage 
   expect(evidence.memoryAfterRecovery?.postgres).toBeDefined();
   expect(evidence.storageRecoveryMs).toBeGreaterThan(0);
   expect(evidence.storageRecoveryMs).toBeLessThanOrEqual(90_000);
-}, 170_000);
+}, 230_000);

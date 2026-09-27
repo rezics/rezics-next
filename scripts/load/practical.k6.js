@@ -21,13 +21,16 @@ const readLatency = {
 };
 const serverErrors = new Rate('practical_server_errors');
 const seconds = Number(__ENV.DURATION_SECONDS);
+const phaseD = __ENV.PHASE_D === '1';
 const full = Number(__ENV.WORKS) === 10000 && seconds === 180;
 let failureSamples = 0;
 
 export const options = {
   summaryTrendStats: ['avg', 'min', 'med', 'max', 'p(90)', 'p(95)', 'p(99)'],
-  scenarios: { practical_public_reads: { executor: 'constant-vus', vus: 8,
-    duration: `${seconds}s`, gracefulStop: '5s' } },
+  scenarios: { practical_public_reads: phaseD
+    ? { executor: 'constant-arrival-rate', rate: 4, timeUnit: '1s',
+      preAllocatedVUs: 16, maxVUs: 32, duration: `${seconds}s`, gracefulStop: '10s' }
+    : { executor: 'constant-vus', vus: 8, duration: `${seconds}s`, gracefulStop: '5s' } },
   thresholds: {
     http_req_failed: ['rate==0'], checks: ['rate==1'],
     http_req_duration: [`p(95)<${full ? 1500 : 2500}`],
@@ -73,5 +76,5 @@ export default function () {
     case: item.name, status: response.status, body: response.body?.slice(0, 500),
     expectedWork: item.expectedWork, expectedPopulation: item.lane === 'content'
       ? fixture.contentPopulation : fixture.graphPopulation }));
-  sleep(0.55);
+  if (!phaseD) sleep(0.55);
 }

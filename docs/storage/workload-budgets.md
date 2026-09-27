@@ -525,3 +525,61 @@ This qualification covers the named 20-second host mix and 10,000 public
 MatchUnits. It does not claim the older 180-second sustained capacity profile
 or a 20,000-unit search corpus. The manager's clean full backend run remains the
 final acceptance gate.
+
+### Stable OPS05 arrival-rate measurement (2026-09-27)
+
+Record run 5 (`20260927t071628-ff07f0`) exposed a sampling defect in the
+20-second mix: closed-loop writers completed only two selection writes, so the
+reported 2,717 ms p95 was their maximum. The 264 reads and 28 writes also
+produced a 90.4% read share and only 292 completed requests. Selection's
+draft and publication prerequisites were already outside the timed interval.
+
+The revised fixture-backed Phase D profile offers four public reads and one
+admitted write per second for 63 seconds, independent of observed latency.
+Selection, Work metadata edit and standing rating rotate through the write
+slots, yielding 21 samples of each kind before any write p95 is compared.
+Twenty-one published selection prerequisites are prepared before the mix (18.4,
+19.0 and 19.0 seconds in the three runs). Writes targeting the same Work are
+serialized, with time in that queue included in request latency. The 10 fresh
+command Works and 100,000 restored Works are read against 10,000 restored public
+MatchUnits. k6 recorded 253 reads in each run, one more than the nominal 252
+at its scheduling boundary, with zero dropped arrivals. All 63 writes completed
+in each run: 316 requests, 80.06% reads and zero HTTP or writer errors. The
+unchanged objectives remain 70–90% reads, at least 300 completed requests,
+read p95 at most 1,500 ms, each write-kind p95 at most 2,500 ms, no growing
+relay backlog and storage recovery within 90 seconds.
+
+| Load-tier run | Tier time | Read p95 | Edit median / p95 | Selection median / p95 | Rating median / p95 | Recovery |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| `20260927t081313-6acb60` | 214.4 s | 366 ms | 479 / 942 ms | 502 / 756 ms | 424 / 697 ms | 21.0 s |
+| `20260927t082537-290a9f` | 220.1 s | 447 ms | 486 / 1,005 ms | 498 / 878 ms | 408 / 585 ms | 22.2 s |
+| `20260927t083748-b28663` | 236.7 s | 440 ms | 483 / 666 ms | 512 / 1,002 ms | 415 / 566 ms | 23.9 s |
+
+All ten tests passed in each registered load tier, with stable source and a
+240-second test budget. Main, Realm and Content lane read p95 values stayed
+between 247 and 458 ms. Relay lag peaked at one batch and ended at zero in
+each run. Main process high-water memory was 147,300–150,588 KiB; Fuseki
+cgroup peaks were 3.12–3.34 GB and PostgreSQL cgroup peaks 133.9–137.8 MB.
+The containers had no explicit cgroup memory limit, so these are usage samples.
+The third tier's 236.7 seconds leaves 3.3 seconds of test-budget margin on
+this host; fixture preparation is separately limited to 600 seconds.
+
+Per-selection timing points to the Fuseki command path as the dominant source
+of the earlier 1.2–2.7 second tail, although the two original commands were
+not separately traced. Across the three passing runs, median
+Fuseki command time was 406–417 ms and command p95 was 663–925 ms. Traced
+Fuseki calls accounted for 91.6–92.5% of median selection execution time;
+median Access work was 23–25 ms before the command and 9–11 ms after it.
+Per-Work queue delay stayed below 0.4 ms. The command module executes the
+guarded graph update, validation, public-search delta and commit in one WRITE
+transaction; the client trace cannot split those internal stages further.
+Relay processing follows the selection response. A diagnostic offer of two
+writes per second (`20260927t074918-8053f5`) did saturate the graph path:
+queue delay reached 5.35 seconds and 14 of 360 reads returned 503. The
+observed one-write-per-second profile had neither symptom. No product-side
+sleep or redundant fence was identified to remove.
+
+These runs qualify the named 63-second mix on this host and the restored
+10,000-unit public corpus. They do not qualify the separate 180-second
+sustained profile or 20,000-unit search scale. Final backend acceptance still
+belongs to the manager's clean recorded run.
