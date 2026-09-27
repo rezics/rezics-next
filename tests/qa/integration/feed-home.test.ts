@@ -9,6 +9,8 @@ import { AccountAssertionDenied } from '../../../services/main/src/modules/accou
 import { AgentProvisioning } from '../../../services/main/src/modules/agent/provision.ts';
 import { FeedStore } from '../../../services/main/src/modules/feed/store.ts';
 import { HomePersonalStore } from '../../../services/main/src/modules/feed/personal.ts';
+import { RankingHomeTrendingReader } from '../../../services/main/src/modules/feed/trending.ts';
+import { ReadRankingProjection, rankingBuckets } from '../../../services/main/src/modules/rankings/projection.ts';
 import { FeedRefreshWorker } from '../../../services/main/src/modules/feed/refresh.ts';
 import type { FeedItem, FeedVoteResult } from '../../../services/main/src/modules/feed/contract.ts';
 import { FollowsStore } from '../../../services/main/src/modules/follows/store.ts';
@@ -169,6 +171,23 @@ test('G282: follows and home feed use real receipts, relay progress, public read
     expect(all.items.every(item => item.group.count === 1 && item.group.actors.length === 1 && item.primaryAction.kind
       && item.viewerState.status === 'anonymous' && item.reason.kind === 'recommended')).toBe(true);
     expect(all.ranking).toMatchObject({ version: 'home-best-v1', decayHours: 24 });
+    const trendingProjection = new ReadRankingProjection(stack.accessPool, stack.content,
+      stack.contentPool, stack.env);
+    for (let attempt = 0; attempt < 100 && await trendingProjection.tick(); attempt++) { /* bounded source catch-up */ }
+    const trendCheckpoint = await trendingProjection.current();
+    await stack.accessPool.query(`INSERT INTO access.read_ranking_score
+      (generation, metric, interval, bucket, work, score, growth)
+      VALUES ($1,'reads','day',$2,$3,5,5)`, [trendCheckpoint.generation,
+      rankingBuckets(new Date(), 'day').current, first.work]);
+    Object.assign(deps, { homeTrending: new RankingHomeTrendingReader(trendingProjection) });
+    const publicTrend = await json<{ items: { work: string; realm: string; reason: string }[] }>(
+      await call('GET', '/v1/trending?scope=global&window=day'));
+    expect(publicTrend.items).toEqual([expect.objectContaining({ work: first.work,
+      realm: realm.realm, reason: 'growth-in-realm' })]);
+    expect(await json<{ items: { work: string }[] }>(await call('GET',
+      `/v1/trending?scope=followed&window=day&actingSubject=${encodeURIComponent(reader)}`, undefined, b.token)))
+      .toMatchObject({ items: [{ work: first.work }] });
+    expect((await call('GET', '/v1/trending?kind=adoption')).status).toBe(400);
     expect(firstItem.card.kind).toBe('work');
     expect(firstItem.primaryAction).toEqual({ kind: 'want-to-read', work: first.work });
     expect(followed.items.every(item => item.viewerState.status === 'unavailable')).toBe(true);
@@ -187,9 +206,19 @@ test('G282: follows and home feed use real receipts, relay progress, public read
     expect((await call('PUT', preferencesPath, settings, b.token)).status).toBe(409);
     expect(await json(await call('GET', `/v1/feed?${authQuery}`, undefined, b.token)))
       .toMatchObject({ scope: 'all', sort: 'new' });
+    expect(await json<{ items: unknown[] }>(await call('GET',
+      `/v1/trending?scope=global&window=day&${authQuery}`, undefined, b.token)))
+      .toMatchObject({ items: [] });
     await json(await call('PUT', preferencesPath, { actingSubject: reader,
       expectedRevision: savedSettings.revision, preferences: {
         tab: 'following', sort: 'best', density: 'card', contentLanguages: [], recommendations: true } }, b.token));
+    await json(await call('PUT', '/v1/me/mutes', {
+      actingSubject: reader, kind: 'realm', target: realm.realm, strength: 'mute' }, b.token));
+    expect(await json<{ items: unknown[] }>(await call('GET',
+      `/v1/trending?scope=followed&window=day&actingSubject=${encodeURIComponent(reader)}`, undefined, b.token)))
+      .toMatchObject({ items: [] });
+    await json(await call('PUT', '/v1/me/mutes', {
+      actingSubject: reader, kind: 'realm', target: realm.realm, strength: 'clear' }, b.token));
     const headBefore = await json<{ newPosts: { value: number } }>(await call('GET',
       `/v1/feed/head?scope=all&after=0&${authQuery}`, undefined, b.token));
     expect(headBefore.newPosts.value).toBeGreaterThan(0);
@@ -223,6 +252,7 @@ test('G282: follows and home feed use real receipts, relay progress, public read
     const interests = await json<{ kinds: { id: string; available: boolean }[];
       topicsStatus: string; topics: unknown[] }>(await call('GET', '/v1/onboarding/interests?locale=en'));
     expect(interests.kinds.map(item => item.id)).toEqual(['books', 'software', 'ai', 'recipes', 'media', 'discussions']);
+    expect(interests.kinds.map(item => item.available)).toEqual([true, false, false, true, false, false]);
     expect(interests).toMatchObject({ topicsStatus: 'empty', topics: [] });
     const suggested = await json<{ items: { id: string; realm: string; sampleWorks: { id: string }[] }[] }>(
       await call('GET', '/v1/onboarding/suggested-follows?locale=en'));
@@ -527,7 +557,6 @@ test('G282: follows and home feed use real receipts, relay progress, public read
     expect(distantFeed.items.find(item => item.target.work === second.work && item.card.kind === 'chapter'))
       .toMatchObject({ primaryAction: { kind: 'next-unread', occurrence: distant },
         viewerState: { progress: { occurrence: distant } } });
-    expect((await call('GET', '/v1/trending')).status).toBe(503);
 
     // Hub cards expose exact public previews and declared compatibility, never
     // a private draft or guessed version/changelog metadata.

@@ -6,7 +6,7 @@ import { exclusionCommand, exclusionKind, homePreferences, preferencesCommand, w
 import { HOME_COST } from '../modules/feed/personal.ts';
 import { admitFeedVote, readFeed } from '../modules/feed/read.ts';
 import { readNewSince } from '../modules/feed/new-since.ts';
-import { trendingQuery, trendingResult } from '../modules/feed/trending.ts';
+import { TRENDING_COST, trendingQuery, trendingResult } from '../modules/feed/trending.ts';
 import { readId, readUuid } from '../modules/work/read-contract.ts';
 import { workRead, WorkReadLimit, WorkReadUnavailable } from '../modules/work/read-session.ts';
 import type { MainWorkDependencies } from './dependencies.ts';
@@ -156,8 +156,14 @@ export function feedRoutes(work: MainWorkDependencies) {
       }
       if (scope === 'followed' && !principal) throw new ControlInvalid('Following requires authentication');
       if (!work.homeTrending) throw new WorkReadUnavailable('Trending projection is unavailable');
-      return Response.json(await work.homeTrending.read({ query, principal,
-        agent: query.actingSubject ?? null }), { headers: homeHeaders });
+      const result = await workRead(work, new Request(request.url, { headers: request.headers }),
+        { actingSubject: query.actingSubject }, session => work.homeTrending!.read(session,
+          { query, principal, agent: query.actingSubject ?? null }));
+      const body = JSON.stringify(result);
+      if (Buffer.byteLength(body) > TRENDING_COST.responseBytes) {
+        throw new WorkReadLimit('Trending response budget exceeded');
+      }
+      return new Response(body, { headers: { ...homeHeaders, 'content-type': 'application/json' } });
     } catch (error) { return homeError(error); }
   }).get('/v1/me/feed-watermarks', { query: privateQuery,
     response: { 200: watermarksResult, ...workReadProblems },

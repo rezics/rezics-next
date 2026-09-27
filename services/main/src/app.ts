@@ -140,11 +140,9 @@ function domainRoutes(fuseki: FusekiClient, work: SearchRouteDependencies) {
     .use(rankingRoutes(work))
     .use(realmDirectoryRoutes(work));
     .use(realmDirectoryRoutes(work))
-    .use(workContentsRoutes(work));
     .use(workContentsRoutes(work))
     .use(continueRoutes(work))
-    .use(onboardingInterestsRoutes(work))
-    .use(workActivityRoutes(work));
+    .use(onboardingInterestsRoutes(work));
 }
 
 function extraRoutes1(fuseki: FusekiClient, work: SearchRouteDependencies) {

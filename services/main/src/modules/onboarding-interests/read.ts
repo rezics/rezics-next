@@ -14,6 +14,10 @@ import { ONBOARDING_COST } from './contract.ts';
 
 const kinds: HomeInterestKind[] = ['books', 'software', 'ai', 'recipes', 'media', 'discussions'];
 const languages = ['en', 'zh-Hant', 'zh-Hans', 'ja', 'ko', 'de', 'fr', 'es'];
+// Native Work types distinguish Book and Recipe. DigitalDocument cannot split
+// software, AI or discussions; Hub SkillPackage/PromptTemplate are narrower
+// artifacts, and Video/Audio card hints are not admitted Work creation types.
+// Classification Senses have no controlled mapping to these six kind IDs.
 const typeFor = (kind: HomeInterestKind) => kind === 'books' ? 'https://schema.org/Book'
   : kind === 'recipes' ? 'https://schema.org/Recipe' : null;
 export function parseChoices(value: string | undefined, allowed: readonly string[], maximum: number) {
