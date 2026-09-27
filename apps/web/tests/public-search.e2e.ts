@@ -11,6 +11,9 @@ test('search keeps phrase, scope and filters in the URL and states what it searc
   await page.goto('/en/search');
   await expect(results(page)).toContainText('Enter at least two characters to search.');
   await expect(form(page).getByRole('combobox', { name: 'Search in' })).toHaveValue('global');
+  // Submit once React owns the form, which normalizes the phrase; before that the browser submits it natively.
+  await page.waitForFunction(() => Object.keys(document.querySelector('input[name="q"]') ?? {})
+    .some(key => key.startsWith('__react')));
   await form(page).getByRole('searchbox', { name: 'Search phrase' }).fill('  river  ');
   await form(page).getByRole('button', { name: 'Search', exact: true }).click();
   await expect(page).toHaveURL(/\/en\/search\?q=river$/);

@@ -44,7 +44,7 @@ function Overview({ work, agentCredits, credits, scope, realms, ratings, classif
       adoption={view ? <AdoptionRegion adoptions={adoptions} view={view} locale={locale} messages={t} /> : null}
       record={<WorkRecord work={work} locale={locale} messages={t}
         citation={`${work.title.value}. Maren Osei. REZICS. https://rezics.com/${locale}/w/${fixture.workRef}`} />}
-      author={author ? <AuthorSection credit={author} works={fixture.agentWorks} work={work.id} locale={locale}
+      author={author ? <AuthorSection credit={author} works={fixture.agentWorks} work={fixture.workRef} locale={locale}
         messages={t} /> : null} />
   </WorkFrame>;
 }

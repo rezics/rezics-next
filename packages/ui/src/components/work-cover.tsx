@@ -88,8 +88,9 @@ const upright = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}]/u;
  * thread-bound book; longer ones and Korean run horizontally.
  */
 export function uprightTitle(title: string): boolean {
-  const characters = [...title.replace(/[\s·・。，、]/gu, '')];
-  return characters.length > 0 && characters.length <= 8 && characters.every(character => upright.test(character));
+  const characters = [...title.replace(/\s/gu, '')];
+  // A slip holds a short name; separators such as "·" mark a longer, compound title that reads better across.
+  return characters.length > 0 && characters.length <= 6 && characters.every(character => upright.test(character));
 }
 
 const longestWord = (title: string) => Math.max(0, ...title
@@ -196,7 +197,8 @@ function BookDesign({ title, lang, dir, authors, swatch, layout }: DesignProps) 
       <div className="absolute top-[8%] left-[11%] hidden border px-[3.5%] py-[5%] @min-[4.5rem]:block"
         style={{ background: 'oklch(0.95 0.02 85)', color: 'oklch(0.22 0.02 260)', borderColor: 'oklch(0.22 0.02 260 / 0.45)' }}>
         <p lang={lang} className="font-semibold font-work-title leading-none tracking-[0.18em] [text-orientation:upright]
-          [writing-mode:vertical-rl]" style={{ fontSize: `${[...title].length <= 4 ? 12 : 10}cqw` }}>{title}</p>
+          [writing-mode:vertical-rl]" style={{ fontSize: `${[...title.replace(/\s/gu, '')].length <= 4 ? 12 : 10}cqw` }}>
+          {title.replace(/\s/gu, '')}</p>
       </div>
       <Authors authors={authors} lang={lang} className="absolute inset-x-[11%] bottom-[8%]" />
       <Spine side="right" />

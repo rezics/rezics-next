@@ -149,6 +149,8 @@ export const CJK: Story = {
   async play({ canvasElement }) {
     await expect(uprightTitle('西游记')).toBe(true);
     await expect(uprightTitle('채식주의자')).toBe(false);
+    // A compound title with a separator runs across rather than overfilling a slip.
+    await expect(uprightTitle('雨夜书店 · 连载小说')).toBe(false);
     const journey = within(canvasElement).getByText('西游记');
     await expect(getComputedStyle(journey).writingMode).toBe('vertical-rl');
     // Korean covers set the title horizontally, as modern Korean books do.

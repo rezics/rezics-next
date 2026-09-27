@@ -14,11 +14,12 @@ import type { AgentCredit, AgentWorksPage, Loaded } from './types.ts';
  * quietly: the section is an invitation, not the Work's record.
  */
 export function AuthorSection({ credit, works, work, avatarQuery, locale, messages }: {
+  /** The Work being shown, as an IRI or its UUID; it is not offered again. */
   credit: AgentCredit; works: Loaded<AgentWorksPage>; work: string; avatarQuery?: string; locale: UiLocale;
   messages: WorkPageMessages;
 }) {
   const t = materializeData(messages, { locale });
-  const others: CatalogueWork[] = works.ok ? works.data.items.filter(item => item.id !== work).map(item => ({
+  const others: CatalogueWork[] = works.ok ? works.data.items.filter(item => item.id.slice(-36) !== work.slice(-36)).map(item => ({
     id: item.id, href: workHref(item.id.slice(-36)), title: item.title, cover: item.cover, kind: 'book',
     authors: [credit.displayName], rating: null })) : [];
   return <section aria-labelledby="work-author" className="grid min-w-0 gap-6 border-border/70 border-t pt-8">
