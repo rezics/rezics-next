@@ -7,6 +7,7 @@ import { type ActingContextDiscovery, type AgentOption, agentOptions, resolveSes
 import { ACCESS_COOKIE, isSessionKey, REFRESH_COOKIE, SESSION_COOKIE,
   SESSION_KEY_COOKIE } from './cookies.ts';
 import { decodeSessionRecord } from './session-state.ts';
+import { readAgentProfile } from './agent-profile.ts';
 
 export interface MainSessionAgentState {
   sessionAgent: { actingSubject: string | null; eligible: boolean; revision: string | null };
@@ -69,7 +70,15 @@ export const readSession = cache(async (): Promise<Session | null> => {
   const [discovery, state] = jar.get(ACCESS_COOKIE)?.value
     ? await Promise.all([sessionDiscovery(), sessionAgentState()]) : [null, null];
   const agents = discovery ? agentOptions(discovery) : null;
+  const agent = state ? resolveSessionAgent(agents, state.sessionAgent.actingSubject)
+    : { status: 'unverified', previous: null } as const;
+  if (agent.status === 'selected') {
+    const profile = await readAgentProfile(agent.agent.iri);
+    if (profile) {
+      agent.agent.label = profile.displayName;
+      agent.agent.avatarUrl = profile.avatarUrl;
+    }
+  }
   return { user: record.user, expiresAt: record.expiresAt, agents: agents ?? [],
-    agent: state ? resolveSessionAgent(agents, state.sessionAgent.actingSubject)
-      : { status: 'unverified', previous: null } };
+    agent };
 });

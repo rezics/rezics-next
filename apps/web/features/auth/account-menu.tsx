@@ -1,17 +1,19 @@
 'use client';
 
-import { Avatar, AvatarFallback } from '@rezics/ui/avatar';
+import { Avatar, AvatarFallback, AvatarImage } from '@rezics/ui/avatar';
 import { Button } from '@rezics/ui/button';
 import { Menu, MenuContent, MenuGroup, MenuItem, MenuRadioGroup, MenuRadioItem, MenuSeparator,
   MenuSub, MenuSubContent, MenuSubTrigger, MenuTrigger } from '@rezics/ui/menu';
 import { Sheet, SheetClose, SheetContent, SheetTitle } from '@rezics/ui/sheet';
 import { XIcon } from 'lucide-react';
-import { useId, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { localeNames, uiLocales, type UiLocale } from '../../i18n/define.ts';
 import { localizedPath } from '../../i18n/locale.ts';
 import LocalizedLink from '../shell/localized-link.tsx';
 import { themes, type Theme } from '../shell/preferences.ts';
 import { useShell } from '../shell/shell-provider.tsx';
+import { BFF_PREFIX } from '../api/browser.ts';
+import { currentVanityHandle } from '../onboarding/handle.ts';
 import { agentName, type SessionAgent } from './acting-identity.ts';
 import type { AuthMessages } from './messages.ts';
 import type { Session } from './session.ts';
@@ -52,8 +54,12 @@ function AccountIdentity({ session, messages, compact = false }: {
   const agent = agentSummary(session.agent, messages);
   const displayName = user.name || user.email || messages.accountMenu;
   const avatarName = session.agent.status === 'selected' ? agent.text : user.name;
+  const handle = session.agent.status === 'selected'
+    ? currentVanityHandle(session.agent.agent.handle) : null;
   return <>
     <Avatar size="lg">
+      {session.agent.status === 'selected' && session.agent.agent.avatarUrl
+        ? <AvatarImage src={`${BFF_PREFIX}${session.agent.agent.avatarUrl}`} alt="" /> : null}
       <AvatarFallback className="bg-accent font-semibold text-accent-foreground text-sm">
         {initials(avatarName, user.email)}</AvatarFallback>
     </Avatar>
@@ -62,8 +68,8 @@ function AccountIdentity({ session, messages, compact = false }: {
       <span className={`flex items-center gap-1 truncate text-xs ${agent.attention
         ? 'text-warning-foreground' : 'text-muted-foreground'}`}>
         {agent.attention ? <AttentionDot /> : null}
-        <span className="truncate">{session.agent.status === 'selected' && session.agent.agent.handle
-          ? `@${session.agent.agent.handle}` : displayName}</span></span>
+        <span className="truncate">{session.agent.status === 'selected'
+          ? handle ? `@${handle}` : messages.chooseHandle : displayName}</span></span>
     </span>
   </>;
 }
@@ -74,6 +80,8 @@ export function AccountMenu({ session, messages, accountOrigin }: {
 }) {
   const { locale, t, theme, setTheme } = useShell();
   const [sheetOpen, setSheetOpen] = useState(false);
+  const [hydrated, setHydrated] = useState(false);
+  useEffect(() => setHydrated(true), []);
   const localeForm = useRef<HTMLFormElement>(null);
   const localeField = useRef<HTMLInputElement>(null);
   const signOutForm = useRef<HTMLFormElement>(null);
@@ -99,7 +107,8 @@ export function AccountMenu({ session, messages, accountOrigin }: {
         if (value === 'switch-agent') switchAgent();
         else if (value === 'sign-out') signOut();
       }}>
-        <MenuTrigger aria-label={messages.accountMenu} className="inline-flex max-w-64 items-center gap-2
+        <MenuTrigger aria-label={messages.accountMenu} data-hydrated={hydrated ? 'true' : undefined}
+          className="inline-flex max-w-64 items-center gap-2
           rounded-full p-1 text-start outline-none hover:bg-accent/60 focus-visible:ring-2
           focus-visible:ring-ring sm:pe-3">
           <AccountIdentity session={session} messages={messages} />
@@ -115,8 +124,9 @@ export function AccountMenu({ session, messages, accountOrigin }: {
             <p className={`flex items-center gap-1.5 px-2.5 pb-1.5 text-sm ${agent.attention
               ? 'text-warning-foreground' : ''}`}>
               {agent.attention ? <AttentionDot /> : null}<span className="truncate">{agent.text}
-                {session.agent.status === 'selected' && session.agent.agent.handle
-                  ? ` · @${session.agent.agent.handle}` : ''}</span></p>
+                {session.agent.status === 'selected'
+                  ? ` · ${currentVanityHandle(session.agent.agent.handle)
+                    ? `@${session.agent.agent.handle}` : messages.chooseHandle}` : ''}</span></p>
             <MenuItem value="switch-agent">{messages.switchAgent}</MenuItem>
             <MenuItem value="profile-settings" asChild><LocalizedLink
               href={localizedPath('/settings', locale)}>{messages.profileSettings}</LocalizedLink></MenuItem>
@@ -149,7 +159,8 @@ export function AccountMenu({ session, messages, accountOrigin }: {
       </Menu>
     </div>
     <Sheet open={sheetOpen} onOpenChange={details => setSheetOpen(details.open)}>
-      <button type="button" aria-label={messages.accountMenu} aria-haspopup="dialog"
+      <button type="button" aria-label={messages.accountMenu} data-hydrated={hydrated ? 'true' : undefined}
+        aria-haspopup="dialog"
         aria-expanded={sheetOpen} onClick={() => setSheetOpen(true)}
         className="inline-flex items-center rounded-full p-1 outline-none hover:bg-accent/60
           focus-visible:ring-2 focus-visible:ring-ring sm:hidden">
@@ -164,8 +175,9 @@ export function AccountMenu({ session, messages, accountOrigin }: {
         <div className="grid gap-5 overflow-y-auto px-5 py-4">
           <div><p className="font-medium">{displayName}</p>
             <p className="text-muted-foreground text-sm">{agent.text}
-              {session.agent.status === 'selected' && session.agent.agent.handle
-                ? ` · @${session.agent.agent.handle}` : ''}</p></div>
+              {session.agent.status === 'selected'
+                ? ` · ${currentVanityHandle(session.agent.agent.handle)
+                  ? `@${session.agent.agent.handle}` : messages.chooseHandle}` : ''}</p></div>
           <button type="button" onClick={switchAgent} className="text-start text-sm">{messages.switchAgent}</button>
           <LocalizedLink href={localizedPath('/settings', locale)} className="text-sm">
             {messages.profileSettings}</LocalizedLink>

@@ -63,6 +63,16 @@ export const UnlabeledAgent: Story = {
   },
 };
 
+export const BeforeHandle: Story = {
+  args: { session: { ...session, agent: { status: 'selected', agent: { ...agents[0]!,
+    handle: 'agent-b8df6385-cec9-4fa0-8b89-71def5fa82b5' } } } },
+  async play({ canvasElement }) {
+    const trigger = within(canvasElement).getByRole('button', { name: 'Account menu' });
+    await expect(trigger).toHaveTextContent('Choose a handle');
+    await expect(trigger).not.toHaveTextContent('@agent-b8df6385');
+  },
+};
+
 export const ChooseAgent: Story = {
   args: { session: { ...session, agent: { status: 'unselected' } } },
   async play({ canvasElement }) {

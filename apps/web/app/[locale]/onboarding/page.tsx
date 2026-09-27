@@ -28,6 +28,9 @@ export default async function OnboardingPage({ params, searchParams }: {
   const key = jar.get(SESSION_KEY_COOKIE)?.value;
   const outcome = token && key ? await ensureOnboarding(token, key) : { kind: 'unavailable' as const };
   const t = messages[locale];
+  const publicName = outcome.kind === 'active'
+    ? session.agents.find(agent => agent.iri === outcome.person.agent)?.label || session.user.name
+    : session.user.name;
   const retryPath = `${localizedPath('/onboarding', locale)}?next=${encodeURIComponent(next)}`;
   return <PageContainer className="max-w-xl py-8 sm:py-16">
     <Card><CardContent className="grid gap-6 p-6 sm:p-8">
@@ -45,7 +48,7 @@ export default async function OnboardingPage({ params, searchParams }: {
           <input type="hidden" name="key" value={crypto.randomUUID()} />
           <div className="grid gap-1 rounded-lg border border-border bg-muted/40 p-4">
             <span className="text-muted-foreground text-sm">{t.displayName}</span>
-            <strong>{session.user.name}</strong>
+            <strong>{publicName}</strong>
             <span className="text-muted-foreground text-sm">{t.displayNameHelp}</span>
           </div>
         </HandleField>

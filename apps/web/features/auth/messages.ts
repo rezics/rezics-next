@@ -42,6 +42,7 @@ const en = {
   noAgent: 'No Agent yet', agentUnverified: 'Agent not checked', signOut: 'Sign out',
   manageAccount: 'Manage your REZICS Account',
   profileSettings: 'Profile settings',
+  chooseHandle: 'Choose a handle',
 };
 
 export type AuthMessages = typeof en;
@@ -82,6 +83,7 @@ const zhCN: AuthMessages = {
   noAgent: '尚无身份', agentUnverified: '身份未经检查', signOut: '退出登录',
   manageAccount: '管理您的 REZICS 账户',
   profileSettings: '个人资料设置',
+  chooseHandle: '选择用户名',
 };
 
 export const messages = defineMessages({ en, 'zh-Hans': zhCN });

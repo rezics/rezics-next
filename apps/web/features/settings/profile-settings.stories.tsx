@@ -1,12 +1,16 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, within } from 'storybook/test';
 import type { AgentOption } from '../auth/acting-identity.ts';
+import type { PublicAgentProfile } from '../auth/agent-profile.ts';
 import { ProfileSettings } from './profile-settings.tsx';
 
 const person: AgentOption = { iri: 'https://rezics.com/id/00000000-0000-4000-8000-000000000001',
   label: 'Ada Lovelace', handle: 'ada', kind: 'person', path: 'direct-principal' };
+const profile: PublicAgentProfile = { id: person.iri, displayName: 'Ada Lovelace',
+  revision: 'https://rezics.com/id/00000000-0000-4000-8000-000000000002',
+  bio: { text: 'Reader and writer', language: 'en' }, avatarSelection: null, avatarUrl: null };
 const meta = { title: 'Settings/Profile', component: ProfileSettings,
-  args: { agent: person, locale: 'en', error: null, updated: false },
+  args: { agent: person, profile, locale: 'en', error: null, updated: null },
 } satisfies Meta<typeof ProfileSettings>;
 export default meta;
 type Story = StoryObj<typeof meta>;
@@ -16,7 +20,11 @@ export const Person: Story = {
     const canvas = within(canvasElement);
     await expect(canvas.getByRole('heading', { name: 'Profile settings' })).toBeVisible();
     await expect(canvas.getByText('@ada')).toBeVisible();
-    await expect(canvas.getByText(/This public name started with your Account name/)).toBeVisible();
+    await expect(canvas.getByText(/This public name began with your Account name/)).toBeVisible();
+    await expect(canvas.getByRole('textbox', { name: 'Display name' })).toHaveValue('Ada Lovelace');
+    await expect(canvas.getByRole('textbox', { name: 'Bio' })).toHaveValue('Reader and writer');
+    await expect(canvas.getByText('Choose image')).toBeVisible();
+    await expect(canvas.getByRole('button', { name: 'Save public profile' })).toBeEnabled();
     await expect(canvas.getByText(/30 days/)).toBeVisible();
     await expect(canvas.getByRole('status')).toHaveTextContent('current handle');
     await expect(canvas.getByRole('button', { name: 'Change handle' })).toBeDisabled();
@@ -29,7 +37,8 @@ export const PenName: Story = {
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     await expect(canvas.getByText('Aster')).toBeVisible();
-    await expect(canvas.getByText(/Editing this Agent’s name and avatar/)).toBeVisible();
+    await expect(canvas.getByText(/Changes here appear publicly for this Agent/)).toBeVisible();
+    await expect(canvas.getByRole('button', { name: 'Save public profile' })).toBeEnabled();
   },
 };
 
@@ -41,10 +50,19 @@ export const Cooldown: Story = {
 };
 
 export const NoEligibleAgent: Story = {
-  args: { agent: null },
+  args: { agent: null, profile: null },
   async play({ canvasElement }) {
     await expect(within(canvasElement).getByRole('link', { name: 'Choose a profile' }))
       .toHaveAttribute('href', '/en/identity');
+  },
+};
+
+export const ProfileUnavailable: Story = {
+  args: { profile: null },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByText(/Profile editing is temporarily unavailable/)).toBeVisible();
+    await expect(canvas.getByRole('button', { name: 'Save public profile' })).toBeDisabled();
   },
 };
 
@@ -54,6 +72,7 @@ export const ChinesePhone: Story = {
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     await expect(canvas.getByRole('heading', { name: '个人资料设置' })).toBeVisible();
+    await expect(canvas.getByText('选择图片')).toBeVisible();
     await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
   },
 };

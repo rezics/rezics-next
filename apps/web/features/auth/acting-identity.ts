@@ -16,6 +16,7 @@ export interface AgentOption {
   /** Main's public display name, or null when public metadata is absent. */
   label: string | null;
   handle: string | null;
+  avatarUrl?: string | null;
   kind: 'person' | 'pen-name' | 'organization' | 'service' | null;
   /** Represented Agents act through a representation; a direct Agent is the person's own. */
   path: 'represented-agent' | 'direct-principal';

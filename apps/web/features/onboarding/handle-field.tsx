@@ -23,7 +23,9 @@ export function HandleField({ action, initial, current = null, submit, messages,
   checkAvailability?: (handle: string, signal: AbortSignal) => Promise<HandleAvailability>;
 }) {
   const [value, setValue] = useState(initial);
+  const [hydrated, setHydrated] = useState(false);
   const [availability, setAvailability] = useState<'checking' | 'available' | 'current' | 'taken' | 'reserved' | 'invalid' | 'failed'>('checking');
+  useEffect(() => setHydrated(true), []);
   const hintId = useId();
   const handle = normalizedHandle(value);
   const unchanged = handle !== null && handle === currentVanityHandle(current);
@@ -52,6 +54,7 @@ export function HandleField({ action, initial, current = null, submit, messages,
       <div className="flex min-h-11 items-center rounded-lg border border-input bg-background px-3 focus-within:ring-2 focus-within:ring-ring">
         <span className="text-muted-foreground">@</span>
         <input id={hintId} name="handle" required maxLength={30} autoComplete="nickname"
+          data-hydrated={hydrated ? 'true' : undefined}
           aria-describedby={`${hintId}-rules ${hintId}-status`}
           className="min-w-0 flex-1 border-0 bg-transparent px-1 py-2 outline-none"
           value={value} onChange={event => setValue(event.target.value)} />
