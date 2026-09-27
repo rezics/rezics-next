@@ -172,6 +172,7 @@ export const Inline: Story = {
   render: (args) => <Palette className="max-w-lg" onValueChange={args.onValueChange} />,
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
+    await expect(canvas.getByRole('dialog', { name: 'Command palette' })).toBeInTheDocument();
     await expect(canvas.getByRole('combobox', { name: 'Search REZICS' })).toBeInTheDocument();
     await expect(canvas.getByRole('option', { name: /The Three-Body Problem/ })).toBeVisible();
   },

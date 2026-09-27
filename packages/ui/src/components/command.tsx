@@ -90,9 +90,17 @@ export const CommandDialogContent = (props: CommandDialogContentProps) => {
  * by keyboard. On REZICS it is the ⌘K palette for jumping to a Work, a Realm or an action such as
  * “Create a post”, shown inline or in `CommandDialog`. Build it from an Ark list collection so
  * filtering and grouping stay in one place; for choosing a form value use a combobox instead.
+ * The popup dialog is labelled “Command palette” by default; pass `aria-label` to override it.
  */
 export const Command: ArkCombobox.RootComponent = (props) => {
-  const { lazyMount = true, unmountOnExit = true, className, ...rest } = props;
+  const {
+    lazyMount = true,
+    unmountOnExit = true,
+    className,
+    children,
+    'aria-label': ariaLabel = 'Command palette',
+    ...rest
+  } = props;
 
   return (
     <Combobox
@@ -114,7 +122,10 @@ export const Command: ArkCombobox.RootComponent = (props) => {
       selectionBehavior="clear"
       unmountOnExit={unmountOnExit}
       {...rest}
-    />
+    >
+      <ArkCombobox.Label className="sr-only">{ariaLabel}</ArkCombobox.Label>
+      {children}
+    </Combobox>
   );
 };
 
