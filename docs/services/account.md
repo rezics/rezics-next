@@ -38,7 +38,7 @@ retirement before routing a backup restored from before it.
 ## Operations
 
 [Account startup and recovery](../../services/account/README.md),
-[email delivery](../email-delivery.md) and the
+[email rollout](../operations/deployment.md#email-rollout) and the
 [recovery runbook](../operations/recovery.md) describe the operational
 entry points. The Account origin proxy must preserve cookies, Origin and all
 Set-Cookie headers, and set the client IP header from a trusted connection.
