@@ -1,9 +1,8 @@
 'use client';
 
-import { Badge } from '@rezics/ui/badge';
 import { Button, buttonVariants } from '@rezics/ui/button';
 import { Skeleton, SkeletonText } from '@rezics/ui/skeleton';
-import { RotateCwIcon, SearchXIcon, SparklesIcon, TriangleAlertIcon } from 'lucide-react';
+import { RotateCwIcon, SearchXIcon, TriangleAlertIcon } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { EmptyState } from './empty-state.tsx';
@@ -19,7 +18,6 @@ export function RouteNotFound() {
     return <PageContainer>
       <EmptyState icon={planned.icon} headingLevel={1}
         title={t.comingSoonTitle({ feature: planned.label[locale] })} description={planned.planned[locale]}>
-        <Badge variant="soft" size="lg"><SparklesIcon aria-hidden="true" />{t.comingSoon}</Badge>
         <Link href="/" className={buttonVariants({ variant: 'outline' })}>{t.backHome}</Link>
       </EmptyState>
     </PageContainer>;

@@ -12,6 +12,23 @@ where data crosses trust boundaries. Client selectors reflect authority but neve
 replace server enforcement. Exact content/context selection is shared between
 SSR and browser navigation. Cache/query keys include relevant selection and scope.
 
+## Adding a feature
+
+Parallel feature slices touch no shared file beyond one registration line each;
+the registries merge with git's union driver. The home, search, Work and Studio
+features are worked examples.
+
+- `features/<name>/messages.ts` holds the feature's strings for every locale
+  (`defineMessages` in `i18n/define.ts`), registered by one line in
+  `i18n/catalogs.ts`. Routes pass `getMessages()` output to components, which
+  materialize recipes with the request locale; server code that only needs text,
+  such as metadata, uses `getTranslation()`.
+- A navigation entry is one line in `features/shell/navigation.ts`; an entry
+  marked `planned` shows a coming-soon page until its route exists.
+- Routes render inside the shell's `<main>` with `PageContainer`, and cover
+  loading, empty, error and not-found states with the shell's `EmptyState`
+  and route boundaries.
+
 ## Data fetching
 
 Eden is the typed transport; TanStack Query is only the client-side cache.

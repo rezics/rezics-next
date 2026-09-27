@@ -5,7 +5,7 @@ import tailwindcss from '@tailwindcss/vite';
 const local = (path: string) => fileURLToPath(new URL(path, import.meta.url));
 
 const config: StorybookConfig = {
-  framework: '@storybook/react-vite',
+  framework: { name: '@storybook/react-vite', options: { builder: { viteConfigPath: local('./vite.config.ts') } } },
   stories: ['../features/**/*.stories.@(ts|tsx)', '../../../packages/ui/src/**/*.stories.@(ts|tsx)'],
   addons: ['@storybook/addon-vitest', '@storybook/addon-a11y', '@storybook/addon-mcp'],
   // Component manifest for the MCP docs toolset; agents read it at http://127.0.0.1:6006/mcp.

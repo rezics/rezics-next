@@ -45,7 +45,7 @@ export function AppShell({ locale, messages, theme, navCollapsed, account, notif
     </header>
     <div className="flex">
       <aside id={SIDE_NAVIGATION_ID} className="sticky top-16 hidden h-[calc(100dvh-4rem)] w-64 shrink-0
-        border-border/60 border-e bg-sidebar/60 md:block md:group-data-[nav=collapsed]/shell:w-18">
+        border-border/60 border-e bg-sidebar/90 md:block md:group-data-[nav=collapsed]/shell:w-18">
         <SideNav variant="rail" />
       </aside>
       <main id={MAIN_CONTENT_ID} tabIndex={-1} className="min-w-0 flex-1 outline-none

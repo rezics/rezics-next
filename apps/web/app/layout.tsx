@@ -1,4 +1,4 @@
-import type { Metadata } from 'next';
+import type { Metadata, Viewport } from 'next';
 import { cookies } from 'next/headers';
 import type { ReactNode } from 'react';
 import { AccountMenu } from '../features/shell/account-menu.tsx';
@@ -13,6 +13,8 @@ export const metadata: Metadata = {
   title: { default: 'REZICS', template: '%s · REZICS' },
   icons: { icon: { url: '/favicon.svg', type: 'image/svg+xml' } },
 };
+
+export const viewport: Viewport = { width: 'device-width', initialScale: 1, viewportFit: 'cover' };
 
 type CookieJar = Awaited<ReturnType<typeof cookies>>;
 
@@ -32,10 +34,6 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
   const theme = parseTheme(jar.get(THEME_COOKIE)?.value);
   const session = cookieSession(jar);
   return <html lang={locale} className={themeClass(theme)}>
-    <head>
-      <meta charSet="utf-8" />
-      <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-    </head>
     <body className="aura-canvas min-h-dvh">
       <AppShell locale={locale} messages={messages} theme={theme}
         navCollapsed={parseNavCollapsed(jar.get(NAV_COOKIE)?.value)}

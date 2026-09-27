@@ -33,6 +33,9 @@
   .auth-form button[type="submit"] {
     @apply mt-2 w-full;
   }
+  .auth-form + p {
+    @apply mt-5 text-sm;
+  }
   .muted {
     @apply text-muted-foreground;
   }

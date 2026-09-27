@@ -91,14 +91,15 @@
   --color-chart-4: var(--chart-4);
   --color-chart-5: var(--chart-5);
 
-  /* Aura radius scale (arca-ui/aura, --radius: 1rem): controls xl, containers 2xl, dialogs 3xl. */
+  /* Aura radius scale (arca-ui/aura, --radius: 1rem). Pills (badges, avatars,
+     switches) use rounded-full. */
   --radius-xs: calc(var(--radius) - 8px);
-  --radius-sm: calc(var(--radius) - 4px);
+  --radius-sm: calc(var(--radius) - 4px); /* 12px: cover images, checkboxes */
   --radius-md: calc(var(--radius) - 2px);
-  --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) + 4px);
-  --radius-2xl: calc(var(--radius) + 8px);
-  --radius-3xl: calc(var(--radius) + 14px);
+  --radius-lg: var(--radius); /* 16px: small inputs, xs buttons, keyboard hints */
+  --radius-xl: calc(var(--radius) + 4px); /* 20px: buttons, inputs, tabs, menu items */
+  --radius-2xl: calc(var(--radius) + 8px); /* 24px: cards, menus, popovers, alerts */
+  --radius-3xl: calc(var(--radius) + 14px); /* 30px: dialogs, sheets, feature headers */
   --radius-4xl: calc(var(--radius) + 20px);
 
   --animate-slide-up: slideUp 0.2s ease-out;
@@ -310,9 +311,9 @@
   --accent: #e4ecf7;
   --accent-foreground: #1f4a85;
 
-  --brand: #df3d35;
-  --rating: #bf7a0e;
-  --vote-down: #6a5bb5;
+  --brand: #df3d35; /* logo, active upvote, unread dots, chart marks: never text */
+  --rating: #bf7a0e; /* stars and rating bars */
+  --vote-down: #6a5bb5; /* active downvote, kept apart from blue actions */
 
   --destructive: #c42840;
   --destructive-foreground: #b0233a;

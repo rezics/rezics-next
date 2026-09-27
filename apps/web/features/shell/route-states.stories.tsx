@@ -22,7 +22,7 @@ export const ComingSoon: Story = {
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     await expect(canvas.getByRole('heading', { level: 1, name: 'Shelves is on its way' })).toBeVisible();
-    await expect(canvas.getByText('Coming soon')).toBeVisible();
+    await expect(canvas.getByText(/Keep the works you are reading/)).toBeVisible();
   },
 };
 
