@@ -66,6 +66,8 @@ export const settled = async <T extends Element>(element: T): Promise<T> => {
   const finite = layer
     .getAnimations({ subtree: true })
     .filter((animation) => animation.effect?.getComputedTiming().iterations !== Infinity);
-  await Promise.allSettled(finite.map((animation) => animation.finished));
+  // Cap the wait: an animation that never plays (for example in a hidden frame) must not hang a test.
+  const cap = new Promise((resolve) => setTimeout(resolve, 2000));
+  await Promise.race([Promise.allSettled(finite.map((animation) => animation.finished)), cap]);
   return element;
 };

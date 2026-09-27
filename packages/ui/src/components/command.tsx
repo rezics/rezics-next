@@ -13,8 +13,8 @@ import {
   ComboboxGroup,
   ComboboxGroupLabel,
   type ComboboxItem,
-  ComboboxList,
   comboboxItemVariants,
+  useCombobox,
 } from './combobox.tsx';
 import {
   Dialog,
@@ -124,8 +124,12 @@ interface CommandInputProps extends Omit<React.ComponentProps<typeof ArkCombobox
 export const CommandContent = (props: React.ComponentProps<typeof ArkCombobox.Content>) => {
   const { className, ...rest } = props;
 
+  // An empty listbox is invalid ARIA; hide it and let CommandEmpty, placed beside it, speak.
+  const empty = useCombobox().collection.size === 0;
+
   return (
     <ArkCombobox.Content
+      hidden={empty || undefined}
       className={cn(
         'flex flex-1 flex-col',
         'max-h-(--available-height) min-h-0',
@@ -146,11 +150,12 @@ export const CommandInput = (props: CommandInputProps) => {
 
   return (
     <ComboboxControl className="mb-2">
-      <InputGroup className={cn('rounded-2xl bg-input/32', className)} size={size} {...rest}>
+      <InputGroup className={cn('rounded-2xl bg-input/32', className)} size={size}>
         <InputGroupAddon>
           <SearchIcon aria-hidden className="opacity-64" />
         </InputGroupAddon>
-        <ArkCombobox.Input asChild data-slot="command-input">
+        {/* Input props such as aria-label and placeholder belong on the input, not the group. */}
+        <ArkCombobox.Input asChild data-slot="command-input" {...rest}>
           <InputGroupInput autoFocus />
         </ArkCombobox.Input>
       </InputGroup>
@@ -158,29 +163,35 @@ export const CommandInput = (props: CommandInputProps) => {
   );
 };
 
-interface CommandListProps extends React.ComponentProps<typeof ComboboxList> {}
-
-export const CommandList = (props: CommandListProps) => {
+// CommandContent is already the listbox. Ark's List part would sit between it and the
+// options with a stray aria-labelledby, which axe reports as a disallowed listbox child.
+export const CommandList = (props: React.ComponentProps<'div'>) => {
   const { className, ...rest } = props;
 
   return (
     <div className="max-h-72 min-h-0 flex-1">
-      <ComboboxList className={cn('flex-1 pr-2.5', className)} data-slot="command-list" {...rest} />
+      <div className={cn('flex flex-1 flex-col pr-2.5', className)} data-slot="command-list" {...rest} />
     </div>
   );
 };
 
+/**
+ * The no-results message. Place it beside CommandContent, which hides while empty.
+ * The status region stays mounted so screen readers announce the message when it appears.
+ */
 export const CommandEmpty = (props: React.ComponentProps<typeof ComboboxEmpty>) => {
   const { className, children, ...rest } = props;
 
   return (
-    <ComboboxEmpty
-      className={cn('py-6 text-center text-sm', className)}
-      data-slot="command-empty"
-      {...rest}
-    >
-      {children || 'No results found.'}
-    </ComboboxEmpty>
+    <div data-slot="command-empty-status" role="status">
+      <ComboboxEmpty
+        className={cn('py-6 text-center text-muted-foreground text-sm', className)}
+        data-slot="command-empty"
+        {...rest}
+      >
+        {children || 'No results found.'}
+      </ComboboxEmpty>
+    </div>
   );
 };
 

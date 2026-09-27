@@ -59,6 +59,7 @@ export const FloatingPanelContent = (props: FloatingPanelContentProps) => {
             'bg-popover',
             'text-popover-foreground',
             'rounded-3xl border border-border/60 shadow-(--aura-shadow-float)',
+            'outline-none',
             'transition-[scale,opacity,translate] duration-200 ease-in-out will-change-transform',
             'data-[state=open]:fade-in-0 data-[state=open]:zoom-in-[98%] data-[state=open]:animate-in',
             'motion-reduce:animate-none! motion-reduce:transition-none!',
