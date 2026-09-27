@@ -13,12 +13,19 @@ const nested = { tier: 'integration' as const,
 const recovery = { tier: 'fault/recovery' as const,
   file: 'tests/qa/fault-recovery/zone-wiki.test.ts',
   name: 'WIKI02/VIEW06: Zone owner bootstrap and configuration recover exact lost graph responses' };
+const realmText = { tier: 'integration' as const,
+  file: 'tests/qa/integration/wiki-realm-selection.test.ts',
+  name: 'WIKI05: Realm serving text and search keep its accepted draft while the source edits' };
+const realmMedia = { tier: 'integration' as const,
+  file: 'tests/qa/integration/wiki-realm-selection.test.ts',
+  name: 'WIKI05: Realm media serves its accepted exact set after the source publishes a newer set' };
 
 export const wikiCases: CaseDeclarations = {
   WIKI01: [zone],
   WIKI02: [zone, recovery],
   WIKI03: [collection],
   WIKI04: [dynamic],
+  WIKI05: [realmText, realmMedia],
   WIKI06: [collection],
   VIEW03: [zone],
   VIEW05: [dynamic, nested],

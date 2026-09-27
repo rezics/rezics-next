@@ -1,4 +1,6 @@
 import { Elysia, t } from 'elysia';
+import { ObjectIntegrityError, ObjectUnavailable } from '../infrastructure/immutable-objects.ts';
+import { readRealmMediaSet, RealmMediaUnavailable } from '../modules/content-publication/realm-media.ts';
 import type { FusekiClient } from '../infrastructure/fuseki.ts';
 import { AdmissionUnavailable } from '../modules/access/admission.ts';
 import { rejectAdmittedOrganizationPublication }
@@ -79,6 +81,10 @@ export function publicationRoutes(fuseki: FusekiClient, work: MainWorkDependenci
         mainVersion: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
         contribution: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
         publicationDecision: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
+        media: t.Optional(t.Object({
+          variantId: t.String({ pattern: '^urn:rezics:variant:[0-9a-f-]{36}$' }),
+          publicationDecision: t.String({ pattern: '^urn:rezics:content-publication:[0-9a-f]{64}$' }),
+        }, { additionalProperties: false })),
         expectedSelectionHead: t.Union([
           t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }), t.Null(),
         ]),
@@ -94,13 +100,17 @@ export function publicationRoutes(fuseki: FusekiClient, work: MainWorkDependenci
       }
       try {
         if (body.profile === 'realm-local-selection-v1') {
+          if (body.media && !work.content) {
+            return problem(503, 'selection_unavailable', 'Content owner is unavailable');
+          }
           const receipt = await selectAdmittedRealmLocal(work.environment, work.account,
             work.access, request, { context: body.context, work: body.work,
               mainVersion: body.mainVersion, contribution: body.contribution,
               publicationDecision: body.publicationDecision,
+              ...(body.media ? { media: body.media } : {}),
               expectedSelectionHead: body.expectedSelectionHead,
               selectionBasis: body.selectionBasis, actingSubject: body.actingSubject,
-              idempotencyKey });
+              idempotencyKey }, work.content);
           return Response.json({ work: receipt.work, mainVersion: receipt.mainVersion,
             realm: receipt.realm, slot: receipt.slot,
             contribution: receipt.contribution, publicationDecision: receipt.publicationDecision,
@@ -203,6 +213,7 @@ export function publicationRoutes(fuseki: FusekiClient, work: MainWorkDependenci
         const slot = realmSelectionSlotIri(realm, main);
         const result = await fuseki.query(`PREFIX rv: <https://rezics.com/vocab/>
           SELECT ?work ?selection ?contribution ?draft ?language ?body ?reason
+            ?mediaVariant ?mediaDecision ?mediaRevision ?mediaDigest ?mediaProof
             ?effectiveContext ?suppressed WHERE {
             GRAPH <urn:rezics:graph:current> {
               ?space a rv:Space ; rv:realmCapability ${iri(realm)} ; rv:disclosure rv:Public .
@@ -230,6 +241,14 @@ export function publicationRoutes(fuseki: FusekiClient, work: MainWorkDependenci
                 ?selection a rv:PublicationSelection ; rv:work ?work ;
                   rv:mainVersion ${iri(main)} ; rv:contribution ?contribution ;
                   rv:selectedDraft ?draft ; rv:matchUnit ?unit .
+                OPTIONAL { ?selection rv:mediaVariant ?mediaVariant ;
+                  rv:mediaPublicationDecision ?mediaDecision ;
+                  rv:mediaRevision ?mediaRevision ; rv:mediaDigest ?mediaDigest . }
+                OPTIONAL { FILTER(BOUND(?mediaDecision))
+                  ?mediaDecision a rv:ContentPublicationDecision ;
+                  rv:component ?mediaVariant ; rv:resource ?work ;
+                  rv:contentModel "media-set-v1" ; rv:contentRevision ?mediaRevision ;
+                  rv:byteDigest ?mediaDigest . BIND(true AS ?mediaProof) }
               }
               GRAPH ${iri(PUBLIC_SEARCH_GRAPH)} {
                 ?unit a rv:MatchUnit ; rv:selection ?selection ;
@@ -253,12 +272,110 @@ export function publicationRoutes(fuseki: FusekiClient, work: MainWorkDependenci
           || !row.body || !row.reason || !row.effectiveContext) {
           return problem(404, 'selection_unavailable', 'Realm selection is unavailable');
         }
+        let media: { variantId: string; publicationDecision: string; revisionId: string;
+          items: Array<{ use: string; mediaType: string; width: number; height: number; url: string }> } | undefined;
+        if (row.mediaVariant || row.mediaDecision || row.mediaRevision || row.mediaDigest) {
+          const revision = /^urn:rezics:content:revision:([0-9a-f-]{36})$/
+            .exec(row.mediaRevision?.value ?? '');
+          if (!work.content || !row.mediaVariant || !row.mediaDecision || !revision
+            || row.mediaProof?.value !== 'true'
+            || !row.mediaDigest) {
+            return problem(503, 'selection_unavailable', 'Realm media selection is unavailable');
+          }
+          const reference = { variantId: row.mediaVariant.value,
+            publicationDecision: row.mediaDecision.value, revisionId: revision[1]!,
+            byteDigest: row.mediaDigest.value };
+          const items = await readRealmMediaSet(work.content, row.work!.value, reference);
+          media = { variantId: reference.variantId, publicationDecision: reference.publicationDecision,
+            revisionId: reference.revisionId,
+            items: items.map(item => ({ use: item.use, mediaType: item.mediaType,
+              width: item.width, height: item.height,
+              url: `/v1/realms/${params.realm}/main-versions/${params.mainVersion}`
+                + `/selections/${row.selection!.value.slice('https://rezics.com/id/'.length)}`
+                + `/media/${item.use}` })) };
+        }
         return Response.json({ work: row.work!.value, mainVersion: main, realm,
           effectiveContext: row.effectiveContext!.value, reason: row.reason!.value,
           selection: row.selection!.value, contribution: row.contribution!.value,
           selectedDraft: row.draft!.value, language: row.language!.value,
-          body: row.body!.value }, { headers: { 'cache-control': 'no-store' } });
-      } catch (error) { return commandError(error); }
+          body: row.body!.value, ...(media ? { media } : {}) },
+        { headers: { 'cache-control': 'no-store' } });
+      } catch (error) {
+        if (error instanceof RealmMediaUnavailable) {
+          return problem(503, 'selection_unavailable', 'Realm media selection is unavailable');
+        }
+        return commandError(error);
+      }
+    })
+    .get('/v1/realms/:realm/main-versions/:mainVersion/selections/:selection/media/:use', {
+      params: t.Object({ realm: t.String({ pattern: '^[0-9a-f-]{36}$' }),
+        mainVersion: t.String({ pattern: '^[0-9a-f-]{36}$' }),
+        selection: t.String({ pattern: '^[0-9a-f-]{36}$' }),
+        use: t.String({ pattern: '^[0-9a-f-]{36}$' }) }),
+      response: { 200: t.Any(), ...readProblems },
+    }, async ({ params }: { params: { realm: string; mainVersion: string;
+      selection: string; use: string } }) => {
+      if (!work.content || !work.media) {
+        return problem(503, 'selection_unavailable', 'Realm media selection is unavailable');
+      }
+      try {
+        await assertGraphAdmissionOpen(fuseki, work.environment.lineage);
+        const realm = `https://rezics.com/id/${params.realm}`;
+        const main = `https://rezics.com/id/${params.mainVersion}`;
+        const selection = `https://rezics.com/id/${params.selection}`;
+        const slot = realmSelectionSlotIri(realm, main);
+        const rows = (await fuseki.query(`PREFIX rv: <https://rezics.com/vocab/>
+          SELECT ?work ?variant ?decision ?revision ?digest WHERE {
+            GRAPH <urn:rezics:graph:current> {
+              ?space a rv:Space ; rv:realmCapability ${iri(realm)} ; rv:disclosure rv:Public .
+              ${iri(realm)} a rv:Realm ; rv:space ?space ; rv:realmState rv:Active ;
+                rv:selectionPolicy ${iri(SELECTION_POLICY)} ; rv:reviewPolicy ${iri(REVIEW_POLICY)} .
+              ${iri(main)} a rv:MainVersion ; rv:work ?work .
+              ${iri(slot)} a rv:RealmPublicationSlot ; rv:realm ${iri(realm)} ;
+                rv:mainVersion ${iri(main)} ; rv:work ?work ; rv:selectionHead ${iri(selection)} . }
+            GRAPH <urn:rezics:graph:revisions> {
+              ${iri(selection)} a rv:PublicationSelection ; rv:slot ${iri(slot)} ;
+                rv:work ?work ; rv:mainVersion ${iri(main)} ;
+                rv:mediaVariant ?variant ; rv:mediaPublicationDecision ?decision ;
+                rv:mediaRevision ?revision ; rv:mediaDigest ?digest . }
+            GRAPH <urn:rezics:graph:revisions> {
+              ?decision a rv:ContentPublicationDecision ; rv:component ?variant ;
+                rv:resource ?work ; rv:contentModel "media-set-v1" ;
+                rv:contentRevision ?revision ; rv:byteDigest ?digest . }
+          }`)).results?.bindings ?? [];
+        const row = rows[0];
+        const revision = /^urn:rezics:content:revision:([0-9a-f-]{36})$/
+          .exec(row?.revision?.value ?? '');
+        if (rows.length !== 1 || !row?.work || !row.variant || !row.decision
+          || !revision || !row.digest) {
+          return problem(404, 'selection_unavailable', 'Realm media selection is unavailable');
+        }
+        const items = await readRealmMediaSet(work.content, row.work.value,
+          { variantId: row.variant.value, publicationDecision: row.decision.value,
+            revisionId: revision[1]!, byteDigest: row.digest.value });
+        const selected = items.find(item => item.use === params.use);
+        if (!selected) return problem(404, 'selection_unavailable', 'Realm media item is unavailable');
+        const basis = await work.media.store.itemDelivery(params.use);
+        if (!basis || basis.target !== row.work.value || basis.sha256 !== selected.sha256
+          || basis.mediaType !== selected.mediaType || basis.width !== selected.width
+          || basis.height !== selected.height || basis.availability !== 'available'
+          || basis.disclosure !== 'public' || basis.moderation !== 'none'
+          || basis.lifecycle !== 'active') {
+          return problem(404, 'selection_unavailable', 'Realm media item is unavailable');
+        }
+        const bytes = await work.media.objects(basis.objectNamespace).get(basis.sha256);
+        return new Response(new Uint8Array(bytes), { headers: { 'content-type': basis.mediaType,
+          etag: `"${basis.sha256}"`, 'x-content-type-options': 'nosniff',
+          'cache-control': 'public, no-cache' } });
+      } catch (error) {
+        if (error instanceof RealmMediaUnavailable) {
+          return problem(503, 'selection_unavailable', 'Realm media selection is unavailable');
+        }
+        if (error instanceof ObjectUnavailable || error instanceof ObjectIntegrityError) {
+          return problem(503, 'media_unavailable', 'Media bytes are unavailable');
+        }
+        return commandError(error);
+      }
     })
     .get('/v1/main-versions/:mainVersion/native-variants', {
       params: t.Object({ mainVersion: t.String({ pattern: '^[0-9a-f-]{36}$' }) }),

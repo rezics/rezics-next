@@ -34,6 +34,12 @@ is a negative slot head: it removes any former local text unit and suppresses
 Main fallback until a later expected-head adoption. Management grant
 provisioning, policy revisions and Zone capability creation remain pending.
 
+Realm adoption may also pin an exact `media-set-v1` Content publication for the
+same Work. The manager names its variant and current publication decision; the
+selection stores the verified Content revision and digest. Source edits leave
+that selection unchanged. Media item URLs are bound to the current Realm slot
+head and recheck the exact set and current asset disclosure at delivery.
+
 The separate `classification-context-v1` profile binds an existing
 active Realm to a distinct classification Context under fixed Global
 inheritance. It does not revise the installed `space-realm-v1` creation shape;

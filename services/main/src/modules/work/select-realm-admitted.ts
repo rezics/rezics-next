@@ -1,5 +1,7 @@
 import type { AccountAssertionVerifier } from '../account/verify-assertion.ts';
+import type { ContentCore } from '../../../../content/src/core.ts';
 import { AdmissionDenied, AdmissionExpired, type AccessAdmissionRegistry } from '../access/admission.ts';
+import { RealmMediaUnavailable } from '../content-publication/realm-media.ts';
 import { assertGraphAdmissionOpen } from './restore-lineage.ts';
 import { IdempotencyConflict, type WorkActivationEnvironment } from './activate.ts';
 import { PendingAdmittedWork } from './create-admitted.ts';
@@ -15,6 +17,7 @@ export async function selectAdmittedRealmLocal(
   access: Pick<AccessAdmissionRegistry, 'register' | 'claim' | 'recordGraphOutcome'>,
   request: Request,
   input: SelectRealmLocalInput & { idempotencyKey: string },
+  content?: Pick<ContentCore, 'readExactBatch'>,
 ): Promise<RealmSelectionReceipt & { replayed: boolean }> {
   const digest = realmSelectionDigest(input);
   await assertGraphAdmissionOpen(env.fuseki, env.lineage);
@@ -34,10 +37,10 @@ export async function selectAdmittedRealmLocal(
       if (!admission.dispatchEligible || admission.state === 'registered') {
         await sealRealmSelectionAdmission(env, admission);
       } else {
-        try { await selectRealmLocal(env, admission, input); }
+        try { await selectRealmLocal(env, admission, input, content); }
         catch (error) {
           if (error instanceof IdempotencyConflict) throw error;
-          if (error instanceof RealmSelectionUnavailable) {
+          if (error instanceof RealmSelectionUnavailable || error instanceof RealmMediaUnavailable) {
             await sealRealmSelectionAdmission(env, admission);
           }
         }

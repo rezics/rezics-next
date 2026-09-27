@@ -270,7 +270,11 @@ export const realmSelectionReadResult = t.Union([
     rejection: ref, reasonCode: t.Literal('not-approved') },
   { additionalProperties: false }),
   t.Object({ ...selectedText, realm: ref, effectiveContext: ref,
-    reason: t.Union([t.Literal('realm-adoption'), t.Literal('main-fallback')]) },
+    reason: t.Union([t.Literal('realm-adoption'), t.Literal('main-fallback')]),
+    media: t.Optional(t.Object({ variantId: ref, publicationDecision: ref,
+      revisionId: t.String(), items: t.Array(t.Object({ use: t.String(),
+        mediaType: t.String(), width: t.Number(), height: t.Number(), url: t.String() }),
+      { maxItems: 16 }) })), },
   { additionalProperties: false }),
 ]);
 export const mainSelectionReadResult = t.Object(selectedText);

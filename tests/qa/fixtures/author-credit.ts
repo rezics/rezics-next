@@ -4,6 +4,7 @@ import { Pool } from 'pg';
 import { createMainApp } from '../../../services/main/src/app.ts';
 import { FusekiClient, type CommandEnvelope } from '../../../services/main/src/infrastructure/fuseki.ts';
 import { AccessAdmissionRegistry } from '../../../services/main/src/modules/access/admission.ts';
+import { AccessPolicyOwner } from '../../../services/main/src/modules/access/policy-owner.ts';
 import { ProtectionAdmissionSigner } from '../../../services/main/src/modules/access/protection-admission.ts';
 import { OpenLibraryConversionStore } from '../../../services/main/src/modules/source/open-library-conversion.ts';
 import { OpenLibrarySourceGraph } from '../../../services/main/src/modules/source/graph-projection.ts';
@@ -129,6 +130,7 @@ export async function authorCreditFixture(apps: Record<string, string>, objectDi
     ref === 'urn:rezics:rule:source-rights' ? { revision: 'v1', digest: ruleDigest } : null });
   let source: Record<string, unknown> = {};
   const app = createMainApp(fuseki, { environment: env, account: account.verifier, access,
+    accessPolicy: new AccessPolicyOwner(accessPool),
     governance: { store: governance }, rights: { store: rightsStore },
     protectionSigner: new ProtectionAdmissionSigner(accessPool, apps.FUSEKI_TITLE_ADMISSION_KEY),
     sourceIntake: intake, recipeSourceConversions: new RecipeSourceConversionStore(pool, intake),

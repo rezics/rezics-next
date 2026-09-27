@@ -3152,6 +3152,23 @@ export async function reconcileRetainedRealmSelection(
   }
   const state = readComponentState(env.objectDirectory, receipt.selectionManifest,
     slot, REALM_SELECTION_PROFILE);
+  const rawMedia = state.media;
+  const media = rawMedia && typeof rawMedia === 'object' && !Array.isArray(rawMedia)
+    ? rawMedia as { variantId?: unknown; publicationDecision?: unknown;
+      revisionId?: unknown; byteDigest?: unknown } : null;
+  if (rawMedia !== undefined && (!media
+    || typeof media.variantId !== 'string'
+    || !/^urn:rezics:variant:[0-9a-f-]{36}$/.test(media.variantId)
+    || typeof media.publicationDecision !== 'string'
+    || !/^urn:rezics:content-publication:[0-9a-f]{64}$/.test(media.publicationDecision)
+    || typeof media.revisionId !== 'string'
+    || !/^[0-9a-f-]{36}$/.test(media.revisionId)
+    || typeof media.byteDigest !== 'string'
+    || !/^[0-9a-f]{64}$/.test(media.byteDigest))) {
+    throw new RetainedEffectConflict('retained Realm media reference is invalid');
+  }
+  const mediaRef = media as { variantId: string; publicationDecision: string;
+    revisionId: string; byteDigest: string } | null;
   const context = state.context as { kind?: string; id?: string } | undefined;
   if (context?.kind !== 'realm-local' || context.id !== realm
     || state.slot !== slot || state.work !== work || state.mainVersion !== main
@@ -3182,6 +3199,15 @@ export async function reconcileRetainedRealmSelection(
         rv:selectedDraft ${iri(draft)} ; rv:rightsBasis rv:OriginalContribution ;
         rv:disclosure rv:Public .
     }
+    ${mediaRef ? `GRAPH ${iri(GRAPHS.current)} {
+      ${iri(mediaRef.variantId)} a rv:ContentVariant ; rv:resource ${iri(work)} ;
+        rv:contentPublicationHead ${iri(mediaRef.publicationDecision)} . }
+      GRAPH ${iri(GRAPHS.revisions)} {
+        ${iri(mediaRef.publicationDecision)} a rv:ContentPublicationDecision ;
+          rv:component ${iri(mediaRef.variantId)} ; rv:resource ${iri(work)} ;
+          rv:contentModel "media-set-v1" ;
+          rv:contentRevision ${iri(`urn:rezics:content:revision:${mediaRef.revisionId}`)} ;
+          rv:byteDigest ${lit(mediaRef.byteDigest)} . }` : ''}
   }`);
   if (eligible.boolean !== true) throw new RetainedEffectConflict('Realm publication is not eligible');
   const client = await accessPool.connect();
@@ -3203,6 +3229,8 @@ export async function reconcileRetainedRealmSelection(
       || admitted.graph_data_epoch !== coverage.dataEpoch || admitted.graph_sequence !== sequence
       || realmSelectionDigest({ context: { kind: 'realm-local', id: realm },
         work, mainVersion: main, contribution, publicationDecision: decision,
+        ...(mediaRef ? { media: { variantId: mediaRef.variantId,
+          publicationDecision: mediaRef.publicationDecision } } : {}),
         expectedSelectionHead: predecessor, selectionBasis: 'realm-manager-review',
         actingSubject: admitted.acting_subject }) !== receipt.requestDigest) {
       throw new RetainedEffectConflict('current Access admission does not prove Realm adoption');
@@ -3210,6 +3238,19 @@ export async function reconcileRetainedRealmSelection(
     const marker = `urn:rezics:restore:${env.lineage.dataEpoch}`;
     const predecessorTriple = predecessor ? `rv:predecessor ${iri(predecessor)} ;` : '';
     const receiptPredecessor = predecessor ? `rv:expectedHead ${iri(predecessor)} ;` : '';
+    const mediaTriple = mediaRef ? `rv:mediaVariant ${iri(mediaRef.variantId)} ;
+      rv:mediaPublicationDecision ${iri(mediaRef.publicationDecision)} ;
+      rv:mediaRevision ${iri(`urn:rezics:content:revision:${mediaRef.revisionId}`)} ;
+      rv:mediaDigest ${lit(mediaRef.byteDigest)} ;` : '';
+    const mediaGuard = mediaRef ? `GRAPH ${iri(GRAPHS.current)} {
+        ${iri(mediaRef.variantId)} a rv:ContentVariant ; rv:resource ${iri(work)} ;
+          rv:contentPublicationHead ${iri(mediaRef.publicationDecision)} . }
+        GRAPH ${iri(GRAPHS.revisions)} {
+          ${iri(mediaRef.publicationDecision)} a rv:ContentPublicationDecision ;
+            rv:component ${iri(mediaRef.variantId)} ; rv:resource ${iri(work)} ;
+            rv:contentModel "media-set-v1" ;
+            rv:contentRevision ${iri(`urn:rezics:content:revision:${mediaRef.revisionId}`)} ;
+            rv:byteDigest ${lit(mediaRef.byteDigest)} . }` : '';
     const update = `PREFIX rv: <${RV}>
       DELETE {
         GRAPH ${iri(GRAPHS.control)} { ${iri(marker)} rv:reconciledPriorSequence ?last }
@@ -3229,6 +3270,7 @@ export async function reconcileRetainedRealmSelection(
             rv:operation ${iri(operation)} ; rv:context ${iri(realm)} ; rv:slot ${iri(slot)} ;
             rv:work ${iri(work)} ; rv:mainVersion ${iri(main)} ;
             rv:contribution ${iri(contribution)} ; rv:publicationDecision ${iri(decision)} ;
+            ${mediaTriple}
             rv:selectedDraft ${iri(draft)} ; rv:language ${lit(language)} ;
             rv:selectionBasis rv:RealmManagerReview ; rv:selectionMode rv:Fixed ;
             rv:reviewPolicy ${iri(REVIEW_POLICY)} ; rv:reviewer ${iri(admitted.acting_subject)} ;
@@ -3291,6 +3333,7 @@ export async function reconcileRetainedRealmSelection(
             rv:disclosure rv:Public .
           ${iri(draft)} a rv:RevisionAnchor ; rv:component ${iri(contribution)} .
         }
+        ${mediaGuard}
         OPTIONAL {
           FILTER(BOUND(?prior))
           GRAPH ${iri(GRAPHS.revisions)} { ?prior rv:matchUnit ?oldUnit ; rv:slot ${iri(slot)} }
@@ -3329,6 +3372,7 @@ export async function reconcileRetainedRealmSelection(
         ${iri(selection)} a rv:PublicationSelection, rv:RevisionAnchor ;
           rv:component ${iri(slot)} ; rv:operation ${iri(operation)} ;
           rv:selectedDraft ${iri(draft)} ; rv:matchUnit ${iri(unit)} ;
+          ${mediaTriple}
           rv:manifest ${iri(receipt.selectionManifest)} ;
           rv:dataEpoch ${lit(coverage.dataEpoch)} ; rv:sequence ${sequence} . }
       GRAPH ${iri(GRAPHS.outbox)} {

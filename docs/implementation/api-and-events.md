@@ -379,6 +379,13 @@ pending admission. `GET /v1/realms/{realm}/main-versions/{id}/selection`
 resolves the local selected body or the Main default with an explicit reason and
 effective context. A local choice leaves the Main default and other Realms
 unchanged.
+An optional `media` input names a `media-set-v1` variant and its current exact
+Content publication decision. Adoption verifies the Work, Content revision,
+digest and bounded item manifest under the same Realm authority and slot CAS.
+The selection read returns pinned media items. Its item URLs include the
+selection ID and resolve only while that Realm slot still selects it. Delivery
+rechecks the exact Content body, item basis and current asset state. Media adds
+no text MatchUnit.
 `POST /v1/publication-rejections` admits `realm-local-rejection-v1` with a typed
 Realm context, Work, Main Version, nullable expected local head, fixed
 `decisionBasis: realm-manager-review`, `reasonCode: not-approved` and actor.

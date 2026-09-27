@@ -4,6 +4,9 @@ import { assertNotInvalidProfileReceipt, validatedCommand } from '../../infrastr
 import type { RegisteredAdmission } from '../access/admission.ts';
 import { readExactContributionDraft } from '../contribution/history.ts';
 import { PUBLICATION_PROFILE } from '../contribution/publish.ts';
+import type { ContentCore } from '../../../../content/src/core.ts';
+import { currentRealmMediaSet, type RealmMediaIntent }
+  from '../content-publication/realm-media.ts';
 import { REVIEW_POLICY, SELECTION_POLICY } from '../space/create.ts';
 import { readComponentState } from './history.ts';
 import { PUBLIC_SEARCH_GRAPH } from './select-main.ts';
@@ -24,6 +27,7 @@ export interface SelectRealmLocalInput {
   mainVersion: string;
   contribution: string;
   publicationDecision: string;
+  media?: RealmMediaIntent;
   expectedSelectionHead: string | null;
   selectionBasis: 'realm-manager-review';
   actingSubject: string;
@@ -63,6 +67,8 @@ export function realmSelectionDigest(input: SelectRealmLocalInput): string {
   if (input.context?.kind !== 'realm-local' || !nativeId.test(input.context.id)
     || !nativeId.test(input.work) || !nativeId.test(input.mainVersion)
     || !nativeId.test(input.contribution) || !nativeId.test(input.publicationDecision)
+    || (input.media !== undefined && (!/^urn:rezics:variant:[0-9a-f-]{36}$/.test(input.media.variantId)
+      || !/^urn:rezics:content-publication:[0-9a-f]{64}$/.test(input.media.publicationDecision)))
     || !nativeId.test(input.actingSubject)
     || (input.expectedSelectionHead !== null && !nativeId.test(input.expectedSelectionHead))
     || input.selectionBasis !== 'realm-manager-review') {
@@ -71,6 +77,7 @@ export function realmSelectionDigest(input: SelectRealmLocalInput): string {
   return hash(JSON.stringify({ family: 'select-realm-local-v1', context: input.context,
     work: input.work, mainVersion: input.mainVersion,
     contribution: input.contribution, publicationDecision: input.publicationDecision,
+    ...(input.media ? { media: input.media } : {}),
     expectedSelectionHead: input.expectedSelectionHead,
     selectionBasis: input.selectionBasis, actor: input.actingSubject,
     selectionPolicy: SELECTION_POLICY, reviewPolicy: REVIEW_POLICY }));
@@ -166,9 +173,13 @@ async function sealTerminal(env: WorkActivationEnvironment, admission: Registere
       OPTIONAL { ${iri(slot)} rv:selectionHead ?prior }
       OPTIONAL { ${iri(input.contribution)} a rv:TextContribution ;
         rv:work ${iri(input.work)} ; rv:publicationHead ?published }
+      ${input.media ? `OPTIONAL { ${iri(input.media.variantId)} a rv:ContentVariant ;
+        rv:resource ${iri(input.work)} ; rv:contentPublicationHead ?mediaPublished }` : ''}
     }
     FILTER(COALESCE(?prior, ${iri(NONE)}) != ${iri(input.expectedSelectionHead ?? NONE)}
-      || !BOUND(?published) || ?published != ${iri(input.publicationDecision)})` : '';
+      || !BOUND(?published) || ?published != ${iri(input.publicationDecision)}
+      ${input.media ? `|| !BOUND(?mediaPublished)
+        || ?mediaPublished != ${iri(input.media.publicationDecision)}` : ''})` : '';
   try { await env.fuseki.commandWithReceipt({ receipt, digest: admission.requestDigest,
     validations: [], deadlineMs: 10_000, update: `PREFIX rv: <${RV}>
     DELETE { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?n } }
@@ -229,7 +240,8 @@ async function validateCandidate(env: WorkActivationEnvironment, selection: stri
 
 /** Adopt one exact eligible public draft in a Realm/Main Version slot. */
 export async function selectRealmLocal(env: WorkActivationEnvironment,
-  admission: RegisteredAdmission, input: SelectRealmLocalInput): Promise<RealmSelectionReceipt> {
+  admission: RegisteredAdmission, input: SelectRealmLocalInput,
+  content?: Pick<ContentCore, 'readExactBatch'>): Promise<RealmSelectionReceipt> {
   const digest = realmSelectionDigest(input);
   if (admission.action !== 'publication.adopt'
     || admission.scope !== `publication:adopt:${input.context.id}`
@@ -288,6 +300,9 @@ export async function selectRealmLocal(env: WorkActivationEnvironment,
     || !/^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$/.test(exact.language)) {
     throw new RealmSelectionUnavailable('selected draft differs from eligible decision');
   }
+  if (input.media && !content) throw new RealmSelectionUnavailable('Content owner is unavailable');
+  const media = input.media && content
+    ? await currentRealmMediaSet(env, content, input.work, input.media) : null;
   const selection = ID + Bun.randomUUIDv7();
   const unit = ID + Bun.randomUUIDv7();
   const operation = ID + Bun.randomUUIDv7();
@@ -296,6 +311,7 @@ export async function selectRealmLocal(env: WorkActivationEnvironment,
     { context: input.context, slot, work: input.work, mainVersion: input.mainVersion,
       contribution: input.contribution, publicationDecision: input.publicationDecision,
       selectedDraft: exact.revision, language: exact.language,
+      ...(media ? { media: media.reference } : {}),
       selectionBasis: input.selectionBasis, selectionMode: 'fixed',
       reviewPolicy: REVIEW_POLICY, selectionPolicy: SELECTION_POLICY,
       reviewer: input.actingSubject, predecessor: input.expectedSelectionHead,
@@ -308,6 +324,20 @@ export async function selectRealmLocal(env: WorkActivationEnvironment,
     ? `rv:predecessor ${iri(input.expectedSelectionHead)} ;` : '';
   const receiptPredecessor = input.expectedSelectionHead
     ? `rv:expectedHead ${iri(input.expectedSelectionHead)} ;` : '';
+  const mediaTriples = media
+    ? `rv:mediaVariant ${iri(media.reference.variantId)} ;
+          rv:mediaPublicationDecision ${iri(media.reference.publicationDecision)} ;
+          rv:mediaRevision ${iri(`urn:rezics:content:revision:${media.reference.revisionId}`)} ;
+          rv:mediaDigest ${lit(media.reference.byteDigest)} ;` : '';
+  const mediaGuard = media ? `GRAPH ${iri(GRAPHS.current)} {
+        ${iri(media.reference.variantId)} a rv:ContentVariant ; rv:resource ${iri(input.work)} ;
+          rv:contentPublicationHead ${iri(media.reference.publicationDecision)} . }
+      GRAPH ${iri(GRAPHS.revisions)} {
+        ${iri(media.reference.publicationDecision)} a rv:ContentPublicationDecision ;
+          rv:component ${iri(media.reference.variantId)} ; rv:resource ${iri(input.work)} ;
+          rv:contentModel "media-set-v1" ;
+          rv:contentRevision ${iri(`urn:rezics:content:revision:${media.reference.revisionId}`)} ;
+          rv:byteDigest ${lit(media.reference.byteDigest)} . }` : '';
   try {
     const result = await validatedCommand(env, { receipt, digest, validations, deadlineMs: 10_000,
       update: `PREFIX rv: <${RV}> PREFIX schema: <https://schema.org/>
@@ -331,6 +361,7 @@ export async function selectRealmLocal(env: WorkActivationEnvironment,
           rv:mainVersion ${iri(input.mainVersion)} ;
           rv:contribution ${iri(input.contribution)} ;
           rv:publicationDecision ${iri(input.publicationDecision)} ;
+          ${mediaTriples}
           rv:selectedDraft ${iri(exact.revision)} ; rv:language ${lit(exact.language)} ;
           rv:selectionBasis rv:RealmManagerReview ; rv:selectionMode rv:Fixed ;
           rv:reviewPolicy ${iri(REVIEW_POLICY)} ; rv:reviewer ${iri(input.actingSubject)} ;
@@ -391,6 +422,7 @@ export async function selectRealmLocal(env: WorkActivationEnvironment,
           rv:rightsBasis rv:OriginalContribution ; rv:disclosure rv:Public .
         ${iri(exact.revision)} a rv:RevisionAnchor ; rv:component ${iri(input.contribution)} .
       }
+      ${mediaGuard}
       OPTIONAL {
         FILTER(BOUND(?prior))
         GRAPH ${iri(GRAPHS.revisions)} { ?prior rv:matchUnit ?oldUnit ; rv:slot ${iri(slot)} }
