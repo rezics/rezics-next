@@ -3,7 +3,7 @@ import { seedKey } from './plan.ts';
 
 interface CreatedWork { work: string; mainVersion: string }
 interface Composition { structure: string; revision: string }
-interface Changed extends Composition { occurrences: string[] }
+interface Changed extends Composition { occurrences?: string[] }
 
 /** Progress is valid only for a real chapter occurrence in a Book composition. */
 export async function seedChapterProgress(api: SeedApi, owner: { token: string; actingSubject: string },
@@ -27,12 +27,23 @@ export async function seedChapterProgress(api: SeedApi, owner: { token: string; 
       operations: chapters.map(({ key, work }) => ({ op: 'insert', parent: composition.structure,
         position: 'last', role: 'chapter', target: work.work, sourceKey: `seed:/serial/${key}` })),
     }, owner.token, seedKey('composition-chapters', 'serial'));
+  let occurrences = changed.occurrences;
+  if (!occurrences?.length) {
+    // Replayed graph receipts carry the terminal head, but can omit the fresh
+    // occurrence list. Recover it from the public chapter read.
+    const response = await fetch(`${api.endpoints.main}/v1/works/${parent.work.slice(-36)}/contents?limit=3`);
+    if (!response.ok) throw new Error(`Chapter page is unavailable: HTTP ${response.status}`);
+    const page = await response.json() as { items: { role: string; occurrence: string }[] };
+    occurrences = page.items.filter(item => item.role === 'chapter').map(item => item.occurrence);
+  }
+  if (occurrences.length < chapters.length) throw new Error('Seed composition has too few readable chapters');
   for (const [index, reader] of readers.entries()) {
-    const occurrence = changed.occurrences[index % changed.occurrences.length];
+    const occurrence = occurrences[index % occurrences.length];
     if (!occurrence) continue;
     await api.put(`/v1/compositions/${composition.structure.slice(-36)}/occurrences/${occurrence.slice(-36)}/progress`, {
       actingSubject: reader.actingSubject, expectedVersion: 0,
       completed: index % 3 === 0, position: `paragraph:${index + 1}`,
     }, reader.token, seedKey('chapter-progress', `${reader.id}:${occurrence}`));
   }
+  return { chapters: occurrences.length };
 }

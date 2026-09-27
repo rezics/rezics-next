@@ -142,3 +142,51 @@ export async function grantCuratedCollectionSeed(input: LocalOperatorInput, coll
     throw error;
   } finally { client.release(); await pool.end(); }
 }
+
+/** Dev fixture authority for the seed author's exact serial and Content variants.
+ * Authoring and reader progress still use the ordinary Main commands. */
+export async function grantHomeSeedAuthority(input: LocalOperatorInput,
+  grants: readonly { action: 'work.edit' | 'work.read' | 'content.draft'
+    | 'content.publish' | 'content.search-eligibility'; scope: string }[]) {
+  loopback(input.accessDatabaseUrl);
+  const scopePrefix = { 'work.edit': 'work:edit:https://rezics.com/id/',
+    'work.read': 'work:read:https://rezics.com/id/',
+    'content.draft': 'content:draft:https://rezics.com/id/',
+    'content.publish': 'content:publish:urn:rezics:variant:',
+    'content.search-eligibility': 'content:search-eligibility:urn:rezics:variant:' } as const;
+  if (grants.length > 10 || grants.some(({ action, scope }) =>
+    !scope.startsWith(scopePrefix[action])
+    || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(
+      scope.slice(scopePrefix[action].length)))) {
+    throw new Error('Home seed grant is outside the serial fixture');
+  }
+  const pool = new Pool({ connectionString: input.accessDatabaseUrl });
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query("SET LOCAL lock_timeout = '2s'");
+    await client.query("SET LOCAL statement_timeout = '5s'");
+    const fence = await client.query<{ open: boolean }>(
+      'SELECT open FROM access.recovery_fence WHERE id = true FOR SHARE');
+    if (fence.rows[0]?.open !== true) throw new Error('Access recovery fence is closed');
+    const owner = await principal(client, `${input.endpoints.account}/api/auth`, input.ownerAccountSubject);
+    for (const { action, scope } of grants) {
+      await client.query('INSERT INTO access.scope_gate (id) VALUES ($1) ON CONFLICT (id) DO NOTHING', [scope]);
+      const gate = await client.query<{ open: boolean }>(
+        'SELECT open FROM access.scope_gate WHERE id = $1 FOR SHARE', [scope]);
+      if (gate.rows[0]?.open !== true) throw new Error(`Home seed grant gate is closed: ${scope}`);
+      await ensureRepresentation(client, owner, input.actingSubject, action);
+      const found = await client.query(`SELECT id FROM access.permission_grant
+        WHERE recipient_subject = $1 AND scope_id = $2 AND action = $3 AND active
+          AND valid_until > now() FOR SHARE`, [input.actingSubject, scope, action]);
+      if (!found.rowCount) await client.query(`INSERT INTO access.permission_grant
+        (id, issuer_subject, recipient_subject, scope_id, action, valid_until)
+        VALUES ($1,$2,$2,$3,$4,now() + interval '8 hours')`,
+      [randomUUID(), input.actingSubject, scope, action]);
+    }
+    await client.query('COMMIT');
+  } catch (error) {
+    try { await client.query('ROLLBACK'); } catch { /* preserve first error */ }
+    throw error;
+  } finally { client.release(); await pool.end(); }
+}

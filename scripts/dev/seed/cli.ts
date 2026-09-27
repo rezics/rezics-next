@@ -2,6 +2,7 @@ import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, isAbsolute, join, resolve } from 'node:path';
+import { isDeepStrictEqual } from 'node:util';
 import { readEnv } from '../config.ts';
 import { SeedApi, SeedApiError, type SeedEndpoints } from './api.ts';
 import { people, realms, seedKey, semanticTypes, works } from './plan.ts';
@@ -9,11 +10,11 @@ import { seedReply } from './replies.ts';
 import { seedRealmManagement } from './realm-management.ts';
 import { seedFeed } from './feed.ts';
 import { seedChapterProgress } from './progress.ts';
-import { grantCuratedCollectionSeed, grantOfficialZoneSeed, operatorSeedSession }
+import { grantCuratedCollectionSeed, grantHomeSeedAuthority, grantOfficialZoneSeed, operatorSeedSession }
   from './operator.ts';
 import { DEFAULT_ZONE_PRESENTATION, ZONE_PRESETS }
   from '../../../services/main/src/modules/zone/presentation-format.ts';
-import { seedHomeV2 } from './home-v2.ts';
+import { prepareHomeV2Chapters, seedHomeV2 } from './home-v2.ts';
 
 interface Options { dryRun: boolean; resetOwn: boolean }
 interface WorkReceipt { work: string; mainVersion: string; workRevision: string; mainRevision: string;
@@ -142,6 +143,8 @@ async function run(options: Options): Promise<boolean> {
       profile: 'metadata-only-v1', title: work.title, semanticTypes: semanticTypes(work.type),
       actingSubject: owner.actingSubject }, ownerToken, seedKey('work', work.id));
     created.set(work.id, receipt);
+    if (work.tagline) await grantHomeSeedAuthority(operatorInput,
+      [{ action: 'work.edit', scope: `work:edit:${receipt.work}` }]);
     if (work.tagline) await optional('Work serial summary', () => api.put(
       `/v1/works/${receipt.work.slice(-36)}/metadata`, {
         profile: 'work-metadata-details-v1', expectedHead: null,
@@ -185,18 +188,25 @@ async function run(options: Options): Promise<boolean> {
       zone, space: parent.receipt.space, disclosure: 'public',
       actingSubject: parent.steward.actingSubject,
     }, parent.steward.token, seedKey('zone', realm.id));
-    const currentZone = await api.get<{ revision: string }>(
+    const currentZone = await api.get<{ revision: string; configuration: {
+      defaultRealm: string | null; official: { routeSegment: string } | null;
+      presentation: unknown } }>(
       `/v1/zones/${zone.slice(-36)}/configuration?actingSubject=${encodeURIComponent(parent.steward.actingSubject)}`,
       parent.steward.token);
     const preset = realm.preset;
-    await operatorSession.api.put(`/v1/zones/${zone.slice(-36)}/configuration`, {
-      expectedHead: currentZone.revision, actingSubject: parent.steward.actingSubject,
-      defaultRealm: parent.receipt.realm, official: { routeSegment: realm.id },
+    const desiredZone = { defaultRealm: parent.receipt.realm,
+      official: { routeSegment: realm.id },
       presentation: { ...DEFAULT_ZONE_PRESENTATION, preset, tokens: ZONE_PRESETS[preset],
         navigation: [{ label: realm.name, href: `/r/${realm.id}` }],
         modules: [{ id: 'featured', type: 'editorial-list', title: 'Featured works',
-          source: { kind: 'collection', collection }, options: { layout: 'covers', limit: 12 } }] },
-    }, operatorSession.token, seedKey('official-zone', realm.id));
+          source: { kind: 'collection', collection }, options: { layout: 'covers', limit: 12 } }] } };
+    if (!isDeepStrictEqual({ defaultRealm: currentZone.configuration.defaultRealm,
+      official: currentZone.configuration.official, presentation: currentZone.configuration.presentation }, desiredZone)) {
+      await operatorSession.api.put(`/v1/zones/${zone.slice(-36)}/configuration`, {
+        expectedHead: currentZone.revision, actingSubject: parent.steward.actingSubject,
+        ...desiredZone }, operatorSession.token,
+      seedKey('official-zone', `${realm.id}:${currentZone.revision.slice(-36)}`));
+    }
     seededZones.push(zone);
   }
   const original = created.get('pride');
@@ -273,7 +283,10 @@ async function run(options: Options): Promise<boolean> {
       person.token, seedKey('reading-status', `${person.id}:${choice.id}`)));
   }
 
-  await optional('Chapter reading progress', () => seedChapterProgress(api, owner, sessions, created));
+  const chaptersReady = await optional('Home chapter Content', () =>
+    prepareHomeV2Chapters(api, owner, created, operatorInput));
+  if (chaptersReady) await optional('Chapter reading progress', () =>
+    seedChapterProgress(api, owner, sessions, created));
 
   const managed = createdRealms.find(realm => realm.id === 'fiction');
   if (managed) await optional('Realm moderation team and queue', () => seedRealmManagement(api,
