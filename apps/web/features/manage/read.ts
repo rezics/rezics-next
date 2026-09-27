@@ -91,14 +91,23 @@ const NAME_BUDGET = 50;
  * Public names for the Agents a view shows. Main's management reads return
  * Agent IDs only, so each name is one public profile read, bounded per view;
  * an Agent Main cannot describe keeps a null label and shows its short ID.
+ * A client that sends a token (the BFF always does) must name its acting Agent.
  */
-export async function readAgents(main: MainClient, iris: readonly string[]): Promise<Record<string, AgentSummary>> {
+export async function readAgents(main: MainClient, iris: readonly string[], actingSubject?: string):
+  Promise<Record<string, AgentSummary>> {
   const unique = [...new Set(iris)].slice(0, NAME_BUDGET);
   const agents = await bounded(unique, 8, async (iri): Promise<AgentSummary> => {
-    const read = await settle(() => main.v1.agents({ id: uuidOf(iri) }).get({ query: {} }));
+    const read = await settle(() => main.v1.agents({ id: uuidOf(iri) }).get({ query: actingSubject ? { actingSubject } : {} }));
     return read.ok ? { iri, label: read.data.displayName, handle: read.data.handle } : { iri, label: null, handle: null };
   });
   return Object.fromEntries(agents.map(agent => [agent.iri, agent]));
+}
+
+/** Newly read names over known ones, except that a read Main could not answer never erases a known name. */
+export function mergeAgents(known: Record<string, AgentSummary>, found: Record<string, AgentSummary>) {
+  const merged = { ...known };
+  for (const [iri, agent] of Object.entries(found)) if (agent.label !== null || !merged[iri]) merged[iri] = agent;
+  return merged;
 }
 
 /** The Works queue items point at, read as the acting moderator so restricted Works still show. */
@@ -127,13 +136,13 @@ export async function readDraftText(main: MainClient, contribution: string, revi
 }
 
 /** A person by handle ("@lin_mei" or "lin_mei"), for acting on someone who is not in the member list. */
-export async function readHandle(main: MainClient, handle: string): Promise<Loaded<AgentSummary>> {
+export async function readHandle(main: MainClient, handle: string, actingSubject?: string): Promise<Loaded<AgentSummary>> {
   const bare = handle.trim().replace(/^@/, '');
   if (/^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/.test(bare)) return { ok: true, data: { iri: bare, label: null, handle: null } };
   if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(bare)) {
     return { ok: true, data: { iri: iriOf(bare), label: null, handle: null } };
   }
   if (!bare || bare.length > 64) return { ok: false, failure: 'invalid' };
-  const read = await settle(() => main.v1.handles({ handle: bare }).get({ query: {} }));
+  const read = await settle(() => main.v1.handles({ handle: bare }).get({ query: actingSubject ? { actingSubject } : {} }));
   return read.ok ? { ok: true, data: { iri: read.data.id, label: read.data.displayName, handle: read.data.handle } } : read;
 }

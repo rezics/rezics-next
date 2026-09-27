@@ -93,6 +93,23 @@ export const BanSomeoneByHandle: Story = {
   },
 };
 
+/** Bans of people outside the roster are not listed; unbanning by handle says when there was none. */
+export const UnbanSomeoneOutsideTheRoster: Story = {
+  args: { api: adminApi({ record, memberFailure: 'denied' }) },
+  async play({ canvasElement }) {
+    reset();
+    const canvas = within(canvasElement);
+    await userEvent.click(canvas.getByRole('button', { name: 'Unban someone' }));
+    const dialog = within(await body().findByRole('dialog', { name: 'Unban someone in this Realm' }));
+    await userEvent.type(dialog.getByRole('textbox', { name: 'Who' }), '@lin_mei');
+    await userEvent.type(dialog.getByRole('textbox', { name: 'Reason' }), 'Ban was a mistake.');
+    await userEvent.click(dialog.getByRole('button', { name: 'Unban' }));
+    await expect(await dialog.findByRole('alert')).toHaveTextContent('They aren’t banned in this Realm.');
+    await expect(record.members).toEqual([expect.objectContaining({ action: 'unban', member: people.mei,
+      expectedMembershipGeneration: '0' })]);
+  },
+};
+
 /** A stale membership keeps the dialog and what was typed, and says why. */
 export const ChangedMeanwhile: Story = {
   args: { api: adminApi({ record, memberFailure: 'stale' }) },

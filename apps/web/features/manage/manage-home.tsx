@@ -11,9 +11,10 @@ import { relativeTime } from './format.ts';
 import type { ManageMessages } from './messages.ts';
 import { Named, Thumb } from './parts.tsx';
 import { ActingAs } from './realm-frame.tsx';
-import { ForgetRealm, RealmFinder, type RealmSearch } from './realm-finder.tsx';
+import { RealmFinder } from './realm-finder.tsx';
+import { ForgetRealm } from './remember.tsx';
 import { realmHref } from './routes.ts';
-import type { Loaded, ModerationPage, RealmHeader } from './types.ts';
+import type { Loaded, ModerationPage, RealmDirectoryPage, RealmHeader } from './types.ts';
 
 export interface RealmSummary { realm: string; header: RealmHeader | null; queue: Loaded<ModerationPage> }
 
@@ -51,9 +52,9 @@ function RealmCard({ summary, now, locale, messages }: { summary: RealmSummary; 
 }
 
 /** `/manage`: the Realms this person manages from this device, each with its queue at a glance. */
-export function ManageHome({ agent, realms, now, locale, messages, search }: {
-  agent: AgentOption; realms: readonly RealmSummary[]; now: number; locale: UiLocale; messages: ManageMessages;
-  search?: RealmSearch;
+export function ManageHome({ agent, realms, query, results, now, locale, messages }: {
+  agent: AgentOption; realms: readonly RealmSummary[]; query: string; results: Loaded<RealmDirectoryPage> | null;
+  now: number; locale: UiLocale; messages: ManageMessages;
 }) {
   const t = materializeData(messages, { locale });
   return <PageContainer className="grid gap-10">
@@ -69,6 +70,6 @@ export function ManageHome({ agent, realms, now, locale, messages, search }: {
           messages={messages} />)}
       </ul> : <EmptyState icon={CompassIcon} title={t.noRealmsTitle} description={t.noRealmsHelp} headingLevel={3} />}
     </section>
-    <RealmFinder locale={locale} messages={messages} search={search} />
+    <RealmFinder query={query} results={results} locale={locale} messages={messages} />
   </PageContainer>;
 }

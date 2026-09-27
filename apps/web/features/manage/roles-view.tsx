@@ -18,6 +18,7 @@ import { ImpactPreview } from './impact-preview.tsx';
 import { failureText } from './members-view.tsx';
 import type { ManageMessages } from './messages.ts';
 import { permissionOrder, permissionText, sortPermissions } from './permissions.ts';
+import { mergeAgents } from './read.ts';
 import { REASON_LIMIT } from './reason-dialog.tsx';
 import type { AgentSummary, RealmPermission, Role, RoleChange, RoleList } from './types.ts';
 
@@ -91,7 +92,7 @@ function RoleEditor({ role, generation, api, actingSubject, agents, locale, mess
   [roleId, name, permissions]);
   const unchanged = role !== null && role.name === name.trim()
     && sortPermissions(role.permissions).join() === sortPermissions(permissions).join();
-  const { state, save } = useRoleChange(api, { actingSubject, generation, change: unchanged ? null : change });
+  const { state, save, names } = useRoleChange(api, { actingSubject, generation, change: unchanged ? null : change });
 
   async function submit() {
     if (!name.trim()) { setError(t.roleNameRequired); return; }
@@ -124,7 +125,8 @@ function RoleEditor({ role, generation, api, actingSubject, agents, locale, mess
         </Field>)}
       </div>
     </FieldSet>
-    <ImpactPreview state={state} agents={agents} actingSubject={actingSubject} locale={locale} messages={messages} />
+    <ImpactPreview state={state} agents={mergeAgents(agents, names)} actingSubject={actingSubject} locale={locale}
+      messages={messages} />
     <Field invalid={error === t.reasonRequired}>
       <FieldLabel>{t.changeReasonLabel}</FieldLabel>
       <Textarea value={reason} rows={2} maxLength={REASON_LIMIT} onChange={event => setReason(event.currentTarget.value)} />

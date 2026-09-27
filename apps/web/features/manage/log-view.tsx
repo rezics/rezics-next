@@ -13,7 +13,7 @@ import { agentLabel, dateTime, relativeTime, shownHandle } from './format.ts';
 import { auditKindLabel, auditOutcome, publicDecisionLabel } from './labels.ts';
 import type { ManageMessages } from './messages.ts';
 import { AgentMark, Named, Pill } from './parts.tsx';
-import { readAgents, readAudit, readPublicDecisions, readWorks } from './read.ts';
+import { mergeAgents, readAgents, readAudit, readPublicDecisions, readWorks } from './read.ts';
 import { type AuditFilter, type LogView as View, logHref } from './routes.ts';
 import { type AgentSummary, type AuditItem, type AuditPage, type Loaded, type PublicDecision, type PublicDecisionPage,
   uuidOf, type WorkSummary } from './types.ts';
@@ -32,7 +32,8 @@ export function bffLogApi(realm: string, actingSubject: string, language: string
     decisions: cursor => readPublicDecisions(browserMainApi(), realm, cursor),
     async names(agents, works) {
       const main = browserMainApi();
-      const [a, w] = await Promise.all([readAgents(main, agents), readWorks(main, works, { language, actingSubject })]);
+      const [a, w] = await Promise.all([readAgents(main, agents, actingSubject),
+        readWorks(main, works, { language, actingSubject })]);
       return { agents: a, works: w };
     },
   };
@@ -71,7 +72,7 @@ export function LogView({ realm, actingSubject, view, first, agents: initialAgen
       setAudit(items => [...items, ...read.data.items]);
       setCursor(read.data.nextCursor);
       const found = await api.names(read.data.items.map(item => item.actingSubject), []);
-      setNames(known => ({ ...known, agents: { ...known.agents, ...found.agents } }));
+      setNames(known => ({ ...known, agents: mergeAgents(known.agents, found.agents) }));
     } else {
       const read = await api.decisions(cursor);
       if (!read.ok) { setPaging(read.failure === 'moved' ? 'moved' : 'failed'); return; }

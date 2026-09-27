@@ -1,10 +1,9 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { expect, userEvent, within } from 'storybook/test';
+import { expect, within } from 'storybook/test';
 import { acting, header, iri, now, queuePage, realm } from './fixtures.ts';
 import { ManageHome, type RealmSummary } from './manage-home.tsx';
 import { messages } from './messages.ts';
 import zhHans from './messages/zh-Hans.ts';
-import type { RealmSearch } from './realm-finder.tsx';
 
 const serials = '00000000-0000-4000-8000-000000000021';
 const cooking = '00000000-0000-4000-8000-000000000022';
@@ -18,16 +17,16 @@ const realms: RealmSummary[] = [
   { realm: cooking, header: named('Home Cooking · 家常菜', cooking), queue: { ok: false, failure: 'denied' } },
 ];
 
-const search: RealmSearch = async query => ({ ok: true, data: { profile: 'realm-directory-v1', nextCursor: null,
-  sourcePosition: { dataEpoch: 'fixture', sequence: '1' }, count: { value: 1, kind: 'exact-page', total: null },
-  items: query.toLowerCase().includes('class') ? [{ id: iri(1), space: iri(2), name: header.name, icon: header.icon,
-    description: null, membership: { count: { kind: 'unknown', value: null } }, links: { realm: `/v1/realms/${realm}` } }] : [] } });
+const found = { ok: true as const, data: { profile: 'realm-directory-v1' as const, nextCursor: null,
+  sourcePosition: { dataEpoch: 'fixture', sequence: '1' }, count: { value: 1, kind: 'exact-page' as const, total: null },
+  items: [{ id: iri(1), space: iri(2), name: header.name, icon: header.icon, description: null,
+    membership: { count: { kind: 'unknown' as const, value: null } }, links: { realm: `/v1/realms/${realm}` } }] } };
 
 const meta = {
   title: 'Manage/Home',
   component: ManageHome,
   parameters: { route: { pathname: '/en/manage' } },
-  args: { agent: acting, realms, now, locale: 'en', messages, search },
+  args: { agent: acting, realms, query: '', results: null, now, locale: 'en', messages },
 } satisfies Meta<typeof ManageHome>;
 export default meta;
 type Story = StoryObj<typeof meta>;
@@ -55,11 +54,26 @@ export const FirstVisit: Story = {
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     await expect(canvas.getByRole('heading', { name: 'Open a Realm you moderate' })).toBeVisible();
-    await userEvent.type(canvas.getByRole('searchbox', { name: 'Realm name' }), 'classic{enter}');
-    await expect(await canvas.findByRole('link', { name: /Classic Literature/ })).toHaveAttribute('href', `/en/manage/r/${realm}`);
-    await userEvent.clear(canvas.getByRole('searchbox', { name: 'Realm name' }));
-    await userEvent.type(canvas.getByRole('searchbox', { name: 'Realm name' }), 'knitting{enter}');
-    await expect(await canvas.findByText('No Realms match “knitting”.')).toBeVisible();
+    const form = canvas.getByRole('search', { name: 'Open a Realm' });
+    await expect(form).toHaveAttribute('action', '/en/manage');
+    await expect(within(form).getByRole('searchbox', { name: 'Realm name' })).toHaveAttribute('name', 'q');
+  },
+};
+
+/** The finder is a plain GET form: results come from the server, so it works before scripts load. */
+export const FinderResults: Story = {
+  args: { realms: [], query: 'classic', results: found },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByRole('searchbox', { name: 'Realm name' })).toHaveValue('classic');
+    await expect(canvas.getByRole('link', { name: /Classic Literature/ })).toHaveAttribute('href', `/en/manage/r/${realm}`);
+  },
+};
+
+export const FinderNoMatch: Story = {
+  args: { realms: [], query: 'knitting', results: { ...found, data: { ...found.data, items: [] } } },
+  async play({ canvasElement }) {
+    await expect(within(canvasElement).getByRole('status')).toHaveTextContent('No Realms match “knitting”.');
   },
 };
 

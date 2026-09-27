@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { browserMainApi } from '../api/browser.ts';
 import { changeMember, changeRole, newKey, type Outcome, previewRole, saveSettings } from './commands.ts';
 import type { ImpactState } from './impact-preview.tsx';
-import { readAgents, readHandle, readMembers, readRoles, readSettings } from './read.ts';
+import { mergeAgents, readAgents, readHandle, readMembers, readRoles, readSettings } from './read.ts';
 import type { AgentSummary, Loaded, MemberCommand, MemberPage, MemberReceipt, RoleChange, RoleCommand, RoleImpact,
   RoleList, RoleReceipt, SettingsReceipt, SettingsView } from './types.ts';
 
@@ -25,8 +25,8 @@ export function bffAdminApi(realm: string, actingSubject: string): AdminApi {
   const main = () => browserMainApi();
   return {
     members: (search, after) => readMembers(main(), realm, { actingSubject, search, after }),
-    names: iris => readAgents(main(), iris),
-    lookup: handle => readHandle(main(), handle),
+    names: iris => readAgents(main(), iris, actingSubject),
+    lookup: handle => readHandle(main(), handle, actingSubject),
     changeMember: (command, key) => changeMember(main(), realm, command, key),
     roles: () => readRoles(main(), realm, actingSubject),
     preview: command => previewRole(main(), realm, command),
@@ -53,6 +53,8 @@ export type RoleSave = Outcome<RoleReceipt> | { ok: false; failure: 'changed'; i
 export function useRoleChange(api: AdminApi, input: { actingSubject: string; generation: string;
   change: RoleChange | null }) {
   const [state, setState] = useState<ImpactState>({ kind: 'idle' });
+  // People a change affects need not be on the roster the page already named.
+  const [names, setNames] = useState<Record<string, AgentSummary>>({});
   const generation = useRef(input.generation);
   const request = JSON.stringify(input.change);
   const shown = useRef<RoleImpact | null>(null);
@@ -81,10 +83,14 @@ export function useRoleChange(api: AdminApi, input: { actingSubject: string; gen
         shown.current = result.ok ? result.data : null;
         setState(result.ok ? { kind: 'ready', impact: result.data, refreshed: before !== generation.current }
           : { kind: 'failed' });
+        if (result.ok && result.data.changes.length) {
+          void api.names(result.data.changes.map(change => change.member))
+            .then(found => { if (current) setNames(known => mergeAgents(known, found)); });
+        }
       });
     }, 350);
     return () => { current = false; clearTimeout(timer); };
-  }, [request, preview]);
+  }, [request, preview, api]);
 
   const save = useCallback(async (reason: string): Promise<RoleSave> => {
     const change = request === 'null' ? null : JSON.parse(request) as RoleChange;
@@ -101,5 +107,5 @@ export function useRoleChange(api: AdminApi, input: { actingSubject: string; gen
     return api.changeRole(command, bound.data.digest, newKey());
   }, [api, preview, request, input.actingSubject]);
 
-  return { state, save };
+  return { state, save, names };
 }

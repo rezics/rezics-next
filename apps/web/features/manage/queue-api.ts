@@ -28,7 +28,7 @@ export function bffQueueApi(realm: string, actingSubject: string, language: stri
     async names(items) {
       const main = browserMainApi();
       const { agents, works } = mentioned(items);
-      const [agentNames, workNames] = await Promise.all([readAgents(main, agents),
+      const [agentNames, workNames] = await Promise.all([readAgents(main, agents, actingSubject),
         readWorks(main, works, { language, actingSubject })]);
       return { agents: agentNames, works: workNames };
     },

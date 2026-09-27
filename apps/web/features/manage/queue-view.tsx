@@ -21,6 +21,7 @@ import { QueueDetail } from './queue-detail.tsx';
 import { actionsFor, commonActions, type Decision, initialTriage, needsReason, type PendingDecision,
   type QueueAction, type Settled, targetIds, triage, UNDO_WINDOW_MS, visibleIds } from './queue-state.ts';
 import { ReasonDialog } from './reason-dialog.tsx';
+import { mergeAgents } from './read.ts';
 import { type QueueView as View, queueHref } from './routes.ts';
 import type { AgentSummary, Loaded, ModerationItem, ModerationKind, ModerationPage, WorkSummary } from './types.ts';
 
@@ -93,7 +94,7 @@ export function QueueView({ realm, actingSubject, view, initial, agents: initial
 
   const learn = useCallback(async (items: readonly ModerationItem[]) => {
     const found = await api.names(items);
-    setNames(known => ({ agents: { ...known.agents, ...found.agents }, works: { ...known.works, ...found.works } }));
+    setNames(known => ({ agents: mergeAgents(known.agents, found.agents), works: { ...known.works, ...found.works } }));
   }, [api]);
 
   const reload = useCallback(async () => {
@@ -117,7 +118,8 @@ export function QueueView({ realm, actingSubject, view, initial, agents: initial
       if (!result.ok && result.failure === 'pending') setFlash(t.pendingNotice);
       return outcome;
     }));
-    if (results.some(outcome => outcome.kind === 'stale')) await reload();
+    // An escalated item stays open for the owners, so it comes back with its escalation shown.
+    if (entry.decision.action === 'escalate' || results.some(outcome => outcome.kind === 'stale')) await reload();
   }, [api, reload, t.pendingNotice]);
 
   // The undo window: a clock while decisions wait, and each is sent when its window closes.
@@ -317,6 +319,7 @@ export function QueueView({ realm, actingSubject, view, initial, agents: initial
               {(['approve', 'reject', 'request-changes', 'escalate'] as const).filter(action => bulkActions.has(action))
                 .map(action => <Button key={action} size="xs" variant={action === 'approve' ? 'default' : 'outline'}
                   onClick={() => act(action)}>{actionLabel(action, t)}</Button>)}
+              {bulkActions.size ? null : <span className="text-muted-foreground text-sm">{t.noCommonAction}</span>}
               <Button size="xs" variant="ghost" onClick={() => dispatch({ type: 'clear-selection' })}>{t.clearSelection}</Button>
             </> : <span className="text-muted-foreground text-sm">{t.selectAll}</span>}
           </div> : null}
@@ -352,6 +355,7 @@ export function QueueView({ realm, actingSubject, view, initial, agents: initial
       }}>{t.undo}<Kbd aria-hidden="true">Z</Kbd></Button>
     </div> : state.committing.length ? <div role="status" className="sr-only">{t.sending}</div> : null}
     <ReasonDialog action={dialog?.action ?? null} count={dialog?.ids.length ?? 1} locale={locale} messages={messages}
+      finalFocus={() => (latest.current.current ? rows.current.get(latest.current.current) : null) ?? null}
       onClose={() => setDialog(null)}
       onDecide={decision => { const ids = dialog?.ids ?? []; setDialog(null); decide(ids, decision); }} />
     <Dialog open={help} onOpenChange={details => setHelp(details.open)}>

@@ -21,6 +21,6 @@ export default async function RealmSettingsRoute({ params }: { params: Promise<{
   const [messages, settings] = await Promise.all([getMessages('manage', locale), readSettings(main, realm, actingSubject)]);
   if (!settings.ok) return <ManageFailure failure={settings.failure} locale={locale} messages={messages}
     signInHref={signInHref} retryHref={localizedPath(realmHref(realm, 'settings'), locale)} />;
-  return <SettingsView key={`${settings.data.generation}:${settings.data.ruleBasis.revision ?? ''}`} realm={realm}
+  return <SettingsView realm={realm}
     actingSubject={actingSubject} initial={settings.data} locale={locale} messages={messages} />;
 }

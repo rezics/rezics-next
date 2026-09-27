@@ -4,7 +4,7 @@ import { ManageFailure } from '../../../../../features/manage/parts.tsx';
 import { mentioned } from '../../../../../features/manage/queue-api.ts';
 import { QueueView } from '../../../../../features/manage/queue-view.tsx';
 import { readAgents, readQueue, readWorks } from '../../../../../features/manage/read.ts';
-import { RememberRealm } from '../../../../../features/manage/realm-finder.tsx';
+import { RememberRealm } from '../../../../../features/manage/remember.tsx';
 import { parseQueueView, queueHref } from '../../../../../features/manage/routes.ts';
 import { isRealmSegment, manager } from '../../../../../features/manage/server.ts';
 import { localizedPath } from '../../../../../i18n/locale.ts';

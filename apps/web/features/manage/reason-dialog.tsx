@@ -17,9 +17,11 @@ export const REASON_LIMIT = 2000;
  * Asks for the reason Main requires before a rejection, a change request or an
  * escalation. The decision is not sent here; it enters the undo window.
  */
-export function ReasonDialog({ action, count, onDecide, onClose, locale, messages }: {
+export function ReasonDialog({ action, count, onDecide, onClose, finalFocus, locale, messages }: {
   action: Exclude<QueueAction, 'approve'> | null; count: number; onDecide: (decision: Decision) => void;
   onClose: () => void; locale: UiLocale; messages: ManageMessages;
+  /** Where focus goes when the dialog closes: the queue's next item, so shortcuts keep working. */
+  finalFocus?: () => HTMLElement | null;
 }) {
   const t = materializeData(messages, { locale });
   const [reason, setReason] = useState('');
@@ -28,20 +30,24 @@ export function ReasonDialog({ action, count, onDecide, onClose, locale, message
   const reasonRef = useRef<HTMLTextAreaElement>(null);
   // The dialog animates out after `action` clears; keep its words until it is gone.
   const [shown, setShown] = useState(action ?? 'reject');
-  if (action && action !== shown) setShown(action);
+  const [opened, setOpened] = useState(action !== null);
+  // A fresh decision starts empty; the text stays while the last dialog animates out.
+  if ((action !== null) !== opened) {
+    setOpened(action !== null);
+    if (action) { setShown(action); setReason(''); setNote(''); setError(null); }
+  }
   const escalating = shown === 'escalate';
   const title = shown === 'reject' ? t.reasonRejectTitle(count)
     : shown === 'request-changes' ? t.reasonChangesTitle(count) : t.reasonEscalateTitle(count);
-  const close = () => { setReason(''); setNote(''); setError(null); onClose(); };
+  const close = () => onClose();
   const submit = () => {
     const text = reason.trim();
     if (!text) { setError(t.reasonRequired); return; }
     if (text.length > REASON_LIMIT || note.length > 4000) { setError(t.reasonTooLong); return; }
     onDecide({ action: shown, reason: text, note: escalating ? null : note.trim() || null });
-    setReason(''); setNote(''); setError(null);
   };
   return <Dialog open={action !== null} onOpenChange={details => { if (!details.open) close(); }}
-    initialFocusEl={() => reasonRef.current}>
+    initialFocusEl={() => reasonRef.current} {...finalFocus ? { finalFocusEl: finalFocus } : {}}>
     <DialogContent size="md">
       <form noValidate onSubmit={event => { event.preventDefault(); submit(); }} className="contents">
         <DialogHeader title={title} description={t.undoHint} />

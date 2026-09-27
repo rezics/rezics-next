@@ -21,6 +21,7 @@ import { agentLabel, date, shownHandle } from './format.ts';
 import { ImpactPreview } from './impact-preview.tsx';
 import type { ManageMessages } from './messages.ts';
 import { AgentMark } from './parts.tsx';
+import { mergeAgents } from './read.ts';
 import { REASON_LIMIT } from './reason-dialog.tsx';
 import type { AgentSummary, Member, MemberPage, Role, RoleChange } from './types.ts';
 
@@ -32,8 +33,8 @@ export const roleDurations = [['validFor7', 7], ['validFor30', 30], ['validFor90
 
 type Target = { iri: string; membershipGeneration: string; member: Member | null };
 type Open =
-  | { kind: 'ban'; target: Target | null }
-  | { kind: 'unban' | 'remove'; target: Target }
+  | { kind: 'ban' | 'unban'; target: Target | null }
+  | { kind: 'remove'; target: Target }
   | { kind: 'add' }
   | { kind: 'give'; target: Target }
   | { kind: 'take'; target: Target; role: { id: string; name: string } };
@@ -81,7 +82,7 @@ export function MembersView({ realm, actingSubject, first, agents: initialAgents
     setPage(current => after ? { ...read.data, items: [...current.items, ...read.data.items] } : read.data);
     setSearched(search);
     const found = await api.names(read.data.items.map(item => item.member));
-    setAgents(known => ({ ...known, ...found }));
+    setAgents(known => mergeAgents(known, found));
   }
 
   function search(event: FormEvent) {
@@ -105,6 +106,7 @@ export function MembersView({ realm, actingSubject, first, agents: initialAgents
         <p className="max-w-2xl text-muted-foreground text-sm">{t.membersHelp}</p>
       </div>
       <div className="flex flex-wrap gap-2">
+        <Button variant="ghost" size="sm" onClick={() => setOpen({ kind: 'unban', target: null })}>{t.unbanSomeone}</Button>
         <Button variant="outline" size="sm" onClick={() => setOpen({ kind: 'ban', target: null })}>
           <BanIcon aria-hidden="true" />{t.banSomeone}</Button>
         <Button size="sm" onClick={() => setOpen({ kind: 'add' })}><UserPlusIcon aria-hidden="true" />{t.addMember}</Button>
@@ -149,7 +151,8 @@ export function MembersView({ realm, actingSubject, first, agents: initialAgents
             <Menu onSelect={({ value }) => {
               const chosen = target(member);
               if (value === 'ban') setOpen({ kind: 'ban', target: chosen });
-              else if (value === 'unban' || value === 'remove') setOpen({ kind: value, target: chosen });
+              else if (value === 'unban') setOpen({ kind: 'unban', target: chosen });
+              else if (value === 'remove') setOpen({ kind: 'remove', target: chosen });
               else if (value === 'give') setOpen({ kind: 'give', target: chosen });
               else if (value.startsWith('take:')) {
                 const role = member.roles.find(item => `take:${item.id}` === value);
@@ -211,7 +214,8 @@ function MemberDialog({ open, generation, api, actingSubject, nameOf, locale, me
   const known = open && 'target' in open ? open.target : null;
   const name = known ? nameOf(known.iri) : '';
   const title = kind === 'ban' ? known ? t.banTitle({ name }) : t.banSomeoneTitle
-    : kind === 'unban' ? t.unbanTitle({ name }) : kind === 'remove' ? t.removeTitle({ name }) : t.addTitle;
+    : kind === 'unban' ? known ? t.unbanTitle({ name }) : t.unbanSomeoneTitle
+      : kind === 'remove' ? t.removeTitle({ name }) : t.addTitle;
   const help = kind === 'ban' ? t.banHelp : kind === 'unban' ? t.unbanHelp : kind === 'remove' ? t.removeHelp : t.addHelp;
   const confirm = kind === 'ban' ? t.banConfirm : kind === 'unban' ? t.unbanConfirm : kind === 'remove' ? t.removeConfirm
     : t.addConfirm;
@@ -219,15 +223,20 @@ function MemberDialog({ open, generation, api, actingSubject, nameOf, locale, me
   async function submit() {
     if (!open) return;
     setError(null); setField(null);
-    if ((open.kind === 'add' || open.kind === 'ban' && !open.target) && !who.trim()) { setField('who'); return; }
+    if ((open.kind === 'add' || (open.kind === 'ban' || open.kind === 'unban') && !open.target) && !who.trim()) {
+      setField('who');
+      return;
+    }
     if (open.kind === 'add' && !consentPattern.test(consent.trim())) { setField('consent'); return; }
     if (!reason.trim() || reason.trim().length > REASON_LIMIT) { setField('reason'); return; }
     setPending(true);
     let subject = known;
+    let label: string | null = null;
     if (!subject) {
       const found = await api.lookup(who);
       if (!found.ok) { setPending(false); setField('who'); return; }
       onLearn(found.data);
+      label = found.data.label;
       // Someone already on the roster is changed at their own membership generation.
       const roster = await api.members(found.data.iri, null);
       const row = roster.ok ? roster.data.items.find(item => item.member === found.data.iri) : undefined;
@@ -240,12 +249,14 @@ function MemberDialog({ open, generation, api, actingSubject, nameOf, locale, me
     key.current);
     setPending(false);
     if (!result.ok) {
-      setError(failureText(result.failure, t, 'member'));
+      // Main does not list bans of people outside the roster; a refused unban means there was none.
+      setError(open.kind === 'unban' && !known && result.failure === 'denied' ? t.notBanned
+        : failureText(result.failure, t, 'member'));
       if (result.failure === 'stale') key.current = newKey();
       return;
     }
-    const shown = nameOf(subject.iri);
-    onDone(open.kind === 'ban' ? t.bannedNow({ name: shown }) : open.kind === 'unban' ? t.unbannedNow({ name: shown })
+    const shown = label ?? nameOf(subject.iri);
+    onDone(open.kind === 'ban' ? subject.member ? t.bannedNow({ name: shown }) : t.bannedOutsider({ name: shown }) : open.kind === 'unban' ? t.unbannedNow({ name: shown })
       : open.kind === 'remove' ? t.removedNow({ name: shown }) : t.addedNow({ name: shown }));
   }
 
@@ -253,7 +264,7 @@ function MemberDialog({ open, generation, api, actingSubject, nameOf, locale, me
     destructive={kind === 'ban' || kind === 'remove'} pending={pending} error={error} cancel={t.cancel}
     onClose={onClose} onConfirm={() => void submit()}
     initialFocus={() => whoRef.current ?? reasonRef.current}>
-    {kind === 'add' || kind === 'ban' && !known ? <Field invalid={field === 'who'}>
+    {kind === 'add' || (kind === 'ban' || kind === 'unban') && !known ? <Field invalid={field === 'who'}>
       <FieldLabel>{t.whoLabel}</FieldLabel>
       <Input ref={whoRef} value={who} placeholder={t.whoPlaceholder} autoComplete="off"
         onChange={event => setWho(event.currentTarget.value)} />
@@ -298,7 +309,7 @@ function RoleDialog({ open, generation, roles, api, actingSubject, agents, name,
     assigned: open.kind === 'give',
     validUntil: new Date(openedAt + (open.kind === 'give' ? days * 86_400_000 : 0)).toISOString() } : null,
   [roleId, open, days, openedAt]);
-  const { state, save } = useRoleChange(api, { actingSubject, generation, change });
+  const { state, save, names } = useRoleChange(api, { actingSubject, generation, change });
   const roleName = open.kind === 'take' ? open.role.name : roles.find(role => role.id === roleId)?.name ?? '';
 
   async function submit() {
@@ -332,7 +343,8 @@ function RoleDialog({ open, generation, roles, api, actingSubject, agents, name,
         </NativeSelect>
       </Field>
     </div> : null}
-    <ImpactPreview state={state} agents={agents} actingSubject={actingSubject} locale={locale} messages={messages} />
+    <ImpactPreview state={state} agents={mergeAgents(agents, names)} actingSubject={actingSubject} locale={locale}
+      messages={messages} />
     <Field invalid={error === t.reasonRequired}>
       <FieldLabel>{t.changeReasonLabel}</FieldLabel>
       <Textarea value={reason} rows={2} maxLength={REASON_LIMIT} onChange={event => setReason(event.currentTarget.value)} />
