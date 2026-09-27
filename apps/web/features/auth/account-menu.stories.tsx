@@ -1,0 +1,74 @@
+import type { Meta, StoryObj } from '@storybook/react-vite';
+import { expect, userEvent, waitFor, within } from 'storybook/test';
+import { AccountMenu } from './account-menu.tsx';
+import { authMessages } from './messages.ts';
+import type { Session } from './session.ts';
+
+const ada = 'https://rezics.com/id/b8df6385-cec9-4fa0-8b89-71def5fa82b5';
+const pen = 'https://rezics.com/id/1e1489d5-6994-402c-99f2-50547eeaef4d';
+const agents: Session['agents'] = [{ iri: ada, label: 'Ada Lovelace', path: 'direct-principal' },
+  { iri: pen, label: null, path: 'represented-agent' }];
+const session: Session = { user: { id: 'u1', name: 'Ada Lovelace', email: 'ada@example.test', image: null },
+  agent: { status: 'selected', agent: agents[0]! }, agents, expiresAt: '2026-10-27T00:00:00.000Z' };
+
+const meta = { title: 'Auth/Account menu', component: AccountMenu,
+  args: { session, messages: authMessages.en },
+  decorators: [Story => <div className="flex justify-end p-4"><Story /></div>],
+} satisfies Meta<typeof AccountMenu>;
+export default meta;
+type Story = StoryObj<typeof meta>;
+
+export const SignedIn: Story = {
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    const trigger = canvas.getByRole('button', { name: 'Account menu' });
+    await expect(trigger).toHaveTextContent('Ada Lovelace');
+    await userEvent.click(trigger);
+    const menu = await within(canvasElement.ownerDocument.body).findByRole('menu');
+    await expect(menu).toHaveTextContent('ada@example.test');
+    await expect(within(menu).getByRole('group', { name: 'Acting as' })).toHaveTextContent('Ada Lovelace');
+    // The menu opens with a short fade and zoom.
+    await waitFor(() => expect(within(menu).getByRole('menuitem', { name: 'Switch Agent' })).toBeVisible());
+    await expect(within(menu).getByRole('menuitem', { name: 'Sign out' })).toBeVisible();
+  },
+};
+
+export const UnlabeledAgent: Story = {
+  args: { session: { ...session, agent: { status: 'selected', agent: agents[1]! } } },
+  async play({ canvasElement }) {
+    await expect(within(canvasElement).getByRole('button', { name: 'Account menu' }))
+      .toHaveTextContent('Agent 1e1489d5');
+  },
+};
+
+export const ChooseAgent: Story = {
+  args: { session: { ...session, agent: { status: 'unselected' } } },
+  async play({ canvasElement }) {
+    await expect(within(canvasElement).getByRole('button', { name: 'Account menu' }))
+      .toHaveTextContent('Choose an Agent');
+  },
+};
+
+export const AgentNoLongerAvailable: Story = {
+  args: { session: { ...session, agent: { status: 'ineligible', previous: pen } } },
+  async play({ canvasElement }) {
+    await expect(within(canvasElement).getByRole('button', { name: 'Account menu' }))
+      .toHaveTextContent('Agent no longer available');
+  },
+};
+
+export const LongName: Story = {
+  args: { session: { ...session, user: { ...session.user,
+    name: 'Augusta Ada King, Countess of Lovelace and Honorary Member of Several Learned Societies' } } },
+};
+
+export const Chinese: Story = {
+  args: { messages: authMessages['zh-CN'], session: { ...session, agent: { status: 'unselected' } } },
+  async play({ canvasElement }) {
+    const trigger = within(canvasElement).getByRole('button', { name: '账户菜单' });
+    await expect(trigger).toHaveTextContent('选择身份');
+    await userEvent.click(trigger);
+    const menu = await within(canvasElement.ownerDocument.body).findByRole('menu');
+    await waitFor(() => expect(within(menu).getByRole('menuitem', { name: '退出登录' })).toBeVisible());
+  },
+};

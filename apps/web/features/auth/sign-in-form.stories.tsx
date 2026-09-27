@@ -1,12 +1,11 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, userEvent, within } from 'storybook/test';
 import { SignInForm } from '../../app/sign-in/sign-in-form.tsx';
-import { auth as english } from '../../i18n/en.ts';
-import { auth as chinese } from '../../i18n/zh-CN.ts';
+import { authMessages } from './messages.ts';
 
 const meta = { title: 'Auth/Sign in', component: SignInForm,
-  args: { next: '/studio', messages: english },
-  decorators: [Story => <main className="page-width"><div className="auth-layout"><Story /></div></main>],
+  args: { next: '/studio', messages: authMessages.en },
+  decorators: [Story => <main className="mx-auto w-full max-w-md px-4 py-12"><Story /></main>],
 } satisfies Meta<typeof SignInForm>;
 export default meta;
 type Story = StoryObj<typeof meta>;
@@ -30,7 +29,7 @@ export const CreateAccount: Story = {
 };
 
 export const ChineseSignIn: Story = {
-  args: { messages: chinese },
+  args: { messages: authMessages['zh-CN'] },
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     await expect(canvas.getByRole('heading', { name: '登录 REZICS' })).toBeInTheDocument();
@@ -39,7 +38,7 @@ export const ChineseSignIn: Story = {
 };
 
 export const ChineseCreateAccount: Story = {
-  args: { messages: chinese },
+  args: { messages: authMessages['zh-CN'] },
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     await userEvent.click(canvas.getByRole('button', { name: '创建账户' }));

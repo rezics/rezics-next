@@ -1,12 +1,17 @@
+import { redirect } from 'next/navigation';
+import { authMessages } from '../../features/auth/messages.ts';
 import { safeReturnPath } from '../../features/auth/paths.ts';
+import { readSession } from '../../features/auth/session.ts';
+import { requestLocale } from '../../i18n/server.ts';
 import { SignInForm } from './sign-in-form.tsx';
-import { getTranslation, requestLocale } from '../../i18n/server.ts';
 
 export default async function SignInPage({ searchParams }: {
-  searchParams: Promise<{ next?: string }>;
+  searchParams: Promise<{ next?: string; error?: string }>;
 }) {
-  const { next } = await searchParams;
-  const { data: messages } = await getTranslation('auth', [await requestLocale()]);
-  return <main className="page-width"><div className="auth-layout">
-    <SignInForm next={safeReturnPath(next)} messages={messages} /></div></main>;
+  const query = await searchParams;
+  const next = safeReturnPath(query.next);
+  if (await readSession()) redirect(next);
+  return <main className="mx-auto w-full max-w-md px-4 py-12">
+    <SignInForm next={next} messages={authMessages[await requestLocale()]}
+      failed={query.error === 'sign-in' || query.error === 'sign-up'} /></main>;
 }

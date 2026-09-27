@@ -1,0 +1,135 @@
+// Account's OAuth endpoints as the web server uses them. Every function takes
+// its endpoint configuration and `fetch`, so tests drive them without a stack.
+
+export interface AccountClient {
+  accountOrigin: string;
+  clientId: string;
+  /** OAuth resource identifier for Main; tokens are audience-bound to it. */
+  resource: string;
+  fetch?: typeof fetch;
+}
+
+export interface IssuedTokens {
+  accessToken: string;
+  /** Absent only when Account did not grant `offline_access`. */
+  refreshToken: string | null;
+  expiresIn: number;
+}
+
+/** `rejected`: Account refused the grant, so the session is over. `unavailable`:
+ * Account could not answer; keep the session and try again on a later request. */
+export type TokenResult =
+  | { status: 'issued'; tokens: IssuedTokens }
+  | { status: 'rejected' }
+  | { status: 'unavailable' };
+
+async function tokenRequest(client: AccountClient, body: Record<string, string>): Promise<TokenResult> {
+  let response: Response;
+  try {
+    response = await (client.fetch ?? fetch)(new URL('/api/auth/oauth2/token', client.accountOrigin), {
+      method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ client_id: client.clientId, resource: client.resource, ...body }),
+      cache: 'no-store', signal: AbortSignal.timeout(10_000),
+    });
+  } catch { return { status: 'unavailable' }; }
+  // RFC 6749 §5.2: a refused grant is a 400 (401 for client authentication).
+  if (response.status === 400 || response.status === 401) {
+    await response.body?.cancel();
+    return { status: 'rejected' };
+  }
+  const issued = response.ok ? await response.json().catch(() => null) as {
+    access_token?: unknown; refresh_token?: unknown; expires_in?: unknown } | null : null;
+  if (!response.ok) await response.body?.cancel();
+  if (!issued || typeof issued.access_token !== 'string' || !issued.access_token) {
+    return { status: 'unavailable' };
+  }
+  return { status: 'issued', tokens: { accessToken: issued.access_token,
+    refreshToken: typeof issued.refresh_token === 'string' && issued.refresh_token
+      ? issued.refresh_token : null,
+    expiresIn: typeof issued.expires_in === 'number' ? issued.expires_in : 300 } };
+}
+
+export function exchangeCode(client: AccountClient, input: {
+  code: string; redirectUri: string; verifier: string;
+}): Promise<TokenResult> {
+  return tokenRequest(client, { grant_type: 'authorization_code', code: input.code,
+    redirect_uri: input.redirectUri, code_verifier: input.verifier });
+}
+
+// Account rotates refresh tokens and treats a second use of a rotated one as
+// theft: it drops every refresh token of this client for the user. Concurrent
+// requests carrying the same refresh cookie (parallel BFF calls after expiry)
+// therefore share one exchange, and a request that arrives just after it
+// finished, still carrying the old cookie, reuses its result. This holds
+// within one server isolate; across isolates Account's refresh-token reuse
+// interval has to cover the race.
+const REUSE_WINDOW_MS = 30_000;
+const MAX_TRACKED = 1_000;
+const refreshes = new Map<string, { result: Promise<TokenResult>; settledAt?: number }>();
+
+export function refreshTokens(client: AccountClient, refreshToken: string,
+  now: () => number = Date.now): Promise<TokenResult> {
+  const time = now();
+  for (const [key, entry] of refreshes) {
+    if (entry.settledAt !== undefined && time - entry.settledAt > REUSE_WINDOW_MS) refreshes.delete(key);
+  }
+  const current = refreshes.get(refreshToken);
+  if (current) return current.result;
+  if (refreshes.size >= MAX_TRACKED) refreshes.delete(refreshes.keys().next().value!);
+  const entry: { result: Promise<TokenResult>; settledAt?: number } = {
+    result: tokenRequest(client, { grant_type: 'refresh_token', refresh_token: refreshToken })
+      .then(result => {
+        // A transient failure is retried by the next request instead of replayed.
+        if (result.status === 'unavailable') refreshes.delete(refreshToken);
+        else entry.settledAt = now();
+        return result;
+      }),
+  };
+  refreshes.set(refreshToken, entry);
+  return entry.result;
+}
+
+/** RFC 7009 revocation of the refresh token; revoking it ends its access tokens too. */
+export async function revokeRefreshToken(client: AccountClient, refreshToken: string): Promise<boolean> {
+  try {
+    const response = await (client.fetch ?? fetch)(new URL('/api/auth/oauth2/revoke', client.accountOrigin), {
+      method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ client_id: client.clientId, token: refreshToken,
+        token_type_hint: 'refresh_token' }),
+      cache: 'no-store', signal: AbortSignal.timeout(10_000),
+    });
+    await response.body?.cancel();
+    return response.ok;
+  } catch { return false; }
+}
+
+export interface AccountUser { id: string; name: string; email: string; image: string | null }
+
+/** The Account session behind the browser's Account cookie, if any. */
+export async function readAccountUser(accountOrigin: string, cookie: string,
+  fetcher: typeof fetch = fetch): Promise<AccountUser | null> {
+  try {
+    const response = await fetcher(new URL('/api/auth/get-session', accountOrigin), {
+      headers: { cookie }, cache: 'no-store', signal: AbortSignal.timeout(10_000) });
+    const body = await response.json().catch(() => null) as { user?: {
+      id?: unknown; name?: unknown; email?: unknown; image?: unknown } } | null;
+    const user = body?.user;
+    if (!response.ok || typeof user?.id !== 'string' || !user.id) return null;
+    return { id: user.id, name: typeof user.name === 'string' ? user.name : '',
+      email: typeof user.email === 'string' ? user.email : '',
+      image: typeof user.image === 'string' && /^https?:\/\//.test(user.image) ? user.image : null };
+  } catch { return null; }
+}
+
+/** Ends the Account session behind the browser's Account cookie and returns
+ * the `Set-Cookie` headers that clear it. */
+export async function endAccountSession(accountOrigin: string, cookie: string,
+  fetcher: typeof fetch = fetch): Promise<string[]> {
+  try {
+    const response = await fetcher(new URL('/api/auth/sign-out', accountOrigin), {
+      method: 'POST', headers: { cookie, origin: accountOrigin, 'content-type': 'application/json' },
+      body: '{}', cache: 'no-store', signal: AbortSignal.timeout(10_000) });
+    await response.body?.cancel();
+    return response.headers.getSetCookie();
+  } catch { return []; }
+}

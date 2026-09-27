@@ -1,5 +1,5 @@
-export function safeReturnPath(value: string | null | undefined): string {
-  if (!value || !/^\/(?!\/)[^\\\r\n]*$/.test(value)) return '/studio';
+export function safeReturnPath(value: string | null | undefined, fallback = '/studio'): string {
+  if (!value || !/^\/(?!\/)[^\\\r\n]*$/.test(value)) return fallback;
   return value;
 }
 
