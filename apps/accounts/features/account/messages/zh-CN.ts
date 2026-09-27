@@ -122,7 +122,7 @@ export default {
   passkeysEmptyTitle: '尚无通行密钥',
   passkeysEmptyBody: '通行密钥比密码更安全：它无法被猜到、重复使用或被钓鱼窃取。',
   passkeyCreateHint: '您的浏览器或设备会询问保存位置。',
-  passkeysUnsupported: '此浏览器无法创建通行密钥。',
+  passkeysUnsupported: '此浏览器或当前地址无法使用通行密钥。',
   createPasskey: '创建通行密钥',
   passkeyAdded: '通行密钥已创建，下次登录时即可使用。',
   passkeyExists: '这台设备上已有您账号的通行密钥。',

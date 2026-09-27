@@ -89,6 +89,7 @@ test('P0.1 QA projects keep independent credentials and endpoints', () => {
   expect(a.ACCOUNTS_PORT).toBeUndefined();
   expect(appEnvironment(a, root).ACCOUNT_BASE_URL).toBe(`http://127.0.0.1:${a.ACCOUNT_PORT}`);
   expect(appEnvironment(a, root).ACCOUNT_ORIGIN).toBe(`http://127.0.0.1:${a.ACCOUNT_PORT}`);
+  expect(appEnvironment({ ...a, MAILPIT_SMTP_PORT: '14025' }, root).ACCOUNT_SMTP_PORT).toBe('14025');
   const nested = composeProcessEnvironment({ ...a, DOCKER_HOST: 'unix:///run/docker.sock' }, b);
   expect(nested.FUSEKI_MAINTENANCE_TOKEN).toBe(b.FUSEKI_MAINTENANCE_TOKEN);
   expect(nested.FUSEKI_COMMAND_TOKEN).toBe(b.FUSEKI_COMMAND_TOKEN);

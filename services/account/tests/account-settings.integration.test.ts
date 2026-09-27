@@ -1,9 +1,13 @@
 import { expect, test } from 'bun:test';
 import { createHash, randomBytes } from 'node:crypto';
+import { createOTP } from '@better-auth/utils/otp';
+import { symmetricDecrypt } from 'better-auth/crypto';
 import { chromium, type Page } from '@playwright/test';
 import { accountFixture } from './account-fixture.ts';
 import { oauthFixture } from './oauth-fixture.ts';
-import { markEmailChangeStep } from '../src/account-settings.ts';
+import { markEmailChangeStep, passkeyRelyingParty } from '../src/account-settings.ts';
+import { parseActivity, parseConnectedApps, parseMethods, parseSession,
+  parseSessions } from '../../../apps/accounts/features/api/account-data.ts';
 
 const link = (text: string) => /https?:\/\/\S+/.exec(text)![0];
 
@@ -62,6 +66,56 @@ test('G261 settings: an email change marks its confirmation and verification ste
   } finally { await f.close(); }
 }, 60_000);
 
+test('G261 contract: the Accounts site reads every account-centre response the service returns', async () => {
+  const f = await accountFixture();
+  try {
+    const oauth = await oauthFixture(f);
+    const member = await f.signup('contract@example.test');
+    const client = await oauth.createClient();
+    await oauth.issue(client.client_id, member.cookie);
+    await f.request('/api/auth/sign-in/email', { email: member.email, password: 'not the password' });
+    const read = async (path: string) => (await f.request(path, undefined, member.cookie)).json() as Promise<unknown>;
+    expect(parseSession(await read('/api/auth/get-session'))).toMatchObject({ user: { email: member.email,
+      locale: null, twoFactorEnabled: false } });
+    expect(parseMethods(await read('/api/account/methods'))).toEqual({ password: true,
+      passwordChangedAt: expect.any(String), passkeys: [], totp: null });
+    expect(parseSessions(await read('/api/account/sessions'))?.items)
+      .toContainEqual(expect.objectContaining({ thisDevice: true }));
+    const activity = parseActivity(await read('/api/account/security-activity'));
+    expect(activity?.items.map(item => item.action)).toEqual(expect.arrayContaining(['sign_in', 'sign_in_failed',
+      'consent_granted']));
+    expect(activity?.failedLast24Hours).toEqual({ count: 1, capped: false });
+    expect(parseConnectedApps(await read('/api/account/connected-apps'))?.items).toEqual([expect.objectContaining({
+      clientId: client.client_id, name: 'Notes', trusted: false, withdrawn: false, lastUsedAt: null,
+      scopes: expect.arrayContaining([{ scope: 'work:read', description: { en: 'Read works', 'zh-CN': '读取作品' } }]) })]);
+  } finally { await f.close(); }
+}, 60_000);
+
+test('G261 activity: confirming a new authenticator app is enrollment, not a sign-in', async () => {
+  const f = await accountFixture();
+  try {
+    const member = await f.signup('enroll@example.test');
+    expect((await f.request('/api/auth/two-factor/enable', { password: member.password }, member.cookie)).status).toBe(200);
+    const secret = await symmetricDecrypt({ key: f.secret, data: (await f.pool.query(
+      'SELECT secret FROM "twoFactor" WHERE "userId" = $1', [member.id])).rows[0].secret });
+    const confirmed = await f.request('/api/auth/two-factor/verify-totp', { code: await createOTP(secret).totp() },
+      member.cookie);
+    expect(confirmed.status).toBe(200);
+    const actions = async () => (await f.pool.query<{ action: string; method: string | null }>(`SELECT action,
+      detail->>'method' AS method FROM rezics_account_security_event WHERE user_id = $1 ORDER BY occurred_at`,
+    [member.id])).rows;
+    expect(await actions()).toContainEqual({ action: 'totp_added', method: null });
+    expect((await actions()).filter(row => row.method === 'verify-totp')).toEqual([]);
+    // The second step of a later sign-in is one.
+    const challenge = await f.request('/api/auth/sign-in/email', { email: member.email, password: member.password });
+    const cookie = challenge.headers.getSetCookie().map(value => value.split(';')[0]).join('; ');
+    await Bun.sleep(1_000 * (30 - (Date.now() / 1000) % 30) + 50);
+    expect((await f.request('/api/auth/two-factor/verify-totp', { code: await createOTP(secret).totp() }, cookie)).status)
+      .toBe(200);
+    expect((await actions()).filter(row => row.method === 'verify-totp')).toEqual([{ action: 'sign_in', method: 'verify-totp' }]);
+  } finally { await f.close(); }
+}, 90_000);
+
 test('G261 settings: /sign-in can name the App from the signed authorization request only', async () => {
   const f = await accountFixture();
   try {
@@ -84,6 +138,14 @@ test('G261 settings: /sign-in can name the App from the signed authorization req
     expect((await f.request('/api/auth/oauth2/public-client-prelogin', { client_id: client.client_id })).ok).toBe(false);
   } finally { await f.close(); }
 }, 60_000);
+
+test('G261 settings: a loopback issuer names passkeys for localhost, which WebAuthn accepts', () => {
+  expect(passkeyRelyingParty('https://accounts.rezics.example')).toEqual({ rpID: 'accounts.rezics.example',
+    origin: 'https://accounts.rezics.example' });
+  expect(passkeyRelyingParty('http://localhost:3004')).toEqual({ rpID: 'localhost', origin: 'http://localhost:3004' });
+  expect(passkeyRelyingParty('http://127.0.0.1:3004/')).toEqual({ rpID: 'localhost',
+    origin: ['http://localhost:3004', 'http://127.0.0.1:3004'] });
+});
 
 async function createPasskey(page: Page, options: unknown) {
   return page.evaluate(async raw => {
@@ -133,6 +195,10 @@ test('G261 settings: passkey step-up proves the person again without a second se
       return { response: await assertPasskey(page, await options.json()),
         challenge: options.headers.get('set-cookie')!.split(';')[0]! };
     };
+    // A browser's same-origin GET carries no Origin header; registration must still start.
+    const browserGet = await fetch(`${f.baseURL}/api/auth/passkey/generate-register-options`,
+      { headers: { cookie: member.cookie } });
+    expect(browserGet.status).toBe(200);
     const passkeyId = await register(member.cookie);
     await register(peer.cookie);
     const methods = async () => (await (await f.request('/api/account/methods', undefined, member.cookie)).json() as {

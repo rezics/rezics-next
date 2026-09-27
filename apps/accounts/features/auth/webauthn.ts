@@ -47,8 +47,11 @@ export function credentialJson(credential: PublicKeyCredential): Json {
     authenticatorAttachment: credential.authenticatorAttachment ?? undefined };
 }
 
+/** WebAuthn needs a named origin: a page at an IP address (such as local
+ * development at 127.0.0.1) can't use passkeys, only one at `localhost`. */
 export function passkeysSupported(): boolean {
-  return typeof window !== 'undefined' && typeof window.PublicKeyCredential === 'function';
+  return typeof window !== 'undefined' && typeof window.PublicKeyCredential === 'function'
+    && !/^(\d+\.){3}\d+$|^\[/.test(window.location.hostname);
 }
 
 /** Whether the browser can offer passkeys in the email field's autofill. */

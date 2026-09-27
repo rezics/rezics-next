@@ -5,7 +5,7 @@ import { AppWindowIcon, CircleCheckIcon, CircleMinusIcon, FingerprintIcon, Lapto
   ShieldIcon, SlidersHorizontalIcon, UserRoundIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
 import type { CheckupIssue } from './activity.ts';
-import { sectionPaths } from './account-shell.tsx';
+import { sectionPaths } from './sections.ts';
 import { CheckupCard } from './checkup-card.tsx';
 import { type AvatarUser, UserAvatar } from '../shell/user-avatar.tsx';
 import { useTranslation } from '../../i18n/client.ts';

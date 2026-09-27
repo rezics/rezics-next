@@ -12,7 +12,8 @@ import { signingKeyOptions } from './signing-keys.ts';
 import { providerScopes, resourceScopes } from './oauth-scopes.ts';
 import { currentRecoveryGeneration, RECOVERY_GENERATION_CLAIM } from './recovery-claim.ts';
 import type { AccountEmail } from './email.ts';
-import { afterPasskeyAssertion, emailLocale, localeField, markEmailChangeStep } from './account-settings.ts';
+import { afterPasskeyAssertion, emailLocale, localeField, markEmailChangeStep,
+  passkeyRelyingParty } from './account-settings.ts';
 import { deviceLabel } from './security-activity.ts';
 import { ACCOUNT_GENERATION_CLAIM, GRANT_GENERATION_CLAIM, currentAccountGenerations } from './account-fence.ts';
 import { bootstrapOperators, operatorRole, rolePermits } from './operators.ts';
@@ -113,8 +114,7 @@ export function accountAuthOptions(config: AccountConfig) {
       openAPI({ disableDefaultReference: true }),
       twoFactor({ issuer: 'REZICS', allowPasswordless: true,
         backupCodeOptions: { storeBackupCodes: 'encrypted' } }),
-      passkey({ rpName: 'REZICS', rpID: new URL(config.baseURL).hostname,
-        origin: new URL(config.baseURL).origin,
+      passkey({ rpName: 'REZICS', ...passkeyRelyingParty(config.baseURL),
         authenticatorSelection: { residentKey: 'required', userVerification: 'required' },
         registration: { afterVerification: async ({ ctx, verification, user }) => {
           if (!verification.registrationInfo?.userVerified) {

@@ -63,9 +63,10 @@ describe('Account proxy', () => {
     const { calls, options } = recorder();
     await proxyAccountRequest(new Request(`${own}/api/auth/list-sessions`, { headers: {
       'user-agent': 'Browser/1', 'accept-language': 'zh-CN', 'x-forwarded-for': '203.0.113.9',
-      'x-custom': 'secret', host: 'evil.example' } }), options);
+      'x-custom': 'secret', host: 'evil.example', 'x-account-reason': 'Rotate a leaked client secret' } }), options);
     const sent = calls[0]!.init.headers;
     expect(sent.get('user-agent')).toBe('Browser/1');
+    expect(sent.get('x-account-reason')).toBe('Rotate a leaked client secret');
     expect(sent.get('accept-language')).toBe('zh-CN');
     expect(sent.get('x-forwarded-for')).toBeNull();
     expect(sent.get('x-custom')).toBeNull();

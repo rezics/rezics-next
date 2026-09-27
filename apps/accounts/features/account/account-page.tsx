@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
-import { AccountShell, type AccountSection, sectionPaths } from './account-shell.tsx';
+import { AccountShell } from './account-shell.tsx';
+import { type AccountSection, sectionPaths } from './sections.ts';
 import type { StepUpMethods } from './step-up.tsx';
 import type { SignInMethods } from '../api/account-data.ts';
 import { readMethods, readSession, type AccountSession, type Read } from '../api/server.ts';

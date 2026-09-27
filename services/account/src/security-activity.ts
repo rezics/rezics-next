@@ -130,8 +130,12 @@ export async function observeAuthentication(auth: AccountAuth, pool: Pool, reque
   const output = await response.clone().json().catch(() => null) as {
     user?: { id: string }; token?: string; session?: { id: string }; twoFactorRedirect?: boolean;
   } | null;
+  // A signed-in person confirming a new authenticator app also calls
+  // verify-totp; that is enrollment (recorded as totp_added), not a sign-in.
+  const enrolling = !!before && path === '/api/auth/two-factor/verify-totp';
   if (signingOut && response.ok && before) await securityEvent(pool, before.user.id, 'sign_out');
-  else if (signingIn && response.ok && output?.user && (output.token || output.session) && !output.twoFactorRedirect) {
+  else if (signingIn && !enrolling && response.ok && output?.user && (output.token || output.session)
+    && !output.twoFactorRedirect) {
     await securityEvent(pool, output.user.id, 'sign_in', { method: path.split('/').at(-1),
       device: deviceLabel(request.headers.get('user-agent')),
       network: coarseNetwork(request.headers.get('x-rezics-client-ip')) });

@@ -43,6 +43,17 @@ export function markEmailChangeStep(link: string, step: 'requested' | 'verified'
   return url.toString();
 }
 
+/** WebAuthn rejects IP addresses as relying-party IDs, and local development
+ * serves Account at 127.0.0.1. A loopback issuer therefore uses `localhost`
+ * and accepts pages at that name; any other issuer is its own RP ID and origin. */
+export function passkeyRelyingParty(baseURL: string): { rpID: string; origin: string | string[] } {
+  const url = new URL(baseURL);
+  if (url.hostname !== '127.0.0.1' && url.hostname !== '[::1]') return { rpID: url.hostname, origin: url.origin };
+  const local = new URL(url);
+  local.hostname = 'localhost';
+  return { rpID: 'localhost', origin: [local.origin, url.origin] };
+}
+
 // A passkey step-up runs Better Auth's own assertion check, but it proves the
 // signed-in person again; it must never open a second session.
 const stepUpProof = new AsyncLocalStorage<{ userId: string; verified: boolean }>();

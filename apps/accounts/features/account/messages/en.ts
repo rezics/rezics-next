@@ -126,7 +126,7 @@ export default {
   passkeysEmptyTitle: 'No passkeys yet',
   passkeysEmptyBody: 'A passkey is safer than a password: it can’t be guessed, reused or phished.',
   passkeyCreateHint: 'Your browser or device will ask how to save it.',
-  passkeysUnsupported: 'This browser can’t create passkeys.',
+  passkeysUnsupported: 'Passkeys aren’t available in this browser or at this address.',
   createPasskey: 'Create a passkey',
   passkeyAdded: 'Passkey created. You can use it the next time you sign in.',
   passkeyExists: 'This device already has a passkey for your account.',

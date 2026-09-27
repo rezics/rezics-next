@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
-import { AccountShell, type AccountSection } from '../features/account/account-shell.tsx';
+import { AccountShell } from '../features/account/account-shell.tsx';
+import type { AccountSection } from '../features/account/sections.ts';
 import type { StepUpMethods } from '../features/account/step-up.tsx';
 
 export const ada = { name: 'Ada Lovelace', email: 'ada@example.test', image: null, emailVerified: true,

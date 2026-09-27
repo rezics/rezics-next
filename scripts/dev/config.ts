@@ -184,6 +184,8 @@ export function appEnvironment(compose: Record<string, string>, dir: string): Re
     MAIN_RELAY_CONSUMER: 'main-graph-v1',
     ACCOUNT_BASE_URL: account, ACCOUNT_PORT: compose.ACCOUNT_PORT,
     ...(compose.ACCOUNTS_PORT ? { ACCOUNTS_PORT: compose.ACCOUNTS_PORT } : {}),
+    // Each stack's Account email reaches that stack's Mailpit, not the shared one.
+    ...(compose.MAILPIT_SMTP_PORT ? { ACCOUNT_SMTP_PORT: compose.MAILPIT_SMTP_PORT } : {}),
     ACCOUNT_ISSUER: `${account}/api/auth`,
     ACCOUNT_JWKS_URL: `${service}/api/auth/jwks`,
     ACCOUNT_INTROSPECT_URL: `${service}/api/auth/oauth2/introspect`,

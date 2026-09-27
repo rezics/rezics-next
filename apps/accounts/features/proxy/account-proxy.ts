@@ -5,8 +5,9 @@
 
 const prefixes = ['/api/auth/', '/api/account/', '/oauth2/', '/.well-known/'];
 const segment = /^(?!\.{1,2}$)[A-Za-z0-9._~-]{1,256}$/;
+// `x-account-reason` is the audit reason Account requires for operator changes.
 const requestHeaders = ['accept', 'accept-language', 'authorization', 'content-type', 'cookie',
-  'dpop', 'user-agent'];
+  'dpop', 'user-agent', 'x-account-reason'];
 const fetchMetadata = ['sec-fetch-dest', 'sec-fetch-mode', 'sec-fetch-site'];
 const bodyless = new Set(['GET', 'HEAD']);
 

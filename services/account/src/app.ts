@@ -138,7 +138,9 @@ export function createAccountApp(auth: ReturnType<typeof createAccountAuth>, poo
     }
     if (sensitiveAuthPaths.has(path)) {
       try {
-        const session = await accountSession(auth, request, true);
+        // Browsers send no Origin on a same-origin GET (passkey registration
+        // options); SameSite cookies already keep cross-site GETs signed out.
+        const session = await accountSession(auth, request);
         await requireStepUp(pool, session);
       } catch (error) { return accountFailure(error); }
     }

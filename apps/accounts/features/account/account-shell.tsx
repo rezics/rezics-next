@@ -6,16 +6,13 @@ import { cn } from '@rezics/ui/utils';
 import { AppWindowIcon, ArrowUpRightIcon, ChevronRightIcon, HouseIcon, LogOutIcon, ShieldIcon,
   SlidersHorizontalIcon, UserRoundIcon } from 'lucide-react';
 import { type ReactNode, useEffect, useId, useRef, useState } from 'react';
+import { type AccountSection, sectionPaths } from './sections.ts';
 import { type StepUpMethods, StepUpProvider } from './step-up.tsx';
 import { useAccountClient } from '../api/account-client.tsx';
 import { Brand } from '../shell/brand.tsx';
 import { type AvatarUser, UserAvatar } from '../shell/user-avatar.tsx';
 import { useTranslation } from '../../i18n/client.ts';
 
-export type AccountSection = 'home' | 'personal-info' | 'security' | 'connected-apps' | 'data-privacy';
-
-export const sectionPaths: Record<AccountSection, string> = { home: '/', 'personal-info': '/personal-info',
-  security: '/security', 'connected-apps': '/connected-apps', 'data-privacy': '/data-privacy' };
 
 const sections = [
   { id: 'home', icon: HouseIcon, label: 'home' },
