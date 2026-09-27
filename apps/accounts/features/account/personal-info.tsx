@@ -8,7 +8,8 @@ import { type FormEvent, type ReactNode, useState } from 'react';
 import { SectionHeading, SettingsCard, SettingsRow } from './account-shell.tsx';
 import { useStepUp } from './step-up.tsx';
 import { useAccountClient } from '../api/account-client.tsx';
-import type { AccountLocale } from '../api/account-data.ts';
+import type { AccountLocale, DisplayPreferences } from '../api/account-data.ts';
+import type { Read } from '../api/server.ts';
 import type { FailureKind } from '../api/errors.ts';
 import { failureText } from './failure-text.ts';
 import { EmailField, emailPattern, NameField } from '../auth/fields.tsx';
@@ -64,7 +65,50 @@ function LanguageRow({ chosen }: { chosen: AccountLocale | null }) {
   </SettingsRow>;
 }
 
-export function PersonalInfo({ user }: { user: AvatarUser & { emailVerified: boolean; locale: AccountLocale | null } }) {
+function DisplayRows({ initial }: { initial: Read<DisplayPreferences> }) {
+  const { t } = useTranslation('account');
+  const common = useTranslation('common').t;
+  const { api, refresh } = useAccountClient();
+  const [choice, setChoice] = useState(initial.status === 'ok' ? initial.data : null);
+  const [busy, setBusy] = useState(false);
+  const [failure, setFailure] = useState('');
+  async function choose(next: Pick<DisplayPreferences, 'displayMode' | 'showZoneThemes'>) {
+    if (!choice || busy) return;
+    setBusy(true);
+    setFailure('');
+    const result = await api.setDisplayPreferences({ ...choice, ...next });
+    setBusy(false);
+    if (!result.ok) {
+      setFailure(failureText(result.kind, common));
+      if (result.kind === 'conflict') refresh();
+      return;
+    }
+    setChoice(result.data);
+  }
+  return <>
+    <SettingsRow label={t.displayMode}>
+      {choice ? <NativeSelect aria-label={t.displayMode} value={choice.displayMode} size="md"
+        className="w-full max-w-60" disabled={busy}
+        onChange={event => void choose({ displayMode: event.currentTarget.value as DisplayPreferences['displayMode'],
+          showZoneThemes: choice!.showZoneThemes })}>
+        <option value="system">{t.modeSystem}</option><option value="light">{t.modeLight}</option>
+        <option value="dark">{t.modeDark}</option>
+      </NativeSelect> : <span className="text-sm text-muted-foreground">{common.unavailableBody}</span>}
+    </SettingsRow>
+    <SettingsRow label={t.showZoneThemes}>
+      {choice ? <NativeSelect aria-label={t.showZoneThemes} value={choice.showZoneThemes ? 'yes' : 'no'} size="md"
+        className="w-full max-w-60" disabled={busy}
+        onChange={event => void choose({ displayMode: choice!.displayMode,
+          showZoneThemes: event.currentTarget.value === 'yes' })}>
+        <option value="yes">{t.yes}</option><option value="no">{t.no}</option>
+      </NativeSelect> : <span className="text-sm text-muted-foreground">—</span>}
+      {failure ? <Alert role="alert" variant="destructive" className="mt-3"><AlertDescription>{failure}</AlertDescription></Alert> : null}
+    </SettingsRow>
+  </>;
+}
+
+export function PersonalInfo({ user, preferences }: { user: AvatarUser & { emailVerified: boolean;
+  locale: AccountLocale | null }; preferences: Read<DisplayPreferences> }) {
   const { t } = useTranslation('account');
   const { api, refresh } = useAccountClient();
   const stepUp = useStepUp();
@@ -164,6 +208,7 @@ export function PersonalInfo({ user }: { user: AvatarUser & { emailVerified: boo
       </SettingsCard>
       <SettingsCard title={t.preferences}>
         <LanguageRow chosen={user.locale} />
+        <DisplayRows initial={preferences} />
       </SettingsCard>
     </div>
   </>;

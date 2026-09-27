@@ -44,6 +44,6 @@ createAccountApp(createAccountAuth({ baseURL, secret, resource, pool, operatorUs
     }
     await retainAccountSubjectDeletion(relayPool!, issuer, subject);
   } : undefined,
-}), pool, { operatorUserIds })
+}), pool, { operatorUserIds, displayPreferenceClientIds: new Set([config.WEB_OAUTH_CLIENT_ID].filter(Boolean)) })
   .cleanup(() => { clearInterval(deliveryTimer); })
   .listen({ hostname: '127.0.0.1', port });

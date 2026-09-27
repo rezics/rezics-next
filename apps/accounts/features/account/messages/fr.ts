@@ -66,6 +66,8 @@ export default {
   sendVerification: 'Envoyer un lien de confirmation',
   verificationSent: 'Consultez votre messagerie pour trouver le lien de confirmation.',
   preferences: 'Préférences',
+  displayMode: 'Mode d’affichage', modeSystem: 'Selon le système', modeLight: 'Clair', modeDark: 'Sombre',
+  showZoneThemes: 'Afficher les thèmes des Zones', yes: 'Afficher', no: 'Masquer',
   language: 'Langue',
   languageHelp: 'Utilisée sur les pages du compte REZICS et dans les e-mails que nous vous envoyons.',
 

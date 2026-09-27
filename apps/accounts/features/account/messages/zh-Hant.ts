@@ -62,6 +62,8 @@ export default {
   sendVerification: '寄送驗證連結',
   verificationSent: '請查看收件匣中的驗證連結。',
   preferences: '偏好設定',
+  displayMode: '顯示模式', modeSystem: '跟隨系統', modeLight: '淺色', modeDark: '深色',
+  showZoneThemes: '顯示社群主題', yes: '顯示', no: '隱藏',
   language: '語言',
   languageHelp: '用於 REZICS 帳戶頁面和我們寄給你的電子郵件。',
 

@@ -33,7 +33,8 @@ export function RealmPageStory({ zone, modules = [], pkg = null, execution = { m
   const theme = zoneTheme(zone.tokens, { reader, enabled: look });
   const ref = zone.slug ?? 'classics';
   const actions = <LookMenu enabled={look} labels={{ menu: zoneMessages.lookLabel, zone: zoneMessages.lookZone,
-    standard: zoneMessages.lookStandard, help: zoneMessages.lookHelp }} />;
+    standard: zoneMessages.lookStandard, help: zoneMessages.lookHelp,
+    saveFailed: zoneMessages.lookSaveFailed }} />;
   return <ZoneFrame zone={zone} dataZone={zone.slug ?? 'classics'} theme={theme} pkg={pkg} actions={actions}
     members={members} masthead={<ZoneMasthead zone={zone} members={members} actions={actions} />}
     tabs={<RealmTabs locale={locale} realmRef={ref} label={messages.sections} navigation={navigation}

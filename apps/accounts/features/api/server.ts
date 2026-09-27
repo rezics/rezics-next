@@ -1,7 +1,7 @@
 // Server Component reads from the Account service with the visitor's cookies.
 import { headers } from 'next/headers';
 import { cache } from 'react';
-import { parseActivity, parseConnectedApps, parseMethods, parsePublicClient, parseSession,
+import { parseActivity, parseConnectedApps, parseDisplayPreferences, parseMethods, parsePublicClient, parseSession,
   parseSessions, record } from './account-data.ts';
 import { accountsConfig, httpOrigin } from '../config/env.ts';
 
@@ -46,6 +46,7 @@ async function read<T>(path: string, parse: (value: unknown) => T | null,
 /** One session read per request, shared by the page and its sections. */
 export const readSession = cache(() => read('/api/auth/get-session', parseSession));
 export const readMethods = cache(() => read('/api/account/methods', parseMethods));
+export const readDisplayPreferences = cache(() => read('/api/account/display-preferences', parseDisplayPreferences));
 export const readSessions = cache(() => read('/api/account/sessions?limit=100', parseSessions));
 export const readSecurityActivity = cache((cursor?: string) => read(`/api/account/security-activity?limit=50${
   cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`, parseActivity));

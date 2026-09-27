@@ -66,6 +66,8 @@ export default {
   sendVerification: 'Bestätigungslink senden',
   verificationSent: 'Prüfen Sie in Ihrem Posteingang, ob der Bestätigungslink angekommen ist.',
   preferences: 'Einstellungen',
+  displayMode: 'Anzeigemodus', modeSystem: 'Systemeinstellung', modeLight: 'Hell', modeDark: 'Dunkel',
+  showZoneThemes: 'Zone Designs anzeigen', yes: 'Anzeigen', no: 'Ausblenden',
   language: 'Sprache',
   languageHelp: 'Wird für REZICS Account-Seiten und die E-Mails verwendet, die wir Ihnen senden.',
 

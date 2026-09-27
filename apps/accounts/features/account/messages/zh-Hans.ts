@@ -62,6 +62,8 @@ export default {
   sendVerification: '发送验证链接',
   verificationSent: '请在收件箱中查看验证链接。',
   preferences: '偏好设置',
+  displayMode: '显示模式', modeSystem: '跟随系统', modeLight: '浅色', modeDark: '深色',
+  showZoneThemes: '显示社区主题', yes: '显示', no: '隐藏',
   language: '语言',
   languageHelp: '用于 REZICS 账号页面和我们发给您的邮件。',
 

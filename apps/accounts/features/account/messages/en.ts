@@ -66,6 +66,8 @@ export default {
   sendVerification: 'Send verification link',
   verificationSent: 'Check your inbox for a verification link.',
   preferences: 'Preferences',
+  displayMode: 'Display mode', modeSystem: 'Match system', modeLight: 'Light', modeDark: 'Dark',
+  showZoneThemes: 'Show Zone themes', yes: 'Show', no: 'Hide',
   language: 'Language',
   languageHelp: 'Used for REZICS Account pages and the emails we send you.',
 

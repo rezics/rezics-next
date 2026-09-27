@@ -105,7 +105,8 @@ export async function RealmFrame({ view, tab, locale, search, children }: {
     enabled: lookEnabled });
   const members = membersText(realm.header.membership.count, locale, messages);
   const actions = <LookMenu enabled={lookEnabled} labels={{ menu: zoneMessages.lookLabel,
-    zone: zoneMessages.lookZone, standard: zoneMessages.lookStandard, help: zoneMessages.lookHelp }} />;
+    zone: zoneMessages.lookZone, standard: zoneMessages.lookStandard, help: zoneMessages.lookHelp,
+    saveFailed: zoneMessages.lookSaveFailed }} />;
   const { safe: _, ...rest } = search;
   const showDesign = realmHref(locale, realm.ref, 'home', Object.fromEntries(Object.entries(rest)
     .filter((entry): entry is [string, string] => typeof entry[1] === 'string')));

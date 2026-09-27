@@ -1,0 +1,22 @@
+import type { Meta, StoryObj } from '@storybook/react-vite';
+import { expect, userEvent, within } from 'storybook/test';
+import { LookMenu } from './look-menu.tsx';
+import { messages } from './messages.ts';
+
+const labels = { menu: messages.lookLabel, zone: messages.lookZone,
+  standard: messages.lookStandard, help: messages.lookHelp, saveFailed: messages.lookSaveFailed };
+const meta = { title: 'Zones/Page style', component: LookMenu,
+  args: { enabled: true, labels, save: async () => 'failed' as const },
+  parameters: { route: { pathname: '/en/r/fiction' } },
+} satisfies Meta<typeof LookMenu>;
+export default meta;
+type Story = StoryObj<typeof meta>;
+
+export const SaveFailed: Story = {
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await userEvent.click(canvas.getByRole('button', { name: 'Page style' }));
+    await userEvent.click(await within(document.body).findByRole('menuitemradio', { name: 'Standard look' }));
+    await expect(await within(document.body).findByRole('alert')).toHaveTextContent('Couldn’t save your page style. Try again.');
+  },
+};

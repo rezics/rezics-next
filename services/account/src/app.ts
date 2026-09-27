@@ -14,6 +14,7 @@ import { observeAuthentication, securityActivityApi } from './security-activity.
 import { connectedAppsApi } from './connected-apps.ts';
 import { adminApi } from './admin.ts';
 import { accountSettingsApi } from './account-settings.ts';
+import { displayPreferencesApi } from './display-preferences.ts';
 import { bootstrapOperators, requireOperator } from './operators.ts';
 import { AccountRecoveryConflict, AccountRecoveryDenied, AccountRecoveryStale,
   activateAccountRecovery, approveAccountRecovery, enrollAccountRecovery,
@@ -24,6 +25,8 @@ export interface AccountAppOptions {
   operatorUserIds?: ReadonlySet<string>;
   /** Connections the authorization-code guard may hold across exchanges. */
   codeGuardConnections?: number;
+  /** First-party web OAuth client IDs admitted to account display preferences. */
+  displayPreferenceClientIds?: ReadonlySet<string>;
 }
 
 const installationView = t.Object({ installationId: t.String(), clientId: t.String(),
@@ -231,6 +234,7 @@ export function createAccountApp(auth: ReturnType<typeof createAccountAuth>, poo
     .use(connectedAppsApi(auth, pool))
     .use(adminApi(auth, pool))
     .use(accountSettingsApi(auth, pool))
+    .use(displayPreferencesApi(auth, pool, options.displayPreferenceClientIds ?? new Set()))
     .post('/api/auth/oauth2/token', ({ request }) =>
       guardedAuthorizationCodeExchange(guard(), request, () => auth.handler(request)))
     // A product must bind and consume state at its callback. Require the input

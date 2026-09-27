@@ -2,7 +2,7 @@
 // maps to a Better Auth or oauth-provider endpoint of the pinned version, or to
 // an Account route under /api/account.
 import { classifyFailure, type FailureKind, type Result } from './errors.ts';
-import type { AccountLocale } from './account-data.ts';
+import { parseDisplayPreferences, type AccountLocale, type DisplayPreferences } from './account-data.ts';
 import { creationOptions, credentialJson, isCancelled, passkeysSupported,
   requestOptions } from '../auth/webauthn.ts';
 
@@ -33,6 +33,7 @@ export interface AccountApi {
   reauthenticateWithPasskey(): Promise<Result<void>>;
   updateName(name: string): Promise<Result<void>>;
   setLocale(locale: AccountLocale): Promise<Result<void>>;
+  setDisplayPreferences(value: DisplayPreferences): Promise<Result<DisplayPreferences>>;
   changeEmail(newEmail: string): Promise<Result<void>>;
   /** Changing the password always signs out every other device. */
   changePassword(input: { currentPassword: string; newPassword: string }): Promise<Result<void>>;
@@ -65,6 +66,20 @@ async function call<T = unknown>(path: string, body?: Body): Promise<Result<T>> 
   const data = await response.json().catch(() => null) as unknown;
   if (!response.ok) return { ok: false, kind: classifyFailure(response.status, data), status: response.status };
   return { ok: true, data: data as T };
+}
+
+async function putDisplayPreferences(value: DisplayPreferences): Promise<Result<DisplayPreferences>> {
+  let response: Response;
+  try {
+    response = await fetch('/api/account/display-preferences', { method: 'PUT', credentials: 'same-origin',
+      headers: { accept: 'application/json', 'content-type': 'application/json' },
+      body: JSON.stringify({ expectedRevision: value.revision, displayMode: value.displayMode,
+        showZoneThemes: value.showZoneThemes }) });
+  } catch { return { ok: false, kind: 'unavailable', status: 0 }; }
+  const body = await response.json().catch(() => null) as unknown;
+  if (!response.ok) return { ok: false, kind: classifyFailure(response.status, body), status: response.status };
+  const parsed = parseDisplayPreferences(body);
+  return parsed ? { ok: true, data: parsed } : { ok: false, kind: 'unavailable', status: response.status };
 }
 const auth = <T = unknown>(path: string, body?: Body) => call<T>(`/api/auth${path}`, body);
 const account = <T = unknown>(path: string, body?: Body) => call<T>(`/api/account${path}`, body);
@@ -164,6 +179,7 @@ export const browserAccountApi: AccountApi = {
   },
   async updateName(name) { return done(await auth('/update-user', { name })); },
   async setLocale(locale) { return done(await auth('/update-user', { locale })); },
+  setDisplayPreferences: putDisplayPreferences,
   async changeEmail(newEmail) {
     return done(await auth('/change-email', { newEmail, callbackURL: callbackPaths.changeEmail }));
   },

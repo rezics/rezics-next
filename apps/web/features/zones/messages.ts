@@ -22,6 +22,7 @@ export const messages = {
   failed: insert('Couldn’t load {{module}}', { module: String }), retry: 'Try again',
   lookLabel: 'Page style', lookZone: 'Community design', lookStandard: 'Standard look',
   lookHelp: 'The standard look applies to every community.',
+  lookSaveFailed: 'Couldn’t save your page style. Try again.',
   safeModeTitle: 'Showing this community’s standard layout',
   safeModeBody: 'Its custom design is off for this page, so everything here uses the platform’s own components.',
   showDesign: 'Show the full design',

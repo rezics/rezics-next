@@ -66,6 +66,8 @@ export default {
   sendVerification: '인증 링크 보내기',
   verificationSent: '받은편지함에서 인증 링크를 확인하세요.',
   preferences: '환경설정',
+  displayMode: '화면 모드', modeSystem: '시스템 설정 따르기', modeLight: '라이트', modeDark: '다크',
+  showZoneThemes: '존 테마 표시', yes: '표시', no: '숨기기',
   language: '언어',
   languageHelp: 'REZICS Account 페이지와 보내드리는 이메일에 사용됩니다.',
 

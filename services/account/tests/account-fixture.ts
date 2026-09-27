@@ -36,6 +36,7 @@ export async function accountFixture(overrides: Partial<AccountConfig> = {}, hos
   const messages: { id: string; to: string; text: string; html: string; subject: string }[] = [];
   const email = accountEmailQueue(pool, secret, async mail => { messages.push(mail); });
   const operators = new Set<string>();
+  const displayPreferenceClientIds = new Set<string>();
   const config = { baseURL, secret, resource: 'https://main.rezics.test', pool,
     operatorUserIds: operators, email, ...overrides };
   let app: ReturnType<typeof createAccountApp> | undefined;
@@ -49,7 +50,7 @@ export async function accountFixture(overrides: Partial<AccountConfig> = {}, hos
     await (await getMigrations(accountAuthOptions(config))).runMigrations();
     await installConsentRefreshFence(pool);
     const auth = createAccountAuth(config);
-    app = createAccountApp(auth, pool, { operatorUserIds: operators })
+    app = createAccountApp(auth, pool, { operatorUserIds: operators, displayPreferenceClientIds })
       .listen({ hostname: '127.0.0.1', port: accountPort });
     const request = (path: string, body?: unknown, cookie?: string, extra: HeadersInit = {}) =>
       fetch(new URL(path, baseURL), { method: body === undefined ? 'GET' : 'POST',
@@ -71,6 +72,7 @@ export async function accountFixture(overrides: Partial<AccountConfig> = {}, hos
       const { user } = await signed.json() as { user: { id: string } };
       return { cookie, id: user.id, email: address, password };
     };
-    return { pool, baseURL, secret, config, auth, operators, messages, email, request, signup, close };
+    return { pool, baseURL, secret, config, auth, operators, displayPreferenceClientIds,
+      messages, email, request, signup, close };
   } catch (error) { await close(); throw error; }
 }

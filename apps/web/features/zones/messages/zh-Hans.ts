@@ -22,6 +22,7 @@ export default {
   failed: insert('无法加载{{module}}', { module: String }), retry: '重试',
   lookLabel: '页面风格', lookZone: '社区设计', lookStandard: '标准外观',
   lookHelp: '标准外观适用于所有社区。',
+  lookSaveFailed: '无法保存页面风格，请重试。',
   safeModeTitle: '正在显示这个社区的标准版式',
   safeModeBody: '本页已关闭自定义设计，所有内容都使用平台自己的组件显示。',
   showDesign: '显示完整设计',

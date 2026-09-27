@@ -3,6 +3,7 @@ import { cookies } from 'next/headers';
 import type { ReactNode } from 'react';
 import { AccountMenu } from '../features/auth/account-menu.tsx';
 import { serviceOrigin } from '../features/api/origins.ts';
+import { DisplayPreferenceSync } from '../features/api/preferences-sync.tsx';
 import { readSession } from '../features/auth/session.ts';
 import { SignInLink } from '../features/auth/sign-in-link.tsx';
 import { AppShell } from '../features/shell/app-shell.tsx';
@@ -31,6 +32,7 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
         notifications={session ? <NotificationsLink /> : null}
         account={session ? <AccountMenu session={session} messages={auth}
           accountOrigin={serviceOrigin('ACCOUNT_ORIGIN')} /> : <SignInLink label={auth.signIn} />}>
+        {session ? <DisplayPreferenceSync userId={session.user.id} /> : null}
         {children}
       </AppShell>
     </body>

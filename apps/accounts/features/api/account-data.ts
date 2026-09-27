@@ -5,6 +5,7 @@
 import type { UiLocale } from '../../i18n/locale.ts';
 
 export type AccountLocale = UiLocale;
+export interface DisplayPreferences { revision: number; displayMode: 'system' | 'light' | 'dark'; showZoneThemes: boolean }
 interface AccountUser { id: string; name: string; email: string; emailVerified: boolean;
   image: string | null; createdAt: string; locale: AccountLocale | null; twoFactorEnabled: boolean }
 export interface AccountSession { user: AccountUser; sessionId: string }
@@ -66,6 +67,15 @@ export function parseSession(value: unknown): AccountSession | null {
   return { sessionId, user: { id, email, createdAt, name: text(user?.name) ?? '',
     emailVerified: user?.emailVerified === true, image: webLink(user?.image), locale: locale(user?.locale),
     twoFactorEnabled: user?.twoFactorEnabled === true } };
+}
+
+export function parseDisplayPreferences(value: unknown): DisplayPreferences | null {
+  const item = record(value);
+  if (!item || !Number.isSafeInteger(item.revision) || (item.revision as number) < 0
+    || !['system', 'light', 'dark'].includes(String(item.displayMode))
+    || typeof item.showZoneThemes !== 'boolean') return null;
+  return { revision: item.revision as number, displayMode: item.displayMode as DisplayPreferences['displayMode'],
+    showZoneThemes: item.showZoneThemes };
 }
 
 function parsePasskey(value: unknown): Passkey | null {

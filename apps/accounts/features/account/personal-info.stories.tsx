@@ -6,7 +6,8 @@ import { chinese, dark, phone } from '../../.storybook/variants.ts';
 import { ReadStatePanel } from '../shell/state-panel.tsx';
 
 const meta = {
-  title: 'Accounts/Account centre/Personal info', component: PersonalInfo, args: { user: ada },
+  title: 'Accounts/Account centre/Personal info', component: PersonalInfo, args: { user: ada,
+    preferences: { status: 'ok', data: { revision: 0, displayMode: 'system', showZoneThemes: true } } },
   decorators: [Story => <AccountFrame section="personal-info"><Story /></AccountFrame>],
 } satisfies Meta<typeof PersonalInfo>;
 export default meta;
@@ -19,7 +20,31 @@ export const Details: Story = {
     await expect(canvas.getByText('Ada Lovelace', { selector: 'span' })).toBeVisible();
     await expect(canvas.getByText('Verified')).toBeVisible();
     await expect(canvas.getByRole('combobox', { name: 'Language' })).toHaveValue('en');
+    await expect(canvas.getByRole('combobox', { name: 'Display mode' })).toHaveValue('system');
+    await expect(canvas.getByRole('combobox', { name: 'Show Zone themes' })).toHaveValue('yes');
     await expect(canvas.queryByText('Coming soon')).toBeNull();
+  },
+};
+
+const savedDisplay = fn(async (value: { revision: number; displayMode: 'system' | 'light' | 'dark';
+  showZoneThemes: boolean }) => ({ ok: true as const, data: { ...value, revision: value.revision + 1 } }));
+export const ChooseDisplay: Story = {
+  parameters: { account: { api: { setDisplayPreferences: savedDisplay } } },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await userEvent.selectOptions(canvas.getByRole('combobox', { name: 'Display mode' }), 'dark');
+    await expect(savedDisplay).toHaveBeenCalledWith({ revision: 0, displayMode: 'dark', showZoneThemes: true });
+    await userEvent.selectOptions(canvas.getByRole('combobox', { name: 'Show Zone themes' }), 'no');
+    await expect(savedDisplay).toHaveBeenCalledWith({ revision: 1, displayMode: 'dark', showZoneThemes: false });
+  },
+};
+
+export const DisplayUnavailable: Story = {
+  args: { preferences: { status: 'unavailable' } },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await expect(canvas.queryByRole('combobox', { name: 'Display mode' })).toBeNull();
+    await expect(canvas.getByText(/We could not reach the REZICS Account service/)).toBeVisible();
   },
 };
 
@@ -120,9 +145,10 @@ export const JapaneseFallback: Story = {
   globals: { locale: 'ja' },
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
-    await expect(await canvas.findByRole('heading', { level: 1, name: 'Personal info' })).toBeVisible();
-    await expect(canvas.getByRole('combobox', { name: 'Language' })).toHaveValue('ja');
-    const options = await canvas.findAllByRole('option');
+    await expect(await canvas.findByRole('heading', { level: 1, name: '個人情報' })).toBeVisible();
+    const language = canvas.getByRole('combobox', { name: '言語' });
+    await expect(language).toHaveValue('ja');
+    const options = within(language).getAllByRole('option');
     expect(options.map(option => option.textContent?.trim()))
       .toEqual(['English', '繁體中文', '简体中文', '日本語', '한국어', 'Deutsch', 'Français', 'Español']);
   },

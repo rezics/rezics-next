@@ -66,6 +66,8 @@ export default {
   sendVerification: 'Enviar enlace de verificación',
   verificationSent: 'Busca en tu bandeja de entrada el enlace de verificación.',
   preferences: 'Preferencias',
+  displayMode: 'Modo de visualización', modeSystem: 'Según el sistema', modeLight: 'Claro', modeDark: 'Oscuro',
+  showZoneThemes: 'Mostrar temas de Zonas', yes: 'Mostrar', no: 'Ocultar',
   language: 'Idioma',
   languageHelp: 'Se usa en las páginas de la cuenta de REZICS y en los correos electrónicos que te enviamos.',
 

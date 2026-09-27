@@ -62,6 +62,8 @@ export default {
   sendVerification: '確認リンクを送信',
   verificationSent: '受信トレイで確認リンクを探してください。',
   preferences: '設定',
+  displayMode: '表示モード', modeSystem: 'システム設定に合わせる', modeLight: 'ライト', modeDark: 'ダーク',
+  showZoneThemes: 'ゾーンのテーマを表示', yes: '表示', no: '非表示',
   language: '言語',
   languageHelp: 'REZICS アカウントのページと、REZICS から送信するメールに使用します。',
 
