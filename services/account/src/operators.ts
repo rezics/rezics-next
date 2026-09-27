@@ -60,9 +60,10 @@ export async function requireOperator(auth: AccountAuth, pool: Pool, request: Re
 
 export async function writeAudit(db: Pool | PoolClient, input: { actorId: string; action: string;
   targetId: string; reason: string; before: unknown; after: unknown; requestId: string;
-  outcome?: 'attempted' | 'succeeded' | 'failed' }) {
+  outcome?: 'attempted' | 'succeeded' | 'failed'; reasonCode?: string | null; userMessage?: string | null }) {
   await db.query(`INSERT INTO rezics_account_operator_audit
-    (actor_id, action, target_id, reason, before_summary, after_summary, request_id, outcome)
-    VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`, [input.actorId, input.action, input.targetId,
-    input.reason, JSON.stringify(input.before), JSON.stringify(input.after), input.requestId, input.outcome ?? 'succeeded']);
+    (actor_id, action, target_id, reason, before_summary, after_summary, request_id, outcome, reason_code, user_message)
+    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`, [input.actorId, input.action, input.targetId,
+    input.reason, JSON.stringify(input.before), JSON.stringify(input.after), input.requestId, input.outcome ?? 'succeeded',
+    input.reasonCode ?? null, input.userMessage ?? null]);
 }

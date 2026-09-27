@@ -22,13 +22,14 @@ const TABLES = [
   'rezics_account_pending_consent', 'rezics_account_step_up', 'rezics_account_security_event',
   'rezics_account_security', 'rezics_account_grant', 'rezics_account_operator',
   'rezics_account_operator_bootstrap', 'rezics_account_operator_audit', 'rezics_account_operator_note',
-  'rezics_account_operator_command',
+  'rezics_account_operator_command', 'rezics_account_operator_preference', 'rezics_account_operator_job',
+  'rezics_account_operator_job_item',
 ] as const;
 const UUID_ID_TABLES = new Set<string>([
   'rezics_account_recovery_activation', 'rezics_account_recovery_approval',
   'rezics_account_recovery_claim',
   'rezics_account_email', 'rezics_account_security_event', 'rezics_account_operator_audit',
-  'rezics_account_operator_note',
+  'rezics_account_operator_note', 'rezics_account_operator_job',
 ]);
 const KEYS: Record<string, [string, string][]> = {
   rezics_account_rate_limit: [['key', 'text']],
@@ -38,6 +39,8 @@ const KEYS: Record<string, [string, string][]> = {
   rezics_account_operator: [['user_id', 'text']],
   rezics_account_operator_bootstrap: [['singleton', 'boolean']],
   rezics_account_operator_command: [['actor_id', 'text'], ['command_id', 'uuid']],
+  rezics_account_operator_preference: [['user_id', 'text']],
+  rezics_account_operator_job_item: [['job_id', 'uuid'], ['position', 'integer']],
 };
 
 /** Offline coverage of every private Account table at one UTC snapshot. */

@@ -24,7 +24,7 @@ test('G205 admin: stored roles, directory filters/cursors, notes, audit and deni
     const next = await (await f.request(`/api/account/admin/users?limit=1&sort=name&cursor=${encodeURIComponent(directory.nextCursor)}`, undefined, owner.cookie)).json() as { items: { id: string }[] };
     expect(next.items[0]!.id).not.toBe(directory.items[0]!.id);
     expect((await f.request(`/api/account/admin/users?sort=email&cursor=${encodeURIComponent(directory.nextCursor)}`, undefined, owner.cookie)).status).toBe(400);
-    const action = { action: 'suspend', reason: 'Abuse review pending', commandId: randomUUID() };
+    const action = { action: 'suspend', reasonCode: 'abuse', reason: 'Abuse review pending', commandId: randomUUID() };
     expect((await f.request(`/api/account/admin/users/${member.id}/actions`, action, support.cookie)).status).toBe(403);
     expect((await f.request('/api/account/admin/audit', undefined, support.cookie)).status).toBe(403);
     const note = { action: 'add-note', reason: 'Support conversation', note: 'Verified ownership by support procedure', commandId: randomUUID() };
@@ -67,7 +67,7 @@ test('G205 admin: suspension and required reset stop sign-in, sessions, refresh 
     const assertion = new Request(`${f.config.resource}/works`, { headers: { authorization: `Bearer ${tokens.access_token}` } });
     expect((await main.verify(assertion, ['work:read'])).subject).toBe(member.id);
     expect(await oauth.introspect(tokens.access_token)).toMatchObject({ active: true });
-    const suspension = { action: 'suspend', reason: 'Temporary abuse review', commandId: randomUUID(),
+    const suspension = { action: 'suspend', reasonCode: 'abuse', reason: 'Temporary abuse review', commandId: randomUUID(),
       expiresAt: new Date(Date.now() + 60_000).toISOString() };
     const response = await f.request(`/api/account/admin/users/${member.id}/actions`, suspension, oauth.owner.cookie);
     expect(response.status).toBe(200);
@@ -86,7 +86,7 @@ test('G205 admin: suspension and required reset stop sign-in, sessions, refresh 
     expect(await oauth.introspect(newTokens.access_token)).toMatchObject({ active: true });
     expect(await oauth.introspect(tokens.access_token)).toEqual({ active: false });
     const reset = await f.request(`/api/account/admin/users/${member.id}/actions`, { action: 'require-password-reset',
-      reason: 'Credential exposure report', commandId: randomUUID() }, oauth.owner.cookie);
+      reasonCode: 'compromised', reason: 'Credential exposure report', commandId: randomUUID() }, oauth.owner.cookie);
     expect(reset.status).toBe(200);
     expect(await oauth.introspect(newTokens.access_token)).toEqual({ active: false });
     expect((await f.request('/api/auth/sign-in/email', { email: member.email, password: member.password })).status).toBe(403);
@@ -112,7 +112,7 @@ test('G205 admin: audit failure rolls back, concurrent owner suspension preserve
       RETURN NEW; END $$;
       CREATE TRIGGER reject_probe_audit BEFORE INSERT ON rezics_account_operator_audit
       FOR EACH ROW EXECUTE FUNCTION reject_probe_audit()`);
-    const command = { action: 'suspend', reason: 'Audit failure probe', commandId: randomUUID() };
+    const command = { action: 'suspend', reasonCode: 'abuse', reason: 'Audit failure probe', commandId: randomUUID() };
     expect((await f.request(`/api/account/admin/users/${member.id}/actions`, command, owner.cookie)).status).toBe(503);
     expect((await f.pool.query('SELECT suspended_at, generation FROM rezics_account_security WHERE user_id = $1', [member.id])).rows[0])
       .toEqual({ suspended_at: null, generation: '0' });
@@ -137,7 +137,7 @@ test('G205 admin: audit failure rolls back, concurrent owner suspension preserve
       VALUES ($1, 'Existing authenticator', 'test-fixture', $2, $3, 0, 'singleDevice', false, now())`, [randomUUID(), member.id, randomUUID()]);
     expect((await f.request('/api/account/methods/password/remove', {}, member.cookie)).status).toBe(200);
     expect((await f.request(`/api/account/admin/users/${member.id}/actions`, { action: 'require-password-reset',
-      reason: 'Restore primary credential', commandId: randomUUID() }, remaining.cookie)).status).toBe(200);
+      reasonCode: 'user-request', reason: 'Restore primary credential', commandId: randomUUID() }, remaining.cookie)).status).toBe(200);
     await f.request('/api/auth/request-password-reset', { email: member.email, redirectTo: `${f.baseURL}/reset-password` });
     await f.email.drain();
     const callback = await f.request(/https?:\/\/\S+/.exec(f.messages.at(-1)!.text)![0]);
