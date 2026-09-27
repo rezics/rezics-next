@@ -29,7 +29,7 @@ services:
       retries: 30
 
   fuseki:
-    image: rezics/fuseki:6.2.0-cmd0.5.33-81624bf057dc
+    image: rezics/fuseki:6.2.0-cmd0.5.33-9d98da7b2355
     build:
       context: ../..
       dockerfile: infra/jena/Dockerfile

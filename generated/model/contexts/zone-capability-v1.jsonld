@@ -35,6 +35,14 @@
       "@id": "https://rezics.com/vocab/datasetId",
       "@type": "@id"
     },
+    "rv:defaultContext": {
+      "@id": "https://rezics.com/vocab/defaultContext",
+      "@type": "@id"
+    },
+    "rv:defaultContextRevision": {
+      "@id": "https://rezics.com/vocab/defaultContextRevision",
+      "@type": "@id"
+    },
     "rv:defaultRealm": {
       "@id": "https://rezics.com/vocab/defaultRealm",
       "@type": "@id"

@@ -388,6 +388,8 @@ export const iri = {
   "rv:declaredAt": "https://rezics.com/vocab/declaredAt",
   "rv:declaredBy": "https://rezics.com/vocab/declaredBy",
   "rv:DeclaredInvalidationDecision": "https://rezics.com/vocab/DeclaredInvalidationDecision",
+  "rv:defaultContext": "https://rezics.com/vocab/defaultContext",
+  "rv:defaultContextRevision": "https://rezics.com/vocab/defaultContextRevision",
   "rv:defaultRealm": "https://rezics.com/vocab/defaultRealm",
   "rv:DefaultScope": "https://rezics.com/vocab/DefaultScope",
   "rv:Defined": "https://rezics.com/vocab/Defined",

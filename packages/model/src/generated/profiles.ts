@@ -141,15 +141,17 @@ export const profileRegistry = {
     ]
   },
   "collection-curation-v1": {
-    "sha256": "fa4ef6efc1e7932f945a202ad4b51704e83ac7c34f8cd231bddfa91317c3d0f4",
+    "sha256": "f89da51e411b4d1dc4f402ba2059b63a123bd3093f865b527d751a3dfa3468fe",
     "file": "shapes/collection-curation-v1.ttl",
     "shapes": [
+      "https://rezics.com/definition/collection-curation-v1/structure-link-shape",
       "https://rezics.com/definition/collection-curation-v1/collection-shape",
       "https://rezics.com/definition/collection-curation-v1/revision-shape",
       "https://rezics.com/definition/collection-curation-v1/definition-shape",
       "https://rezics.com/definition/collection-curation-v1/definition-revision-shape"
     ],
     "focusRoles": [
+      "structure-link",
       "collection",
       "revision",
       "definition",
@@ -1025,14 +1027,16 @@ export const profileRegistry = {
     ]
   },
   "zone-capability-v1": {
-    "sha256": "b0374ad8d4506ef6a3337f784e77d97470a3df881f211c74a3281d2430365015",
+    "sha256": "c518389e8a7777b2358a5ed98f6016e77a803aa8c9336fefc40201fb38df4f65",
     "file": "shapes/zone-capability-v1.ttl",
     "shapes": [
+      "https://rezics.com/definition/zone-capability-v1/navigation-link-shape",
       "https://rezics.com/definition/zone-capability-v1/zone-shape",
       "https://rezics.com/definition/zone-capability-v1/mount-shape",
       "https://rezics.com/definition/zone-capability-v1/revision-shape"
     ],
     "focusRoles": [
+      "navigation-link",
       "zone",
       "mount",
       "revision"
