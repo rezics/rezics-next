@@ -62,6 +62,7 @@ type _RevisionShape = Assert<RevisionGet['response'][200] extends {
 } ? true : false>;
 type _MainRevisionShape = Assert<MainRevisionGet['response'][200] extends {
   revision: string; mainVersion: string; defaultSelection: string | null;
+  defaultSelections: Record<string, string>;
   hostingPolicy: 'metadata-only'
 } ? true : false>;
 type _ContentRevisionShape = Assert<ContentRevisionGet['response'][200] extends {
@@ -121,7 +122,7 @@ describe('Main typed route contracts', () => {
       sourcePosition: position })).toBe(true);
     expect(Value.Check(exactMainRevision, { revision: id, mainVersion: id,
       work: id, operation: id, hostingPolicy: 'metadata-only',
-      defaultSelection: null, sourcePosition: position })).toBe(true);
+      defaultSelection: null, defaultSelections: {}, sourcePosition: position })).toBe(true);
     expect(Value.Check(exactContentRevision, { reference: {
       owner: 'content', resourceId: id, variantId: 'urn:rezics:variant:test',
       revisionId: id, format: 'rezics-content-json-v1', model: 'content-shape-v1',

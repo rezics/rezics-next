@@ -130,7 +130,7 @@ test('IAM01/IAM03/IAM04: Account and Access check explicit Agents without poolin
     }
     await accessPool.query("INSERT INTO access.authority_subject (id, kind) VALUES ($1,'institution')",
       [institution]);
-    await accessPool.query("INSERT INTO access.scope_gate (id) VALUES ('work:create:root')");
+    await accessPool.query("INSERT INTO access.scope_gate (id) VALUES ('work:create:root') ON CONFLICT (id) DO NOTHING");
     const represent = async (principal: string, agent: string) => accessPool.query(`
       INSERT INTO access.representation (id, principal_id, subject_id, action, valid_until)
       VALUES ($1,$2,$3,'work.create',now() + interval '1 hour')`,
@@ -185,7 +185,7 @@ test('IAM01/IAM03/IAM04: Account and Access check explicit Agents without poolin
       return { results: { bindings: [{ agent: { type: 'uri', value: agentA },
         label: { type: 'literal', value: 'Ada Example' },
         kind: { type: 'uri', value: 'https://rezics.com/vocab/PersonAgent' },
-        handle: { type: 'literal', value: 'ada' } }] } };
+        nativeHandle: { type: 'literal', value: 'ada' } }] } };
     } } as unknown as FusekiClient;
     const labelled = await new AccessActingContexts(accessPool, { fuseki: labelledFuseki,
       lineage: { dataEpoch: Bun.env.MAIN_DATA_EPOCH, routingEpoch: Bun.env.MAIN_ROUTING_EPOCH },
