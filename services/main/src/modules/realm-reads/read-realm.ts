@@ -1,26 +1,24 @@
-import { GRAPHS, iri } from '../work/activate.ts';
+import type { RealmVisibility, RealmReviewMode } from '../space/policy.ts';
 import { WorkReadMissing, WorkReadUnavailable, type WorkReadSession } from '../work/read-session.ts';
 import { chosenModerators, readCurrentProfile } from '../realm-profile/commands.ts';
 import { AVATAR_POLICY, avatarImageEligible, DEFAULT_MEDIA_CONTEXT } from '../media/store.ts';
 import { fallbackAvatar, selectName } from '../media/summary.ts';
 
-export interface RealmBasis { id: string; space: string; revision: string }
+export interface RealmBasis { id: string; space: string; revision: string;
+  visibility: RealmVisibility; reviewMode: RealmReviewMode; policyRevision: string | null }
 
 /** A private Realm and an absent Realm have the same public answer. */
 export async function readRealmBasis(session: WorkReadSession, realm: string): Promise<RealmBasis> {
-  const rows = await session.query(`SELECT ?space ?revision WHERE { GRAPH ${iri(GRAPHS.current)} {
-    ${iri(realm)} a rv:Realm ; rv:realmState rv:Active ; rv:space ?space ; rv:head ?revision .
-    ?space a rv:Space ; rv:realmCapability ${iri(realm)} ; rv:disclosure rv:Public .
-  } } LIMIT 2`, 1);
-  if (!rows.length) throw new WorkReadMissing('Realm is unavailable');
-  if (!rows[0]?.space || !rows[0].revision) throw new WorkReadUnavailable('Realm basis is incomplete');
-  return { id: realm, space: rows[0].space.value, revision: rows[0].revision.value };
+  const policy = await session.realm(realm);
+  if (!policy.realmRevision) throw new WorkReadUnavailable('Realm basis is incomplete');
+  return { id: realm, space: policy.space, revision: policy.realmRevision,
+    visibility: policy.visibility, reviewMode: policy.reviewMode, policyRevision: policy.revision };
 }
 
 export async function readRealmHeader(session: WorkReadSession, realm: string) {
   const basis = await readRealmBasis(session, realm);
   const summary = (await session.summaries([realm]))[0];
-  if (summary?.status !== 'available' || summary.type !== 'realm' || summary.disclosure !== 'public') {
+  if (summary?.status !== 'available' || summary.type !== 'realm') {
     throw new WorkReadMissing('Realm is unavailable');
   }
   await readRealmBasis(session, realm);
@@ -47,7 +45,7 @@ export async function readRealmHeader(session: WorkReadSession, realm: string) {
     : profile ? fallbackAvatar('realm', realm) : summary.avatar;
   const moderators = profile ? [...await chosenModerators(session.deps.environment,
     realm, profile.moderators)] : [];
-  const managedRules = await session.deps.governance?.rules?.publishedRealmRules(realm);
+  const managedRules = await session.deps.governance?.rules?.publishedRealmRules(realm, true);
   const sourceRules = managedRules ?? profile?.rules;
   const rules = sourceRules ? await Promise.all(sourceRules.map(async rule => {
     let governanceRule = rule.governanceRule;

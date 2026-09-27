@@ -11,7 +11,7 @@ export async function requireCandidate(env: WorkActivationEnvironment, realm: st
     ${iri(realmSelectionSlotIri(realm, input.mainVersion))} rv:selectionHead ${iri(input.correctionOf)} .` : '';
   const rows = (await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?draft WHERE {
     GRAPH ${iri(GRAPHS.current)} {
-      ?space a rv:Space ; rv:realmCapability ${iri(realm)} ; rv:disclosure rv:Public .
+      ?space a rv:Space ; rv:realmCapability ${iri(realm)} .
       ${iri(realm)} a rv:Realm ; rv:realmState rv:Active ; rv:space ?space .
       ${iri(input.work)} rv:mainVersion ${iri(input.mainVersion)} .
       ${iri(input.contribution)} a rv:TextContribution ; rv:work ${iri(input.work)} ;

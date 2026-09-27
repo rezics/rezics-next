@@ -323,7 +323,8 @@ export async function placeReply(env: WorkActivationEnvironment,
           OPTIONAL { ${iri(slot)} rv:replyPlacementHead ?prior }
         }
         ${preparation.directPolicyRevision ? `GRAPH ${iri(GRAPHS.current)} {
-          ${iri(preparation.realm)} rv:publicProfileHead ${iri(preparation.directPolicyRevision)} }` : ''}
+          ${iri(preparation.realm)} ${preparation.directPolicyRevision.startsWith('urn:rezics:realm-policy:')
+            ? 'rv:realmPolicyHead' : 'rv:publicProfileHead'} ${iri(preparation.directPolicyRevision)} }` : ''}
         ${parentGuard}
         FILTER(COALESCE(?prior, ${iri(NONE)}) = ${iri(expectedHead ?? NONE)})
         FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:restoreHold true } }
@@ -338,7 +339,8 @@ export async function placeReply(env: WorkActivationEnvironment,
   if (!terminal && preparation.directPolicyRevision) {
     const currentPolicy = await env.fuseki.query(`PREFIX rv: <${RV}> ASK {
       GRAPH ${iri(GRAPHS.current)} { ${iri(preparation.realm)}
-        rv:publicProfileHead ${iri(preparation.directPolicyRevision)} } }`);
+        ${preparation.directPolicyRevision.startsWith('urn:rezics:realm-policy:')
+          ? 'rv:realmPolicyHead' : 'rv:publicProfileHead'} ${iri(preparation.directPolicyRevision)} } }`);
     if (currentPolicy.boolean !== true) throw new RealmReplyStale('Realm reply policy changed');
   }
   if (!terminal) throw new RealmReplyUnavailable(updateError

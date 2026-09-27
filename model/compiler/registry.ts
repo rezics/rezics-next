@@ -186,6 +186,8 @@ export const establishedDeclarations: Readonly<Record<string, EstablishedDeclara
     canonical: { selection: { types: [rv('PublicationSelection')],
       when: [{ path: rv('selectionBasis'), value: rv('MainMaintainer') }] } },
   },
+  'realm-policy-selection-v1': { canonical: { selection: { types: [rv('PublicationSelection')],
+    when: [{ path: rv('selectionBasis'), value: rv('RealmPolicy') }] } } },
   'realm-local-selection-v1': { canonical: { selection: only(rv('PublicationSelection')) } },
   'realm-local-rejection-v1': { canonical: { rejection: only(rv('RealmPublicationRejection')) } },
 };

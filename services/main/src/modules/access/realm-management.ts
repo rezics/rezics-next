@@ -9,6 +9,7 @@ import { REALM_ADMIN_COST, RealmAdminConflict, RealmAdminDenied, RealmAdminInval
 import { changeRealmMember } from './realm-management-members.ts';
 import { searchRealmMembers } from './realm-management-search.ts';
 import { readRealmSettings, saveRealmSettings } from './realm-management-settings.ts';
+import { deliverRealmPolicy, type RealmPolicyDelivery } from '../space/policy.ts';
 import { DATASET, GRAPHS, iri, lit, RV, type WorkActivationEnvironment } from '../work/activate.ts';
 
 export const realmAdminScope = (realm: string) => `governance:realm:${realm}`;
@@ -164,21 +165,48 @@ export class AccessRealmManagement {
         ...await changeRealmMember(client, realm, input, principalId, receiptId) }));
   }
 
-  settings(principal: VerifiedPrincipal, realm: string, actor: string) {
+  private async settlePolicy(realm: string, env?: WorkActivationEnvironment) {
+    const pending = (await this.pool.query<RealmPolicyDelivery>(`SELECT realm,receipt_id,generation::text,visibility,review_mode
+      FROM access.realm_policy_delivery WHERE realm = $1 AND NOT delivered`, [realm])).rows[0];
+    if (!pending) return;
+    if (!env) throw new RealmAdminUnavailable('Realm policy delivery needs the graph owner');
+    try { await deliverRealmPolicy(env, pending); }
+    catch { throw new RealmAdminUnavailable('Realm policy publication is pending; retry'); }
+    await this.pool.query(`UPDATE access.realm_policy_delivery SET delivered = true WHERE realm = $1 AND receipt_id = $2`,
+      [realm, pending.receipt_id]);
+  }
+
+  async settings(principal: VerifiedPrincipal, realm: string, actor: string, env?: WorkActivationEnvironment) {
+    await this.settlePolicy(realm, env);
     return this.transaction(realm, async (client, generation) => {
       await this.authorize(client, principal, realm, actor, 'realm.settings.manage');
       return { generation, ...await readRealmSettings(client, realm) };
     });
   }
 
-  changeSettings(principal: VerifiedPrincipal, realm: string, input: SettingsCommand, key: string) {
+  async changeSettings(principal: VerifiedPrincipal, realm: string, input: SettingsCommand, key: string, env?: WorkActivationEnvironment) {
     if (!Value.Check(settingsCommand, input)) throw new RealmAdminInvalid('Invalid Realm settings');
-    return this.write(principal, realm, input, key, 'realm.settings.manage',
+    await this.settlePolicy(realm, env);
+    const result = await this.write(principal, realm, input, key, 'realm.settings.manage',
       async (client, principalId, receiptId, generation) => {
         await this.authorize(client, principal, realm, input.actingSubject, 'governance.rule.publish');
-        return { receiptId, generation, replayed: false,
-          ...await saveRealmSettings(client, realm, principalId, input, key) };
+        if ((await client.query('SELECT 1 FROM access.realm_policy_delivery WHERE realm = $1 AND NOT delivered', [realm])).rowCount) {
+          throw new RealmAdminUnavailable('Realm policy publication is pending; retry');
+        }
+        if (!env && (input.settings.visibility !== 'public' || input.settings.reviewMode || !input.settings.reviewRequired)) {
+          throw new RealmAdminUnavailable('Realm policy publication needs the graph owner');
+        }
+        const saved = await saveRealmSettings(client, realm, principalId, input, key);
+        if (env) await client.query(`INSERT INTO access.realm_policy_delivery
+          (realm,receipt_id,generation,visibility,review_mode) VALUES ($1,$2,$3,$4,$5)
+          ON CONFLICT (realm) DO UPDATE SET receipt_id = EXCLUDED.receipt_id,generation = EXCLUDED.generation,
+            visibility = EXCLUDED.visibility,review_mode = EXCLUDED.review_mode,delivered = false`,
+        [realm,receiptId,generation,input.settings.visibility,
+          input.settings.reviewMode ?? (input.settings.reviewRequired ? 'mandatory' : 'open')]);
+        return { receiptId, generation, replayed: false, ...saved };
       });
+    await this.settlePolicy(realm, env);
+    return result;
   }
 
   roles(principal: VerifiedPrincipal, realm: string, actor: string) {

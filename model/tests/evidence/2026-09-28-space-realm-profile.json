@@ -1,0 +1,61 @@
+{
+  "cases": [
+    "MODEL15-space-realm-profile",
+    "MODEL17-two-focus-validation",
+    "G-298-realm-visibility-review-policy"
+  ],
+  "profile_sha256": "74a39bad65c0fd259f557146bed386843c5919fac3491b7503032d1ce9e370c2",
+  "jena_shacl": "Apache Jena SHACL version 6.2.0",
+  "outcomes": {
+    "valid": {
+      "conforms": true
+    },
+    "missing-owner": {
+      "conforms": false
+    },
+    "missing-realm-type": {
+      "conforms": false
+    },
+    "wrong-policy": {
+      "conforms": false
+    },
+    "public-mandatory": {
+      "conforms": true
+    },
+    "public-trusted-members": {
+      "conforms": true
+    },
+    "public-open": {
+      "conforms": true
+    },
+    "restricted-mandatory": {
+      "conforms": true
+    },
+    "restricted-trusted-members": {
+      "conforms": true
+    },
+    "restricted-open": {
+      "conforms": true
+    },
+    "private-mandatory": {
+      "conforms": true
+    },
+    "private-trusted-members": {
+      "conforms": true
+    },
+    "private-open": {
+      "conforms": true
+    },
+    "unknown-visibility": {
+      "conforms": false
+    },
+    "unknown-review-mode": {
+      "conforms": false
+    },
+    "unknown-disclosure": {
+      "conforms": false
+    }
+  },
+  "result": "pass",
+  "native_run": "20260927t205452-bf6e02"
+}

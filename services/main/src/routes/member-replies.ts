@@ -8,6 +8,7 @@ import { commandError, problem } from './problems.ts';
 const native = t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' });
 const uuid = t.String({ pattern: '^[0-9a-f-]{36}$' });
 const reply = t.Object({ reply: native, author: native, rootTarget: native, rootRevision: native,
+  originRealm: t.Optional(t.Nullable(native)),
   variantId: t.String(), revisionId: uuid, body: t.String(), revisionDigest: t.String(),
   parentReply: t.Optional(t.Nullable(native)), parentRevision: t.Optional(t.Nullable(uuid)) });
 export const openApiOperations = {
@@ -20,6 +21,7 @@ export function memberReplyRoutes(work: MainWorkDependencies) {
       body: t.Object({ profile: t.Literal('member-reply-draft-v1'), reply: native,
         variantId: t.String({ pattern: '^urn:rezics:variant:[0-9a-f-]{36}$' }),
         rootTarget: native, rootRevision: native, language: t.String({ minLength: 2, maxLength: 35 }),
+        originRealm: t.Optional(t.Nullable(native)),
         direction: t.Union([t.Literal('ltr'), t.Literal('rtl'), t.Literal('none')]),
         expectedHead: t.Nullable(uuid), body: t.Nullable(t.String({ minLength: 1, maxLength: 8192 })),
         actingSubject: native }, { additionalProperties: false }),
@@ -40,21 +42,26 @@ export function memberReplyRoutes(work: MainWorkDependencies) {
       } catch (error) { return commandError(error); }
     })
     .get('/v1/member-replies/:reply', { params: t.Object({ reply: uuid }),
-      response: { 200: reply, ...readProblems } }, async ({ params }) => {
+      query: t.Object({ actingSubject: t.Optional(native) }),
+      response: { 200: reply, ...readProblems } }, async ({ params, request, query }) => {
       try {
         if (!work.realmReplies) return problem(503, 'reply_unavailable', 'Replies are unavailable');
-        const result = await work.realmReplies.readPublic(`https://rezics.com/id/${params.reply}`);
+        const principal = request.headers.has('authorization') ? await work.account.verify(request, ['work:read']) : undefined;
+        const result = await work.realmReplies.readPublic(`https://rezics.com/id/${params.reply}`, principal, query.actingSubject);
         return result ? Response.json(result, { headers: { 'cache-control': 'no-store' } })
           : problem(404, 'reply_unavailable', 'Reply is unavailable');
       } catch (error) { return commandError(error); }
     })
     .get('/v1/member-replies', {
-      query: t.Object({ rootTarget: native, rootRevision: native, after: t.Optional(native) }, { additionalProperties: false }),
+      query: t.Object({ rootTarget: native, rootRevision: native, after: t.Optional(native),
+        realm: t.Optional(native), actingSubject: t.Optional(native) }, { additionalProperties: false }),
       response: { 200: t.Object({ items: t.Array(reply, { maxItems: 32 }), next: t.Nullable(native) }), ...readProblems },
-    }, async ({ query }) => {
+    }, async ({ request, query }) => {
       try {
         if (!work.realmReplies) return problem(503, 'reply_unavailable', 'Replies are unavailable');
-        const result = await work.realmReplies.listPublic(query.rootTarget, query.rootRevision, query.after);
+        const principal = request.headers.has('authorization') ? await work.account.verify(request, ['work:read']) : undefined;
+        const result = await work.realmReplies.listPublic(query.rootTarget, query.rootRevision, query.after,
+          query.realm, principal, query.actingSubject);
         return result ? Response.json(result, { headers: { 'cache-control': 'no-store' } })
           : problem(404, 'reply_unavailable', 'Reply root is unavailable');
       } catch (error) { return commandError(error); }

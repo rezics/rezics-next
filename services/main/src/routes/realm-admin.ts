@@ -58,7 +58,7 @@ export function realmAdminRoutes(work: MainWorkDependencies) {
     }, async ({ request, params: path, query: options }) => {
       try {
         const principal = await work.account.verify(request, ['governance:decide']);
-        return Response.json(await owner().settings(principal, `https://rezics.com/id/${path.realm}`, options.actingSubject), { headers });
+        return Response.json(await owner().settings(principal, `https://rezics.com/id/${path.realm}`, options.actingSubject, work.environment), { headers });
       } catch (error) { return errorResponse(error); }
     })
     .put('/v1/realms/:realm/settings', { params, body: settingsCommand,
@@ -66,7 +66,7 @@ export function realmAdminRoutes(work: MainWorkDependencies) {
     }, async ({ request, params: path, body }) => {
       try {
         const principal = await work.account.verify(request, ['governance:decide']);
-        const result = await owner().changeSettings(principal, `https://rezics.com/id/${path.realm}`, body, key(request));
+        const result = await owner().changeSettings(principal, `https://rezics.com/id/${path.realm}`, body, key(request), work.environment);
         return Response.json(result, { headers, status: result.replayed ? 200 : 201 });
       } catch (error) { return errorResponse(error); }
     })

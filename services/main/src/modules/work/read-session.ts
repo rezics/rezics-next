@@ -8,6 +8,7 @@ import type {} from '../../routes/media.ts';
 import { AccountAssertionDenied } from '../account/verify-assertion.ts';
 import type { VerifiedPrincipal } from '../access/admission.ts';
 import { readResourceSummaries, type ResourceSummary } from '../media/summary.ts';
+import { readRealmPolicy } from '../space/policy.ts';
 import { DEFAULT_MEDIA_CONTEXT } from '../media/store.ts';
 import { DATASET, GRAPHS, RV, iri, lit } from './activate.ts';
 import { WORK_READ_COST } from './read-contract.ts';
@@ -57,6 +58,29 @@ export function decodeReadCursor(token: string | undefined, binding: unknown, po
 
 export class WorkReadSession {
   principal: VerifiedPrincipal | null = null;
+  private readonly realmProofs = new Map<string, string>();
+
+  async realm(realm: string) {
+    const policy = await readRealmPolicy(this.deps.environment, realm);
+    if (!policy) throw new WorkReadMissing('Realm is unavailable');
+    if (policy.visibility === 'private') {
+      const proof = this.principal && this.options.actingSubject
+        ? await this.deps.access.realmReadProof?.(this.principal, this.options.actingSubject, realm) : null;
+      if (!proof) throw new WorkReadMissing('Realm is unavailable');
+      const prior = this.realmProofs.get(realm);
+      if (prior && prior !== proof) throw new WorkReadMoved('Realm membership changed');
+      this.realmProofs.set(realm, proof);
+    }
+    return policy;
+  }
+
+  async fenceRealms() {
+    for (const [realm, proof] of this.realmProofs) {
+      if (await this.deps.access.realmReadProof?.(this.principal!, this.options.actingSubject!, realm) !== proof) {
+        throw new WorkReadMissing('Realm is unavailable');
+      }
+    }
+  }
   constructor(readonly deps: MainWorkDependencies, readonly request: Request, readonly options: ReadOptions,
     readonly position: ReadPosition) {}
 
@@ -71,7 +95,9 @@ export class WorkReadSession {
   async summaries(resources: string[]): Promise<ResourceSummary[]> {
     this.checkDeadline();
     if (!resources.length) return [];
-    const reader = { restrictedTitles: this.deps.governance?.store
+    const reader = { realmReadProof: this.principal && this.options.actingSubject ? (realm: string) =>
+      Promise.resolve(this.deps.access.realmReadProof?.(this.principal!, this.options.actingSubject!, realm) ?? null) : undefined,
+    restrictedTitles: this.deps.governance?.store
       ? (heads: readonly { work: string; revision: string }[], context: string) =>
         this.deps.governance!.store.restrictedTitles(heads, context) : undefined,
     canReadWork: this.principal && this.options.actingSubject ? (work: string) =>
@@ -90,11 +116,7 @@ export class WorkReadSession {
     if ((kind === 'realm') !== !!this.options.realm) throw new WorkReadInvalid('Realm is required only for Realm scope');
     if (kind === 'mine' && !this.principal) throw new AccountAssertionDenied('Mine requires authentication');
     if (kind === 'realm') {
-      const rows = await this.query(`SELECT ?realm WHERE { GRAPH ${iri(GRAPHS.current)} {
-        BIND(${iri(this.options.realm!)} AS ?realm)
-        ?realm a rv:Realm ; rv:realmState rv:Active ; rv:space ?space .
-        ?space a rv:Space ; rv:realmCapability ?realm ; rv:disclosure rv:Public . } } LIMIT 2`, 1);
-      if (!rows.length) throw new WorkReadMissing('Resource is unavailable');
+      await this.realm(this.options.realm!);
     }
     return { kind, realm: this.options.realm ?? null };
   }
@@ -135,6 +157,7 @@ export async function workRead<T>(deps: MainWorkDependencies, request: Request, 
       if (session.principal && !await deps.access.activePrincipalId(session.principal)) {
         throw new AccountAssertionDenied('Principal is inactive');
       }
+      await session.fenceRealms();
       signal.throwIfAborted();
       return result;
     });

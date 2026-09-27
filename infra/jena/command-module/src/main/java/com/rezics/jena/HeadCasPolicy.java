@@ -188,7 +188,17 @@ final class HeadCasPolicy {
             } else {
                 if (!realm.isURI() || !same(data, RECEIPTS, own, "slot", subject))
                     return "Realm selection head differs from its receipt";
-                requiredScope = "publication:adopt:" + realm.getURI();
+                boolean policySelection = same(data, REVISIONS, next, "selectionBasis", rv("RealmPolicy"));
+                if (policySelection) {
+                    Node policy = one(data, REVISIONS, next, rv("realmPolicyHead"));
+                    Node mode = one(data, CURRENT, realm, rv("reviewMode"));
+                    if (policy == null || !policy.isURI()
+                        || !same(data, CURRENT, realm, "realmPolicyHead", policy)
+                        || mode == null || !mode.isLiteral()
+                        || !Set.of("open", "trusted-members").contains(mode.getLiteralLexicalForm()))
+                        return "automatic Realm selection lacks its current direct policy";
+                }
+                requiredScope = (policySelection ? "submission:submit:" : "publication:adopt:") + realm.getURI();
             }
         } else if (same(data, RECEIPTS, own, "rejection", next)) {
             Node realm = one(data, RECEIPTS, own, rv("realm"));

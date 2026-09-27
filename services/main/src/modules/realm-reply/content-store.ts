@@ -14,6 +14,7 @@ const digest = /^[0-9a-f]{64}$/;
 const REVIEW_POLICY = 'https://rezics.com/definition/realm-manager-reviewed-v1';
 
 export interface ReplyIdentityInput {
+  originRealm?: string | null;
   reply: string; variantId: string; revisionId: string; author: string;
   rootTarget: string; rootRevision: string; parentReply: string | null;
   parentRevision: string | null; contextRevision: string | null;
@@ -69,6 +70,12 @@ function assertIdentity(input: ReplyIdentityInput): void {
  * tables as ContentCore. Access admission IDs are the owner operation IDs. */
 export class RealmReplyContentStore {
   constructor(private readonly pool: Pool) {}
+
+  async origin(reply: string): Promise<{ realm: string | null } | null> {
+    const row = (await this.pool.query<{ origin_realm: string | null }>(
+      'SELECT origin_realm FROM content.reply_author WHERE reply = $1', [reply])).rows[0];
+    return row ? { realm: row.origin_realm } : null;
+  }
 
   async hasReceipt(operationId: string, action: string, requestDigest: string): Promise<boolean> {
     const result = await this.pool.query<Receipt>(`SELECT action, request_digest FROM content.receipt
@@ -136,16 +143,16 @@ export class RealmReplyContentStore {
     if (!native.test(reply)) throw new RealmReplyInvalid('invalid reply ID');
     const result = await this.pool.query<{
       id: string; variant_id: string; revision_id: string; author: string;
-      root_target: string; root_revision: string;
+      root_target: string; root_revision: string; origin_realm: string | null;
       parent_reply: string | null; parent_revision: string | null; context_revision: string | null;
     }>(`SELECT p.id, p.variant_id, r.revision_id::text, p.author,
-      p.root_target, p.root_revision, p.parent_reply, p.parent_revision::text,
+      p.root_target, p.root_revision, p.origin_realm, p.parent_reply, p.parent_revision::text,
       p.context_revision FROM content.reply p
       JOIN content.receipt r ON r.operation_id = p.operation_id WHERE p.id = $1`, [reply]);
     const row = result.rows[0];
     if (!row) return null;
     return { reply: row.id, variantId: row.variant_id, revisionId: row.revision_id,
-      author: row.author, rootTarget: row.root_target, rootRevision: row.root_revision,
+      author: row.author, rootTarget: row.root_target, rootRevision: row.root_revision, originRealm: row.origin_realm,
       parentReply: row.parent_reply, parentRevision: row.parent_revision,
       contextRevision: row.context_revision };
   }
@@ -191,17 +198,20 @@ export class RealmReplyContentStore {
         || variant.rows[0]?.draft_head !== input.revisionId) {
         throw new RealmReplyStale('reply body head or identity changed');
       }
-      const author = await client.query(`SELECT 1 FROM content.reply_author
+      const author = await client.query<{ origin_realm: string | null }>(`SELECT origin_realm FROM content.reply_author
         WHERE reply = $1 AND variant_id = $2 AND author = $3 AND root_target = $4 AND root_revision = $5`,
       [input.reply, input.variantId, input.author, input.rootTarget, input.rootRevision]);
       if (!author.rowCount) throw new RealmReplyDenied('reply has no matching admitted author provenance');
+      if (input.originRealm !== undefined && input.originRealm !== author.rows[0]!.origin_realm) {
+        throw new RealmReplyDenied('reply origin differs from its first draft');
+      }
       const revision = await client.query(`SELECT 1 FROM content.revision WHERE variant_id = $1
         AND id = $2 AND availability = 'available' AND model = 'member-reply-v1'
         AND provenance->>'author' = $3 AND body->>'deleted' = 'false'`, [input.variantId, input.revisionId, input.author]);
       if (!revision.rowCount) throw new RealmReplyStale('reply revision is unavailable');
       if (input.parentReply) {
-        const parent = await client.query<{ root_target: string; root_revision: string }>(`
-          SELECT p.root_target, p.root_revision FROM content.reply p
+        const parent = await client.query<{ root_target: string; root_revision: string; origin_realm: string | null }>(`
+          SELECT p.root_target, p.root_revision, p.origin_realm FROM content.reply p
           JOIN content.variant v ON v.id = p.variant_id
           JOIN content.revision head ON head.id = v.draft_head AND head.availability = 'available'
             AND head.body->>'deleted' = 'false'
@@ -209,18 +219,19 @@ export class RealmReplyContentStore {
           WHERE p.id = $1 AND r.id = $2 AND r.availability = 'available'`,
         [input.parentReply, input.parentRevision]);
         if (!parent.rows[0] || parent.rows[0].root_target !== input.rootTarget
-          || parent.rows[0].root_revision !== input.rootRevision) {
+          || parent.rows[0].root_revision !== input.rootRevision
+          || parent.rows[0].origin_realm !== author.rows[0]!.origin_realm) {
           throw new RealmReplyDenied('parent is not an exact reply to this root');
         }
       }
       await this.receipt(client, admission, 'reply.create', input.variantId, input.revisionId,
         'content.reply.created', { reply: input.reply, rootTarget: input.rootTarget });
       await client.query(`INSERT INTO content.reply (id, variant_id, author, root_target,
-          root_revision, parent_reply, parent_variant, parent_revision, context_revision, operation_id)
+          root_revision, parent_reply, parent_variant, parent_revision, context_revision, operation_id, origin_realm)
         VALUES ($1, $2, $3, $4, $5, $6,
-          (SELECT variant_id FROM content.reply WHERE id = $6), $7, $8, $9)`,
+          (SELECT variant_id FROM content.reply WHERE id = $6), $7, $8, $9, $10)`,
       [input.reply, input.variantId, input.author, input.rootTarget, input.rootRevision,
-        input.parentReply, input.parentRevision, input.contextRevision, admission.id]);
+        input.parentReply, input.parentRevision, input.contextRevision, admission.id, author.rows[0]!.origin_realm]);
       return { ...input, replayed: false };
     });
   }
@@ -250,9 +261,11 @@ export class RealmReplyContentStore {
           revisionId: input.revisionId, generation: row.rows[0].review_generation,
           outcome: input.outcome, revisionDigest: input.revisionDigest, replayed: true };
       }
-      const reply = await client.query<{ variant_id: string }>(
-        'SELECT variant_id FROM content.reply WHERE id = $1', [input.reply]);
-      if (!reply.rows[0]) throw new RealmReplyDenied('reply is unavailable');
+      const reply = await client.query<{ variant_id: string; origin_realm: string | null }>(
+        'SELECT variant_id,origin_realm FROM content.reply WHERE id = $1', [input.reply]);
+      if (!reply.rows[0] || reply.rows[0].origin_realm && reply.rows[0].origin_realm !== input.realm) {
+        throw new RealmReplyDenied('reply is unavailable in this Realm');
+      }
       await client.query('SELECT id FROM content.variant WHERE id = $1 FOR UPDATE', [reply.rows[0].variant_id]);
       const revision = await client.query<{ byte_digest: string }>(`
         SELECT byte_digest FROM content.revision WHERE variant_id = $1 AND id = $2
@@ -313,13 +326,14 @@ export class RealmReplyContentStore {
 
   /** Live keyset page, at most 32 visible comments and one lookahead row.
    * Exact-root index bounds traversal to this thread; no per-row owner calls. */
-  async listCurrent(rootTarget: string, rootRevision: string, after?: string) {
+  async listCurrent(rootTarget: string, rootRevision: string, after?: string, realm: string | null = null) {
     if (![rootTarget, rootRevision].every(value => native.test(value))
       || (after && !native.test(after))) throw new RealmReplyInvalid('invalid reply page');
     const rows = await this.pool.query(`WITH candidates AS (
       SELECT * FROM content.reply WHERE root_target = $1 AND root_revision = $2 AND id > $3
+        AND origin_realm IS NOT DISTINCT FROM $4
       ORDER BY id LIMIT 33
-    ) SELECT p.id AS reply, p.author,
+    ) SELECT p.id AS reply, p.author, p.origin_realm AS "originRealm",
       p.root_target AS "rootTarget", p.root_revision AS "rootRevision",
       p.parent_reply AS "parentReply", p.parent_revision AS "parentRevision",
       p.variant_id AS "variantId", r.id AS "revisionId", r.body->>'body' AS body,
@@ -327,7 +341,7 @@ export class RealmReplyContentStore {
       (r.availability = 'available' AND r.body->>'deleted' = 'false') AS visible
       FROM candidates p JOIN content.variant v ON v.id = p.variant_id
       JOIN content.revision r ON r.id = v.draft_head
-      ORDER BY p.id`, [rootTarget, rootRevision, after ?? '']);
+      ORDER BY p.id`, [rootTarget, rootRevision, after ?? '', realm]);
     const candidates = rows.rows.slice(0, 32);
     const items = candidates.filter(row => row.visible === true).map(({ visible: _visible, ...row }) => row);
     return { items, next: rows.rows.length > 32 ? candidates.at(-1)!.reply as string : null };
@@ -336,8 +350,8 @@ export class RealmReplyContentStore {
   async readCurrent(reply: string) {
     if (!native.test(reply)) throw new RealmReplyInvalid('invalid reply');
     const row = (await this.pool.query<{ reply: string; author: string; rootTarget: string;
-      rootRevision: string; variantId: string; revisionId: string; body: string; revisionDigest: string }>(`
-      SELECT p.id AS reply, p.author, p.root_target AS "rootTarget", p.root_revision AS "rootRevision",
+      rootRevision: string; variantId: string; revisionId: string; body: string; revisionDigest: string; originRealm: string | null }>(`
+      SELECT p.id AS reply, p.author, p.origin_realm AS "originRealm", p.root_target AS "rootTarget", p.root_revision AS "rootRevision",
         p.variant_id AS "variantId", r.id AS "revisionId", r.body->>'body' AS body, r.byte_digest AS "revisionDigest"
       FROM content.reply p JOIN content.variant v ON v.id = p.variant_id
       JOIN content.revision r ON r.id = v.draft_head
@@ -346,7 +360,8 @@ export class RealmReplyContentStore {
   }
 
   async preparePlacement(admission: RegisteredAdmission,
-    input: PlacementInput, directPolicyRevision?: string): Promise<PlacementPreparation> {
+    input: PlacementInput, directPolicyRevision?: string,
+    directPolicy = 'https://rezics.com/definition/realm-members-direct-v1'): Promise<PlacementPreparation> {
     if (!native.test(input.realm) || !native.test(input.reply) || !uuid.test(input.revisionId)
       || (input.reviewDecisionId !== null && !uuid.test(input.reviewDecisionId)) || !digest.test(input.revisionDigest)
       || (input.expectedHead !== null && !native.test(input.expectedHead))) {
@@ -363,10 +378,13 @@ export class RealmReplyContentStore {
       }
       const reply = await client.query<{ variant_id: string; author: string; root_target: string;
         root_revision: string; parent_reply: string | null; parent_revision: string | null;
-        context_revision: string | null }>(`SELECT variant_id, author, root_target, root_revision,
+        context_revision: string | null; origin_realm: string | null }>(`SELECT variant_id, author, root_target, root_revision,origin_realm,
           parent_reply, parent_revision::text, context_revision FROM content.reply WHERE id = $1`, [input.reply]);
-      if (!reply.rows[0]) throw new RealmReplyDenied('reply is unavailable');
+      if (!reply.rows[0] || reply.rows[0].origin_realm && reply.rows[0].origin_realm !== input.realm) {
+        throw new RealmReplyDenied('reply is unavailable in this Realm');
+      }
       const row = reply.rows[0];
+      if (row.origin_realm && row.origin_realm !== input.realm) throw new RealmReplyDenied('Realm-origin reply cannot be republished in another Realm');
       await client.query('SELECT id FROM content.variant WHERE id = $1 FOR UPDATE', [row.variant_id]);
       const exact = await client.query<{ byte_digest: string }>(`SELECT byte_digest FROM content.revision
         WHERE variant_id = $1 AND id = $2 AND availability = 'available'`,
@@ -397,10 +415,10 @@ export class RealmReplyContentStore {
           await client.query(`INSERT INTO content.realm_review_decision
             (id, realm, variant_id, revision_id, review_generation, outcome, policy, policy_revision,
              method, method_revision, reviewer, revision_digest, dependency_digest, operation_id)
-            VALUES ($1,$2,$3,$4,1,'approved','https://rezics.com/definition/realm-members-direct-v1',
+            VALUES ($1,$2,$3,$4,1,'approved',$10,
               $5,'policy',$5,$6,$7,$8,$9)`, [reviewDecisionId, input.realm, row.variant_id,
             input.revisionId, directPolicyRevision, admission.actingSubject, input.revisionDigest,
-            proof, policyAdmission.id]);
+            proof, policyAdmission.id, directPolicy]);
         }
       }
       const approval = await client.query<{ request_digest: string; method: string; policy_revision: string }>(`SELECT c.request_digest, d.method, d.policy_revision

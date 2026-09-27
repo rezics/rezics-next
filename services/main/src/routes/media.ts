@@ -108,7 +108,9 @@ export function mediaRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
     if (!actingSubject) throw new MediaInvalid('actingSubject is required for an authenticated read');
     let verifiedWork: ReturnType<typeof work.account.verify> | undefined;
     const workPrincipal = () => verifiedWork ??= work.account.verify(request, ['work:read']);
-    return { canReadWorks: work.mediaAccess
+    return { realmReadProof: async (realm: string) =>
+      await work.access.realmReadProof?.(await workPrincipal(), actingSubject, realm) ?? null,
+    canReadWorks: work.mediaAccess
       ? async (resources: readonly string[]) => work.mediaAccess!.canReadWorks(await workPrincipal(), actingSubject, resources)
       : undefined,
     canReadWork: async (resource: string) => work.access.canReadWork(await workPrincipal(), actingSubject, resource),

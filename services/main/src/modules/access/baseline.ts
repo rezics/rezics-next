@@ -1,4 +1,4 @@
-import { realmMemberProof } from '../realm-reply/member-policy.ts';
+import { realmApprovedProof } from '../realm-reply/member-policy.ts';
 import type { PoolClient } from 'pg';
 import type { FusekiClient } from '../../infrastructure/fuseki.ts';
 import { GRAPHS, iri } from '../work/activate.ts';
@@ -97,10 +97,11 @@ export async function baselineTargetAllowed(client: PoolClient, graph: Pick<Fuse
   if (target.kind === 'personal') return target.id === actingSubject;
   if (!graph) return false;
   if (target.kind === 'realm-reply') {
-    if (!await realmMemberProof(client, target.id, principalId, actingSubject)) return false;
+    const member = !!await realmApprovedProof(client, target.id, principalId, actingSubject);
     return (await graph.query(`PREFIX rv: <https://rezics.com/vocab/> ASK {
       GRAPH ${iri(GRAPHS.current)} { ${iri(target.id)} a rv:Realm ; rv:realmState rv:Active ;
-        rv:space ?space . ?space rv:realmCapability ${iri(target.id)} ; rv:disclosure rv:Public }
+        rv:space ?space . ?space rv:realmCapability ${iri(target.id)} ; rv:disclosure ?disclosure .
+        ${member ? '' : `${iri(target.id)} rv:reviewMode "open" . FILTER(?disclosure = rv:Public)`} }
     }`, 1024)).boolean === true;
   }
   if (target.kind === 'maintainer') {
@@ -184,7 +185,7 @@ export async function newBaselineProof(client: PoolClient, graph: Pick<FusekiCli
     target, request.baselineCollectionCreate === true, request.baselineRelatedWork ?? null,
     request.baselineSourceRevision ?? null)) return null;
   return { ...proof, realm_membership: target.kind === 'realm-reply'
-    ? await realmMemberProof(client, target.id, principalId, request.actingSubject) : null,
+    ? await realmApprovedProof(client, target.id, principalId, request.actingSubject) ?? 'open' : null,
     collection_create: request.baselineCollectionCreate === true,
     related_work: request.baselineRelatedWork ?? null, source_revision: request.baselineSourceRevision ?? null,
     maintainer_generation: target.kind === 'maintainer'
@@ -211,8 +212,8 @@ export async function baselineProofCurrent(client: PoolClient, graph: Pick<Fusek
   if (target.kind === 'maintainer' && (!saved.related_work
     || saved.maintainer_generation !== await maintainerGeneration(client, target.id,
       saved.related_work, admission.acting_subject))) return false;
-  if (target.kind === 'realm-reply' && (!saved.realm_membership
-    || saved.realm_membership !== await realmMemberProof(client, target.id, admission.principal_id,
+  if (target.kind === 'realm-reply' && saved.realm_membership !== 'open' && (!saved.realm_membership
+    || saved.realm_membership !== await realmApprovedProof(client, target.id, admission.principal_id,
       admission.acting_subject))) return false;
   return baselineTargetAllowed(client, graph, admission.principal_id, admission.acting_subject,
     target, saved.collection_create, saved.related_work, saved.source_revision);

@@ -1,5 +1,5 @@
 import { Elysia, t } from 'elysia';
-import { pageQuery, readLanguage, readUuid } from '../modules/work/read-contract.ts';
+import { pageQuery, readId, readLanguage, readUuid } from '../modules/work/read-contract.ts';
 import { WorkReadInvalid, WorkReadLimit, WorkReadMissing, WorkReadMoved,
   WorkReadUnavailable, workRead } from '../modules/work/read-session.ts';
 import { realmDecisionsPage, realmHeader, realmWorksPage } from '../modules/realm-reads/read-contract.ts';
@@ -13,9 +13,8 @@ import { workReadProblems } from './work-reads.ts';
 
 const params = t.Object({ realm: readUuid });
 const headers = { 'cache-control': 'no-store' };
-const page = t.Object({ limit: pageQuery.limit, cursor: pageQuery.cursor }, { additionalProperties: false });
+const page = t.Object({ actingSubject: t.Optional(readId), limit: pageQuery.limit, cursor: pageQuery.cursor }, { additionalProperties: false });
 const id = (uuid: string) => `https://rezics.com/id/${uuid}`;
-const publicRequest = (request: Request) => new Request(request.url);
 function realmReadError(error: unknown): Response {
   if (error instanceof WorkReadInvalid) return problem(400, 'invalid_realm_read', error.message);
   if (error instanceof WorkReadMissing) return problem(404, 'realm_unavailable', 'Realm is unavailable');
@@ -27,7 +26,7 @@ function realmReadError(error: unknown): Response {
   return commandError(error);
 }
 
-// Public only: a bearer token does not grant a private Realm or roster read.
+// Anonymous public reads; private Realms require a live approved membership.
 export const openApiOperations = {
   '/v1/realms/{realm}': { get: { bearer: false } },
   '/v1/realms/{realm}/works': { get: { bearer: false } },
@@ -37,10 +36,10 @@ export const openApiOperations = {
 export function realmReadRoutes(work: MainWorkDependencies) {
   return new Elysia()
     .get('/v1/realms/:realm', {
-      params, query: t.Object({ language: t.Optional(readLanguage) }, { additionalProperties: false }),
+      params, query: t.Object({ actingSubject: t.Optional(readId), language: t.Optional(readLanguage) }, { additionalProperties: false }),
       response: { 200: realmHeader, ...workReadProblems },
     }, async ({ request, params: path, query }) => {
-      try { return Response.json(await workRead(work, publicRequest(request), query,
+      try { return Response.json(await workRead(work, request, query,
         session => readRealmHeader(session, id(path.realm))), { headers }); }
       catch (error) { return realmReadError(error); }
     })
@@ -49,14 +48,14 @@ export function realmReadRoutes(work: MainWorkDependencies) {
         { additionalProperties: false }),
       response: { 200: realmWorksPage, ...workReadProblems },
     }, async ({ request, params: path, query }) => {
-      try { return Response.json(await workRead(work, publicRequest(request), query,
+      try { return Response.json(await workRead(work, request, query,
         session => readRealmWorks(session, id(path.realm))), { headers }); }
       catch (error) { return realmReadError(error); }
     })
     .get('/v1/realms/:realm/decisions', { params, query: page,
       response: { 200: realmDecisionsPage, ...workReadProblems },
     }, async ({ request, params: path, query }) => {
-      try { return Response.json(await workRead(work, publicRequest(request), query,
+      try { return Response.json(await workRead(work, request, query,
         session => readRealmDecisions(session, id(path.realm))), { headers }); }
       catch (error) { return realmReadError(error); }
     });

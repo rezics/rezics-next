@@ -75,7 +75,8 @@ test('P0.3: authored constraints emit the exact recorded candidate profiles', ()
   for (const profile of authoredProfiles.filter(item => historical.includes(item.id))) {
     const rendered = renderProfile(profile);
     const evidenceName = profile.id === 'work-metadata-v1' ? 'work-profile' : `${profile.id.slice(0, -3)}-profile`;
-    const evidenceDate = profile.id === 'work-metadata-v1' ? '2026-09-26' : '2026-09-24';
+    const evidenceDate = profile.id === 'work-metadata-v1' ? '2026-09-26'
+      : profile.id === 'space-realm-v1' ? '2026-09-28' : '2026-09-24';
     const evidence = JSON.parse(readFileSync(join(repo, `model/tests/evidence/${evidenceDate}-${evidenceName}.json`), 'utf8')) as {
       profile_sha256: string;
       outcomes: Record<string, { conforms: boolean }>;
@@ -268,7 +269,7 @@ const historicalCanonical: [type: string, ...routes: string[]][] = [
   ['ClassificationContext', 'classification-context-v1/global contextRole=GlobalClassification',
     'classification-context-v1/context'],
   ['PublicationSelection', 'main-default-selection-v1/selection selectionBasis=MainMaintainer',
-    'realm-local-selection-v1/selection'],
+    'realm-policy-selection-v1/selection selectionBasis=RealmPolicy', 'realm-local-selection-v1/selection'],
   ['RealmPublicationRejection', 'realm-local-rejection-v1/rejection'],
   ['http://www.w3.org/2004/02/skos/core#ConceptScheme', 'classification-proposition-v1/scheme'],
   ['http://www.w3.org/2004/02/skos/core#Concept', 'classification-proposition-v1/concept'],

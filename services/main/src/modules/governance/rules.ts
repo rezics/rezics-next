@@ -81,14 +81,18 @@ export class GovernanceRules implements RuleBasis {
   /** Only the explicit public profile crosses into Realm home reads. Generic
    * governance documents may contain private material and never fall through.
    * Localized maps use the existing Realm profile schema and read-side fallback. */
-  async publishedRealmRules(realm: string) {
+  async publishedRealmRules(realm: string, authorizedRealmRead = false) {
     const row = (await this.pool.query<{ open: boolean; document: unknown }>(`SELECT f.open,r.document
       FROM access.recovery_fence f LEFT JOIN access.governance_rule_head h
         ON h.ref = $1 AND h.scope_id = $2
       LEFT JOIN access.governance_rule_revision r ON r.ref = h.ref AND r.revision = h.revision
       WHERE f.id`, [realmRulesRef(realm), `governance:realm:${realm}`])).rows[0];
     if (!row?.open) throw new GovernanceUnavailable('Access is held for recovery');
-    return Value.Check(publicRealmRules, row.document) ? row.document.rules : null;
+    // The Realm owner has already fenced disclosure/membership. Keep the
+    // public profile validation while allowing its private publication flag.
+    const document = authorizedRealmRead && row.document && typeof row.document === 'object'
+      ? { ...row.document, public: true } : row.document;
+    return Value.Check(publicRealmRules, document) ? document.rules : null;
   }
 
   private async transaction<T>(work: (client: PoolClient) => Promise<T>): Promise<T> {

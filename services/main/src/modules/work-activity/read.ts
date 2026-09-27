@@ -2,7 +2,7 @@ import { readEpochOrder } from '../discovery/lineage.ts';
 import { GRAPHS, iri, lit } from '../work/activate.ts';
 import { fenceWorkBasis, readWorkBasis } from '../work/read-header.ts';
 import { decodeReadCursor, encodeReadCursor, pageResult, WorkReadLimit,
-  WorkReadMissing, WorkReadUnavailable, type WorkReadSession } from '../work/read-session.ts';
+  WorkReadUnavailable, type WorkReadSession } from '../work/read-session.ts';
 import { WORK_ACTIVITY_COST } from './read-contract.ts';
 
 type Kind = 'metadata-revision' | 'publication-decision' | 'reply-placement';
@@ -48,14 +48,7 @@ export async function readWorkDiscussion(session: WorkReadSession, work: string,
   if (!session.deps.realmReplies || !session.deps.content) {
     throw new WorkReadUnavailable('Reply or Content owner is unavailable');
   }
-  if (realm) {
-    const admitted = await session.query(`SELECT ?realm WHERE { GRAPH ${iri(GRAPHS.current)} {
-      BIND(${iri(realm)} AS ?realm)
-      ?realm a rv:Realm ; rv:realmState rv:Active ; rv:space ?space .
-      ?space a rv:Space ; rv:realmCapability ?realm ; rv:disclosure rv:Public .
-    } } LIMIT 2`, 1);
-    if (!admitted.length) throw new WorkReadMissing('Realm is unavailable');
-  }
+  if (realm) await session.realm(realm);
   const limit = session.options.limit ?? WORK_ACTIVITY_COST.pageSize;
   const binding = ['work-discussion-v1', work, realm ?? null,
     session.options.language ?? null, session.options.actingSubject ?? null];
@@ -67,7 +60,7 @@ export async function readWorkDiscussion(session: WorkReadSession, work: string,
       ?slot a rv:RealmReplySlot ; rv:rootTarget ${iri(work)} ; rv:realm ?realm ;
         rv:reply ?reply ; rv:replyPlacementHead ?id .
       ?realm a rv:Realm ; rv:realmState rv:Active ; rv:space ?space .
-      ?space a rv:Space ; rv:realmCapability ?realm ; rv:disclosure rv:Public . }
+      ?space a rv:Space ; rv:realmCapability ?realm . ${realm ? '' : '?space rv:disclosure rv:Public .'} }
     GRAPH ${iri(GRAPHS.revisions)} {
       ?id a rv:RealmReplyPlacement ; rv:realm ?realm ; rv:reply ?reply ;
         rv:rootTarget ${iri(work)} ; rv:contentRevision ?revision ;
@@ -85,7 +78,7 @@ export async function readWorkDiscussion(session: WorkReadSession, work: string,
     if (!uuid.test(id)) throw new WorkReadUnavailable('Reply revision identity is invalid');
     const reply = field(row, 'reply');
     const realmId = field(row, 'realm');
-    const visible = await session.deps.realmReplies.visible(realmId, reply);
+    const visible = await session.deps.realmReplies.visible(realmId, reply, session.principal ?? undefined, session.options.actingSubject);
     if (visible?.placement === field(row, 'id') && visible.revisionId === id
       && field(row, 'review') === `urn:rezics:realm-review:${visible.reviewDecisionId}`) {
       visiblePage.push({ row, revisionId: id, realmId, reply });
@@ -99,7 +92,7 @@ export async function readWorkDiscussion(session: WorkReadSession, work: string,
   const items = [];
   for (const { row, revisionId, realmId, reply } of visiblePage) {
     const review = field(row, 'review');
-    const visible = await session.deps.realmReplies.visible(realmId, reply);
+    const visible = await session.deps.realmReplies.visible(realmId, reply, session.principal ?? undefined, session.options.actingSubject);
     const body = bodies.get(revisionId);
     if (!visible || visible.placement !== field(row, 'id')
       || visible.revisionId !== revisionId
@@ -169,7 +162,7 @@ export async function readWorkActivityHistory(session: WorkReadSession, work: st
       if (!session.deps.realmReplies) throw new WorkReadUnavailable('Reply owner is unavailable');
       const realm = field(row, 'realm');
       const reply = field(row, 'reply');
-      const visible = await session.deps.realmReplies.visible(realm, reply);
+      const visible = await session.deps.realmReplies.visible(realm, reply, session.principal ?? undefined, session.options.actingSubject);
       if (!visible || visible.placement !== id
         || field(row, 'revision') !== `${contentRevision}${visible.revisionId}`
         || field(row, 'review') !== `urn:rezics:realm-review:${visible.reviewDecisionId}`) continue;

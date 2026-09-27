@@ -3,7 +3,7 @@ import { assertGraphAdmissionOpen } from '../work/restore-lineage.ts';
 
 /** Current, public Realm names from their owning Space. One graph read for a bounded batch. */
 export async function readPublicRealmNames(env: WorkActivationEnvironment,
-  realms: readonly string[]): Promise<Map<string, string>> {
+  realms: readonly string[], readablePrivate: ReadonlySet<string> = new Set()): Promise<Map<string, string>> {
   if (!realms.length) return new Map();
   await assertGraphAdmissionOpen(env.fuseki, env.lineage);
   const rows = (await env.fuseki.query(`PREFIX rv: <${RV}>
@@ -12,7 +12,9 @@ export async function readPublicRealmNames(env: WorkActivationEnvironment,
       VALUES ?realm { ${realms.map(iri).join(' ')} }
       GRAPH ${iri(GRAPHS.current)} {
         ?realm a rv:Realm ; rv:realmState rv:Active ; rv:space ?space .
-        ?space a rv:Space ; rv:disclosure rv:Public ; rv:realmCapability ?realm ; rdfs:label ?name .
+        ?space a rv:Space ; rv:disclosure ?disclosure ; rv:realmCapability ?realm ; rdfs:label ?name .
+        FILTER(?disclosure = rv:Public ${readablePrivate.size
+          ? `|| ?realm IN (${[...readablePrivate].map(iri).join(',')})` : ''})
       }
     } LIMIT ${realms.length + 1}`)).results?.bindings ?? [];
   if (rows.length > realms.length) throw new Error('Realm summary read is ambiguous');

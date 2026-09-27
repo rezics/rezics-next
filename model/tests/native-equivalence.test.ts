@@ -21,7 +21,8 @@ type PathDifference = { profile: string; case: string; expectedPath: string; rep
 
 function evidencePath(id: string): string {
   const name = id === 'work-metadata-v1' ? 'work-profile' : `${id.slice(0, -3)}-profile`;
-  const date = id === 'work-metadata-v1' ? '2026-09-26' : '2026-09-24';
+  const date = id === 'work-metadata-v1' ? '2026-09-26'
+    : id === 'space-realm-v1' ? '2026-09-28' : '2026-09-24';
   return resolve(root, `model/tests/evidence/${date}-${name}.json`);
 }
 
@@ -212,7 +213,7 @@ test('P0.3: TypeScript candidate fixtures preserve all recorded profile digests 
       cases++;
     }
   }
-  expect(cases).toBe(69);
+  expect(cases).toBe(81);
 });
 
 const nativeTest = process.env.MODEL_NATIVE_EQUIVALENCE === '1' && base ? test : test.skip;
@@ -247,7 +248,7 @@ nativeTest('MODEL17/MODEL27: generated profiles match recorded candidates throug
   console.log(`P0.3 native matrix ${result.moduleVersion}: ${result.cases - result.mismatches.length}/${result.cases} outcomes matched, ${result.pathDifferences.length} violation paths absent from bounded reports; ${reportPath}`);
   if (process.env.MODEL_NATIVE_EQUIVALENCE_STRICT === '1') {
     expect(result.moduleVersion).toBe(COMMAND_MODULE_VERSION);
-    expect(result.cases).toBe(69);
+    expect(result.cases).toBe(81);
     expect(result.mismatches).toEqual([]);
     expect(result.pathDifferences).toEqual([]);
   }

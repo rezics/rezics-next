@@ -18,6 +18,8 @@ export type ResourceType = 'work' | 'main-version' | 'space' | 'realm' | 'concep
   | 'character' | 'context' | 'role' | 'relation-definition';
 
 export interface SummaryReader {
+  /** Current approved membership, including its revocation generations. */
+  realmReadProof?: (realm: string) => Promise<string | null>;
   /** Readable non-public Work, checked against current Access only after the graph read. */
   canReadWork?: (work: string) => Promise<boolean>;
   /** One Access owner request for all distinct non-public Works in the batch. */
@@ -188,12 +190,14 @@ async function graphRows(env: WorkActivationEnvironment, resources: readonly str
           GRAPH ${iri(GRAPHS.revisions)} { ?pin rv:contentRevision ?contentRevision .
             ?contentRevision a rv:ErasedRevision }
         }, false) AS ?erased)
-        BIND(IF(?type = "concept" || ?type = "realm", true,
+        BIND(IF(?type = "realm", EXISTS { GRAPH ${iri(GRAPHS.current)} {
+          ?r rv:space ?realmSpace . ?realmSpace rv:realmCapability ?r ; rv:disclosure rv:Public } },
+          IF(?type = "concept", true,
           IF(?type = "context", EXISTS { GRAPH ${iri(GRAPHS.current)} { ?r rv:disclosure rv:Public } },
           IF(?type = "space",
           EXISTS { GRAPH ${iri(GRAPHS.current)} { ?r rv:disclosure rv:Public } },
           EXISTS { GRAPH ${iri(GRAPHS.current)} { ?work rv:mainVersion ?pm . ?pm rv:selectionHead ?ps }
-            GRAPH ${iri(GRAPHS.revisions)} { ?ps rv:publicationDecision ?pd . ?pd rv:disclosure rv:Public } })))
+            GRAPH ${iri(GRAPHS.revisions)} { ?ps rv:publicationDecision ?pd . ?pd rv:disclosure rv:Public } }))))
           AS ?public)
       }
     }`);
@@ -267,7 +271,15 @@ export async function readResourceSummaries(env: WorkActivationEnvironment, medi
   }
   // Owner reads validate current state and disclosure before a name or avatar is hydrated.
   const realms = [...special].filter(([, row]) => row.type === 'realm').map(([reference]) => reference);
-  const realmNames = await readPublicRealmNames(env, realms);
+  const realmProofs = new Map<string, string>();
+  for (const realm of realms) {
+    if (!special.get(realm)!.public && reader.realmReadProof) {
+      cost.accessChecks++; cost.accessQueries++;
+      const proof = await reader.realmReadProof(realm);
+      if (proof) realmProofs.set(realm, proof);
+    }
+  }
+  const realmNames = await readPublicRealmNames(env, realms, new Set(realmProofs.keys()));
   if (realms.length) cost.graphQueries += 2;
   const contextRefs = [...special].filter(([, row]) => row.type === 'context').map(([reference]) => reference);
   const contextBatch = await readContextSummaryBatch(env, contextRefs,
@@ -361,6 +373,14 @@ export async function readResourceSummaries(env: WorkActivationEnvironment, medi
     cost.mediaQueries = 1;
     avatars = hydrated.rows;
     mediaGeneration = `${hydrated.generation.dataEpoch}:${hydrated.generation.sequence}`;
+  }
+  // Hydrated names/images cannot outlive a disclosure or membership change.
+  const fencedNames = await readPublicRealmNames(env, realms, new Set(realmProofs.keys()));
+  if (realms.length) cost.graphQueries += 2;
+  for (const realm of realms) {
+    const proof = realmProofs.get(realm);
+    if (proof) { cost.accessChecks++; cost.accessQueries++; }
+    if (!fencedNames.has(realm) || proof && await reader.realmReadProof!(realm) !== proof) readable.delete(realm);
   }
   const summaries = input.resources.map((reference): ResourceSummary => {
     const row = readable.get(reference);

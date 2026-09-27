@@ -10,6 +10,8 @@ import { acknowledgeContentDecision, cancelPlacement, placeReply,
   readPlacementHead, readRootPlacementHeads,
   readReplyGraphReceipt } from './graph.ts';
 import { publicReplyRoot } from './root.ts';
+import { readRealmPolicy, reviewPolicy } from '../space/policy.ts';
+import type { RealmPermit } from '../access/realm-management-policy.ts';
 
 function stable(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map(stable).join(',')}]`;
@@ -26,7 +28,7 @@ export class RealmReplyStore {
   constructor(private readonly content: RealmReplyContentStore,
     private readonly contentCore: Pick<ContentCore, 'settlePublication'>,
     private readonly access: Pick<AccessAdmissionRegistry, 'register' | 'claim' | 'recordGraphOutcome'>
-      & Partial<Pick<AccessAdmissionRegistry, 'hasRealmMemberAdmission'>>,
+      & Partial<Pick<AccessAdmissionRegistry, 'hasRealmMemberAdmission' | 'withRealmPolicy' | 'realmReadProof'>>,
     private readonly env: WorkActivationEnvironment) {}
 
   private async admission(principal: VerifiedPrincipal, actingSubject: string, action: string,
@@ -57,6 +59,19 @@ export class RealmReplyStore {
 
   async create(principal: VerifiedPrincipal, input: ReplyIdentityInput,
     key: string, digest: string) {
+    const origin = await this.content.origin(input.reply);
+    if (origin?.realm) {
+      if (!this.access.withRealmPolicy) throw new RealmReplyUnavailable('Realm policy owner is unavailable');
+      return this.access.withRealmPolicy(principal, input.author, origin.realm, 'reply', async permit => {
+        const policy = await readRealmPolicy(this.env, origin.realm!);
+        if (!policy || policy.visibility !== 'public' && !permit.member) throw new RealmReplyDenied('Realm membership is required');
+        return this.createAdmitted(principal, input, key, digest);
+      });
+    }
+    return this.createAdmitted(principal, input, key, digest);
+  }
+
+  private async createAdmitted(principal: VerifiedPrincipal, input: ReplyIdentityInput, key: string, digest: string) {
     const admission = await this.admission(principal, input.author, 'reply.create',
       `reply:create:${input.rootTarget}`, key, digest, input.rootRevision);
     let result;
@@ -87,6 +102,17 @@ export class RealmReplyStore {
 
   async place(principal: VerifiedPrincipal, actingSubject: string, input: PlacementInput,
     key: string, digest: string) {
+    if (this.access.withRealmPolicy) return this.access.withRealmPolicy(principal, actingSubject, input.realm, 'reply',
+      permit => this.placeAdmitted(principal, actingSubject, input, key, digest, permit));
+    return this.placeAdmitted(principal, actingSubject, input, key, digest);
+  }
+
+  private async placeAdmitted(principal: VerifiedPrincipal, actingSubject: string, input: PlacementInput,
+    key: string, digest: string, permit?: RealmPermit) {
+    const unified = await readRealmPolicy(this.env, input.realm);
+    if (permit && (!unified || unified.visibility !== 'public' && !permit.member)) {
+      throw new RealmReplyDenied('Realm membership is required');
+    }
     const admission = await this.admission(principal, actingSubject, 'reply.place',
       `reply:place:${input.realm}`, key, digest);
     const existing = await readReplyGraphReceipt(this.env, admission);
@@ -95,15 +121,25 @@ export class RealmReplyStore {
     if (!prepared) {
       try {
         let directPolicyRevision: string | undefined;
+        let directPolicy: string | undefined;
         if (input.reviewDecisionId === null) {
-          const policy = await readCurrentProfile(this.env, input.realm);
-          if (policy?.profile.replyPolicy !== 'members-direct'
-            || !await this.access.hasRealmMemberAdmission?.(admission.id)) {
-            throw new RealmReplyDenied('Realm policy requires moderator approval');
+          if (unified?.revision) {
+            if (unified.revision !== permit?.revision || unified.reviewMode === 'mandatory'
+              || unified.reviewMode === 'trusted-members' && !permit.member) {
+              throw new RealmReplyDenied('Realm policy requires moderator approval');
+            }
+            directPolicyRevision = unified.revision;
+            directPolicy = reviewPolicy(unified.reviewMode);
+          } else {
+            const policy = await readCurrentProfile(this.env, input.realm);
+            if (policy?.profile.replyPolicy !== 'members-direct'
+              || !await this.access.hasRealmMemberAdmission?.(admission.id)) {
+              throw new RealmReplyDenied('Realm policy requires moderator approval');
+            }
+            directPolicyRevision = policy.revision;
           }
-          directPolicyRevision = policy.revision;
         }
-        prepared = await this.content.preparePlacement(admission, input, directPolicyRevision);
+        prepared = await this.content.preparePlacement(admission, input, directPolicyRevision, directPolicy);
       } catch (error) {
         if (error instanceof RealmReplyDenied || error instanceof RealmReplyInvalid || error instanceof RealmReplyStale) {
           await cancelPlacement(this.env, admission);
@@ -145,38 +181,67 @@ export class RealmReplyStore {
       replayed: admission.replayed || prepared.replayed };
   }
 
-  async visible(realm: string, reply: string) {
-    await assertGraphAdmissionOpen(this.env.fuseki, this.env.lineage);
+  private async readProof(realm: string, principal?: VerifiedPrincipal, actor?: string): Promise<string | null> {
+    const policy = await readRealmPolicy(this.env, realm);
+    if (!policy) return null;
+    const member = policy.visibility === 'private'
+      ? principal && actor ? await this.access.realmReadProof?.(principal, actor, realm) : null : 'public';
+    return member ? JSON.stringify([policy, member]) : null;
+  }
+
+  async visible(realm: string, reply: string, principal?: VerifiedPrincipal, actor?: string) {
+    const before = await this.readProof(realm, principal, actor);
+    if (!before) return null;
+    const origin = await this.content.origin(reply);
+    if (origin?.realm && origin.realm !== realm) return null;
     const placement = await readPlacementHead(this.env, realm, reply);
     if (!placement) return null;
     if (!await this.content.currentReview(realm, reply, placement.revisionId,
       placement.reviewDecisionId, placement.preparationId)) return null;
-    return placement;
+    return await this.readProof(realm, principal, actor) === before ? placement : null;
   }
 
-  async readPublic(reply: string) {
+  async readPublic(reply: string, principal?: VerifiedPrincipal, actor?: string) {
     await assertGraphAdmissionOpen(this.env.fuseki, this.env.lineage);
     const result = await this.content.readCurrent(reply);
     if (!result || !await publicReplyRoot(this.env.fuseki, result.rootTarget, result.rootRevision)) return null;
+    if (result.originRealm) {
+      const visible = await this.visible(result.originRealm, reply, principal, actor);
+      if (visible?.revisionId !== result.revisionId) return null;
+    }
     return result;
   }
 
-  async listPublic(rootTarget: string, rootRevision: string, after?: string) {
+  /** An explicit Realm selects its origin partition before LIMIT. Independent
+   * public replies have a null origin, so private rows cannot alter their pages.
+   * At most 32 exact placement/review checks and two policy fences per page. */
+  async listPublic(rootTarget: string, rootRevision: string, after?: string, realm?: string,
+    principal?: VerifiedPrincipal, actor?: string) {
     await assertGraphAdmissionOpen(this.env.fuseki, this.env.lineage);
     if (!await publicReplyRoot(this.env.fuseki, rootTarget, rootRevision)) return null;
-    const page = await this.content.listCurrent(rootTarget, rootRevision, after);
+    const before = realm ? await this.readProof(realm, principal, actor) : 'public';
+    if (!before) return null;
+    const page = await this.content.listCurrent(rootTarget, rootRevision, after, realm ?? null);
+    if (realm) {
+      const visible = await Promise.all(page.items.map(async item =>
+        (await this.visible(realm, item.reply as string, principal, actor))?.revisionId === item.revisionId));
+      page.items = page.items.filter((_item, index) => visible[index]);
+      if (await this.readProof(realm, principal, actor) !== before) return null;
+    }
     if (!await publicReplyRoot(this.env.fuseki, rootTarget, rootRevision)) return null;
     return page;
   }
 
-  async rootCount(realm: string, rootTarget: string) {
-    await assertGraphAdmissionOpen(this.env.fuseki, this.env.lineage);
+  async rootCount(realm: string, rootTarget: string, principal?: VerifiedPrincipal, actor?: string) {
+    const before = await this.readProof(realm, principal, actor);
+    if (!before) throw new RealmReplyDenied('Realm is unavailable');
     const page = await readRootPlacementHeads(this.env, realm, rootTarget);
     let count = 0;
     for (const placement of page.heads) {
       if (await this.content.currentReview(realm, placement.reply, placement.revisionId,
         placement.reviewDecisionId, placement.preparationId)) count++;
     }
+    if (await this.readProof(realm, principal, actor) !== before) throw new RealmReplyDenied('Realm is unavailable');
     return { realm, rootTarget, count, complete: page.complete };
   }
 }

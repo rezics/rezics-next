@@ -127,7 +127,7 @@ export function realmReplyRoutes(work: MainWorkDependencies) {
       try {
         const principal = await work.account.verify(request, ['work:read']);
         if (!work.realmReplies) return problem(503, 'realm_reply_unavailable', 'Realm replies are unavailable');
-        const visible = await work.realmReplies.visible(params.realm, params.reply);
+        const visible = await work.realmReplies.visible(params.realm, params.reply, principal, query.actingSubject);
         if (!visible || !await work.access.canReadWork(principal, query.actingSubject,
           visible.rootTarget)) return problem(404, 'realm_reply_unavailable', 'Reply is unavailable');
         return Response.json({ profile: 'realm-reply-placement-v1', ...visible }, noStore);
@@ -144,7 +144,7 @@ export function realmReplyRoutes(work: MainWorkDependencies) {
         if (!await work.access.canReadWork(principal, query.actingSubject, params.rootTarget)) {
           return problem(404, 'realm_reply_unavailable', 'Reply root is unavailable');
         }
-        const count = await work.realmReplies.rootCount(params.realm, params.rootTarget);
+        const count = await work.realmReplies.rootCount(params.realm, params.rootTarget, principal, query.actingSubject);
         return Response.json({ profile: 'realm-reply-root-count-v1', ...count }, noStore);
       } catch (error) { return replyError(error); }
     });

@@ -3,7 +3,8 @@ import type { Static } from 'typebox';
 import { readId, readUuid } from '../work/read-contract.ts';
 import { communityRule, MAX_RULES } from '../realm-profile/schema.ts';
 
-// All operations use indexed Access reads, with no graph or external calls.
+// Management uses indexed Access reads. Settings also deliver one pending policy
+// receipt through a bounded graph command; no Realm contents are scanned.
 // Role edits are O(grantRows + affected assignments * permissions); overflow is rejected
 // before mutation. A preview never reports a truncated count as exact.
 // Community-scoped and temporary bans follow the moderator task described at
@@ -60,9 +61,9 @@ export const memberCommand = t.Object({ ...commandFields, member: readId,
   durationSeconds: t.Nullable(t.Integer({ minimum: 1, maximum: 31_622_400 })) },
 { additionalProperties: false });
 export type MemberCommand = Static<typeof memberCommand>;
-// These literals reflect the current graph profile. Private visibility and
-// automatic adoption need new owner profiles before they can be selected.
-export const realmSettings = t.Object({ visibility: t.Literal('public'), reviewRequired: t.Literal(true),
+export const realmSettings = t.Object({ visibility: t.Union([t.Literal('public'), t.Literal('restricted'), t.Literal('private')]),
+  reviewRequired: t.Boolean(),
+  reviewMode: t.Optional(t.Union([t.Literal('mandatory'), t.Literal('trusted-members'), t.Literal('open')])),
   whoMaySubmit: t.Union([t.Literal('granted'), t.Literal('members'), t.Literal('closed')]),
   rules: t.Array(communityRule, { maxItems: MAX_RULES }) }, { additionalProperties: false });
 export type RealmSettings = Static<typeof realmSettings>;

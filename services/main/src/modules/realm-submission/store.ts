@@ -1,4 +1,7 @@
 import { randomUUID } from 'node:crypto';
+import { realmPermit } from '../access/realm-management-policy.ts';
+import { readRealmPolicy } from '../space/policy.ts';
+import { GRAPHS, RV, iri } from '../work/activate.ts';
 import { requireRealmSubmissionPolicy } from '../access/realm-management-settings.ts';
 import type { Pool, PoolClient } from 'pg';
 import { fusekiReadBudget } from '../../infrastructure/fuseki.ts';
@@ -7,7 +10,7 @@ import { AdmissionConflict, AdmissionDenied, AdmissionExpired, type AccessAdmiss
 import { hash, type WorkActivationEnvironment } from '../work/activate.ts';
 import { assertGraphAdmissionOpen } from '../work/restore-lineage.ts';
 import { checkedRealmSelectionReceipt, readRealmSelectionReceipt, realmSelectionDigest,
-  RealmSelectionUnavailable, sealRealmSelectionAdmission, selectRealmLocal, StaleRealmSelection,
+  RealmSelectionUnavailable, realmSelectionSlotIri, sealRealmSelectionAdmission, selectRealmLocal, StaleRealmSelection,
   type SelectRealmLocalInput } from '../work/select-realm.ts';
 import { acknowledgeSubmission, requireCandidate } from './graph.ts';
 import { SUBMISSION_COST, SubmissionInvalid, SubmissionMissing, SubmissionStale,
@@ -26,7 +29,7 @@ const stable = (value: unknown): string => {
 /** Access owns the private workflow; Jena's existing selection owner is the only
  * authority for adoption. A committed reservation is required before dispatch.
  * Row locking semantics: https://www.postgresql.org/docs/18/explicit-locking.html
- * (checked 2026-09-28). Graph calls never occur in an uncommitted adoption attempt. */
+ * (checked 2026-09-28). Graph mutations never occur in an uncommitted adoption attempt. */
 export class RealmSubmissionStore {
   constructor(private readonly pool: Pool,
     private readonly access: Pick<AccessAdmissionRegistry, 'register' | 'claim' | 'recordGraphOutcome'>,
@@ -137,7 +140,28 @@ export class RealmSubmissionStore {
           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'pending',$11) RETURNING *`,
         [randomUUID(), realm, input.kind, input.work, input.mainVersion, input.contribution,
           input.publicationDecision, input.selectedDraft, input.correctionOf, input.actingSubject, randomUUID()])).rows[0]!;
-        return this.save(client, admission, row);
+        const permit = await realmPermit(client, principal, input.actingSubject, realm, 'submission');
+        const policy = await readRealmPolicy(this.env, realm);
+        if (!policy || policy.visibility !== 'public' && !permit.member) throw new AdmissionDenied('Realm membership is required');
+        const direct = policy?.revision && policy.revision === permit.revision
+          && (policy.reviewMode === 'open' || policy.reviewMode === 'trusted-members' && permit.member);
+        if (!direct) return this.save(client, admission, row);
+        const slot = realmSelectionSlotIri(realm, input.mainVersion);
+        const heads = (await this.env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?head WHERE {
+          GRAPH ${iri(GRAPHS.current)} { ${iri(slot)} rv:selectionHead ?head }
+        } LIMIT 2`, 2048)).results?.bindings ?? [];
+        if (heads.length > 1) throw new SubmissionUnavailable('Realm selection is ambiguous');
+        const head = heads[0]?.head?.value ?? null;
+        if (input.correctionOf && input.correctionOf !== head) throw new SubmissionStale('Correction selection changed');
+        const selection: SelectRealmLocalInput = { context: { kind: 'realm-local', id: realm },
+          work: input.work, mainVersion: input.mainVersion, contribution: input.contribution,
+          publicationDecision: input.publicationDecision, expectedSelectionHead: head,
+          selectionBasis: 'realm-policy', policy: { revision: policy.revision!,
+            mode: policy.reviewMode as 'open' | 'trusted-members' }, actingSubject: input.actingSubject };
+        const deciding = (await client.query<SubmissionRow>(`UPDATE access.realm_submission
+          SET state = 'deciding',decision_operation = $2,revision = $3,generation = generation + 1
+          WHERE id = $1 RETURNING *`, [row.id,admission.id,randomUUID()])).rows[0]!;
+        return this.save(client, admission, deciding, { admission, input: selection });
       });
   }
 
@@ -217,7 +241,7 @@ export class RealmSubmissionStore {
     // digest serializes context directly, so restore its canonical field order.
     const adoption: Adoption = { admission: stored.admission, input: { ...stored.input,
       context: { kind: 'realm-local', id: stored.input.context.id } } };
-    let terminal = await readRealmSelectionReceipt(this.env, adoption.admission.id);
+    let terminal = await readRealmSelectionReceipt(this.env, adoption.admission.id, adoption.admission.action === 'submission.submit');
     if (!terminal) {
       if (!adoption.admission.dispatchEligible || Date.parse(adoption.admission.expiresAt) <= Date.now()) {
         terminal = await sealRealmSelectionAdmission(this.env, adoption.admission);
@@ -230,7 +254,8 @@ export class RealmSubmissionStore {
       }
     }
     if (terminal.outcome === 'succeeded') {
-      checkedRealmSelectionReceipt(terminal, adoption.admission, adoption.input, realmSelectionDigest(adoption.input));
+      checkedRealmSelectionReceipt(terminal, adoption.admission, adoption.input, adoption.admission.action === 'submission.submit'
+        ? adoption.admission.requestDigest : realmSelectionDigest(adoption.input));
     }
     await this.access.recordGraphOutcome(adoption.admission.id, terminal);
     return this.transaction(async client => {

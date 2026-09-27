@@ -414,6 +414,8 @@ export class ContentCore {
     if (!body || Array.isArray(body) || typeof body !== 'object') throw new ContentConflict('body must be a JSON object');
     if (command.model === 'member-reply-v1'
       && (command.provenance.kind !== 'admitted-original-contribution-v1'
+        || body.originRealm != null && (typeof body.originRealm !== 'string'
+          || !/^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/.test(body.originRealm))
         || typeof body.rootTarget !== 'string'
         || !/^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/.test(body.rootTarget)
         || body.rootRevision !== command.sourceRevision
@@ -457,7 +459,8 @@ export class ContentCore {
           [command.variant.resourceId])).rows[0];
         if (author && (author.variant_id !== command.variant.id
           || author.author !== command.provenance.author || author.root_target !== body.rootTarget
-          || author.root_revision !== command.sourceRevision)) throw new ContentConflict('reply authorship is immutable');
+          || author.root_revision !== command.sourceRevision
+          || author.origin_realm !== (body.originRealm ?? null))) throw new ContentConflict('reply authorship and origin are immutable');
         if (!author && command.expectedHead !== null) throw new ContentConflict('reply has no admitted author');
       }
       if (command.expectedHead === null) {
@@ -514,10 +517,10 @@ export class ContentCore {
           predecessor: command.expectedHead, byteDigest, byteLength: bytes.length } });
       if (command.model === 'member-reply-v1') {
         await client.query(`INSERT INTO content.reply_author
-          (reply, variant_id, author, root_target, root_revision, operation_id)
-          VALUES ($1,$2,$3,$4,$5,$6) ON CONFLICT (reply) DO NOTHING`,
+          (reply, variant_id, author, root_target, root_revision, operation_id, origin_realm)
+          VALUES ($1,$2,$3,$4,$5,$6,$7) ON CONFLICT (reply) DO NOTHING`,
         [command.variant.resourceId, command.variant.id, command.provenance.author,
-          body.rootTarget, command.sourceRevision, command.operationId]);
+          body.rootTarget, command.sourceRevision, command.operationId, body.originRealm ?? null]);
       }
       return { outcome: 'succeeded', revisionId, predecessor: command.expectedHead,
         position: sourcePosition, replayed: false };

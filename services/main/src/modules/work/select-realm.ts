@@ -7,6 +7,7 @@ import { PUBLICATION_PROFILE } from '../contribution/publish.ts';
 import type { ContentCore } from '../../../../content/src/core.ts';
 import { currentRealmMediaSet, type RealmMediaIntent }
   from '../content-publication/realm-media.ts';
+import { reviewPolicy } from '../space/policy.ts';
 import { REVIEW_POLICY, SELECTION_POLICY } from '../space/create.ts';
 import { readComponentState } from './history.ts';
 import { PUBLIC_SEARCH_GRAPH } from './select-main.ts';
@@ -29,7 +30,8 @@ export interface SelectRealmLocalInput {
   publicationDecision: string;
   media?: RealmMediaIntent;
   expectedSelectionHead: string | null;
-  selectionBasis: 'realm-manager-review';
+  selectionBasis: 'realm-manager-review' | 'realm-policy';
+  policy?: { revision: string; mode: 'trusted-members' | 'open' };
   actingSubject: string;
 }
 
@@ -71,7 +73,9 @@ export function realmSelectionDigest(input: SelectRealmLocalInput): string {
       || !/^urn:rezics:content-publication:[0-9a-f]{64}$/.test(input.media.publicationDecision)))
     || !nativeId.test(input.actingSubject)
     || (input.expectedSelectionHead !== null && !nativeId.test(input.expectedSelectionHead))
-    || input.selectionBasis !== 'realm-manager-review') {
+    || (input.selectionBasis !== 'realm-manager-review' && (input.selectionBasis !== 'realm-policy'
+      || !input.policy || !/^urn:rezics:realm-policy:[0-9a-f-]{36}$/.test(input.policy.revision)
+      || !['trusted-members','open'].includes(input.policy.mode)))) {
     throw new InvalidRealmSelectionInput('invalid Realm selection');
   }
   return hash(JSON.stringify({ family: 'select-realm-local-v1', context: input.context,
@@ -79,17 +83,17 @@ export function realmSelectionDigest(input: SelectRealmLocalInput): string {
     contribution: input.contribution, publicationDecision: input.publicationDecision,
     ...(input.media ? { media: input.media } : {}),
     expectedSelectionHead: input.expectedSelectionHead,
-    selectionBasis: input.selectionBasis, actor: input.actingSubject,
+    selectionBasis: input.selectionBasis, ...(input.policy ? { policy: input.policy } : {}), actor: input.actingSubject,
     selectionPolicy: SELECTION_POLICY, reviewPolicy: REVIEW_POLICY }));
 }
 
-export function realmSelectionReceiptIri(admissionId: string): string {
-  return `urn:rezics:receipt:${hash(`${admissionId}\0select-realm-local`)}`;
+export function realmSelectionReceiptIri(admissionId: string, submission = false): string {
+  return `urn:rezics:receipt:${hash(`${admissionId}\0${submission ? 'realm-submission-submit-v1' : 'select-realm-local'}`)}`;
 }
 
 export async function readRealmSelectionReceipt(env: WorkActivationEnvironment,
-  admissionId: string): Promise<RealmSelectionReceipt | null> {
-  const receipt = realmSelectionReceiptIri(admissionId);
+  admissionId: string, submission = false): Promise<RealmSelectionReceipt | null> {
+  const receipt = realmSelectionReceiptIri(admissionId, submission);
   const result = await env.fuseki.query(`PREFIX rv: <${RV}> SELECT
     ?outcome ?reason ?digest ?id ?epoch ?scope ?dataEpoch ?sequence
     ?work ?main ?realm ?slot ?contribution ?decision ?draft ?selection ?unit ?prior ?language WHERE {
@@ -162,7 +166,7 @@ export function checkedRealmSelectionReceipt(receipt: RealmSelectionReceipt,
 
 async function sealTerminal(env: WorkActivationEnvironment, admission: RegisteredAdmission,
   reason?: 'stale-head', input?: SelectRealmLocalInput): Promise<RealmSelectionReceipt | null> {
-  const receipt = realmSelectionReceiptIri(admission.id);
+  const receipt = realmSelectionReceiptIri(admission.id, admission.action === 'submission.submit');
   const suffix = hash(`${receipt}\0${reason ? 'stale' : 'cancel'}`);
   const batch = `urn:rezics:outbox:${suffix}`;
   const event = `urn:rezics:event:${suffix}`;
@@ -173,11 +177,13 @@ async function sealTerminal(env: WorkActivationEnvironment, admission: Registere
       OPTIONAL { ${iri(slot)} rv:selectionHead ?prior }
       OPTIONAL { ${iri(input.contribution)} a rv:TextContribution ;
         rv:work ${iri(input.work)} ; rv:publicationHead ?published }
+      ${input.policy ? `OPTIONAL { ${iri(input.context.id)} rv:realmPolicyHead ?policyHead }` : ''}
       ${input.media ? `OPTIONAL { ${iri(input.media.variantId)} a rv:ContentVariant ;
         rv:resource ${iri(input.work)} ; rv:contentPublicationHead ?mediaPublished }` : ''}
     }
     FILTER(COALESCE(?prior, ${iri(NONE)}) != ${iri(input.expectedSelectionHead ?? NONE)}
       || !BOUND(?published) || ?published != ${iri(input.publicationDecision)}
+      ${input.policy ? `|| !BOUND(?policyHead) || ?policyHead != ${iri(input.policy.revision)}` : ''}
       ${input.media ? `|| !BOUND(?mediaPublished)
         || ?mediaPublished != ${iri(input.media.publicationDecision)}` : ''})` : '';
   try { await env.fuseki.commandWithReceipt({ receipt, digest: admission.requestDigest,
@@ -195,9 +201,10 @@ async function sealTerminal(env: WorkActivationEnvironment, admission: Registere
       }
       GRAPH ${iri(GRAPHS.outbox)} {
         ${iri(batch)} a rv:OutboxBatch ; rv:dataEpoch ${lit(env.lineage.dataEpoch)} ;
-          rv:sequence ?next ; rv:eventCount 1 ; rv:event ${iri(event)} .
+          rv:sequence ?next ; rv:eventCount ${admission.action === 'submission.submit' ? 0 : 1} .
+        ${admission.action === 'submission.submit' ? '' : `${iri(batch)} rv:event ${iri(event)} .
         ${iri(event)} a rv:${reason ? 'RealmSelectionRejectedEvent' : 'RealmSelectionCancelledEvent'} ;
-          rv:ordinal 0 ; rv:action "publication.adopt" ; rv:receipt ${iri(receipt)} .
+          rv:ordinal 0 ; rv:action "publication.adopt" ; rv:receipt ${iri(receipt)} .`}
       }
     }
     WHERE {
@@ -208,13 +215,13 @@ async function sealTerminal(env: WorkActivationEnvironment, admission: Registere
       FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} ?p ?o } }
       BIND(?n + 1 AS ?next)
     }` }); } catch { /* resolve ambiguous update through the receipt */ }
-  return readRealmSelectionReceipt(env, admission.id);
+  return readRealmSelectionReceipt(env, admission.id, admission.action === 'submission.submit');
 }
 
 export async function sealRealmSelectionAdmission(env: WorkActivationEnvironment,
   admission: RegisteredAdmission): Promise<RealmSelectionReceipt> {
-  if (admission.action !== 'publication.adopt') throw new Error('unsupported Realm selection admission');
-  const existing = await readRealmSelectionReceipt(env, admission.id);
+  if (!['publication.adopt', 'submission.submit'].includes(admission.action)) throw new Error('unsupported Realm selection admission');
+  const existing = await readRealmSelectionReceipt(env, admission.id, admission.action === 'submission.submit');
   if (existing) {
     if (!matches(existing, admission, admission.requestDigest)) {
       throw new IdempotencyConflict('Realm selection receipt differs from admission');
@@ -232,8 +239,9 @@ async function validateCandidate(env: WorkActivationEnvironment, selection: stri
   slot: string, input: SelectRealmLocalInput, draft: string): Promise<CommandValidation[]> {
   for (const value of [selection, slot, input.context.id, input.work, input.mainVersion,
     input.contribution, input.publicationDecision, draft]) iri(value);
-  return profileValidations(env.fuseki, 'realm-local-selection-v1', [{
-    shape: `${REALM_SELECTION_PROFILE}/selection-shape`, focus: [selection],
+  const profile = input.policy ? 'realm-policy-selection-v1' : 'realm-local-selection-v1';
+  return profileValidations(env.fuseki, profile, [{
+    shape: `https://rezics.com/definition/${profile}/selection-shape`, focus: [selection],
     graphs: [GRAPHS.current, GRAPHS.revisions],
   }]);
 }
@@ -242,24 +250,35 @@ async function validateCandidate(env: WorkActivationEnvironment, selection: stri
 export async function selectRealmLocal(env: WorkActivationEnvironment,
   admission: RegisteredAdmission, input: SelectRealmLocalInput,
   content?: Pick<ContentCore, 'readExactBatch'>): Promise<RealmSelectionReceipt> {
-  const digest = realmSelectionDigest(input);
-  if (admission.action !== 'publication.adopt'
+  const selectionDigest = realmSelectionDigest(input);
+  // Only the durable submission owner dispatches a policy adoption with its
+  // original submit admission. One terminal receipt atomically records both
+  // submission and selection, so recovery cannot acknowledge half an outcome.
+  const automatic = admission.action === 'submission.submit' && !!input.policy;
+  const digest = automatic ? admission.requestDigest : selectionDigest;
+  if (automatic ? admission.scope !== `submission:submit:${input.context.id}`
+    || input.selectionBasis !== 'realm-policy' || admission.actingSubject !== input.actingSubject
+    : admission.action !== 'publication.adopt'
     || admission.scope !== `publication:adopt:${input.context.id}`
     || admission.actingSubject !== input.actingSubject
-    || admission.requestDigest !== digest) {
+    || admission.requestDigest !== digest || !!input.policy) {
     throw new IdempotencyConflict('Realm adoption admission differs from intent');
   }
-  await assertNotInvalidProfileReceipt(env.fuseki, realmSelectionReceiptIri(admission.id));
-  const existing = await readRealmSelectionReceipt(env, admission.id);
+  await assertNotInvalidProfileReceipt(env.fuseki, realmSelectionReceiptIri(admission.id, admission.action === 'submission.submit'));
+  const existing = await readRealmSelectionReceipt(env, admission.id, admission.action === 'submission.submit');
   if (existing) return checkedRealmSelectionReceipt(existing, admission, input, digest);
   if (Date.parse(admission.expiresAt) <= Date.now()) throw new PendingActivation('Realm adoption expired');
+  const profile = input.policy ? 'https://rezics.com/definition/realm-policy-selection-v1' : REALM_SELECTION_PROFILE;
+  const policy = input.policy ? reviewPolicy(input.policy.mode) : REVIEW_POLICY;
+  const policyGuard = input.policy ? `${iri(input.context.id)} rv:realmPolicyHead ${iri(input.policy.revision)} ;
+    rv:reviewPolicy ${iri(policy)} .` : '';
   const slot = realmSelectionSlotIri(input.context.id, input.mainVersion);
   const current = await env.fuseki.query(`PREFIX rv: <${RV}> PREFIX schema: <https://schema.org/>
     SELECT ?draft ?language ?manifest ?prior WHERE {
       GRAPH ${iri(GRAPHS.current)} {
-        ?space a rv:Space ; rv:realmCapability ${iri(input.context.id)} ; rv:disclosure rv:Public .
+        ?space a rv:Space ; rv:realmCapability ${iri(input.context.id)} .
         ${iri(input.context.id)} a rv:Realm ; rv:space ?space ; rv:realmState rv:Active ;
-          rv:selectionPolicy ${iri(SELECTION_POLICY)} ; rv:reviewPolicy ${iri(REVIEW_POLICY)} .
+          rv:selectionPolicy ${iri(SELECTION_POLICY)} . ${policyGuard}
         ${iri(input.work)} a schema:CreativeWork ; rv:mainVersion ${iri(input.mainVersion)} .
         ${iri(input.mainVersion)} a rv:MainVersion ; rv:work ${iri(input.work)} .
         ${iri(input.contribution)} a rv:TextContribution ; rv:work ${iri(input.work)} ;
@@ -313,11 +332,12 @@ export async function selectRealmLocal(env: WorkActivationEnvironment,
       selectedDraft: exact.revision, language: exact.language,
       ...(media ? { media: media.reference } : {}),
       selectionBasis: input.selectionBasis, selectionMode: 'fixed',
-      reviewPolicy: REVIEW_POLICY, selectionPolicy: SELECTION_POLICY,
-      reviewer: input.actingSubject, predecessor: input.expectedSelectionHead,
-      matchUnit: unit }, REALM_SELECTION_PROFILE);
+      reviewPolicy: policy, ...(input.policy ? { policyRevision: input.policy.revision } : {}), selectionPolicy: SELECTION_POLICY,
+      ...(automatic ? { submittingAgent: input.actingSubject } : { reviewer: input.actingSubject }),
+      predecessor: input.expectedSelectionHead,
+      matchUnit: unit }, profile);
   if (Date.parse(admission.expiresAt) <= Date.now()) throw new PendingActivation('Realm adoption expired');
-  const receipt = realmSelectionReceiptIri(admission.id);
+  const receipt = realmSelectionReceiptIri(admission.id, admission.action === 'submission.submit');
   const batch = `urn:rezics:outbox:${hash(receipt)}`;
   const event = `urn:rezics:event:${hash(operation)}`;
   const predecessorTriple = input.expectedSelectionHead
@@ -363,11 +383,12 @@ export async function selectRealmLocal(env: WorkActivationEnvironment,
           rv:publicationDecision ${iri(input.publicationDecision)} ;
           ${mediaTriples}
           rv:selectedDraft ${iri(exact.revision)} ; rv:language ${lit(exact.language)} ;
-          rv:selectionBasis rv:RealmManagerReview ; rv:selectionMode rv:Fixed ;
-          rv:reviewPolicy ${iri(REVIEW_POLICY)} ; rv:reviewer ${iri(input.actingSubject)} ;
+          rv:selectionBasis rv:${input.policy ? 'RealmPolicy' : 'RealmManagerReview'} ; rv:selectionMode rv:Fixed ;
+          ${input.policy ? `rv:realmPolicyHead ${iri(input.policy.revision)} ;` : ''}
+          rv:reviewPolicy ${iri(policy)} ; rv:${automatic ? 'submittingAgent' : 'reviewer'} ${iri(input.actingSubject)} ;
           rv:matchUnit ${iri(unit)} ; rv:manifest ${iri(`urn:rezics:sha256:${manifest}`)} ;
-          rv:modelRevision ${iri(REALM_SELECTION_PROFILE)} ;
-          rv:shapeRevision ${iri(REALM_SELECTION_PROFILE)} ;
+          rv:modelRevision ${iri(profile)} ;
+          rv:shapeRevision ${iri(profile)} ;
           rv:datasetId ${iri(DATASET)} ; rv:dataEpoch ${lit(env.lineage.dataEpoch)} ;
           rv:sequence ?next .
       }
@@ -397,8 +418,8 @@ export async function selectRealmLocal(env: WorkActivationEnvironment,
       GRAPH ${iri(GRAPHS.outbox)} {
         ${iri(batch)} a rv:OutboxBatch ; rv:dataEpoch ${lit(env.lineage.dataEpoch)} ;
           rv:sequence ?next ; rv:eventCount 1 ; rv:event ${iri(event)} .
-        ${iri(event)} a rv:RealmSelectionChangedEvent ; rv:ordinal 0 ;
-          rv:action "publication.adopt" ; rv:receipt ${iri(receipt)} ;
+        ${iri(event)} a rv:${automatic ? 'RealmSubmissionSelectedEvent' : 'RealmSelectionChangedEvent'} ; rv:ordinal 0 ;
+          rv:action ${lit(admission.action)} ; rv:receipt ${iri(receipt)} ;
           rv:operation ${iri(operation)} ; rv:work ${iri(input.work)} ;
           rv:realm ${iri(input.context.id)} .
       }
@@ -407,9 +428,9 @@ export async function selectRealmLocal(env: WorkActivationEnvironment,
       GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:dataEpoch ${lit(env.lineage.dataEpoch)} ;
         rv:routingEpoch ${lit(env.lineage.routingEpoch)} ; rv:sequence ?n . }
       GRAPH ${iri(GRAPHS.current)} {
-        ?space a rv:Space ; rv:realmCapability ${iri(input.context.id)} ; rv:disclosure rv:Public .
+        ?space a rv:Space ; rv:realmCapability ${iri(input.context.id)} .
         ${iri(input.context.id)} a rv:Realm ; rv:space ?space ; rv:realmState rv:Active ;
-          rv:selectionPolicy ${iri(SELECTION_POLICY)} ; rv:reviewPolicy ${iri(REVIEW_POLICY)} .
+          rv:selectionPolicy ${iri(SELECTION_POLICY)} . ${policyGuard}
         ${iri(input.work)} a schema:CreativeWork ; rv:mainVersion ${iri(input.mainVersion)} .
         ${iri(input.mainVersion)} a rv:MainVersion ; rv:work ${iri(input.work)} .
         ${iri(input.contribution)} a rv:TextContribution ; rv:work ${iri(input.work)} ;
@@ -453,7 +474,7 @@ export async function selectRealmLocal(env: WorkActivationEnvironment,
     if (error instanceof InvalidRealmSelectionInput || error instanceof CommandRejected) throw error;
     /* resolve by terminal receipt */
   }
-  const committed = await readRealmSelectionReceipt(env, admission.id);
+  const committed = await readRealmSelectionReceipt(env, admission.id, admission.action === 'submission.submit');
   if (committed) return checkedRealmSelectionReceipt(committed, admission, input, digest);
   const stale = await sealTerminal(env, admission, 'stale-head', input);
   if (stale) return checkedRealmSelectionReceipt(stale, admission, input, digest);

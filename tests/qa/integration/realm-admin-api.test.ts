@@ -113,7 +113,7 @@ test('Realm roles: exact impact matches enforced grants; retries, stale and conc
   } finally { await s.stack.stop(); }
 }, 120_000);
 
-test('Realm settings: atomic rule CAS, localization, submission restrictions and unsupported profiles', async () => {
+test('Realm settings: atomic rule CAS, localization, submission restrictions and stale policy changes', async () => {
   const s = await setup();
   try {
     const empty = await s.call('GET', `/settings${s.actorQuery()}`);
@@ -140,9 +140,9 @@ test('Realm settings: atomic rule CAS, localization, submission restrictions and
     expect((await s.call('PUT', '/settings', input, s.owner.token, key)).body.replayed).toBe(true);
     expect((await s.call('PUT', '/settings', input)).status).toBe(409);
     expect((await s.call('PUT', '/settings', { ...input, expectedGeneration: '1',
-      settings: { ...input.settings, visibility: 'private' } })).status).toBe(400);
+      settings: { ...input.settings, visibility: 'private' } })).status).toBe(409);
     expect((await s.call('PUT', '/settings', { ...input, expectedGeneration: '1',
-      settings: { ...input.settings, reviewRequired: false } })).status).toBe(400);
+      settings: { ...input.settings, reviewRequired: false } })).status).toBe(409);
     const external = new GovernanceRules(s.stack.accessPool);
     await external.publish(s.owner.principal, { ref: basis.ref, scopeId: s.scope, actingSubject: s.owner.actor,
       expectedRevision: basis.revision, document: { rules: input.settings.rules }, idempotencyKey: randomUUID() });

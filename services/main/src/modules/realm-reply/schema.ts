@@ -7,11 +7,11 @@ export const realmReplySchema = 'content';
 
 export const realmReplyColumns = {
   reply_author: { reply: 'text', variant_id: 'text', author: 'text', root_target: 'text',
-    root_revision: 'text', operation_id: 'text' },
+    root_revision: 'text', operation_id: 'text', origin_realm: 'text?' },
   reply: { id: 'text', variant_id: 'text', author: 'text', root_target: 'text',
     root_revision: 'text', parent_reply: 'text?', parent_variant: 'text?',
     parent_revision: 'uuid?', context_revision: 'text?', operation_id: 'text',
-    created_at: 'timestamptz' },
+    created_at: 'timestamptz', origin_realm: 'text?' },
   realm_review_decision: { id: 'uuid', realm: 'text', variant_id: 'text', revision_id: 'uuid',
     review_generation: 'int8', supersedes: 'uuid?', outcome: 'text', policy: 'text',
     policy_revision: 'text', method: 'text', method_revision: 'text', reviewer: 'text',

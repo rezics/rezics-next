@@ -7,7 +7,8 @@ import { pageFields, readId, readUuid } from '../work/read-contract.ts';
 export const SUBMISSION_COST = { pageSize: 20, candidateRows: 2, candidateBytes: 8192,
   commandGraphCalls: 24, commandGraphBytes: 512 * 1024, deadlineMs: 30_000,
   ownerSqlStatements: 32, readSqlStatements: 12, statementTimeoutMs: 5_000, lockTimeoutMs: 2_000 } as const;
-// Submit/withdraw: one admission and one SQL mutation. Review: one review
+// Submit: one admission, one reservation and at most one policy selection.
+// Withdraw: one admission and one mutation. Review: one review
 // admission, at most one adoption admission and one exact selection command.
 // SQL counts cover this owner; the reused Access/selection owners retain theirs.
 // Author/detail reads have no graph calls, no totals, and at most 21/1 rows.

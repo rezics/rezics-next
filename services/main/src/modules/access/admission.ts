@@ -1,4 +1,5 @@
 import { requireRealmParticipation } from './realm-management-settings.ts';
+import { withRealmPermit, type RealmPermit } from './realm-management-policy.ts';
 import { RealmDirectoryIndex } from '../realm-directory/index.ts';
 import { createHash } from 'node:crypto';
 import { receiptFamilyFor } from './receipt-families.ts';
@@ -246,6 +247,15 @@ export async function releaseAccessRecoveryFence(pool: Pool, generation: string)
 }
 
 export class AccessAdmissionRegistry {
+  withRealmPolicy<T>(principal: VerifiedPrincipal, actor: string, realm: string,
+    purpose: 'read' | 'reply' | 'submission', operation: (permit: RealmPermit) => Promise<T>) {
+    return withRealmPermit(this.pool, principal, actor, realm, purpose, operation);
+  }
+
+  async realmReadProof(principal: VerifiedPrincipal, actor: string, realm: string): Promise<string | null> {
+    try { return await this.withRealmPolicy(principal, actor, realm, 'read', async permit => permit.stamp); }
+    catch (error) { if (error instanceof AdmissionDenied) return null; throw error; }
+  }
   readonly realmDirectory: RealmDirectoryIndex;
   constructor(private readonly pool: Pool, private readonly titleAdmissionKey = Bun.env.FUSEKI_TITLE_ADMISSION_KEY) {
     this.realmDirectory = new RealmDirectoryIndex(pool);

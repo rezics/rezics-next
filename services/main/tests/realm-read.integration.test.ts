@@ -125,6 +125,6 @@ test('Realm reads: public home, scoped Works, indexed decisions, privacy and sta
       ${iri(realm.space)} rv:disclosure rv:Public } } INSERT { GRAPH ${iri(GRAPHS.current)} {
       ${iri(realm.space)} rv:disclosure rv:Private } } WHERE {}`);
     for (const suffix of ['', '/works', '/decisions']) expect((await get(`${root}${suffix}`)).status).toBe(404);
-    expect((await stack.call('GET', root, { token: editor.token })).status).toBe(404);
+    expect((await stack.call('GET', `${root}?actingSubject=${encodeURIComponent(editor.actor)}`, { token: editor.token })).status).toBe(404);
   } finally { await stack.stop(); }
 }, 120_000);
