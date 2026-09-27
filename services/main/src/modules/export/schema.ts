@@ -66,7 +66,9 @@ export const EXPORT_RESIDUAL_KINDS = ['unmapped_grain', 'unsupported_scope', 'pr
   'language_loss', 'unknown_value', 'qualified_claim', 'context_scope', 'private_dependency',
   'erased', 'unavailable', 'rights_excluded', 'missing_member'] as const;
 
-/** `export.residual`: one explicit loss; withheld inputs have no member ordinal. */
+/** `export.residual`: one explicit loss; withheld inputs have no member ordinal.
+ * Qualified claims, local Context meanings and private dependencies must remain
+ * residual when the target profile cannot express them without changing meaning. */
 export interface ExportResidualRow {
   manifest_id: string;
   ordinal: number;

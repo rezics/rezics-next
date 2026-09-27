@@ -22,14 +22,10 @@ belong to controlled ignored/artifact storage, not the design collection.
 
 ## Required source matrix
 
-| Domain | Sources | Semantic cases |
-| --- | --- | --- |
-| Books | Open Library, Bangumi and native novel cases | Work/edition distinction, authors/roles, languages, repeated chapters, multiple translations, metadata-only and Main Version adoption. |
-| Music/media | MusicBrainz/Cover Art Archive, Bangumi, VNDB | Composition/recording/release/medium/track, credits/aliases/characters, cut/episode/platform/language, artwork use and source-primary selection. |
-| Software | crates.io/Cargo, npm plus pnpm/Yarn strategy cases, Go module sources/proxies, Nixpkgs/flakes | Native version/feature/peer/MVS/input/derivation semantics and exact artifacts. |
-| Minecraft/mods | Modrinth, CurseForge, Nexus Mods, Steam Workshop; Fabric/Forge/NeoForge manifests | Project/file/version/mod grain, loader/game/runtime/side, embedded/advisory/hard requirements and load ordering. |
-| Recipes | Current Schema.org Recipe-bearing sources and native examples | Free-text/structured ingredients, exact/unknown quantities, units, step groups, yield/time and variants. |
-| Skill/Prompt | Current Agent Skills specification and publicly available package repositories | Manifest/content/files, parameters/examples, dependencies, tool/runtime declarations, exact release and non-execution on ingest. |
+The elected providers and semantic surfaces are declared in
+[`sourceConformanceTargets`](../../scripts/qa/cases/source-conformance.ts).
+Each provider/surface needs its own acquisition and mapping evidence; a selected
+Open Library run does not qualify the rest of the matrix.
 
 Official entry points: [Open Library](https://openlibrary.org/developers/api),
 [MusicBrainz](https://musicbrainz.org/doc/MusicBrainz_Database/Schema),
@@ -65,26 +61,10 @@ or a few successful records do not qualify all fields. API/dump/archive/artwork
 coverage are separate. Authentication/network/rate-limit failures remain acquisition
 failures, never empty data or successful skips.
 
-| ID | Scenario | Required result |
-| --- | --- | --- |
-| LIVE01 | Current source adds/removes/changes a field | Explicit drift and disposition; no silent dropping. |
-| LIVE02 | Partial/malformed/failed fetch | No completed receipt or omission-driven deletion. |
-| LIVE03 | Same-value human confirmation races with refresh | Human epoch prevents source overwrite/compensation. |
-| LIVE04 | Repeated children reorder or reuse source keys | Occurrence-qualified correspondence or conflict. |
-| LIVE05 | Source withdraws one of several supports | Independent support/native acceptance survives. |
-| LIVE06 | Provider redirects/merges a record | No automatic native identity/grant transfer. |
-| LIVE07 | Round-trip exact/unknown/language/time/quantity values | Preserve meaning and concrete losses. |
-| LIVE08 | Import provider scores/users | Source statistics; no native ballot/account invention. |
-| LIVE09 | Source changes during a run | Frozen run capture used consistently; next run refreshes. |
-| LIVE10 | Export accepted Main Version with external releases | Grain-aware mapping and residuals; no fabricated edition. |
-| LIVE11 | Required data unavailable behind provider access | Mark that surface unqualified; no bypass or guessed values. |
-| LIVE12 | Stream dump/bootstrap then consume changes | Gap/overlap handling, resumable progress and bounded memory. |
-| LIVE13 | Enter facts and a synopsis from a source with incomplete license metadata | Intake preserves provenance and explicit rights unknowns without a blanket rejection/quarantine. Distinguish factual entry from expressive copying; neither manual entry nor acceptance fabricates permission. |
-| LIVE14 | Company-operated wiki use of NC material; later reuse in a paid data product | No company-wide rejection or wiki-wide approval. Preserve the evidenced use scope; reassess the changed use without inheriting the earlier conclusion. |
-| LIVE15 | Publish a bounded quotation with a documented fair-use basis, then request a full source export | Preserve the specific exception rationale and scope without inventing a license. The different export requires its own basis. |
-| LIVE16 | Source API terms disallow retaining a response but the importer requests a raw capture | No retention solely for reproducibility; report the acquisition/retention limitation. Independently supported data from another route remains eligible. |
-| LIVE17 | Combine ShareAlike sources with native facts and export the result | Preserve provenance, notices and applicable sharing/access obligations. Neither corporate status nor named-graph separation decides the combined export's license scope. |
-| LIVE18 | A complaint decision restricts an imported synopsis, then refresh or human-confirmed reapply runs | Restricted expression is not restored; independently supported facts and resource identity survive. Edit-control confirmation is not rights clearance. |
+LIVE01–18 scenarios and required results are declared in
+[`source-conformance.ts`](../../scripts/qa/cases/source-conformance.ts).
+The [recorded qualification](../plan/qualification.md) names the executable
+evidence for each ID; the selected-run limits below still apply.
 
 The planned [editorial-protection integration](../contracts/source-lifecycle.md#editorial-protection-and-quality-integration)
 adds the [protection matrix](editorial-protection.md)'s source-control subcases

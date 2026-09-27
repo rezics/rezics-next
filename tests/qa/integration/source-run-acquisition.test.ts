@@ -50,6 +50,11 @@ test('LIVE09: a run freezes each request capture, reuses it across consumers and
     expect(await replay.json()).toEqual({ run, replayed: true });
     expect(await (await h.get(`/v1/sources/runs/${idOf(run.run)}`, 'reader')).json()).toEqual(run);
     const workObservation = idOf(surface(run, 'works').captures[0]!.observation);
+    // Missing copyright clearance is recorded as unknown; it is not an
+    // acquisition failure or a fabricated grant for this factual capture.
+    const captured = await h.get(`/v1/sources/observations/${workObservation}`, 'reader');
+    expect(captured.status).toBe(200);
+    expect(await captured.json()).toMatchObject({ rightsEvidence: { basis: 'unknown' } });
     const converted = await h.post(`/v1/sources/observations/${workObservation}/conversions/open-library-work`,
       'owner', { profile: 'open-library-work-map-v1' }, `convert-${randomUUID()}`);
     expect(converted.status).toBe(201);

@@ -14,6 +14,8 @@ export const useKinds = ['acquisition', 'raw_retention', 'wiki_display', 'search
   'quotation', 'export', 'paid_data_product', 'redistribution'] as const;
 export const rightsBases = ['original_contribution', 'unprotected_fact', 'public_domain', 'license',
   'permission', 'statutory_exception', 'service_terms', 'unknown'] as const;
+// A recorded basis describes one material and use. Access authorization and
+// legal clearance are independent decisions, even for a recognized offering.
 export const assessmentOutcomes = ['supported', 'conditional', 'not_supported', 'undetermined'] as const;
 export const obligationKinds = ['attribution', 'share_alike', 'notice_retention', 'change_indication',
   'non_commercial', 'no_derivatives', 'other'] as const;

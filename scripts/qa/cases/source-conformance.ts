@@ -1,5 +1,33 @@
 import { defineCases } from './types.ts';
 
+// Elected live surfaces are separate qualification targets. A passing case on
+// one provider or surface cannot qualify another provider, archive or syntax.
+export const sourceConformanceTargets = [
+  { domain: 'books', sources: ['Open Library', 'Bangumi', 'native novel cases'],
+    cases: ['Work/edition grain', 'author roles', 'languages', 'repeated chapters',
+      'translations', 'metadata-only Works', 'Main Version adoption'] },
+  { domain: 'music-media', sources: ['MusicBrainz', 'Cover Art Archive', 'Bangumi', 'VNDB'],
+    cases: ['composition/recording/release/medium/track grain', 'credits and aliases',
+      'characters', 'cut/episode/platform/language', 'artwork use', 'source-primary selection'] },
+  { domain: 'software', sources: ['crates.io/Cargo', 'npm', 'pnpm/Yarn', 'Go modules/proxies',
+    'Nixpkgs/flakes'], cases: ['native version', 'features', 'peers', 'MVS', 'inputs',
+    'derivations', 'exact artifacts'] },
+  { domain: 'minecraft-mods', sources: ['Modrinth', 'CurseForge', 'Nexus Mods',
+    'Steam Workshop', 'Fabric/Forge/NeoForge manifests'],
+    cases: ['project/file/version/mod grain', 'loader/game/runtime/side',
+      'embedded/advisory/hard requirements', 'load ordering'] },
+  { domain: 'recipes', sources: ['Schema.org Recipe sources', 'native examples'],
+    cases: ['free-text/structured ingredients', 'exact/unknown quantities', 'units',
+      'step groups', 'yield/time', 'variants'] },
+  { domain: 'skills-prompts', sources: ['Agent Skills specification', 'public package repositories'],
+    cases: ['manifest/content/files', 'parameters/examples', 'dependencies',
+      'tool/runtime declarations', 'exact release', 'non-execution on ingest'] },
+] as const satisfies readonly {
+  domain: string;
+  sources: readonly [string, ...string[]];
+  cases: readonly [string, ...string[]];
+}[];
+
 export const cases = defineCases('docs/testing/source-conformance.md', [
   {
     id: 'LIVE01',
