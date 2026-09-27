@@ -50,10 +50,14 @@ const catalogs = {
     fr: () => import('../features/account/messages/fr.ts').then(module => module.default),
     es: () => import('../features/account/messages/es.ts').then(module => module.default),
   }),
-  // G-262 owns the admin catalog migration. Continue using its Simplified
-  // Chinese file under the canonical locale until that task moves it.
   admin: catalog(() => import('../features/admin/messages/en.ts').then(module => module.default), {
-    'zh-Hans': () => import('../features/admin/messages/zh-CN.ts').then(module => module.default),
+    'zh-Hans': () => import('../features/admin/messages/zh-Hans.ts').then(module => module.default),
+    'zh-Hant': () => import('../features/admin/messages/zh-Hant.ts').then(module => module.default),
+    ja: () => import('../features/admin/messages/ja.ts').then(module => module.default),
+    ko: () => import('../features/admin/messages/ko.ts').then(module => module.default),
+    de: () => import('../features/admin/messages/de.ts').then(module => module.default),
+    fr: () => import('../features/admin/messages/fr.ts').then(module => module.default),
+    es: () => import('../features/admin/messages/es.ts').then(module => module.default),
   }),
 };
 
