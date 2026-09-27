@@ -1,3 +1,32 @@
 import type { SettingsMessages } from '../messages.ts';
 
-export default {} satisfies Partial<SettingsMessages>;
+export default {
+  title: 'Profileinstellungen',
+  description: 'An deinem öffentlichen Profil erkennen andere dich auf REZICS.',
+  actingAs: 'Wird bearbeitet',
+  publicProfile: 'Öffentliches Profil',
+  displayName: 'Anzeigename',
+  avatar: 'Profilbild',
+  chooseAvatar: 'Bild auswählen',
+  noAvatarSelected: 'Kein Bild ausgewählt',
+  bio: 'Kurzbeschreibung',
+  avatarHelp: 'PNG, JPEG, WebP oder GIF, bis zu 4 MB. Nach dem Speichern ist das Bild öffentlich sichtbar.',
+  removeAvatar: 'Aktuelles Profilbild entfernen',
+  accountInfo: 'Dieser öffentliche Name wurde zunächst aus deinem Kontonamen übernommen. Änderungen hier ändern deinen Kontonamen nicht.',
+  otherInfo: 'Änderungen hier sind für diese Identität öffentlich sichtbar.',
+  profileUnavailable: 'Dein Profil kann gerade nicht bearbeitet werden. Lade diese Seite neu.',
+  saveProfile: 'Öffentliches Profil speichern',
+  profileSaved: 'Dein öffentliches Profil wurde aktualisiert.',
+  invalid: 'Prüfe den Namen, die Kurzbeschreibung und das Bild und versuche es erneut.',
+  avatarDenied: 'Für dieses Profil kann noch kein Profilbild festgelegt werden. Deine Eingaben sind weiterhin vorhanden.',
+  avatarUnavailable: 'Der Profilbilddienst ist nicht verfügbar. Deine Eingaben sind weiterhin vorhanden. Versuche es erneut.',
+  handleTitle: 'Benutzername',
+  handleHelp: 'Du kannst deinen Benutzernamen alle 30 Tage ändern. Dein alter Benutzername bleibt 90 Tage lang mit dem neuen verknüpft.',
+  save: 'Benutzernamen ändern',
+  saved: 'Dein Benutzername wurde geändert.',
+  cooldown: 'Du kannst deinen Benutzernamen 30 Tage nach der letzten Änderung wieder ändern.',
+  conflict: 'Dieses Profil wurde geändert oder der Benutzername ist nicht mehr verfügbar. Lade die Seite neu und versuche es erneut.',
+  denied: 'Du kannst dieses Profil nicht mehr bearbeiten. Wähle ein anderes Profil.',
+  failed: 'Änderungen konnten nicht gespeichert werden. Bitte versuche es erneut.',
+  choose: 'Profil auswählen',
+} satisfies Partial<SettingsMessages>;

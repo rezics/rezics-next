@@ -1,3 +1,42 @@
 import type { AuthMessages } from '../messages.ts';
 
-export default {} satisfies Partial<AuthMessages>;
+export default {
+  signInHeading: 'REZICS에 로그인',
+  createAccountHeading: 'REZICS 계정 만들기',
+  accountHelp: '계정으로 버전과 기여 활동을 관리할 수 있습니다.',
+  nameLabel: '이름', email: '이메일', password: '비밀번호',
+  accountFailed: '계정 로그인에 실패했습니다', connecting: '연결 중…',
+  createAccount: '계정 만들기', signIn: '로그인',
+  newHere: 'REZICS가 처음이신가요?', alreadyHaveAccount: '이미 계정이 있으신가요?',
+  createAccountLink: '계정 만들기',
+  consentDeclined: 'REZICS에 계정 접근 권한을 허용하지 않았습니다. 계속하려면 다시 로그인해 주세요.',
+  consentHeading: '로그인이 완료되지 않았습니다', signInAgain: '다시 로그인',
+
+  chooseAgentHeading: '활동할 프로필 선택',
+  chooseAgentHelp: '계정으로 다음 프로필을 사용해 활동할 수 있습니다. 선택한 프로필은 REZICS 전반에서 로그인한 프로필로 표시되고, 여기서 하는 작업에 기본으로 제안됩니다. 각 작업의 권한은 실행할 때마다 확인합니다.',
+  agentsLegend: '사용할 수 있는 프로필',
+  agentFallback: '프로필 {agent}',
+  representedPath: '위임받아 사용하는 프로필', directPath: '본인 프로필',
+  personAgent: '개인', penNameAgent: '필명',
+  organizationAgent: '단체', serviceAgent: '서비스',
+  currentAgent: '현재', defaultAgent: '기본',
+  saveDefault: '기본 프로필로 설정',
+  saveDefaultHelp: '다음 로그인은 이 프로필로 시작하며, 새 작품을 만들 때도 기본으로 제안됩니다.',
+  useAgent: '이 프로필로 활동',
+  ineligibleAgent: '사용하던 프로필({agent})은 더 이상 사용할 수 없습니다. 자동으로 다른 프로필로 전환하지 않았습니다. 계속하려면 프로필을 선택해 주세요.',
+  ineligibleDefault: '저장한 기본 프로필({agent})은 더 이상 사용할 수 없습니다. 원할 때 새 기본 프로필을 선택해 주세요.',
+  noAgents: '아직 사용할 수 있는 프로필이 없습니다.',
+  setUpProfile: '프로필 설정하기',
+  agentsUnavailable: '지금은 프로필 목록을 불러올 수 없습니다. 잠시 후 다시 시도해 주세요.',
+  invalidAgent: '이 프로필은 사용할 수 없습니다. 목록에서 선택해 주세요.',
+  staleDefault: '다른 곳에서 기본 프로필이 변경되었습니다. 목록을 확인한 뒤 다시 시도해 주세요.',
+  staleSession: '다른 탭에서 활동 중인 프로필이 변경되었습니다. 현재 선택을 확인한 뒤 다시 시도해 주세요.',
+  defaultNotSaved: '선택한 프로필로 활동하도록 변경했지만 기본 프로필로 저장하지 못했습니다.',
+
+  accountMenu: '계정 메뉴', actingAs: '활동 중인 프로필', switchAgent: '프로필 전환',
+  chooseAgent: '프로필 선택', agentNotEligible: '프로필을 더 이상 사용할 수 없음',
+  noAgent: '프로필 없음', agentUnverified: '확인되지 않은 프로필', signOut: '로그아웃',
+  manageAccount: 'REZICS 계정 관리',
+  profileSettings: '프로필 설정',
+  chooseHandle: '사용자 이름 정하기',
+} satisfies Partial<AuthMessages>;

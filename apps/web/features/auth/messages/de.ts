@@ -1,3 +1,42 @@
 import type { AuthMessages } from '../messages.ts';
 
-export default {} satisfies Partial<AuthMessages>;
+export default {
+  signInHeading: 'Bei REZICS anmelden',
+  createAccountHeading: 'Dein REZICS-Konto erstellen',
+  accountHelp: 'Mit deinem Konto kannst du Versionen verwalten und Beiträge leisten.',
+  nameLabel: 'Name', email: 'E-Mail', password: 'Passwort',
+  accountFailed: 'Die Kontoanmeldung ist fehlgeschlagen', connecting: 'Verbindung wird hergestellt…',
+  createAccount: 'Konto erstellen', signIn: 'Anmelden',
+  newHere: 'Neu bei REZICS?', alreadyHaveAccount: 'Du hast bereits ein Konto?',
+  createAccountLink: 'Konto erstellen',
+  consentDeclined: 'REZICS wurde kein Zugriff auf dein Konto gewährt. Melde dich erneut an, um fortzufahren.',
+  consentHeading: 'Die Anmeldung wurde nicht abgeschlossen', signInAgain: 'Erneut anmelden',
+
+  chooseAgentHeading: 'Wähle, in welcher Identität du handelst',
+  chooseAgentHelp: 'Mit deinem Konto kannst du in diesen Identitäten handeln. Die ausgewählte Identität wird überall bei REZICS als angemeldet angezeigt und für deine Aktionen vorgeschlagen. Die Berechtigung wird bei jeder Aktion erneut geprüft.',
+  agentsLegend: 'Identitäten, in denen du handeln kannst',
+  agentFallback: 'Identität {agent}',
+  representedPath: 'Vertretene Identität', directPath: 'Deine eigene Identität',
+  personAgent: 'Person', penNameAgent: 'Pseudonym',
+  organizationAgent: 'Organisation', serviceAgent: 'Dienst',
+  currentAgent: 'Aktuell', defaultAgent: 'Standard',
+  saveDefault: 'Als meine Standardidentität festlegen',
+  saveDefaultHelp: 'Neue Anmeldungen beginnen mit dieser Identität; auch für neue Werke wird sie vorgeschlagen.',
+  useAgent: 'Mit dieser Identität handeln',
+  ineligibleAgent: 'Du hast als {agent} gehandelt, kannst diese Identität aber nicht mehr verwenden. Es wurde nichts für dich umgestellt. Wähle eine Identität, um fortzufahren.',
+  ineligibleDefault: 'Deine gespeicherte Standardidentität {agent} ist nicht mehr verfügbar. Wähle eine neue Standardidentität, wenn du möchtest.',
+  noAgents: 'Du hast noch kein verwendbares Profil.',
+  setUpProfile: 'Profil einrichten',
+  agentsUnavailable: 'Deine Identitäten können gerade nicht angezeigt werden. Bitte versuche es gleich noch einmal.',
+  invalidAgent: 'Diese Identität ist für dich nicht verfügbar. Wähle eine aus der Liste.',
+  staleDefault: 'Deine Standardidentität wurde an anderer Stelle geändert. Prüfe die Liste und versuche es erneut.',
+  staleSession: 'Deine Identität wurde in einem anderen Tab geändert. Prüfe die aktuelle Auswahl und versuche es erneut.',
+  defaultNotSaved: 'Du handelst jetzt mit der ausgewählten Identität, aber sie konnte nicht als Standard gespeichert werden.',
+
+  accountMenu: 'Kontomenü', actingAs: 'Aktive Identität', switchAgent: 'Identität wechseln',
+  chooseAgent: 'Identität auswählen', agentNotEligible: 'Identität nicht mehr verfügbar',
+  noAgent: 'Noch keine Identität', agentUnverified: 'Identität nicht geprüft', signOut: 'Abmelden',
+  manageAccount: 'Dein REZICS-Konto verwalten',
+  profileSettings: 'Profileinstellungen',
+  chooseHandle: 'Benutzernamen wählen',
+} satisfies Partial<AuthMessages>;

@@ -1,3 +1,32 @@
 import type { SettingsMessages } from '../messages.ts';
 
-export default {} satisfies Partial<SettingsMessages>;
+export default {
+  title: '프로필 설정',
+  description: '공개 프로필은 다른 사람들이 REZICS에서 나를 알아보는 방법입니다.',
+  actingAs: '편집 중',
+  publicProfile: '공개 프로필',
+  displayName: '표시 이름',
+  avatar: '아바타',
+  chooseAvatar: '이미지 선택',
+  noAvatarSelected: '선택한 이미지 없음',
+  bio: '소개',
+  avatarHelp: 'PNG, JPEG, WebP, GIF 형식, 최대 4MB입니다. 저장하면 이미지가 공개됩니다.',
+  removeAvatar: '현재 아바타 삭제',
+  accountInfo: '공개 이름은 처음에 계정 이름으로 설정되었습니다. 여기서 바꿔도 계정 이름은 변경되지 않습니다.',
+  otherInfo: '여기서 변경한 내용은 이 프로필에 공개적으로 표시됩니다.',
+  profileUnavailable: '프로필을 지금은 수정할 수 없습니다. 이 페이지를 새로고침해 주세요.',
+  saveProfile: '공개 프로필 저장',
+  profileSaved: '공개 프로필을 업데이트했습니다.',
+  invalid: '이름, 소개, 이미지를 확인한 뒤 다시 시도해 주세요.',
+  avatarDenied: '아직 이 프로필에 아바타를 설정할 수 없습니다. 입력한 내용은 그대로 남아 있습니다.',
+  avatarUnavailable: '아바타 서비스를 사용할 수 없습니다. 입력한 내용은 그대로 남아 있습니다. 다시 시도해 주세요.',
+  handleTitle: '사용자 이름',
+  handleHelp: '사용자 이름은 30일마다 한 번 변경할 수 있습니다. 이전 사용자 이름은 90일 동안 새 이름에 연결됩니다.',
+  save: '사용자 이름 변경',
+  saved: '사용자 이름을 변경했습니다.',
+  cooldown: '마지막으로 변경한 날부터 30일이 지나야 사용자 이름을 다시 바꿀 수 있습니다.',
+  conflict: '프로필이 변경되었거나 사용자 이름을 사용할 수 없습니다. 새로고침한 뒤 다시 시도해 주세요.',
+  denied: '이 프로필을 더 이상 수정할 수 없습니다. 다른 프로필을 선택해 주세요.',
+  failed: '변경 사항을 저장하지 못했습니다. 다시 시도해 주세요.',
+  choose: '프로필 선택',
+} satisfies Partial<SettingsMessages>;
