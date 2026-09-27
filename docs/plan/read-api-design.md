@@ -1,5 +1,7 @@
 # Main-site read APIs
 
+> **Frozen 2026-09-28.** Each read family's contract now lives in code (`services/main/src/modules/*/read-contract.ts`, route schemas and tests). Do not edit this page; it will be deleted once the remaining families land.
+
 G-212 implementation/design, 2026-09-27. This is a dispatch map; remove sections
 as their owner contracts and tests take over. Main owns admission and selection;
 Server Components consume typed Main responses in parallel.
