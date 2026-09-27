@@ -8,7 +8,7 @@ import { readWorkClassifications } from '../work/read-classifications.ts';
 import { decodeReadCursor, encodeReadCursor, pageResult, WorkReadInvalid, WorkReadMissing,
   WorkReadMoved, WorkReadSession, WorkReadUnavailable } from '../work/read-session.ts';
 import { FEED_COST, feedViewerState, type FeedItem, type FeedQuery } from './contract.ts';
-import { feedSources, type FeedSource } from './source.ts';
+import { feedReviewSources, feedSources, type FeedSource } from './source.ts';
 import type { FeedRow } from './store.ts';
 import { feedCardData } from './cards.ts';
 import { diversityAllows, FEED_RANKING, recommendationAllowed } from './ranking.ts';
@@ -19,6 +19,12 @@ import { interestKinds, matchingActivityKinds } from '../work/work-kinds.ts';
 import type { HomeInterestKind } from '../onboarding-interests/contract.ts';
 
 export interface FeedReader { principal: VerifiedPrincipal; agent: string }
+
+export async function visibleFeedSources(session: WorkReadSession, rows: readonly { id: string; kind: string }[]) {
+  const graph = rows.filter(row => row.kind !== 'review').map(row => row.id);
+  const reviews = rows.filter(row => row.kind === 'review').map(row => row.id);
+  return [...await feedSources(session, { ids: graph }), ...await feedReviewSources(session, reviews)];
+}
 
 /** A fewer signal keeps one deterministic card in four. Hide and mute remove
  * every matching card. This is applied before grouping and cursor emission. */
@@ -81,6 +87,7 @@ export async function hydrateFeedItem(session: WorkReadSession, source: FeedSour
   const realm = source.realm ? await readFollowTarget(session, source.realm, 'realm', summaries) : null;
   const body = await replyExcerpt(session, source);
   const href = target?.href ?? `/collections/${source.target.slice(-36)}`;
+  const reviewHref = source.readerReview ? `${href}#review-${source.readerReview.id}` : href;
   const item: FeedItem = { id: source.id, kind: source.kind,
     reason: { kind: 'recommended', basis: 'all' }, group: { key: row.group_key, count: 1,
       actors: [{ id: actor.id, name: actor.displayName, handle: actor.handle }] },
@@ -93,14 +100,15 @@ export async function hydrateFeedItem(session: WorkReadSession, source: FeedSour
     realm: realm ? { id: realm.id, name: realm.name, icon: realm.icon } : null,
     time: row.occurred_at.toISOString(), timeBasis: row.time_basis, score: row.score,
     vote: row.vote ?? 0, voteRevision: row.vote_revision ?? null, comments: await comments(session, source),
-    links: { target: source.reply ? `${href}/discussion#${source.reply.slice(-36)}` : href,
+    links: { target: source.readerReview ? reviewHref : source.reply ? `${href}/discussion#${source.reply.slice(-36)}` : href,
       actor: actor.links.profile, comments: source.work ? `${href}/discussion` : href,
       vote: `/v1/feed/${source.id.slice(-36)}/vote` } };
   return { ...item, ...await feedCardData(session, source, item.target, item.links.target) };
 }
 
 export async function admitFeedVote(session: WorkReadSession, target: string) {
-  const source = (await feedSources(session, { ids: [target] }))[0];
+  const kind = (await session.deps.feed?.members(session.position.dataEpoch, [target]))?.[0]?.kind;
+  const source = (await visibleFeedSources(session, [{ id: target, kind: kind ?? '' }]))[0];
   if (!source) throw new WorkReadMissing('Feed activity unavailable');
   await readAgent(session, source.actor);
   if (source.work) await readFollowTarget(session, source.work, 'work');
@@ -125,6 +133,31 @@ export function matchesFeedInterest(source: Pick<FeedSource, 'kind' | 'work'>,
   const activityKinds = matchingActivityKinds(source.kind);
   if (activityKinds.length) return interests.some(kind => activityKinds.includes(kind));
   return !!source.work && interests.some(kind => workMatches.get(source.work!)?.includes(kind));
+}
+
+/** Group only disclosed review cards. A later deletion or restriction cannot
+ * hide a public sibling behind a private projection anchor. */
+export function collapseReviewCards(items: FeedItem[]): FeedItem[] {
+  const result: FeedItem[] = [];
+  const buckets = new Map<string, Array<{ index: number; works: Set<string> }>>();
+  for (const item of items) {
+    if (item.kind !== 'review' || !item.target.work) { result.push(item); continue; }
+    const key = JSON.stringify([item.actor.id, item.realm?.id ?? null, item.time.slice(0, 13), item.reason]);
+    const groups = buckets.get(key) ?? [];
+    const group = groups.find(candidate => candidate.works.size < FEED_COST.groupMembers
+      && !candidate.works.has(item.target.work!));
+    if (group) {
+      group.works.add(item.target.work);
+      const lead = result[group.index]!;
+      lead.group = { ...lead.group, count: lead.group.count + 1 };
+      continue;
+    }
+    item.group = { ...item.group, key: digest(['home-review-group-v1', key, groups.length]) };
+    groups.push({ index: result.length, works: new Set([item.target.work]) });
+    buckets.set(key, groups);
+    result.push(item);
+  }
+  return result;
 }
 
 const normalized = (query: FeedQuery) => [
@@ -186,7 +219,7 @@ export async function readFeed(session: WorkReadSession, query: FeedQuery, reade
   const cutoff = window === 'all' ? 0 : asOf - (window === 'week' ? 7 : 30) * 86_400_000;
   const withinWindow = page.filter(row => row.sort_time.getTime() >= cutoff && row.sort_time.getTime() <= asOf);
   const memberRows = await store.members(session.position.dataEpoch, withinWindow.flatMap(row => row.group_members));
-  const sources = await feedSources(session, { ids: memberRows.map(row => row.id) });
+  const sources = await visibleFeedSources(session, memberRows);
   // At most eight member Works enter this one bounded catalogue read. The
   // same type and accepted-Sense relation powers onboarding suggestions.
   const workKinds = interests.length ? await readWorkKindMatches(session, [...new Set(sources
@@ -238,7 +271,7 @@ export async function readFeed(session: WorkReadSession, query: FeedQuery, reade
       items.push(item);
     } catch (error) { if (!(error instanceof WorkReadMissing)) throw error; }
   }
-  const final = await feedSources(session, { ids: items.map(item => item.id) });
+  const final = await visibleFeedSources(session, items);
   const finalWorkKinds = interests.length ? await readWorkKindMatches(session,
     [...new Set(final.filter(source => matchingActivityKinds(source.kind).length === 0)
       .flatMap(source => source.work ? [source.work] : []))]) : new Map();
@@ -262,7 +295,11 @@ export async function readFeed(session: WorkReadSession, query: FeedQuery, reade
           && JSON.stringify(workKinds.get(finalSource.work))
           !== JSON.stringify(finalWorkKinds.get(finalSource.work))) throw new WorkReadMoved('Feed interest changed');
       await replyExcerpt(session, finalSource);
-      if (item.card.kind === 'prompt' || item.card.kind === 'release') {
+      if (item.kind === 'review' && (finalSource.readerReview?.revision !== sources.find(source => source.id === item.id)?.readerReview?.revision
+        || finalSource.readerReview?.helpful_count !== (item.card.kind === 'review' ? item.card.helpfulCount : -1))) {
+        throw new WorkReadMoved('Review changed');
+      }
+      if (item.card.kind === 'prompt' || item.card.kind === 'release' || item.card.kind === 'review') {
         const card = await feedCardData(session, finalSource, item.target, item.links.target);
         if (JSON.stringify(card.card) !== JSON.stringify(item.card)
           || JSON.stringify(card.primaryAction) !== JSON.stringify(item.primaryAction)) throw new WorkReadMoved('Card content changed');
@@ -291,14 +328,15 @@ export async function readFeed(session: WorkReadSession, query: FeedQuery, reade
         ...(chapters.length === entries.length && new Set(entries.map(item => item.card.kind === 'chapter' ? item.card.parent : null)).size === 1 ? { range: { kind: 'chapters' as const,
           from: Math.min(...chapters), to: Math.max(...chapters) } } : {}) } }];
   });
+  const collapsed = collapseReviewCards(groups);
   const more = rows.length > page.length;
-  followedSeen = Math.min(FEED_RANKING.thinFollowing, followedSeen + groups.filter(item => item.reason.kind === 'followed').length);
+  followedSeen = Math.min(FEED_RANKING.thinFollowing, followedSeen + collapsed.filter(item => item.reason.kind === 'followed').length);
   // A sparse page is not evidence that Following is thin. Prove it by an
   // empty follow inventory or by exhausting this view's candidate relation.
   const thinKnown = following?.count === 0 || !more;
   const allowRecommendations = scope === 'all' || personal?.preferences.recommendations !== false
     && thinKnown && recommendationAllowed(scope, sort, followedSeen);
-  const selected = groups.filter(item => {
+  const selected = collapsed.filter(item => {
     if (scope === 'following' && item.reason.kind !== 'followed' && !allowRecommendations) return false;
     if (sort === 'best' && !diversityAllows(item.realm?.id ?? null, recentRealms)) return false;
     recentRealms = [...recentRealms, item.realm?.id ?? null].slice(-9);
@@ -332,7 +370,8 @@ export async function readFeed(session: WorkReadSession, query: FeedQuery, reade
     throw new WorkReadMoved('Home preferences changed');
   }
   const last = page.at(-1);
-  const current = checkpoint.sequence === session.position.sequence && checkpoint.after_id === '\uffff' && !checkpoint.rebuild_epoch;
+  const current = checkpoint.sequence === session.position.sequence && checkpoint.after_id === '\uffff'
+    && !checkpoint.rebuild_epoch && !await store.reviewPending(checkpoint.review_sequence);
   return { profile: 'home-feed-v1' as const, scope, sort, window, ranking: FEED_RANKING,
     caughtUp: scope === 'following' && sort === 'new' ? { asOf: new Date(asOf).toISOString(),
       lastVisitedAt: watermark?.data_epoch === session.position.dataEpoch
@@ -343,5 +382,6 @@ export async function readFeed(session: WorkReadSession, query: FeedQuery, reade
         projection: checkpoint.revision, following: scope === 'following' ? following?.revision ?? null : null,
         personal: personal?.revision ?? null,
         asOf, recentRealms, followedSeen })) : null),
-    projection: { sequence: checkpoint.sequence, status: current ? 'current' as const : 'catching-up' as const } };
+    projection: { sequence: checkpoint.sequence, reviewSequence: checkpoint.review_sequence,
+      status: current ? 'current' as const : 'catching-up' as const } };
 }

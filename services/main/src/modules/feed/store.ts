@@ -9,9 +9,11 @@ import { WorkReadMoved, WorkReadUnavailable, type ReadPosition } from '../work/r
 import { FEED_COST, type FeedVoteCommand, type FeedVoteResult, type FeedQuery } from './contract.ts';
 import { activityTime, bestKey, FEED_RANKING, rankCandidates } from './ranking.ts';
 import type { FeedSource, FeedReference } from './source.ts';
+import type { ReviewEvent } from '../review/store.ts';
+import { reviewActivityId } from './source.ts';
 
 export interface FeedCheckpoint { data_epoch: string; sequence: string; after_id: string; revision: string;
-  rebuild_epoch: string | null; rebuild_after: string }
+  rebuild_epoch: string | null; rebuild_after: string; review_sequence: string }
 export interface FeedRow { id: string; kind: FeedSource['kind']; occurred_at: Date;
   time_basis: 'revision' | 'relay'; realm: string | null; group_key: string; group_members: string[]; sort_time: Date; score: number; order_key: string; vote: -1 | 0 | 1; vote_revision: string | null }
 export class FeedStore {
@@ -24,6 +26,11 @@ export class FeedStore {
       if (row.data_epoch !== epoch) throw new WorkReadUnavailable('Feed projection is recovering');
       return row;
     });
+  }
+
+  async reviewPending(sequence: string): Promise<boolean> {
+    return controlTransaction(this.pool, async client => (await client.query(
+      'SELECT 1 FROM access.reader_review_event WHERE sequence > $1::bigint LIMIT 1', [sequence])).rowCount !== 0);
   }
 
   async initialize(epoch: string): Promise<FeedCheckpoint> {
@@ -95,6 +102,32 @@ export class FeedStore {
     });
   }
 
+  /** One indexed Access event seek per tick. The item stores no review text;
+   * hidden events still advance the cursor and remain subject to live reads. */
+  async advanceReviews(expected: FeedCheckpoint, events: readonly ReviewEvent[],
+    admitted: ReadonlyMap<string, FeedSource>) {
+    if (events.length > FEED_COST.refreshItems + 1) throw new WorkReadUnavailable('Review refresh budget exceeded');
+    return controlTransaction(this.pool, async client => {
+      const current = (await client.query<FeedCheckpoint>('SELECT * FROM access.feed_checkpoint WHERE id FOR UPDATE')).rows[0];
+      if (current?.revision !== expected.revision) throw new WorkReadMoved('Feed projection changed');
+      for (const event of events.slice(0, FEED_COST.refreshItems)) {
+        const source = admitted.get(reviewActivityId(event.review));
+        if (event.kind !== 'created') continue;
+        const time = source?.readerReview?.created_at ?? new Date(event.occurredAt);
+        const bucket = source ? digest(['review', source.actor, source.realm, time.toISOString().slice(0, 13)])
+          : digest(['review-hidden', event.review]);
+        const groupKey = digest(['home-group-v1', reviewActivityId(event.review)]);
+        await client.query(`INSERT INTO access.feed_item (data_epoch, id, sequence, kind, occurred_at,
+          time_basis, best_key, realm, group_bucket, group_key, group_leader, group_members, sort_time)
+          VALUES ($1,$2,$3,'review',$4,'revision',$5,$6,$7,$8,true,$9,$4) ON CONFLICT DO NOTHING`,
+        [expected.data_epoch, reviewActivityId(event.review), event.sequence, time, bestKey(0, time.getTime()),
+          source?.realm ?? event.realm, bucket, groupKey, [reviewActivityId(event.review)]]);
+      }
+      await client.query('UPDATE access.feed_checkpoint SET review_sequence = $1, revision = $2 WHERE id',
+        [events[Math.min(events.length, FEED_COST.refreshItems) - 1]!.sequence, randomUUID()]);
+    });
+  }
+
   async page(position: ReadPosition, revision: string, sort: 'best' | 'new' | 'top', limit: number,
     after: { key: string; id: string } | undefined, reader: { principal: VerifiedPrincipal; agent: string } | undefined,
     window: NonNullable<FeedQuery['window']>, asOf: number) {
@@ -149,22 +182,25 @@ export class FeedStore {
 
   /** Indexed head probe only; disclosure and follows are checked by the reader. */
   async since(position: ReadPosition, revision: string, afterSequence: string,
-    realm?: string, limit = 20): Promise<{ id: string; realm: string | null; group_key: string }[]> {
+    realm?: string, limit = 20, afterReview?: string): Promise<{ id: string; kind: string; realm: string | null; group_key: string }[]> {
     if (!/^\d{1,30}$/.test(afterSequence) || !Number.isInteger(limit) || limit < 1 || limit > 20) {
       throw new ControlInvalid('Invalid feed head');
     }
+    if (afterReview !== undefined && !/^\d{1,30}$/.test(afterReview)) throw new ControlInvalid('Invalid review head');
     return controlTransaction(this.pool, async client => {
       const checkpoint = (await client.query<FeedCheckpoint>(
         'SELECT * FROM access.feed_checkpoint WHERE id FOR SHARE')).rows[0];
       if (checkpoint?.data_epoch !== position.dataEpoch || checkpoint.revision !== revision) {
         throw new WorkReadMoved('Feed changed');
       }
-      return (await client.query<{ id: string; realm: string | null; group_key: string }>(`SELECT id, realm, group_key FROM access.feed_item
-        WHERE data_epoch = $1 AND sequence > $2
-          ${realm ? 'AND realm = $4' : ''}
-        ORDER BY sequence DESC, id DESC LIMIT $3`,
-      realm ? [position.dataEpoch, afterSequence, limit + 1, realm]
-        : [position.dataEpoch, afterSequence, limit + 1])).rows;
+      return (await client.query<{ id: string; kind: string; realm: string | null; group_key: string }>(`SELECT id, kind, realm,
+          CASE WHEN kind = 'review' THEN group_bucket ELSE group_key END AS group_key FROM access.feed_item
+        WHERE data_epoch = $1 AND (kind <> 'review' AND sequence > $2
+          OR kind = 'review' AND sequence > $5)
+          AND ($4::text IS NULL OR realm = $4)
+        ORDER BY occurred_at DESC, id DESC LIMIT $3`,
+      [position.dataEpoch, afterSequence, limit + 1, realm ?? null,
+        afterReview ?? checkpoint.review_sequence])).rows;
     });
   }
 

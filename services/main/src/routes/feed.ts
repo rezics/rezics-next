@@ -42,13 +42,14 @@ const watermarksResult = t.Object({ profile: t.Literal('home-watermarks-v1'),
   items: t.Array(t.Object({ scope: t.String(), dataEpoch: t.String(), sequence: t.String(),
     updatedAt: t.String() }), { maxItems: HOME_COST.watermarks }) });
 const headQuery = t.Object({ after: t.String({ pattern: '^\\d{1,30}$' }),
+  afterReview: t.Optional(t.String({ pattern: '^\\d{1,30}$' })),
   scope: t.Optional(t.String({ maxLength: 100 })), actingSubject: t.Optional(readId) },
 { additionalProperties: false });
 const headResult = t.Object({ profile: t.Literal('home-feed-head-v1'), scope: t.String(),
   afterSequence: t.String(), newPosts: t.Object({ value: t.Integer({ minimum: 0 }),
     kind: t.Union([t.Literal('exact'), t.Literal('lower-bound')]) }),
   state: t.Union([t.Literal('current'), t.Literal('more'), t.Literal('projecting')]),
-  projection: t.Object({ sequence: t.String(), dataEpoch: t.String() }) });
+  projection: t.Object({ sequence: t.String(), reviewSequence: t.String(), dataEpoch: t.String() }) });
 
 export function feedRoutes(work: MainWorkDependencies) {
   return new Elysia().get('/v1/feed', { query: feedQuery,
@@ -77,7 +78,7 @@ export function feedRoutes(work: MainWorkDependencies) {
       }
       return Response.json(await workRead(work, new Request(request.url), {},
         session => readNewSince(session, query.after, scope as 'all' | 'following' | `realm:${string}`,
-          principal ? { principal, agent: query.actingSubject! } : undefined)), { headers: homeHeaders });
+          principal ? { principal, agent: query.actingSubject! } : undefined, query.afterReview)), { headers: homeHeaders });
     } catch (error) { return homeError(error); }
   }).post('/v1/feed/:id/vote', { params: t.Object({ id: readUuid }), body: feedVoteCommand,
     response: { 200: feedVoteResult, ...workReadProblems },

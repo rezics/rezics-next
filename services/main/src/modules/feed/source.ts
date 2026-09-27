@@ -1,14 +1,43 @@
 import { GRAPHS, iri, lit } from '../work/activate.ts';
 import { PUBLIC_SEARCH_GRAPH } from '../work/select-main.ts';
-import { publicWork, unerased, WorkReadUnavailable, type ReadRow, type WorkReadSession } from '../work/read-session.ts';
+import { publicWork, unerased, WorkReadMissing, WorkReadUnavailable, type ReadRow, type WorkReadSession } from '../work/read-session.ts';
 import { FEED_COST, type FeedKind } from './contract.ts';
+import { reviewTarget } from '../review/read.ts';
+import type { ReviewRow } from '../review/store.ts';
 
 export interface FeedSource { id: string; sequence: string; kind: FeedKind; target: string;
   work: string | null; actor: string; realm: string | null; zone: string | null;
   language: string | null; excerpt: string | null; title: string | null;
-  occurrence: string | null; contentTarget: string | null; reply: string | null; contentRevision: string | null; review: string | null }
+  occurrence: string | null; contentTarget: string | null; reply: string | null; contentRevision: string | null; review: string | null;
+  readerReview?: ReviewRow }
 export interface FeedCut { epoch: string; through: string; afterSequence: string; afterId: string }
 export interface FeedReference { id: string; sequence: string; kind: FeedKind; work?: string | null; realm?: string | null; target?: string; groupKind?: 'chapter' | 'hub' }
+
+export const reviewActivityId = (review: string) => `https://rezics.com/id/${review}`;
+
+/** Review events are Access references. Recheck the current public review and
+ * Work on each read; an edit, deletion or restriction cannot expose a stale card. */
+export async function feedReviewSources(session: WorkReadSession, ids: readonly string[]): Promise<FeedSource[]> {
+  if (ids.length > FEED_COST.refreshItems) throw new WorkReadUnavailable('Review source budget exceeded');
+  if (!ids.length) return [];
+  if (!session.deps.reviews) throw new WorkReadUnavailable('Review owner is unavailable');
+  const result: FeedSource[] = [];
+  for (const id of ids) {
+    const review = id.slice('https://rezics.com/id/'.length);
+    const row = await session.deps.reviews.byId(review, null);
+    if (!row || !row.body.trim()) continue;
+    let target: Awaited<ReturnType<typeof reviewTarget>>;
+    try { target = await reviewTarget(session, row.context, row.work); }
+    catch (error) { if (error instanceof WorkReadMissing) continue; throw error; }
+    if (target.mainVersion !== row.main_version || target.realm !== row.realm) continue;
+    result.push({ id, sequence: '0', kind: 'review', target: row.work, work: row.work,
+      actor: row.acting_subject, realm: row.realm, zone: null, language: row.language,
+      excerpt: row.spoiler ? null : row.body.slice(0, 400), title: null,
+      occurrence: null, contentTarget: null, reply: null, contentRevision: null,
+      review: null, readerReview: row });
+  }
+  return result;
+}
 
 /** Ingestion retains only opaque references, including currently hidden ones.
  * Otherwise a later disclosure/review change could never reveal an older

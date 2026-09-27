@@ -4,6 +4,9 @@ import type { MainApp } from '../src/app.ts';
 import { activityTime, bestKey, bestScore, FEED_DECAY_MS, FEED_RANKING, rankCandidates, diversityAllows, recommendationAllowed } from '../src/modules/feed/ranking.ts';
 import { decodeReadCursor, encodeReadCursor, WorkReadInvalid, WorkReadMoved } from '../src/modules/work/read-session.ts';
 import { describeScope } from '../../account/src/scope-descriptions.ts';
+import { Value } from 'typebox/value';
+import { feedCard } from '../src/modules/feed/contract.ts';
+import { matchesFeedInterest } from '../src/modules/feed/read.ts';
 
 test('G282: best is monotone in votes, decays with time, and its seek key preserves the exact order', () => {
   const time = Date.UTC(2026, 8, 28), now = time + FEED_DECAY_MS;
@@ -108,4 +111,17 @@ test('G282: recommendations require thin Following and never enter Following New
   expect(recommendationAllowed('following', 'best', 3)).toBe(false);
   expect(recommendationAllowed('following', 'top', 0)).toBe(false);
   expect(recommendationAllowed('all', 'new', 0)).toBe(true);
+});
+
+test('G324: review cards require a Work interest and keep withheld spoiler text absent', () => {
+  const work = 'https://rezics.com/id/00000000-0000-4000-8000-000000000001';
+  const source = { kind: 'review' as const, work };
+  const kinds = new Map([[work, ['books' as const]]]);
+  expect(matchesFeedInterest(source, ['books'], kinds)).toBe(true);
+  expect(matchesFeedInterest(source, ['software'], kinds)).toBe(false);
+  expect(matchesFeedInterest(source, ['discussions'], kinds)).toBe(false);
+  const card = { kind: 'review', review: '00000000-0000-4000-8000-000000000002',
+    rating: 4, scale: 5, spoiler: true, helpfulCount: 3, opening: null };
+  expect(Value.Check(feedCard, card)).toBe(true);
+  expect(Value.Check(feedCard, { ...card, opening: 'a'.repeat(401) })).toBe(false);
 });

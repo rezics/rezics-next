@@ -3,7 +3,7 @@ import type { Static } from 'typebox';
 import { pageFields, pageQuery, readAvatar, readId, readLanguage, readName, readUuid } from '../work/read-contract.ts';
 
 export const feedKind = t.Union([t.Literal('work'), t.Literal('contribution'), t.Literal('adoption'),
-  t.Literal('decision'), t.Literal('discussion'), t.Literal('reply'), t.Literal('collection')]);
+  t.Literal('decision'), t.Literal('discussion'), t.Literal('reply'), t.Literal('collection'), t.Literal('review')]);
 export type FeedKind = Static<typeof feedKind>;
 export const feedSort = t.Union([t.Literal('best'), t.Literal('new'), t.Literal('top')]);
 export const feedWindow = t.Union([t.Literal('week'), t.Literal('month'), t.Literal('all')]);
@@ -26,6 +26,9 @@ export const feedCard = t.Union([
   t.Object({ kind: t.Literal('prompt'), preview: t.Optional(t.String({ maxLength: 400 })) }),
   t.Object({ kind: t.Literal('media'), durationSeconds: t.Optional(t.Number({ minimum: 0 })) }),
   t.Object({ kind: t.Literal('activity') }),
+  t.Object({ kind: t.Literal('review'), review: readUuid, rating: t.Integer({ minimum: 1, maximum: 10 }),
+    scale: t.Union([t.Literal(5), t.Literal(10)]), spoiler: t.Boolean(),
+    helpfulCount: t.Integer({ minimum: 0 }), opening: t.Nullable(t.String({ maxLength: 400 })) }),
 ]);
 export const feedAction = t.Union([
   t.Object({ kind: t.Literal('read-chapter'), work: readId, occurrence: readId, href: t.String() }),
@@ -35,6 +38,7 @@ export const feedAction = t.Union([
   t.Object({ kind: t.Literal('copy-prompt'), work: readId, revision: t.String(), href: t.String() }),
   t.Object({ kind: t.Literal('want-to-read'), work: readId }),
   t.Object({ kind: t.Literal('open'), href: t.String() }),
+  t.Object({ kind: t.Literal('read-review'), review: readUuid, href: t.String() }),
 ]);
 /** G-285 supplies this batch seam; unavailable is distinct from an empty shelf. */
 export const feedViewerState = t.Union([
@@ -50,7 +54,7 @@ export type FeedViewerState = Static<typeof feedViewerState>;
 export const feedQuery = t.Object({ ...pageQuery,
   scope: t.Optional(t.Union([t.Literal('following'), t.Literal('all')])),
   sort: t.Optional(feedSort), window: t.Optional(feedWindow),
-  kinds: t.Optional(t.Array(feedKind, { minItems: 1, maxItems: 7, uniqueItems: true })),
+  kinds: t.Optional(t.Array(feedKind, { minItems: 1, maxItems: 8, uniqueItems: true })),
   /** Comma-separated human kinds. The reader rejects duplicates and unknown values. */
   interests: t.Optional(t.String({ minLength: 2, maxLength: 64 })),
   contentLanguages: t.Optional(t.Array(readLanguage, { minItems: 1, maxItems: 8, uniqueItems: true })),
@@ -79,7 +83,8 @@ export const feedPage = t.Object({ profile: t.Literal('home-feed-v1'),
   caughtUp: t.Nullable(t.Object({ asOf: t.String(), lastVisitedAt: t.Nullable(t.String()),
     state: t.Union([t.Literal('more'), t.Literal('caught-up'), t.Literal('projecting')]) })),
   items: t.Array(feedItem, { maxItems: 20 }), ...pageFields,
-  projection: t.Object({ sequence: t.String(), status: t.Union([t.Literal('current'), t.Literal('catching-up')]) }) });
+  projection: t.Object({ sequence: t.String(), reviewSequence: t.String(),
+    status: t.Union([t.Literal('current'), t.Literal('catching-up')]) }) });
 export const feedVoteCommand = t.Object({ profile: t.Literal('feed-vote-command-v1'), actingSubject: readId,
   value: t.Union([t.Literal(-1), t.Literal(0), t.Literal(1)]), expectedRevision: t.Nullable(readUuid) },
 { additionalProperties: false });
@@ -99,6 +104,7 @@ export type FeedVoteResult = Static<typeof feedVoteResult>;
  * Works, using the same current types and accepted global Senses as onboarding.
  * No offset or unbounded count. Refresh admits 20 references after the relay
  * cut; native graph scan/sort cost is bounded by the shared 160-call/4MiB/10s
- * envelope, not claimed to be a PostgreSQL seek. Cards cap responses at 256KiB. */
+ * envelope, not claimed to be a PostgreSQL seek. Review refresh seeks at most
+ * 100 Access events and rechecks at most 20 current rows. Cards cap responses at 256KiB. */
 export const FEED_COST = { pageSize: 20, candidates: 8, tagCandidates: 2, refreshItems: 20, groupMembers: 4,
   commentProbe: 64, intervalMs: 1000, responseBytes: 256 * 1024 } as const;

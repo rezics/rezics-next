@@ -15,6 +15,13 @@ export async function feedCardData(session: WorkReadSession, source: FeedSource,
   target: FeedItem['target'], href: string): Promise<Card> {
   const fallback: Card = { card: { kind: source.kind === 'work' ? 'work' : 'activity' },
     primaryAction: source.kind === 'work' && source.work ? { kind: 'want-to-read', work: source.work } : { kind: 'open', href } };
+  if (source.kind === 'review' && source.readerReview) {
+    const row = source.readerReview;
+    return { card: { kind: 'review', review: row.id, rating: row.rating,
+      scale: row.realm ? 10 : 5, spoiler: row.spoiler, helpfulCount: row.helpful_count,
+      opening: row.spoiler ? null : row.body.slice(0, 400) },
+    primaryAction: { kind: 'read-review', review: row.id, href } };
+  }
   if (!source.work || !['work', 'contribution'].includes(source.kind)) return fallback;
   if (source.occurrence) return chapterCard(session, source, source.occurrence);
   const types = await session.query(`SELECT ?type WHERE { GRAPH ${iri(GRAPHS.current)} {
