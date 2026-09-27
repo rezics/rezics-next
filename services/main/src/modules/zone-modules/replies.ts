@@ -2,7 +2,7 @@ import { readEpochOrder } from '../discovery/lineage.ts';
 import { readRealmBasis } from '../realm-reads/read-realm.ts';
 import { GRAPHS, iri, lit } from '../work/activate.ts';
 import { decodeReadCursor, encodeReadCursor, pageResult, publicWork,
-  WorkReadUnavailable, type ReadRow, type WorkReadSession } from '../work/read-session.ts';
+  WorkReadInvalid, WorkReadUnavailable, type ReadRow, type WorkReadSession } from '../work/read-session.ts';
 import { ZONE_MODULE_COST } from './contract.ts';
 
 type Kind = 'discussions' | 'reader-quotes';
@@ -21,7 +21,7 @@ export async function readZoneReplies(session: WorkReadSession, realm: string, k
   const cursor = decodeReadCursor(session.options.cursor, binding, session.position);
   const order = cursor?.order.split(':');
   if (order && (order.length !== 2 || !order.every(value => /^\d+$/.test(value)))) {
-    throw new WorkReadUnavailable('Reply cursor order is invalid');
+    throw new WorkReadInvalid('Reply cursor order is invalid');
   }
   const epochs = await readEpochOrder(session);
   const rows = await session.query(`SELECT DISTINCT ?id ?reply ?work ?author ?authorName ?revision ?review
@@ -65,6 +65,11 @@ export async function readZoneReplies(session: WorkReadSession, realm: string, k
   const revisions = [...new Set(visible.map(item => item.revisionId))];
   const bodies = revisions.length
     ? await session.deps.content.readExactBatch(revisions, async ids => new Set(ids)) : [];
+  const contentBytes = bodies.reduce((total, item) => total + (item.status === 'available'
+    ? Buffer.byteLength(item.body.body, 'utf8') : 0), 0);
+  if (contentBytes > ZONE_MODULE_COST.contentBytes) {
+    throw new WorkReadUnavailable('Realm reply content batch exceeds the read budget');
+  }
   const byRevision = new Map(revisions.map((revision, index) => [revision, bodies[index]]));
   const works = [...new Set(visible.map(item => item.row.work!.value))];
   const summaries = await session.summaries(works);

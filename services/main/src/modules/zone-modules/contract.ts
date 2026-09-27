@@ -1,16 +1,17 @@
 import { t } from 'elysia';
-import { creditItem, pageFields, readAvatar, readId, readName, readPosition, workCard }
+import { pageFields, readAvatar, readId, readName, readPosition, workCard }
   from '../work/read-contract.ts';
 import { realmDecision } from '../realm-reads/read-contract.ts';
+import { discoveryCredit } from '../discovery/contract.ts';
 
 export const ZONE_MODULE_COST = { pageSize: 20, candidateRows: 21, typeRows: 160,
   serialHeads: 20, summaryBatches: 2, replyReviewChecks: 40, contentRevisions: 20,
-  creditQueries: 20,
+  contentBytes: 20 * 1_048_576, creditQueries: 20,
   graphCalls: 160, graphBytes: 4 * 1024 * 1024,
   deadlineMs: 10_000 } as const;
 
 export const zoneWork = t.Object({ ...workCard.properties,
-  primaryCredits: t.Array(creditItem, { maxItems: 3 }), evidence: readId,
+  primaryCredits: t.Array(discoveryCredit, { maxItems: 3 }), evidence: readId,
   dataEpoch: t.String(), sequence: t.String() });
 export const zoneWorkPage = t.Object({ profile: t.Union([
   t.Literal('zone-new-adoptions-v1'), t.Literal('zone-recently-completed-v1')]),
@@ -21,7 +22,7 @@ export const zoneDecisionPage = t.Object({ profile: t.Literal('zone-recent-decis
     semanticRuleChange: t.Integer({ minimum: 0 }), basis: t.Literal('exact-page') }) });
 export const zoneChapterPage = t.Object({ profile: t.Literal('zone-latest-chapters-v1'), realm: readId,
   items: t.Array(t.Object({ work: t.Object({ ...workCard.properties,
-    primaryCredits: t.Array(creditItem, { maxItems: 3 }) }), chapter: readId, publication: readId,
+    primaryCredits: t.Array(discoveryCredit, { maxItems: 3 }) }), chapter: readId, publication: readId,
     contentRevision: t.String(), language: t.String(), dataEpoch: t.String(), sequence: t.String() }),
   { maxItems: ZONE_MODULE_COST.pageSize }), ...pageFields });
 export const zoneReplyPage = t.Object({ profile: t.Union([

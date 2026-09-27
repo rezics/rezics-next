@@ -1,4 +1,5 @@
 import { expect, test } from 'bun:test';
+import { Value } from 'typebox/value';
 import { checkZoneConfiguration, ZONE_CONFIG_FORMAT, ZONE_PROFILE }
   from '../src/modules/zone/config-format.ts';
 import { DEFAULT_ZONE_PRESENTATION, type ZonePresentation }
@@ -6,6 +7,8 @@ import { DEFAULT_ZONE_PRESENTATION, type ZonePresentation }
 import { readZoneBannerMedia } from '../src/modules/zone/publication.ts';
 import { zonePackageExecution, type FirstPartyView }
   from '../src/modules/theme/first-party-lifecycle.ts';
+import { discoveryCredit } from '../src/modules/discovery/contract.ts';
+import { displayZoneCredits } from '../src/modules/zone-modules/read.ts';
 
 const id = (value: string) => `https://rezics.com/id/${value}`;
 const zone = id('00000000-0000-4000-8000-000000000001');
@@ -53,4 +56,18 @@ test('reviewed source digest is reported only by an effective package activation
   expect(zonePackageExecution(view, zone)).toMatchObject({ state: 'package', packageDigest: bundleDigest });
   expect(zonePackageExecution({ ...view, revoked: true }, zone)).toMatchObject({
     state: 'fallback', reason: 'revoked' });
+});
+
+test('Zone cards name public Agent credits and suppress undisclosed Agent identities', () => {
+  const publicAgent = id('00000000-0000-4000-8000-000000000004');
+  const privateAgent = id('00000000-0000-4000-8000-000000000005');
+  const credits = [{ id: use, role: 'author' as const, participantKind: 'agent' as const,
+    provider: null, key: null, ordinal: null, agent: publicAgent, displayName: null, handle: null },
+  { id: zone, role: 'author' as const, participantKind: 'agent' as const,
+    provider: null, key: null, ordinal: null, agent: privateAgent, displayName: null, handle: null }];
+  const shown = displayZoneCredits(credits, new Map([[publicAgent,
+    { displayName: 'Ada Writer', handle: 'ada' }]]));
+  expect(shown).toHaveLength(1);
+  expect(shown[0]).toMatchObject({ agent: publicAgent, displayName: 'Ada Writer', handle: 'ada' });
+  expect(shown.every(credit => Value.Check(discoveryCredit, credit))).toBe(true);
 });

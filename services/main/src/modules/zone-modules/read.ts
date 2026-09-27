@@ -1,5 +1,6 @@
 import { readEpochOrder } from '../discovery/lineage.ts';
-import { primaryDiscoveryCredits } from '../discovery/credits.ts';
+import { namedDiscoveryCredits, primaryDiscoveryCredits } from '../discovery/credits.ts';
+import type { DiscoveryCredit, ProjectedCredit } from '../discovery/contract.ts';
 import { readRealmDecisions } from '../realm-reads/public-decision-index.ts';
 import { readRealmBasis } from '../realm-reads/read-realm.ts';
 import { GRAPHS, WORK_SEMANTIC_TYPES, iri, lit } from '../work/activate.ts';
@@ -15,6 +16,15 @@ function cursorOrder(value: string) {
     throw new WorkReadInvalid('Zone module cursor ordering is invalid');
   }
   return parts;
+}
+
+export function displayZoneCredits(credits: ProjectedCredit[],
+  names: ReadonlyMap<string, { displayName: string; handle: string }>): DiscoveryCredit[] {
+  return credits.flatMap((credit): DiscoveryCredit[] => {
+    if (credit.participantKind === 'external-reference') return [credit];
+    const name = names.get(credit.agent);
+    return name ? [{ ...credit, ...name }] : [];
+  });
 }
 
 /** One bounded candidate page, one type batch, two summary batches and ≤20 exact
@@ -89,7 +99,9 @@ export async function readZoneWorks(session: WorkReadSession, realm: string, kin
       evidence: row.evidence!.value, dataEpoch: row.revisionEpoch!.value,
       sequence: row.sequence!.value };
   }));
-  const items = hydrated.filter((item): item is NonNullable<typeof item> => item !== null);
+  const visible = hydrated.filter((item): item is NonNullable<typeof item> => item !== null);
+  const names = await namedDiscoveryCredits(session, visible.flatMap(item => item.primaryCredits));
+  const items = visible.map(item => ({ ...item, primaryCredits: displayZoneCredits(item.primaryCredits, names) }));
   await readRealmBasis(session, realm);
   const last = page.at(-1);
   return { profile: status ? 'zone-recently-completed-v1' as const : 'zone-new-adoptions-v1' as const,
@@ -185,7 +197,10 @@ export async function readZoneChapters(session: WorkReadSession, realm: string) 
     contentRevision: row.contentRevision!.value, language: row.language!.value,
     dataEpoch: row.revisionEpoch!.value, sequence: row.sequence!.value };
   }));
-  const items = hydrated.filter((item): item is NonNullable<typeof item> => item !== null);
+  const visible = hydrated.filter((item): item is NonNullable<typeof item> => item !== null);
+  const names = await namedDiscoveryCredits(session, visible.flatMap(item => item.work.primaryCredits));
+  const items = visible.map(item => ({ ...item, work: { ...item.work,
+    primaryCredits: displayZoneCredits(item.work.primaryCredits, names) } }));
   await readRealmBasis(session, realm);
   const last = page.at(-1);
   return { profile: 'zone-latest-chapters-v1' as const, realm,
