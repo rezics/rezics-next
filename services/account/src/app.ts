@@ -9,6 +9,7 @@ import { consumeAccountLimit } from './rate-limit.ts';
 import { consentApi } from './consent.ts';
 import { methodsApi, requireStepUp, sensitiveAuthPaths } from './methods.ts';
 import { accountFailure, accountSession } from './http.ts';
+import { observeAuthentication, securityActivityApi } from './security-activity.ts';
 import { AccountRecoveryConflict, AccountRecoveryDenied, AccountRecoveryStale,
   activateAccountRecovery, approveAccountRecovery, enrollAccountRecovery,
   readAccountRecoveryClaim, requestAccountRecovery } from './recovery-claim.ts';
@@ -205,6 +206,7 @@ export function createAccountApp(auth: ReturnType<typeof createAccountAuth>, poo
     })
     .use(consentApi(auth, pool))
     .use(methodsApi(auth, pool))
+    .use(securityActivityApi(auth, pool))
     .post('/api/auth/oauth2/token', ({ request }) =>
       guardedAuthorizationCodeExchange(guard(), request, () => auth.handler(request)))
     // A product must bind and consume state at its callback. Require the input
@@ -348,5 +350,5 @@ export function createAccountApp(auth: ReturnType<typeof createAccountAuth>, poo
       catch (error) { return recoveryError(error); }
     })
     .cleanup(async () => { await guardPool?.end(); })
-    .mount(guardedAuthHandler);
+    .mount((request: Request) => observeAuthentication(auth, pool, request, () => guardedAuthHandler(request)));
 }
