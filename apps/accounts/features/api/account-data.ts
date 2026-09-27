@@ -2,7 +2,9 @@
 // fields the pages show. Fields added to the service later are optional here,
 // so a page keeps working against an Account service one release behind.
 
-export type AccountLocale = 'en' | 'zh-CN';
+import type { UiLocale } from '../../i18n/locale.ts';
+
+export type AccountLocale = UiLocale;
 interface AccountUser { id: string; name: string; email: string; emailVerified: boolean;
   image: string | null; createdAt: string; locale: AccountLocale | null; twoFactorEnabled: boolean }
 export interface AccountSession { user: AccountUser; sessionId: string }
@@ -17,7 +19,7 @@ export interface SecurityEvent { id: string; action: string; occurredAt: string;
   browser: string | null; platform: string | null; network: string | null; clientId: string | null }
 export interface SecurityActivity { items: SecurityEvent[]; nextCursor: string | null;
   failedLast24Hours: { count: number; capped: boolean } }
-interface ScopeDescription { scope: string; description: Record<AccountLocale, string> }
+interface ScopeDescription { scope: string; description: { en: string; 'zh-CN': string } }
 export interface ConnectedApp { clientId: string; name: string; uri: string | null; icon: string | null;
   trusted: boolean; scopes: ScopeDescription[]; grantedAt: string; lastUsedAt: string | null;
   /** The App was withdrawn from REZICS; its access can still be removed. */
@@ -31,7 +33,9 @@ export const record = (value: unknown): Json | null =>
 const text = (value: unknown): string | null => typeof value === 'string' ? value : null;
 const date = (value: unknown): string | null =>
   typeof value === 'string' && !Number.isNaN(Date.parse(value)) ? value : null;
-const locale = (value: unknown): AccountLocale | null => value === 'en' || value === 'zh-CN' ? value : null;
+const locale = (value: unknown): AccountLocale | null => value === 'zh-CN' ? 'zh-Hans'
+  : ['en', 'zh-Hant', 'zh-Hans', 'ja', 'ko', 'de', 'fr', 'es'].includes(String(value))
+    ? value as AccountLocale : null;
 export function list<T>(value: unknown, item: (entry: unknown) => T | null): T[] | null {
   if (!Array.isArray(value)) return null;
   const items = value.map(item);

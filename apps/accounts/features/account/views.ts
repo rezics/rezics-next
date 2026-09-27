@@ -41,7 +41,8 @@ export function appNames(apps: { status: string; data?: { items: ConnectedApp[] 
 export function connectedAppViews(apps: ConnectedApp[], now: Date, locale: AccountLocale): ConnectedAppView[] {
   return apps.map(app => ({ clientId: app.clientId, name: app.name, uri: app.uri, icon: app.icon,
     trusted: app.trusted, withdrawn: app.withdrawn,
-    permissions: [...new Set(app.scopes.map(scope => scope.description[locale]))],
+    permissions: [...new Set(app.scopes.map(scope => scope.description[
+      locale === 'zh-Hans' || locale === 'zh-Hant' ? 'zh-CN' : 'en']))],
     granted: calendarDate(app.grantedAt, locale),
     lastUsed: app.lastUsedAt ? relativeTime(app.lastUsedAt, now, locale) : null }));
 }

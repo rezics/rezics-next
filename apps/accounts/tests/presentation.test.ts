@@ -78,7 +78,7 @@ describe('view models', () => {
     const [app] = connectedAppViews([{ clientId: 'r', name: 'Reader', uri: null, icon: null, trusted: false,
       withdrawn: false, grantedAt: '2026-09-01T00:00:00Z', lastUsedAt: at(3_600),
       scopes: [scope('openid', 'Identify your REZICS account', '识别你的 REZICS 账号'),
-        scope('work:read', 'Read works', '读取作品')] }], now, 'zh-CN');
+        scope('work:read', 'Read works', '读取作品')] }], now, 'zh-Hans');
     expect(app).toMatchObject({ permissions: ['识别你的 REZICS 账号', '读取作品'], lastUsed: '1小时前' });
   });
 
@@ -93,7 +93,7 @@ describe('dates', () => {
     expect(relativeTime('2026-09-27T09:00:00Z', now, 'en')).toBe('3 hours ago');
     expect(relativeTime('2026-09-26T12:00:00Z', now, 'en')).toBe('yesterday');
     expect(relativeTime('2026-09-27T11:59:40Z', now, 'en')).toBe('this minute');
-    expect(relativeTime('2026-09-27T09:00:00Z', now, 'zh-CN')).toBe('3小时前');
+    expect(relativeTime('2026-09-27T09:00:00Z', now, 'zh-Hans')).toBe('3小时前');
     expect(calendarDate('2026-09-27T23:30:00Z', 'en')).toBe('Sep 27, 2026');
   });
 });

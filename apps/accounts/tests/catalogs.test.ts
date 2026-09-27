@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { i18n } from '../i18n/locale.ts';
+import { uiLocales } from '../i18n/locale.ts';
 import { resources } from '../i18n/resources.ts';
 
 const namespaces = ['common', 'auth', 'consent', 'account', 'admin'] as const;
@@ -10,12 +11,15 @@ function keys(value: unknown, prefix = ''): string[] {
 }
 
 describe('Accounts message catalogs', () => {
-  test('every namespace has the same messages in both locales', async () => {
+  test('every namespace has the same messages in all interface locales after English fallback', async () => {
     expect(Object.keys(resources.loaders.en).sort()).toEqual([...namespaces].sort());
     for (const namespace of namespaces) {
-      const [english, chinese] = await Promise.all([resources.loaders.en[namespace](),
-        resources.loaders['zh-CN'][namespace]()]);
-      expect(keys(chinese).sort()).toEqual(keys(english).sort());
+      const english = await resources.loaders.en[namespace]();
+      for (const locale of uiLocales) {
+        const localized = await resources.loaders[locale][namespace]();
+        expect({ namespace, locale, keys: keys(localized).sort() })
+          .toEqual({ namespace, locale, keys: keys(english).sort() });
+      }
     }
   });
 
@@ -29,11 +33,12 @@ describe('Accounts message catalogs', () => {
     }
   });
 
-  test('messages materialize in both locales', async () => {
-    const [english, chinese] = await Promise.all([i18n.getTranslation(namespaces, ['en']),
-      i18n.getTranslation(namespaces, ['zh-CN'])]);
+  test('messages materialize translated keys and English per-key fallbacks', async () => {
+    const [english, chinese, japanese] = await Promise.all([i18n.getTranslation(namespaces, ['en']),
+      i18n.getTranslation(namespaces, ['zh-Hans']), i18n.getTranslation(namespaces, ['ja'])]);
     expect(english.t.account.greeting({ name: 'Ada' })).toBe('Welcome, Ada');
     expect(chinese.t.account.greeting({ name: 'Ada' })).toBe('欢迎，Ada');
+    expect(japanese.t.account.greeting({ name: 'Ada' })).toBe('Welcome, Ada');
     expect(english.t.account.appsCardBody(0)).toBe('No apps can use your account');
     expect(english.t.account.appsCardBody(2)).toBe('2 apps can use your account');
     expect(chinese.t.account.deviceOn({ browser: 'Chrome', os: 'macOS' })).toBe('macOS 上的 Chrome');

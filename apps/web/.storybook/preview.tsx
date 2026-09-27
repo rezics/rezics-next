@@ -26,7 +26,7 @@ const withDocument: Decorator = (Story, { globals, parameters }) => {
       <ShellProvider
         key={`${theme}-${locale}`}
         locale={locale}
-        messages={shell[locale]}
+        messages={shell}
         initialTheme={theme}
         initialCollapsed={Boolean(parameters.navCollapsed)}
       >

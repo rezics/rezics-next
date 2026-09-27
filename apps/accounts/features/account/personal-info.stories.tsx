@@ -29,10 +29,10 @@ export const ChooseLanguage: Story = {
   parameters: { account: { navigate: reloaded, api: { setLocale: chosen } } },
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
-    await userEvent.selectOptions(await canvas.findByRole('combobox', { name: 'Language' }), 'zh-CN');
+    await userEvent.selectOptions(await canvas.findByRole('combobox', { name: 'Language' }), 'zh-Hans');
     // Stored on the account, then remembered in this browser through ?hl=.
-    await expect(chosen).toHaveBeenCalledWith('zh-CN');
-    await waitFor(() => expect(reloaded).toHaveBeenCalledWith(expect.stringContaining('hl=zh-CN')));
+    await expect(chosen).toHaveBeenCalledWith('zh-Hans');
+    await waitFor(() => expect(reloaded).toHaveBeenCalledWith(expect.stringContaining('hl=zh-Hans')));
   },
 };
 
@@ -112,6 +112,18 @@ export const Chinese: Story = {
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     await expect(await canvas.findByRole('heading', { level: 1, name: '个人信息' })).toBeVisible();
-    await expect(canvas.getByRole('combobox', { name: '语言' })).toHaveValue('zh-CN');
+    await expect(canvas.getByRole('combobox', { name: '语言' })).toHaveValue('zh-Hans');
+  },
+};
+
+export const JapaneseFallback: Story = {
+  globals: { locale: 'ja' },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await expect(await canvas.findByRole('heading', { level: 1, name: 'Personal info' })).toBeVisible();
+    await expect(canvas.getByRole('combobox', { name: 'Language' })).toHaveValue('ja');
+    const options = await canvas.findAllByRole('option');
+    expect(options.map(option => option.textContent?.trim()))
+      .toEqual(['English', '繁體中文', '简体中文', '日本語', '한국어', 'Deutsch', 'Français', 'Español']);
   },
 };

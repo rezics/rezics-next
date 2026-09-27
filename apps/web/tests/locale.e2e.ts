@@ -1,6 +1,16 @@
 import { expect, test } from '@playwright/test';
 import { localeNames, uiLocales } from '../i18n/define.ts';
 
+test('G288 Traditional Chinese home route keeps English fallback strings', async ({ page }) => {
+  const pageErrors: string[] = [];
+  page.on('pageerror', error => pageErrors.push(error.message));
+  await page.goto('/zh-Hant/');
+  await expect(page.locator('html')).toHaveAttribute('lang', 'zh-Hant');
+  await expect(page.getByRole('heading', { level: 1, name: 'Find a work. Follow its meaning.' })).toBeVisible();
+  await expect(page.getByRole('search', { name: 'Search published works' })).toBeVisible();
+  expect(pageErrors).toEqual([]);
+});
+
 test('eight canonical locale routes expose native picker names and English key fallback', async ({ page }) => {
   await page.goto('/fr/search');
   await expect(page.locator('html')).toHaveAttribute('lang', 'fr');

@@ -16,7 +16,7 @@ test('G205 email: verification, localized delivery, reset replay/concurrency and
     await f.email.drain();
     const mail = f.messages[0]!;
     expect(mail.subject).toBe('验证邮箱地址');
-    expect(mail.html).toContain('lang="zh-CN"');
+    expect(mail.html).toContain('lang="zh-Hans"');
     expect((await f.pool.query('SELECT payload FROM rezics_account_email')).rows.every(row => row.payload === null)).toBe(true);
     const verify = /https?:\/\/\S+/.exec(mail.text)![0];
     expect((await f.request(verify)).status).toBe(302);

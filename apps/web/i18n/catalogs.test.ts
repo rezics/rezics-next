@@ -10,11 +10,13 @@ function shape(value: unknown): unknown {
 }
 
 test('every feature catalog has the same keys in every interface locale', async () => {
-  for (const [namespace, load] of Object.entries(catalogs)) {
-    const catalog: Record<string, unknown> = await load();
+  for (const namespace of Object.keys(catalogs) as (keyof typeof catalogs)[]) {
+    const load = catalogs[namespace];
+    const english: unknown = await load.en();
     for (const locale of uiLocales) {
-      expect({ namespace, locale, shape: shape(catalog[locale]) })
-        .toEqual({ namespace, locale, shape: shape(catalog.en) });
+      const localized: unknown = await load[locale]();
+      expect({ namespace, locale, shape: shape(localized) })
+        .toEqual({ namespace, locale, shape: shape(english) });
     }
   }
 });

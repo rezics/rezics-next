@@ -3,6 +3,7 @@ import { Suspense, useLayoutEffect } from 'react';
 import { type FakeAccount, fakeAccountClient } from './account-client.ts';
 import { AccountClientProvider } from '../features/api/account-client.tsx';
 import { TranslationProvider } from '../i18n/client.ts';
+import { localeNames, uiLocales, type UiLocale } from '../i18n/define.ts';
 import { i18n } from '../i18n/locale.ts';
 import '../app/styles.css';
 
@@ -10,7 +11,7 @@ import '../app/styles.css';
 // rendered and tested light and dark, en and zh-CN, desktop and phone.
 const withAccountsApp: Decorator = (Story, context) => {
   const theme = context.globals.theme === 'dark' ? 'dark' : 'light';
-  const locale = context.globals.locale === 'zh-CN' ? 'zh-CN' : 'en';
+  const locale = uiLocales.includes(context.globals.locale as UiLocale) ? context.globals.locale as UiLocale : 'en';
   useLayoutEffect(() => {
     document.documentElement.classList.toggle('dark', theme === 'dark');
     document.documentElement.lang = locale;
@@ -28,7 +29,8 @@ const withAccountsApp: Decorator = (Story, context) => {
 const seed = (locale: string) => i18n.getTranslation(['common', 'auth', 'consent', 'account', 'admin'], [locale]);
 
 const preview: Preview = {
-  loaders: [async ({ globals }) => ({ i18n: await seed(globals.locale === 'zh-CN' ? 'zh-CN' : 'en') })],
+  loaders: [async ({ globals }) => ({ i18n: await seed(
+    uiLocales.includes(globals.locale as UiLocale) ? globals.locale as UiLocale : 'en') })],
   decorators: [withAccountsApp],
   parameters: {
     layout: 'fullscreen',
@@ -42,7 +44,7 @@ const preview: Preview = {
     theme: { description: 'Colour scheme', toolbar: { icon: 'mirror', dynamicTitle: true,
       items: [{ value: 'light', title: 'Light' }, { value: 'dark', title: 'Dark' }] } },
     locale: { description: 'Interface language', toolbar: { icon: 'globe', dynamicTitle: true,
-      items: [{ value: 'en', title: 'English' }, { value: 'zh-CN', title: '简体中文' }] } },
+      items: uiLocales.map(locale => ({ value: locale, title: localeNames[locale] })) } },
   },
   initialGlobals: { theme: 'light', locale: 'en', viewport: { value: 'desktop', isRotated: false } },
 };

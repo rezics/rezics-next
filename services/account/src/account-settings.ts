@@ -9,7 +9,7 @@ import { accountResponses } from './views.ts';
 
 /** Interface languages an account can choose. The Accounts site shows its pages
  * in it and every Account email to the person uses it. */
-export const accountLocales = ['en', 'zh-CN'] as const satisfies readonly AccountLocale[];
+export const accountLocales = ['en', 'zh-Hant', 'zh-Hans', 'ja', 'ko', 'de', 'fr', 'es'] as const satisfies readonly AccountLocale[];
 
 function isAccountLocale(value: unknown): value is AccountLocale {
   return accountLocales.includes(value as AccountLocale);

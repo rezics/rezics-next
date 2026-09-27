@@ -12,9 +12,13 @@ describe('Account responses', () => {
       name: 'Ada', emailVerified: true, image: 'javascript:alert(1)', createdAt: at, role: 'x', locale: 'zh-CN',
       twoFactorEnabled: true } })).toEqual({
       sessionId: 's1', user: { id: 'u1', email: 'a@example.test', name: 'Ada', emailVerified: true,
-        image: null, createdAt: at, locale: 'zh-CN', twoFactorEnabled: true } });
+        image: null, createdAt: at, locale: 'zh-Hans', twoFactorEnabled: true } });
+    expect(parseSession({ session: { id: 's2' }, user: { id: 'u2', email: 'b@example.test', createdAt: at,
+      locale: 'ja' } })?.user.locale).toBe('ja');
     expect(parseSession({ session: { id: 's1' }, user: { id: 'u1', email: 'a@example.test', createdAt: at,
-      locale: 'fr' } })?.user).toMatchObject({ locale: null, twoFactorEnabled: false });
+      locale: 'fr' } })?.user).toMatchObject({ locale: 'fr', twoFactorEnabled: false });
+    expect(parseSession({ session: { id: 's1' }, user: { id: 'u1', email: 'a@example.test', createdAt: at,
+      locale: 'it' } })?.user.locale).toBeNull();
     expect(parseSession(null)).toBeNull();
     expect(parseSession({ user: { id: 'u1' }, session: { id: 's1' } })).toBeNull();
   });

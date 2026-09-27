@@ -239,6 +239,11 @@ tasks:
     cmds:
       - bun scripts/research/storage_architecture/docs-check.ts {{.CLI_ARGS}}
 
+  i18n:check:
+    desc: Report locale catalog gaps and fail on extra keys or insert placeholder mismatches.
+    cmds:
+      - bun scripts/i18n/check.ts
+
   test:
     desc: Run explicit test files or the affected plan (-- --affected [<base>] [--list]).
     cmds:

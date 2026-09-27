@@ -3,7 +3,7 @@ import { symmetricDecrypt, symmetricEncrypt } from 'better-auth/crypto';
 import nodemailer from 'nodemailer';
 import type { Pool, PoolClient } from 'pg';
 
-export type AccountLocale = 'en' | 'zh-CN';
+export type AccountLocale = 'en' | 'zh-Hant' | 'zh-Hans' | 'ja' | 'ko' | 'de' | 'fr' | 'es';
 export type EmailPurpose = 'verify' | 'reset' | 'change-email' | 'notice';
 export interface AccountEmail {
   /** `message`: an operator's words to the user, sent only with `notice`. */
@@ -18,8 +18,18 @@ export async function enqueueAccountEmail(db: Pool | PoolClient, secret: string,
 }
 
 export function accountLocale(request?: Request): AccountLocale {
-  return /^zh(?:-cn|-hans)?(?:[,;\s-]|$)/i.test(request?.headers.get('accept-language') ?? '')
-    ? 'zh-CN' : 'en';
+  for (const range of (request?.headers.get('accept-language') ?? '').split(',')) {
+    const tag = range.trim().split(';')[0];
+    if (!tag) continue;
+    let locale: Intl.Locale;
+    try { locale = new Intl.Locale(tag.replaceAll('_', '-')); }
+    catch { continue; }
+    if (locale.language === 'zh') {
+      return locale.script === 'Hant' || ['TW', 'HK', 'MO'].includes(locale.region ?? '') ? 'zh-Hant' : 'zh-Hans';
+    }
+    if (['en', 'ja', 'ko', 'de', 'fr', 'es'].includes(locale.language)) return locale.language as AccountLocale;
+  }
+  return 'en';
 }
 
 const copy = {
@@ -30,7 +40,7 @@ const copy = {
     notice: ['A message about your REZICS account', 'The REZICS team sent you this message about your account:', 'Open your REZICS account'],
     ignore: 'If you did not request this, you can ignore this email.',
   },
-  'zh-CN': {
+  'zh-Hans': {
     verify: ['验证邮箱地址', '请确认此邮箱地址用于你的 REZICS 账号。', '验证邮箱'],
     reset: ['重置密码', '为你的 REZICS 账号设置新密码。此链接将在 30 分钟后失效。', '重置密码'],
     'change-email': ['确认更换邮箱', '请确认更换 REZICS 邮箱的请求。之后还需要验证新邮箱。', '确认更换邮箱'],
@@ -47,14 +57,15 @@ function escapeHtml(value: string) {
 export function renderAccountEmail(purpose: EmailPurpose, locale: AccountLocale, url: string, notice?: string) {
   const parsed = new URL(url);
   if (!['https:', 'http:'].includes(parsed.protocol)) throw new Error('Invalid Account email URL');
-  const [subject, message, action] = copy[locale][purpose];
+  const copyLocale = locale === 'zh-Hans' ? 'zh-Hans' : 'en';
+  const [subject, message, action] = copy[copyLocale][purpose];
   if (purpose === 'notice') {
     if (!notice?.trim()) throw new Error('A notice needs its message');
     // An operator's message is quoted as plain text; the link is always the account.
     return { subject, text: `${message}\n\n${notice}\n\n${action}: ${url}`,
       html: `<!doctype html><html lang="${locale}"><body><h1>${subject}</h1><p>${message}</p><blockquote style="white-space:pre-wrap">${escapeHtml(notice)}</blockquote><p><a href="${escapeHtml(url)}">${action}</a></p></body></html>` };
   }
-  const ignore = copy[locale].ignore;
+  const ignore = copy[copyLocale].ignore;
   return { subject, text: `${message}\n\n${action}: ${url}\n\n${ignore}`,
     html: `<!doctype html><html lang="${locale}"><body><h1>${subject}</h1><p>${message}</p><p><a href="${escapeHtml(url)}">${action}</a></p><p>${ignore}</p></body></html>` };
 }

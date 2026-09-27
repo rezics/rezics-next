@@ -6,8 +6,11 @@ import type { Session } from '../auth/session.ts';
 import { SignInLink } from '../auth/sign-in-link.tsx';
 import { AppShell } from './app-shell.tsx';
 import { messages } from './messages.ts';
+import zhHans from './messages/zh-Hans.ts';
 import { NotificationsLink } from './notifications-link.tsx';
 import { PageContainer, PageHeader } from './page.tsx';
+
+const zhHansShellMessages = { ...messages, ...zhHans };
 
 const ada = { iri: 'https://rezics.com/id/57c86232-6db4-4b0d-aa56-e4ad584d07b4', label: 'Ada Lovelace',
   handle: 'ada', kind: 'person', path: 'direct-principal' } as const;
@@ -31,7 +34,7 @@ function Placeholder() {
 
 const meta = {
   title: 'Shell/App shell', component: AppShell,
-  args: { locale: 'en', messages: messages.en, theme: 'light', navCollapsed: false,
+  args: { locale: 'en', messages, theme: 'light', navCollapsed: false,
     account: <SignInLink label={auth.en.signIn} />, children: <Placeholder /> },
   globals: { viewport: { value: 'desktop' } },
 } satisfies Meta<typeof AppShell>;
@@ -133,7 +136,7 @@ export const ThemeChoice: Story = {
 };
 
 export const Chinese: Story = {
-  args: { locale: 'zh-Hans', messages: messages['zh-Hans'], signedIn: true, account: <AccountMenu accountOrigin="https://account.rezics.test" session={signedIn} messages={auth['zh-Hans']} />,
+  args: { locale: 'zh-Hans', messages: zhHansShellMessages, signedIn: true, account: <AccountMenu accountOrigin="https://account.rezics.test" session={signedIn} messages={auth['zh-Hans']} />,
     notifications: <NotificationsLink /> },
   globals: { locale: 'zh-Hans' },
   async play({ canvasElement }) {
@@ -167,7 +170,7 @@ export const Phone: Story = {
 };
 
 export const PhoneSignedInChinese: Story = {
-  args: { locale: 'zh-Hans', messages: messages['zh-Hans'], signedIn: true, account: <AccountMenu accountOrigin="https://account.rezics.test" session={longNames} messages={auth['zh-Hans']} />,
+  args: { locale: 'zh-Hans', messages: zhHansShellMessages, signedIn: true, account: <AccountMenu accountOrigin="https://account.rezics.test" session={longNames} messages={auth['zh-Hans']} />,
     notifications: <NotificationsLink /> },
   globals: { locale: 'zh-Hans', viewport: { value: 'phone' } },
   async play({ canvasElement }) {

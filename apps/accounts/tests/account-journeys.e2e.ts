@@ -19,6 +19,16 @@ type Person = ReturnType<typeof newPerson>;
 // The stack's Mailpit (`task urls`); Account delivers its queue every second.
 const mailpit = process.env.MAILPIT_URL ?? 'http://127.0.0.1:8025';
 
+test('G288 Accounts Japanese locale query keeps English fallback strings', async ({ page }) => {
+  const pageErrors: string[] = [];
+  page.on('pageerror', error => pageErrors.push(error.message));
+  await page.goto('/?hl=ja');
+  await hydrated(page);
+  await expect(page.locator('html')).toHaveAttribute('lang', 'ja');
+  await expect(page.getByRole('heading', { name: 'Sign in to continue' })).toBeVisible();
+  expect(pageErrors).toEqual([]);
+});
+
 /** The newest link in the newest email to `to` whose subject matches. */
 async function emailLink(to: string, subject: RegExp): Promise<string> {
   let link: string | undefined;
@@ -113,7 +123,7 @@ test('sign up with email verification, the account centre and sign out', async (
   await page.getByRole('button', { name: 'Save' }).click();
   await expect(page.getByText(`${person.name} Byron`)).toBeVisible();
   // The language is stored on the account and follows it to a new browser.
-  await page.getByRole('combobox', { name: 'Language' }).selectOption('zh-CN');
+  await page.getByRole('combobox', { name: 'Language' }).selectOption('zh-Hans');
   await expect(page.getByRole('heading', { level: 1, name: '个人信息' })).toBeVisible();
   await page.context().clearCookies({ name: 'rezics_locale' });
   await open(page, '/personal-info');

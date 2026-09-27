@@ -3,6 +3,7 @@ import { createHash, randomBytes } from 'node:crypto';
 import { createOTP } from '@better-auth/utils/otp';
 import { symmetricDecrypt } from 'better-auth/crypto';
 import { chromium, type Page } from '@playwright/test';
+import { accountLocales } from '../src/account-settings.ts';
 import { accountFixture } from './account-fixture.ts';
 import { oauthFixture } from './oauth-fixture.ts';
 import { markEmailChangeStep, passkeyRelyingParty } from '../src/account-settings.ts';
@@ -11,11 +12,12 @@ import { parseActivity, parseConnectedApps, parseMethods, parseSession,
 
 const link = (text: string) => /https?:\/\/\S+/.exec(text)![0];
 
-test('G261 settings: the account language is validated, returned with the session and used for Account email', async () => {
+test('G288 settings: all interface locales validate and stored zh-CN choices migrate to zh-Hans', async () => {
   const f = await accountFixture();
   try {
-    const body = { email: 'lang@example.test', name: 'Lang', password: 'a sufficiently long password', locale: 'zh-CN' };
-    expect((await f.request('/api/auth/sign-up/email', { ...body, email: 'fr@example.test', locale: 'fr' })).status).toBe(400);
+    const body = { email: 'lang@example.test', name: 'Lang', password: 'a sufficiently long password', locale: 'zh-Hans' };
+    expect((await f.request('/api/auth/sign-up/email', { ...body, email: 'legacy@example.test', locale: 'zh-CN' })).status)
+      .toBe(400);
     const signedUp = await f.request('/api/auth/sign-up/email', body, undefined, { 'accept-language': 'en' });
     // A chosen language changes nothing about the enumeration-safe answer.
     expect(await signedUp.json()).toEqual({ status: true });
@@ -25,11 +27,18 @@ test('G261 settings: the account language is validated, returned with the sessio
     expect((await f.request(link(verification.text))).status).toBe(302);
     const signedIn = await f.request('/api/auth/sign-in/email', { email: body.email, password: body.password });
     const cookie = signedIn.headers.get('set-cookie')!;
+    const { user: signedInUser } = await signedIn.json() as { user: { id: string } };
     const session = async () => (await (await f.request('/api/auth/get-session', undefined, cookie)).json() as {
       user: { locale: string | null } }).user.locale;
-    expect(await session()).toBe('zh-CN');
-    expect((await f.request('/api/auth/update-user', { locale: 'fr' }, cookie)).status).toBe(400);
-    expect(await session()).toBe('zh-CN');
+    expect(await session()).toBe('zh-Hans');
+    for (const locale of accountLocales) {
+      expect((await f.request('/api/auth/update-user', { locale }, cookie)).status).toBe(200);
+      expect(await session()).toBe(locale);
+    }
+    expect((await f.request('/api/auth/update-user', { locale: 'zh-CN' }, cookie)).status).toBe(400);
+    await f.pool.query('UPDATE "user" SET locale = $2 WHERE id = $1', [signedInUser.id, 'zh-CN']);
+    await f.pool.query(await Bun.file(new URL('../migrations/050_account_locale_hans.sql', import.meta.url)).text());
+    expect(await session()).toBe('zh-Hans');
     expect((await f.request('/api/auth/update-user', { locale: 'en' }, cookie)).status).toBe(200);
     expect(await session()).toBe('en');
     // The stored choice outranks the language of whichever browser asks.

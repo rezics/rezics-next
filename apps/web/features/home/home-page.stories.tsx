@@ -2,8 +2,11 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, within } from 'storybook/test';
 import { HomePage } from './home-page.tsx';
 import { messages } from './messages.ts';
+import zhHans from './messages/zh-Hans.ts';
 
-const meta = { title: 'Home/Landing', component: HomePage, args: { messages: messages.en } } satisfies Meta<typeof HomePage>;
+const zhHansMessages = { ...messages, ...zhHans };
+
+const meta = { title: 'Home/Landing', component: HomePage, args: { messages } } satisfies Meta<typeof HomePage>;
 export default meta;
 type Story = StoryObj<typeof meta>;
 
@@ -21,8 +24,8 @@ export const Landing: Story = {
 };
 
 export const Chinese: Story = {
-  args: { messages: messages['zh-CN'] },
-  globals: { locale: 'zh-CN' },
+  args: { messages: zhHansMessages },
+  globals: { locale: 'zh-Hans' },
   async play({ canvasElement }) {
     await expect(within(canvasElement).getByRole('heading', { level: 1, name: '寻找作品，追寻其意义。' })).toBeVisible();
   },

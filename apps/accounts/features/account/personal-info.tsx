@@ -14,9 +14,7 @@ import { failureText } from './failure-text.ts';
 import { EmailField, emailPattern, NameField } from '../auth/fields.tsx';
 import { type AvatarUser, UserAvatar } from '../shell/user-avatar.tsx';
 import { useLocale, useTranslation } from '../../i18n/client.ts';
-import { uiLocales } from '../../i18n/locale.ts';
-
-const languageNames: Record<AccountLocale, string> = { en: 'English', 'zh-CN': '简体中文' };
+import { localeNames, uiLocales } from '../../i18n/locale.ts';
 
 type Outcome = { tone: 'success' | 'destructive' | 'info'; text: string };
 
@@ -59,7 +57,7 @@ function LanguageRow({ chosen }: { chosen: AccountLocale | null }) {
   return <SettingsRow label={t.language}>
     <NativeSelect aria-label={t.language} value={value} size="md" className="w-full max-w-60" disabled={busy}
       onChange={event => void choose(event.currentTarget.value as AccountLocale)}>
-      {uiLocales.map(item => <option key={item} value={item} lang={item}>{languageNames[item]}</option>)}
+      {uiLocales.map(item => <option key={item} value={item} lang={item}>{localeNames[item]}</option>)}
     </NativeSelect>
     <p className="mt-2 text-sm text-muted-foreground">{t.languageHelp}</p>
     {failure ? <Alert role="alert" variant="destructive" className="mt-3"><AlertDescription>{failure}</AlertDescription></Alert> : null}

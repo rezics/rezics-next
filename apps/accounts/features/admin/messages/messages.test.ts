@@ -9,12 +9,12 @@ function keys(value: unknown, prefix = ''): string[] {
 
 describe('admin panel messages', () => {
   test('both locales have the same messages', async () => {
-    const [english, chinese] = await Promise.all([resources.loaders.en.admin(), resources.loaders['zh-CN'].admin()]);
+    const [english, chinese] = await Promise.all([resources.loaders.en.admin(), resources.loaders['zh-Hans'].admin()]);
     expect(keys(chinese).sort()).toEqual(keys(english).sort());
   });
 
   test('they materialize with their values in both locales', async () => {
-    const [english, chinese] = await Promise.all([i18n.getTranslation('admin', ['en']), i18n.getTranslation('admin', ['zh-CN'])]);
+    const [english, chinese] = await Promise.all([i18n.getTranslation('admin', ['en']), i18n.getTranslation('admin', ['zh-Hans'])]);
     expect(english.t.selected(3)).toBe('3 selected');
     expect(chinese.t.selected(3)).toBe('已选 3 位');
     expect(english.t.bulkTitles.suspend(1)).toBe('Suspend 1 user?');
