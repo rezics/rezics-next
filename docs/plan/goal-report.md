@@ -83,8 +83,8 @@ boundaries remain explicit:
 
 ## Next actions for the maintainer
 
-- Decide the provider acquisition design for CurseForge and Steam (PKG09,
-  PKG11) and whether advanced-user API keys are exposed in configuration docs.
+- Provider acquisition for CurseForge and Steam (PKG09, PKG11) is deferred to
+  [low-priority work](low-priority/README.md).
 - Later phase: full performance verification, the executable cost-contract
   inventory and qualification at the 500 million entity scale.
 - Verify snapshot, backup and media destruction for OPS10 on the production

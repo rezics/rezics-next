@@ -61,7 +61,8 @@ API-key capture paths (`REZICS_CURSEFORGE_API_KEY`, `REZICS_NEXUS_API_KEY`,
 advanced users; only their live tests are skipped for now. The keyless
 live Modrinth, Nexus and Steam Collection captures above stay as recorded
 evidence. Live acquisition for these providers is an explicit rollout boundary
-until the acquisition design is agreed.
+until the acquisition design is agreed; it is tracked as
+[low-priority work](../plan/low-priority/README.md).
 
 G-138's selected relation-modeling API run `20260927t035118-1ca44e` passed
 authored CurseForge file responses with all six documented relation types and

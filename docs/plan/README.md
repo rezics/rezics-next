@@ -10,7 +10,7 @@
 | Authority | This active Goal authorizes local backend implementation, dependency setup, disposable QA stacks and coherent local commits on `main`. Remote pushes, production publication and paid provisioning remain outside this scope. |
 | Deployment premise | Principal services concentrated on one assessed host; the other primarily API and unrelated workloads. Account placement remains assessed. |
 | Status | Complete. The backend Goal ran from 17:43:55 UTC on 2026-09-26 for about 16 h 53 min; the full `yarn qa --backend --record` run `20260927t101230-1616d8` on clean commit `af3f5f40` passed with all 276 retained backend acceptance IDs (see the [qualification page](qualification.md) and the [Goal report](goal-report.md)). |
-| Next action | Maintainer decisions and later-phase work listed in the [Goal report](goal-report.md#next-actions-for-the-maintainer): provider acquisition for CurseForge and Steam, full performance verification including the 500 million entity scale, and production destruction verification for OPS10. |
+| Next action | Maintainer decisions and later-phase work listed in the [Goal report](goal-report.md#next-actions-for-the-maintainer): full performance verification including the 500 million entity scale and production destruction verification for OPS10. Deferred items live in [low-priority work](low-priority/README.md), starting with CurseForge and Steam Workshop acquisition. |
 | Forecast | Closed: completed at about 16 h 53 min, missing the 10-hour target and inside the 25-hour outer bound; the [Goal report](goal-report.md) explains the miss. |
 
 ### Active management program
