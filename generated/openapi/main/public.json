@@ -88322,6 +88322,13 @@
                             "null"
                           ]
                         },
+                        "countPrecision": {
+                          "enum": [
+                            "exact",
+                            "lower-bound"
+                          ],
+                          "type": "string"
+                        },
                         "edges": {
                           "items": {
                             "additionalProperties": false,
@@ -88469,6 +88476,7 @@
                         "profile",
                         "complete",
                         "frontier",
+                        "countPrecision",
                         "total",
                         "edges",
                         "continuation",
@@ -191827,6 +191835,191 @@
                   {
                     "additionalProperties": false,
                     "properties": {
+                      "actingSubject": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      },
+                      "asOf": {
+                        "properties": {
+                          "dataEpoch": {
+                            "type": "string"
+                          },
+                          "datasetId": {
+                            "const": "product",
+                            "type": "string"
+                          },
+                          "sequence": {
+                            "pattern": "^[0-9]+$",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "datasetId",
+                          "dataEpoch",
+                          "sequence"
+                        ],
+                        "type": "object"
+                      },
+                      "conditions": {
+                        "items": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "applicability": {
+                              "items": {
+                                "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                "type": "string"
+                              },
+                              "maxItems": 8,
+                              "type": "array"
+                            },
+                            "context": {
+                              "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                              "type": "string"
+                            },
+                            "predicate": {
+                              "pattern": "^https?://[^\\s<>\"{}|\\\\^`]{1,2040}$",
+                              "type": "string"
+                            },
+                            "relationDefinition": {
+                              "pattern": "^https?://[^\\s<>\"{}|\\\\^`]{1,2040}$",
+                              "type": "string"
+                            },
+                            "semanticRevision": {
+                              "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                              "type": "string"
+                            },
+                            "value": {
+                              "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "predicate",
+                            "relationDefinition",
+                            "value",
+                            "context",
+                            "semanticRevision",
+                            "applicability"
+                          ],
+                          "type": "object"
+                        },
+                        "maxItems": 2,
+                        "minItems": 1,
+                        "type": "array"
+                      },
+                      "context": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "id": {
+                            "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                            "type": "string"
+                          },
+                          "kind": {
+                            "const": "realm-local",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "id"
+                        ],
+                        "type": "object"
+                      },
+                      "countGrain": {
+                        "enum": [
+                          "work",
+                          "participant",
+                          "occurrence",
+                          "qualifiedFact",
+                          "supportingStatement"
+                        ],
+                        "type": "string"
+                      },
+                      "facetMode": {
+                        "enum": [
+                          "fully-filtered",
+                          "self-filter-excluding"
+                        ],
+                        "type": "string"
+                      },
+                      "language": {
+                        "maxLength": 35,
+                        "minLength": 2,
+                        "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$",
+                        "type": "string"
+                      },
+                      "phrase": {
+                        "maxLength": 80,
+                        "minLength": 2,
+                        "type": "string"
+                      },
+                      "profile": {
+                        "const": "public-grouped-statement-phrase-v1",
+                        "type": "string"
+                      },
+                      "relation": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "definition": {
+                            "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                            "type": "string"
+                          },
+                          "participantRole": {
+                            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,31}$",
+                            "type": "string"
+                          },
+                          "workRole": {
+                            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,31}$",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "definition",
+                          "workRole",
+                          "participantRole"
+                        ],
+                        "type": "object"
+                      },
+                      "sourcePolicy": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "datasetIds": {
+                            "items": {
+                              "maxLength": 200,
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "maxItems": 8,
+                            "minItems": 2,
+                            "type": "array"
+                          },
+                          "kind": {
+                            "const": "multi-dataset",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "datasetIds"
+                        ],
+                        "type": "object"
+                      }
+                    },
+                    "required": [
+                      "profile",
+                      "actingSubject",
+                      "context",
+                      "phrase",
+                      "language",
+                      "relation",
+                      "conditions",
+                      "countGrain"
+                    ],
+                    "type": "object"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "properties": {
                       "asOf": {
                         "properties": {
                           "dataEpoch": {
@@ -192622,6 +192815,191 @@
                   {
                     "additionalProperties": false,
                     "properties": {
+                      "actingSubject": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      },
+                      "asOf": {
+                        "properties": {
+                          "dataEpoch": {
+                            "type": "string"
+                          },
+                          "datasetId": {
+                            "const": "product",
+                            "type": "string"
+                          },
+                          "sequence": {
+                            "pattern": "^[0-9]+$",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "datasetId",
+                          "dataEpoch",
+                          "sequence"
+                        ],
+                        "type": "object"
+                      },
+                      "conditions": {
+                        "items": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "applicability": {
+                              "items": {
+                                "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                "type": "string"
+                              },
+                              "maxItems": 8,
+                              "type": "array"
+                            },
+                            "context": {
+                              "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                              "type": "string"
+                            },
+                            "predicate": {
+                              "pattern": "^https?://[^\\s<>\"{}|\\\\^`]{1,2040}$",
+                              "type": "string"
+                            },
+                            "relationDefinition": {
+                              "pattern": "^https?://[^\\s<>\"{}|\\\\^`]{1,2040}$",
+                              "type": "string"
+                            },
+                            "semanticRevision": {
+                              "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                              "type": "string"
+                            },
+                            "value": {
+                              "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "predicate",
+                            "relationDefinition",
+                            "value",
+                            "context",
+                            "semanticRevision",
+                            "applicability"
+                          ],
+                          "type": "object"
+                        },
+                        "maxItems": 2,
+                        "minItems": 1,
+                        "type": "array"
+                      },
+                      "context": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "id": {
+                            "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                            "type": "string"
+                          },
+                          "kind": {
+                            "const": "realm-local",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "id"
+                        ],
+                        "type": "object"
+                      },
+                      "countGrain": {
+                        "enum": [
+                          "work",
+                          "participant",
+                          "occurrence",
+                          "qualifiedFact",
+                          "supportingStatement"
+                        ],
+                        "type": "string"
+                      },
+                      "facetMode": {
+                        "enum": [
+                          "fully-filtered",
+                          "self-filter-excluding"
+                        ],
+                        "type": "string"
+                      },
+                      "language": {
+                        "maxLength": 35,
+                        "minLength": 2,
+                        "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$",
+                        "type": "string"
+                      },
+                      "phrase": {
+                        "maxLength": 80,
+                        "minLength": 2,
+                        "type": "string"
+                      },
+                      "profile": {
+                        "const": "public-grouped-statement-phrase-v1",
+                        "type": "string"
+                      },
+                      "relation": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "definition": {
+                            "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                            "type": "string"
+                          },
+                          "participantRole": {
+                            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,31}$",
+                            "type": "string"
+                          },
+                          "workRole": {
+                            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,31}$",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "definition",
+                          "workRole",
+                          "participantRole"
+                        ],
+                        "type": "object"
+                      },
+                      "sourcePolicy": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "datasetIds": {
+                            "items": {
+                              "maxLength": 200,
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "maxItems": 8,
+                            "minItems": 2,
+                            "type": "array"
+                          },
+                          "kind": {
+                            "const": "multi-dataset",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "datasetIds"
+                        ],
+                        "type": "object"
+                      }
+                    },
+                    "required": [
+                      "profile",
+                      "actingSubject",
+                      "context",
+                      "phrase",
+                      "language",
+                      "relation",
+                      "conditions",
+                      "countGrain"
+                    ],
+                    "type": "object"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "properties": {
                       "asOf": {
                         "properties": {
                           "dataEpoch": {
@@ -193414,6 +193792,191 @@
             "multipart/form-data": {
               "schema": {
                 "anyOf": [
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "actingSubject": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      },
+                      "asOf": {
+                        "properties": {
+                          "dataEpoch": {
+                            "type": "string"
+                          },
+                          "datasetId": {
+                            "const": "product",
+                            "type": "string"
+                          },
+                          "sequence": {
+                            "pattern": "^[0-9]+$",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "datasetId",
+                          "dataEpoch",
+                          "sequence"
+                        ],
+                        "type": "object"
+                      },
+                      "conditions": {
+                        "items": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "applicability": {
+                              "items": {
+                                "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                "type": "string"
+                              },
+                              "maxItems": 8,
+                              "type": "array"
+                            },
+                            "context": {
+                              "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                              "type": "string"
+                            },
+                            "predicate": {
+                              "pattern": "^https?://[^\\s<>\"{}|\\\\^`]{1,2040}$",
+                              "type": "string"
+                            },
+                            "relationDefinition": {
+                              "pattern": "^https?://[^\\s<>\"{}|\\\\^`]{1,2040}$",
+                              "type": "string"
+                            },
+                            "semanticRevision": {
+                              "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                              "type": "string"
+                            },
+                            "value": {
+                              "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "predicate",
+                            "relationDefinition",
+                            "value",
+                            "context",
+                            "semanticRevision",
+                            "applicability"
+                          ],
+                          "type": "object"
+                        },
+                        "maxItems": 2,
+                        "minItems": 1,
+                        "type": "array"
+                      },
+                      "context": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "id": {
+                            "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                            "type": "string"
+                          },
+                          "kind": {
+                            "const": "realm-local",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "id"
+                        ],
+                        "type": "object"
+                      },
+                      "countGrain": {
+                        "enum": [
+                          "work",
+                          "participant",
+                          "occurrence",
+                          "qualifiedFact",
+                          "supportingStatement"
+                        ],
+                        "type": "string"
+                      },
+                      "facetMode": {
+                        "enum": [
+                          "fully-filtered",
+                          "self-filter-excluding"
+                        ],
+                        "type": "string"
+                      },
+                      "language": {
+                        "maxLength": 35,
+                        "minLength": 2,
+                        "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$",
+                        "type": "string"
+                      },
+                      "phrase": {
+                        "maxLength": 80,
+                        "minLength": 2,
+                        "type": "string"
+                      },
+                      "profile": {
+                        "const": "public-grouped-statement-phrase-v1",
+                        "type": "string"
+                      },
+                      "relation": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "definition": {
+                            "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                            "type": "string"
+                          },
+                          "participantRole": {
+                            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,31}$",
+                            "type": "string"
+                          },
+                          "workRole": {
+                            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,31}$",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "definition",
+                          "workRole",
+                          "participantRole"
+                        ],
+                        "type": "object"
+                      },
+                      "sourcePolicy": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "datasetIds": {
+                            "items": {
+                              "maxLength": 200,
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "maxItems": 8,
+                            "minItems": 2,
+                            "type": "array"
+                          },
+                          "kind": {
+                            "const": "multi-dataset",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "datasetIds"
+                        ],
+                        "type": "object"
+                      }
+                    },
+                    "required": [
+                      "profile",
+                      "actingSubject",
+                      "context",
+                      "phrase",
+                      "language",
+                      "relation",
+                      "conditions",
+                      "countGrain"
+                    ],
+                    "type": "object"
+                  },
                   {
                     "additionalProperties": false,
                     "properties": {
@@ -194215,6 +194778,274 @@
               "application/json": {
                 "schema": {
                   "anyOf": [
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "complete": {
+                          "const": true,
+                          "type": "boolean"
+                        },
+                        "contractVersion": {
+                          "const": "1",
+                          "type": "string"
+                        },
+                        "countPrecision": {
+                          "const": "exact",
+                          "type": "string"
+                        },
+                        "facetPrecision": {
+                          "const": "exact",
+                          "type": "string"
+                        },
+                        "facets": {
+                          "items": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "mode": {
+                                "enum": [
+                                  "fully-filtered",
+                                  "self-filter-excluding"
+                                ],
+                                "type": "string"
+                              },
+                              "populationBasis": {
+                                "type": "string"
+                              },
+                              "predicate": {
+                                "type": "string"
+                              },
+                              "values": {
+                                "items": {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "count": {
+                                      "minimum": 0,
+                                      "type": "integer"
+                                    },
+                                    "value": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "value",
+                                    "count"
+                                  ],
+                                  "type": "object"
+                                },
+                                "type": "array"
+                              }
+                            },
+                            "required": [
+                              "predicate",
+                              "mode",
+                              "populationBasis",
+                              "values"
+                            ],
+                            "type": "object"
+                          },
+                          "type": "array"
+                        },
+                        "groupGeneration": {
+                          "pattern": "^[0-9a-f]{64}$",
+                          "type": "string"
+                        },
+                        "indexGeneration": {
+                          "type": "string"
+                        },
+                        "interpretations": {
+                          "items": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "basis": {
+                                "type": "string"
+                              },
+                              "context": {
+                                "type": "string"
+                              },
+                              "definition": {
+                                "type": "string"
+                              },
+                              "entryRevision": {
+                                "~elyTyp": 7,
+                                "nullable": true,
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              },
+                              "selectionRevision": {
+                                "~elyTyp": 7,
+                                "nullable": true,
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              },
+                              "semanticRevision": {
+                                "type": "string"
+                              },
+                              "sourcePosition": {
+                                "properties": {
+                                  "dataEpoch": {
+                                    "type": "string"
+                                  },
+                                  "datasetId": {
+                                    "const": "product",
+                                    "type": "string"
+                                  },
+                                  "sequence": {
+                                    "pattern": "^[0-9]+$",
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "datasetId",
+                                  "dataEpoch",
+                                  "sequence"
+                                ],
+                                "type": "object"
+                              }
+                            },
+                            "required": [
+                              "basis",
+                              "context",
+                              "semanticRevision",
+                              "definition",
+                              "entryRevision",
+                              "selectionRevision",
+                              "sourcePosition"
+                            ],
+                            "type": "object"
+                          },
+                          "type": "array"
+                        },
+                        "profile": {
+                          "const": "public-grouped-statement-phrase-v1",
+                          "type": "string"
+                        },
+                        "resultGrain": {
+                          "enum": [
+                            "work",
+                            "participant",
+                            "occurrence",
+                            "qualifiedFact",
+                            "supportingStatement"
+                          ],
+                          "type": "string"
+                        },
+                        "results": {
+                          "items": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "facts": {
+                                "items": {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "acceptanceContext": {
+                                      "type": "string"
+                                    },
+                                    "meaningKey": {
+                                      "type": "string"
+                                    },
+                                    "predicate": {
+                                      "type": "string"
+                                    },
+                                    "supportingStatements": {
+                                      "items": {
+                                        "type": "string"
+                                      },
+                                      "type": "array"
+                                    },
+                                    "value": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "meaningKey",
+                                    "acceptanceContext",
+                                    "predicate",
+                                    "value",
+                                    "supportingStatements"
+                                  ],
+                                  "type": "object"
+                                },
+                                "type": "array"
+                              },
+                              "mainVersion": {
+                                "type": "string"
+                              },
+                              "matchUnit": {
+                                "type": "string"
+                              },
+                              "occurrence": {
+                                "type": "string"
+                              },
+                              "participant": {
+                                "type": "string"
+                              },
+                              "score": {
+                                "type": "number"
+                              },
+                              "work": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "work",
+                              "mainVersion",
+                              "matchUnit",
+                              "score",
+                              "occurrence",
+                              "participant",
+                              "facts"
+                            ],
+                            "type": "object"
+                          },
+                          "type": "array"
+                        },
+                        "sourcePosition": {
+                          "properties": {
+                            "dataEpoch": {
+                              "type": "string"
+                            },
+                            "datasetId": {
+                              "const": "product",
+                              "type": "string"
+                            },
+                            "sequence": {
+                              "pattern": "^[0-9]+$",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "datasetId",
+                            "dataEpoch",
+                            "sequence"
+                          ],
+                          "type": "object"
+                        },
+                        "total": {
+                          "minimum": 0,
+                          "type": "integer"
+                        }
+                      },
+                      "required": [
+                        "contractVersion",
+                        "profile",
+                        "resultGrain",
+                        "complete",
+                        "countPrecision",
+                        "facetPrecision",
+                        "total",
+                        "sourcePosition",
+                        "indexGeneration",
+                        "groupGeneration",
+                        "interpretations",
+                        "results",
+                        "facets"
+                      ],
+                      "type": "object"
+                    },
                     {
                       "additionalProperties": false,
                       "properties": {
