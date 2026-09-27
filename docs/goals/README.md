@@ -68,7 +68,7 @@ review; workers propose out-of-scope work instead of doing it.
 ## Integration and QA
 
 - Workers run only their own checks through `goalctl test`, which bounds
-  concurrent QA stacks (default 8 slots, `GOAL_QA_SLOTS`).
+  concurrent QA stacks (default 4 slots, `GOAL_QA_SLOTS`).
 - The manager merges ready tasks in waves, one at a time, regenerates derived
   artifacts once (`task gen`), runs the static checks and one
   `goalctl test --affected <wave base>` run, then commits. Failures go back to
@@ -104,7 +104,7 @@ that can be served locally. It uses the credentials in `.temp/vault/` when
 needed, only for local host administration, and never copies them into briefs,
 commits, logs or prompts to other tools.
 
-Known host facts: Docker Desktop has 24 GB for QA stacks. Never choose "Reset to
+Known host facts: the host has 62 GB and Docker Desktop's VM 24 GiB (`MemoryMiB` in `~/.docker/desktop/settings-store.json`). On 2026-09-27 a 36 GiB VM, about a dozen agent workers and a six-shard affected run exhausted host memory and the kernel OOM-killed the whole VM; every later test failed on `ECONNREFUSED`. Run wave QA with `REZICS_QA_SHARDS=2` while workers hold QA stacks, and restart with `systemctl --user start docker-desktop` if it dies. Never choose "Reset to
 factory defaults", which deletes every named volume. Results produced while the
 engine was down are void. Run bulk volume copies alone: the engine panicked
 under full QA load during a 400,000-file copy. `~/.docker/daemon.json` sets

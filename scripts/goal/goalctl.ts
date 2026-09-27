@@ -804,7 +804,7 @@ async function status(): Promise<void> {
 }
 
 async function withSlot(command: string[]): Promise<number> {
-  const slots = Number(process.env.GOAL_QA_SLOTS ?? 8);
+  const slots = Number(process.env.GOAL_QA_SLOTS ?? 4);
   const dir = join(stateDir, 'qa-slots');
   mkdirSync(dir, { recursive: true });
   let held: string | undefined;
