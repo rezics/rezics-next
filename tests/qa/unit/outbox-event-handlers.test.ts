@@ -106,7 +106,7 @@ test('G-266: an unknown kind stops its ordered position with event identity and 
   const rows = [
     { results: { bindings: [{ controlSequence: binding('1'), routing: binding('route-1'),
       batch: binding(batchId), eventCount: binding('1') }] } },
-    { results: { bindings: [{ event: binding(eventId) }] } },
+    { results: { bindings: [{ event: binding(eventId), ordinal: binding('0') }] } },
     { boolean: true },
     { results: { bindings: [{ kind: binding(`${RV}UnknownNewEvent`), ordinal: binding('0'),
       action: binding('unknown.change'), receipt: binding('urn:rezics:receipt:unknown'),

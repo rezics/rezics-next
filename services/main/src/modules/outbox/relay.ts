@@ -400,13 +400,18 @@ export async function readNextMainOutboxBatch(
   if (!Number.isSafeInteger(count) || count > 100) throw new OutboxIncomplete('outbox event count exceeds admitted bound');
   const batchId = row.batch.value;
   iri(batchId);
-  const members = await fuseki.query(`PREFIX rv: <${RV}> SELECT ?event WHERE {
-    GRAPH ${iri(GRAPHS.outbox)} { ${iri(batchId)} rv:event ?event }
-  } ORDER BY ?event`);
-  const eventIds = (members.results?.bindings ?? []).map(member => member.event?.value ?? '');
-  if (eventIds.length !== count || new Set(eventIds).size !== count) {
-    throw new OutboxIncomplete('outbox batch event count differs from retained members');
+  const members = await fuseki.query(`PREFIX rv: <${RV}> SELECT ?event ?ordinal WHERE {
+    GRAPH ${iri(GRAPHS.outbox)} { ${iri(batchId)} rv:event ?event .
+      ?event rv:ordinal ?ordinal . }
+  }`);
+  const ordered = (members.results?.bindings ?? []).map(member => ({
+    eventId: member.event?.value ?? '', ordinal: decimal(member.ordinal?.value ?? ''),
+  })).sort((a, b) => a.ordinal < b.ordinal ? -1 : a.ordinal > b.ordinal ? 1 : 0);
+  if (ordered.length !== count || new Set(ordered.map(member => member.eventId)).size !== count
+    || ordered.some((member, index) => member.ordinal !== BigInt(index))) {
+    throw new OutboxIncomplete('outbox batch members differ from their ordinals');
   }
+  const eventIds = ordered.map(member => member.eventId);
   for (const eventId of eventIds) {
     iri(eventId);
     const exists = await fuseki.query(`ASK { GRAPH ${iri(GRAPHS.outbox)} { ${iri(eventId)} ?p ?o } }`);
