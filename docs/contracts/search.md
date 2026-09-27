@@ -655,24 +655,25 @@ policy; filtering privileged results only after matching is insufficient.
 
 The current Content phrase lane indexes public eligible body revisions only. A
 Content draft remains in PostgreSQL and its text never becomes a public MatchUnit
-until an exact publication and eligibility decision is projected. The Work title
-is public RDF metadata, but title text is not yet indexed by this body phrase
-lane. The assembler's general `rdfs:label` index also covers unrelated resources;
-its global hit count cannot serve as a bounded Work-title population for a joined
-title/body query. SEARCH14 requires a public title projection with an admitted
-field and generation, then two explicit per-field bindings joined on the same
-eligible result identity. A term conjunction within one predicate stays within
+until an exact publication and eligibility decision is projected. The dedicated
+Work title projection copies an admitted public title onto each selected public
+body unit. The assembler's general `rdfs:label` index also covers unrelated
+resources; its global hit count cannot serve as a bounded Work-title population.
+The title/body profile uses the dedicated `rv:publicTitle` field and two explicit
+per-field bindings joined on the same eligible result identity. A term conjunction
+within one predicate stays within
 one indexed triple; a title term and a body term require separate title and body
-bindings for that identity. The joined profile will rank by the sum of its one
+bindings for that identity. The joined profile ranks by the sum of its one
 title score and one body score, with Main Version IRI as the final ascending tie
 break. Multiple paths to the same binding cannot add the score twice. A body-only
-hit cannot silently satisfy a title term. The present
-response exposes result identity, score, count and population; it does
+hit cannot silently satisfy a title term. The response exposes result identity,
+score, count and population; it does
 not expose snippets or facets. The SEARCH03 native fixture compares those
 observable values before and after a retained private draft, checks the raw
 public jena-text graph for the private term, and repeats the public query after
-a different body is published. Title search and future snippet/facet surfaces
-need their own disclosure qualification when introduced.
+a different body is published. The title/body route has its own native field
+membership and unrelated-label check. Future snippet/facet surfaces need their
+own disclosure qualification when introduced.
 
 The prepared `public-main-title-body-v1` Work profile accepts `titleTerm`,
 `bodyTerm`, optional selected-body language and exact author. It binds one
@@ -682,14 +683,12 @@ IRI as the ascending tie break. Each field has an independent 513-hit raw probe;
 an over-budget field returns a typed budget outcome even when the joined relation
 would be empty. The title is copied from the Work's current `rdfs:label` only
 onto a selected public body unit and refreshed by title edits and replay. The
-query never counts the assembler's general `rdfs:label` postings. Activation of
-this profile requires the assembler to map `rv:publicTitle` as its own `publicTitle`
-field and a new qualified reader generation under `search-index-cjk-bigram-v2`.
+query never counts the assembler's general `rdfs:label` postings. The assembler
+maps `rv:publicTitle` as its own `publicTitle` field under
+`search-index-cjk-bigram-v2`.
 Its dedicated title sentinel must be returned by that exact field before this
 profile can report a complete result; an old or unmapped index is unavailable.
-Until the assembler map and rebuild are installed, the title field is not
-searchable on the deployed index. The corresponding page profile uses the same
-complete-relation restart contract.
+The corresponding page profile uses the same complete-relation restart contract.
 
 ## Freshness and generation lifecycle
 

@@ -105,9 +105,10 @@ closure, lost-replica sweep and recovery reopening. A growing hidden-match
 corpus checks that the query binds one concrete subject before Lucene matching.
 The 30-second sweep records possible delivery as `unconfirmed`; it never claims
 an offered frame was recalled or not delivered. These are SEARCH12's native
-profile assertions. SEARCH11 remains partial because the Content-owned private
-body path and searchable Context, statement, name and avatar owners are absent;
-this fixture cannot qualify their disclosure clauses.
+profile assertions. The separate owner-backed public field fixture admits
+Context labels, accepted Statement values, names and avatars before matching;
+it checks hidden fields against scores, facets and counts through both the owner
+and public route. The Content publication fixture covers the private draft body.
 
 The isolated `SEARCH02/SEARCH10` candidate-overflow fixture inserts 512 native
 text postings with no eligible Main relation and requires a complete empty result.
@@ -122,12 +123,14 @@ distinct search term. It compares public Content hits, scores, population and
 response fields across the draft write, probes the native public text graph,
 and repeats the private-term query after a different body is published. This
 qualifies the installed body-only response surface when its isolated integration
-tier passes. Title search, snippets and facets require separate cases if those
-surfaces are added.
+tier passes. The SEARCH14 native title/body fixture checks the separate title
+field and route binding against an unrelated `rdfs:label` resource. Snippets and
+facets require separate cases if those surfaces are added.
 
 Merged selected integration `20260926t122802-263b0c` and the QA coverage unit
-passed for this installed body-only lane. SEARCH03 is a complete-case candidate
-pending one clean recorded backend QA; the selection remains a partial run.
+passed for the body-only lane. The owner-backed field and public-route fixtures
+extend SEARCH03/SEARCH11 to Context, Statement, name and avatar disclosure.
+Their isolated selected tiers are not a clean recorded backend QA.
 
 The shared-stack `public-search-scale` fixture builds the rated Realm relation
 through native Work, Contribution, selection, classification and standing-rating

@@ -19,4 +19,13 @@ export const searchPagingCases: CaseDeclarations = {
     name: 'SEARCH03/SEARCH11: public route excludes a private Context before hits, score and facets' },
   { tier: 'integration', file: 'tests/qa/integration/search-disclosure-route.test.ts',
     name: 'SEARCH03/SEARCH11: a public Work title matches while its private draft body changes no public field' }],
+  SEARCH14: [{ tier: 'integration',
+    file: 'tests/qa/integration/content-search-public-title-native.test.ts',
+    name: 'SEARCH14: public title and body have independent native text membership' },
+  { tier: 'integration', file: 'tests/qa/integration/search-title-body-native.test.ts',
+    name: 'SEARCH14: dedicated public title and selected body join at one unit without unrelated labels' },
+  { tier: 'unit', file: 'tests/qa/unit/search-multifield.test.ts',
+    name: 'SEARCH14: title/body binds one public unit, sums one score per field and ignores labels' },
+  { tier: 'unit', file: 'tests/qa/unit/search-multifield.test.ts',
+    name: 'SEARCH14: an unmapped title field cannot report a false complete empty relation' }],
 };
