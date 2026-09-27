@@ -74,7 +74,8 @@ test('baseline demo seed: verified signups, Works, contributions, Spaces and per
       // provisioning and the author's baseline operations must still finish.
       expect(code, error).toBe(2);
       expect(error).toBe('');
-      const summary = `Seeded ${works.length} Works, ${realms.length} Realms, ${people.length} Account users, 9 Agents, 8 published contributions,`;
+      const published = works.filter(work => work.excerpt && work.id !== 'serial-ch3').length;
+      const summary = `Seeded ${works.length} Works, ${realms.length} Realms, 0 official Zones, ${people.length} Account users, 9 Agents, ${published} published contributions,`;
       if (!output.includes(summary)) console.log(output.split('\n').filter(line =>
         /Seeded|HTTP|API gaps/.test(line)).join('\n'));
       expect(output).toContain(summary);
@@ -90,7 +91,9 @@ test('baseline demo seed: verified signups, Works, contributions, Spaces and per
     mkdirSync(evidence, { recursive: true });
     writeFileSync(join(evidence, 'baseline-seed-evidence.json'), JSON.stringify({
       qaRunId: Bun.env.REZICS_QA_RUN_ID, attempts: 2, works: works.length, spaces: realms.length,
-      verifiedAccounts: people.length, agents: 9, publishedContributions: 8, explicitGrants: 0, gaps,
+      verifiedAccounts: people.length, agents: 9,
+      publishedContributions: works.filter(work => work.excerpt && work.id !== 'serial-ch3').length,
+      explicitGrants: 0, gaps,
     }, null, 2));
     console.log(gaps);
   } finally {

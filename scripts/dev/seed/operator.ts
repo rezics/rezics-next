@@ -3,7 +3,7 @@ import { Pool, type PoolClient } from 'pg';
 import { createAccountAuth } from '../../../services/account/src/auth.ts';
 import { SeedApi, type Credentials, type SeedEndpoints } from './api.ts';
 
-interface LocalOperatorInput { endpoints: SeedEndpoints; credentials: Credentials;
+export interface LocalOperatorInput { endpoints: SeedEndpoints; credentials: Credentials;
   accountDatabaseUrl: string; accountSecret: string; accessDatabaseUrl: string;
   accountSubject: string; ownerAccountSubject: string; actingSubject: string }
 
@@ -147,14 +147,16 @@ export async function grantCuratedCollectionSeed(input: LocalOperatorInput, coll
  * Authoring and reader progress still use the ordinary Main commands. */
 export async function grantHomeSeedAuthority(input: LocalOperatorInput,
   grants: readonly { action: 'work.edit' | 'work.read' | 'content.draft'
-    | 'content.publish' | 'content.search-eligibility' | 'publication.adopt'; scope: string }[]) {
+    | 'content.publish' | 'content.search-eligibility' | 'publication.adopt'
+    | 'rating.context.create'; scope: string }[]) {
   loopback(input.accessDatabaseUrl);
   const scopePrefix = { 'work.edit': 'work:edit:https://rezics.com/id/',
     'work.read': 'work:read:https://rezics.com/id/',
     'content.draft': 'content:draft:https://rezics.com/id/',
     'content.publish': 'content:publish:https://rezics.com/id/',
     'content.search-eligibility': 'content:search-eligibility:https://rezics.com/id/',
-    'publication.adopt': 'publication:adopt:https://rezics.com/id/' } as const;
+    'publication.adopt': 'publication:adopt:https://rezics.com/id/',
+    'rating.context.create': 'rating:context:https://rezics.com/id/' } as const;
   if (grants.length > 10 || grants.some(({ action, scope }) =>
     !scope.startsWith(scopePrefix[action])
     || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(
@@ -190,4 +192,15 @@ export async function grantHomeSeedAuthority(input: LocalOperatorInput,
     try { await client.query('ROLLBACK'); } catch { /* preserve first error */ }
     throw error;
   } finally { client.release(); await pool.end(); }
+}
+
+/** An official Realm accepts member reports only while its governance gate is open. */
+export async function openRealmReportScope(input: LocalOperatorInput, realm: string) {
+  loopback(input.accessDatabaseUrl);
+  if (!/^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/.test(realm)) throw new Error('Seed Realm id must be native');
+  const pool = new Pool({ connectionString: input.accessDatabaseUrl });
+  try {
+    await pool.query('INSERT INTO access.scope_gate (id) VALUES ($1) ON CONFLICT (id) DO NOTHING',
+      [`governance:realm:${realm}`]);
+  } finally { await pool.end(); }
 }

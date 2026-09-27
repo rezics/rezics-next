@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { parseOptions } from '../../../scripts/dev/seed/cli.ts';
+import { dryRunLines, parseOptions, steps } from '../../../scripts/dev/seed/cli.ts';
 import { people, realms, seedKey, semanticTypes, works } from '../../../scripts/dev/seed/plan.ts';
 
 describe('dev seed plan', () => {
@@ -32,5 +32,18 @@ describe('dev seed plan', () => {
     expect(parseOptions([])).toEqual({ dryRun: false, resetOwn: false });
     expect(parseOptions(['--dry-run', '--reset-own'])).toEqual({ dryRun: true, resetOwn: true });
     expect(() => parseOptions(['--remove-all'])).toThrow('Usage:');
+  });
+
+  test('dry run prints every demo sign-in and keeps one ordered list of seed steps', () => {
+    const lines = dryRunLines();
+    for (const person of people) {
+      expect(lines).toContain(`  ${person.name}: ${person.email} / ${person.password}`);
+    }
+    expect(steps.map(step => step.name)).toEqual([
+      'seedAccounts', 'seedWorks', 'seedRealms', 'seedContributions', 'seedAdoptions',
+      'seedRatings', 'seedLibrary', 'seedChapters', 'seedModeration', 'seedHomeFeed',
+      'seedProfileCredits', 'seedProfileBios', 'seedProfileShelves', 'seedProfileFollows',
+      'checkPublicReads', 'printSeedReport',
+    ]);
   });
 });

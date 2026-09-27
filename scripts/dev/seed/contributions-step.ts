@@ -1,0 +1,54 @@
+import { seedKey, works } from './plan.ts';
+import { seedReply } from './replies.ts';
+import type { ContributionReceipt, PublicationReceipt, SeedState } from './state.ts';
+
+export async function seedContributions(state: SeedState) {
+  const { api, created, publicForRealm, sessions } = state;
+  const owner = sessions[0]!;
+  const original = created.get('pride');
+  const translation = created.get('pride-zh');
+  if (original && translation) await state.optional('Translation link', () => api.post('/v1/translation-links', {
+    profile: 'translation-link-v1', targetWork: translation.work,
+    targetMainVersion: translation.mainVersion, targetMainRevision: translation.mainRevision,
+    sourceWork: original.work, sourceMainVersion: original.mainVersion,
+    sourceMainRevision: original.mainRevision, status: 'third-party', contentLanguage: 'zh-Hans',
+    translator: owner.actingSubject, publisher: owner.actingSubject,
+    evidence: 'https://www.gutenberg.org/ebooks/1342',
+    actingSubject: owner.actingSubject }, owner.token, seedKey('translation', 'pride-zh')));
+
+  for (const excerpt of works.filter(work => work.excerpt)) {
+    const target = created.get(excerpt.id)!;
+    const contribution = await state.optional('Text contribution', () => api.post<ContributionReceipt>(
+      '/v1/contributions', { profile: 'text-contribution-v1', work: target.work,
+        language: excerpt.language, body: excerpt.excerpt!, actingSubject: owner.actingSubject },
+      owner.token, seedKey('contribution', excerpt.id)));
+    if (!contribution) continue;
+    if (excerpt.id === 'serial-ch3') continue; // Leave one draft in the review queue.
+    const published = await state.optional('Contribution publication', () => api.post<PublicationReceipt>(
+      '/v1/contribution-publications', { profile: 'text-publication-v1',
+        contribution: contribution.contribution, expectedDraftHead: contribution.draftRevision,
+        expectedPublicationHead: null, rightsBasis: 'original-contribution', disclosure: 'public',
+        actingSubject: owner.actingSubject }, owner.token, seedKey('publication', excerpt.id)));
+    const selected = published && await state.optional('Main selection', () => api.post('/v1/publication-selections', {
+      profile: 'main-default-selection-v1', context: { kind: 'main-version-default', id: target.mainVersion },
+      work: target.work, contribution: contribution.contribution,
+      publicationDecision: published.publicationDecision, expectedSelectionHead: null,
+      selectionBasis: 'main-maintainer', actingSubject: owner.actingSubject },
+    owner.token, seedKey('selection', excerpt.id)));
+    if (published) state.publishedCount++;
+    if (selected) state.selectedCount++;
+    if (selected && published) publicForRealm.set(excerpt.id,
+      { contribution: contribution.contribution, decision: published.publicationDecision });
+    if (!published) continue;
+    const replyTarget = { id: `comment:${excerpt.id}`, work: target.work,
+      revision: contribution.draftRevision, language: 'en' };
+    const comment = await state.optional('Member comment', () => seedReply(api, sessions[1] ?? owner,
+      replyTarget, `I saved this passage from ${excerpt.title} to discuss with the reading group.`));
+    if (!comment) continue;
+    state.commentCount++;
+    const reply = await state.optional('Member reply', () => seedReply(api, sessions[2] ?? owner,
+      { ...replyTarget, id: `response:${excerpt.id}` },
+      'Which detail in this passage stood out to you?', comment));
+    if (reply) state.replyCount++;
+  }
+}

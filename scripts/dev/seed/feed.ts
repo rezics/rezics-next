@@ -28,6 +28,7 @@ export async function seedFeed(api: SeedApi, sessions: Session[], realms: { id: 
     }
   }
   let items: Item[] = [];
+  let lastProjection = 'unavailable';
   for (let attempt = 0; attempt < 30; attempt++) {
     const found: Item[] = [];
     let cursor: string | null = null, ready = false;
@@ -38,6 +39,7 @@ export async function seedFeed(api: SeedApi, sessions: Session[], realms: { id: 
       }
       if (!response.ok) { await response.body?.cancel(); ready = false; break; }
       const page = await response.json() as { items: Item[]; nextCursor: string | null; projection: { status: string } };
+      lastProjection = page.projection.status;
       found.push(...page.items); cursor = page.nextCursor;
       ready = page.projection.status === 'current';
       if (!ready || !cursor) break;
@@ -45,7 +47,7 @@ export async function seedFeed(api: SeedApi, sessions: Session[], realms: { id: 
     if (ready && found.length) { items = found.slice(0, 24); break; }
     await new Promise(resolve => setTimeout(resolve, 1000));
   }
-  if (!items.length) throw new Error('Home feed has no public activity after its bounded relay wait');
+  if (!items.length) throw new Error(`Home feed has no public activity after its bounded relay wait (${lastProjection})`);
   // Work follows make the signed-in New view useful even before a Realm has
   // reviewed an adoption. Only already public API results become follow targets.
   const works = [...new Set(items.flatMap(item => item.target.work ? [item.target.work] : []))];
