@@ -182,7 +182,9 @@ export async function restoreAdmittedComposition(env: WorkActivationEnvironment,
 
 export async function activateAdmittedCompositionStage(env: WorkActivationEnvironment,
   account: Account, access: Access, request: Request, input: { structure: string;
-    expectedHead: string; stageId: string; generation: string; revision: string; manifestDigest: string;
+  expectedHead: string; stageId: string; generation: string; revision: string; manifestDigest: string;
+    kind?: 'replace' | 'import' | 'refresh'; sourceRef?: string | null;
+    sourceRevision?: string | null; mappingPolicy?: 'source-key' | 'explicit' | null;
     actingSubject: string; idempotencyKey: string; onGraphStart: () => Promise<number>;
     onProjectionBatch: (previous: number) => Promise<number> }) {
   const digest = compositionStageDigest(input.structure, input.expectedHead,
@@ -196,6 +198,8 @@ export async function activateAdmittedCompositionStage(env: WorkActivationEnviro
   admission => restoreComposition(env, { admission, structure: input.structure,
     expectedHead: input.expectedHead, restoredFrom: input.expectedHead,
     stage: { id: input.stageId, generation: input.generation, revision: input.revision,
+      kind: input.kind, sourceRef: input.sourceRef, sourceRevision: input.sourceRevision,
+      mappingPolicy: input.mappingPolicy,
       manifestDigest: input.manifestDigest, onGraphStart: input.onGraphStart,
       onProjectionBatch: input.onProjectionBatch },
     canReadTarget: target => canReadStructureTarget(profile, { access, principal,

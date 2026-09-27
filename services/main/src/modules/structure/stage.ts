@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import type { Pool } from 'pg';
 import type { ImmutableObjects } from '../../infrastructure/immutable-objects.ts';
 import { hash } from '../work/activate.ts';
-import { COMPOSITION_PROFILE, derivedId, orderTreeKey, recordTreeKey } from './graph.ts';
+import { COMPOSITION_PROFILE, NATIVE_ID, derivedId, orderTreeKey, recordTreeKey } from './graph.ts';
 import { orderTree, recordTree } from './change.ts';
 import { checkOccurrenceRecord, checkStructureManifest, checkStructurePage,
   STRUCTURE_LIMITS, STRUCTURE_MANIFEST_FORMAT, STRUCTURE_PAGE_FORMAT,
@@ -16,6 +16,8 @@ const STAGE_MATERIALIZATION_LIMIT = STRUCTURE_LIMITS.stageRecords;
 
 interface StageRow {
   id: string; principal_id: string; structure: string; generation: string;
+  kind: 'replace' | 'import' | 'refresh'; source_ref: string | null;
+  source_revision: string | null; mapping_policy: 'source-key' | 'explicit' | null;
   base_head: string; status: 'staging' | 'sealed' | 'activated' | 'cancelled' | 'failed';
   lease_holder: string | null; lease_fence: string; lease_expires_at: Date | null;
   staged_pages: number; staged_records: string; staged_bytes: string;
@@ -27,6 +29,8 @@ interface StageRow {
 
 export interface StructureStage {
   id: string; structure: string; generation: string; baseHead: string;
+  kind: StageRow['kind']; sourceRef: string | null; sourceRevision: string | null;
+  mappingPolicy: StageRow['mapping_policy'];
   revision: string; status: StageRow['status']; holder: string | null; fence: string;
   pages: number; records: number; bytes: number; manifest: string | null;
   graphStarted: boolean; projectionBatches: number;
@@ -36,6 +40,8 @@ export interface StructureStage {
 
 function view(row: StageRow): StructureStage {
   return { id: row.id, structure: row.structure, generation: row.generation,
+    kind: row.kind, sourceRef: row.source_ref, sourceRevision: row.source_revision,
+    mappingPolicy: row.mapping_policy,
     baseHead: row.base_head, revision: row.revision
       ?? derivedId(`${row.id}\0composition\0revision`), status: row.status,
     holder: row.lease_holder, fence: String(row.lease_fence), pages: row.staged_pages,
@@ -51,9 +57,18 @@ export class StructureStageStore {
   constructor(private readonly pool: Pool, private readonly objects: ImmutableObjects) {}
 
   async create(input: { principalId: string; idempotencyKey: string; scope: string;
-    structure: string; baseHead: string }): Promise<StructureStage> {
+    structure: string; baseHead: string; kind?: 'replace' | 'import' | 'refresh';
+    sourceRef?: string; sourceRevision?: string; mappingPolicy?: 'source-key' | 'explicit' }):
+    Promise<StructureStage> {
+    const kind = input.kind ?? 'replace';
+    if ((kind === 'replace') !== (input.sourceRef === undefined && input.sourceRevision === undefined
+      && input.mappingPolicy === undefined) || kind !== 'replace'
+      && (!NATIVE_ID.test(input.sourceRef ?? '') || !NATIVE_ID.test(input.sourceRevision ?? '')
+        || !input.mappingPolicy)) throw new StructureStageInvalid('stage source metadata is invalid');
     const digest = hash(JSON.stringify({ family: 'structure-stage-create-v1',
-      structure: input.structure, baseHead: input.baseHead, kind: 'replace' }));
+      structure: input.structure, baseHead: input.baseHead, kind,
+      ...(kind !== 'replace' ? { sourceRef: input.sourceRef,
+        sourceRevision: input.sourceRevision, mappingPolicy: input.mappingPolicy } : {}) }));
     const prior = await this.pool.query<StageRow & { request_digest: string }>(
       'SELECT * FROM structure.stage_job WHERE principal_id = $1 AND idempotency_key = $2',
       [input.principalId, input.idempotencyKey]);
@@ -66,11 +81,13 @@ export class StructureStageStore {
     try {
       const inserted = await this.pool.query<StageRow>(`INSERT INTO structure.stage_job
         (id, principal_id, idempotency_key, request_digest, authority_scope, structure,
-          generation, kind, base_head, status, lease_holder, lease_fence, lease_expires_at, deadline_at)
-        VALUES ($1,$2,$3,$4,$5,$6,$7,'replace',$8,'staging',$9,1,
+          generation, kind, base_head, source_ref, source_revision, mapping_policy,
+          status, lease_holder, lease_fence, lease_expires_at, deadline_at)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,'staging',$13,1,
           clock_timestamp() + interval '5 minutes', clock_timestamp() + interval '1 day')
         RETURNING *`, [id, input.principalId, input.idempotencyKey, digest, input.scope,
-        input.structure, generation, input.baseHead, holder]);
+        input.structure, generation, kind, input.baseHead, input.sourceRef ?? null,
+        input.sourceRevision ?? null, input.mappingPolicy ?? null, holder]);
       return view(inserted.rows[0]!);
     } catch (error) {
       if ((error as { code?: string }).code === '23505') {
@@ -205,6 +222,9 @@ export class StructureStageStore {
       structureOf: input.mainVersion, profile: 'book-composition' as const,
       generation: stage.generation, pageFormat: STRUCTURE_PAGE_FORMAT,
       records: recordRoot, order: orderRoot, placementCount: order.size, measures: [],
+      ...(stage.sourceRef && stage.sourceRevision && stage.mappingPolicy
+        ? { source: { ref: stage.sourceRef, revision: stage.sourceRevision,
+          mappingPolicy: stage.mappingPolicy } } : {}),
       model: COMPOSITION_PROFILE, shape: COMPOSITION_PROFILE };
     const bytes = new TextEncoder().encode(JSON.stringify(manifest));
     checkStructureManifest(bytes);

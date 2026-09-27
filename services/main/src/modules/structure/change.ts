@@ -518,11 +518,16 @@ async function projectStageBatch(env: WorkActivationEnvironment, admission: Admi
 
 function revisionTriples(env: WorkActivationEnvironment, input: { revision: string; structure: string;
   predecessor?: string; operation: string; kind: string; generation: string; manifest: string;
-  count: number; restoredFrom?: string }): string {
+  count: number; restoredFrom?: string; source?: { ref: string; revision: string;
+    mappingPolicy: 'source-key' | 'explicit' } }): string {
   return `${iri(input.revision)} a rv:StructureRevision, rv:RevisionAnchor ;
     rv:component ${iri(input.structure)} ;
     ${input.predecessor ? `rv:predecessor ${iri(input.predecessor)} ;` : ''}
     ${input.restoredFrom ? `rv:restoredFrom ${iri(input.restoredFrom)} ;` : ''}
+    ${input.source ? `rv:importSource ${iri(input.source.ref)} ;
+    rv:importSourceRevision ${iri(input.source.revision)} ;
+    rv:mappingPolicy rv:${input.source.mappingPolicy === 'source-key'
+      ? 'SourceKeyCorrespondence' : 'ExplicitCorrespondence'} ;` : ''}
     rv:operation ${iri(input.operation)} ; rv:structureOperation rv:${input.kind} ;
     rv:generation ${iri(input.generation)} ; rv:manifest ${iri(manifestIri(input.manifest))} ;
     rv:placementCount ${input.count} ; rv:modelRevision ${iri(COMPOSITION_PROFILE)} ;
@@ -1376,6 +1381,8 @@ export interface RestoreCompositionIntent {
   /** Rechecked for every active target just before the guarded activation. */
   canReadTarget: (target: string) => Promise<boolean>;
   stage?: { id: string; generation: string; revision: string; manifestDigest: string;
+    kind?: 'replace' | 'import' | 'refresh'; sourceRef?: string | null;
+    sourceRevision?: string | null; mappingPolicy?: 'source-key' | 'explicit' | null;
     onGraphStart: () => Promise<number>;
     onProjectionBatch: (previous: number) => Promise<number> };
 }
@@ -1426,6 +1433,12 @@ export async function restoreComposition(env: WorkActivationEnvironment, intent:
     }
     if (error instanceof ObjectUnavailable) throw new StructureObjectUnavailable(error.message);
     throw error;
+  }
+  const imported = intent.stage?.kind === 'import' || intent.stage?.kind === 'refresh';
+  if (imported && (!sourceManifest.source || sourceManifest.source.ref !== intent.stage?.sourceRef
+    || sourceManifest.source.revision !== intent.stage?.sourceRevision
+    || sourceManifest.source.mappingPolicy !== intent.stage?.mappingPolicy)) {
+    throw new StructureObjectCorrupt('staged source metadata differs from the refresh intent');
   }
   const materializationLimit = intent.stage ? STRUCTURE_LIMITS.stageRecords : STRUCTURE_LIMITS.segmentMembers;
   if (sourceManifest.structure !== header.structure || sourceManifest.structureOf !== header.component
@@ -1566,8 +1579,12 @@ export async function restoreComposition(env: WorkActivationEnvironment, intent:
       rv:stagedBy ${iri(operation)} ; rv:baseRevision ${iri(intent.expectedHead)} ;
       rv:placementCount ${active.length} .`;
     const candidateRevisionTriples = revisionTriples(env, { revision, structure: header.structure,
-      predecessor: intent.expectedHead, operation, kind: 'StructureReplace', generation,
-      manifest: next, count: active.length });
+      predecessor: intent.expectedHead, operation,
+      kind: intent.stage.kind === 'refresh' ? 'StructureRefresh'
+        : intent.stage.kind === 'import' ? 'StructureImport' : 'StructureReplace',
+      generation, manifest: next, count: active.length,
+      ...(imported ? { source: sourceManifest.source as { ref: string; revision: string;
+        mappingPolicy: 'source-key' | 'explicit' } } : {}) });
     const totalBatches = Math.max(1, Math.ceil(records.length / STRUCTURE_LIMITS.projectionBatchRecords));
     let checkpoint = await intent.stage.onGraphStart();
     if (checkpoint > totalBatches) throw new CompositionCorrupt('stage projection checkpoint exceeds its manifest');

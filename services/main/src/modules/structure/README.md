@@ -48,6 +48,17 @@ they never use the current projection for an older revision. The result reports
 one page read and one page write for a committed edit, with zero placement,
 segment and rebalance writes. A stale head records a terminal rejection.
 
+Book import and refresh read the exact source revision, retained source basis
+and expected local head, with at most 4,096 records in each. Source keys map to
+stable destination occurrences; the three-way planner counts comparisons and
+reports simultaneous divergent content, removal, order or child correspondence
+as a conflict. A planned result is checkpointed as immutable stage pages before
+the existing lease-fenced activation. Each graph projection receipt contains at
+most 30 records, and the final head switch uses the expected head. Planning
+cost is O(n log n) for at most three bounded record sets and O(n) memory;
+activation retains the stage's per-batch cost. Replays use the stage key and
+graph receipt rather than rebuilding an already activated result.
+
 Copy `tests/qa/integration/structure-composition.test.ts` for real admission,
 replay, stale head, immutable read and graph validation checks. Copy the page
 growth test in `services/main/tests/structure-schema.test.ts` for fan-out and

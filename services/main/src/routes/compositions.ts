@@ -15,6 +15,8 @@ import { StructureObjectCorrupt, StructureObjectUnavailable } from '../modules/s
 import { InvalidStructureObject, type OccurrenceRecord } from '../modules/structure/format.ts';
 import { StructureStageConflict, StructureStageInvalid, StructureStageUnavailable }
   from '../modules/structure/stage.ts';
+import { planBookRefresh, readBookStructureSnapshot, StructureRefreshInvalid }
+  from '../modules/structure/refresh.ts';
 import { assertGraphAdmissionOpen } from '../modules/work/restore-lineage.ts';
 import { pendingOperation, problemResult } from '../api-contract.ts';
 import { authorizedReadProblems } from '../api-responses.ts';
@@ -75,6 +77,7 @@ export const openApiOperations = {
   '/v1/compositions/{id}/stages/{stage}/pages/{ordinal}': { put: { bearer: true } },
   '/v1/compositions/{id}/stages/{stage}/seal': { post: { bearer: true } },
   '/v1/compositions/{id}/stages/{stage}/activate': { post: { bearer: true } },
+  '/v1/compositions/{id}/refreshes': { post: { bearer: true, idempotencyKey: true } },
 } as const;
 const sealPageResult = t.Object({ structure: ref, seal: ref, structureRevision: ref,
   coverage: t.Union([t.Literal('complete'), t.Literal('partial')]), unavailableCount: t.Integer(),
@@ -92,6 +95,9 @@ function key(request: Request): string | null {
 function compositionError(error: unknown): Response {
   if (error instanceof StructureStageInvalid || error instanceof InvalidStructureObject) {
     return problem(400, 'invalid_structure_stage', error.message);
+  }
+  if (error instanceof StructureRefreshInvalid) {
+    return problem(400, 'invalid_structure_refresh', error.message);
   }
   if (error instanceof StructureStageConflict) return problem(409, 'structure_stage_conflict', error.message);
   if (error instanceof StructureStageUnavailable) return problem(404, 'structure_stage_unavailable',
@@ -112,6 +118,9 @@ function compositionError(error: unknown): Response {
 const writeBody = t.Object({ actingSubject: ref }, { additionalProperties: false });
 
 const stageResult = t.Object({ id: groupUuid, structure: ref, generation: ref,
+  kind: t.Union([t.Literal('replace'), t.Literal('import'), t.Literal('refresh')]),
+  sourceRef: t.Nullable(ref), sourceRevision: t.Nullable(ref),
+  mappingPolicy: t.Nullable(t.Union([t.Literal('source-key'), t.Literal('explicit')])),
   baseHead: ref, revision: ref, status: t.Union([t.Literal('staging'), t.Literal('sealed'),
     t.Literal('activated'), t.Literal('cancelled'), t.Literal('failed')]),
   holder: t.Nullable(groupUuid), fence: t.String(), pages: t.Integer(), records: t.Integer(),
@@ -122,6 +131,9 @@ const stageResult = t.Object({ id: groupUuid, structure: ref, generation: ref,
 const stageResponses = { 200: stageResult, 201: stageResult, 400: problemResult(400),
   401: problemResult(401), 403: problemResult(403), 404: problemResult(404),
   409: problemResult(409), 500: problemResult(500), 503: problemResult(503) };
+const refreshConflict = t.Object({ ...problemResult(409).properties,
+  conflicts: t.Array(t.Object({ sourceKey: t.String(), reason: t.String() })) });
+const refreshResponses = { ...stageResponses, 409: t.Union([problemResult(409), refreshConflict]) };
 const stageParams = t.Object({ id: groupUuid, stage: groupUuid });
 
 function compositionStageRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
@@ -228,6 +240,8 @@ function compositionStageRoutes(fuseki: FusekiClient, work: MainWorkDependencies
         const result = await activateAdmittedCompositionStage(work.environment, work.account,
           work.access, request, { structure, expectedHead: stage.baseHead, stageId: stage.id,
             generation: stage.generation, revision: stage.revision, manifestDigest: stage.manifest,
+            kind: stage.kind, sourceRef: stage.sourceRef, sourceRevision: stage.sourceRevision,
+            mappingPolicy: stage.mappingPolicy,
             actingSubject: body.actingSubject, idempotencyKey: `structure-stage-${stage.id}`,
             onGraphStart: () => store().beginActivation(stage.id, proof.principalId, structure),
             onProjectionBatch: previous => store().advanceProjectionBatch(stage.id,
@@ -240,6 +254,96 @@ function compositionStageRoutes(fuseki: FusekiClient, work: MainWorkDependencies
           throw new CompositionConflict('stage activation was rejected by the graph');
         }
         if (!result.revision) throw new StructureStageConflict('stage activation lacks a revision');
+        const activated = await store().activate(stage.id, proof.principalId, structure,
+          { receipt: result.receipt, dataEpoch: result.dataEpoch, sequence: result.sequence,
+            revision: result.revision });
+        return Response.json({ ...activated, ...(result.cost ? { cost: result.cost } : {}) },
+          { headers: { 'cache-control': 'no-store' } });
+      } catch (error) { return compositionError(error); }
+    })
+    .post('/v1/compositions/:id/refreshes', {
+      params: t.Object({ id: groupUuid }),
+      body: t.Object({ expectedHead: ref, sourceStructure: ref, sourceRevision: ref,
+        actingSubject: ref }, { additionalProperties: false }),
+      response: { ...refreshResponses, 202: pendingOperation },
+    }, async ({ request, params, body }) => {
+      const idempotencyKey = key(request);
+      if (!idempotencyKey) return problem(400, 'invalid_idempotency_key', 'A valid Idempotency-Key is required');
+      try {
+        const structure = `https://rezics.com/id/${params.id}`;
+        const { header, proof, principal } = await context(request, structure, body.actingSubject);
+        if (body.sourceStructure === structure) {
+          throw new StructureRefreshInvalid('a Book cannot refresh from itself');
+        }
+        const sourceHeader = await readCompositionHeader(work.environment, body.sourceStructure);
+        if (!sourceHeader || sourceHeader.profile !== 'book-composition'
+          || !await work.access.canReadWork(principal, body.actingSubject, sourceHeader.owner)) {
+          throw new CompositionUnavailable('Book source is unavailable');
+        }
+        const local = await readBookStructureSnapshot(work.environment, structure, body.expectedHead);
+        const priorSource = local.manifest.source;
+        if (priorSource && (priorSource.ref !== body.sourceStructure
+          || priorSource.mappingPolicy !== 'source-key')) {
+          throw new StructureRefreshInvalid('Book source correspondence differs from retained basis');
+        }
+        const source = await readBookStructureSnapshot(work.environment,
+          body.sourceStructure, body.sourceRevision);
+        const base = priorSource ? await readBookStructureSnapshot(work.environment,
+          body.sourceStructure, priorSource.revision) : undefined;
+        let stage = await store().create({ principalId: proof.principalId,
+          idempotencyKey: `refresh:${idempotencyKey}`, scope: proof.scope, structure,
+          baseHead: body.expectedHead, kind: base ? 'refresh' : 'import',
+          sourceRef: body.sourceStructure, sourceRevision: body.sourceRevision,
+          mappingPolicy: 'source-key' });
+        if (stage.status === 'cancelled') throw new StructureStageConflict('refresh plan was rejected');
+        if (stage.status === 'activated') return Response.json(stage,
+          { headers: { 'cache-control': 'no-store' } });
+        if (header.head !== body.expectedHead) {
+          if (stage.status === 'staging') await store().cancel(stage.id, proof.principalId, structure);
+          throw new StaleCompositionHead('refresh basis is stale');
+        }
+        if (stage.status === 'staging') {
+          const plan = planBookRefresh({ source, ...(base ? { base } : {}), local,
+            revision: stage.revision });
+          if (plan.conflicts.length) {
+            await store().cancel(stage.id, proof.principalId, structure);
+            return Response.json({ type: 'https://rezics.com/problems/structure_refresh_conflict',
+              title: 'Source and local changes need a correspondence decision', status: 409,
+              code: 'structure_refresh_conflict', conflicts: plan.conflicts },
+            { status: 409, headers: { 'cache-control': 'no-store' } });
+          }
+          stage = await store().renew(stage.id, proof.principalId, structure);
+          const records = [...plan.records].sort((a, b) => a.occurrence.localeCompare(b.occurrence));
+          for (let ordinal = 0; ordinal * 256 < records.length; ordinal++) {
+            stage = await store().upload({ id: stage.id, principalId: proof.principalId,
+              structure, holder: stage.holder!, fence: stage.fence, ordinal,
+              entries: records.slice(ordinal * 256, ordinal * 256 + 256) });
+          }
+          stage = await store().seal({ id: stage.id, principalId: proof.principalId,
+            structure, mainVersion: header.mainVersion, holder: stage.holder!, fence: stage.fence,
+            canReadTarget: target => canReadStructureTarget(structureProfileFor(header.profile), {
+              access: work.access, principal, actingSubject: body.actingSubject, target }) });
+        }
+        if (stage.status !== 'sealed' || !stage.manifest) {
+          throw new StructureStageConflict('refresh stage is not sealed');
+        }
+        const result = await activateAdmittedCompositionStage(work.environment, work.account,
+          work.access, request, { structure, expectedHead: stage.baseHead, stageId: stage.id,
+            generation: stage.generation, revision: stage.revision, manifestDigest: stage.manifest,
+            kind: stage.kind, sourceRef: stage.sourceRef, sourceRevision: stage.sourceRevision,
+            mappingPolicy: stage.mappingPolicy, actingSubject: body.actingSubject,
+            idempotencyKey: `structure-stage-${stage.id}`,
+            onGraphStart: () => store().beginActivation(stage.id, proof.principalId, structure),
+            onProjectionBatch: previous => store().advanceProjectionBatch(stage.id,
+              proof.principalId, structure, previous) });
+        if (result.outcome === 'cancelled') {
+          await store().fail(stage.id, proof.principalId, structure, {
+            receipt: result.receipt, dataEpoch: result.dataEpoch, sequence: result.sequence,
+            reason: result.reason ?? 'graph-cancelled' });
+          if (result.reason === 'stale-head') throw new StaleCompositionHead('refresh basis is stale');
+          throw new CompositionConflict('refresh activation was rejected by the graph');
+        }
+        if (!result.revision) throw new StructureStageConflict('refresh receipt lacks a revision');
         const activated = await store().activate(stage.id, proof.principalId, structure,
           { receipt: result.receipt, dataEpoch: result.dataEpoch, sequence: result.sequence,
             revision: result.revision });
