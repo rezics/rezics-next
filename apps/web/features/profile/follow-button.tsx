@@ -10,6 +10,7 @@ import { browserMainApi } from '../api/browser.ts';
 import type { MainClient } from '../discover/types.ts';
 import Link from '../shell/localized-link.tsx';
 import type { ProfileMessages } from './messages.ts';
+import { followerLabel } from './followers.ts';
 import type { FollowerCount } from './types.ts';
 
 /** What a follow write came to: saved with Main's new revision, stale (changed elsewhere first) or failed. */
@@ -47,14 +48,6 @@ export function mainFollowActions(target: string, actingSubject: string,
       return data ? { following: data.following ?? false, revision: data.revision } : null;
     },
   };
-}
-
-/** "794 followers", or "1,000+ followers" when Main stopped counting. */
-export function followerLabel(followers: FollowerCount, locale: UiLocale, messages: ProfileMessages): string {
-  const t = materializeData(messages, { locale });
-  return followers.kind === 'lower-bound'
-    ? t.followersAtLeast({ count: new Intl.NumberFormat(locale).format(followers.value) })
-    : t.followers(followers.value);
 }
 
 const bump = (followers: FollowerCount | null, by: number): FollowerCount | null =>

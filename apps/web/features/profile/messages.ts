@@ -51,6 +51,7 @@ export const messages = {
 
   nothingYetTitle: insert('{{name}} hasn’t shared anything yet', { name: String }),
   nothingYetBody: 'Works they are credited on and bookshelves they make public will appear here.',
+  nothingYetWorksBody: 'Works they are credited on will appear here.',
   unavailableTitle: 'Couldn’t load this profile',
   unavailableBody: 'REZICS couldn’t reach this profile just now. Try again in a moment.',
   retry: 'Retry',

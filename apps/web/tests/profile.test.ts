@@ -1,12 +1,13 @@
 import { describe, expect, test } from 'bun:test';
 import { creditedCard, creditLine, shelfCard, worksSummary } from '../features/profile/cards.ts';
 import { authorWorks, organizationWorks, storyProfile } from '../features/profile/fixtures.ts';
-import { followerLabel } from '../features/profile/follow-button.tsx';
+import { followerLabel } from '../features/profile/followers.ts';
 import { messages } from '../features/profile/messages.ts';
 import zhHans from '../features/profile/messages/zh-Hans.ts';
 import { profileJsonLd, profileMetadata } from '../features/profile/metadata.ts';
 import { initials } from '../features/profile/profile-avatar.tsx';
-import { parseCursor, parseHandleSegment, parseShelfStatus, profileHref } from '../features/profile/route.ts';
+import { isNativeHandle, parseCursor, parseHandleSegment, parseShelfStatus, profileHref }
+  from '../features/profile/route.ts';
 import { isPublicPagePath, localizedPath, pathLocale } from '../i18n/locale.ts';
 
 const zh = { ...messages, ...zhHans };
@@ -105,6 +106,14 @@ describe('profile metadata', () => {
     expect(profileMetadata(quiet, false, 'en', messages).description).toStartWith('What Lin Mei 林梅 is reading');
     expect(profileMetadata(storyProfile({ bio: null, library: { visibility: 'private', statusShelvesVisible: false } }),
       false, 'en', messages).description).toBe('Lin Mei 林梅 on REZICS.');
+    // A native handle is an identifier: it resolves, but titles name only the Agent.
+    const native = storyProfile({ handle: `agent-${uuid}` });
+    expect(isNativeHandle(native.handle)).toBe(true);
+    expect(isNativeHandle('lin_mei')).toBe(false);
+    expect(profileMetadata(native, true, 'en', messages)).toMatchObject({ title: 'Lin Mei 林梅',
+      openGraph: { type: 'profile' } });
+    expect(profileMetadata(native, true, 'en', messages).openGraph).not.toHaveProperty('username');
+    expect(JSON.parse(profileJsonLd(native, null)).mainEntity).not.toHaveProperty('alternateName');
   });
 
   test('JSON-LD describes a ProfilePage and cannot close its script element', () => {

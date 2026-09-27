@@ -47,6 +47,7 @@ export default {
 
   nothingYetTitle: insert('{{name}}はまだ何も公開していません', { name: String }),
   nothingYetBody: 'クレジットされた作品や公開した本棚がここに表示されます。',
+  nothingYetWorksBody: 'クレジットされた作品がここに表示されます。',
   unavailableTitle: 'このプロフィールを読み込めませんでした',
   unavailableBody: 'REZICS が今このプロフィールを取得できませんでした。しばらくしてからもう一度お試しください。',
   retry: '再試行',

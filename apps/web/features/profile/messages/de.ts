@@ -50,6 +50,7 @@ export default {
 
   nothingYetTitle: insert('{{name}} hat noch nichts geteilt', { name: String }),
   nothingYetBody: 'Werke mit Nennung und öffentliche Regale erscheinen hier.',
+  nothingYetWorksBody: 'Werke mit Nennung erscheinen hier.',
   unavailableTitle: 'Profil konnte nicht geladen werden',
   unavailableBody: 'REZICS konnte dieses Profil gerade nicht abrufen. Versuche es gleich noch einmal.',
   retry: 'Erneut versuchen',

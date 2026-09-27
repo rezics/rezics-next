@@ -50,6 +50,7 @@ export default {
 
   nothingYetTitle: insert('{{name}} todavía no ha compartido nada', { name: String }),
   nothingYetBody: 'Aquí aparecerán las obras en las que figura y las estanterías que haga públicas.',
+  nothingYetWorksBody: 'Aquí aparecerán las obras en las que figura.',
   unavailableTitle: 'No se pudo cargar este perfil',
   unavailableBody: 'REZICS no pudo acceder a este perfil ahora mismo. Vuelve a intentarlo en un momento.',
   retry: 'Reintentar',

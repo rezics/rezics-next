@@ -50,6 +50,7 @@ export default {
 
   nothingYetTitle: insert('{{name}} n’a encore rien partagé', { name: String }),
   nothingYetBody: 'Les œuvres qui lui sont créditées et ses étagères publiques apparaîtront ici.',
+  nothingYetWorksBody: 'Les œuvres qui lui sont créditées apparaîtront ici.',
   unavailableTitle: 'Impossible de charger ce profil',
   unavailableBody: 'REZICS n’a pas pu joindre ce profil pour le moment. Réessayez dans un instant.',
   retry: 'Réessayer',

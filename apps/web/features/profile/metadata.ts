@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import { materializeData } from 'native-i18n';
 import type { UiLocale } from '../../i18n/define.ts';
 import type { ProfileMessages } from './messages.ts';
+import { isNativeHandle } from './route.ts';
 import type { AgentProfile } from './types.ts';
 
 /**
@@ -14,12 +15,13 @@ export function profileMetadata(profile: AgentProfile, credited: boolean, locale
   messages: ProfileMessages): Metadata {
   const t = materializeData(messages, { locale });
   const name = profile.displayName;
-  const title = t.profileTitle({ name, handle: profile.handle });
+  const title = isNativeHandle(profile.handle) ? name : t.profileTitle({ name, handle: profile.handle });
   const description = profile.bio?.text
     ?? (profile.kind === 'organization' ? t.organizationDescription({ name })
       : credited ? t.authorDescription({ name })
         : profile.library.statusShelvesVisible ? t.readerDescription({ name }) : t.profileDescription({ name }));
-  return { title, description, openGraph: { type: 'profile', title, description, username: profile.handle } };
+  return { title, description, openGraph: { type: 'profile', title, description,
+    ...(isNativeHandle(profile.handle) ? {} : { username: profile.handle }) } };
 }
 
 /**
@@ -28,7 +30,7 @@ export function profileMetadata(profile: AgentProfile, credited: boolean, locale
  */
 export function profileJsonLd(profile: AgentProfile, followers: number | null): string {
   const entity = { '@type': profile.kind === 'person' ? 'Person' : 'Organization', name: profile.displayName,
-    alternateName: `@${profile.handle}`, identifier: profile.id,
+    ...(isNativeHandle(profile.handle) ? {} : { alternateName: `@${profile.handle}` }), identifier: profile.id,
     ...(profile.bio ? { description: profile.bio.text } : {}),
     ...(followers === null ? {} : { interactionStatistic: { '@type': 'InteractionCounter',
       interactionType: 'https://schema.org/FollowAction', userInteractionCount: followers } }) };

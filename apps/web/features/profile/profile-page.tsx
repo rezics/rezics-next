@@ -18,10 +18,11 @@ import Link from '../shell/localized-link.tsx';
 import { PageContainer } from '../shell/page.tsx';
 import { Expandable } from '../work-page/expandable.tsx';
 import { creditedCard, shelfCard, worksSummary } from './cards.ts';
-import { type FollowActions, FollowControl, followerLabel } from './follow-button.tsx';
+import { type FollowActions, FollowControl } from './follow-button.tsx';
+import { followerLabel } from './followers.ts';
 import type { ProfileMessages } from './messages.ts';
 import { ProfileAvatar } from './profile-avatar.tsx';
-import { profileHref, type ProfileView } from './route.ts';
+import { isNativeHandle, profileHref, type ProfileView } from './route.ts';
 import type { AgentProfile, AgentWorksPage, FollowState, LibraryView, Loaded, ReadFailure, ShelfCard,
   ShelfStatus } from './types.ts';
 
@@ -77,7 +78,8 @@ function ProfileHeader({ profile, credited, follow, reader, followActions, local
       <p className="font-medium text-muted-foreground text-sm">{kindLabel(profile, credited, t)}</p>
       <h1 className="text-balance font-semibold font-work-title text-3xl/tight tracking-tight [overflow-wrap:anywhere]
         sm:text-5xl/tight">{profile.displayName}</h1>
-      <p className="text-muted-foreground [overflow-wrap:anywhere]">@{profile.handle}</p>
+      {isNativeHandle(profile.handle) ? null
+        : <p className="text-muted-foreground [overflow-wrap:anywhere]">@{profile.handle}</p>}
     </div>
     <div className="col-span-2 grid content-start gap-5 sm:col-span-1 sm:col-start-2">
       {own ? <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
@@ -256,12 +258,13 @@ export function ProfilePage({ profile, works, follow, library, reader, readerAct
   return <ReaderActionsProvider signedIn={reader.signedIn} actions={readerActions}
     signInHref={signInPath(localizedPath(profileHref(profile.handle), locale))}
     actingSubject={reader.seed === null ? null : reader.actingSubject} seed={reader.seed ?? undefined}>
-    <PageContainer className="grid gap-12">
+    {/* Names and headings mix Latin and CJK ("Moonlit Scribe的书架"); space them apart. */}
+    <PageContainer className="grid gap-12 [text-autospace:normal]">
       <ProfileHeader profile={profile} credited={credited} follow={follow} reader={reader}
         followActions={followActions} locale={locale} messages={messages} />
       {worksRegion || libraryRegion ? <div className="grid gap-12">{worksRegion}{libraryRegion}</div>
         : <EmptyState icon={UserRoundIcon} title={t.nothingYetTitle({ name: profile.displayName })}
-          description={t.nothingYetBody} />}
+          description={profile.kind === 'person' ? t.nothingYetBody : t.nothingYetWorksBody} />}
     </PageContainer>
   </ReaderActionsProvider>;
 }
@@ -289,7 +292,7 @@ function ListFrame({ profile, title, count, view, cursor, nextCursor, reader, re
   return <ReaderActionsProvider signedIn={reader.signedIn} actions={readerActions}
     signInHref={signInPath(localizedPath(profileHref(profile.handle, view, cursor), locale))}
     actingSubject={reader.seed === null ? null : reader.actingSubject} seed={reader.seed ?? undefined}>
-    <PageContainer className="grid gap-8">
+    <PageContainer className="grid gap-8 [text-autospace:normal]">
       <header className="grid gap-4">
         <Link href={profileHref(profile.handle)} className="flex w-fit items-center gap-3 rounded-full pe-3
           outline-none hover:bg-accent/60 focus-visible:ring-2 focus-visible:ring-ring">
@@ -297,7 +300,8 @@ function ListFrame({ profile, title, count, view, cursor, nextCursor, reader, re
             avatarQuery={reader.avatarQuery} size="sm" />
           <span className="grid min-w-0">
             <span className="truncate font-medium">{profile.displayName}</span>
-            <span className="truncate text-muted-foreground text-sm">@{profile.handle}</span>
+            {isNativeHandle(profile.handle) ? null
+              : <span className="truncate text-muted-foreground text-sm">@{profile.handle}</span>}
           </span>
           <span className="sr-only">{t.backTo({ name: profile.displayName })}</span>
         </Link>

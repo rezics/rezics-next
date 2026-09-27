@@ -47,6 +47,7 @@ export default {
 
   nothingYetTitle: insert('{{name}} 님이 아직 공유한 것이 없습니다', { name: String }),
   nothingYetBody: '크레디트된 작품과 공개한 책장이 여기에 표시됩니다.',
+  nothingYetWorksBody: '크레디트된 작품이 여기에 표시됩니다.',
   unavailableTitle: '이 프로필을 불러오지 못했습니다',
   unavailableBody: 'REZICS가 지금 이 프로필을 가져오지 못했습니다. 잠시 후 다시 시도해 주세요.',
   retry: '다시 시도',

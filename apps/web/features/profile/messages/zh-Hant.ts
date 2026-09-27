@@ -47,6 +47,7 @@ export default {
 
   nothingYetTitle: insert('{{name}}還沒有分享任何內容', { name: String }),
   nothingYetBody: '署名的作品和公開的書架會顯示在這裡。',
+  nothingYetWorksBody: '署名的作品會顯示在這裡。',
   unavailableTitle: '無法載入這個個人檔案',
   unavailableBody: 'REZICS 暫時無法讀取這個個人檔案，請稍後再試。',
   retry: '重試',

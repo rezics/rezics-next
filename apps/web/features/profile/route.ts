@@ -25,6 +25,12 @@ export function parseHandleSegment(segment: string): string | null {
   return vanity.test(handle) || native.test(handle) ? handle : null;
 }
 
+/**
+ * Whether a handle is the Agent's native address (`agent-{uuid}`). It still
+ * resolves, but it is an identifier, so pages show and title only vanity handles.
+ */
+export const isNativeHandle = (handle: string) => native.test(handle);
+
 /** Main's reading shelves in the order a profile lists them, as Goodreads does. */
 export const shelfStatuses = ['reading', 'read', 'want-to-read'] as const satisfies readonly ShelfStatus[];
 

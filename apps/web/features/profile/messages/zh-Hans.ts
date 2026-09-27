@@ -47,6 +47,7 @@ export default {
 
   nothingYetTitle: insert('{{name}}还没有分享内容', { name: String }),
   nothingYetBody: '署名的作品和公开的书架会显示在这里。',
+  nothingYetWorksBody: '署名的作品会显示在这里。',
   unavailableTitle: '未能加载这个个人主页',
   unavailableBody: 'REZICS 暂时无法读取这个个人主页，请稍后再试。',
   retry: '重试',
