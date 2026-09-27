@@ -6,7 +6,7 @@ import type React from 'react';
 import { cn } from '../utils.ts';
 import { Button } from './button.tsx';
 import { FieldLabel } from './field.tsx';
-import { Input, type InputProps } from './input.tsx';
+import { type InputProps, inputVariants } from './input.tsx';
 
 export const useNumberInput = useNumberInputContext;
 
@@ -15,10 +15,12 @@ interface NumberInputProps
     Pick<InputProps, 'size'> {}
 
 export const NumberInput = (props: NumberInputProps) => {
-  const { size = 'md', className, ...rest } = props;
+  const { size = 'md', translations, className, ...rest } = props;
 
   return (
     <ArkNumberInput.Root
+      // Zag's defaults are "increment value" and "decrease value"; keep the pair consistent.
+      translations={{ incrementLabel: 'Increase', decrementLabel: 'Decrease', ...translations }}
       className={cn(
         'group/number-field',
         'flex w-full flex-col items-start gap-2',
@@ -37,18 +39,21 @@ export const NumberInputGroup = (props: React.ComponentProps<typeof ArkNumberInp
 
   return (
     <ArkNumberInput.Control
+      // Input's chrome and heights, so a number field lines up with text fields.
       className={cn(
         'relative',
         'w-full',
         'flex justify-between',
-        'bg-transparent dark:bg-input/30',
+        'h-9 in-data-[size=lg]:h-10 in-data-[size=sm]:h-8',
+        'bg-primary/5',
         'text-base',
-        'rounded-xl border border-input shadow-xs/5 ring-ring/32',
+        'rounded-xl border border-border/80 shadow-[inset_0_1px_2px_rgba(0,0,0,0.04)] hover:border-border',
+        'in-data-[size=sm]:rounded-lg',
         'transition-shadow',
-        'focus-within:border-primary focus-within:ring-[3px] focus-within:ring-ring/32',
+        'focus-within:border-ring/50 focus-within:ring-2 focus-within:ring-ring/20',
         'data-disabled:pointer-events-none data-disabled:opacity-64',
-        'aria-invalid:border-destructive aria-invalid:ring-[3px] aria-invalid:ring-destructive/24',
-        'dark:aria-invalid:border-destructive-foreground dark:aria-invalid:text-destructive-foreground dark:aria-invalid:ring-destructive-foreground/20',
+        'data-invalid:border-destructive data-invalid:ring-[3px] data-invalid:ring-destructive/24',
+        'dark:data-invalid:border-destructive-foreground dark:data-invalid:ring-destructive-foreground/40',
         'motion-reduce:transition-none!',
         className,
       )}
@@ -68,10 +73,10 @@ export const NumberInputDecrement = (
       asChild
       className={cn(
         'relative',
-        'h-8 in-data-[size=lg]:h-9 in-data-[size=sm]:h-7',
+        'h-full w-9 in-data-[size=lg]:w-10 in-data-[size=sm]:w-8 px-0',
         'flex shrink-0',
-        'text-foreground',
-        'rounded-none rounded-s-[calc(var(--radius-lg)+1px)]',
+        'text-muted-foreground hover:text-foreground',
+        'rounded-none rounded-s-[calc(var(--radius-xl)-1px)] in-data-[size=sm]:rounded-s-[calc(var(--radius-lg)-1px)]',
         'cursor-pointer',
         'pointer-coarse:after:absolute pointer-coarse:after:size-full pointer-coarse:after:min-h-11 pointer-coarse:after:min-w-11',
         className,
@@ -79,7 +84,7 @@ export const NumberInputDecrement = (
       data-slot="number-field-decrement"
       {...rest}
     >
-      <Button aria-label="Decrement" variant="ghost">
+      <Button variant="ghost">
         <MinusIcon aria-hidden />
       </Button>
     </ArkNumberInput.DecrementTrigger>
@@ -96,10 +101,10 @@ export const NumberInputIncrement = (
       asChild
       className={cn(
         'relative',
-        'h-8 in-data-[size=lg]:h-9 in-data-[size=sm]:h-7',
+        'h-full w-9 in-data-[size=lg]:w-10 in-data-[size=sm]:w-8 px-0',
         'flex shrink-0',
-        'text-foreground',
-        'rounded-none rounded-e-[calc(var(--radius-lg)+1px)]',
+        'text-muted-foreground hover:text-foreground',
+        'rounded-none rounded-e-[calc(var(--radius-xl)-1px)] in-data-[size=sm]:rounded-e-[calc(var(--radius-lg)-1px)]',
         'cursor-pointer',
         'pointer-coarse:after:absolute pointer-coarse:after:size-full pointer-coarse:after:min-h-11 pointer-coarse:after:min-w-11',
         className,
@@ -107,48 +112,53 @@ export const NumberInputIncrement = (
       data-slot="number-field-increment"
       {...rest}
     >
-      <Button aria-label="Increment" variant="ghost">
+      <Button variant="ghost">
         <PlusIcon aria-hidden />
       </Button>
     </ArkNumberInput.IncrementTrigger>
   );
 };
 
-export const NumberInputInput = (props: React.ComponentProps<typeof Input>) => {
+// Styled with inputVariants rather than wrapping Input: Input is Ark's FieldInput, and
+// nesting a second Ark part on the same element kept zag from seeing focus and keys.
+export const NumberInputInput = (
+  props: Omit<React.ComponentProps<typeof ArkNumberInput.Input>, 'size'> & Pick<InputProps, 'size'>,
+) => {
   const { size, className, ...rest } = props;
 
   return (
-    <ArkNumberInput.Input asChild data-slot="number-field-input" {...rest}>
-      <Input
-        className={cn(
-          'grow',
-          'h-8 in-data-[size=lg]:h-9 in-data-[size=sm]:h-7',
-          'tabular-nums',
-          'border-0 shadow-none ring-0',
-          'focus-visible:ring-0 aria-invalid:ring-0 data-invalid:ring-0',
-          'dark:bg-transparent',
-          className,
-        )}
-      />
-    </ArkNumberInput.Input>
+    <ArkNumberInput.Input
+      className={cn(
+        inputVariants({ size }),
+        'grow',
+        'h-full min-w-0',
+        'tabular-nums',
+        'bg-transparent',
+        'rounded-none border-0 shadow-none ring-0',
+        'focus-visible:ring-0 aria-invalid:ring-0 data-invalid:ring-0',
+        'disabled:opacity-100',
+        className,
+      )}
+      data-slot="number-field-input"
+      {...rest}
+    />
   );
 };
 
+// The label stays a <label>; the scrubber is a span inside it, since the scrubber's
+// role="presentation" is not allowed on a label.
 export const NumberInputScrubber = (
   props: React.ComponentProps<typeof ArkNumberInput.Scrubber>,
 ) => {
   const { className, children, ...rest } = props;
 
   return (
-    <ArkNumberInput.Scrubber
-      asChild
-      className={cn('flex cursor-ew-resize', className)}
-      data-slot="number-field-scrubber"
-      {...rest}
-    >
-      <ArkNumberInput.Label asChild>
-        <FieldLabel>{children}</FieldLabel>
-      </ArkNumberInput.Label>
-    </ArkNumberInput.Scrubber>
+    <ArkNumberInput.Label asChild>
+      <FieldLabel>
+        <ArkNumberInput.Scrubber asChild data-slot="number-field-scrubber" {...rest}>
+          <span className={cn('flex cursor-ew-resize', className)}>{children}</span>
+        </ArkNumberInput.Scrubber>
+      </FieldLabel>
+    </ArkNumberInput.Label>
   );
 };
