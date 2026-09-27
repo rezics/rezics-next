@@ -3,7 +3,7 @@ import type { CaseDeclarations } from './declaration.ts';
 const bookJourney = {
   tier: 'integration',
   file: 'tests/qa/integration/structure-book-content.test.ts',
-  name: 'BOOK01/BOOK03/BOOK06/BOOK08: native Book follows published Post while a fixed release retains its revision',
+  name: 'BOOK01/BOOK03/BOOK08: native Book follows published Post while a fixed release retains its revision',
 } as const;
 
 const structureJourney = {

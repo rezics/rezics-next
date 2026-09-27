@@ -8,7 +8,7 @@ import { authorCreditFixture, shortId } from '../fixtures/author-credit.ts';
 
 const revisionRef = (id: string) => `urn:rezics:content:revision:${id}`;
 
-test('BOOK01/BOOK03/BOOK06/BOOK08: native Book follows published Post while a fixed release retains its revision', async () => {
+test('BOOK01/BOOK03/BOOK08: native Book follows published Post while a fixed release retains its revision', async () => {
   if (!Bun.env.REZICS_QA_RUN_ID) throw new Error('Run through the isolated integration tier');
   const f = await authorCreditFixture(Bun.env as Record<string, string>,
     resolve('.temp', `structure-book-content-${randomUUID()}`));
