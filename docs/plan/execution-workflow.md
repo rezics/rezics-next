@@ -4,7 +4,7 @@
 
 The maintainer activated the backend-only Goal and authorized autonomous local
 implementation, qualification and coherent local commits. The
-[plan](README.md#active-execution) names its current scope, status and slice
+[plan](README.md#current-state) names its current scope, status and slice
 ledger; the [Goal program](../goals/README.md#management-handover) is the
 manager's operating manual, including worker processes, claims and the
 maintainer's documentation-change rule.

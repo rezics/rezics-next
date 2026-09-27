@@ -19,8 +19,8 @@ with owner-specific implementations.
 Main uses reusable **HTTP clients to Apache Jena Fuseki**. The JVM owns TDB2 and
 jena-text/Lucene; Main does not embed Jena, open the database files or use JNI as
 a bootstrap requirement. The [graph quickstart](../operations/installation.md)
-starts that dependency. Existing Main/Account/Access slices are listed in the
-[implemented baseline](../plan/README.md#implemented-baseline); PostgreSQL Content
+starts that dependency. Main/Account/Access behavior is qualified on the
+[qualification page](../plan/qualification.md); PostgreSQL Content
 and the complete projection lifecycle remain implementation work.
 
 ## Runtime and framework

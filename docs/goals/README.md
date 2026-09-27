@@ -11,8 +11,9 @@ frontend implementation and browser acceptance are excluded.
 The GPT-6 Sol Codex program ran from 03:57:20 UTC on 2026-09-26 and is paused at
 `0dd3817` with no live workers. It integrated G-001–G-037, left 25 affected-verified
 complete-case candidates (IAM02 partial) and produced no recorded backend run.
-Its log is in the [program history](history/codex-program-2026-09-26.md). Do not
-resume its threads or tasks.
+Its log and the finished backend phase 1 Goal are archived on the local orphan
+branch `archive/goals`, outside this working tree. Do not resume its threads or
+tasks.
 
 Measured lessons that shape this program:
 
@@ -79,7 +80,7 @@ The phase order is the maintainer's direction: database structure, then API
 templates, then bulk implementation, then unified testing. Gates apply per
 domain; shared cross-owner structures (Access/authority, receipts, outbox,
 recovery manifests) come first because every domain depends on them. The
-[plan](../plan/README.md#backend-only-ten-hour-proposal) holds the time budget.
+[goal specification](../../GOAL.md#delivery-cadence-and-throughput) holds the time budget.
 
 1. **Phase 0, closure map (about 30 min).** Two to four scouts split the 276
    retained IDs by domain and record for each open case: current status
@@ -277,7 +278,7 @@ such as a third-party account or API key, are reported to the maintainer.
 
 - Handle every `wait` completion immediately. Once per elapsed hour and at each
   phase gate, add a checkpoint of at most five lines to the
-  [plan](../plan/README.md#active-management-program).
+  [plan](../plan/README.md#current-state).
 - Forecast at elapsed 2:00 from merged passing cases per hour against the closure
   map, then at each checkpoint. The target is 10 hours with a 25-hour outer bound.
   Report a forecast miss immediately; never shrink scope or count partial cases.

@@ -1,5 +1,11 @@
 # REZICS implementation goal
 
+Status: backend phase 1 completed on 2026-09-27 (recorded run
+`20260927t101230-1616d8`, local tag `goal/backend-phase1`); no Goal is active.
+This page stays the implementation goal specification until the maintainer
+revises it for the next phase; the finished run is archived on the local orphan
+branch `archive/goals`.
+
 ## Outcome
 
 Implement and qualify REZICS's complete retained first-delivery backend scope in
@@ -27,8 +33,8 @@ only consume them. Backend behavior and qualification must run without web code.
 
 The requested execution target is 10 elapsed hours for 100% of that backend
 scope, with a 25-hour outer bound when measured progress forecasts a miss.
-Follow the [phase plan](docs/plan/README.md#backend-only-ten-hour-proposal) and
-the [Goal program](docs/goals/README.md). Setup, implementation, research,
+Follow the [phases](docs/goals/README.md#phases) of the
+[Goal program](docs/goals/README.md). Setup, implementation, research,
 coordination, QA and repairs all consume that budget. This is a target, not
 evidence that the remaining scope fits. Report a forecast miss as soon as the
 measured work exposes it; never remove backend requirements or count partial
@@ -54,7 +60,7 @@ per brief (`medium` by default, `high` or `xhigh` by complexity, never `max`)
 through the [Goal program](docs/goals/README.md). Exclusive claims, one session
 per task and scope checks at merge prevent duplicate work.
 
-On activation, reconcile [Active execution](docs/plan/README.md#active-execution)
+On activation, reconcile the plan's [current state](docs/plan/README.md#current-state)
 with this implementation scope. The plan owns current scope, slices, blockers
 and next actions; the [qualification page](docs/plan/qualification.md) owns
 recorded evidence; `goalctl` owns live worker-process state. Update the existing

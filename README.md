@@ -19,7 +19,7 @@ This repository contains the architecture, implementation contracts, the Fuseki
 command module, Account, Main with Access admission and product HTTP routes,
 and the first PostgreSQL Content owner. Phase 0 provides a pinned local stack
 and a shared QA runner. The web client, Content-to-Main binding and complete
-qualification remain in the [execution program](docs/plan/README.md#execution-program).
+qualification remain in the [plan](docs/plan/README.md#current-state).
 
 From a fresh checkout with the [pinned runtimes and Docker-compatible daemon](docs/development/toolchain.md), run:
 
@@ -41,8 +41,8 @@ yarn stack:down
 The [installation guide](docs/operations/installation.md) covers readiness,
 private configuration, isolated QA runs and cleanup. `yarn qa` exercises its
 implemented tiers in disposable projects; passing it currently leaves many
-retained acceptance IDs uncovered. See the [active plan](docs/plan/README.md#active-execution)
-for batch results and remaining gates.
+retained acceptance IDs uncovered. See the [plan's current state](docs/plan/README.md#current-state)
+and the [qualification page](docs/plan/qualification.md) for results and remaining gates.
 
 - [Toolchain lock](docs/development/toolchain.md): every tool, version, local
   service and root command (`yarn dev`, `yarn check`, `yarn qa`).

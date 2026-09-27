@@ -26,7 +26,7 @@ do not select tools.
   change, with the reason and the check that passed. A tool that is absent from
   this page is not available to an implementation batch.
 - **Qualification gates.** Rows marked *gate* are proven in Phase 0 of the
-  [execution program](../plan/README.md#execution-program) within one batch. If a
+  [plan](../plan/README.md#current-state) within one batch. If a
   gate fails, apply its documented fallback and update this page; do not start
   open-ended research during implementation batches.
 
@@ -309,7 +309,7 @@ allowed in either design.
 
 ## Backend delivery tooling proposal
 
-The 2026-09-26 [plan](../plan/README.md#backend-only-ten-hour-proposal) proposes
+The 2026-09-26 backend plan (now archived on the local `archive/goals` branch) proposed
 Drizzle ORM/Kit over the existing `pg` driver for ordinary PostgreSQL development,
 with Kysely as the bounded fallback. Content adopts `drizzle-orm` 0.45.3 over
 the existing `pg` driver for a typed owner-position/receipt/outbox pilot. Its

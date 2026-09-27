@@ -4,7 +4,7 @@ The supported development installation uses the pinned root commands. It starts
 PostgreSQL, Fuseki with the REZICS command module, RustFS, Mailpit and Toxiproxy
 in a private Compose project. Main and Account run on the host. The current
 checkout still needs the web journey, Content-to-Main publication/search binding
-and remaining [acceptance gates](../plan/README.md#execution-program).
+and remaining [acceptance gates](../plan/README.md#acceptance-gates).
 
 ## Fresh checkout
 
@@ -374,5 +374,6 @@ exact-revision reads. A rollback crossing TDB2 or Lucene format changes uses the
 recorded backup and compatible binary; an old executable is not a rollback plan.
 The commands and assembler here were reviewed against official documentation and
 6.2.0 source. The automated S0 drill executed the substrate probes; its result is
-linked from the [active plan](../plan/README.md#active-execution). It did not
+recorded in the backend phase 1 execution log, archived on the local
+`archive/goals` branch. It did not
 measure capacity or certify a production release.

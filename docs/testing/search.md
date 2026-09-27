@@ -161,7 +161,7 @@ and Main unit cases cover no-op and replacement mutations, a 65th actual unit,
 claim mismatch, duplicate Lucene document, contiguous replay, gaps, bypass and
 restart. Later cmd0.5.15 evidence includes a 10-Work product-only diagnostic with
 a bounded native delta, no full inventory and a private Contribution restart
-probe; see the [execution plan](../plan/README.md#execution-program). These scoped
+probe; see the [qualification page](../plan/qualification.md). These scoped
 checks do not establish the complete growth bound. Follow
 [complexity verification](complexity.md): vary unrelated corpus, affected units,
 degree and rejected candidates independently, count native work as well as calls,

@@ -12,7 +12,7 @@ Start with one graph service, one product dataset and a small authenticated
 vertical journey. The
 [installation guide](../operations/installation.md) starts the graph substrate;
 [the delivery sequence](../plan/README.md) adds actual REZICS commands and clients.
-This is the implementation target. The [execution plan](../plan/README.md#execution-program)
+This is the implementation target. The [plan](../plan/README.md#current-state)
 records the partial PostgreSQL Content/projection implementation and remaining
 qualification; the historical baseline is not the current completion status.
 The maintainer reaffirmed the TypeScript/Bun application stack, including Better
