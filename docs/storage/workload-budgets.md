@@ -1,585 +1,90 @@
-# Workload, integrity and capacity policy
+# Workload and capacity decisions
 
 ## Capacity planning
 
-The current corpus requirement is **500,000,000 business entities/documents**,
-confirmed by the maintainer on 2026-09-25; 3,000,000,000 remains a future planning
-estimate. These are not RDF triple counts. Account separately for current facts,
-retained revisions, source observations, derived text, indexes and recovery logs.
-Bounded control datasets may use justified smaller bounds.
-
-The initial hardware is one 16-core/64GB host and one 12-core/32GB host. This is
-an available topology, not evidence that the corpus fits. Routine development
-uses small, deliberately varied datasets to falsify the cost model. It does not
-require loading 500M entities on each change. Production placement still needs
-measured byte amplification, query/write rates, import/index throughput, disk
-headroom and restore/rebuild objectives; small-data passes cannot certify those.
+The maintainer confirmed 500 million business entities/documents on 2026-09-25;
+3 billion is a future scenario. These are not triple or per-owner row counts. The starting topology
+is one 16-core/64 GB host and one 12-core/32 GB host, not evidence of fit.
+`CAPACITY_SCENARIOS` and `deriveCapacity` in
+[`scripts/load/budget.ts`](../../scripts/load/budget.ts) keep owner population,
+current facts, retained facts, measured RDF bytes per fact and queue retention
+separate. Relational revisions, WAL, immutable objects, text indexes, backups
+and rebuild space require separate measurements; do not count shared pages or
+indexes twice. Each owner must measure its skew, rates, bytes, lag, memory and
+restore/rebuild time before choosing placement or admission thresholds.
 
 ## Complexity contracts
 
-Every API operation, job, importer, projection and recovery/rebuild entry point
-must have a cost contract beside its owning behavior and acceptance cases. Cover
-normal, absent, denied, stale, retry, cold-cache and fallback paths. This is a
-required implementation gate, not a claim that the current code is covered.
-Unknown library or engine costs stay explicitly unverified.
-
-| Contract field | Required content |
-| --- | --- |
-| Variables | Name the relevant dimensions: corpus N, related degree d, raw candidates c, returned items k, input/body bytes b, history h, changed units u and batch size. |
-| Bound and reasoning | Derive work per stage and compose the whole operation. Distinguish worst-case, amortized and expected bounds; include retries and downstream effects. |
-| Preconditions | Required indexes, ordering, uniqueness, selectivity assumptions, admitted input shape and algorithm/plan switch points. |
-| Resources | CPU/iteration work, engine work, remote calls and bytes, peak memory, write/index amplification and lock scope. Parallelism reduces elapsed time only when resources permit; it does not remove total work. |
-| Evidence | Name observable counters, representative plans and multi-scale counterexamples linked to existing acceptance IDs. Record unsupported observation boundaries. |
-
-An indexed exact read might cost O(log N + b) under its declared index and
-encoding assumptions; a full rebuild legitimately costs at least the amount of
-data read and written. Do not demand O(1) for every operation or hide unbounded
-work behind a page-size constant. Interactive work must not acquire an accidental
-dependence on unrelated corpus/history, while batch work must not repeatedly
-rescan completed prefixes. Include iterator consumption and engine operators,
-not only code in the HTTP handler.
-
-Declare bounded concurrency and contention separately: lock wait, single-writer
-occupancy and queue service rate are not established by Big-O. A correct growth
-class with a prohibitive constant also fails the elected latency/resource budget.
-The [complexity verification method](../testing/complexity.md) defines executable
-checks; it supplements, rather than replaces, correctness and recovery tests.
-
-### Main outbox relay next-batch read (OPS05)
-
-Let N be retained outbox batches, E batches from other data epochs at the same
-numeric sequence, and e events in the next batch (admitted maximum 100). The
-relay reads one keyed control row and seeks exactly `checkpoint + 1` through
-the named graph's `rv:sequence` predicate/object index in the same graph
-snapshot. It returns at most two batch headers, reads the selected batch's
-members, and probes each member's object. The request makes one graph read when
-idle and at most `2 + e` graph reads when a batch exists; result rows are at
-most `2 + e` before the object
-probes. Under Jena's [POSG quad index](https://jena.apache.org/documentation/tdb/store-parameters.html)
-and a selective sequence, index seeking is expected to depend logarithmically
-on N plus E and e. [Jena's optimizer](https://jena.apache.org/documentation/tdb/optimizer.html)
-can reorder the basic graph pattern, so the physical plan and E remain measured
-preconditions. Missing positions, duplicate headers, a restore hold, excess
-members and incomplete event objects fail explicitly; none triggers a scan of
-later sequence positions. `OPS05: next relay batch seeks one indexed sequence
-regardless of unrelated backlog` checks the query shape and fixed graph-call
-count at backlogs 1, 100 and 100,000. The quiet-host phase-D run still needs to
-measure the native plan, latency and relay lag under writes.
+Every API operation, job, importer, projection and recovery/rebuild path needs
+a cost contract beside its owner. The contract names dimensions, stage bounds,
+index and selectivity preconditions, retries, calls and bytes, memory, write
+amplification, lock scope and evidence. Include absent, denied, stale, cold and
+fallback paths. Unknown engine work remains unverified. Interactive work must
+not accidentally grow with unrelated corpus or history; batch work must not
+rescan completed prefixes. Big-O alone cannot establish latency or contention.
+The [complexity verification method](../testing/complexity.md) explains multi-scale observations.
 
 ## Data preparation and import
 
-The maintainer's 2026-09-26 direction sets a hard **600-second ceiling** for
-ordinary fixture construction or restoration, including service startup,
-migration, index readiness and the small setup smoke check. Design owner schemas,
-constraints, indexes and relationships first; bulk-create the test corpus once
-and save a consistent complete backup. Subsequent runs restore isolated copies.
+The maintainer set a 600-second ceiling on 2026-09-26 for ordinary fixture
+build or restore, including startup, migrations, readiness and a small smoke
+check. Build background data once, retain a consistent stopped backup of all
+owners, and restore isolated writable copies for runs. A code-only change does
+not invalidate that backup. The manifest compares owner generators, model and
+schema inputs, migrations and engines; normal restore reads sampled exact state
+and index readiness without a full corpus scan or receipt replay. Exceeding the
+ceiling calls for a setup fix, not a longer timeout.
 
-Routine setup reads the small fixture-version/schema/engine manifest and checks
-service readiness. It does not rescan every row/object, replay receipts, recompute
-the corpus digest, fetch upstream data or execute a recovery proof. A code-only
-change does not invalidate the backup. Regenerate only the part whose schema,
-model meaning or storage/index format actually changed; migrate an existing
-fixture where that is cheaper. Exceeding 600 seconds fails preparation and calls
-for fixing the setup path, not raising its timeout or silently doing a full seed.
-
-The backup includes PostgreSQL owners, consistent TDB2/Lucene state, objects and
-fixture configuration. Take it while stopped or through supported consistent
-backup mechanisms. Restore separate writable copies per isolated run; never
-share mutable baseline volumes. Rebind only run-local endpoints and credentials.
-`REZICS_FIXTURE_ROOT` directs the fixture manifest and private Compose
-configuration to a checkout-local `.temp/fixture` when a worker's filesystem
-boundary does not allow writing the shared fixture directory.
-
-Complete reconstruction, corpus validation and comprehensive recovery checks run
-at final backend acceptance, or when a relevant defect makes them necessary.
-Their time still counts against the requested ten-hour delivery budget. Runtime
-API authorization, input validation and database constraints remain behavior under
-test; this policy removes repeated fixture certification from normal setup.
-
-Use distinct paths for command correctness, repeatable fixtures and corpus import:
-
-- Small command fixtures exercise real authorization, receipts and state changes.
-- Backups or deterministic bulk fixtures supply background data. Direct database
-  loading is allowed for test setup; the operation being tested still runs through
-  its real API/owner. Imported background rows need no fabricated interactive
-  receipts and earn no evidence for command paths they bypassed. Rebase only
-  expired run credentials needed by the small fresh operation cohort.
-- Initial corpus import uses validated chunks, bounded parallel preparation,
-  database bulk loading, index construction and restart checkpoints. Preserve
-  identities, provenance, exact revisions, authority and cross-owner references
-  through an explicit import contract; do not fabricate interactive receipts.
-  PostgreSQL COPY and Jena's bulk/index tools are mechanisms to qualify, not new
-  authorized commands until admitted through the toolchain and root facade.
-
-Measure preparation separately from the operation. Increase batch size or
-parallelism only with measured work, locks and memory; TDB2's single writer and
-shared PostgreSQL control rows can serialize dispatch. Rebuild a derived current
-view from an authoritative snapshot plus a bounded change tail where applicable,
-rather than replaying all historical edits by default. Keep history/recovery
-requirements distinct from disposable search state.
-
-PostgreSQL documents [COPY and post-load indexing](https://www.postgresql.org/docs/18/populate.html).
-Jena documents [TDB2 loader tradeoffs](https://jena.apache.org/documentation/tdb2/tdb2_cmds.html)
-and [separate text-index construction](https://jena.apache.org/documentation/query/text-query.html#building-a-text-index).
-Fast loaders may have weaker crash guarantees; build an isolated generation and
-validate it before activation. These sources establish mechanisms, not REZICS
-throughput. Stopped-state clone reuse and a 600-second-enforced routine restore
-facade passed on a ten-Work source with owner/index readiness, fresh writes,
-restart and source isolation.
-
-`task fixture:build` now bulk-builds the current owners directly. The real
-graph bootstrap commits first, then the TDB2 phased loader and offline text
-index run on the stopped dataset, objects go to RustFS and PostgreSQL rows are
-loaded in 5,000-row `unnest` batches. Imported data sits at graph position 0
-with no receipts. Measured on 2026-09-27 on a 64-CPU host with a 25 GB Docker
-Desktop VM:
-
-For the fixture graph generator, W is imported Works, U is imported public
-MatchUnits, and B is their total body bytes. Graph generation and its digest
-each traverse O(W + U + B) input; the graph stream buffers at most one 1 MiB
-chunk plus one Work's quads. Jena's phased loader and Lucene indexer run once
-for the entire import, with native memory and index amplification measured by
-the build, not assumed constant. The generator emits one indexed literal per
-public unit and checks three exact postings plus the total MatchUnit count.
-`OPS05/SEARCH18: deterministic public graph plan scales with the imported
-corpus` checks record growth at two Work/public-unit scales. Restore reads only
-sampled exact state and the public index readiness proof; it does not regenerate
-or recount every imported object.
-
-| Profile | Works | Build | Backup | Restore |
-| --- | --- | --- | --- | --- |
-| `small` | 1,000 | 28.3 s | 373 MB | 13.0 s |
-| `medium` | 100,000 | 370.3 s | 2.91 GB | 92.3 s |
-
-The medium build loaded 2,758,334 quads in 17.3 s (about 160,000 per second)
-and indexed 100,001 labels in 5.8 s. Its 400,000 object PUTs took 303.5 s;
-RustFS saturated near 1,400–1,460 PUT/s at 64 or 192 concurrent requests, with
-or without a checksum header. The first medium build took 958 s because
-verification listed the 400,000-key prefix (588 s); verification now counts
-acknowledged PUTs and reads evenly spaced samples. Copying the 400,016-file
-RustFS volume took 80.0 s of the medium restore, against about 4.6 s each for
-PostgreSQL (1.25 GB, mostly WAL and build-time archive) and TDB2/Lucene
-(1.26 GB). Object count is therefore the restore bottleneck. During an
-experiment, a one-container tar-pipe copy of that volume coincided with a
-Docker Desktop 4.90.0 engine panic, so restore keeps `cp -a`. These figures
-cover only metadata-only Works, Agents with Work read grants and Content drafts.
-The complete M01–M10 fixture remains work, and none of this is a capacity
-claim.
-
-## Immediate design failures
-
-Reject synchronous full-corpus scans on ordinary writes, Resource x Realm copies,
-unbounded queues/closures, registry-wide package loading, application-wide locks
-over validation/network work and search truncation presented as complete results. Exercise high-degree/skewed cases
-at practical sizes and measure work growth. A LIMIT alone does not bound work.
-TDB2 has one active writer per dataset; keep transactions bounded. Do extraction,
-object upload and staging preparation outside that writer. Preflight validation
-may run there too, but required SHACL/post-state checks and mutable dependency
-guards remain inside the command's write transaction before commit.
-
-Budgets name scanned candidates, graph expansions, batches/bytes, memory, time,
-external calls, concurrent jobs, retention and cancellation. Product semantic
-cardinality is separate from one request's work limit. Do not put temporary
-implementation ceilings into ontology meaning.
+Use small command fixtures for real authorization and receipts, bulk fixtures
+for background population, and validated chunks/checkpoints for initial import.
+Background rows bypassing commands are not evidence for those commands. Preserve
+identities, revisions, authority and cross-owner references; keep object upload
+and staging outside TDB2's single writer, with required post-state validation
+inside its transaction. `task fixture:build` creates the reusable backup;
+`task fixture:restore -- --fixture <id> --run-id <id>` makes a writable copy.
+`REZICS_FIXTURE_ROOT` places worker metadata in checkout-local `.temp/`.
+Full reconstruction and recovery proofs belong to final acceptance or a relevant
+defect investigation. Routine preparation and its evidence are separate from
+the timed operation.
 
 ## Fixed bounds for interactive requests
 
-The maintainer requires a fixed maximum number of storage/service round trips for
-every admitted interactive operation. This is a design and release requirement,
-not a property already established for the existing runtime. The maximum must
-not grow with corpus size, node degree, matches rejected by a filter, label count
-or the number of historical revisions. A finite timeout without a call-count
-bound does not meet the requirement.
+The maintainer requires a fixed maximum of storage/service round trips for each
+admitted interactive operation. A timeout, final LIMIT, HTTP wrapper, cache or
+parallel dispatch alone does not establish that bound. A query/command profile
+must count authentication, Access, readiness, retries, fallback, hydration and
+transaction calls, plus transferred IDs/bytes and internal engine work. Budget
+exhaustion is an explicit partial/unavailable result, never exact empty or
+complete top-K. Cross-owner sets that cannot fit one complete exchange require
+an indexed local plan or an asynchronous operation. Requalify profile/topology
+changes against skew, contention, latency, memory and overload on elected
+hardware. Async jobs need bounded batches and measured catch-up capacity.
 
-Each versioned query/command profile declares numeric ceilings for total remote
-request attempts, serial dependency stages, transferred IDs/bytes, page size,
-query width/depth, retries and deadline. Count authentication, Access admission
-and delivery checks, readiness, vocabulary/language resolution, cursor creation,
-cache misses, fallback and transaction protocol calls. One HTTP wrapper, one
-transaction, batching or parallel dispatch is not proof of one storage round trip.
-Database-internal shard fanout is a separate bound for the admitted deployment;
-federated requests/extra SQL calls must be observable rather than hidden by the
-front door. A topology or query-profile change requires requalification.
+## Qualification scope and decisions
 
-The private Open Library source-graph projection has a fixed work bound per
-conversion: three base source subjects plus at most two reified field Statements
-(title and optional description), at most 24 statement/link triples, and at most
-five source-subject validations. It makes one guarded Jena write transaction and
-does not iterate over provider fields, source records or graph history. Its
-integration complexity check exercises both Statements and asserts the maximum
-triple footprint.
+The retained [OPS05](../testing/operations.md) and
+[SEARCH18](../testing/backend-integration.md) load tests cover named fixture-backed scopes,
+not the 500-million-entity requirement. The frozen
+`fx-medium-c9f6e4fdcb52` fixture has 100,000 Works and 10,000 public
+MatchUnits. Three quiet-host runs each completed a 63-second offered mix of
+253 reads and 63 writes with zero errors and relay lag ending at zero:
 
-The physical plan must justify these ceilings before admission; a shared runtime
-budget must also stop nested adapters from exceeding them. Budgets are not reset
-by a retry or subcall. Do not refill filtered pages, follow context parents,
-resolve each label, hydrate each item or fetch more candidates in an open-ended
-loop. Batch sizes need both a fixed item cap and a byte cap. Parallel N+1 remains
-N+1. Caches may reduce work but cannot be necessary to satisfy the maximum.
+| QA run | Read p95 | Edit / selection / rating p95 | Recovery |
+| --- | ---: | ---: | ---: |
+| `20260927t081313-6acb60` | 366 ms | 942 / 756 / 697 ms | 21.0 s |
+| `20260927t082537-290a9f` | 447 ms | 1,005 / 878 / 585 ms | 22.2 s |
+| `20260927t083748-b28663` | 440 ms | 666 / 1,002 / 566 ms | 23.9 s |
 
-When a cross-owner candidate set cannot fit one admitted complete exchange,
-choose a precomputed/index-local plan or an explicit asynchronous operation;
-do not keep dividing the growing set into more requests. Cap detection such as
-fetching B+1 IDs bounds transferred results, not the engine work needed to find
-them. A budget/partial/unavailable result must not be presented as exact empty
-results, exact counts or complete top-K. Ordinary pagination advances a declared
-result cursor; it cannot disguise internal candidate probing as more page calls.
+The third tier took 236.7 of its 240-second test budget. The earlier
+20-second tier `20260927t035602-33bffd` passed its named mix; earlier probes
+with 503s and deadline misses drove bounded retry/readiness changes, not raised
+request budgets. SEARCH18's registered trace measured 512 admitted candidates
+in 177.0 ms, rejected 513 with HTTP 422, and returned a moved selection in
+698.9 ms with 14 Fuseki calls. No native operator or 20,000-unit result follows
+from those observations.
 
-Fixed request counts are necessary but insufficient. Qualify engine work,
-memory/bytes, internal fanout, contention, P95/P99 latency and overload behavior
-on the elected hardware and representative skewed mixed workloads. Count failures
-and budget rejections alongside latency; rejecting the ordinary workload cannot
-be called a performance pass. Async projection/materialization jobs use bounded
-checkpointed batches, bounded queues and measured catch-up capacity. Accepting
-delay does not allow sustained backlog growth.
-
-The [architecture research](../research/storage-architecture.md#fixed-call-plans-and-performance-evidence)
-records the supporting research, proposed paths and still-unqualified runtime
-budgets. This policy applies to both single-store and multi-store implementations.
-
-## Growth arithmetic
-
-Let N be primary objects, f current facts per object, H retained RDF revision/
-outbox/source facts and b measured TDB2 bytes per fact including its dictionaries
-and native indexes. Estimate current facts N*f and RDF storage (N*f+H)*b; identify
-the derived body/MatchUnit share within that total. Add
-PostgreSQL revision bytes/JSONB/manifests and WAL,
-immutable object pages, Lucene indexes, backups and rebuild
-space separately. Unchanged reused pages count once; retained revisions still
-incur root/metadata and changed-page costs. State assumptions and do not
-double-count index costs. Average-width errors amplify
-across relations; hot keys and churn can dominate total object count.
-
-Record read/write rates, skew, query shapes, worker service rates, backlog age,
-storage/network costs, restore and rebuild time. Queue capacity is arrival rate
-times retention, not the number of business objects. More API replicas do not
-increase a saturated transaction/index/storage resource.
-
-For the selected body binding, distinguish authoritative JSON/bytes from extracted
-RDF text and Lucene postings/stored fields. Include obsolete revisions, pending
-publication pins, index merges and replacement generations. Report storage/write
-amplification and TDB2 writer time per published body; small draft edits must not
-trigger a whole-body graph/index rewrite until a publication requires it.
-
-## Integrity and bounded work
-
-Ingress checks syntax; domain commands check authority and transitions; the owning
-database transaction protects irreducible persisted invariants. Explicit Jena SHACL
-validation plus guarded update invariants and PostgreSQL constraints serve their
-actual owners. Cross-service checks use staged workflows/fences, not imaginary cross-engine FKs.
-
-Page forward/inverse relations, coalesce derived metrics, stage large changes and
-activate fenced generations. Retain cancellation and partial/unavailable outcomes.
-Rendering isolates malformed presentation without executing unsafe payloads.
-
-## Growth decisions
-
-Track concrete thresholds for queue lag, text-projection/index lag, hot aggregate
-latency, memory, disk headroom and restore budget on elected hardware. Exceeding a threshold
-triggers admission control, query/profile restriction, index adjustment or a
-placement review. Long-term sharding/cluster work remains a designed evolution,
-not an unmeasured claim that money guarantees arbitrary-query performance.
-
-The 2026-09-27 selected load-tier run `20260926t203951-bdbe06` passed its
-10-Work diagnostic: 11 Main units and one Content unit across English, Chinese
-and Japanese; two k6 clients for 20 seconds; 286 complete exact reads; 70.2 ms
-overall p95; zero failed HTTP responses and zero 5xx responses. The offered
-mix used 50% hot-Work reads, 20% other Main reads, 20% Realm reads and 10%
-Content reads. Its retained evidence is under
-`.artifacts/qa/20260926t203951-bdbe06/load/`. This run measured no admitted
-writers, relay lag, memory, or cold storage recovery, and does not qualify OPS05
-or SEARCH18's 10,000-Work host objective.
-
-The 2026-09-27 G-115 restore of the rebuilt current medium fixture
-`fx-medium-532e16fa7af3` as `fixture-g115` passed in 160.048 s (600 s preparation
-ceiling). It applied only
-`services/main/migrations/relay/014_current_authority_coverage.sql`; the Fuseki
-engine image changed while Jena stayed compatible. A second clean copy,
-`fixture-g115-run2`, restored in 311.572 s, including 288.560 s copying the
-RustFS volume. Both are below the fixed restore bound.
-
-The fixture has 100,000 metadata-only Works. That is useful host background but
-does not provide the 10,000 published public MatchUnits required to qualify the
-named searchable host profile. `task load -- --fixture-run-id` now attaches the
-load runner to a restored persistent fixture and limits fresh command seeding
-to its explicit `--works` count; fixture-backed runs remain diagnostic unless
-their searchable population reaches the named objective.
-
-The attached 100-fresh-Work, 180-second attempt
-`load-20260926t215428-2c179c` ended after 93.404 s with `The operation timed
-out.` before seed completion, phrase/cursor traces, k6 mixed traffic, relay lag
-sampling, container-memory capture or cold storage restart. The retained early
-Main-process high-water mark was 131,900 KiB; the Main-to-Fuseki meter saw 9
-calls, 6,464 request bytes, 32,520 response bytes and zero errors. The Main
-relay process logged a timeout. Fuseki's log includes a relay batch query that
-completed in 55.020 s, above the Fuseki client's existing 10 s upstream read
-timeout. Thus OPS05 did not pass: no mixed-workload latency, lag, memory-cgroup
-or recovery result was collected. The relevant relay query is in
-`services/main/src/modules/outbox/relay.ts`, outside this worker's claimed
-paths; changing its plan or timeout would need its own bounded-work review, not
-a larger budget.
-
-An initial attached attempt (`load-20260926t214645-3945ce`) stopped before
-seeding because the load harness omitted owner-specific receipt fields when
-sealing an Access rating-context command. `scripts/load/corpus.ts` now preserves
-the returned owner identity while binding the seal to the claimed admission;
-the focused test passes. The subsequent relay timeout still blocks the full
-profile, so OPS05 and SEARCH18 remain partial. In particular, this run supplies
-no evidence for SEARCH18's cold/stale/retry/cursor traces, growth to 10,000
-searchable units, or its end-to-end total remote-attempt accounting. The
-declared search limits remain unchanged: 72 Fuseki calls, 8 MiB aggregate
-Fuseki response bytes, 1 MiB per response, 512 phrase candidates, 20,000 public
-units and a 1,500 ms wall deadline (90 total attempts including owner/cursor
-reads). No budget was raised to pass.
-
-A separate fixture-backed Search trace (`load-20260926t220953-5e102f`) ran
-without the relay on the partially seeded `fixture-g115-run2` copy, before
-cold-restarting its storage services. It measured 11 public MatchUnits, so it
-is a trace check, not a growth qualification. With Fuseki already running, the
-cold Main-process phrase read returned 11/11 complete results in 783.0 ms using
-8 Fuseki calls and 38,792 response bytes; its warm read took 91.5 ms, 6 calls
-and 37,513 bytes. Chinese and Japanese probes each returned one exact result in
-67.1 ms and 56.2 ms (6 calls each). A rejected Realm phrase returned complete
-zero in 71.7 ms (6 calls). An 80-character phrase was accepted in 56.0 ms (6
-calls); 81 characters returned HTTP 400 without a Fuseki call. Cursor pages 1
-and 2 returned different Works in 110.6 ms and 63.0 ms (6 calls and 1,246
-response bytes each). After a real selection replacement, the old continuation
-returned HTTP 409 `search_restart_required` in 181.5 ms (6 calls). A concurrent
-selection movement during a Main phrase request returned the new selected
-Contribution in 1,100.8 ms, with 14 calls, 83,364 Fuseki response bytes and
-5,529 API response bytes; that was 8 more calls than the stable six-call
-baseline. Each completed measured request stayed within 72 calls, 8 MiB Fuseki
-response bytes, 1 MiB API response bytes and the 1,500 ms deadline. The probe's
-aggregate 79 metered calls span multiple separate requests and are not a
-per-request budget comparison.
-
-A follow-up (`load-20260926t221214-9e4337`) cold-restarted the persistent
-storage services in 50.353 s, then ran the same trace. Its cold Main phrase
-read returned 11/11 complete results in 706.3 ms using 8 calls and 38,774
-response bytes. Cursor pages, language probes, rejected phrase and payload
-limits also completed. However, its deterministic selection-movement retry
-returned HTTP 503 `search_index_unavailable` at 1,504.8 ms. Main's retained
-attempt diagnostic shows the first read detected `SearchSnapshotMoved` after
-1,455 ms and the 45 ms writer wait exhausted the unchanged 1,500 ms request
-deadline. That request used 6 Fuseki calls and received 37,506 bytes before
-the timeout. The earlier warm-engine retry returned the new selection in
-1,100.8 ms (14 calls), so the current evidence distinguishes a warm pass from
-a cold-storage retry miss. The cold trace did not reach its final stale-token
-check; the preceding warm trace did return HTTP 409
-`search_restart_required`. Search's retry remains within its hard wall bound
-but fails the required complete-result/error objective under this forced cold
-movement. No budget was raised. Neither probe measures cross-owner calls in
-the deliberately concurrent write setup, candidate degree, or growth scales up
-to 10,000/20,000 units; SEARCH18 remains partial.
-
-The continuation built `fx-medium-deecad138315` with 100,000 imported Works
-and 10,000 indexed public MatchUnits. Its deterministic bodies include 64
-`public load` hits for cursor/retry traces, 512 admitted `candidate degree`
-hits, 513 `overflow degree` hits for explicit refusal, Chinese and Japanese
-canaries, one 4 KiB body, and a Realm-rejected candidate. The graph loader
-loaded 3,008,345 quads in 32.344 s and indexed 110,001 literals in 9.707 s;
-the builder verified the public population and exact sampled postings. This is
-a search materialization fixture: imported public selections have current and
-projection rows but no fabricated command receipts or complete authorial
-revision-object history. The fresh load cohort still exercises real
-Account/Access/Main/Content commands and receipts. Imported units qualify the
-public read/index population, not exact publication recovery.
-
-This build took 821.846 s on the loaded worker host, so it **failed** the
-600-second preparation objective. Object upload took 452.069 s for 400,000
-acknowledged immutable objects, and the full volume size/file-count walk took
-242.489 s; graph loading, migration, verification and stop accounted for the
-remaining time. The stopped consistent backup was retained, but no restore or
-capacity run was started after the preparation breach. The prior quiet-host
-medium build and restore remain the relevant evidence for the preparation
-design; the new backup must be restored and timed on the manager's quiet host.
-The relay now seeks the exact next outbox sequence in one indexed snapshot query,
-and the fixture-backed 180-second load runner recognizes a restored corpus with
-at least 10,000 public units as the named practical profile. OPS05 and SEARCH18
-remain partial until that run measures latency, lag, memory and recovery, and
-the 20,000-unit scale and cold movement retry are exercised successfully.
-
-### Phase-D isolated load checks (G-115)
-
-The frozen-main fixture `fx-medium-c9f6e4fdcb52` contains 100,000 Works and
-10,000 indexed public MatchUnits. Independent writable copies
-`fixture-g115-1` and `fixture-g115-2` restored in 142.447 s and 124.681 s,
-respectively, including readiness and sampled smoke checks. No fixture was
-rebuilt. The registered REC02 load test on the first copy processed 10,000
-signals in 100 retained batches, half on one target and half spread over 999
-other Works. Its 4.4-second load-tier run
-`20260927t021732-774d74` passed: each generation tick consumed at most 16
-relay batches and 1,600 signals with at most 32 metered Access statements,
-produced 1,000 score rows and 10,000 slot rows, and paged the leading hot
-target through the ordered index with at most 16 Access statements. These are
-bounded-work and correctness observations for this fixture copy, not a
-production recommendation throughput claim.
-
-SEARCH18's first cold-storage trace on the second copy
-(`20260927t022011-31a2da`) returned a correct 64-result snapshot of the
-10,000-unit population in 1,503.0 ms, with eight Fuseki calls and 111,609
-received bytes. It missed the unchanged 1,500 ms single-query limit by 3.0 ms.
-After changing the cold probe to a one-hit query, the next run
-(`20260927t022135-3bbcaa`) exposed a diagnostic-only partition-route rebind
-error on a reused fixture copy; the test setup now rebinds its ephemeral
-meter endpoint before Main starts. The subsequent run
-(`20260927t022346-66d224`) cold-restarted storage in 48.066 s, then returned
-HTTP 503 `search_index_unavailable` at 1,556.4 ms on its first one-hit query.
-The server recorded one read attempt exhausting the 1,500 ms wall deadline;
-its meter saw four Fuseki calls, 8,852 response bytes and one upstream error.
-The degree, cursor and movement probes were not reached, so SEARCH18 remains
-unqualified. No call, byte or time budget was increased.
-
-The third through sixth writable restores took 316.611 s, 191.673 s,
-181.209 s and 232.176 s; every copy stayed below the 600-second preparation
-deadline. The first two OPS attempts exposed fixture-canary collisions in the
-fresh token and rejected-candidate phrases. A later run exposed Docker
-Desktop's separate container host network; the k6 runner now uses the same
-host-loopback mapping as the passing small public-query test. The clean sixth
-copy produced the first full 20-second phase-D mixed trace
-(`20260927t025054-7b83f2`): eight k6 read clients and two admitted writers
-against 100,000 imported Works, 10,000 imported public units and ten fresh
-command Works. It completed 198 HTTP reads and 22 writes, an observed 90/10
-read/write split. Read p95 was 1,457.6 ms (Main 1,486.6 ms, Realm 1,457.6 ms,
-Content 677.4 ms), while edit and selection write p95 were 4,924.3 ms and
-4,396.2 ms. Ten of 198 reads returned HTTP 503 (5.05%); both Content
-`dependency_unavailable` and public `search_index_unavailable` occurred. The
-zero-error objective and 2,500 ms write p95 objective therefore failed; the
-host profile is **not** qualified. No threshold was raised.
-
-The same failed run still measured relay and recovery separately: 26 relay
-samples peaked at one batch of lag and ended at zero; the checkpoint caught
-the graph at sequence 77. Main's observed process high-water mark was 150,904
-KiB. Before recovery, Fuseki's cgroup peak was 2,861,101,056 bytes and
-PostgreSQL's was 141,348,864 bytes; these containers reported no explicit
-cgroup memory limit, so the samples do not prove a host memory ceiling.
- Persistent storage stop/start, Main search readiness, seven exact post-restart
-queries and relay drain completed in 22.979 s, with graph and checkpoint still
-at sequence 77. This is a measured 20-second fixture-backed scope, not the
-older 180-second sustained capacity profile or a 20,000-unit search scale.
-
-A later SEARCH18 diagnostic moved the cold 10,000-unit membership proof to
-Main's existing `/health/search-ready` gate and recorded it as setup. In
-`20260927t030200-c4cb1d`, cold readiness took 3.077 s over four probes;
-the first admitted one-hit query took 151.4 ms, the 64-hit query took
-123.8 ms, 512 admitted candidates took 215.7 ms, and 513 candidates returned
-the explicit 422 budget outcome. The cursor, language, payload and rejected
-Realm probes reached their assertions. Movement setup against an imported Work
-then failed `InvalidMainSelectionInput`, confirming that this read fixture
-cannot stand in for an authorial command target. The test now creates that
-target through Access and Main commands. Its final run
-`20260927t030607-5979ff` reached the intended selection-movement race, but
-the phrase request returned HTTP 503 `search_index_unavailable` at 1,501.9 ms
-after four Fuseki calls and 17,202 response bytes. Main recorded its first
-read attempt consuming the entire 1,500 ms deadline; a second bounded read
-never began. This is a correctness/error-objective failure under the retained
-limit, so SEARCH18 is not declared complete.
-
-### Quiet-host registered load qualification (2026-09-27)
-
-The complete registered load tier passed as `20260927t035602-33bffd`: ten tests,
-zero failures, 162.827 seconds of test execution under the unchanged 180-second
-limit. Its preparation restored three independent writable copies of frozen
-`fx-medium-c9f6e4fdcb52`, one each for OPS05, SEARCH18 and REC02. The restores
-ran concurrently and took 261.007, 260.810 and 259.764 seconds; empty-stack
-startup took 8.899 seconds, bootstrap 1.213 seconds and aggregate preparation
-271.121 seconds under the 600-second ceiling. The fixture was not rebuilt. The
-restore smoke verified owner samples and graph readiness before the test clock.
-
-OPS05 measured 255 public reads and 35 admitted writes over a 20-second mix
-against 100,000 restored Works, 10,000 public MatchUnits and ten fresh command
-Works. Eight read clients produced an 87.9% read share and 50.2% hot-Work read
-share. There were zero HTTP or writer errors. Read p95 was 210.4 ms overall
-(Main 202.5, Realm 176.5, Content 369.4 ms); edit, selection and rating write
-p95 were 1,508.2, 1,254.8 and 549.1 ms, all under their unchanged 1,500 ms
-read and 2,500 ms write objectives. Relay lag peaked at one batch and ended at
-zero. Main process high-water memory was 149,584 KiB; before recovery Fuseki
-and PostgreSQL cgroup peaks were 2,706,743,296 and 140,726,272 bytes. Neither
-container had an explicit cgroup memory limit, so these samples record usage
-rather than proving a host memory ceiling. Persistent storage restart, search
-readiness, exact post-restart reads and relay drain took 25.960 seconds under
-the unchanged 90-second recovery limit.
-
-The earlier OPS05 miss timed a three-command draft, publication and selection
-workflow as one selection write and produced one Content 503 while that workflow
-mutated the public graph. The registered run prepared four published
-Contributions in 4.680 seconds of recorded setup before the mix, then timed the
-admitted selection command itself during the mix. Public search retry pauses
-after proven graph movement were reduced from 75/250 ms to 25/50 ms; the
-1,500 ms deadline and all call and byte bounds stayed fixed. A failed delta
-proof now retains the last qualified membership for a bounded retry instead of
-forcing another 10,000-unit inventory.
-
-SEARCH18 cold-restarted the restored storage in 19.350 seconds and reached
-Main search readiness in 2.101 seconds. The 10,000-unit corpus returned 512
-admitted candidates in 177.0 ms and explicitly rejected 513 with HTTP 422 in
-153.4 ms. Its real selection-movement query returned the newly selected
-Contribution in 698.9 ms, using 14 Main-to-Fuseki calls and 232,582 response
-bytes. One native membership delta was available and no full corpus inventory
-ran during that retry. The probe's 96 metered Fuseki calls are the aggregate
-across readiness and multiple separate queries, not a per-request call count;
-the measured movement request stayed below the 72-call and 8 MiB per-request
-bounds. The same tier passed REC02's 10,000-signal hot-target and sparse ranking
-test in 4.0 seconds.
-
-This qualification covers the named 20-second host mix and 10,000 public
-MatchUnits. It does not claim the older 180-second sustained capacity profile
-or a 20,000-unit search corpus. The manager's clean full backend run remains the
-final acceptance gate.
-
-### Stable OPS05 arrival-rate measurement (2026-09-27)
-
-Record run 5 (`20260927t071628-ff07f0`) exposed a sampling defect in the
-20-second mix: closed-loop writers completed only two selection writes, so the
-reported 2,717 ms p95 was their maximum. The 264 reads and 28 writes also
-produced a 90.4% read share and only 292 completed requests. Selection's
-draft and publication prerequisites were already outside the timed interval.
-
-The revised fixture-backed Phase D profile offers four public reads and one
-admitted write per second for 63 seconds, independent of observed latency.
-Selection, Work metadata edit and standing rating rotate through the write
-slots, yielding 21 samples of each kind before any write p95 is compared.
-Twenty-one published selection prerequisites are prepared before the mix (18.4,
-19.0 and 19.0 seconds in the three runs). Writes targeting the same Work are
-serialized, with time in that queue included in request latency. The 10 fresh
-command Works and 100,000 restored Works are read against 10,000 restored public
-MatchUnits. k6 recorded 253 reads in each run, one more than the nominal 252
-at its scheduling boundary, with zero dropped arrivals. All 63 writes completed
-in each run: 316 requests, 80.06% reads and zero HTTP or writer errors. The
-unchanged objectives remain 70–90% reads, at least 300 completed requests,
-read p95 at most 1,500 ms, each write-kind p95 at most 2,500 ms, no growing
-relay backlog and storage recovery within 90 seconds.
-
-| Load-tier run | Tier time | Read p95 | Edit median / p95 | Selection median / p95 | Rating median / p95 | Recovery |
-| --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| `20260927t081313-6acb60` | 214.4 s | 366 ms | 479 / 942 ms | 502 / 756 ms | 424 / 697 ms | 21.0 s |
-| `20260927t082537-290a9f` | 220.1 s | 447 ms | 486 / 1,005 ms | 498 / 878 ms | 408 / 585 ms | 22.2 s |
-| `20260927t083748-b28663` | 236.7 s | 440 ms | 483 / 666 ms | 512 / 1,002 ms | 415 / 566 ms | 23.9 s |
-
-All ten tests passed in each registered load tier, with stable source and a
-240-second test budget. Main, Realm and Content lane read p95 values stayed
-between 247 and 458 ms. Relay lag peaked at one batch and ended at zero in
-each run. Main process high-water memory was 147,300–150,588 KiB; Fuseki
-cgroup peaks were 3.12–3.34 GB and PostgreSQL cgroup peaks 133.9–137.8 MB.
-The containers had no explicit cgroup memory limit, so these are usage samples.
-The third tier's 236.7 seconds leaves 3.3 seconds of test-budget margin on
-this host; fixture preparation is separately limited to 600 seconds.
-
-Per-selection timing points to the Fuseki command path as the dominant source
-of the earlier 1.2–2.7 second tail, although the two original commands were
-not separately traced. Across the three passing runs, median
-Fuseki command time was 406–417 ms and command p95 was 663–925 ms. Traced
-Fuseki calls accounted for 91.6–92.5% of median selection execution time;
-median Access work was 23–25 ms before the command and 9–11 ms after it.
-Per-Work queue delay stayed below 0.4 ms. The command module executes the
-guarded graph update, validation, public-search delta and commit in one WRITE
-transaction; the client trace cannot split those internal stages further.
-Relay processing follows the selection response. A diagnostic offer of two
-writes per second (`20260927t074918-8053f5`) did saturate the graph path:
-queue delay reached 5.35 seconds and 14 of 360 reads returned 503. The
-observed one-write-per-second profile had neither symptom. No product-side
-sleep or redundant fence was identified to remove.
-
-These runs qualify the named 63-second mix on this host and the restored
-10,000-unit public corpus. They do not qualify the separate 180-second
-sustained profile or 20,000-unit search scale. Final backend acceptance still
-belongs to the manager's clean recorded run.
+This evidence qualifies the named 63-second host mix and 10,000-unit search corpus only.
+The 180-second sustained profile, 20,000-unit search scale, full
+native Jena/SQL work, 500-million-entity placement and 3-billion scenario are
+not qualified. A later owner-specific threshold breach should trigger admission,
+query/profile restriction, index adjustment or a placement review. Sharding and fleet operations remain separate measured work.

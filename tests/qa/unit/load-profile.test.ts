@@ -3,7 +3,8 @@ import { readFileSync } from 'node:fs';
 import { replacementContribution, selectedBody, uniqueToken, writerCohorts, writerIndex }
   from '../../../scripts/load/corpus.ts';
 import { fusekiImageFromCompose } from '../../../scripts/load/image.ts';
-import { PRACTICAL_PROFILE_TIMEOUT_MS } from '../../../scripts/load/budget.ts';
+import { CAPACITY_SCENARIOS, OWNER_WORKLOAD_DIMENSIONS, PRACTICAL_PROFILE_TIMEOUT_MS,
+  checkedOwnerWorkload, deriveCapacity } from '../../../scripts/load/budget.ts';
 import { onceForKey, runBoundedIndices } from '../../../scripts/load/schedule.ts';
 import { delta, laneReadLatencies, laneReadP95Within, parseCgroupMemory, percentile,
   relayBacklogTrend, searchProofDelta, selectPhraseQuery,
@@ -87,6 +88,33 @@ test('OPS05: practical profile budget covers the measured seed, mix and restart 
   const restartReserveMs = 20 * 60_000;
   expect(PRACTICAL_PROFILE_TIMEOUT_MS)
     .toBeGreaterThan(measuredSeedMs + mixMs + restartReserveMs);
+});
+
+test('OPS05: owner facts, retained history and queue size derive from separate inputs', () => {
+  expect(CAPACITY_SCENARIOS).toEqual({ current: 500_000_000n, future: 3_000_000_000n });
+  const input = { ownerEntities: 2_000n, currentFactsPerEntity: 3n,
+    retainedFacts: 400n, measuredRdfBytesPerFact: null,
+    arrivalsPerSecond: 7n, retentionSeconds: 60n };
+  expect(deriveCapacity(input)).toEqual({ currentFacts: 6_000n, rdfFacts: 6_400n,
+    rdfBytes: null, retainedQueueItems: 420n });
+  expect(deriveCapacity({ ...input, measuredRdfBytesPerFact: 120n }).rdfBytes).toBe(768_000n);
+  expect(() => deriveCapacity({ ...input, retainedFacts: -1n })).toThrow('retainedFacts must be nonnegative');
+});
+
+test('OPS05: workload inputs keep owner skew and distinct graph depths explicit', () => {
+  expect(Object.keys(OWNER_WORKLOAD_DIMENSIONS)).toHaveLength(7);
+  const access = { representationDepth: 8, groupDepth: 32, resourceDepth: 4,
+    dependentGrantDepth: 2, reachedStates: 50, reachedEdges: 76,
+    subjectMemberships: 3, policyIntersections: 2, policyExclusions: 1, revocationFanout: 12 };
+  expect(checkedOwnerWorkload('identityAccess', access)).toBe(access);
+  expect(() => checkedOwnerWorkload('identityAccess', { ...access, reachedEdges: Number.MAX_SAFE_INTEGER + 1 }))
+    .toThrow('identityAccess.reachedEdges must be a nonnegative safe integer');
+  const incomplete = { ...access } as Partial<typeof access>;
+  delete incomplete.resourceDepth;
+  expect(() => checkedOwnerWorkload('identityAccess', incomplete as typeof access))
+    .toThrow('identityAccess.resourceDepth must be a nonnegative safe integer');
+  expect(OWNER_WORKLOAD_DIMENSIONS.statements).toContain('correlatedOccurrences');
+  expect(OWNER_WORKLOAD_DIMENSIONS.governanceDelivery).toContain('representativesPerSeat');
 });
 
 test('OPS05/SEARCH18: call and latency evidence counts all attempts', () => {
