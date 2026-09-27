@@ -66,7 +66,7 @@ export async function readZoneReplies(session: WorkReadSession, realm: string, k
   const bodies = revisions.length
     ? await session.deps.content.readExactBatch(revisions, async ids => new Set(ids)) : [];
   const contentBytes = bodies.reduce((total, item) => total + (item.status === 'available'
-    ? Buffer.byteLength(item.body.body, 'utf8') : 0), 0);
+    && typeof item.body.body === 'string' ? Buffer.byteLength(item.body.body, 'utf8') : 0), 0);
   if (contentBytes > ZONE_MODULE_COST.contentBytes) {
     throw new WorkReadUnavailable('Realm reply content batch exceeds the read budget');
   }
