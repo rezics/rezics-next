@@ -1,3 +1,4 @@
+import { currentMembershipConsent } from './memberships.ts';
 import { randomUUID } from 'node:crypto';
 import type { PoolClient } from 'pg';
 import { RealmAdminDenied, RealmAdminInvalid, RealmAdminLimit, RealmAdminStale,
@@ -34,26 +35,11 @@ export async function changeRealmMember(client: PoolClient, realm: string, input
   const membershipId = member?.id ?? randomUUID();
   let membershipGeneration = member?.generation ?? '0';
   if (input.action === 'add') {
-    // The same immutable consent, representation, grant and generation basis
-    // checked by AccessMemberships.change; a moderator cannot invent consent.
-    const consent = await client.query(`SELECT c.id FROM access.membership_consent c
-      JOIN access.principal p ON p.id = c.principal_id AND p.active AND p.enforcement_epoch = c.principal_epoch
-      JOIN access.authority_subject s ON s.id = c.member_subject AND s.kind = 'agent' AND s.active
-        AND s.generation = c.member_generation
-      JOIN access.representation r ON r.id = c.representation_id AND r.principal_id = c.principal_id
-        AND r.subject_id = c.member_subject AND r.action = 'access.membership.consent' AND r.active
-        AND r.generation = c.representation_generation AND r.valid_until > clock_timestamp()
-      JOIN access.permission_grant g ON g.id = c.grant_id AND g.recipient_subject = c.member_subject
-        AND g.scope_id = 'work:create:root' AND g.action = 'access.membership.consent' AND g.active
-        AND g.generation = c.grant_generation AND g.membership_id IS NULL AND g.valid_until > clock_timestamp()
-      WHERE c.id = $1 AND c.kind = 'realm' AND c.owner_subject = $2 AND c.member_subject = $3
-        AND c.policy_revision = $4 AND c.terms_revision = $5 AND c.next_generation = $6
-        AND c.expires_at > clock_timestamp()
-        AND NOT EXISTS (SELECT 1 FROM access.membership_consent_revocation v WHERE v.consent_id = c.id)
-        AND NOT EXISTS (SELECT 1 FROM access.membership_consent_use u WHERE u.consent_id = c.id)
-      FOR SHARE OF c,p,s,r,g`, [input.consent, realm, input.member, policy.revision,
-      policy.terms_revision, (BigInt(membershipGeneration) + 1n).toString()]);
-    if (!consent.rowCount) throw new RealmAdminDenied('Recipient consent is unavailable');
+    const consent = await currentMembershipConsent(client, { kind: 'realm', ownerSubject: realm,
+      memberSubject: input.member, expectedPolicyRevision: policy.revision,
+      termsRevision: policy.terms_revision, consentReference: input.consent! },
+    (BigInt(membershipGeneration) + 1n).toString());
+    if (!consent) throw new RealmAdminDenied('Recipient consent is unavailable');
   }
   if (input.action === 'add' || input.action === 'remove') {
     membershipGeneration = (BigInt(membershipGeneration) + 1n).toString();

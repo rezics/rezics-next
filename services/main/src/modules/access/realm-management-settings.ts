@@ -1,11 +1,12 @@
 import { createHash } from 'node:crypto';
 import type { PoolClient } from 'pg';
 import { Value } from 'typebox/value';
-import { realmSettings, RealmAdminInvalid, RealmAdminStale, type RealmSettings,
+import { realmSettings, RealmAdminInvalid, RealmAdminStale, RealmAdminConflict, RealmAdminDenied, type RealmSettings,
   type SettingsCommand } from '../realm-admin/contract.ts';
 import { AdmissionDenied } from './admission.ts';
 import { realmMemberProof } from '../realm-reply/member-policy.ts';
-import { realmRulesRef } from '../governance/rules.ts';
+import { realmRulesRef, publishRuleRevision } from '../governance/rules.ts';
+import { GovernanceConflict, GovernanceDenied, GovernanceInvalid, GovernanceStale } from '../governance/store.ts';
 
 const hash = (input: unknown) => createHash('sha256').update(JSON.stringify(input)).digest('hex');
 
@@ -34,26 +35,18 @@ export async function saveRealmSettings(client: PoolClient, realm: string, princ
   const document = { profile: 'realm-settings-rules-v1', public: true, rules: settings.rules };
   if (Buffer.byteLength(JSON.stringify(document)) > 16_384) throw new RealmAdminInvalid('Rules exceed the governance document budget');
   const ref = realmRulesRef(realm);
-  // Same absent-head serialization as GovernanceRules.publish, including generic
-  // rule edits made outside this aggregate settings endpoint.
-  await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [ref]);
-  const prior = (await client.query<{ revision: string; scope_id: string }>(`
-    SELECT revision::text,scope_id FROM access.governance_rule_head WHERE ref = $1 FOR UPDATE`, [ref])).rows[0];
-  if ((prior?.revision ?? null) !== input.expectedRulesRevision) throw new RealmAdminStale('Realm rules revision changed');
-  const scope = `governance:realm:${realm}`;
-  if (prior && prior.scope_id !== scope) throw new RealmAdminInvalid('Realm rules belong to another scope');
-  const revision = (BigInt(prior?.revision ?? '0') + 1n).toString();
-  const digest = hash(document);
-  await client.query(`INSERT INTO access.governance_rule_head (ref,scope_id,revision,digest)
-    VALUES ($1,$2,$3,$4) ON CONFLICT (ref) DO UPDATE SET revision = EXCLUDED.revision,digest = EXCLUDED.digest`,
-  [ref, scope, revision, digest]);
-  await client.query(`INSERT INTO access.governance_rule_revision
-    (ref,revision,scope_id,digest,document,principal_id,acting_subject,idempotency_key,request_digest)
-    VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
-  [ref, revision, scope, digest, document, principalId, input.actingSubject, hash({ realm, key }), hash(input)]);
+  const published = await publishRuleRevision(client, principalId, { ref, scopeId: `governance:realm:${realm}`,
+    expectedRevision: input.expectedRulesRevision, actingSubject: input.actingSubject,
+    document, idempotencyKey: hash({ realm, key }) }).catch((error: unknown) => {
+    if (error instanceof GovernanceStale) throw new RealmAdminStale(error.message);
+    if (error instanceof GovernanceConflict) throw new RealmAdminConflict(error.message);
+    if (error instanceof GovernanceInvalid) throw new RealmAdminInvalid(error.message);
+    if (error instanceof GovernanceDenied) throw new RealmAdminDenied(error.message);
+    throw error;
+  });
   await client.query(`INSERT INTO access.realm_admin_settings (realm,who_may_submit) VALUES ($1,$2)
     ON CONFLICT (realm) DO UPDATE SET who_may_submit = EXCLUDED.who_may_submit`, [realm, settings.whoMaySubmit]);
-  return { settings, ruleBasis: { ref, revision, digest } };
+  return { settings, ruleBasis: { ref, revision: published.revision, digest: published.digest } };
 }
 
 /** This is an additional Access restriction on the existing submission grant,

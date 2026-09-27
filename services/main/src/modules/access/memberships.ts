@@ -145,6 +145,40 @@ type Member = { id: string; state: 'joined' | 'left'; generation: string };
 
 /** One owner transaction serializes a membership episode with dependent grants.
  * Org roster and Realm participation use distinct management actions/policies. */
+/** One consent predicate shared by generic and Realm-scoped membership writes. */
+export async function currentMembershipConsent(client: PoolClient,
+  input: Pick<MembershipChange, 'kind' | 'ownerSubject' | 'memberSubject' | 'expectedPolicyRevision'
+    | 'termsRevision' | 'consentReference'>, nextGeneration: string): Promise<boolean> {
+  const consent = await client.query(`SELECT c.id FROM access.membership_consent c
+    JOIN access.principal p ON p.id = c.principal_id AND p.active
+      AND p.enforcement_epoch = c.principal_epoch
+    JOIN access.authority_subject s ON s.id = c.member_subject
+      AND s.kind = 'agent' AND s.active AND s.generation = c.member_generation
+    JOIN access.representation r ON r.id = c.representation_id
+      AND r.principal_id = c.principal_id AND r.subject_id = c.member_subject
+      AND r.action = 'access.membership.consent' AND r.active
+      AND r.generation = c.representation_generation
+      AND r.valid_until > clock_timestamp()
+    JOIN access.permission_grant g ON g.id = c.grant_id
+      AND g.recipient_subject = c.member_subject AND g.scope_id = $8
+      AND g.action = 'access.membership.consent' AND g.active
+      AND g.generation = c.grant_generation AND g.membership_id IS NULL
+      AND g.valid_until > clock_timestamp()
+    WHERE c.id = $1 AND c.kind = $2 AND c.owner_subject = $3
+      AND c.member_subject = $4 AND c.policy_revision = $5
+      AND c.terms_revision = $6 AND c.next_generation = $7
+      AND c.expires_at > clock_timestamp()
+      AND NOT EXISTS (SELECT 1 FROM access.membership_consent_revocation v
+        WHERE v.consent_id = c.id)
+      AND NOT EXISTS (SELECT 1 FROM access.membership_consent_use u
+        WHERE u.consent_id = c.id)
+    FOR SHARE OF c, p, s, r, g`,
+  [input.consentReference, input.kind, input.ownerSubject, input.memberSubject,
+    input.expectedPolicyRevision, input.termsRevision,
+    nextGeneration, SCOPE]);
+  return !!consent.rows[0];
+}
+
 export class AccessMemberships {
   constructor(private readonly pool: Pool) {}
 
@@ -340,34 +374,8 @@ export class AccessMemberships {
           AND (expires_at IS NULL OR expires_at > clock_timestamp())
           FOR SHARE`, [input.kind, input.ownerSubject, input.memberSubject]);
         if (ban.rows[0]) throw new MembershipDenied('member is banned');
-        const consent = await client.query(`SELECT c.id FROM access.membership_consent c
-          JOIN access.principal p ON p.id = c.principal_id AND p.active
-            AND p.enforcement_epoch = c.principal_epoch
-          JOIN access.authority_subject s ON s.id = c.member_subject
-            AND s.kind = 'agent' AND s.active AND s.generation = c.member_generation
-          JOIN access.representation r ON r.id = c.representation_id
-            AND r.principal_id = c.principal_id AND r.subject_id = c.member_subject
-            AND r.action = 'access.membership.consent' AND r.active
-            AND r.generation = c.representation_generation
-            AND r.valid_until > clock_timestamp()
-          JOIN access.permission_grant g ON g.id = c.grant_id
-            AND g.recipient_subject = c.member_subject AND g.scope_id = $8
-            AND g.action = 'access.membership.consent' AND g.active
-            AND g.generation = c.grant_generation AND g.membership_id IS NULL
-            AND g.valid_until > clock_timestamp()
-          WHERE c.id = $1 AND c.kind = $2 AND c.owner_subject = $3
-            AND c.member_subject = $4 AND c.policy_revision = $5
-            AND c.terms_revision = $6 AND c.next_generation = $7
-            AND c.expires_at > clock_timestamp()
-            AND NOT EXISTS (SELECT 1 FROM access.membership_consent_revocation v
-              WHERE v.consent_id = c.id)
-            AND NOT EXISTS (SELECT 1 FROM access.membership_consent_use u
-              WHERE u.consent_id = c.id)
-          FOR SHARE OF c, p, s, r, g`,
-        [input.consentReference, input.kind, input.ownerSubject, input.memberSubject,
-          input.expectedPolicyRevision, input.termsRevision,
-          (BigInt(priorGeneration) + 1n).toString(), SCOPE]);
-        if (!consent.rows[0]) throw new MembershipDenied('recipient consent unavailable');
+        const consent = await currentMembershipConsent(client, input, (BigInt(priorGeneration) + 1n).toString());
+        if (!consent) throw new MembershipDenied('recipient consent unavailable');
       }
       const membershipId = existing.rows[0]?.id ?? randomUUID();
       const generation = (BigInt(priorGeneration) + 1n).toString();

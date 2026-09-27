@@ -132,6 +132,11 @@ test('Realm settings: atomic rule CAS, localization, submission restrictions and
     expect(await new GovernanceRules(s.stack.accessPool).current(basis.ref, s.scope))
       .toEqual({ revision: basis.revision, digest: basis.digest });
     expect(await new GovernanceRules(s.stack.accessPool).publishedRealmRules(s.realm)).toEqual(input.settings.rules);
+    const sameDocument = await new GovernanceRules(s.stack.accessPool).publish(s.owner.principal, {
+      scopeId: s.scope, ref: `urn:comparison:${randomUUID()}`, actingSubject: s.owner.actor,
+      expectedRevision: null, document: { rules: input.settings.rules, public: true, profile: 'realm-settings-rules-v1' },
+      idempotencyKey: randomUUID() });
+    expect(sameDocument.digest).toBe(basis.digest);
     expect((await s.call('PUT', '/settings', input, s.owner.token, key)).body.replayed).toBe(true);
     expect((await s.call('PUT', '/settings', input)).status).toBe(409);
     expect((await s.call('PUT', '/settings', { ...input, expectedGeneration: '1',
@@ -242,10 +247,15 @@ test('Realm members: recipient consent, dated roster, removal, temporary bans an
     expect(roster.status).toBe(200);
     expect(roster.body.items).toMatchObject([{ member: s.moderator.actor, state: 'joined', membershipGeneration: '1' }]);
     expect((roster.body.items as { joinedAt: string }[])[0]!.joinedAt).toBeString();
+    await s.moderator.grant(`reply:place:${s.realm}`, 'reply.place');
+    const pending = await s.stack.access.register({ principal: s.moderator.principal,
+      actingSubject: s.moderator.actor, action: 'reply.place', scope: `reply:place:${s.realm}`,
+      idempotencyKey: randomUUID(), requestDigest: 'b'.repeat(64) });
     const ban = { ...input, action: 'ban', expectedGeneration: '1', expectedMembershipGeneration: '1',
       consent: null, durationSeconds: 60, reason: 'Repeated rule violations' };
     const banned = await s.call('POST', '/members', ban);
     expect(banned.status).toBe(201);
+    await expect(s.stack.access.claim(pending.id, 'b'.repeat(64))).rejects.toThrow('banned');
     expect((await s.call('GET', `/members${s.actorQuery()}`)).body.items).toMatchObject([
       { member: s.moderator.actor, banned: true, bannedUntil: banned.body.bannedUntil }]);
     const client = await s.stack.accessPool.connect();

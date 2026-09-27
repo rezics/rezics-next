@@ -26,6 +26,54 @@ export interface PublishedRule {
   document: Record<string, unknown>; replayed: boolean;
 }
 
+/** Reused by aggregate settings after its Access authority check. The caller
+ * owns the transaction, so rules, settings and the audit receipt commit together. */
+export async function publishRuleRevision(client: PoolClient, principalId: string,
+  input: RulePublication): Promise<PublishedRule> {
+  const document = canonical(input.document);
+  if (!input.ref || input.ref.length > 512 || !input.scopeId || input.scopeId.length > 256
+    || !agentPattern.test(input.actingSubject) || !keyPattern.test(input.idempotencyKey)
+    || input.expectedRevision !== null && !/^[1-9][0-9]{0,18}$/.test(input.expectedRevision)
+    || typeof input.document !== 'object' || input.document === null || Array.isArray(input.document)
+    || !document || Buffer.byteLength(document) > 16_384) {
+    throw new GovernanceInvalid('rule publication does not match its profile');
+  }
+  const digest = sha256(document);
+  const requestDigest = sha256(canonical({ ...input, idempotencyKey: undefined }));
+  // The absent head needs the same serialization as a later head CAS.
+  await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [input.ref]);
+  const prior = (await client.query<{ ref: string; revision: string; scope_id: string;
+    digest: string; document: Record<string, unknown>; request_digest: string }>(
+    `SELECT ref, revision::text, scope_id, digest, document, request_digest
+     FROM access.governance_rule_revision WHERE principal_id = $1 AND idempotency_key = $2`,
+  [principalId, input.idempotencyKey])).rows[0];
+  if (prior) {
+    if (prior.request_digest !== requestDigest) throw new GovernanceConflict('rule key binds another intent');
+    return { ref: prior.ref, scopeId: prior.scope_id, revision: prior.revision, digest: prior.digest,
+      document: prior.document, replayed: true };
+  }
+  const head = (await client.query<{ revision: string; scope_id: string }>(
+    'SELECT revision::text, scope_id FROM access.governance_rule_head WHERE ref = $1 FOR UPDATE',
+  [input.ref])).rows[0];
+  if (head?.scope_id && head.scope_id !== input.scopeId) throw new GovernanceDenied('rule belongs to another scope');
+  if ((head?.revision ?? null) !== input.expectedRevision) throw new GovernanceStale('rule head changed');
+  const revision = head ? (BigInt(head.revision) + 1n).toString() : '1';
+  if (head) {
+    await client.query('UPDATE access.governance_rule_head SET revision = $2, digest = $3 WHERE ref = $1',
+      [input.ref, revision, digest]);
+  } else {
+    await client.query(`INSERT INTO access.governance_rule_head (ref, scope_id, revision, digest)
+      VALUES ($1, $2, $3, $4)`, [input.ref, input.scopeId, revision, digest]);
+  }
+  await client.query(`INSERT INTO access.governance_rule_revision (ref, revision, scope_id, digest,
+    document, principal_id, acting_subject, idempotency_key, request_digest)
+    VALUES ($1, $2, $3, $4, $5::jsonb, $6, $7, $8, $9)`,
+  [input.ref, revision, input.scopeId, digest, document, principalId, input.actingSubject,
+    input.idempotencyKey, requestDigest]);
+  return { ref: input.ref, scopeId: input.scopeId, revision, digest, document: input.document,
+    replayed: false };
+}
+
 /** One Access transaction publishes an immutable rule revision and advances its CAS head. */
 export class GovernanceRules implements RuleBasis {
   constructor(private readonly pool: Pool) {}
@@ -85,50 +133,9 @@ export class GovernanceRules implements RuleBasis {
   }
 
   async publish(principal: VerifiedPrincipal, input: RulePublication): Promise<PublishedRule> {
-    const document = canonical(input.document);
-    if (!input.ref || input.ref.length > 512 || !input.scopeId || input.scopeId.length > 256
-      || !agentPattern.test(input.actingSubject) || !keyPattern.test(input.idempotencyKey)
-      || input.expectedRevision !== null && !/^[1-9][0-9]{0,18}$/.test(input.expectedRevision)
-      || typeof input.document !== 'object' || input.document === null || Array.isArray(input.document)
-      || !document || Buffer.byteLength(document) > 16_384) {
-      throw new GovernanceInvalid('rule publication does not match its profile');
-    }
-    const digest = sha256(document);
-    const requestDigest = sha256(canonical({ ...input, idempotencyKey: undefined }));
     return this.transaction(async client => {
       const principalId = await this.authorized(client, principal, input.actingSubject, input.scopeId);
-      // The absent head needs the same serialization as a later head CAS.
-      await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [input.ref]);
-      const prior = (await client.query<{ ref: string; revision: string; scope_id: string;
-        digest: string; document: Record<string, unknown>; request_digest: string }>(
-        `SELECT ref, revision::text, scope_id, digest, document, request_digest
-         FROM access.governance_rule_revision WHERE principal_id = $1 AND idempotency_key = $2`,
-      [principalId, input.idempotencyKey])).rows[0];
-      if (prior) {
-        if (prior.request_digest !== requestDigest) throw new GovernanceConflict('rule key binds another intent');
-        return { ref: prior.ref, scopeId: prior.scope_id, revision: prior.revision, digest: prior.digest,
-          document: prior.document, replayed: true };
-      }
-      const head = (await client.query<{ revision: string; scope_id: string }>(
-        'SELECT revision::text, scope_id FROM access.governance_rule_head WHERE ref = $1 FOR UPDATE',
-      [input.ref])).rows[0];
-      if (head?.scope_id && head.scope_id !== input.scopeId) throw new GovernanceDenied('rule belongs to another scope');
-      if ((head?.revision ?? null) !== input.expectedRevision) throw new GovernanceStale('rule head changed');
-      const revision = head ? (BigInt(head.revision) + 1n).toString() : '1';
-      if (head) {
-        await client.query('UPDATE access.governance_rule_head SET revision = $2, digest = $3 WHERE ref = $1',
-          [input.ref, revision, digest]);
-      } else {
-        await client.query(`INSERT INTO access.governance_rule_head (ref, scope_id, revision, digest)
-          VALUES ($1, $2, $3, $4)`, [input.ref, input.scopeId, revision, digest]);
-      }
-      await client.query(`INSERT INTO access.governance_rule_revision (ref, revision, scope_id, digest,
-        document, principal_id, acting_subject, idempotency_key, request_digest)
-        VALUES ($1, $2, $3, $4, $5::jsonb, $6, $7, $8, $9)`,
-      [input.ref, revision, input.scopeId, digest, document, principalId, input.actingSubject,
-        input.idempotencyKey, requestDigest]);
-      return { ref: input.ref, scopeId: input.scopeId, revision, digest, document: input.document,
-        replayed: false };
+      return publishRuleRevision(client, principalId, input);
     });
   }
 
