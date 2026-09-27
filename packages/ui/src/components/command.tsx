@@ -170,7 +170,11 @@ export const CommandList = (props: React.ComponentProps<'div'>) => {
 
   return (
     <div className="max-h-72 min-h-0 flex-1">
-      <div className={cn('flex flex-1 flex-col pr-2.5', className)} data-slot="command-list" {...rest} />
+      <div
+        className={cn('flex flex-1 flex-col pr-2.5', className)}
+        data-slot="command-list"
+        {...rest}
+      />
     </div>
   );
 };

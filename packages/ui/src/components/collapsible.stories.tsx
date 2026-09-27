@@ -31,8 +31,8 @@ export const Spoiler: Story = {
   render: (args) => (
     <Collapsible className="flex max-w-xl flex-col gap-2" {...args}>
       <p className="text-sm">
-        The countdown only Wang Miao can see is the book’s best scene, and the reason why is
-        worth the wait.
+        The countdown only Wang Miao can see is the book’s best scene, and the reason why is worth
+        the wait.
       </p>
       <CollapsibleTrigger asChild>
         <Button className="w-fit" size="sm" variant="secondary">

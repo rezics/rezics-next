@@ -110,7 +110,9 @@ export const CloseWithEscape: Story = {
     await openSheet(canvasElement);
     await userEvent.keyboard('{Escape}');
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
-    await expect(within(canvasElement).getByRole('button', { name: 'Revision history' })).toHaveFocus();
+    await expect(
+      within(canvasElement).getByRole('button', { name: 'Revision history' }),
+    ).toHaveFocus();
   },
 };
 
@@ -161,7 +163,9 @@ export const Chinese: Story = {
       <SheetContent>
         <SheetHeader description="只显示符合条件的帖子。" title="筛选「科幻」Realm 的帖子" />
         <SheetBody>
-          <p className="text-sm">当前条件：讨论《三体》（The Three-Body Problem）· 最近 30 天 · 至少 10 个赞同。</p>
+          <p className="text-sm">
+            当前条件：讨论《三体》（The Three-Body Problem）· 最近 30 天 · 至少 10 个赞同。
+          </p>
         </SheetBody>
         <SheetFooter>
           <SheetClose asChild>
@@ -174,7 +178,9 @@ export const Chinese: Story = {
   ),
   async play({ canvasElement }) {
     const sheet = await openSheet(canvasElement, '筛选');
-    await expect(within(sheet).getByRole('heading', { name: '筛选「科幻」Realm 的帖子' })).toBeVisible();
+    await expect(
+      within(sheet).getByRole('heading', { name: '筛选「科幻」Realm 的帖子' }),
+    ).toBeVisible();
   },
 };
 

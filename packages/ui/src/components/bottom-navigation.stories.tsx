@@ -92,7 +92,9 @@ const PhoneNavigation = (
               )}
               <BottomNavigationItemLabel>
                 {labels[destination]}
-                {destination === 'inbox' && unread ? <span className="sr-only"> (unread)</span> : null}
+                {destination === 'inbox' && unread ? (
+                  <span className="sr-only"> (unread)</span>
+                ) : null}
               </BottomNavigationItemLabel>
             </BottomNavigationItem>
           ))}
@@ -107,7 +109,10 @@ export const Default: Story = {
   async play({ canvasElement }) {
     const bar = within(canvasElement).getByRole('navigation', { name: 'Primary' });
     await expect(within(bar).getAllByRole('link')).toHaveLength(5);
-    await expect(within(bar).getByRole('link', { name: 'Home' })).toHaveAttribute('aria-current', 'page');
+    await expect(within(bar).getByRole('link', { name: 'Home' })).toHaveAttribute(
+      'aria-current',
+      'page',
+    );
     await expect(within(bar).getByRole('link', { name: 'Inbox (unread)' })).toBeVisible();
   },
 };
@@ -117,7 +122,10 @@ export const Navigate: Story = {
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     await userEvent.click(canvas.getByRole('link', { name: 'Shelves' }));
-    await expect(canvas.getByRole('link', { name: 'Shelves' })).toHaveAttribute('aria-current', 'page');
+    await expect(canvas.getByRole('link', { name: 'Shelves' })).toHaveAttribute(
+      'aria-current',
+      'page',
+    );
     await expect(canvas.getByRole('link', { name: 'Home' })).not.toHaveAttribute('aria-current');
   },
 };
@@ -131,7 +139,10 @@ export const KeyboardNavigation: Story = {
     await userEvent.tab();
     await expect(canvas.getByRole('link', { name: 'Discover' })).toHaveFocus();
     await userEvent.keyboard('{Enter}');
-    await expect(canvas.getByRole('link', { name: 'Discover' })).toHaveAttribute('aria-current', 'page');
+    await expect(canvas.getByRole('link', { name: 'Discover' })).toHaveAttribute(
+      'aria-current',
+      'page',
+    );
   },
 };
 
@@ -144,12 +155,22 @@ export const Chinese: Story = {
     <PhoneNavigation
       {...args}
       current="discover"
-      labels={{ home: '首页', discover: '发现', create: '发布', inbox: '消息', shelves: '书架', bar: '主导航' }}
+      labels={{
+        home: '首页',
+        discover: '发现',
+        create: '发布',
+        inbox: '消息',
+        shelves: '书架',
+        bar: '主导航',
+      }}
     />
   ),
   async play({ canvasElement }) {
     const bar = within(canvasElement).getByRole('navigation', { name: '主导航' });
-    await expect(within(bar).getByRole('link', { name: '发现' })).toHaveAttribute('aria-current', 'page');
+    await expect(within(bar).getByRole('link', { name: '发现' })).toHaveAttribute(
+      'aria-current',
+      'page',
+    );
   },
 };
 

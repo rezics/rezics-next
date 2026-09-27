@@ -34,7 +34,10 @@ export const FirstPage: Story = {
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     await expect(canvas.getByRole('button', { name: /previous/i })).toBeDisabled();
-    await expect(canvas.getByRole('button', { name: /page 1/i })).toHaveAttribute('aria-current', 'page');
+    await expect(canvas.getByRole('button', { name: /page 1/i })).toHaveAttribute(
+      'aria-current',
+      'page',
+    );
     await expect(canvas.getByRole('button', { name: /last page, page 65/i })).toBeVisible();
   },
 };
@@ -45,7 +48,10 @@ export const GoToNext: Story = {
     const canvas = within(canvasElement);
     await userEvent.click(canvas.getByRole('button', { name: /next/i }));
     await expect(args.onPageChange).toHaveBeenCalledWith(expect.objectContaining({ page: 2 }));
-    await expect(canvas.getByRole('button', { name: /page 2/i })).toHaveAttribute('aria-current', 'page');
+    await expect(canvas.getByRole('button', { name: /page 2/i })).toHaveAttribute(
+      'aria-current',
+      'page',
+    );
   },
 };
 
@@ -55,7 +61,10 @@ export const MiddlePage: Story = {
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     await userEvent.click(canvas.getByRole('button', { name: /page 33/i }));
-    await expect(canvas.getByRole('button', { name: /page 33/i })).toHaveAttribute('aria-current', 'page');
+    await expect(canvas.getByRole('button', { name: /page 33/i })).toHaveAttribute(
+      'aria-current',
+      'page',
+    );
   },
 };
 
@@ -92,7 +101,8 @@ export const Chinese: Story = {
         rootLabel: '书评分页',
         prevTriggerLabel: '上一页',
         nextTriggerLabel: '下一页',
-        itemLabel: ({ page, totalPages }) => (page === totalPages ? `最后一页，第 ${page} 页` : `第 ${page} 页`),
+        itemLabel: ({ page, totalPages }) =>
+          page === totalPages ? `最后一页，第 ${page} 页` : `第 ${page} 页`,
       }}
     >
       <PaginationPrevious>上一页</PaginationPrevious>
@@ -104,7 +114,10 @@ export const Chinese: Story = {
     const canvas = within(canvasElement);
     await expect(canvas.getByRole('navigation', { name: '书评分页' })).toBeVisible();
     await userEvent.click(canvas.getByRole('button', { name: '下一页' }));
-    await expect(canvas.getByRole('button', { name: '第 4 页' })).toHaveAttribute('aria-current', 'page');
+    await expect(canvas.getByRole('button', { name: '第 4 页' })).toHaveAttribute(
+      'aria-current',
+      'page',
+    );
   },
 };
 

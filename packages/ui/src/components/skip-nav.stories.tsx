@@ -36,7 +36,9 @@ const Page = (props: { label?: string; skip?: React.ReactNode }) => (
     <SkipNavContent className="p-6">
       <main>
         <h1 className="font-heading font-semibold text-2xl">The Three-Body Problem</h1>
-        <p className="text-muted-foreground text-sm">Liu Cixin · 2006 · Hard SF readers rate it 4.3</p>
+        <p className="text-muted-foreground text-sm">
+          Liu Cixin · 2006 · Hard SF readers rate it 4.3
+        </p>
       </main>
     </SkipNavContent>
   </>

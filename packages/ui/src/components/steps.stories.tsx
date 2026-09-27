@@ -117,7 +117,10 @@ export const JumpToStep: Story = {
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     await userEvent.click(canvas.getByRole('tab', { name: /Moderators/ }));
-    await expect(canvas.getByRole('tab', { name: /Moderators/ })).toHaveAttribute('aria-selected', 'true');
+    await expect(canvas.getByRole('tab', { name: /Moderators/ })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    );
     await expect(canvas.getByText(/Invite @ye_wenjie/)).toBeVisible();
   },
 };

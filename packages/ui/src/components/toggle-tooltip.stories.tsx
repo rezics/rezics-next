@@ -58,7 +58,7 @@ export const ToggleClosed: Story = {
   render: (args) => <ContextHint {...args} />,
   async play({ canvasElement }) {
     await userEvent.click(trigger(canvasElement));
-    await screen.findByRole('dialog');
+    await settled(await screen.findByRole('dialog'));
     await userEvent.click(trigger(canvasElement));
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
   },
@@ -68,7 +68,7 @@ export const CloseWithEscape: Story = {
   render: (args) => <ContextHint {...args} />,
   async play({ canvasElement }) {
     await userEvent.click(trigger(canvasElement));
-    await screen.findByRole('dialog');
+    await settled(await screen.findByRole('dialog'));
     await userEvent.keyboard('{Escape}');
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
   },

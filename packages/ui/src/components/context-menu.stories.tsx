@@ -70,7 +70,7 @@ const ShelfCover = (props: React.ComponentProps<typeof ContextMenu> & { title: s
 const openContextMenu = async (canvasElement: HTMLElement, text: string) => {
   const target = within(canvasElement).getByText(text);
   const { left, top, width, height } = target.getBoundingClientRect();
-  fireEvent.contextMenu(target, { clientX: left + width / 2, clientY: top + height / 2 });
+  await fireEvent.contextMenu(target, { clientX: left + width / 2, clientY: top + height / 2 });
   return settled(await screen.findByRole('menu'));
 };
 

@@ -93,7 +93,9 @@ export const Default: Story = {
     const panel = await openPanel(canvasElement);
     await expect(panel).toHaveAccessibleName('Notes · The Three-Body Problem');
     // Non-modal: the page behind stays interactive.
-    await expect(within(canvasElement).getByRole('button', { name: /Reading notes/ })).toBeEnabled();
+    await expect(
+      within(canvasElement).getByRole('button', { name: /Reading notes/ }),
+    ).toBeEnabled();
   },
 };
 

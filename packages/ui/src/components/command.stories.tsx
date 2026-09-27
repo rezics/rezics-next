@@ -32,14 +32,62 @@ interface Entry {
 }
 
 const entries: Entry[] = [
-  { value: 'work:three-body', label: 'The Three-Body Problem', group: 'Works', hint: 'Liu Cixin · 2006', icon: <BookOpenIcon /> },
-  { value: 'work:dark-forest', label: 'The Dark Forest', group: 'Works', hint: 'Liu Cixin · 2008', icon: <BookOpenIcon /> },
-  { value: 'work:death-end', label: 'Death’s End', group: 'Works', hint: 'Liu Cixin · 2010', icon: <BookOpenIcon /> },
-  { value: 'work:santi', label: '三体', group: 'Works', hint: '刘慈欣 · 重庆出版社', icon: <BookOpenIcon /> },
-  { value: 'realm:hard-sf', label: 'Hard SF', group: 'Realms', hint: '18.2k members', icon: <UsersIcon /> },
-  { value: 'realm:translated', label: 'Translated Fiction', group: 'Realms', hint: '6.4k members', icon: <UsersIcon /> },
-  { value: 'action:post', label: 'Create a post', group: 'Actions', shortcut: 'C', icon: <PenSquareIcon /> },
-  { value: 'action:inbox', label: 'Go to Inbox', group: 'Actions', shortcut: 'G I', icon: <InboxIcon /> },
+  {
+    value: 'work:three-body',
+    label: 'The Three-Body Problem',
+    group: 'Works',
+    hint: 'Liu Cixin · 2006',
+    icon: <BookOpenIcon />,
+  },
+  {
+    value: 'work:dark-forest',
+    label: 'The Dark Forest',
+    group: 'Works',
+    hint: 'Liu Cixin · 2008',
+    icon: <BookOpenIcon />,
+  },
+  {
+    value: 'work:death-end',
+    label: 'Death’s End',
+    group: 'Works',
+    hint: 'Liu Cixin · 2010',
+    icon: <BookOpenIcon />,
+  },
+  {
+    value: 'work:santi',
+    label: '三体',
+    group: 'Works',
+    hint: '刘慈欣 · 重庆出版社',
+    icon: <BookOpenIcon />,
+  },
+  {
+    value: 'realm:hard-sf',
+    label: 'Hard SF',
+    group: 'Realms',
+    hint: '18.2k members',
+    icon: <UsersIcon />,
+  },
+  {
+    value: 'realm:translated',
+    label: 'Translated Fiction',
+    group: 'Realms',
+    hint: '6.4k members',
+    icon: <UsersIcon />,
+  },
+  {
+    value: 'action:post',
+    label: 'Create a post',
+    group: 'Actions',
+    shortcut: 'C',
+    icon: <PenSquareIcon />,
+  },
+  {
+    value: 'action:inbox',
+    label: 'Go to Inbox',
+    group: 'Actions',
+    shortcut: 'G I',
+    icon: <InboxIcon />,
+  },
 ];
 
 // Typing faster than the combobox re-renders its controlled input drops keys, as no reader would.
@@ -66,7 +114,10 @@ const Palette = (props: {
       onInputValueChange={(details) => filter(details.inputValue)}
       onValueChange={props.onValueChange}
     >
-      <CommandInput aria-label="Search REZICS" placeholder={props.placeholder ?? 'Search Works, Realms and actions'} />
+      <CommandInput
+        aria-label="Search REZICS"
+        placeholder={props.placeholder ?? 'Search Works, Realms and actions'}
+      />
       <CommandEmpty>{props.emptyText}</CommandEmpty>
       <CommandContent>
         <CommandList>
@@ -171,7 +222,9 @@ export const Empty: Story = {
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     await typist.type(canvas.getByRole('combobox', { name: 'Search REZICS' }), 'foundation');
-    await expect(await canvas.findByRole('status')).toHaveTextContent(/No Works, Realms or actions/);
+    await expect(await canvas.findByRole('status')).toHaveTextContent(
+      /No Works, Realms or actions/,
+    );
     await expect(canvas.queryByRole('listbox')).not.toBeInTheDocument();
   },
 };
@@ -204,7 +257,10 @@ export const Dialog: Story = {
           <Kbd>⌘K</Kbd>
         </Button>
       </CommandDialogTrigger>
-      <CommandDialogContent description="Jump to a Work, a Realm or an action." title="Search REZICS">
+      <CommandDialogContent
+        description="Jump to a Work, a Realm or an action."
+        title="Search REZICS"
+      >
         <Palette onValueChange={args.onValueChange} />
       </CommandDialogContent>
     </CommandDialog>

@@ -72,9 +72,21 @@ export const Types: Story = {
     <Launcher
       label="Show all types"
       toasts={[
-        { type: 'info', title: 'New revision available', description: 'Rev 43 of this Work was published.' },
-        { type: 'warning', title: 'Post held for review', description: 'Hard SF moderators check first posts.' },
-        { type: 'error', title: 'Couldn’t save your rating', description: 'Check your connection and try again.' },
+        {
+          type: 'info',
+          title: 'New revision available',
+          description: 'Rev 43 of this Work was published.',
+        },
+        {
+          type: 'warning',
+          title: 'Post held for review',
+          description: 'Hard SF moderators check first posts.',
+        },
+        {
+          type: 'error',
+          title: 'Couldn’t save your rating',
+          description: 'Check your connection and try again.',
+        },
       ]}
     />
   ),
@@ -151,7 +163,13 @@ export const Chinese: Story = {
   render: () => (
     <Launcher
       label="加入书架"
-      toasts={[{ type: 'success', title: '已加入「想读」', description: '《三体》(The Three-Body Problem) 已加入你的书架。' }]}
+      toasts={[
+        {
+          type: 'success',
+          title: '已加入「想读」',
+          description: '《三体》(The Three-Body Problem) 已加入你的书架。',
+        },
+      ]}
     />
   ),
   async play({ canvasElement }) {

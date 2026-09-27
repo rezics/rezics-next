@@ -128,8 +128,19 @@ export const SelectWithKeyboard: Story = {
     await userEvent.tab();
     await expect(trigger).toHaveFocus();
     await userEvent.keyboard('{Enter}');
-    await screen.findByRole('menu');
+    const menu = await settled(await screen.findByRole('menu'));
+    // Opening from the keyboard highlights the first item; wait for it before moving on.
+    await waitFor(() =>
+      expect(within(menu).getByRole('menuitem', { name: /Copy link/ })).toHaveAttribute(
+        'data-highlighted',
+      ),
+    );
     await userEvent.keyboard('{ArrowDown}');
+    await waitFor(() =>
+      expect(within(menu).getByRole('menuitem', { name: /Save post/ })).toHaveAttribute(
+        'data-highlighted',
+      ),
+    );
     await userEvent.keyboard('{Enter}');
     await waitFor(() => expect(screen.queryByRole('menu')).not.toBeInTheDocument());
     await expect(args.onSelect).toHaveBeenCalledWith({ value: 'save' });
@@ -193,7 +204,11 @@ const FeedOptionsMenu = (props: React.ComponentProps<typeof Menu>) => {
         </MenuRadioGroup>
         <MenuSeparator />
         <MenuGroup heading="Display">
-          <MenuCheckboxItem checked={blurSpoilers} onCheckedChange={setBlurSpoilers} value="spoilers">
+          <MenuCheckboxItem
+            checked={blurSpoilers}
+            onCheckedChange={setBlurSpoilers}
+            value="spoilers"
+          >
             Blur spoilers
           </MenuCheckboxItem>
           <MenuCheckboxItem checked={compact} onCheckedChange={setCompact} value="compact">
@@ -213,7 +228,9 @@ export const FeedOptions: Story = {
     await userEvent.click(within(menu).getByRole('menuitemradio', { name: 'New' }));
     await expect(within(menu).getByRole('menuitemradio', { name: 'New' })).toBeChecked();
     await userEvent.click(within(menu).getByRole('menuitemcheckbox', { name: 'Compact cards' }));
-    await expect(within(menu).getByRole('menuitemcheckbox', { name: 'Compact cards' })).toBeChecked();
+    await expect(
+      within(menu).getByRole('menuitemcheckbox', { name: 'Compact cards' }),
+    ).toBeChecked();
   },
 };
 

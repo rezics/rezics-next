@@ -161,7 +161,9 @@ export const Chinese: Story = {
     </Breadcrumb>
   ),
   async play({ canvasElement }) {
-    await expect(within(canvasElement).getByRole('navigation', { name: '面包屑导航' })).toBeVisible();
+    await expect(
+      within(canvasElement).getByRole('navigation', { name: '面包屑导航' }),
+    ).toBeVisible();
   },
 };
 

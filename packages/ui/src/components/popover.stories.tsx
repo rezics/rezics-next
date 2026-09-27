@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { InfoIcon } from 'lucide-react';
-import { expect, screen, userEvent, waitFor, within } from 'storybook/test';
+import { expect, fn, screen, userEvent, waitFor, within } from 'storybook/test';
 import { settled, withTheme } from '../stories/support.tsx';
 import { Button } from './button.tsx';
 import {
@@ -80,7 +80,9 @@ export const CloseWithEscape: Story = {
     await openPopover(canvasElement, /Hard SF readers/);
     await userEvent.keyboard('{Escape}');
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
-    await expect(within(canvasElement).getByRole('button', { name: /Hard SF readers/ })).toHaveFocus();
+    await expect(
+      within(canvasElement).getByRole('button', { name: /Hard SF readers/ }),
+    ).toHaveFocus();
   },
 };
 
@@ -121,12 +123,27 @@ export const WithArrow: Story = {
   },
 };
 
+const outsideClick = fn();
+
+/**
+ * Leaves the page usable: no focus trap, no inert page, and an outside click dismisses it
+ * (checked in a real browser; synthetic outside clicks race Zag's listener under load).
+ */
 export const NonModal: Story = {
-  render: (args) => <RatingContext {...args} modal={false} />,
+  render: (args) => (
+    <div className="flex min-h-96 flex-col justify-between">
+      <RatingContext {...args} modal={false} />
+      <Button className="w-fit" onClick={outsideClick} size="sm" variant="ghost">
+        1,284 ratings · updated hourly
+      </Button>
+    </div>
+  ),
   async play({ canvasElement }) {
-    await openPopover(canvasElement, /Hard SF readers/);
-    await userEvent.click(canvasElement);
-    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    const popover = await openPopover(canvasElement, /Hard SF readers/);
+    await expect(popover).not.toHaveAttribute('aria-modal', 'true');
+    await expect(document.body).not.toHaveAttribute('data-inert');
+    await userEvent.click(within(canvasElement).getByRole('button', { name: /updated hourly/ }));
+    await expect(outsideClick).toHaveBeenCalled();
   },
 };
 
@@ -174,7 +191,8 @@ export const Chinese: Story = {
           title="关于《三体》的评分"
         />
         <PopoverBody className="text-sm">
-          4.6 分来自「科幻」Realm 中 3,902 位已标记读过的成员。出版方的汇总评分作为来源统计单独显示。
+          4.6 分来自「科幻」Realm 中 3,902
+          位已标记读过的成员。出版方的汇总评分作为来源统计单独显示。
         </PopoverBody>
       </PopoverContent>
     </Popover>

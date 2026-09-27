@@ -107,7 +107,10 @@ export const Invalid: Story = {
   async play({ canvasElement }) {
     const dialog = await openDialog(canvasElement, 'New shelf');
     await expect(within(dialog).getByText('Give the shelf a name.')).toBeVisible();
-    await expect(within(dialog).getByLabelText('Shelf name')).toHaveAttribute('aria-invalid', 'true');
+    await expect(within(dialog).getByLabelText('Shelf name')).toHaveAttribute(
+      'aria-invalid',
+      'true',
+    );
   },
 };
 
@@ -123,14 +126,38 @@ export const Saving: Story = {
 };
 
 const guidelines = [
-  ['Stay on the Work', 'Discuss the Work, its editions and its reception. Off-topic threads move to the Realm lounge.'],
-  ['Mark spoilers', 'Hide plot turns behind a spoiler tag, and name the chapter or volume they come from.'],
-  ['Rate what you read', 'Ratings count only once you mark an edition as read. Re-rating after a re-read replaces the old score.'],
-  ['Credit translators', 'When you quote a translation, name the translator and the edition, for example Ken Liu’s 2014 English translation.'],
-  ['No piracy links', 'Link to publishers, libraries and legitimate stores. Moderators remove unlicensed scans without warning.'],
-  ['Report, don’t retaliate', 'Use Report on posts that break these rules. Moderators answer reports in the order they arrive.'],
-  ['Respect other languages', 'Posts in 中文, 日本語 and other languages are welcome; add a short English summary if you want wider replies.'],
-  ['Appeals', 'If a moderator removes your post, you can appeal once from your inbox. A different moderator reviews it.'],
+  [
+    'Stay on the Work',
+    'Discuss the Work, its editions and its reception. Off-topic threads move to the Realm lounge.',
+  ],
+  [
+    'Mark spoilers',
+    'Hide plot turns behind a spoiler tag, and name the chapter or volume they come from.',
+  ],
+  [
+    'Rate what you read',
+    'Ratings count only once you mark an edition as read. Re-rating after a re-read replaces the old score.',
+  ],
+  [
+    'Credit translators',
+    'When you quote a translation, name the translator and the edition, for example Ken Liu’s 2014 English translation.',
+  ],
+  [
+    'No piracy links',
+    'Link to publishers, libraries and legitimate stores. Moderators remove unlicensed scans without warning.',
+  ],
+  [
+    'Report, don’t retaliate',
+    'Use Report on posts that break these rules. Moderators answer reports in the order they arrive.',
+  ],
+  [
+    'Respect other languages',
+    'Posts in 中文, 日本語 and other languages are welcome; add a short English summary if you want wider replies.',
+  ],
+  [
+    'Appeals',
+    'If a moderator removes your post, you can appeal once from your inbox. A different moderator reviews it.',
+  ],
 ];
 
 export const LongContent: Story = {
@@ -250,7 +277,9 @@ export const Chinese: Story = {
   ),
   async play({ canvasElement }) {
     const dialog = await openDialog(canvasElement, '编辑作品信息');
-    await expect(within(dialog).getByRole('heading', { name: '编辑《三体》的作品信息' })).toBeVisible();
+    await expect(
+      within(dialog).getByRole('heading', { name: '编辑《三体》的作品信息' }),
+    ).toBeVisible();
   },
 };
 

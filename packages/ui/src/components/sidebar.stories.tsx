@@ -178,7 +178,9 @@ const Shell = (props: ShellProps) => {
                 </Avatar>
                 <span className="flex min-w-0 flex-col text-start leading-tight">
                   <span className="truncate font-medium">Ye Wenjie</span>
-                  <span className="truncate text-muted-foreground text-xs">Acting as moderator</span>
+                  <span className="truncate text-muted-foreground text-xs">
+                    Acting as moderator
+                  </span>
                 </span>
               </SidebarMenuButton>
             </SidebarMenuItem>
@@ -219,7 +221,10 @@ export const Default: Story = {
   async play({ canvasElement }) {
     const scope = within(await openIfPhone(canvasElement));
     const main = scope.getByRole('navigation', { name: 'Main' });
-    await expect(within(main).getByRole('link', { name: 'Home' })).toHaveAttribute('aria-current', 'page');
+    await expect(within(main).getByRole('link', { name: 'Home' })).toHaveAttribute(
+      'aria-current',
+      'page',
+    );
     await expect(within(main).getByRole('link', { name: 'Hard SF' })).toBeVisible();
   },
 };

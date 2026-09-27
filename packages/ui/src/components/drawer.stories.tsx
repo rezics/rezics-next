@@ -67,7 +67,9 @@ export const Bottom: Story = {
   render: () => <ShelfDrawer />,
   async play({ canvasElement }) {
     const drawer = await openDrawer(canvasElement);
-    await expect(within(drawer).getByRole('heading', { name: 'The Three-Body Problem' })).toBeVisible();
+    await expect(
+      within(drawer).getByRole('heading', { name: 'The Three-Body Problem' }),
+    ).toBeVisible();
   },
 };
 
@@ -155,8 +157,8 @@ export const InsetWithFooter: Story = {
           title="Quick reply"
         />
         <DrawerBody className="text-start text-sm">
-          The dark forest reads better as a thought experiment about trust than as a prediction.
-          The sequel’s deterrence arc makes that explicit.
+          The dark forest reads better as a thought experiment about trust than as a prediction. The
+          sequel’s deterrence arc makes that explicit.
         </DrawerBody>
         <DrawerFooter>
           <Button>Post reply</Button>
