@@ -1,3 +1,32 @@
 import type { SettingsMessages } from '../messages.ts';
 
-export default {} satisfies Partial<SettingsMessages>;
+export default {
+  title: 'プロフィール設定',
+  description: '公開プロフィールを通じて、REZICS の利用者にあなたを知ってもらえます。',
+  actingAs: '編集中',
+  publicProfile: '公開プロフィール',
+  displayName: '表示名',
+  avatar: 'プロフィール画像',
+  chooseAvatar: '画像を選択',
+  noAvatarSelected: '画像が選択されていません',
+  bio: '自己紹介',
+  avatarHelp: 'PNG、JPEG、WebP、GIF に対応しています（最大 4 MB）。保存すると画像が公開されます。',
+  removeAvatar: '現在のプロフィール画像を削除',
+  accountInfo: 'この公開名は最初にアカウント名から設定されました。ここで変更してもアカウント名は変わりません。',
+  otherInfo: 'ここでの変更は、このエージェントのプロフィールに公開されます。',
+  profileUnavailable: 'プロフィールを編集できません。ページを再読み込みしてください。',
+  saveProfile: '公開プロフィールを保存',
+  profileSaved: '公開プロフィールを更新しました。',
+  invalid: '名前、自己紹介、画像を確認してもう一度お試しください。',
+  avatarDenied: 'このプロフィールにはまだ画像を設定できません。入力内容はこのページに残っています。',
+  avatarUnavailable: 'プロフィール画像サービスを利用できません。入力内容はこのページに残っています。もう一度お試しください。',
+  handleTitle: 'ユーザー名',
+  handleHelp: 'ユーザー名は30日に1回変更できます。以前のユーザー名は90日間、新しいユーザー名に紐づけられます。',
+  save: 'ユーザー名を変更',
+  saved: 'ユーザー名を変更しました。',
+  cooldown: '前回の変更から30日経過すると、ユーザー名を再び変更できます。',
+  conflict: 'プロフィールが変更されたか、ユーザー名を利用できなくなりました。再読み込みしてもう一度お試しください。',
+  denied: 'このプロフィールを編集できなくなりました。別のプロフィールを選択してください。',
+  failed: '変更を保存できませんでした。もう一度お試しください。',
+  choose: 'プロフィールを選択',
+} satisfies Partial<SettingsMessages>;

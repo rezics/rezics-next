@@ -1,3 +1,32 @@
 import type { SettingsMessages } from '../messages.ts';
 
-export default {} satisfies Partial<SettingsMessages>;
+export default {
+  title: '個人檔案設定',
+  description: '您的公開個人檔案能讓其他人在 REZICS 認出您。',
+  actingAs: '正在編輯',
+  publicProfile: '公開個人檔案',
+  displayName: '顯示名稱',
+  avatar: '大頭貼',
+  chooseAvatar: '選擇圖片',
+  noAvatarSelected: '尚未選擇圖片',
+  bio: '自我介紹',
+  avatarHelp: '支援 PNG、JPEG、WebP 或 GIF，最大 4 MB。儲存後，圖片會公開顯示。',
+  removeAvatar: '移除目前的大頭貼',
+  accountInfo: '此公開名稱最初取自您的 REZICS 帳戶名稱。在此所做的變更不會改變帳戶名稱。',
+  otherInfo: '此處的變更會公開顯示於此身分的個人檔案中。',
+  profileUnavailable: '目前暫時無法編輯個人檔案，請重新載入此頁面。',
+  saveProfile: '儲存公開個人檔案',
+  profileSaved: '公開個人檔案已更新。',
+  invalid: '請檢查名稱、自我介紹和圖片後再試一次。',
+  avatarDenied: '目前無法為此個人檔案設定大頭貼。您已輸入的內容仍保留在此。',
+  avatarUnavailable: '大頭貼服務目前無法使用。您已輸入的內容仍保留在此，請再試一次。',
+  handleTitle: '使用者名稱',
+  handleHelp: '每 30 天可以變更一次使用者名稱。舊名稱會在 90 天內連結至新名稱。',
+  save: '變更使用者名稱',
+  saved: '使用者名稱已變更。',
+  cooldown: '距離上次變更使用者名稱需滿 30 天，才能再次變更。',
+  conflict: '此個人檔案已變更，或使用者名稱已無法使用。請重新載入後再試一次。',
+  denied: '您已無法編輯此個人檔案，請選擇其他個人檔案。',
+  failed: '無法儲存變更，請再試一次。',
+  choose: '選擇個人檔案',
+} satisfies Partial<SettingsMessages>;

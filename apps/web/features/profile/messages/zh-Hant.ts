@@ -3,10 +3,11 @@ import type { ProfileMessages } from '../messages.ts';
 
 export default {
   author: '作者',
-  organization: '機構',
+  organization: '組織',
   service: '服務',
   reader: '讀者',
-  followers: plural({ other: insert('{{count}} 位追蹤者') }, { count: asValue(number()) }),
+  followers: plural({ one: insert('{{count}} 位追蹤者'), other: insert('{{count}} 位追蹤者') },
+    { count: asValue(number()) }),
   followersAtLeast: insert('{{count}}+ 位追蹤者', { count: String }),
   follow: '追蹤',
   following: '追蹤中',
@@ -18,10 +19,12 @@ export default {
   showLess: '收合',
 
   worksHeading: insert('{{name}}的作品', { name: String }),
-  workCount: plural({ other: insert('{{count}} 部作品') }, { count: asValue(number()) }),
+  workCount: plural({ one: insert('{{count}} 部作品'), other: insert('{{count}} 部作品') },
+    { count: asValue(number()) }),
   workCountAtLeast: insert('{{count}}+ 部作品', { count: String }),
   averageRating: insert('平均評分 {{mean}}', { mean: String }),
-  ratingCount: plural({ other: insert('{{count}} 則評分') }, { count: asValue(number()) }),
+  ratingCount: plural({ one: insert('{{count}} 則評分'), other: insert('{{count}} 則評分') },
+    { count: asValue(number()) }),
   roleAuthor: '作者',
   roleTranslator: '譯者',
   roleEditor: '編者',
