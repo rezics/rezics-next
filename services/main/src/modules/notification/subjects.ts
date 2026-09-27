@@ -5,7 +5,7 @@ import type { NotificationStore } from './store.ts';
 import type { NotificationAgentReader } from './store.ts';
 import type { FusekiClient } from '../../infrastructure/fuseki.ts';
 import { allocateAgentHandle } from '../agent/handle.ts';
-import { RV, iri, type GraphLineage } from '../work/activate.ts';
+import { GRAPHS, RV, iri, type GraphLineage } from '../work/activate.ts';
 import { assertGraphAdmissionOpen } from '../work/restore-lineage.ts';
 import { publicAgent } from '../profiles/read.ts';
 import { avatarImageEligible, DEFAULT_MEDIA_CONTEXT, type MediaStore } from '../media/store.ts';
@@ -94,7 +94,10 @@ export function currentNotificationAgentReader(fuseki: FusekiClient,
     await assertGraphAdmissionOpen(fuseki, lineage);
     const rows = (await fuseki.query(`PREFIX rv: <${RV}>
       PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
-      SELECT ?displayName ?handle WHERE { ${publicAgent(iri(agent))} } LIMIT 2`, 8_192))
+      SELECT ?displayName ?handle ?avatarSelection WHERE { ${publicAgent(iri(agent))}
+        OPTIONAL { GRAPH ${iri(GRAPHS.current)} {
+          ${iri(agent)} rv:profileAvatarSelection ?avatarSelection } }
+      } LIMIT 2`, 8_192))
       .results?.bindings ?? [];
     await assertGraphAdmissionOpen(fuseki, lineage);
     if (rows.length !== 1) return null;
@@ -102,10 +105,12 @@ export function currentNotificationAgentReader(fuseki: FusekiClient,
     const handle = rows[0]?.handle?.value;
     if (!name || name.length > 200 || /[\u0000-\u001f\u007f]/.test(name)
       || handle !== allocateAgentHandle(agent)) return null;
-    const avatar = await media.avatarRows([agent], DEFAULT_MEDIA_CONTEXT).then(result => {
+    const selected = rows[0]?.avatarSelection?.value ?? null;
+    const avatar = selected ? await media.avatarRows([agent], DEFAULT_MEDIA_CONTEXT).then(result => {
       const row = result.rows.get(agent);
-      return row?.selection && avatarImageEligible(row) ? `/v1/media/avatars/${row.selection}` : null;
-    }).catch(() => null);
+      return row?.selection === selected && avatarImageEligible(row)
+        ? `/v1/media/avatars/${selected}` : null;
+    }).catch(() => null) : null;
     return { id: agent, name, handle, avatar };
   };
 }

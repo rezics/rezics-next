@@ -7,6 +7,7 @@ import { AgentProvisioning } from '../../../services/main/src/modules/agent/prov
 import { AGENT_PROFILE_COST, AgentPublicProfiles } from '../../../services/main/src/modules/agent/profile.ts';
 import { AgentVanityHandles } from '../../../services/main/src/modules/agent/vanity.ts';
 import { ProfilesAccess } from '../../../services/main/src/modules/profiles/access.ts';
+import { currentNotificationAgentReader } from '../../../services/main/src/modules/notification/subjects.ts';
 import { readMainOutboxEnvelope } from '../../../services/main/src/modules/outbox/relay.ts';
 import { hash } from '../../../services/main/src/modules/work/activate.ts';
 import { png, sha, startMediaStack } from './media-support.ts';
@@ -99,6 +100,9 @@ test('G-300: controlled profile CAS, receipts, public reads and event survive co
       profile: 'resource-avatar-selection-v1', expectedSelection: null, asset: upload.asset,
       crop: null, actingSubject: agent,
     }), 201);
+    const notificationAgent = currentNotificationAgentReader(stack.fuseki, stack.env.lineage,
+      stack.media.store);
+    expect((await notificationAgent(agent))?.avatar).toBeNull();
     const beforeProfileQueries = stack.fuseki.queries;
     const withAvatar = await json(await call('PUT', `${path}/profile`, owner.token, {
       ...body(saved.revision as string, winner.name), avatarSelection: selection.selection,
@@ -107,6 +111,7 @@ test('G-300: controlled profile CAS, receipts, public reads and event survive co
     const pictured = await json(await call('GET', path), 200);
     expect(pictured).toMatchObject({ revision: withAvatar.revision,
       avatarSelection: selection.selection, avatarUrl: `/v1/media/avatars/${selection.selection}` });
+    expect((await notificationAgent(agent))?.avatar).toBe(pictured.avatarUrl);
     const image = await call('GET', pictured.avatarUrl as string);
     expect(image.status).toBe(200);
     expect(sha(new Uint8Array(await image.arrayBuffer()))).toBe(sha(bytes));
@@ -154,6 +159,7 @@ test('G-300: controlled profile CAS, receipts, public reads and event survive co
     }), 201);
     expect((await json(await call('GET', path), 200))).toMatchObject({ revision: cleared.revision,
       bio: null, avatarSelection: null, avatarUrl: null });
+    expect((await notificationAgent(agent))?.avatar).toBeNull();
     expect((await call('GET', `/v1/media/avatars/${selection.selection}`)).status).toBe(404);
     await stack.accessPool.query('UPDATE access.recovery_fence SET open = false WHERE id = true');
     expect((await call('PUT', `${path}/profile`, owner.token,
