@@ -6,6 +6,7 @@ import { currentInstallationIn, installClient, InstallationConflict, Installatio
 import { currentIntrospection, presentedToken } from './introspection.ts';
 import { guardedAuthorizationCodeExchange } from './oauth-code-guard.ts';
 import { consumeAccountLimit } from './rate-limit.ts';
+import { consentApi } from './consent.ts';
 import { AccountRecoveryConflict, AccountRecoveryDenied, AccountRecoveryStale,
   activateAccountRecovery, approveAccountRecovery, enrollAccountRecovery,
   readAccountRecoveryClaim, requestAccountRecovery } from './recovery-claim.ts';
@@ -187,11 +188,7 @@ export function createAccountApp(auth: ReturnType<typeof createAccountAuth>, poo
       const token = await presentedToken(request.clone());
       return currentIntrospection(pool, token, await auth.handler(request));
     })
-    // The pinned provider lets update-consent widen scopes without the
-    // authorization/consent round trip. This first profile admits edits only
-    // through that explicit round trip, which advances the durable generation.
-    .post('/api/auth/oauth2/update-consent', () =>
-      Response.json({ error: 'unsupported_consent_update' }, { status: 403 }))
+    .use(consentApi(auth, pool))
     .post('/api/auth/oauth2/token', ({ request }) =>
       guardedAuthorizationCodeExchange(guard(), request, () => auth.handler(request)))
     // A product must bind and consume state at its callback. Require the input
