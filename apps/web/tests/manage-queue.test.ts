@@ -1,11 +1,12 @@
 import { describe, expect, test } from 'bun:test';
-import { commandFailure } from '../features/manage/commands.ts';
-import { impactLines, removesOwnRoleManagement, sortPermissions } from '../features/manage/permissions.ts';
-import { actionsFor, commonActions, initialTriage, targetIds, triage, type TriageState, UNDO_WINDOW_MS,
-  visibleIds } from '../features/manage/queue-state.ts';
-import { forget, parseRemembered, remember, serializeRemembered } from '../features/manage/remembered.ts';
-import { logHref, parseLogView, parseQueueView, queueHref } from '../features/manage/routes.ts';
-import type { ModerationItem } from '../features/manage/types.ts';
+import { commandFailure, reportDecision } from '../features/manage/commands.ts';
+import { basisFor } from '../features/manage/fixtures.ts';
+import { auditRuns, shortcutActions } from '../features/manage/labels.ts';
+import { impactLines, positionOf, removesOwnRoleManagement, sortPermissions } from '../features/manage/permissions.ts';
+import { actionsFor, authorityFrom, commonActions, initialTriage, needsReason, targetIds, triage, type TriageState,
+  UNDO_WINDOW_MS, visibleIds } from '../features/manage/queue-state.ts';
+import { logHref, parseLogView, parseQueueView, queueHref, realmHref } from '../features/manage/routes.ts';
+import type { AuditItem, ModerationItem } from '../features/manage/types.ts';
 
 const iri = (n: number) => `https://rezics.com/id/00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
 const uuid = (n: number) => iri(n).slice(-36);
@@ -27,11 +28,33 @@ const escalation = { id: uuid(700), reason: 'Owners should check', actingSubject
   escalatedAt: '2026-09-28T02:00:00.000Z', target: 'owners' as const };
 
 describe('what a moderator can decide', () => {
-  test('pending submissions allow every decision; reports only escalate until Main returns their basis', () => {
+  test('pending submissions allow every decision; reports are kept or removed, and stay decidable once escalated', () => {
     expect([...actionsFor(submission(1))]).toEqual(['approve', 'reject', 'request-changes', 'escalate']);
-    expect([...actionsFor(report(2))]).toEqual(['escalate']);
-    expect([...actionsFor(report(3, { escalation }))]).toEqual([]);
+    expect([...actionsFor(report(2))]).toEqual(['keep', 'remove', 'escalate']);
+    expect([...actionsFor(report(3, { escalation }))]).toEqual(['keep', 'remove']);
     expect([...actionsFor(submission(4, { escalation }))]).toEqual(['approve', 'reject', 'request-changes']);
+    // Main's decision route does not take a rights complaint's restrictions yet.
+    expect([...actionsFor(report(5, { kind: 'rights_complaint' }))]).toEqual(['escalate']);
+    expect(needsReason('keep')).toBe(false);
+    expect(needsReason('remove')).toBe(true);
+  });
+
+  test('G330 the owner is who escalations reach, so an owner is never offered Escalate', () => {
+    const owner = authorityFrom(['governance.moderate', 'realm.owner', 'realm.roles.manage']);
+    expect(owner).toEqual({ decideReports: true, escalate: false });
+    expect([...actionsFor(report(1), owner)]).toEqual(['keep', 'remove']);
+    expect([...actionsFor(submission(2), owner)]).toEqual(['approve', 'reject', 'request-changes']);
+    expect(actionsFor(report(3, { kind: 'rights_complaint' }), owner).size).toBe(0);
+    // A reviewer without the moderation permission can only hand reports on.
+    expect([...actionsFor(report(4), authorityFrom(['review.decide']))]).toEqual(['escalate']);
+    // When Main could not say, every choice shows and Main refuses what the Agent may not do.
+    expect(authorityFrom(null)).toEqual({ decideReports: true, escalate: true });
+  });
+
+  test('A says yes and R says no, whichever kind of item is current', () => {
+    expect(shortcutActions('a')).toEqual(['approve', 'keep']);
+    expect(shortcutActions('r')).toEqual(['reject', 'remove']);
+    expect(shortcutActions('e')).toEqual(['escalate']);
   });
 
   test('closed items and submissions being applied allow nothing', () => {
@@ -193,7 +216,7 @@ describe('role impact in plain words', () => {
   });
 });
 
-describe('addresses and remembered Realms', () => {
+describe('addresses', () => {
   test('queue filters parse strictly and round-trip', () => {
     const realm = uuid(1);
     expect(parseQueueView({})).toEqual({ state: 'open', type: null });
@@ -206,12 +229,70 @@ describe('addresses and remembered Realms', () => {
     expect(logHref(realm, { view: 'audit', kind: 'realm_management' })).toBe(`/manage/r/${realm}/log?kind=realm_management`);
   });
 
-  test('the device list holds valid Realm IDs only, newest first and bounded', () => {
-    expect(parseRemembered(`${uuid(1)}.not-a-realm.${uuid(2)}.${uuid(1)}`)).toEqual([uuid(1), uuid(2)]);
-    expect(parseRemembered('%E0%A4%A')).toEqual([]);
-    const many = Array.from({ length: 20 }, (_, index) => uuid(index + 1));
-    expect(parseRemembered(serializeRemembered(many))).toHaveLength(12);
-    expect(remember([uuid(1), uuid(2)], uuid(2))).toEqual([uuid(2), uuid(1)]);
-    expect(forget([uuid(1), uuid(2)], uuid(1))).toEqual([uuid(2)]);
+  test('G330 an official Zone\'s segment addresses a Realm in Manage as it does on /r', () => {
+    expect(realmHref('fiction')).toBe('/manage/r/fiction');
+    expect(queueHref('fiction', { state: 'closed', type: null })).toBe('/manage/r/fiction?state=closed');
+    expect(realmHref('fiction', 'members')).toBe('/manage/r/fiction/members');
+  });
+});
+
+describe('G330 keep or remove reported content', () => {
+  const item = report(1);
+
+  test('keeping closes the case against its basis and changes nothing', () => {
+    const basis = basisFor(item);
+    expect(reportDecision(basis, 'keep', null, iri(11), 'key-1')).toEqual({ profile: 'moderation-decision-v1',
+      caseId: item.id, expectedGeneration: '1', actingSubject: iri(11), outcome: 'dismiss', targets: [],
+      rule: { ref: basis.ruleBasis!.ref, revision: '3', digest: 'a'.repeat(64) }, evidenceDigest: '0'.repeat(64),
+      reversesDecisionId: null, answersStepId: null, rationale: null, disclosure: 'parties', idempotencyKey: 'key-1' });
+  });
+
+  test('removing hides exactly the reported revision, against the head the basis read', () => {
+    const decision = reportDecision(basisFor(item), 'remove', '  Rule 1: no spoilers in titles. ', iri(11), 'key-2')!;
+    expect(decision.outcome).toBe('restrict');
+    expect(decision.rationale).toBe('Rule 1: no spoilers in titles.');
+    expect(decision.targets).toEqual([{ owner: 'graph', resource: item.target.resource, component: 'title', locator: null,
+      scopeKind: 'exact_revision', revision: `${item.target.resource}-revision-1`,
+      expectedHead: `${item.target.resource}-revision-1`, effect: 'disclosure' }]);
+  });
+
+  test('two reports of the same revision make one target; hidden evidence and unknown parts are left out', () => {
+    const basis = basisFor(item);
+    const twice = { ...basis, reports: [basis.reports[0]!, { ...basis.reports[0]!, id: uuid(9) }] };
+    expect(reportDecision(twice, 'remove', 'x', iri(11), 'k')!.targets).toHaveLength(1);
+    const evidence = basis.reports[0]!.evidence[0]!;
+    const gone = { ...basis, reports: [{ ...basis.reports[0]!, evidence: [{ ...evidence, state: 'restricted' },
+      { ...evidence, component: 'something_new' }] }] };
+    expect(reportDecision(gone, 'remove', 'x', iri(11), 'k')).toBeNull();
+    expect(reportDecision(gone, 'keep', null, iri(11), 'k')?.targets).toEqual([]);
+  });
+
+  test('without published rules or a retained report there is nothing to cite', () => {
+    expect(reportDecision(basisFor(item, false), 'keep', null, iri(11), 'k')).toBeNull();
+    expect(reportDecision({ ...basisFor(item), reports: [] }, 'keep', null, iri(11), 'k')).toBeNull();
+  });
+});
+
+describe('G330 Manage landing and log', () => {
+  test('a person\'s place in a Realm, in one word', () => {
+    expect(positionOf(['governance.moderate', 'realm.owner'])).toBe('owner');
+    expect(positionOf(['realm.members.manage', 'governance.moderate'])).toBe('moderator');
+    expect(positionOf(['review.decide'])).toBe('reviewer');
+    expect(positionOf(['realm.settings.manage'])).toBe('manager');
+  });
+
+  const entry = (n: number, minutes: number, overrides: Partial<AuditItem> = {}): AuditItem => ({ id: uuid(n), caseId: null,
+    kind: 'realm_management', outcome: 'realm.roles.manage', reason: 'Set up the Fiction moderation team',
+    actingSubject: iri(11), decidedAt: new Date(Date.UTC(2026, 8, 27, 21, minutes)).toISOString(), caseSequence: null,
+    ...overrides });
+
+  test('one act recorded as several management entries reads as one line with a count', () => {
+    const runs = auditRuns([entry(1, 0, { outcome: 'realm.initialize', reason: 'Initialize Realm management' }),
+      entry(2, 1), entry(3, 1), entry(4, 2), entry(5, 30),
+      entry(6, 31, { kind: 'content_moderation', outcome: 'dismiss', reason: null }),
+      entry(7, 31, { kind: 'content_moderation', outcome: 'dismiss', reason: null })]);
+    expect(runs.map(run => [run.item.id, run.count])).toEqual([[uuid(1), 1], [uuid(2), 3], [uuid(5), 1], [uuid(6), 1],
+      [uuid(7), 1]]);
+    expect(runs[1]!.latest).toBe(entry(4, 2).decidedAt);
   });
 });

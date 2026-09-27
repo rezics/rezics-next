@@ -25,9 +25,11 @@ export function ActingAs({ agent, locale, messages }: { agent: AgentOption; loca
  * Every Realm management page: the Realm, who is acting, and the sections.
  * The Realm's name is the page's one <h1>; each section titles itself with <h2>.
  */
-export function RealmFrame({ realm, header, agent, locale, messages, children }: {
-  realm: string; header: RealmHeader | null; agent: AgentOption; locale: UiLocale; messages: ManageMessages;
-  children: ReactNode;
+export function RealmFrame({ realm, address = realm, header, agent, locale, messages, children }: {
+  realm: string;
+  /** How the address names the Realm: its official Zone's segment, or its ID. Links keep it. */
+  address?: string;
+  header: RealmHeader | null; agent: AgentOption; locale: UiLocale; messages: ManageMessages; children: ReactNode;
 }) {
   const t = materializeData(messages, { locale });
   const fallback = t.realmFallback({ id: realm.slice(0, 8) });
@@ -47,7 +49,7 @@ export function RealmFrame({ realm, header, agent, locale, messages, children }:
           <h1 className="min-w-0 truncate font-semibold text-2xl tracking-tight sm:text-3xl">
             {header ? <Named name={header.name} /> : fallback}</h1>
         </div>
-        <RealmTabs realm={realm} labels={{ nav: t.realmNav, queue: t.tabQueue, log: t.tabLog, members: t.tabMembers,
+        <RealmTabs realm={address} labels={{ nav: t.realmNav, queue: t.tabQueue, log: t.tabLog, members: t.tabMembers,
           roles: t.tabRoles, settings: t.tabSettings }} />
       </div>
     </div>

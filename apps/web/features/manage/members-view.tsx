@@ -28,6 +28,8 @@ import type { AgentSummary, Member, MemberPage, Role, RoleChange } from './types
 /** Ban lengths moderators choose from (Main allows up to 366 days, or no end). */
 export const banDurations = [['duration1d', 86_400], ['duration3d', 259_200], ['duration7d', 604_800],
   ['duration30d', 2_592_000], ['duration365d', 31_536_000], ['durationForever', null]] as const;
+/** How long an invitation stays open (Main allows up to a week, and never past the inviter's own access). */
+export const inviteDurations = [['duration1d', 86_400], ['duration3d', 259_200], ['duration7d', 604_800]] as const;
 /** How long a role is given for. It cannot outlast the giver's own access. */
 export const roleDurations = [['validFor7', 7], ['validFor30', 30], ['validFor90', 90], ['validFor365', 365]] as const;
 
@@ -35,11 +37,9 @@ type Target = { iri: string; membershipGeneration: string; member: Member | null
 type Open =
   | { kind: 'ban' | 'unban'; target: Target | null }
   | { kind: 'remove'; target: Target }
-  | { kind: 'add' }
+  | { kind: 'invite' }
   | { kind: 'give'; target: Target }
   | { kind: 'take'; target: Target; role: { id: string; name: string } };
-
-const consentPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
 export function failureText(failure: CommandFailure | 'changed', t: ReturnType<typeof materializeData<ManageMessages>>,
   subject: 'member' | 'role') {
@@ -52,8 +52,8 @@ export function failureText(failure: CommandFailure | 'changed', t: ReturnType<t
 }
 
 /**
- * Members of the Realm: search by name or handle, and add, remove, ban and
- * unban people, and give or take roles with the impact shown first.
+ * Members of the Realm: search by name or handle, invite people, remove, ban
+ * and unban them, and give or take roles with the impact shown first.
  */
 export function MembersView({ realm, actingSubject, first, agents: initialAgents, roles, now, locale, messages,
   api: givenApi }: {
@@ -109,7 +109,7 @@ export function MembersView({ realm, actingSubject, first, agents: initialAgents
         <Button variant="ghost" size="sm" onClick={() => setOpen({ kind: 'unban', target: null })}>{t.unbanSomeone}</Button>
         <Button variant="outline" size="sm" onClick={() => setOpen({ kind: 'ban', target: null })}>
           <BanIcon aria-hidden="true" />{t.banSomeone}</Button>
-        <Button size="sm" onClick={() => setOpen({ kind: 'add' })}><UserPlusIcon aria-hidden="true" />{t.addMember}</Button>
+        <Button size="sm" onClick={() => setOpen({ kind: 'invite' })}><UserPlusIcon aria-hidden="true" />{t.inviteMember}</Button>
       </div>
     </div>
     <form role="search" aria-label={t.searchMembers} onSubmit={search} className="flex max-w-xl gap-2">
@@ -195,18 +195,17 @@ function MemberDialog({ open, generation, api, actingSubject, nameOf, locale, me
 }) {
   const t = materializeData(messages, { locale });
   const [who, setWho] = useState('');
-  const [consent, setConsent] = useState('');
   const [duration, setDuration] = useState('duration7d');
   const [reason, setReason] = useState('');
   const [error, setError] = useState<string | null>(null);
-  const [field, setField] = useState<'who' | 'consent' | 'reason' | null>(null);
+  const [field, setField] = useState<'who' | 'reason' | null>(null);
   const [pending, setPending] = useState(false);
   const key = useRef(newKey());
   const whoRef = useRef<HTMLInputElement>(null);
   const reasonRef = useRef<HTMLTextAreaElement>(null);
   useEffect(() => {
     if (!open) return;
-    setWho(''); setConsent(''); setDuration('duration7d'); setReason(''); setError(null); setField(null);
+    setWho(''); setDuration('duration7d'); setReason(''); setError(null); setField(null);
     key.current = newKey();
   }, [open]);
 
@@ -215,20 +214,20 @@ function MemberDialog({ open, generation, api, actingSubject, nameOf, locale, me
   const name = known ? nameOf(known.iri) : '';
   const title = kind === 'ban' ? known ? t.banTitle({ name }) : t.banSomeoneTitle
     : kind === 'unban' ? known ? t.unbanTitle({ name }) : t.unbanSomeoneTitle
-      : kind === 'remove' ? t.removeTitle({ name }) : t.addTitle;
-  const help = kind === 'ban' ? t.banHelp : kind === 'unban' ? t.unbanHelp : kind === 'remove' ? t.removeHelp : t.addHelp;
+      : kind === 'remove' ? t.removeTitle({ name }) : t.inviteTitle;
+  const help = kind === 'ban' ? t.banHelp : kind === 'unban' ? t.unbanHelp : kind === 'remove' ? t.removeHelp : t.inviteHelp;
   const confirm = kind === 'ban' ? t.banConfirm : kind === 'unban' ? t.unbanConfirm : kind === 'remove' ? t.removeConfirm
-    : t.addConfirm;
+    : t.inviteConfirm;
 
   async function submit() {
     if (!open) return;
     setError(null); setField(null);
-    if ((open.kind === 'add' || (open.kind === 'ban' || open.kind === 'unban') && !open.target) && !who.trim()) {
+    if ((open.kind === 'invite' || (open.kind === 'ban' || open.kind === 'unban') && !open.target) && !who.trim()) {
       setField('who');
       return;
     }
-    if (open.kind === 'add' && !consentPattern.test(consent.trim())) { setField('consent'); return; }
-    if (!reason.trim() || reason.trim().length > REASON_LIMIT) { setField('reason'); return; }
+    // An invitation carries no reason: the invitee decides.
+    if (open.kind !== 'invite' && (!reason.trim() || reason.trim().length > REASON_LIMIT)) { setField('reason'); return; }
     setPending(true);
     let subject = known;
     let label: string | null = null;
@@ -242,10 +241,22 @@ function MemberDialog({ open, generation, api, actingSubject, nameOf, locale, me
       const row = roster.ok ? roster.data.items.find(item => item.member === found.data.iri) : undefined;
       subject = { iri: found.data.iri, membershipGeneration: row?.membershipGeneration ?? '0', member: row ?? null };
     }
+    if (open.kind === 'invite') {
+      const seconds = inviteDurations.find(([label]) => label === duration)?.[1] ?? 604_800;
+      const sent = await api.invite({ actingSubject, member: subject.iri, expiresInSeconds: seconds }, key.current);
+      setPending(false);
+      if (!sent.ok) {
+        setError(sent.failure === 'denied' ? t.inviteDenied : failureText(sent.failure, t, 'member'));
+        if (sent.failure === 'stale') key.current = newKey();
+        return;
+      }
+      onDone(t.invitedNow({ name: label ?? nameOf(subject.iri), date: date(sent.data.invitation.expiresAt, locale) }));
+      return;
+    }
     const seconds = banDurations.find(([label]) => label === duration)?.[1] ?? null;
     const result = await api.changeMember({ actingSubject, expectedGeneration: generation, reason: reason.trim(),
       member: subject.iri, expectedMembershipGeneration: subject.membershipGeneration, action: open.kind,
-      consent: open.kind === 'add' ? consent.trim() : null, durationSeconds: open.kind === 'ban' ? seconds : null },
+      consent: null, durationSeconds: open.kind === 'ban' ? seconds : null },
     key.current);
     setPending(false);
     if (!result.ok) {
@@ -257,23 +268,24 @@ function MemberDialog({ open, generation, api, actingSubject, nameOf, locale, me
     }
     const shown = label ?? nameOf(subject.iri);
     onDone(open.kind === 'ban' ? subject.member ? t.bannedNow({ name: shown }) : t.bannedOutsider({ name: shown }) : open.kind === 'unban' ? t.unbannedNow({ name: shown })
-      : open.kind === 'remove' ? t.removedNow({ name: shown }) : t.addedNow({ name: shown }));
+      : t.removedNow({ name: shown }));
   }
 
   return <CommandDialog open={open !== null} title={title} description={help} confirm={confirm}
     destructive={kind === 'ban' || kind === 'remove'} pending={pending} error={error} cancel={t.cancel}
     onClose={onClose} onConfirm={() => void submit()}
     initialFocus={() => whoRef.current ?? reasonRef.current}>
-    {kind === 'add' || (kind === 'ban' || kind === 'unban') && !known ? <Field invalid={field === 'who'}>
+    {kind === 'invite' || (kind === 'ban' || kind === 'unban') && !known ? <Field invalid={field === 'who'}>
       <FieldLabel>{t.whoLabel}</FieldLabel>
       <Input ref={whoRef} value={who} placeholder={t.whoPlaceholder} autoComplete="off"
         onChange={event => setWho(event.currentTarget.value)} />
       {field === 'who' ? <FieldError>{t.whoNotFound}</FieldError> : <FieldHelper>{t.whoHelp}</FieldHelper>}
     </Field> : null}
-    {kind === 'add' ? <Field invalid={field === 'consent'}>
-      <FieldLabel>{t.consentLabel}</FieldLabel>
-      <Input value={consent} autoComplete="off" spellCheck={false} onChange={event => setConsent(event.currentTarget.value)} />
-      {field === 'consent' ? <FieldError>{t.consentInvalid}</FieldError> : <FieldHelper>{t.consentHelp}</FieldHelper>}
+    {kind === 'invite' ? <Field>
+      <FieldLabel>{t.inviteExpiresLabel}</FieldLabel>
+      <NativeSelect value={duration} onChange={event => setDuration(event.currentTarget.value)}>
+        {inviteDurations.map(([label]) => <NativeSelectOption key={label} value={label}>{t[label]}</NativeSelectOption>)}
+      </NativeSelect>
     </Field> : null}
     {kind === 'ban' ? <Field>
       <FieldLabel>{t.durationLabel}</FieldLabel>
@@ -281,13 +293,13 @@ function MemberDialog({ open, generation, api, actingSubject, nameOf, locale, me
         {banDurations.map(([label]) => <NativeSelectOption key={label} value={label}>{t[label]}</NativeSelectOption>)}
       </NativeSelect>
     </Field> : null}
-    <Field invalid={field === 'reason'}>
+    {kind === 'invite' ? null : <Field invalid={field === 'reason'}>
       <FieldLabel>{kind === 'ban' ? t.banReasonLabel : t.changeReasonLabel}</FieldLabel>
       <Textarea ref={reasonRef} value={reason} rows={3} maxLength={REASON_LIMIT + 200}
         onChange={event => setReason(event.currentTarget.value)} />
       {field === 'reason' ? <FieldError>{reason.trim() ? t.reasonTooLong : t.reasonRequired}</FieldError>
         : <FieldHelper>{kind === 'ban' ? t.banReasonHelp : t.changeReasonHelp}</FieldHelper>}
-    </Field>
+    </Field>}
   </CommandDialog>;
 }
 

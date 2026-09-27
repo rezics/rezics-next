@@ -33,7 +33,7 @@ export const PermissionBundles: Story = {
       /Moderate the queue.*Manage members/);
     await expect(moderators).toHaveTextContent('Daniel Chen 陈丹尼, An Wu 吴安');
     const editors = canvas.getByRole('heading', { name: 'Rules editors' }).closest('li')!;
-    await expect(editors).toHaveTextContent('People holding a role are listed under Members.');
+    await expect(editors).toHaveTextContent('Members shows the roles of people who joined the Realm.');
   },
 };
 

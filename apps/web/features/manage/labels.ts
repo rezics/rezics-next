@@ -53,6 +53,8 @@ export function actionLabel(action: QueueAction, t: T): string {
     case 'approve': return t.approve;
     case 'reject': return t.reject;
     case 'request-changes': return t.requestChanges;
+    case 'keep': return t.keep;
+    case 'remove': return t.remove;
     case 'escalate': return t.escalate;
   }
 }
@@ -65,6 +67,8 @@ export function decidedText(action: QueueAction, titles: readonly string[], t: T
       case 'approve': return t.approvedOne({ title });
       case 'reject': return t.rejectedOne({ title });
       case 'request-changes': return t.changesOne({ title });
+      case 'keep': return t.keptOne({ title });
+      case 'remove': return t.removedOne({ title });
       case 'escalate': return t.escalatedOne({ title });
     }
   }
@@ -73,12 +77,21 @@ export function decidedText(action: QueueAction, titles: readonly string[], t: T
     case 'approve': return t.approvedMany(count);
     case 'reject': return t.rejectedMany(count);
     case 'request-changes': return t.changesMany(count);
+    case 'keep': return t.keptMany(count);
+    case 'remove': return t.removedMany(count);
     case 'escalate': return t.escalatedMany(count);
   }
 }
 
-export const shortcutKeys: Record<QueueAction, string> = { approve: 'a', reject: 'r', 'request-changes': 'c',
-  escalate: 'e' };
+/** One key per kind of answer: A says yes (approve, or keep reported content), R says no (reject, or remove it). */
+export const shortcutKeys: Record<QueueAction, string> = { approve: 'a', keep: 'a', reject: 'r', remove: 'r',
+  'request-changes': 'c', escalate: 'e' };
+
+/** The actions a shortcut key stands for, in the order they are tried against what the items allow. */
+export function shortcutActions(key: string): QueueAction[] {
+  return (Object.entries(shortcutKeys) as [QueueAction, string][]).filter(([, value]) => value === key)
+    .map(([action]) => action);
+}
 
 /** The audit log's outcome codes: management actions, moderation outcomes and publication rejections. */
 export function auditOutcome(item: Pick<AuditItem, 'kind' | 'outcome'>, t: T): string {
@@ -90,6 +103,34 @@ export function auditOutcome(item: Pick<AuditItem, 'kind' | 'outcome'>, t: T): s
   };
   if (known[item.outcome]) return known[item.outcome]!;
   return item.kind === 'organization_publication_rejection' ? t.auditReject : readableCode(item.outcome);
+}
+
+/** Consecutive management entries that record one act, shown once with how many changes it made. */
+export interface AuditRun { item: AuditItem; count: number; latest: string }
+
+/** Entries this close together, by one person, of one kind and with one reason, are one act. */
+const RUN_WINDOW_MS = 10 * 60_000;
+
+/**
+ * Groups the audit log's repeated lines. Setting up a team gives several
+ * people a role one command at a time; Main records each, with the same
+ * reason, and the log reads better as "Changed roles · 3 changes". Moderation
+ * decisions each concern their own case, so they are never grouped.
+ */
+export function auditRuns(items: readonly AuditItem[]): AuditRun[] {
+  const runs: AuditRun[] = [];
+  for (const item of items) {
+    const last = runs.at(-1);
+    if (last && item.kind === 'realm_management' && last.item.kind === item.kind && last.item.outcome === item.outcome
+      && last.item.reason === item.reason && last.item.actingSubject === item.actingSubject
+      && Date.parse(item.decidedAt) - Date.parse(last.latest) <= RUN_WINDOW_MS) {
+      last.count++;
+      last.latest = item.decidedAt;
+      continue;
+    }
+    runs.push({ item, count: 1, latest: item.decidedAt });
+  }
+  return runs;
 }
 
 export function auditKindLabel(kind: AuditItem['kind'], t: T): string {

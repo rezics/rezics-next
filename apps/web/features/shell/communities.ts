@@ -43,6 +43,12 @@ export function followedRealmIds(followed: { realms: readonly Community[]; zones
   return [...new Set([...followed.realms, ...followed.zones].map(realmOf).filter(id => id !== undefined))];
 }
 
+/** A Realm's address segment: its official Zone's (`fiction`) when it has one, as `/r/…` uses, else its UUID. */
+export function realmSegment(realm: string, official: readonly Community[]): string {
+  const zone = official.find(item => item.realm === realm);
+  return zone ? zone.href.replace(/^\/r\//, '') : realm.slice(-36);
+}
+
 /** Where Manage opens: the one Realm the reader manages directly, or the list of them. */
 export function manageHref(moderated: readonly Pick<Moderated, 'href'>[]): string {
   return moderated.length === 1 ? moderated[0]!.href : '/manage';

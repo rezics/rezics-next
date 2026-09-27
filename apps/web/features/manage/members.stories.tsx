@@ -40,6 +40,23 @@ export const Roster: Story = {
   },
 };
 
+/** Inviting needs no consent code: the person accepts from their notifications, and joins then. */
+export const Invite: Story = {
+  async play({ canvasElement }) {
+    reset();
+    const canvas = within(canvasElement);
+    await userEvent.click(canvas.getByRole('button', { name: 'Invite' }));
+    const dialog = within(await body().findByRole('dialog', { name: 'Invite someone to join' }, { timeout: 5000 }));
+    await expect(dialog.queryByRole('textbox', { name: 'Reason' })).toBeNull();
+    await userEvent.type(dialog.getByRole('textbox', { name: 'Who' }), '@lin_mei');
+    await userEvent.selectOptions(dialog.getByRole('combobox', { name: 'Invitation stays open for' }), '3 days');
+    await userEvent.click(dialog.getByRole('button', { name: 'Send invitation' }));
+    await expect(await canvas.findByText(/Lin Mei 林梅 is invited until .+\. They join when they accept\./)).toBeVisible();
+    await expect(record.members).toEqual([expect.objectContaining({ actingSubject: acting.iri, member: people.mei,
+      expiresInSeconds: 259_200 })]);
+  },
+};
+
 /** Ban with a duration and a reason; Main records both in the audit log. */
 export const BanForThirtyDays: Story = {
   async play({ canvasElement }) {

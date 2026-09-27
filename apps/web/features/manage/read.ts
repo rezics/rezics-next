@@ -63,6 +63,22 @@ export function readSettings(main: MainClient, realm: string, actingSubject: str
   return settle(() => main.v1.realms({ realm }).settings.get({ query: { actingSubject } }), { management: true });
 }
 
+/** One page of the Realms the acting Agent manages, from its role assignments (G-314). */
+export function readManagedRealms(main: MainClient, actingSubject: string, after?: string | null) {
+  return settle(() => main.v1.me['managed-realms'].get({ query: { actingSubject, ...after ? { after } : {} } }),
+    { management: true });
+}
+
+/**
+ * What a report's decision must cite, read as a moderator: its retained
+ * reports with their private statements and evidence, the target's current
+ * heads and the Realm's published rules (null until rules are published).
+ */
+export function readDecisionBasis(main: MainClient, realm: string, caseId: string, actingSubject: string) {
+  return settle(() => main.v1.realms({ realm }).moderation({ caseId }).get({ query: { actingSubject } }),
+    { management: true });
+}
+
 export function readRealmHeader(main: MainClient, realm: string, language: string) {
   return settle(() => main.v1.realms({ realm }).get({ query: { language } }));
 }

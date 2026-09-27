@@ -3,8 +3,8 @@ import type { AdminApi } from './admin-api.ts';
 import type { Outcome } from './commands.ts';
 import type { LogApi } from './log-view.tsx';
 import type { QueueApi } from './queue-api.ts';
-import type { AgentSummary, AuditItem, Loaded, Member, ModerationItem, ModerationPage, PublicDecision, RealmHeader,
-  RealmRule, Role, RoleImpact, SettingsView, WorkSummary } from './types.ts';
+import type { AgentSummary, AuditItem, DecisionBasis, Loaded, Member, ModerationItem, ModerationPage, PublicDecision,
+  RealmHeader, RealmRule, Role, RoleImpact, SettingsView, WorkSummary } from './types.ts';
 
 // Story data for the Manage workspace: the demo's Classic Literature Realm,
 // its moderators and a busy queue. Stand-in APIs record what they were asked.
@@ -89,10 +89,32 @@ export const drafts: Record<string, string> = {
   [iri(703)]: '第三回 托内兄林如海荐西宾 接外孙贾母惜孤女',
 };
 
+/** What reporters wrote, by case; the first report has a second reporter. */
+const statements: Record<string, Array<{ by: string; text: string | null }>> = {
+  [id(201)]: [{ by: people.mei, text: 'This is the 1813 first edition’s title page, but the text is the 1894 illustrated one.' },
+    { by: people.aria, text: null }],
+  [id(203)]: [{ by: people.aria, text: 'The subtitle gives away the ending.' }],
+};
+
+/** A report's decision basis as Main returns it to a moderator; `rules: false` for a Realm without published rules. */
+export function basisFor(item: ModerationItem, rules = true): DecisionBasis {
+  const head = `${item.target.resource}-revision-1`;
+  return { caseId: item.id, generation: item.generation, decisionHead: null, state: 'open', target: item.target,
+    ruleBasis: rules ? { ref: `urn:rezics:realm-rules:${realm}`, revision: '3', digest: 'a'.repeat(64), document: {} } : null,
+    reports: (statements[item.id] ?? [{ by: item.authorAgent ?? people.mei, text: null }]).map((report, index) => ({
+      id: id(1300 + index), actingSubject: report.by, reasonCode: item.reasonCode ?? 'other', statement: report.text,
+      evidenceDigest: String(index).repeat(64), receivedAt: item.openedAt,
+      evidence: [{ ordinal: 1, owner: 'graph', resource: item.target.resource, component: item.target.component,
+        revision: head, locator: null, state: 'available', representation: 'work-title-en', revisionDigest: 'd'.repeat(64),
+        expectedHead: head, provenance: {} }] })),
+    nextCursor: null, sourcePosition: position };
+}
+
 export interface Recorded { commits: Array<{ id: string; action: string; reason: string | null; key: string }> }
 
 /** A queue whose commits succeed unless `stale` names the item; reloads return `reload` when given. */
-export function queueApi(options: { stale?: readonly string[]; reload?: ModerationItem[]; recorded?: Recorded } = {}): QueueApi {
+export function queueApi(options: { stale?: readonly string[]; reload?: ModerationItem[]; recorded?: Recorded;
+  rules?: boolean } = {}): QueueApi {
   const recorded = options.recorded ?? { commits: [] };
   return {
     page: async () => ({ ok: true, data: { ...queuePage, items: options.reload ?? queue } }),
@@ -101,6 +123,9 @@ export function queueApi(options: { stale?: readonly string[]; reload?: Moderati
       ? { ok: true, data: { text: drafts[item.submission.selectedDraft]!, language: /\p{Script=Han}/u
         .test(drafts[item.submission.selectedDraft]!) ? 'zh-Hans' : 'en' } }
       : { ok: false, failure: 'unavailable' },
+    basis: async item => item.kind === 'content_report' ? { ok: true, data: basisFor(item, options.rules ?? true) }
+      : { ok: false, failure: 'missing' },
+    people: async () => agents,
     commit: async (item, decision, key): Promise<Outcome<unknown>> => {
       recorded.commits.push({ id: item.id, action: decision.action, reason: decision.reason, key });
       return options.stale?.includes(item.id) ? { ok: false, failure: 'stale' } : { ok: true, data: {} };
@@ -199,6 +224,13 @@ export function adminApi(options: { record?: AdminRecord; settingsFailure?: 'sta
     lookup: async handle => {
       const found = Object.values(agents).find(agent => `@${agent.handle}` === handle.trim() || agent.handle === handle.trim());
       return found ? ok(found) : { ok: false, failure: 'missing' };
+    },
+    invite: async (command, key) => {
+      record.members.push({ ...command, key });
+      if (options.memberFailure) return { ok: false, failure: options.memberFailure };
+      return { ok: true, data: { replayed: false, invitation: { id: id(3004), realm: iri(1), member: command.member,
+        inviter: command.actingSubject, state: 'pending', expiresAt: new Date(now + command.expiresInSeconds * 1000).toISOString(),
+        policyRevision: '1', termsRevision: 'terms-1', membershipGeneration: '0' } } };
     },
     changeMember: async (command, key) => {
       record.members.push({ ...command, key });

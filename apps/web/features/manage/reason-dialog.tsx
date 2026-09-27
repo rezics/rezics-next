@@ -14,11 +14,13 @@ import type { Decision, QueueAction } from './queue-state.ts';
 export const REASON_LIMIT = 2000;
 
 /**
- * Asks for the reason Main requires before a rejection, a change request or an
- * escalation. The decision is not sent here; it enters the undo window.
+ * Asks for the reason Main requires before a rejection, a change request, a
+ * removal or an escalation. The decision is not sent here; it enters the undo
+ * window. A removal's reason goes to the reporter and the author; Main keeps
+ * no separate private note for it.
  */
 export function ReasonDialog({ action, count, onDecide, onClose, finalFocus, locale, messages }: {
-  action: Exclude<QueueAction, 'approve'> | null; count: number; onDecide: (decision: Decision) => void;
+  action: Exclude<QueueAction, 'approve' | 'keep'> | null; count: number; onDecide: (decision: Decision) => void;
   onClose: () => void; locale: UiLocale; messages: ManageMessages;
   /** Where focus goes when the dialog closes: the queue's next item, so shortcuts keep working. */
   finalFocus?: () => HTMLElement | null;
@@ -37,14 +39,15 @@ export function ReasonDialog({ action, count, onDecide, onClose, finalFocus, loc
     if (action) { setShown(action); setReason(''); setNote(''); setError(null); }
   }
   const escalating = shown === 'escalate';
-  const title = shown === 'reject' ? t.reasonRejectTitle(count)
-    : shown === 'request-changes' ? t.reasonChangesTitle(count) : t.reasonEscalateTitle(count);
+  const removing = shown === 'remove';
+  const title = shown === 'reject' ? t.reasonRejectTitle(count) : shown === 'request-changes' ? t.reasonChangesTitle(count)
+    : removing ? t.reasonRemoveTitle(count) : t.reasonEscalateTitle(count);
   const close = () => onClose();
   const submit = () => {
     const text = reason.trim();
     if (!text) { setError(t.reasonRequired); return; }
     if (text.length > REASON_LIMIT || note.length > 4000) { setError(t.reasonTooLong); return; }
-    onDecide({ action: shown, reason: text, note: escalating ? null : note.trim() || null });
+    onDecide({ action: shown, reason: text, note: escalating || removing ? null : note.trim() || null });
   };
   return <Dialog open={action !== null} onOpenChange={details => { if (!details.open) close(); }}
     initialFocusEl={() => reasonRef.current} {...finalFocus ? { finalFocusEl: finalFocus } : {}}>
@@ -53,7 +56,7 @@ export function ReasonDialog({ action, count, onDecide, onClose, finalFocus, loc
         <DialogHeader title={title} description={t.undoHint} />
         <DialogBody className="grid gap-4">
           <Field invalid={error !== null}>
-            <FieldLabel>{escalating ? t.escalateReasonLabel : t.publicReasonLabel}</FieldLabel>
+            <FieldLabel>{escalating ? t.escalateReasonLabel : removing ? t.removeReasonLabel : t.publicReasonLabel}</FieldLabel>
             <Textarea ref={reasonRef} value={reason} maxLength={REASON_LIMIT + 200} rows={4}
               onChange={event => { setReason(event.currentTarget.value); setError(null); }}
               onKeyDown={event => {
@@ -63,9 +66,10 @@ export function ReasonDialog({ action, count, onDecide, onClose, finalFocus, loc
                 }
               }} />
             {error ? <FieldError>{error}</FieldError>
-              : <FieldHelper>{escalating ? t.escalateReasonHelp : t.publicReasonHelp}</FieldHelper>}
+              : <FieldHelper>{escalating ? t.escalateReasonHelp : removing ? t.removeReasonHelp : t.publicReasonHelp}
+              </FieldHelper>}
           </Field>
-          {escalating ? null : <Field>
+          {escalating || removing ? null : <Field>
             <FieldLabel>{t.noteLabel}</FieldLabel>
             <Textarea value={note} rows={2} maxLength={4000} onChange={event => setNote(event.currentTarget.value)} />
             <FieldHelper>{t.noteHelp}</FieldHelper>
@@ -73,7 +77,8 @@ export function ReasonDialog({ action, count, onDecide, onClose, finalFocus, loc
         </DialogBody>
         <DialogFooter>
           <Button type="button" variant="outline" onClick={close}>{t.cancel}</Button>
-          <Button type="submit" variant={shown === 'reject' ? 'destructive' : 'default'}>{actionLabel(shown, t)}</Button>
+          <Button type="submit" variant={shown === 'reject' || removing ? 'destructive' : 'default'}>
+            {actionLabel(shown, t)}</Button>
         </DialogFooter>
       </form>
     </DialogContent>

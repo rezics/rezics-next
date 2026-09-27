@@ -46,6 +46,14 @@ export type RealmRule = RealmSettings['rules'][number];
 export type WhoMaySubmit = RealmSettings['whoMaySubmit'];
 export type SettingsReceipt = Ok<Realm['settings']['put']>;
 export type EscalationReceipt = Ok<Realm['escalations']['post']>;
+export type InvitationCommand = Body<Realm['invitations']['post']>;
+export type InvitationResult = Ok<Realm['invitations']['post']>;
+/** What a keep or remove decision must cite: the case, its retained reports and evidence, and the Realm's rules. */
+export type DecisionBasis = Ok<ReturnType<Realm['moderation']>['get']>;
+export type ModerationDecisionCommand = Body<MainClient['v1']['moderation']['decisions']['post']>;
+export type ManagedRealmsPage = Ok<MainClient['v1']['me']['managed-realms']['get']>;
+/** A Realm the acting Agent manages, with the permissions it holds there and its queue counts. */
+export type ManagedRealm = ManagedRealmsPage['items'][number];
 export type SubmissionReview = Ok<Submission['get']>;
 export type SubmissionDecision = Body<Submission['decisions']['post']>;
 export type SubmissionResult = Ok<Submission['decisions']['post']>;

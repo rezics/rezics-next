@@ -4,7 +4,28 @@ import type { ModerationItem, ReadFailure } from './types.ts';
 // which decisions wait out their undo window and how each one ended. It is a
 // pure reducer so keyboard, bulk and undo behavior is testable without a browser.
 
-export type QueueAction = 'approve' | 'reject' | 'request-changes' | 'escalate';
+/** Submissions are approved, rejected or sent back; reported content is kept or removed; either can go to the owners. */
+export type QueueAction = 'approve' | 'reject' | 'request-changes' | 'keep' | 'remove' | 'escalate';
+
+/**
+ * What the acting Agent may decide in this Realm, from the permissions Main
+ * lists for it (`GET /v1/me/managed-realms`). Main still refuses anything
+ * the Agent may not do; this only keeps impossible choices off the screen.
+ */
+export interface QueueAuthority {
+  /** Keep or remove reported content: `governance.moderate`, and published Realm rules for the decision to cite. */
+  decideReports: boolean;
+  /** Escalations go to the owners, so an owner has no one to escalate to. */
+  escalate: boolean;
+}
+
+/** When Main could not say what the Agent holds, every choice shows and Main decides. */
+export const fullAuthority: QueueAuthority = { decideReports: true, escalate: true };
+
+export function authorityFrom(permissions: readonly string[] | null): QueueAuthority {
+  if (!permissions) return fullAuthority;
+  return { decideReports: permissions.includes('governance.moderate'), escalate: !permissions.includes('realm.owner') };
+}
 
 /** How long a decision can be taken back before it is sent. Nothing reaches Main before then. */
 export const UNDO_WINDOW_MS = 6_000;
@@ -21,21 +42,24 @@ export const isReport = (item: Pick<ModerationItem, 'kind'>) =>
   item.kind === 'content_report' || item.kind === 'rights_complaint';
 
 /**
- * What Main lets a moderator do with an item now. Submissions are decided
- * here; reports can be escalated to the owners, but a keep or remove decision
- * must cite the case's retained evidence and rule basis, which the moderation
- * read does not return yet.
+ * What a moderator can do with an item now. A report is kept or removed
+ * (citing its decision basis) and stays decidable after it was escalated.
+ * Rights complaints only escalate: Main's decision route does not take their
+ * interim or final restrictions yet.
  */
-export function actionsFor(item: ModerationItem): ReadonlySet<QueueAction> {
+export function actionsFor(item: ModerationItem, authority: QueueAuthority = fullAuthority): ReadonlySet<QueueAction> {
   if (item.state === 'closed') return new Set();
-  const escalate: QueueAction[] = item.escalation ? [] : ['escalate'];
-  if (isReport(item)) return new Set(escalate);
+  const escalate: QueueAction[] = item.escalation || !authority.escalate ? [] : ['escalate'];
+  if (item.kind === 'content_report') {
+    return new Set<QueueAction>([...authority.decideReports ? ['keep', 'remove'] as const : [], ...escalate]);
+  }
+  if (item.kind === 'rights_complaint') return new Set(escalate);
   if (item.submission?.state !== 'pending') return new Set();
   return new Set<QueueAction>(['approve', 'reject', 'request-changes', ...escalate]);
 }
 
-/** Main requires a public reason for everything except acceptance. */
-export const needsReason = (action: QueueAction) => action !== 'approve';
+/** Main requires a reason for everything except approving a submission or keeping reported content. */
+export const needsReason = (action: QueueAction) => action !== 'approve' && action !== 'keep';
 
 export interface PendingDecision {
   key: string;
@@ -51,7 +75,8 @@ export type Settled =
   | { kind: 'stale' }
   /** The item left the open queue while a stale decision was being checked. */
   | { kind: 'gone' }
-  | { kind: 'failed'; failure: ReadFailure | 'invalid-reason' };
+  /** A keep or remove decision needs Realm rules to cite, and none are published. */
+  | { kind: 'failed'; failure: ReadFailure | 'invalid-reason' | 'no-rules' };
 
 export interface TriageState {
   order: readonly string[];
@@ -97,8 +122,9 @@ export function targetIds(state: TriageState): string[] {
 }
 
 /** Actions every target allows, so a bulk decision is never half-applicable. */
-export function commonActions(state: TriageState, ids: readonly string[]): Set<QueueAction> {
-  const sets = ids.map(id => state.items[id]).filter(item => item !== undefined).map(actionsFor);
+export function commonActions(state: TriageState, ids: readonly string[], authority: QueueAuthority = fullAuthority):
+  Set<QueueAction> {
+  const sets = ids.map(id => state.items[id]).filter(item => item !== undefined).map(item => actionsFor(item, authority));
   if (!sets.length) return new Set();
   return new Set([...sets[0]!].filter(action => sets.every(set => set.has(action))));
 }

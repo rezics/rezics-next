@@ -8,7 +8,7 @@ import { type RealmSection, realmHref } from './routes.ts';
 
 const sections: readonly RealmSection[] = ['queue', 'log', 'members', 'roles', 'settings'];
 
-/** The Realm's management sections as links; the current one is marked for assistive technology. */
+/** The Realm's management sections as links; the current one is marked for assistive technology. `realm` is its address. */
 export function RealmTabs({ realm, labels }: { realm: string; labels: Record<RealmSection | 'nav', string> }) {
   const pathname = withoutLocale(usePathname());
   return <nav aria-label={labels.nav} className="-mb-px flex gap-1 overflow-x-auto">

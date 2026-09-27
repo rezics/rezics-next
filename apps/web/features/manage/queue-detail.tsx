@@ -14,10 +14,58 @@ import { agentLabel, dateTime, relativeTime, shownHandle } from './format.ts';
 import { actionLabel, componentLabel, kindLabel, reasonText, shortcutKeys, stateLabel } from './labels.ts';
 import type { ManageMessages } from './messages.ts';
 import { AgentMark, Named, Thumb } from './parts.tsx';
-import { isReport, type QueueAction } from './queue-state.ts';
-import { type AgentSummary, type Loaded, type ModerationItem, uuidOf, type WorkSummary } from './types.ts';
+import { isReport, type QueueAction, type QueueAuthority } from './queue-state.ts';
+import { type AgentSummary, type DecisionBasis, type Loaded, type ModerationItem, uuidOf, type WorkSummary } from './types.ts';
 
-const actionOrder: readonly QueueAction[] = ['approve', 'reject', 'request-changes', 'escalate'];
+/** The order decisions are offered in, everywhere: yes, no, back to the author, then to the owners. */
+export const actionOrder: readonly QueueAction[] = ['approve', 'keep', 'reject', 'remove', 'request-changes', 'escalate'];
+
+/** Whether the Realm has published rules a keep or remove decision can cite, as the reports read so far say. */
+export type RulesState = 'published' | 'missing' | 'unknown';
+
+type T = ReturnType<typeof materializeData<ManageMessages>>;
+
+/** Why an open report or complaint cannot be decided here, and who can act instead; null when nothing is in the way. */
+function ReportNote({ item, authority, rules, rulesHref, t }: { item: ModerationItem; authority: QueueAuthority;
+  rules: RulesState; rulesHref: string | null; t: T }) {
+  let text: string | null = null;
+  let link: React.ReactNode = null;
+  if (item.kind === 'rights_complaint') {
+    text = !authority.escalate ? t.rightsDecisionsOwner : item.escalation ? t.alreadyEscalated : t.rightsDecisionsLater;
+  } else if (authority.decideReports && rules === 'missing') {
+    text = rulesHref ? t.rulesNeeded : `${t.rulesNeeded} ${t.askOwnerRules}`;
+    link = rulesHref ? <LocalizedLink href={rulesHref} className="font-medium text-primary hover:underline">
+      {t.publishRules}</LocalizedLink> : null;
+  } else if (!authority.decideReports) {
+    text = authority.escalate && !item.escalation ? t.reportsNeedModerator : t.alreadyEscalated;
+  } else if (item.escalation && authority.escalate) text = t.alreadyEscalated;
+  if (!text) return null;
+  return <p className="flex gap-2 text-muted-foreground text-sm">
+    <InfoIcon aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
+    <span>{text}{link ? <> {link}</> : null}</span></p>;
+}
+
+/** What each report of a case says, for moderators only: who reported it, when, and their own words. */
+function Reports({ basis, agents, now, locale, messages }: { basis: Loaded<DecisionBasis> | 'loading' | undefined;
+  agents: Record<string, AgentSummary>; now: number; locale: UiLocale; messages: ManageMessages }) {
+  const t = materializeData(messages, { locale });
+  if (basis === undefined || basis !== 'loading' && !basis.ok) return null;
+  if (basis === 'loading') return <div className="grid gap-2"><Skeleton className="h-4 w-1/3" /><Skeleton className="h-12 w-full" /></div>;
+  const { reports } = basis.data;
+  return <div className="grid gap-2">
+    <h4 className="font-medium text-muted-foreground text-xs">{basis.data.nextCursor
+      ? t.reportsAtLeast({ count: String(reports.length) }) : t.reportsHeading(reports.length)}</h4>
+    <ul className="grid gap-2">
+      {reports.map(report => <li key={report.id} className="grid gap-1 rounded-xl bg-muted/40 px-3 py-2.5 text-sm">
+        <p className="text-muted-foreground text-xs">{t.reporterWrote({ agent: agentLabel(agents[report.actingSubject],
+          report.actingSubject, id => t.agentFallback({ id })) })} · <time dateTime={report.receivedAt}
+          title={dateTime(report.receivedAt, locale)}>{relativeTime(report.receivedAt, now, locale)}</time></p>
+        {report.statement ? <p dir="auto" className="whitespace-pre-line">{report.statement}</p>
+          : <p className="text-muted-foreground">{t.noStatement}</p>}
+      </li>)}
+    </ul>
+  </div>;
+}
 
 function Person({ iri, agents, label, now, locale, messages, time }: {
   iri: string | null; agents: Record<string, AgentSummary>; label: (agent: string) => string; now: number;
@@ -38,9 +86,15 @@ function Person({ iri, agents, label, now, locale, messages, time }: {
 }
 
 /** One queue item in context: what it points at, who raised it, and the decisions it allows. */
-export function QueueDetail({ item, agents, works, draft, allowed, onAct, now, locale, messages, className }: {
+export function QueueDetail({ item, agents, works, draft, basis, allowed, authority, rules, rulesHref, onAct, now, locale,
+  messages, className }: {
   item: ModerationItem | null; agents: Record<string, AgentSummary>; works: Record<string, WorkSummary>;
-  draft: Loaded<{ text: string; language: string }> | 'loading' | undefined; allowed: ReadonlySet<QueueAction>;
+  draft: Loaded<{ text: string; language: string }> | 'loading' | undefined;
+  /** A report's decision basis: its reports' words and the rules a decision cites. */
+  basis?: Loaded<DecisionBasis> | 'loading';
+  allowed: ReadonlySet<QueueAction>; authority: QueueAuthority; rules: RulesState;
+  /** Settings & rules, for someone who may publish the rules; null otherwise. */
+  rulesHref: string | null;
   onAct: (action: QueueAction) => void; now: number; locale: UiLocale; messages: ManageMessages; className?: string;
 }) {
   const t = materializeData(messages, { locale });
@@ -88,6 +142,8 @@ export function QueueDetail({ item, agents, works, draft, allowed, onAct, now, l
     <Person iri={item.authorAgent} agents={agents} now={now} time={item.openedAt} locale={locale} messages={messages}
       label={agent => item.kind === 'rights_complaint' ? t.complainedBy({ agent }) : report ? t.reportedBy({ agent })
         : t.submittedBy({ agent })} />
+    {item.kind === 'content_report' ? <Reports basis={basis} agents={agents} now={now} locale={locale} messages={messages} />
+      : null}
     {item.submission ? <div className="grid gap-2">
       <h4 className="font-medium text-muted-foreground text-xs">{t.submittedText}</h4>
       {draft === 'loading' || draft === undefined ? <div className="grid gap-2"><Skeleton className="h-4 w-full" />
@@ -108,14 +164,14 @@ export function QueueDetail({ item, agents, works, draft, allowed, onAct, now, l
     <div className="grid gap-3 border-border/60 border-t pt-4">
       {decidable.length ? <div role="group" aria-label={t.itemActions} className="flex flex-wrap gap-2">
         {decidable.map(action => <Button key={action} size="sm" onClick={() => onAct(action)}
-          variant={action === 'approve' ? 'default' : action === 'reject' ? 'destructive' : 'outline'}
+          variant={action === 'approve' || action === 'keep' ? 'default'
+            : action === 'reject' || action === 'remove' ? 'destructive' : 'outline'}
           aria-keyshortcuts={shortcutKeys[action]}>
           {actionLabel(action, t)}<Kbd className="ms-1 bg-transparent" aria-hidden="true">{shortcutKeys[action].toUpperCase()}</Kbd>
         </Button>)}
       </div> : null}
-      {report && item.state === 'open' ? <p className="flex gap-2 text-muted-foreground text-sm">
-        <InfoIcon aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
-        {item.escalation ? t.alreadyEscalated : t.reportDecisionsLater}</p> : null}
+      {report && item.state === 'open' ? <ReportNote item={item} authority={authority} rules={rules} rulesHref={rulesHref}
+        t={t} /> : null}
       {item.submission?.state === 'deciding' ? <p className="flex gap-2 text-muted-foreground text-sm">
         <CircleAlertIcon aria-hidden="true" className="mt-0.5 size-4 shrink-0" />{t.beingApplied}</p> : null}
       {!decidable.length && !report && item.submission?.state !== 'deciding'

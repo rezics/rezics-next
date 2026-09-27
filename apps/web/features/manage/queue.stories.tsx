@@ -79,20 +79,93 @@ export const RejectWithReason: Story = {
   },
 };
 
-/** Reports can be escalated; keeping or removing their content waits for Main's case basis. */
+/**
+ * A report shows what each reporter wrote. A keeps its content (no reason
+ * needed); R removes it, with a reason the reporter and the author see.
+ */
+export const KeepOrRemoveReport: Story = {
+  async play({ canvasElement }) {
+    reset();
+    const canvas = within(canvasElement);
+    await expect(await canvas.findByText(/the text is the 1894 illustrated one/)).toBeVisible();
+    await expect(canvas.getAllByText('2 reports')[0]).toBeVisible();
+    await expect(canvas.getAllByText('No details given.')[0]).toBeVisible();
+    await userEvent.keyboard('a');
+    await expect(canvas.getByRole('status', { name: 'Decisions you can still undo' })).toHaveTextContent('Kept “Pride and Prejudice”');
+    await waitFor(() => expect(recorded.commits).toEqual([expect.objectContaining({ id: queue[0]!.id, action: 'keep',
+      reason: null })]));
+    await userEvent.click(within(list(canvas)).getByRole('button', { name: /Little Women/ }));
+    await expect(await canvas.findByText('The subtitle gives away the ending.')).toBeVisible();
+    await userEvent.keyboard('r');
+    const dialog = within(await within(document.body).findByRole('dialog', { name: 'Remove reported content' }, { timeout: 5000 }));
+    await expect(dialog.queryByRole('textbox', { name: 'Private note for moderators' })).toBeNull();
+    await userEvent.type(dialog.getByRole('textbox', { name: 'Why it’s removed' }), 'Rule 1: no spoilers in titles.');
+    await userEvent.click(dialog.getByRole('button', { name: 'Remove' }));
+    await waitFor(() => expect(recorded.commits).toEqual([expect.objectContaining({ action: 'keep' }),
+      expect.objectContaining({ id: queue[5]!.id, action: 'remove', reason: 'Rule 1: no spoilers in titles.' })]));
+  },
+};
+
+/** A moderator can hand a report to the owners with a note for them. */
 export const EscalateReport: Story = {
   async play({ canvasElement }) {
     reset();
     const canvas = within(canvasElement);
-    await expect(canvas.getByText(/can’t be done here yet/)).toBeVisible();
-    await userEvent.keyboard('a');
-    await expect(canvas.getByText('“Approve” isn’t available for this item.')).toBeVisible();
     await userEvent.keyboard('e');
     const dialog = within(await within(document.body).findByRole('dialog', { name: 'Escalate to the Realm owners' }, { timeout: 5000 }));
     await userEvent.type(dialog.getByRole('textbox', { name: 'What should the owners look at?' }),
       'Edition question needs an owner decision.');
     await userEvent.click(dialog.getByRole('button', { name: 'Escalate' }));
     await waitFor(() => expect(recorded.commits).toEqual([expect.objectContaining({ id: queue[0]!.id, action: 'escalate' })]));
+  },
+};
+
+/** An owner is who escalations reach, so an owner decides instead: no Escalate, and complaints say so. */
+export const OwnerDecides: Story = {
+  args: { authority: { decideReports: true, escalate: false } },
+  async play({ canvasElement }) {
+    reset();
+    const canvas = within(canvasElement);
+    const decision = await canvas.findAllByRole('group', { name: 'Decision' });
+    const visible = decision.find(group => group.checkVisibility())!;
+    await expect(within(visible).getByRole('button', { name: /Keep/ })).toBeVisible();
+    await expect(within(visible).queryByRole('button', { name: /Escalate/ })).toBeNull();
+    await expect(canvas.queryByText(/Escalate it so the Realm owners see it/)).toBeNull();
+    await userEvent.keyboard('e');
+    await expect(canvas.getByText('“Escalate” isn’t available for this item.')).toBeVisible();
+    await userEvent.click(within(list(canvas)).getByRole('button', { name: /Sherlock Holmes/ }));
+    await expect(canvas.getByText('Rights complaints can’t be decided here yet.')).toBeVisible();
+  },
+};
+
+/**
+ * Keeping or removing cites the Realm's rules. Until they are published,
+ * neither is offered, and the note says what to do and who can do it.
+ */
+export const RulesNotPublished: Story = {
+  args: { api: queueApi({ recorded, rules: false }), rulesHref: `/manage/r/${realm}/settings` },
+  async play({ canvasElement }) {
+    reset();
+    const canvas = within(canvasElement);
+    await expect(await canvas.findByText(/hasn’t published any yet/)).toBeVisible();
+    await expect(canvas.getByRole('link', { name: 'Publish them in Settings & rules' }))
+      .toHaveAttribute('href', `/en/manage/r/${realm}/settings`);
+    await userEvent.keyboard('a');
+    await expect(canvas.getByText('“Keep” isn’t available for this item.')).toBeVisible();
+    await expect(recorded.commits).toEqual([]);
+  },
+};
+
+/** `/manage/r/fiction` works like `/r/fiction`: the Zone's segment stays in every link. */
+export const BySlug: Story = {
+  args: { address: 'fiction' },
+  parameters: { route: { pathname: '/en/manage/r/fiction' } },
+  render: (args: ComponentProps<typeof QueueView>) => <RealmFrame realm={realm} address="fiction" header={header}
+    agent={acting} locale={args.locale} messages={args.messages}><QueueView {...args} /></RealmFrame>,
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByRole('link', { name: 'Decided' })).toHaveAttribute('href', '/en/manage/r/fiction?state=closed');
+    await expect(canvas.getByRole('link', { name: 'Members' })).toHaveAttribute('href', '/en/manage/r/fiction/members');
   },
 };
 

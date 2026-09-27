@@ -33,8 +33,9 @@ const uuid = t.String({ pattern: '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{
 const key = t.String({ pattern: '^[A-Za-z0-9:_./-]{1,128}$' });
 const digest = t.String({ pattern: '^[0-9a-f]{64}$' });
 const owner = t.Union([t.Literal('graph'), t.Literal('content'), t.Literal('source'), t.Literal('media'), t.Literal('review')]);
-const component = t.Union(['name', 'title', 'body', 'structure', 'media_use', 'synopsis', 'cover', 'publication',
-  'record'].map(value => t.Literal(value)));
+// Literals written out, not mapped from an array, so typed clients see the values instead of `never`.
+const component = t.Union([t.Literal('name'), t.Literal('title'), t.Literal('body'), t.Literal('structure'),
+  t.Literal('media_use'), t.Literal('synopsis'), t.Literal('cover'), t.Literal('publication'), t.Literal('record')]);
 const context = t.String({ pattern: '^(urn:rezics:context:global|https://rezics\\.com/id/[0-9a-f-]{36})$' });
 const disclosure = t.Union([t.Literal('private'), t.Literal('parties'), t.Literal('public_summary')]);
 const bounded = (max: number) => t.String({ minLength: 1, maxLength: max });
@@ -66,8 +67,9 @@ export const decisionFields = {
   targets: t.Array(t.Object({ owner, resource: bounded(512), component, locator: t.Nullable(bounded(512)),
     scopeKind: t.Union([t.Literal('exact_revision'), t.Literal('component')]), revision: t.Nullable(bounded(512)),
     expectedHead: t.Nullable(bounded(512)),
-    effect: t.Union(['disclosure', 'publication', 'participation', 'capability', 'search', 'raw_delivery',
-      'media_delivery', 'export', 'source_apply'].map(value => t.Literal(value))) },
+    effect: t.Union([t.Literal('disclosure'), t.Literal('publication'), t.Literal('participation'), t.Literal('capability'),
+      t.Literal('search'), t.Literal('raw_delivery'), t.Literal('media_delivery'), t.Literal('export'),
+      t.Literal('source_apply')]) },
   { additionalProperties: false }), { maxItems: 64 }),
   rule: t.Object({ ref: bounded(512), revision: bounded(512), digest }, { additionalProperties: false }),
   evidenceDigest: digest,

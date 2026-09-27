@@ -1,7 +1,8 @@
 import type { Decision } from './queue-state.ts';
-import { readMembers, readRoles, readSettings, readSubmission } from './read.ts';
-import { type MainClient, type MemberCommand, type ModerationItem, problemCode, type RoleCommand,
-  type SettingsView, uuidOf } from './types.ts';
+import { readDecisionBasis, readMembers, readRoles, readSettings, readSubmission } from './read.ts';
+import { type DecisionBasis, type InvitationCommand, type MainClient, type MemberCommand, type ModerationDecisionCommand,
+  type ModerationItem,
+  problemCode, type ReadFailure, type RoleCommand, type SettingsView, uuidOf } from './types.ts';
 
 // Commands from the browser through the BFF. Each intent carries one
 // Idempotency-Key, so a retry after a lost response replays the same receipt
@@ -82,6 +83,68 @@ export async function decideSubmission(main: MainClient, realm: string, item: Mo
     publicReason: decision.reason?.trim() || null, internalNote: decision.note?.trim() || null }, keyed(key)));
 }
 
+type DecisionTarget = ModerationDecisionCommand['targets'][number];
+// The basis reports evidence owners and components as plain strings; a decision may name only these.
+const owners = ['graph', 'content', 'source', 'media', 'review'] as const satisfies readonly DecisionTarget['owner'][];
+const components = ['name', 'title', 'body', 'structure', 'media_use', 'synopsis', 'cover', 'publication',
+  'record'] as const satisfies readonly DecisionTarget['component'][];
+const isOwner = (value: string): value is DecisionTarget['owner'] => (owners as readonly string[]).includes(value);
+const isComponent = (value: string): value is DecisionTarget['component'] =>
+  (components as readonly string[]).includes(value);
+
+/**
+ * Main's keep or remove decision for a report, from its decision basis.
+ * Keeping closes the case and changes nothing. Removing hides each reported
+ * revision still available (`disclosure` fence on exactly that revision, so
+ * an author's later fix shows) and compares each target's head with the one
+ * the basis read. Both cite the Realm's published rules and a retained
+ * evidence set; null when there is nothing to cite or nothing left to remove.
+ */
+export function reportDecision(basis: DecisionBasis, action: 'keep' | 'remove', rationale: string | null,
+  actingSubject: string, key: string): ModerationDecisionCommand | null {
+  const rule = basis.ruleBasis;
+  const evidenceDigest = basis.reports[0]?.evidenceDigest;
+  if (!rule || !evidenceDigest) return null;
+  const targets = new Map<string, DecisionTarget>();
+  if (action === 'remove') {
+    for (const evidence of basis.reports.flatMap(report => report.evidence)) {
+      const { owner, component } = evidence;
+      if (evidence.state !== 'available' || !isOwner(owner) || !isComponent(component)) continue;
+      targets.set(JSON.stringify([owner, evidence.resource, component, evidence.locator, evidence.revision]), {
+        owner, resource: evidence.resource, component, locator: evidence.locator,
+        scopeKind: evidence.revision === null ? 'component' : 'exact_revision', revision: evidence.revision,
+        expectedHead: evidence.expectedHead, effect: 'disclosure' });
+    }
+    if (!targets.size) return null;
+  }
+  return { profile: 'moderation-decision-v1', caseId: basis.caseId, expectedGeneration: basis.generation, actingSubject,
+    outcome: action === 'remove' ? 'restrict' : 'dismiss', targets: [...targets.values()],
+    rule: { ref: rule.ref, revision: rule.revision, digest: rule.digest }, evidenceDigest,
+    reversesDecisionId: null, answersStepId: null, rationale: rationale?.trim() || null,
+    // The reporter and the author learn the outcome; it is not published on the Realm's page.
+    disclosure: 'parties', idempotencyKey: key };
+}
+
+/** A basis Main could not read, as the decision's failure: a moved basis means the case changed. */
+const basisFailure = (failure: ReadFailure): CommandFailure => failure === 'moved' ? 'stale' : failure;
+
+/**
+ * Keeps or removes one report's content. The basis is read again when the
+ * decision is sent, so it cites what is true then; Main compares the case
+ * generation, rule revision and target heads and answers stale if any moved.
+ */
+export async function decideReport(main: MainClient, realm: string, item: ModerationItem, decision: Decision,
+  actingSubject: string, key: string): Promise<Outcome<unknown>> {
+  if (decision.action !== 'keep' && decision.action !== 'remove') return { ok: false, failure: 'invalid' };
+  const basis = await readDecisionBasis(main, realm, item.id, actingSubject);
+  if (!basis.ok) return { ok: false, failure: basisFailure(basis.failure) };
+  if (!basis.data.ruleBasis) return { ok: false, failure: 'invalid', code: 'rules_unpublished' };
+  const command = reportDecision(basis.data, decision.action, decision.reason, actingSubject, key);
+  // Everything reported is already hidden: another decision got there first.
+  if (!command) return { ok: false, failure: 'stale' };
+  return send(() => main.v1.moderation.decisions.post(command, keyed(key)));
+}
+
 /**
  * The Realm management generation every management write compares against.
  * Any one of the three management reads returns it; a moderator may hold only
@@ -122,9 +185,16 @@ export async function escalate(main: MainClient, realm: string, item: Moderation
 
 export function commitDecision(main: MainClient, realm: string, item: ModerationItem, decision: Decision,
   actingSubject: string, key: string) {
-  return decision.action === 'escalate'
-    ? escalate(main, realm, item, decision.reason ?? '', actingSubject, key)
-    : decideSubmission(main, realm, item, decision, actingSubject, key);
+  if (decision.action === 'escalate') return escalate(main, realm, item, decision.reason ?? '', actingSubject, key);
+  if (decision.action === 'keep' || decision.action === 'remove') {
+    return decideReport(main, realm, item, decision, actingSubject, key);
+  }
+  return decideSubmission(main, realm, item, decision, actingSubject, key);
+}
+
+/** Invites someone to join; they join when they accept it from their notifications (G-314). */
+export function invite(main: MainClient, realm: string, command: InvitationCommand, key: string) {
+  return send(() => main.v1.realms({ realm }).invitations.post(command, keyed(key)));
 }
 
 export function changeMember(main: MainClient, realm: string, command: MemberCommand, key: string) {

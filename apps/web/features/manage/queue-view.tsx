@@ -13,21 +13,28 @@ import LocalizedLink from '../shell/localized-link.tsx';
 import { EmptyState } from '../shell/empty-state.tsx';
 import type { Outcome } from './commands.ts';
 import { agentLabel, relativeTime } from './format.ts';
-import { actionLabel, decidedText, kindLabel, reasonText, shortcutKeys, stateLabel } from './labels.ts';
+import { actionLabel, decidedText, kindLabel, reasonText, shortcutActions, shortcutKeys, stateLabel } from './labels.ts';
 import type { ManageMessages } from './messages.ts';
 import { Pill, Thumb } from './parts.tsx';
-import { bffQueueApi, type QueueApi } from './queue-api.ts';
-import { QueueDetail } from './queue-detail.tsx';
-import { actionsFor, commonActions, type Decision, initialTriage, needsReason, type PendingDecision,
-  type QueueAction, type Settled, targetIds, triage, UNDO_WINDOW_MS, visibleIds } from './queue-state.ts';
+import { bffQueueApi, type QueueApi, reporters } from './queue-api.ts';
+import { actionOrder, QueueDetail, type RulesState } from './queue-detail.tsx';
+import { actionsFor, commonActions, type Decision, fullAuthority, initialTriage, needsReason, type PendingDecision,
+  type QueueAction, type QueueAuthority, type Settled, targetIds, triage, UNDO_WINDOW_MS, visibleIds } from './queue-state.ts';
 import { ReasonDialog } from './reason-dialog.tsx';
 import { mergeAgents } from './read.ts';
 import { type QueueView as View, queueHref } from './routes.ts';
-import type { AgentSummary, Loaded, ModerationItem, ModerationKind, ModerationPage, WorkSummary } from './types.ts';
+import type { AgentSummary, DecisionBasis, Loaded, ModerationItem, ModerationKind, ModerationPage,
+  WorkSummary } from './types.ts';
 
 export interface QueueViewProps {
   realm: string;
+  /** How the address names the Realm: its official Zone's segment, or its ID. Links keep it. */
+  address?: string;
   actingSubject: string;
+  /** What the acting Agent may decide here; everything when Main could not say. */
+  authority?: QueueAuthority;
+  /** Settings & rules, for someone who may publish the Realm's rules. */
+  rulesHref?: string | null;
   view: View;
   initial: ModerationPage;
   agents: Record<string, AgentSummary>;
@@ -49,6 +56,7 @@ const filters: ReadonlyArray<[ModerationKind | null, 'filterAll' | 'filterReport
 
 function outcomeOf(result: Outcome<unknown>): Settled {
   if (result.ok || result.failure === 'pending') return { kind: 'done' };
+  if (result.code === 'rules_unpublished') return { kind: 'failed', failure: 'no-rules' };
   if (result.failure === 'stale') return { kind: 'stale' };
   if (result.failure === 'denied' || result.failure === 'sign-in' || result.failure === 'budget') {
     return { kind: 'failed', failure: result.failure };
@@ -64,8 +72,17 @@ const typing = (target: EventTarget | null) => target instanceof HTMLElement && 
  * submissions, the current item in context beside it, keyboard triage, bulk
  * decisions and an undo window before anything reaches Main.
  */
-export function QueueView({ realm, actingSubject, view, initial, agents: initialAgents, works: initialWorks, now,
-  locale, messages, api: givenApi, undoWindowMs = UNDO_WINDOW_MS }: QueueViewProps) {
+/** What the reports read so far say about the Realm's rules: one published rule basis serves every report. */
+function rulesOf(bases: Record<string, Loaded<DecisionBasis> | 'loading'>): RulesState {
+  const read = Object.values(bases).filter(basis => basis !== 'loading' && basis.ok)
+    .map(basis => (basis as { data: DecisionBasis }).data);
+  if (read.some(basis => basis.ruleBasis)) return 'published';
+  return read.length ? 'missing' : 'unknown';
+}
+
+export function QueueView({ realm, address = realm, actingSubject, authority = fullAuthority, rulesHref = null, view,
+  initial, agents: initialAgents, works: initialWorks, now, locale, messages, api: givenApi,
+  undoWindowMs = UNDO_WINDOW_MS }: QueueViewProps) {
   const t = useMemo(() => materializeData(messages, { locale }), [messages, locale]);
   const api = useMemo(() => givenApi ?? bffQueueApi(realm, actingSubject, locale),
     [givenApi, realm, actingSubject, locale]);
@@ -73,10 +90,17 @@ export function QueueView({ realm, actingSubject, view, initial, agents: initial
   const [names, setNames] = useState({ agents: initialAgents, works: initialWorks });
   const [cursor, setCursor] = useState(initial.nextCursor);
   const [paging, setPaging] = useState<'idle' | 'loading' | 'moved' | 'failed'>('idle');
-  const [dialog, setDialog] = useState<{ action: Exclude<QueueAction, 'approve'>; ids: string[] } | null>(null);
+  const [dialog, setDialog] = useState<{ action: Exclude<QueueAction, 'approve' | 'keep'>; ids: string[] } | null>(null);
   const [help, setHelp] = useState(false);
   const [flash, setFlash] = useState<string | null>(null);
   const [drafts, setDrafts] = useState<Record<string, Loaded<{ text: string; language: string }> | 'loading'>>({});
+  const [bases, setBases] = useState<Record<string, Loaded<DecisionBasis> | 'loading'>>({});
+  const rules = rulesOf(bases);
+  // Without published rules there is nothing for a keep or remove decision to cite, so neither is offered.
+  const effective = useMemo(() => ({ ...authority, decideReports: authority.decideReports && rules !== 'missing' }),
+    [authority, rules]);
+  const authorityRef = useRef(effective);
+  authorityRef.current = effective;
   const [expanded, setExpanded] = useState(false);
   const [clock, setClock] = useState(now);
   const rows = useRef(new Map<string, HTMLButtonElement>());
@@ -153,6 +177,19 @@ export function QueueView({ realm, actingSubject, view, initial, agents: initial
     void api.draft(current).then(read => setDrafts(known => ({ ...known, [id]: read })));
   }, [current, drafts, api]);
 
+  // The current report's reports and rules, read once, when this person could decide it.
+  useEffect(() => {
+    if (current?.kind !== 'content_report' || !authority.decideReports || bases[current.id] !== undefined) return;
+    const item = current;
+    setBases(known => ({ ...known, [item.id]: 'loading' }));
+    void api.basis(item).then(async read => {
+      setBases(known => ({ ...known, [item.id]: read }));
+      if (!read.ok) return;
+      const found = await api.people(reporters(read.data));
+      setNames(known => ({ ...known, agents: mergeAgents(known.agents, found) }));
+    });
+  }, [current, bases, api, authority.decideReports]);
+
   // Keyboard moves real focus with the current item, so screen readers follow it.
   useEffect(() => {
     if (!focusCurrent.current || !state.current) return;
@@ -169,13 +206,22 @@ export function QueueView({ realm, actingSubject, view, initial, agents: initial
     setClock(Date.now());
   }, [undoWindowMs]);
 
-  const act = useCallback((action: QueueAction) => {
+  /** Decides the targets with the first of `wanted` they all allow, as a shortcut key stands for several actions. */
+  const act = useCallback((wanted: QueueAction | readonly QueueAction[]) => {
     const snapshot = latest.current;
     const ids = targetIds(snapshot);
     if (!ids.length) { setFlash(t.noneSelected); return; }
-    if (!commonActions(snapshot, ids).has(action)) { setFlash(t.notAvailable({ action: actionLabel(action, t) })); return; }
-    if (needsReason(action)) setDialog({ action: action as Exclude<QueueAction, 'approve'>, ids });
-    else decide(ids, { action, reason: null, note: null });
+    const choices = typeof wanted === 'string' ? [wanted] : wanted;
+    const allowed = commonActions(snapshot, ids, authorityRef.current);
+    const action = choices.find(choice => allowed.has(choice));
+    if (!action) {
+      // Name the choice that fits these items (Keep for a report, Approve for a submission), not the key's first.
+      const fitting = [...commonActions(snapshot, ids)].find(choice => choices.includes(choice)) ?? choices[0]!;
+      setFlash(t.notAvailable({ action: actionLabel(fitting, t) }));
+      return;
+    }
+    if (action === 'approve' || action === 'keep') decide(ids, { action, reason: null, note: null });
+    else if (needsReason(action)) setDialog({ action, ids });
   }, [decide, t]);
 
   useEffect(() => {
@@ -189,10 +235,7 @@ export function QueueView({ realm, actingSubject, view, initial, agents: initial
         case 'j': focusCurrent.current = true; dispatch({ type: 'move', delta: 1 }); break;
         case 'k': focusCurrent.current = true; dispatch({ type: 'move', delta: -1 }); break;
         case 'x': if (latest.current.current) dispatch({ type: 'toggle', id: latest.current.current }); break;
-        case 'a': act('approve'); break;
-        case 'r': act('reject'); break;
-        case 'c': act('request-changes'); break;
-        case 'e': act('escalate'); break;
+        case 'a': case 'r': case 'c': case 'e': act(shortcutActions(key)); break;
         case 'z': case 'u': if (latest.current.pending.length) { focusCurrent.current = true; dispatch({ type: 'undo' }); }
           break;
         case '?': setHelp(true); break;
@@ -218,7 +261,7 @@ export function QueueView({ realm, actingSubject, view, initial, agents: initial
 
   const selected = new Set(state.selected);
   const bulk = state.selected.filter(id => visible.includes(id));
-  const bulkActions = commonActions(state, bulk);
+  const bulkActions = commonActions(state, bulk, effective);
   const notices = Object.entries(state.settled).filter(([, outcome]) => outcome.kind !== 'done');
   const last = state.pending.at(-1);
   const waiting = view.state === 'open';
@@ -265,8 +308,10 @@ export function QueueView({ realm, actingSubject, view, initial, agents: initial
   }
 
   const detail = (className?: string) => <QueueDetail item={current} agents={names.agents} works={names.works}
-    draft={current ? drafts[current.id] : undefined} allowed={current && visible.includes(current.id)
-      ? actionsFor(current) : new Set()} onAct={act} now={now} locale={locale} messages={messages} className={className} />;
+    draft={current ? drafts[current.id] : undefined} basis={current ? bases[current.id] : undefined}
+    allowed={current && visible.includes(current.id) ? actionsFor(current, effective) : new Set()}
+    authority={authority} rules={rules} rulesHref={rulesHref} onAct={act} now={now} locale={locale} messages={messages}
+    className={className} />;
 
   return <div className="grid gap-5">
     <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
@@ -279,11 +324,11 @@ export function QueueView({ realm, actingSubject, view, initial, agents: initial
     </div>
     <div className="grid gap-3">
       <nav aria-label={t.stateLabel} className="flex gap-2">
-        <Pill href={queueHref(realm, { ...view, state: 'open' })} current={view.state === 'open'}>{t.stateOpen}</Pill>
-        <Pill href={queueHref(realm, { ...view, state: 'closed' })} current={view.state === 'closed'}>{t.stateClosed}</Pill>
+        <Pill href={queueHref(address, { ...view, state: 'open' })} current={view.state === 'open'}>{t.stateOpen}</Pill>
+        <Pill href={queueHref(address, { ...view, state: 'closed' })} current={view.state === 'closed'}>{t.stateClosed}</Pill>
       </nav>
       <nav aria-label={t.filterLabel} className="flex gap-2 overflow-x-auto pb-1">
-        {filters.map(([type, label]) => <Pill key={label} href={queueHref(realm, { ...view, type })}
+        {filters.map(([type, label]) => <Pill key={label} href={queueHref(address, { ...view, type })}
           current={view.type === type}>{t[label]}</Pill>)}
       </nav>
     </div>
@@ -293,7 +338,8 @@ export function QueueView({ realm, actingSubject, view, initial, agents: initial
         <AlertDescription className="flex items-start justify-between gap-3">
           <span>{outcome.kind === 'gone' ? t.goneNotice({ title: titleOf(id) })
             : outcome.kind === 'stale' ? `${titleOf(id)}: ${t.staleNotice}`
-              : `${titleOf(id)}: ${outcome.kind === 'failed' && outcome.failure === 'denied' ? t.deniedNotice : t.failedNotice}`}</span>
+              : `${titleOf(id)}: ${outcome.kind === 'failed' && outcome.failure === 'denied' ? t.deniedNotice
+                : outcome.kind === 'failed' && outcome.failure === 'no-rules' ? t.noRulesNotice : t.failedNotice}`}</span>
           <Button size="icon-xs" variant="ghost" aria-label={t.dismiss} onClick={() => dispatch({ type: 'dismiss', id })}>
             <XIcon aria-hidden="true" /></Button>
         </AlertDescription>
@@ -303,7 +349,7 @@ export function QueueView({ realm, actingSubject, view, initial, agents: initial
       ? <EmptyState icon={waiting ? CheckCheckIcon : InboxIcon}
         title={waiting ? view.type ? t.emptyFilteredTitle : t.emptyOpenTitle : t.emptyClosedTitle}
         description={waiting ? view.type ? t.emptyFilteredHelp : t.emptyOpenHelp : t.emptyClosedHelp}>
-        {view.type ? <LocalizedLink href={queueHref(realm, { ...view, type: null })}
+        {view.type ? <LocalizedLink href={queueHref(address, { ...view, type: null })}
           className="font-medium text-primary text-sm hover:underline">{t.showAll}</LocalizedLink> : null}
       </EmptyState>
       : <div className="grid gap-6 lg:grid-cols-[minmax(0,5fr)_minmax(0,6fr)]">
@@ -316,8 +362,9 @@ export function QueueView({ realm, actingSubject, view, initial, agents: initial
               className="size-4 accent-primary" />
             {bulk.length ? <>
               <span className="font-medium text-sm">{t.selectedCount(bulk.length)}</span>
-              {(['approve', 'reject', 'request-changes', 'escalate'] as const).filter(action => bulkActions.has(action))
-                .map(action => <Button key={action} size="xs" variant={action === 'approve' ? 'default' : 'outline'}
+              {actionOrder.filter(action => bulkActions.has(action))
+                .map(action => <Button key={action} size="xs"
+                  variant={action === 'approve' || action === 'keep' ? 'default' : 'outline'}
                   onClick={() => act(action)}>{actionLabel(action, t)}</Button>)}
               {bulkActions.size ? null : <span className="text-muted-foreground text-sm">{t.noCommonAction}</span>}
               <Button size="xs" variant="ghost" onClick={() => dispatch({ type: 'clear-selection' })}>{t.clearSelection}</Button>

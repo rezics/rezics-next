@@ -10,7 +10,7 @@ import { browserMainApi } from '../api/browser.ts';
 import { EmptyState } from '../shell/empty-state.tsx';
 import LocalizedLink from '../shell/localized-link.tsx';
 import { agentLabel, dateTime, relativeTime, shownHandle } from './format.ts';
-import { auditKindLabel, auditOutcome, publicDecisionLabel } from './labels.ts';
+import { auditKindLabel, auditOutcome, auditRuns, publicDecisionLabel } from './labels.ts';
 import type { ManageMessages } from './messages.ts';
 import { AgentMark, Named, Pill } from './parts.tsx';
 import { mergeAgents, readAgents, readAudit, readPublicDecisions, readWorks } from './read.ts';
@@ -48,9 +48,12 @@ const auditFilters: ReadonlyArray<[AuditFilter | null, 'auditAll' | 'auditModera
  * The Realm's record: the private audit log of who changed what and why, and
  * the public decisions everyone can see. Filters live in the address.
  */
-export function LogView({ realm, actingSubject, view, first, agents: initialAgents, works: initialWorks, now,
-  locale, messages, api: givenApi }: {
-  realm: string; actingSubject: string; view: View;
+export function LogView({ realm, address = realm, actingSubject, view, first, agents: initialAgents,
+  works: initialWorks, now, locale, messages, api: givenApi }: {
+  realm: string;
+  /** How the address names the Realm: its official Zone's segment, or its ID. Links keep it. */
+  address?: string;
+  actingSubject: string; view: View;
   first: { kind: 'audit'; page: AuditPage } | { kind: 'public'; page: PublicDecisionPage };
   agents: Record<string, AgentSummary>; works: Record<string, WorkSummary>; now: number;
   locale: UiLocale; messages: ManageMessages; api?: LogApi;
@@ -93,27 +96,28 @@ export function LogView({ realm, actingSubject, view, first, agents: initialAgen
     </div>
     <div className="grid gap-3">
       <nav aria-label={t.logViews} className="flex gap-2">
-        <Pill href={logHref(realm, { view: 'audit', kind: null })} current={view.view === 'audit'}>{t.privateLog}</Pill>
-        <Pill href={logHref(realm, { view: 'public', kind: null })} current={view.view === 'public'}>{t.publicLog}</Pill>
+        <Pill href={logHref(address, { view: 'audit', kind: null })} current={view.view === 'audit'}>{t.privateLog}</Pill>
+        <Pill href={logHref(address, { view: 'public', kind: null })} current={view.view === 'public'}>{t.publicLog}</Pill>
       </nav>
       {view.view === 'audit' ? <nav aria-label={t.auditKindLabel} className="flex gap-2 overflow-x-auto pb-1">
-        {auditFilters.map(([kind, label]) => <Pill key={label} href={logHref(realm, { view: 'audit', kind })}
+        {auditFilters.map(([kind, label]) => <Pill key={label} href={logHref(address, { view: 'audit', kind })}
           current={view.kind === kind}>{t[label]}</Pill>)}
       </nav> : null}
     </div>
     {empty ? <EmptyState icon={ScrollTextIcon} title={view.view === 'audit' ? t.emptyAuditTitle : t.emptyPublicTitle}
       description={view.view === 'audit' ? t.emptyAuditHelp : t.emptyPublicHelp} />
       : <ol className="grid divide-y divide-border/60 rounded-2xl border border-border/60 bg-card">
-        {first.kind === 'audit' ? audit.map(item => {
+        {first.kind === 'audit' ? auditRuns(audit).map(({ item, count, latest }) => {
           const name = agentName(item.actingSubject);
           const handle = shownHandle(names.agents[item.actingSubject]?.handle ?? null);
           return <li key={item.id} className="flex gap-3 px-4 py-3.5">
             <AgentMark name={name} iri={item.actingSubject} />
             <div className="grid min-w-0 flex-1 gap-1">
               <div className="flex flex-wrap items-baseline justify-between gap-x-3">
-                <p className="font-medium">{auditOutcome(item, t)}</p>
-                <time dateTime={item.decidedAt} title={dateTime(item.decidedAt, locale)}
-                  className="text-muted-foreground text-xs">{relativeTime(item.decidedAt, now, locale)}</time>
+                <p className="font-medium">{auditOutcome(item, t)}
+                  {count > 1 ? <span className="font-normal text-muted-foreground"> · {t.auditRepeated(count)}</span> : null}</p>
+                <time dateTime={latest} title={dateTime(latest, locale)}
+                  className="text-muted-foreground text-xs">{relativeTime(latest, now, locale)}</time>
               </div>
               <p className="text-muted-foreground text-sm">{t.byAgent({ agent: name })}{handle ? ` ${handle}` : ''}</p>
               {item.reason ? <p className="text-sm" dir="auto">“{item.reason}”</p> : null}
@@ -135,7 +139,7 @@ export function LogView({ realm, actingSubject, view, first, agents: initialAgen
       </ol>}
     {cursor ? <div>
       {paging === 'moved' ? <p className="text-sm">{t.movedTitle}{' '}
-        <LocalizedLink href={logHref(realm, view)} className="font-medium text-primary hover:underline">{t.startOver}</LocalizedLink></p>
+        <LocalizedLink href={logHref(address, view)} className="font-medium text-primary hover:underline">{t.startOver}</LocalizedLink></p>
         : <Button variant="outline" size="sm" isLoading={paging === 'loading'} onClick={() => void more()}>
           {paging === 'loading' ? t.loadingMore : paging === 'failed' ? t.retry : t.loadMore}</Button>}
     </div> : null}

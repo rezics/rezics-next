@@ -2,11 +2,11 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { browserMainApi } from '../api/browser.ts';
-import { changeMember, changeRole, newKey, type Outcome, previewRole, saveSettings } from './commands.ts';
+import { changeMember, changeRole, invite, newKey, type Outcome, previewRole, saveSettings } from './commands.ts';
 import type { ImpactState } from './impact-preview.tsx';
 import { mergeAgents, readAgents, readHandle, readMembers, readRoles, readSettings } from './read.ts';
-import type { AgentSummary, Loaded, MemberCommand, MemberPage, MemberReceipt, RoleChange, RoleCommand, RoleImpact,
-  RoleList, RoleReceipt, SettingsReceipt, SettingsView } from './types.ts';
+import type { AgentSummary, InvitationCommand, InvitationResult, Loaded, MemberCommand, MemberPage, MemberReceipt,
+  RoleChange, RoleCommand, RoleImpact, RoleList, RoleReceipt, SettingsReceipt, SettingsView } from './types.ts';
 
 /** Members, roles and settings from the browser. Stories pass a stand-in. */
 export interface AdminApi {
@@ -14,6 +14,7 @@ export interface AdminApi {
   names(iris: readonly string[]): Promise<Record<string, AgentSummary>>;
   lookup(handle: string): Promise<Loaded<AgentSummary>>;
   changeMember(command: MemberCommand, key: string): Promise<Outcome<MemberReceipt>>;
+  invite(command: InvitationCommand, key: string): Promise<Outcome<InvitationResult>>;
   roles(): Promise<Loaded<RoleList>>;
   preview(command: RoleCommand): Promise<Outcome<RoleImpact>>;
   changeRole(command: RoleCommand, digest: string, key: string): Promise<Outcome<RoleReceipt>>;
@@ -28,6 +29,7 @@ export function bffAdminApi(realm: string, actingSubject: string): AdminApi {
     names: iris => readAgents(main(), iris, actingSubject),
     lookup: handle => readHandle(main(), handle, actingSubject),
     changeMember: (command, key) => changeMember(main(), realm, command, key),
+    invite: (command, key) => invite(main(), realm, command, key),
     roles: () => readRoles(main(), realm, actingSubject),
     preview: command => previewRole(main(), realm, command),
     changeRole: (command, digest, key) => changeRole(main(), realm, command, digest, key),

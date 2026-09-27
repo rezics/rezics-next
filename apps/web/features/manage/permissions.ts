@@ -46,3 +46,15 @@ export function impactLines(impact: Pick<RoleImpact, 'changes'>): ImpactLine[] {
 export function removesOwnRoleManagement(impact: Pick<RoleImpact, 'changes'>, actingSubject: string): boolean {
   return impact.changes.some(change => change.member === actingSubject && change.lost.includes('realm.roles.manage'));
 }
+
+/**
+ * A person's place in a Realm, in one word, from the permissions Main lists
+ * for them there: an owner (`realm.owner`), someone who moderates reports,
+ * someone who reviews submissions, or otherwise someone who helps run it.
+ */
+export function positionOf(permissions: readonly string[]): 'owner' | 'moderator' | 'reviewer' | 'manager' {
+  if (permissions.includes('realm.owner')) return 'owner';
+  if (permissions.includes('governance.moderate')) return 'moderator';
+  if (permissions.includes('review.decide') || permissions.includes('publication.adopt')) return 'reviewer';
+  return 'manager';
+}

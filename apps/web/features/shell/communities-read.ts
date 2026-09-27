@@ -4,7 +4,8 @@ import { mainApiWithToken } from '../api/main.ts';
 import { ACCESS_COOKIE } from '../auth/cookies.ts';
 import { sessionAgentState } from '../auth/session.ts';
 import { type FollowEntry, type FollowKind, settle, uuidOf } from '../feed/types.ts';
-import { type Community, type CommunityNavigation, type Managed, type Moderated, realmOf } from './communities.ts';
+import { type Community, type CommunityNavigation, type Managed, type Moderated, realmOf, realmSegment }
+  from './communities.ts';
 
 /**
  * Who is reading, once per request. A signed-in person whose session Agent
@@ -59,12 +60,6 @@ export const readOfficialZones = cache(async (language: string): Promise<Communi
   return named.filter(item => item !== null);
 });
 
-/** The Manage address of a Realm: its official Zone's segment when it has one, as `/r/{segment}` uses. */
-function manageRef(realm: string, official: readonly Community[]): string {
-  const zone = official.find(item => item.realm === realm);
-  return `/manage/r/${zone ? zone.href.replace(/^\/r\//, '') : uuidOf(realm)}`;
-}
-
 /**
  * The Realms the reader manages, with their open queues, from Main's one
  * read of the reader's role assignments. Counts cover only what the reader
@@ -77,7 +72,7 @@ export const readManaged = cache(async (language: string): Promise<Managed[]> =>
     actingSubject: reader.actingSubject! } })), readOfficialZones(language)]);
   if (!page.ok) return [];
   return page.data.items.map(item => ({ realm: item.realm, open: item.openCount.value,
-    more: item.openCount.kind !== 'exact', href: manageRef(item.realm, official) }));
+    more: item.openCount.kind !== 'exact', href: `/manage/r/${realmSegment(item.realm, official)}` }));
 });
 
 /** Managed Realms with names: from the follows and official Zones already read, otherwise one Realm read each. */

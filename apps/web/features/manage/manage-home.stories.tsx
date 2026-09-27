@@ -1,79 +1,77 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, within } from 'storybook/test';
-import { acting, header, iri, now, queuePage, realm } from './fixtures.ts';
-import { ManageHome, type RealmSummary } from './manage-home.tsx';
+import { acting, header, iri, now, realm } from './fixtures.ts';
+import { ManageHome, type ManagedSummary } from './manage-home.tsx';
 import { messages } from './messages.ts';
 import zhHans from './messages/zh-Hans.ts';
+import type { ManagedRealm } from './types.ts';
 
-const serials = '00000000-0000-4000-8000-000000000021';
-const cooking = '00000000-0000-4000-8000-000000000022';
-const named = (value: string, key: string) => ({ ...header, id: iri(Number(key.slice(-2))),
-  name: { ...header.name, value }, icon: { ...header.icon, key } });
+const named = (value: string, key: string) => ({ ...header, name: { ...header.name, value }, icon: { ...header.icon, key } });
+const managed = (n: number, permissions: string[], open: number, escalated: number, hoursAgo: number | null): ManagedRealm =>
+  ({ realm: iri(n), permissions, openCount: { value: open, kind: 'exact' }, escalatedCount: { value: escalated, kind: 'exact' },
+    latestActivity: hoursAgo === null ? null : new Date(now - hoursAgo * 3_600_000).toISOString() });
 
-const realms: RealmSummary[] = [
-  { realm, header, queue: { ok: true, data: queuePage } },
-  { realm: serials, header: named('中文网络小说 · Chinese Web Fiction', serials),
-    queue: { ok: true, data: { ...queuePage, items: [] } } },
-  { realm: cooking, header: named('Home Cooking · 家常菜', cooking), queue: { ok: false, failure: 'denied' } },
+const owner = ['governance.moderate', 'governance.rule.publish', 'publication.adopt', 'realm.members.manage', 'realm.owner',
+  'realm.roles.manage', 'realm.settings.manage', 'review.decide'];
+/** Daniel's two Realms on the demo stack: Fiction, which he owns, and Classic Literature, where he moderates. */
+const realms: ManagedSummary[] = [
+  { realm: managed(31, owner, 8, 0, 1), header: named('Fiction · 小说', 'fiction'), address: 'fiction' },
+  { realm: managed(1, ['governance.moderate', 'realm.members.manage'], 8, 7, 11), header, address: realm },
+  { realm: managed(32, ['review.decide'], 0, 0, null), header: null, address: '00000000-0000-4000-8000-000000000032' },
 ];
-
-const found = { ok: true as const, data: { profile: 'realm-directory-v1' as const, nextCursor: null,
-  sourcePosition: { dataEpoch: 'fixture', sequence: '1' }, count: { value: 1, kind: 'exact-page' as const, total: null },
-  items: [{ id: iri(1), space: iri(2), name: header.name, icon: header.icon, description: null,
-    membership: { count: { kind: 'unknown' as const, value: null } }, links: { realm: `/v1/realms/${realm}` } }] } };
 
 const meta = {
   title: 'Manage/Home',
   component: ManageHome,
   parameters: { route: { pathname: '/en/manage' } },
-  args: { agent: acting, realms, query: '', results: null, now, locale: 'en', messages },
+  args: { agent: acting, realms: { ok: true, data: { items: realms, nextCursor: null } }, moreHref: null, now, locale: 'en',
+    messages },
 } satisfies Meta<typeof ManageHome>;
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-/** Each Realm at a glance: how much waits, what was escalated, and how long the oldest item has waited. */
+/** The Realms Main says you hold a role in: your place in each, what waits for you, and what was escalated. */
 export const YourRealms: Story = {
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     await expect(canvas.getByRole('heading', { level: 1, name: 'Manage' })).toBeVisible();
     await expect(canvas.getByRole('region', { name: 'Acting as' })).toHaveTextContent('Daniel Chen 陈丹尼');
+    await expect(canvas.queryByRole('search')).toBeNull();
     const cards = within(canvas.getByRole('region', { name: 'Your Realms' })).getAllByRole('listitem');
-    await expect(cards[0]).toHaveTextContent('7 waiting');
-    await expect(cards[0]).toHaveTextContent('1 escalated');
-    await expect(cards[0]).toHaveTextContent(/Oldest waiting since 2 days ago/);
-    await expect(within(cards[0]!).getByRole('link', { name: 'Open queue' })).toHaveAttribute('href', `/en/manage/r/${realm}`);
-    await expect(cards[1]).toHaveTextContent('Nothing waiting');
-    await expect(cards[2]).toHaveTextContent('You no longer manage this Realm.');
-    await expect(within(cards[2]!).queryByRole('link', { name: 'Open queue' })).toBeNull();
-    await expect(within(cards[2]!).getByRole('button', { name: 'Remove Home Cooking · 家常菜 from this list' })).toBeVisible();
+    await expect(cards[0]).toHaveTextContent('Owner');
+    await expect(cards[0]).toHaveTextContent('8 waiting');
+    await expect(within(cards[0]!).getByRole('link', { name: 'Open the queue of Fiction · 小说' }))
+      .toHaveAttribute('href', '/en/manage/r/fiction');
+    await expect(cards[1]).toHaveTextContent('Moderator');
+    await expect(cards[1]).toHaveTextContent('7 escalated');
+    await expect(cards[1]).toHaveTextContent('Last activity 11 hours ago');
+    await expect(cards[2]).toHaveTextContent('Reviewer');
+    await expect(cards[2]).toHaveTextContent('Nothing waiting');
   },
 };
 
-export const FirstVisit: Story = {
-  args: { realms: [] },
+export const NoRealms: Story = {
+  args: { realms: { ok: true, data: { items: [], nextCursor: null } } },
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
-    await expect(canvas.getByRole('heading', { name: 'Open a Realm you moderate' })).toBeVisible();
-    const form = canvas.getByRole('search', { name: 'Open a Realm' });
-    await expect(form).toHaveAttribute('action', '/en/manage');
-    await expect(within(form).getByRole('searchbox', { name: 'Realm name' })).toHaveAttribute('name', 'q');
+    await expect(canvas.getByRole('heading', { name: 'You don’t manage a Realm yet' })).toBeVisible();
+    await expect(canvas.queryByRole('search')).toBeNull();
   },
 };
 
-/** The finder is a plain GET form: results come from the server, so it works before scripts load. */
-export const FinderResults: Story = {
-  args: { realms: [], query: 'classic', results: found },
+/** More than a page of Realms continues on the next page. */
+export const MoreRealms: Story = {
+  args: { moreHref: `/manage?after=${encodeURIComponent(iri(32))}` },
   async play({ canvasElement }) {
-    const canvas = within(canvasElement);
-    await expect(canvas.getByRole('searchbox', { name: 'Realm name' })).toHaveValue('classic');
-    await expect(canvas.getByRole('link', { name: /Classic Literature/ })).toHaveAttribute('href', `/en/manage/r/${realm}`);
+    await expect(within(canvasElement).getByRole('link', { name: 'Show more Realms' }))
+      .toHaveAttribute('href', `/en/manage?after=${encodeURIComponent(iri(32))}`);
   },
 };
 
-export const FinderNoMatch: Story = {
-  args: { realms: [], query: 'knitting', results: { ...found, data: { ...found.data, items: [] } } },
+export const Unavailable: Story = {
+  args: { realms: { ok: false, failure: 'unavailable' }, retryHref: '/en/manage' },
   async play({ canvasElement }) {
-    await expect(within(canvasElement).getByRole('status')).toHaveTextContent('No Realms match “knitting”.');
+    await expect(within(canvasElement).getByRole('heading', { name: 'Couldn’t load this' })).toBeVisible();
   },
 };
 
@@ -83,8 +81,9 @@ export const Chinese: Story = {
   parameters: { route: { pathname: '/zh-Hans/manage' } },
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
-    await expect(canvas.getByText('7 项待处理')).toBeVisible();
-    await expect(canvas.getAllByRole('link', { name: '打开待办' })[0]).toHaveAttribute('href', `/zh-Hans/manage/r/${realm}`);
+    await expect(canvas.getAllByText('8 项待处理')[0]).toBeVisible();
+    await expect(canvas.getByText('所有者')).toBeVisible();
+    await expect(canvas.getByRole('link', { name: '打开Fiction · 小说的待办' })).toHaveAttribute('href', '/zh-Hans/manage/r/fiction');
   },
 };
 
