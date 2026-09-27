@@ -30,7 +30,7 @@ const withDocument: Decorator = (Story, { globals, parameters }) => {
         initialTheme={theme}
         initialCollapsed={Boolean(parameters.navCollapsed)}
       >
-        <div className="aura-canvas min-h-dvh bg-background font-sans text-foreground">
+        <div className="min-h-dvh bg-background font-sans text-foreground">
           <Story />
         </div>
       </ShellProvider>

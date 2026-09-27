@@ -92,32 +92,38 @@ export function uprightTitle(title: string): boolean {
   return characters.length > 0 && characters.length <= 8 && characters.every(character => upright.test(character));
 }
 
-/** The title's size in container-inline units: smaller as it grows, with CJK characters counted about double. */
+const longestWord = (title: string) => Math.max(0, ...title
+  .split(/[\s\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}]+/u).map(word => [...word].length));
+
+/**
+ * The title's size in percent of the cover's width: smaller as the title grows
+ * (CJK characters count about double), and small enough that its longest word
+ * fits on one line where it can.
+ */
 export function coverTitleSize(title: string): number {
   let width = 0;
   for (const character of title) width += wide.test(character) ? 1.8 : 1;
-  if (width <= 14) return 13;
-  if (width <= 28) return 11;
-  if (width <= 48) return 9.5;
-  return width <= 80 ? 8 : 7;
+  const byLength = width <= 14 ? 13 : width <= 28 ? 11 : width <= 48 ? 9.5 : width <= 80 ? 8 : 7;
+  // A semibold serif letter is about 0.62em wide and a book's text column about 68% of its width.
+  const longest = longestWord(title);
+  return Math.max(7, Math.min(byLength, longest ? 68 / (0.62 * longest) : byLength));
 }
 
 const workCoverVariants = tv({
   base: [
     '@container relative isolate shrink-0 select-none overflow-hidden',
     // A printed object on the page: a hairline edge that holds in dark mode, and a soft drop shadow.
-    'shadow-[0_1px_2px_rgb(0_0_0/0.14),0_10px_24px_-12px_rgb(0_0_0/0.45)]',
+    'shadow-[0_1px_2px_rgb(0_0_0/0.1),0_8px_20px_-8px_rgb(0_0_0/0.32)]',
     'after:pointer-events-none after:absolute after:inset-0 after:rounded-[inherit] after:ring-1 after:ring-black/10',
     'after:ring-inset dark:after:ring-white/12',
   ],
   variants: {
-    size: { xs: 'w-10', sm: 'w-16', md: 'w-28', lg: 'w-40', xl: 'w-56', fill: 'w-full' },
-    kind: {
-      book: 'rounded-[0.1875rem_0.3125rem_0.3125rem_0.1875rem]',
-      document: 'rounded-[0.1875rem]',
-      recipe: 'rounded-[0.625rem]',
-      package: 'rounded-[22%]',
+    size: {
+      xs: 'w-10 rounded-[0.1875rem]', sm: 'w-16 rounded-[0.25rem]', md: 'w-28 rounded-[0.375rem]',
+      lg: 'w-40 rounded-[0.5rem]', xl: 'w-56 rounded-[0.5rem]', fill: 'w-full rounded-[0.5rem]',
     },
+    // Recipe cards and package tiles round further; books and documents take the size's radius.
+    kind: { book: '', document: '', recipe: 'rounded-[12%]', package: 'rounded-[22%]' },
   },
   defaultVariants: { size: 'fill', kind: 'book' },
 });
@@ -164,7 +170,7 @@ function Authors({ authors, lang, className }: { authors: readonly string[]; lan
   const text = authors.slice(0, 2).join(authors.some(name => wide.test(name)) ? '、' : ', ');
   const latin = !wide.test(text);
   return <p lang={lang} className={cn('hidden font-sans font-semibold leading-snug @min-[7rem]:line-clamp-2',
-    latin ? 'text-[5.5cqi] uppercase tracking-[0.12em]' : 'text-[6.5cqi] tracking-[0.08em]', className)}>{text}</p>;
+    latin ? 'text-[5.5cqw] uppercase tracking-[0.12em]' : 'text-[6.5cqw] tracking-[0.08em]', className)}>{text}</p>;
 }
 
 // Static class names, so Tailwind generates each clamp; titles show from 4.5rem wide, where they can be read.
@@ -174,9 +180,9 @@ const clamps = { 3: '@min-[4.5rem]:line-clamp-3', 4: '@min-[4.5rem]:line-clamp-4
 function Title({ title, lang, dir, lines, scale = 1, className }: {
   title: string; lang?: string; dir?: 'ltr' | 'rtl'; lines: keyof typeof clamps; scale?: number; className?: string;
 }) {
-  return <p lang={lang} dir={dir} style={{ fontSize: `${coverTitleSize(title) * scale}cqi` }}
-    className={cn('hidden text-balance font-semibold font-work-title leading-[1.14] [overflow-wrap:anywhere] hyphens-auto',
-      clamps[lines], className)}>{title}</p>;
+  return <p lang={lang} dir={dir} style={{ fontSize: `${coverTitleSize(title) * scale}cqw` }}
+    className={cn('hidden text-balance font-semibold font-work-title leading-[1.14] [overflow-wrap:anywhere]',
+      longestWord(title) > 12 ? 'hyphens-auto' : 'hyphens-manual', clamps[lines], className)}>{title}</p>;
 }
 
 /** A cloth-bound book: title and a rule at the head, authors at the foot, a shaded spine. */
@@ -190,7 +196,7 @@ function BookDesign({ title, lang, dir, authors, swatch, layout }: DesignProps) 
       <div className="absolute top-[8%] left-[11%] hidden border px-[3.5%] py-[5%] @min-[4.5rem]:block"
         style={{ background: 'oklch(0.95 0.02 85)', color: 'oklch(0.22 0.02 260)', borderColor: 'oklch(0.22 0.02 260 / 0.45)' }}>
         <p lang={lang} className="font-semibold font-work-title leading-none tracking-[0.18em] [text-orientation:upright]
-          [writing-mode:vertical-rl]" style={{ fontSize: `${[...title].length <= 4 ? 12 : 10}cqi` }}>{title}</p>
+          [writing-mode:vertical-rl]" style={{ fontSize: `${[...title].length <= 4 ? 12 : 10}cqw` }}>{title}</p>
       </div>
       <Authors authors={authors} lang={lang} className="absolute inset-x-[11%] bottom-[8%]" />
       <Spine side="right" />
@@ -220,7 +226,7 @@ function DocumentDesign({ title, lang, dir, authors, swatch, layout }: DesignPro
     <span key="sun" className="absolute -end-[22%] -top-[22%] size-[82%] rounded-full" style={{ background: swatch.accent }} />,
     <span key="bars" className="absolute inset-x-[10%] top-[10%] grid h-[30%] grid-rows-3 gap-[12%]">
       {[0, 1, 2].map(bar => <span key={bar} style={{ background: swatch.accent, width: `${100 - bar * 22}%` }} />)}</span>,
-    <span key="arc" className="absolute -start-[30%] -top-[30%] size-[90%] rounded-full border-[9cqi]"
+    <span key="arc" className="absolute -start-[30%] -top-[30%] size-[90%] rounded-full border-[9cqw]"
       style={{ borderColor: swatch.accent }} />,
     <span key="fold" className="absolute inset-x-0 top-0 h-[52%] [clip-path:polygon(0_0,100%_0,100%_62%,0_100%)]"
       style={{ background: swatch.accent }} />,
@@ -239,12 +245,12 @@ function RecipeDesign({ title, lang, dir, authors, swatch, layout }: DesignProps
   const check = `color-mix(in oklab, ${swatch.accent} 55%, transparent)`;
   const motif = layout % 3 === 0
     ? <span className="absolute inset-x-0 top-0 h-[34%]" style={{ backgroundImage:
-      `repeating-linear-gradient(0deg, ${check} 0 6cqi, transparent 6cqi 12cqi), repeating-linear-gradient(90deg, ${check} 0 6cqi, transparent 6cqi 12cqi)` }} />
+      `repeating-linear-gradient(0deg, ${check} 0 6cqw, transparent 6cqw 12cqw), repeating-linear-gradient(90deg, ${check} 0 6cqw, transparent 6cqw 12cqw)` }} />
     : layout % 3 === 1
       ? <span className="absolute top-[9%] left-1/2 size-[36%] -translate-x-1/2 rounded-full"
-        style={{ boxShadow: `inset 0 0 0 2.5cqi ${swatch.accent}, inset 0 0 0 5cqi transparent, inset 0 0 0 5.6cqi ${check}` }} />
+        style={{ boxShadow: `inset 0 0 0 2.5cqw ${swatch.accent}, inset 0 0 0 5cqw transparent, inset 0 0 0 5.6cqw ${check}` }} />
       : <span className="absolute inset-y-0 start-0 w-[9%]" style={{ backgroundImage:
-        `repeating-linear-gradient(180deg, ${swatch.accent} 0 5cqi, transparent 5cqi 10cqi)` }} />;
+        `repeating-linear-gradient(180deg, ${swatch.accent} 0 5cqw, transparent 5cqw 10cqw)` }} />;
   return <>
     <span aria-hidden="true">{motif}</span>
     <div className={cn('absolute inset-x-[11%] bottom-[10%] flex max-h-[52%] flex-col justify-end gap-[5%]',

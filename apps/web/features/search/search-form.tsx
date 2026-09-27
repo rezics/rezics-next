@@ -49,7 +49,7 @@ export function SearchForm({ state, realm, locale, messages }: {
     }
   }
 
-  return <form role="search" aria-label={t.form} action="/search" method="get" onSubmit={submit}
+  return <form role="search" aria-label={t.form} action={localizedPath('/search', locale)} method="get" onSubmit={submit}
     className="flex flex-col gap-2 sm:flex-row">
     <label htmlFor={scopeId} className="sr-only">{t.scopeLabel}</label>
     <NativeSelect id={scopeId} name="scope" size="lg" value={scope} className="w-full sm:w-auto sm:max-w-80 [&_select]:h-12

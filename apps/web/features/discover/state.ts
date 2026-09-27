@@ -1,6 +1,6 @@
 import { type BrowseScope, iriOf, isUuid, parseScope, scopeQuery, type SearchParams, single,
   withQuery } from './scope.ts';
-import type { DiscoveryQuery } from './types.ts';
+import type { DiscoveryItem, DiscoveryQuery } from './types.ts';
 
 /** The Work types discovery can filter by, in shelf order; Main's `discoveryType` literals. */
 export const workTypes = [
@@ -14,9 +14,9 @@ export const workTypeOf = (iri: string): WorkTypeKey | null =>
   workTypes.find(type => type.iri === iri)?.key ?? null;
 
 /**
- * `/discover` as the URL gives it. `context` is the standing rating Context
- * (a question) that top-rated and Mine rank by; Main never picks one silently.
- * `term` is a classification Sense.
+ * `/discover` as the URL gives it. `context` pins a standing rating Context
+ * (a question); without one the page ranks by the first Context Main lists
+ * for the scope, so links never need it. `term` is a classification Sense.
  */
 export interface DiscoverState {
   scope: BrowseScope;
@@ -44,45 +44,79 @@ export function discoverHref(state: DiscoverState): string {
     term: state.term });
 }
 
-/** One row of Works: an order, the filters it adds and the Context it ranks by. */
+/**
+ * What a shelf lists, which names it for readers: favorites (top rated),
+ * recently added, or one genre (a classification term). Each shelf holds one
+ * kind of Work unless the reader asked for all, so a novel never sits beside
+ * a recipe.
+ */
+export type ShelfTopic =
+  | { kind: 'favorites' | 'recent'; type: WorkTypeKey | null }
+  | { kind: 'popular-in' | 'new-in'; type: WorkTypeKey | null; term: string }
+  | { kind: 'mine'; type: WorkTypeKey | null };
+
+/** One row of Works: its topic, Main's order and filters. */
 export interface ShelfSpec {
   key: string;
+  topic: ShelfTopic;
   sort: 'recent' | 'top-rated';
   type: WorkTypeKey | null;
   term: string | null;
 }
 
-/**
- * The shelves a state shows. A filtered view is one recent shelf (plus top rated
- * when a Context is chosen); the overview adds a recent shelf per Work type.
- * Mine ranks the person's own ratings, so without a Context it has no shelf.
- */
-export function shelvesFor(state: DiscoverState): ShelfSpec[] {
-  const ranked = state.context !== null;
-  if (state.scope.kind === 'mine' && !ranked) return [];
-  const focus = { type: state.type, term: state.term };
-  const shelves: ShelfSpec[] = [{ key: 'recent', sort: 'recent', ...focus }];
-  if (ranked) shelves.push({ key: 'top-rated', sort: 'top-rated', ...focus });
-  if (state.type === null && state.term === null) {
-    for (const type of workTypes) {
-      shelves.push({ key: `recent-${type.key}`, sort: 'recent', type: type.key, term: null });
-    }
-  }
-  return shelves;
+const favorites = (type: WorkTypeKey | null): ShelfSpec =>
+  ({ key: `favorites-${type ?? 'all'}`, topic: { kind: 'favorites', type }, sort: 'top-rated', type, term: null });
+const recent = (type: WorkTypeKey | null): ShelfSpec =>
+  ({ key: `recent-${type ?? 'all'}`, topic: { kind: 'recent', type }, sort: 'recent', type, term: null });
+
+/** A genre shelf: top rated when the scope has a rating question, else newest first. */
+export function termShelf(term: string, type: WorkTypeKey | null, ranked: boolean): ShelfSpec {
+  return { key: `${ranked ? 'popular' : 'new'}-${term}`, topic: { kind: ranked ? 'popular-in' : 'new-in', type, term },
+    sort: ranked ? 'top-rated' : 'recent', type, term };
 }
 
 /**
- * Main's query for one page of a shelf. Each (scope, Realm, Context) is its own
- * built population, so recent shelves read the Context-free one except in
+ * The shelves a state shows before genres are known. The overview leads with
+ * readers' favorite books, then recently added books, guides and recipes; a
+ * kind shows its favorites and newest; a genre its popular and newest. Top
+ * rated needs a rating question (`ranked`); Mine is the reader's own ratings.
+ */
+export function shelvesFor(state: DiscoverState, ranked = false): ShelfSpec[] {
+  if (state.scope.kind === 'mine') {
+    return ranked ? [{ key: 'mine', topic: { kind: 'mine', type: state.type }, sort: 'top-rated', type: state.type,
+      term: null }] : [];
+  }
+  if (state.term) {
+    return [...(ranked ? [termShelf(state.term, state.type, true)] : []), termShelf(state.term, state.type, false)];
+  }
+  if (state.type) return [...(ranked ? [favorites(state.type)] : []), recent(state.type)];
+  return [...(ranked ? [favorites('book')] : []), recent('book'), recent('document'), recent('recipe')];
+}
+
+/** The overview's genre shelves: the terms most often on its first books, most frequent first. */
+export function genreTerms(items: readonly DiscoveryItem[], limit = 2): { term: string; name: DiscoveryItem['classifications'][number]['name'] }[] {
+  const counted = new Map<string, { count: number; name: DiscoveryItem['classifications'][number]['name'] }>();
+  for (const tag of items.flatMap(item => item.classifications)) {
+    const id = tag.sense.slice(-36);
+    if (!isUuid(id)) continue;
+    counted.set(id, { count: (counted.get(id)?.count ?? 0) + 1, name: tag.name });
+  }
+  return [...counted].sort((a, b) => b[1].count - a[1].count || (a[0] < b[0] ? -1 : 1))
+    .slice(0, limit).map(([term, entry]) => ({ term, name: entry.name }));
+}
+
+/**
+ * Main's query for one page of a shelf. Each (scope, Realm, Context) is its
+ * own built population, so recent shelves read the Context-free one except in
  * Mine, whose population is always one Context's ratings.
  */
 export function discoveryQuery(state: DiscoverState, shelf: ShelfSpec, options: { limit: number;
-  language: string; actingSubject?: string; cursor?: string }): DiscoveryQuery {
+  language: string; context?: string | null; actingSubject?: string; cursor?: string }): DiscoveryQuery {
   const { scope } = state;
   const ranked = shelf.sort === 'top-rated' || scope.kind === 'mine';
   return { scope: scope.kind, ...(scope.kind === 'realm' ? { realm: iriOf(scope.realm) } : {}),
     sort: shelf.sort, limit: options.limit, language: options.language,
-    ...(ranked && state.context ? { context: iriOf(state.context) } : {}),
+    ...(ranked && options.context ? { context: iriOf(options.context) } : {}),
     ...(shelf.type ? { type: workTypes.find(type => type.key === shelf.type)!.iri } : {}),
     ...(shelf.term ? { term: iriOf(shelf.term) } : {}),
     ...(scope.kind === 'mine' && options.actingSubject ? { actingSubject: options.actingSubject } : {}),

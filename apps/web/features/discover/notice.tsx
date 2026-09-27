@@ -7,8 +7,9 @@ import type { DiscoverMessages } from './messages.ts';
 import type { ReadFailure } from './types.ts';
 
 /**
- * A shelf-sized state: why a list shows nothing and what to do next. Smaller
- * than the shell's `EmptyState`, so one failing shelf does not dominate a page.
+ * A shelf-sized state, said quietly: why a list shows nothing and what to do
+ * next. Smaller than the shell's `EmptyState`, so one shelf that cannot load
+ * does not dominate a page.
  */
 export function Notice({ icon: Icon, title, description, children, tone = 'default', headingLevel = 3,
   className }: {
@@ -17,34 +18,29 @@ export function Notice({ icon: Icon, title, description, children, tone = 'defau
 }) {
   const Heading = `h${headingLevel}` as const;
   return <div role={tone === 'destructive' ? 'alert' : 'status'} data-slot="notice" className={cn(
-    'flex flex-col gap-4 rounded-2xl border border-border/80 border-dashed bg-card/60 p-5 sm:flex-row sm:items-center',
-    className)}>
-    <span className={cn('grid size-10 shrink-0 place-items-center rounded-xl',
-      tone === 'destructive' ? 'bg-destructive/10 text-destructive-foreground' : 'bg-primary/10 text-primary')}>
-      <Icon aria-hidden="true" className="size-5" />
-    </span>
-    <div className="min-w-0 flex-1 space-y-1">
-      <Heading className="text-pretty font-semibold">{title}</Heading>
+    'flex flex-col gap-3 rounded-2xl bg-muted/60 px-5 py-4 sm:flex-row sm:items-center', className)}>
+    <Icon aria-hidden="true" className={cn('size-5 shrink-0',
+      tone === 'destructive' ? 'text-destructive-foreground' : 'text-muted-foreground')} />
+    <div className="min-w-0 flex-1 space-y-0.5">
+      <Heading className="text-pretty font-medium">{title}</Heading>
       {description ? <p className="text-pretty text-muted-foreground text-sm">{description}</p> : null}
     </div>
     {children ? <div className="flex shrink-0 flex-wrap gap-2">{children}</div> : null}
   </div>;
 }
 
-/** What a failed read shows, in the scope it happened in. */
-export function failureNotice(failure: ReadFailure, scope: string, t: ContractOf<DiscoverMessages>):
+/** What a shelf that could not load says, in people's words rather than system status. */
+export function failureNotice(failure: ReadFailure, shelf: string, t: ContractOf<DiscoverMessages>):
   { icon: LucideIcon; title: string; description?: string; tone: 'default' | 'destructive' } {
   switch (failure) {
-    case 'unbuilt': return { icon: HourglassIcon, title: t.unbuilt({ scope }), description: t.unbuiltHelp,
-      tone: 'default' };
-    case 'stale': return { icon: HourglassIcon, title: t.stale({ scope }), description: t.staleHelp, tone: 'default' };
+    case 'unbuilt': case 'stale':
+      return { icon: HourglassIcon, title: t.preparing, description: t.preparingHelp, tone: 'default' };
     case 'moved': return { icon: RefreshCwIcon, title: t.moved, description: t.movedHelp, tone: 'default' };
-    case 'missing': return { icon: CircleSlashIcon, title: t.missingContext({ scope }), description: t.missingHelp,
-      tone: 'default' };
+    case 'missing': return { icon: CircleSlashIcon, title: t.missingShelf, description: t.missingHelp, tone: 'default' };
     case 'sign-in': return { icon: KeyRoundIcon, title: t.signInTitle, description: t.signInHelp, tone: 'default' };
     case 'invalid': return { icon: BanIcon, title: t.invalidTitle, tone: 'destructive' };
     case 'budget': return { icon: LibraryIcon, title: t.budgetTitle, tone: 'default' };
-    case 'unavailable': return { icon: TriangleAlertIcon, title: t.unavailableTitle, description: t.unavailableHelp,
-      tone: 'destructive' };
+    case 'unavailable': return { icon: TriangleAlertIcon, title: t.unavailableShelf({ shelf }),
+      description: t.unavailableHelp, tone: 'destructive' };
   }
 }

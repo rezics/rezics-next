@@ -1,10 +1,12 @@
 import { buttonVariants } from '@rezics/ui/button';
-import { Card } from '@rezics/ui/card';
 import { cn } from '@rezics/ui/utils';
 import { ChevronDownIcon, LinkIcon, SlidersHorizontalIcon, UserRoundIcon, XIcon } from 'lucide-react';
 import { type ContractOf, materializeData } from 'native-i18n';
 import Link from '../shell/localized-link.tsx';
 import type { UiLocale } from '../../i18n/define.ts';
+import { localizedPath } from '../../i18n/locale.ts';
+import { signInPath } from '../auth/paths.ts';
+import { type ReaderActions, ReaderActionsProvider } from '../catalogue/reader-actions.tsx';
 import type { DiscoverMessages } from '../discover/messages.ts';
 import { Notice } from '../discover/notice.tsx';
 import { workTypes } from '../discover/state.ts';
@@ -27,9 +29,12 @@ export interface SearchPageProps {
   actingSubject?: string;
   avatarQuery?: string;
   load?: SearchLoader;
+  /** Stories supply reader actions; pages derive them from the session. */
+  readerActions?: ReaderActions;
   locale: UiLocale;
   messages: SearchMessages;
-  discoverMessages: DiscoverMessages;
+  /** Still passed by the route; the result cards read catalogue strings now. */
+  discoverMessages?: DiscoverMessages;
 }
 
 function languageName(tag: string, locale: UiLocale): string {
@@ -116,19 +121,20 @@ function Filters({ state, facets, idPrefix, locale, t }: { state: SearchState;
  * `/search`: the phrase, its scope and include filters are URL state; the
  * server renders page one and the browser continues with "Show more".
  */
-export function SearchPage({ parsed, realm, initial, signedIn, actingSubject, avatarQuery, load, locale, messages,
-  discoverMessages }: SearchPageProps) {
+export function SearchPage({ parsed, realm, initial, signedIn, actingSubject, avatarQuery, load, readerActions, locale,
+  messages }: SearchPageProps) {
   const t = materializeData(messages, { locale });
   const state: SearchState = parsed.ok ? parsed.state
     : { phrase: parsed.phrase, scope: { kind: 'global' }, language: null, term: null };
   const scopeLabel = state.scope.kind === 'realm' && realm ? realm.label : t.global;
   const searching = parsed.ok && phraseStatus(state.phrase) === 'ok';
-  return <PageContainer className="grid gap-6">
+  return <ReaderActionsProvider signedIn={signedIn} signInHref={signInPath(localizedPath(searchHref(state), locale))}
+    actions={readerActions}><PageContainer className="grid gap-6">
     <header className="grid gap-4">
       <h1 className="font-semibold text-3xl tracking-tight sm:text-4xl">{t.title}</h1>
       <SearchForm state={state} realm={realm} locale={locale} messages={messages} />
-      {searching ? <p className="text-pretty break-words text-lg">{t.resultsFor({ phrase: state.phrase,
-        scope: scopeLabel })}</p> : null}
+      {searching ? <p className="text-pretty break-words text-lg">{state.scope.kind === 'realm'
+        ? t.resultsForIn({ phrase: state.phrase, scope: scopeLabel }) : t.resultsFor({ phrase: state.phrase })}</p> : null}
     </header>
     {!parsed.ok ? parsed.reason === 'mine'
       ? <Notice icon={UserRoundIcon} headingLevel={2} title={t.mineTitle} description={t.mineHelp}>
@@ -141,11 +147,11 @@ export function SearchPage({ parsed, realm, initial, signedIn, actingSubject, av
       </Notice>
       : <div className="grid gap-6 lg:grid-cols-[15rem_minmax(0,1fr)] lg:items-start">
         <aside aria-label={t.filters}>
-          <Card className="hidden px-4 py-4 lg:block">
+          <div className="hidden lg:sticky lg:top-6 lg:block">
             <Filters state={state} facets={initial?.ok ? initial.page.facets : undefined}
               idPrefix="filters-wide" locale={locale} t={t} />
-          </Card>
-          <details className="group rounded-2xl border border-border/60 bg-card shadow-(--aura-shadow-card) lg:hidden">
+          </div>
+          <details className="group rounded-2xl border border-border/70 lg:hidden">
             <summary className={cn('flex cursor-pointer list-none items-center gap-2 rounded-2xl px-4 py-3 font-medium',
               'text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring [&::-webkit-details-marker]:hidden')}>
               <SlidersHorizontalIcon aria-hidden="true" className="size-4 text-muted-foreground" />
@@ -160,8 +166,7 @@ export function SearchPage({ parsed, realm, initial, signedIn, actingSubject, av
           </details>
         </aside>
         <SearchResults state={state} initial={initial} scopeLabel={scopeLabel} signedIn={signedIn}
-          actingSubject={actingSubject} avatarQuery={avatarQuery} load={load} locale={locale} messages={messages}
-          discoverMessages={discoverMessages} />
+          actingSubject={actingSubject} avatarQuery={avatarQuery} load={load} locale={locale} messages={messages} />
       </div>}
-  </PageContainer>;
+  </PageContainer></ReaderActionsProvider>;
 }

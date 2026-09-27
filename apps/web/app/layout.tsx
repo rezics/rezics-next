@@ -25,7 +25,7 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
     getMessages('auth', locale), readSession()]);
   const theme = parseTheme(jar.get(THEME_COOKIE)?.value);
   return <html lang={locale} className={themeClass(theme)}>
-    <body className="aura-canvas min-h-dvh">
+    <body className="min-h-dvh bg-background">
       <AppShell locale={locale} messages={messages} theme={theme} signedIn={Boolean(session)}
         navCollapsed={parseNavCollapsed(jar.get(NAV_COOKIE)?.value)}
         notifications={session ? <NotificationsLink /> : null}

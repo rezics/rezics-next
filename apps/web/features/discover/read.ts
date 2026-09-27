@@ -1,4 +1,4 @@
-import type { BrowseScope } from './scope.ts';
+import { type BrowseScope, idOf, iriOf } from './scope.ts';
 import { failureOf, type DiscoveryPage, type DiscoveryQuery, type Loaded, type MainClient,
   problemCode, type RealmHeader } from './types.ts';
 
@@ -29,7 +29,19 @@ export function readRealm(main: MainClient, realm: string, language: string): Pr
   return settle(() => main.v1.realms({ realm }).get({ query: { language } }));
 }
 
-/** The question a standing rating Context asks, for a top-rated shelf's label. */
+/**
+ * The standing rating Context a scope ranks by: the first Main lists for
+ * Global or the Realm (Mine rates in Global). Null when the scope has none, so
+ * its top-rated shelves are left out. Main's clients choose a listed Context
+ * rather than combine scales (`services/main/src/modules/discovery/README.md`).
+ */
+export async function readStandingContext(main: MainClient, scope: BrowseScope): Promise<Loaded<string | null>> {
+  const read = await settle(() => main.v1['rating-contexts'].get({ query: scope.kind === 'realm'
+    ? { scope: 'realm', realm: iriOf(scope.realm), limit: 1 } : { scope: 'global', limit: 1 } }));
+  return read.ok ? { ok: true, data: idOf(read.data.items[0]?.context ?? '') } : read;
+}
+
+/** The question a standing rating Context asks and its scale. */
 export async function readContextQuestion(main: MainClient, scope: BrowseScope,
   context: string): Promise<Loaded<{ question: string; max: number }>> {
   if (scope.kind === 'realm') {

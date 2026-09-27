@@ -1,136 +1,89 @@
 'use client';
 
 import { Button, buttonVariants } from '@rezics/ui/button';
-import { cn } from '@rezics/ui/utils';
 import { useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
-import { ArrowRightIcon, LibraryBigIcon, RotateCwIcon } from 'lucide-react';
+import { LibraryBigIcon, RotateCwIcon } from 'lucide-react';
 import { materializeData } from 'native-i18n';
-import Link from '../shell/localized-link.tsx';
 import { useRouter } from 'next/navigation';
-import { type RefObject, useEffect, useId, useRef } from 'react';
+import { useEffect, useId, useRef } from 'react';
 import type { UiLocale } from '../../i18n/define.ts';
+import { type ShelfHeading, ShelfHeader, WorkGrid, WorkShelf } from '../catalogue/work-shelf.tsx';
+import Link from '../shell/localized-link.tsx';
+import { discoveryWork } from './cards.ts';
 import type { DiscoverMessages } from './messages.ts';
 import { failureNotice, Notice } from './notice.tsx';
 import { bffDiscovery, type DiscoveryLoader, discoveryPagesOptions, ReadError } from './query.ts';
-import { type BrowseScope, workHref } from './scope.ts';
-import type { DiscoveryItem, DiscoveryPage, DiscoveryQuery, Loaded, ReadFailure } from './types.ts';
-import { WorkCard } from './work-card.tsx';
+import type { BrowseScope } from './scope.ts';
+import type { DiscoveryPage, DiscoveryQuery, Loaded, ReadFailure } from './types.ts';
 
-export interface ShelfProps {
-  /** What the shelf lists, without the scope ("Top rated"). */
-  title: string;
-  /** Names the scope in words; every shelf title carries it. */
-  scopeLabel: string;
+export interface DiscoverShelfProps {
+  heading: ShelfHeading & { title: string };
+  /** `row`: one sideways row on an overview, hidden when empty. `grid`: the full list with "Show more". */
+  mode: 'row' | 'grid';
   scope: BrowseScope;
-  /** A line under the title: the Context a ranking uses, or what a term shelf means. */
-  subtitle?: string;
   /** Main's query for the first page; later pages add the cursor. */
   query: DiscoveryQuery;
   /** The server-rendered first page, or why it failed. */
   initial: Loaded<DiscoveryPage>;
-  /** A focused view of this shelf ("Browse all Books"). */
-  browseAll?: { href: string; label: string };
-  /** Where an empty or unbuilt shelf offers to look instead. */
+  /** Where an empty or unprepared list in a community offers to look instead. */
   neighbour?: { href: string; label: string };
-  signInHref?: string;
+  signInHref: string;
   avatarQuery?: string;
   /** Reads later pages; the BFF by default, a fixture in stories. */
   load?: DiscoveryLoader;
-  /** One of several shelves on a page: a single swipeable row on phones. */
-  compact?: boolean;
   locale: UiLocale;
   messages: DiscoverMessages;
 }
 
-function Failure({ failure, scopeLabel, messages, locale, onRetry, onStartOver, neighbour, signInHref }: {
-  failure: ReadFailure; scopeLabel: string; messages: DiscoverMessages; locale: UiLocale;
-  onRetry: () => void; onStartOver: () => void; neighbour?: ShelfProps['neighbour']; signInHref?: string;
+function Failure({ failure, shelf, messages, locale, onRetry, onStartOver, neighbour, signInHref }: {
+  failure: ReadFailure; shelf: string; messages: DiscoverMessages; locale: UiLocale;
+  onRetry: () => void; onStartOver: () => void; neighbour?: DiscoverShelfProps['neighbour']; signInHref: string;
 }) {
   const t = materializeData(messages, { locale });
-  const notice = failureNotice(failure, scopeLabel, t);
-  return <Notice {...notice}>
+  return <Notice {...failureNotice(failure, shelf, t)}>
     {failure === 'moved' ? <Button size="sm" onClick={onStartOver}><RotateCwIcon aria-hidden="true" />
       {t.startOver}</Button> : null}
     {failure === 'unavailable' ? <Button size="sm" variant="outline" onClick={onRetry}>
       <RotateCwIcon aria-hidden="true" />{t.retry}</Button> : null}
-    {failure === 'sign-in' && signInHref ? <Link href={signInHref} className={buttonVariants({ size: 'sm' })}>
-      {t.signIn}</Link> : null}
-    {failure === 'stale' ? <Button size="sm" variant="outline" onClick={onRetry}>
-      <RotateCwIcon aria-hidden="true" />{t.retry}</Button> : null}
+    {failure === 'sign-in' ? <Link href={signInHref} className={buttonVariants({ size: 'sm' })}>{t.signIn}</Link> : null}
     {(failure === 'unbuilt' || failure === 'stale' || failure === 'missing') && neighbour
       ? <Link href={neighbour.href} className={buttonVariants({ size: 'sm', variant: 'outline' })}>
         {neighbour.label}</Link> : null}
   </Notice>;
 }
 
-function Cards({ items, scope, scopeLabel, avatarQuery, locale, messages, listRef, compact }: {
-  items: readonly DiscoveryItem[]; scope: BrowseScope; scopeLabel: string; avatarQuery?: string; compact: boolean;
-  locale: UiLocale; messages: DiscoverMessages; listRef: RefObject<HTMLUListElement | null>;
-}) {
-  const t = materializeData(messages, { locale });
-  // A compact shelf is one swipeable row on phones, so an overview of several shelves stays short.
-  return <ul ref={listRef} className={cn('gap-3 sm:grid sm:grid-cols-3 sm:gap-4 md:grid-cols-4 lg:grid-cols-6',
-    compact ? cn('-mx-4 flex snap-x snap-mandatory scroll-px-4 overflow-x-auto px-4 pb-2',
-      'sm:mx-0 sm:overflow-visible sm:px-0 sm:pb-0')
-      : 'grid grid-cols-2')}>
-    {items.map(item => <li key={item.id} className={cn('grid grid-cols-1',
-      compact && 'w-[42%] shrink-0 snap-start sm:w-auto')}>
-      <WorkCard work={item.id} title={item.title} cover={item.cover} types={item.types}
-        href={workHref(item.id, scope)} scopeLabel={scopeLabel} avatarQuery={avatarQuery} locale={locale}
-        messages={messages} rating={item.rating ? { mean: item.rating.mean, count: item.rating.count,
-          max: item.rating.scale.max, own: scope.kind === 'mine' } : null}>
-        {item.match.classification ? <p className="text-muted-foreground text-xs">
-          {item.match.classification.source === 'local' ? t.localDecision
-            : scope.kind === 'realm' ? t.inheritedDecision : t.globalDecision}</p> : null}
-      </WorkCard>
-    </li>)}
-  </ul>;
-}
-
 /**
- * One scoped row of Works with cursor pagination. The first page arrives from
- * the server; "Show more" reads the next through the BFF and appends it. The
- * count is exact once the list ends and a lower bound before.
+ * One discovery shelf. Its first page arrives from the server; on an overview
+ * it is a sideways row leading to its full list, and in a focused view a grid
+ * whose "Show more" reads the next page through the BFF. A shelf that cannot
+ * load says so in its place; the rest of the page stays.
  */
-export function Shelf({ title, scopeLabel, scope, subtitle, query, initial, browseAll, neighbour, signInHref,
-  avatarQuery, load = bffDiscovery, compact = false, locale, messages }: ShelfProps) {
+export function DiscoverShelf(props: DiscoverShelfProps) {
+  const { heading, mode, scope, initial, avatarQuery, locale } = props;
   const headingId = useId();
   const router = useRouter();
-  return <section aria-labelledby={headingId} className="grid gap-4">
-    <header className="flex flex-wrap items-end justify-between gap-x-4 gap-y-2">
-      <div className="min-w-0 space-y-1">
-        <h2 id={headingId} className="text-balance font-semibold text-xl tracking-tight">
-          {title} <span className="font-normal text-muted-foreground">· {scopeLabel}</span></h2>
-        {subtitle ? <p className="text-pretty text-muted-foreground text-sm">{subtitle}</p> : null}
-      </div>
-      {browseAll ? <Link href={browseAll.href} className={buttonVariants({ variant: 'ghost', size: 'sm' })}>
-        {browseAll.label}<ArrowRightIcon aria-hidden="true" /></Link> : null}
-    </header>
-    {initial.ok
-      ? <Pages first={initial.data} query={query} load={load} scope={scope} scopeLabel={scopeLabel} compact={compact}
-        neighbour={neighbour} signInHref={signInHref} avatarQuery={avatarQuery} locale={locale}
-        messages={messages} />
-      : <Failure failure={initial.failure} scopeLabel={scopeLabel} messages={messages} locale={locale}
-        onRetry={() => router.refresh()} onStartOver={() => router.refresh()} neighbour={neighbour}
-        signInHref={signInHref} />}
+  if (initial.ok && mode === 'row') {
+    if (!initial.data.items.length) return null;
+    return <WorkShelf heading={heading} works={initial.data.items.map(item => discoveryWork(item, scope))}
+      avatarQuery={avatarQuery} locale={locale} />;
+  }
+  return <section aria-labelledby={headingId} className="grid min-w-0 grid-cols-1 gap-4">
+    <ShelfHeader id={headingId} heading={mode === 'row' ? heading : { ...heading, seeAll: undefined }} locale={locale} />
+    {initial.ok ? <Pages first={initial.data} {...props} />
+      : <Failure failure={initial.failure} shelf={heading.title} messages={props.messages} locale={locale}
+        onRetry={() => router.refresh()} onStartOver={() => router.refresh()} neighbour={props.neighbour}
+        signInHref={props.signInHref} />}
   </section>;
 }
 
-function Pages({ first, query, load, scope, scopeLabel, neighbour, signInHref, avatarQuery, compact, locale,
-  messages }: {
-  first: DiscoveryPage; compact: boolean; query: DiscoveryQuery; load: DiscoveryLoader; scope: BrowseScope;
-  scopeLabel: string;
-  neighbour?: ShelfProps['neighbour']; signInHref?: string; avatarQuery?: string; locale: UiLocale;
-  messages: DiscoverMessages;
-}) {
+function Pages({ first, query, load = bffDiscovery, scope, heading, neighbour, signInHref, avatarQuery, locale,
+  messages }: DiscoverShelfProps & { first: DiscoveryPage }) {
   const t = materializeData(messages, { locale });
   const client = useQueryClient();
   const options = discoveryPagesOptions(query, first, load);
   const pages = useInfiniteQuery(options);
   const list = useRef<HTMLUListElement>(null);
-  const loaded = pages.data?.pages ?? [first];
-  const items = loaded.flatMap(page => page.items);
-  const last = loaded.at(-1)!;
+  const items = (pages.data?.pages ?? [first]).flatMap(page => page.items);
   // A later page, or page one again after "Start over", may fail while the shown pages stay.
   const failed = pages.isFetchNextPageError || pages.isRefetchError;
   const failure = !failed ? null : pages.error instanceof ReadError ? pages.error.failure : 'unavailable';
@@ -152,24 +105,20 @@ function Pages({ first, query, load, scope, scopeLabel, neighbour, signInHref, a
     void pages.refetch();
   }
 
-  const count = last.matches.kind === 'exact' ? t.count(last.matches.value) : t.countAtLeast(last.matches.value);
   return <>
-    <p aria-live="polite" className="-mt-2 text-muted-foreground text-sm">{count}</p>
     {items.length
-      ? <Cards items={items} scope={scope} scopeLabel={scopeLabel} avatarQuery={avatarQuery} locale={locale}
-        compact={compact}
-        messages={messages} listRef={list} />
-      : !pages.hasNextPage ? <Notice icon={LibraryBigIcon} title={t.empty({ scope: scopeLabel })}
-        description={t.emptyHelp}>
+      ? <WorkGrid works={items.map(item => discoveryWork(item, scope))} avatarQuery={avatarQuery} locale={locale}
+        listRef={list} />
+      : !pages.hasNextPage ? <Notice icon={LibraryBigIcon} title={t.empty} description={t.emptyHelp}>
         {neighbour ? <Link href={neighbour.href} className={buttonVariants({ size: 'sm', variant: 'outline' })}>
           {neighbour.label}</Link> : null}
       </Notice> : null}
-    {failure ? <Failure failure={failure} scopeLabel={scopeLabel} messages={messages} locale={locale}
+    {failure ? <Failure failure={failure} shelf={heading.title} messages={messages} locale={locale}
       onRetry={() => void (pages.isRefetchError ? pages.refetch() : pages.fetchNextPage())}
-      onStartOver={startOver} neighbour={neighbour}
-      signInHref={signInHref} /> : null}
+      onStartOver={startOver} neighbour={neighbour} signInHref={signInHref} /> : null}
+    <p aria-live="polite" className="sr-only">{pages.isFetchingNextPage ? t.loadingMore : ''}</p>
     {pages.hasNextPage && !failure ? <div className="flex justify-center">
-      <Button variant="outline" onClick={showMore} isLoading={pages.isFetchingNextPage}
+      <Button variant="outline" pill onClick={showMore} isLoading={pages.isFetchingNextPage}
         disabled={pages.isFetching}>
         {pages.isFetchingNextPage ? t.loadingMore : t.showMore}</Button>
     </div> : null}

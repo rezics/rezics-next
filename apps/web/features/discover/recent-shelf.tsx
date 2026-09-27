@@ -1,23 +1,33 @@
 import { materializeData } from 'native-i18n';
 import type { UiLocale } from '../../i18n/define.ts';
-import { getMessages } from '../../i18n/server.ts';
+import { localizedPath } from '../../i18n/locale.ts';
+import { signInPath } from '../auth/paths.ts';
+import { ReaderActionsProvider } from '../catalogue/reader-actions.tsx';
 import { Providers } from '../shell/providers.tsx';
-import { readDiscovery } from './read.ts';
-import { browseReader } from './server.ts';
-import { Shelf } from './shelf.tsx';
-import { type DiscoverState, discoveryQuery, shelvesFor } from './state.ts';
+import { shelfTitle } from './discover-view.tsx';
+import { loadDiscover } from './load.ts';
+import { DiscoverShelf } from './shelf.tsx';
+import { discoverHref } from './state.ts';
 
-const global: DiscoverState = { scope: { kind: 'global' }, context: null, type: null, term: null };
-
-/** Discover's recent Global shelf for another page (Home), read on the server. */
+/**
+ * Discover's leading overview rows for another page (the home feed): readers'
+ * favorites and recently added books, read on the server.
+ */
 export async function RecentShelf({ locale }: { locale: UiLocale }) {
-  const [messages, reader] = await Promise.all([getMessages('discover', locale), browseReader()]);
-  const t = materializeData(messages, { locale });
-  const query = discoveryQuery(global, shelvesFor(global)[0]!, { limit: 6, language: locale });
-  const initial = await readDiscovery(reader.anonymous, query);
+  const page = await loadDiscover({}, locale, { genres: false });
+  const t = materializeData(page.messages, { locale });
+  // Sign-in from a shelf control returns to the home page.
+  const signInHref = signInPath(localizedPath('/', locale));
+  const shelves = page.shelves.filter(shelf => shelf.spec.type === 'book' && !shelf.spec.term).slice(0, 2);
   return <Providers>
-    <Shelf title={t.recent} scopeLabel={t.global} scope={global.scope} query={query} initial={initial}
-      browseAll={{ href: '/discover', label: t.openDiscover }} avatarQuery={reader.avatarQuery} compact locale={locale}
-      messages={messages} />
+    <ReaderActionsProvider signedIn={page.signedIn} signInHref={signInHref}>
+      <div className="grid gap-10">
+        {shelves.map(shelf => <DiscoverShelf key={shelf.spec.key} mode="row" scope={{ kind: 'global' }}
+          heading={{ title: shelfTitle(shelf, t), seeAll: { href: discoverHref({ scope: { kind: 'global' }, context: null,
+            type: 'book', term: null }) } }}
+          query={shelf.query} initial={shelf.initial} signInHref={signInHref} avatarQuery={page.avatarQuery}
+          locale={locale} messages={page.messages} />)}
+      </div>
+    </ReaderActionsProvider>
   </Providers>;
 }

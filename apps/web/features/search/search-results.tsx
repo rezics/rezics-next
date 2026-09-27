@@ -10,10 +10,10 @@ import Link from '../shell/localized-link.tsx';
 import { useRouter } from 'next/navigation';
 import { type ReactNode, useEffect, useRef } from 'react';
 import type { UiLocale } from '../../i18n/define.ts';
-import type { DiscoverMessages } from '../discover/messages.ts';
+import { type CatalogueWork, coverKindOf } from '../catalogue/work.ts';
+import { WorkRow } from '../catalogue/work-row.tsx';
 import { Notice } from '../discover/notice.tsx';
 import { workHref } from '../discover/scope.ts';
-import { WorkCard } from '../discover/work-card.tsx';
 import { EmptyState } from '../shell/empty-state.tsx';
 import type { SearchMessages } from './messages.ts';
 import { bffSearch, SearchError, type SearchLoader, searchPagesOptions } from './query.ts';
@@ -36,25 +36,38 @@ export interface SearchResultsProps {
   load?: SearchLoader;
   locale: UiLocale;
   messages: SearchMessages;
-  discoverMessages: DiscoverMessages;
 }
 
 function languageName(tag: string, locale: UiLocale): string {
   try { return new Intl.DisplayNames([locale], { type: 'language' }).of(tag) ?? tag; } catch { return tag; }
 }
 
-/** What was searched and how complete the answer is: exact count, scope, filters, exclusions, index position. */
+/**
+ * The count, then what was searched for anyone who asks: the population,
+ * filters, mutes and index position stay one click away, not in the way.
+ */
 function Completeness({ page, state, scopeLabel, signedIn, locale, t }: {
   page: SearchResultPage; state: SearchState; scopeLabel: string; signedIn: boolean; locale: UiLocale; t: Text;
 }) {
-  const parts = [t.searched({ count: page.population, scope: scopeLabel }),
+  const parts = [t.searched({ count: page.population, scope: scopeLabel }), t.complete,
     ...(state.language ? [t.onlyLanguage({ language: languageName(state.language, locale) })] : []),
     ...(state.term ? [t.onlyTerm] : []), ...(signedIn ? [t.mutes] : []),
     t.freshness({ sequence: page.sequence })];
-  return <p className="text-pretty text-muted-foreground text-sm" data-testid="search-completeness">
-    <span className="font-medium text-foreground">{t.countExact(page.total)}</span>
-    {parts.map(part => <span key={part}> · {part}</span>)}
-  </p>;
+  return <div data-testid="search-completeness" className="flex flex-wrap items-baseline gap-x-3 gap-y-1 text-sm">
+    <p className="font-medium">{t.count(page.total)}</p>
+    <details className="group text-muted-foreground">
+      <summary className="cursor-pointer list-none rounded-sm underline decoration-dotted underline-offset-4 outline-none
+        hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring [&::-webkit-details-marker]:hidden">
+        {t.aboutResults}</summary>
+      <ul className="mt-2 grid gap-0.5">{parts.map(part => <li key={part}>{part}</li>)}</ul>
+    </details>
+  </div>;
+}
+
+/** A result as a catalogue card. Phrase results carry no credits or ratings yet, so the row shows none. */
+function hitWork(hit: SearchHit, state: SearchState): CatalogueWork {
+  return { id: hit.work, href: workHref(hit.work, state.scope), title: hit.title, cover: hit.cover,
+    kind: coverKindOf(hit.types), authors: [], rating: null };
 }
 
 function Reasons({ hit, scopeLabel, locale, t }: { hit: SearchHit; scopeLabel: string; locale: UiLocale; t: Text }) {
@@ -69,9 +82,9 @@ function Reasons({ hit, scopeLabel, locale, t }: { hit: SearchHit; scopeLabel: s
         ? t.classifiedLocal({ term: term?.value ?? t.thisTerm, realm: scopeLabel })
         : t.classifiedGlobal({ term: term?.value ?? t.thisTerm })}</span> }] : []),
   ];
-  return <ul aria-label={t.reasons} className="grid gap-1 text-muted-foreground">
-    {items.map((item, index) => <li key={index} className="flex items-start gap-2">
-      <item.icon aria-hidden="true" className="mt-0.5 size-4 shrink-0" /><span>{item.text}</span></li>)}
+  return <ul aria-label={t.reasons} className="flex flex-wrap gap-x-4 gap-y-1 text-muted-foreground">
+    {items.map((item, index) => <li key={index} className="flex items-start gap-1.5">
+      <item.icon aria-hidden="true" className="mt-0.5 size-3.5 shrink-0" /><span>{item.text}</span></li>)}
   </ul>;
 }
 
@@ -106,7 +119,7 @@ function Widen({ state, t }: { state: SearchState; t: Text }) {
 }
 
 function Pages({ first, props, t }: { first: SearchResultPage; props: SearchResultsProps; t: Text }) {
-  const { state, scopeLabel, signedIn, avatarQuery, locale, discoverMessages } = props;
+  const { state, scopeLabel, signedIn, avatarQuery, locale } = props;
   const client = useQueryClient();
   const options = searchPagesOptions(state, locale, props.actingSubject, first,
     props.load ?? bffSearch(state, locale, props.actingSubject));
@@ -140,7 +153,8 @@ function Pages({ first, props, t }: { first: SearchResultPage; props: SearchResu
   if (!current.total) {
     return <>
       <Completeness page={current} state={state} scopeLabel={scopeLabel} signedIn={signedIn} locale={locale} t={t} />
-      <EmptyState icon={SearchXIcon} title={t.empty({ scope: scopeLabel, phrase: state.phrase })}
+      <EmptyState icon={SearchXIcon} title={state.scope.kind === 'realm'
+        ? t.emptyIn({ scope: scopeLabel, phrase: state.phrase }) : t.empty({ phrase: state.phrase })}
         description={t.emptyHelp}><Widen state={state} t={t} /></EmptyState>
     </>;
   }
@@ -150,13 +164,11 @@ function Pages({ first, props, t }: { first: SearchResultPage; props: SearchResu
       <TriangleAlertIcon aria-hidden="true" />
       <AlertDescription className="text-foreground">{t.titlesUnavailable}</AlertDescription>
     </Alert> : null}
-    <ol ref={list} className="grid gap-3">
-      {hits.map(hit => <li key={hit.matchUnit}>
-        <WorkCard layout="row" headingLevel={2} work={hit.work} title={hit.title} cover={hit.cover} types={hit.types}
-          href={workHref(hit.work, state.scope)} scopeLabel={scopeLabel} avatarQuery={avatarQuery} locale={locale}
-          messages={discoverMessages}>
+    <ol ref={list} className="grid divide-y divide-border/70">
+      {hits.map(hit => <li key={hit.matchUnit} className="py-5 first:pt-1">
+        <WorkRow work={hitWork(hit, state)} avatarQuery={avatarQuery} locale={locale}>
           <Reasons hit={hit} scopeLabel={scopeLabel} locale={locale} t={t} />
-        </WorkCard>
+        </WorkRow>
       </li>)}
     </ol>
     {failure ? <FailureNotice failure={failure} state={state} t={t}

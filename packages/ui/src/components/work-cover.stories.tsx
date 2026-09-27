@@ -144,7 +144,7 @@ export const CJK: Story = {
     <WorkCover {...args} title="吾輩は猫である" authors={['夏目漱石']} lang="ja" seed="neko" />
     <WorkCover {...args} title="傲慢与偏见 · 中文译读" authors={['简·奥斯汀']} lang="zh-Hans" seed="pride-zh" />
     <WorkCover {...args} title="채식주의자" authors={['한강']} lang="ko" seed="vegetarian" />
-    <WorkCover {...args} kind="recipe" title="韭菜鸡蛋饺子" lang="zh-Hans" seed="dumplings" />
+    <WorkCover {...args} kind="recipe" title="韭菜鸡蛋饺子" authors={[]} lang="zh-Hans" seed="dumplings" />
   </div>,
   async play({ canvasElement }) {
     await expect(uprightTitle('西游记')).toBe(true);
