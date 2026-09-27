@@ -1,5 +1,6 @@
 import { receiptFamilyFor } from '../access/receipt-families.ts';
-import { GRAPHS, RV, iri, lit } from '../work/activate.ts';
+import { discoverStructureProfiles } from './profiles.ts';
+import { GRAPHS, RV, hash, iri, lit } from '../work/activate.ts';
 import type { OwnerCloudEvent, OwnerOutboxEventHandler } from '../outbox/event-handlers.ts';
 
 function structureStageEvent(kind: string, action: string, type: string,
@@ -67,6 +68,56 @@ function structureStageEvent(kind: string, action: string, type: string,
 }
 
 export const outboxEventHandlers = [
+  { kind: `${RV}StructureCommandEvent`, action: 'structure.command',
+    type: 'com.rezics.structure.command.v1',
+    read: async ({ fuseki, batch, eventId, value, ordinal }) => {
+      const receipt = value('receipt');
+      const digest = value('digest');
+      if (!receipt || !digest || batch.batchId !== `urn:rezics:outbox:${hash(receipt)}`
+        || eventId !== `urn:rezics:event:${hash(`${receipt}\0structure`)}`
+        || ordinal !== 0 || batch.eventIds.length !== 1) {
+        throw new Error('Structure command event differs from its source position');
+      }
+      const proof = await fuseki.query(`PREFIX rv: <${RV}> SELECT ?action ?operation ?structure
+        ?revision ?reason WHERE {
+        GRAPH ${iri(GRAPHS.outbox)} { ${iri(eventId)} a rv:StructureCommandEvent ;
+          rv:ordinal 0 ; rv:action "structure.command" ; rv:receipt ${iri(receipt)} . }
+        GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} a rv:OperationReceipt ;
+          rv:requestDigest ${lit(digest)} ; rv:action ?action ;
+          rv:dataEpoch ${lit(batch.dataEpoch)} ; rv:sequence ${batch.sequence} ;
+          rv:outcome ?outcome .
+          OPTIONAL { ${iri(receipt)} rv:operation ?operation }
+          OPTIONAL { ${iri(receipt)} rv:structure ?structure }
+          OPTIONAL { ${iri(receipt)} rv:structureRevision ?revision }
+          OPTIONAL { ${iri(receipt)} rv:reason ?reason }
+        }
+      } LIMIT 2`);
+      const rows = proof.results?.bindings ?? [];
+      const action = rows[0]?.action?.value;
+      const admissionId = value('admissionId');
+      const profiles = await discoverStructureProfiles();
+      const matches = [...profiles.values()].filter(profile =>
+        value('scope')?.startsWith(profile.editScopePrefix)
+        && receipt === `urn:rezics:receipt:${hash(`${admissionId}\0${profile.receiptFamily}`)}`);
+      if (rows.length !== 1 || !action || !admissionId || matches.length !== 1
+        || (value('operation') && rows[0]?.operation?.value !== value('operation'))) {
+        throw new Error('Structure command event has no matching terminal receipt');
+      }
+      const outcome = value('outcome') === `${RV}Succeeded` ? 'succeeded' : 'cancelled';
+      return { specversion: '1.0' as const, id: eventId,
+        source: 'https://rezics.com/services/main' as const, type: 'com.rezics.structure.command.v1',
+        datacontenttype: 'application/json' as const, data: { batchId: batch.batchId,
+          routingEpoch: batch.routingEpoch, ordinal,
+          sourcePosition: { datasetId: 'product' as const, dataEpoch: batch.dataEpoch,
+            sequence: batch.sequence },
+          receipt: { id: receipt, action: 'structure.command', outcome,
+            requestDigest: digest, admissionId, authorityEpoch: value('authorityEpoch')!,
+            scope: value('scope')!, commandAction: action,
+            ...(rows[0]?.operation ? { operation: rows[0].operation.value } : {}),
+            ...(rows[0]?.structure ? { structure: rows[0].structure.value } : {}),
+            ...(rows[0]?.revision ? { revision: rows[0].revision.value } : {}),
+            ...(rows[0]?.reason ? { reason: rows[0].reason.value } : {}) } } };
+    } },
   structureStageEvent('StructureProjectionEvent', 'structure.project',
     'com.rezics.structure.projected.v1'),
   structureStageEvent('StructureStageCancelledEvent', 'structure.stage-cancel',

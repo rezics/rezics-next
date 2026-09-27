@@ -1,6 +1,6 @@
 import { Pool } from 'pg';
 import { FusekiClient } from './infrastructure/fuseki.ts';
-import { relayMainOutboxOnce } from './modules/outbox/relay.ts';
+import { relayMainOutboxOnce, RelayEventBlocked } from './modules/outbox/relay.ts';
 import { cleanEnv } from 'envalid';
 import { relaySpec } from './config.ts';
 
@@ -22,6 +22,14 @@ try {
     const batch = await relayMainOutboxOnce(fuseki, pool, consumer);
     if (!batch) await Bun.sleep(interval);
   }
+} catch (error) {
+  console.error(JSON.stringify(error instanceof RelayEventBlocked
+    ? { level: 'error', event: 'main_relay_blocked', consumer,
+      dataEpoch: error.batch.dataEpoch, sequence: error.batch.sequence,
+      batchId: error.batch.batchId, eventId: error.eventId, reason: error.reason }
+    : { level: 'error', event: 'main_relay_failed', consumer,
+      reason: error instanceof Error ? error.message : String(error) }));
+  throw error;
 } finally {
   await pool.end();
 }

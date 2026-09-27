@@ -14,6 +14,13 @@ export class OutboxIncomplete extends Error {}
 export class OutboxEpochChanged extends Error {}
 export class OutboxRecoveryHold extends Error {}
 export class RelayCheckpointConflict extends Error {}
+export class RelayEventBlocked extends OutboxIncomplete {
+  constructor(readonly batch: MainOutboxBatch, readonly eventId: string,
+    readonly reason: string) {
+    super(`outbox event ${eventId} at ${batch.dataEpoch}/${batch.sequence} blocks ordered relay: ${reason}`);
+    this.name = 'RelayEventBlocked';
+  }
+}
 
 export interface RelayCoverage {
   consumer: string;
@@ -768,7 +775,8 @@ export async function readMainOutboxEnvelope(fuseki: FusekiClient, batch: MainOu
     ?sourceRecord ?sourceObservation ?sourceConversion ?sourceByteDigest
     ?sourceMappingRevision ?authorCredit ?creditRevision ?sourceIntent ?retirementReason WHERE {
     GRAPH ${iri(GRAPHS.outbox)} {
-      ${iri(eventId)} a ?kind ; rv:ordinal ?ordinal ; rv:action ?action ; rv:receipt ?receipt .
+      ${iri(eventId)} a ?kind ; rv:ordinal ?ordinal ; rv:receipt ?receipt .
+      OPTIONAL { ${iri(eventId)} rv:action ?action }
       OPTIONAL { ${iri(eventId)} rv:operation ?eventOperation }
       OPTIONAL { ${iri(eventId)} rv:work ?eventWork }
       OPTIONAL { ${iri(eventId)} rv:contribution ?eventContribution }
@@ -879,7 +887,12 @@ export async function readMainOutboxEnvelope(fuseki: FusekiClient, batch: MainOu
   if (rows.length !== 1 || !row) throw new OutboxIncomplete('event receipt is unavailable or ambiguous');
   const value = (name: string): string | undefined => row[name]?.value;
   const kind = value('kind');
-  const action = value('action');
+  const ownerHandler = kind ? handlerFor(kind) : undefined;
+  // The original system Agent events did not carry an action. Their exact RDF
+  // kind and immutable receipt establish the action in the owner handler.
+  const action = value('action') ?? (ownerHandler?.authority === 'system'
+    ? ownerHandler.action : undefined);
+  const ownerValue = (name: string) => name === 'action' ? action : value(name);
   const outcome = value('outcome');
   const receiptId = value('receipt');
   const admissionId = value('admissionId');
@@ -1099,7 +1112,6 @@ export async function readMainOutboxEnvelope(fuseki: FusekiClient, batch: MainOu
         operation: value('operation'), sourceAddress, sourceRevision,
         normalizedSlug, ...(redirectWork ? { redirectWork } : {}) } } };
   }
-  const ownerHandler = kind ? handlerFor(kind) : undefined;
   const systemEvent = ownerHandler?.authority === 'system';
   if (!kind || !receiptId || !requestDigest || !/^[0-9a-f]{64}$/.test(requestDigest)
     || (systemEvent
@@ -1211,8 +1223,10 @@ export async function readMainOutboxEnvelope(fuseki: FusekiClient, batch: MainOu
   if (!type) {
     const handler = ownerHandler;
     if (handler) {
-      if (action !== handler.action) throw new OutboxIncomplete('owner event action differs from handler');
-      const envelope = await handler.read({ fuseki, batch, eventId, value, ordinal });
+      if (action !== handler.action && !handler.actions?.includes(action ?? '')) {
+        throw new OutboxIncomplete('owner event action differs from handler');
+      }
+      const envelope = await handler.read({ fuseki, batch, eventId, value: ownerValue, ordinal });
       if (!envelope?.data?.receipt
         || envelope.specversion !== '1.0' || envelope.id !== eventId || envelope.source !== SOURCE
         || envelope.type !== handler.type || envelope.datacontenttype !== 'application/json'
@@ -1233,6 +1247,7 @@ export async function readMainOutboxEnvelope(fuseki: FusekiClient, batch: MainOu
       }
       return envelope;
     }
+    throw new OutboxIncomplete(`unsupported outbox event kind ${kind}`);
   }
   if (!admissionId || !authorityEpoch || !scope) {
     throw new OutboxIncomplete('legacy event has no Access admission');
@@ -1555,8 +1570,13 @@ export async function relayMainOutboxOnce(
   if (!cursor) throw new RelayCheckpointConflict('relay checkpoint is uninitialized');
   const batch = await readNextMainOutboxBatch(fuseki, cursor.data_epoch, cursor.sequence);
   if (!batch) return null;
-  const events = await Promise.all(batch.eventIds.map(eventId =>
-    readMainOutboxEnvelope(fuseki, batch, eventId)));
+  const events = await Promise.all(batch.eventIds.map(async eventId => {
+    try { return await readMainOutboxEnvelope(fuseki, batch, eventId); }
+    catch (error) {
+      throw new RelayEventBlocked(batch, eventId,
+        error instanceof Error ? error.message : String(error));
+    }
+  }));
   events.sort((a, b) => a.data.ordinal - b.data.ordinal);
   if (events.some((event, index) => event.data.ordinal !== index)) {
     throw new OutboxIncomplete('outbox event ordinals are not complete');

@@ -29,6 +29,8 @@ export interface OwnerOutboxEventHandler {
   /** Full RDF event class IRI; several outcome kinds may share one action. */
   kind: string;
   action: string;
+  /** Exact additional receipt actions sharing this RDF event kind. */
+  actions?: readonly string[];
   type: string;
   /** System handlers prove their own graph terminal; omitted means Access admission. */
   authority?: 'system';
@@ -47,8 +49,11 @@ export async function discoverOutboxEventHandlers(directory = join(import.meta.d
     }
     for (const candidate of module.outboxEventHandlers) {
       const handler = candidate as Partial<OwnerOutboxEventHandler>;
+      const actions = [handler.action, ...(handler.actions ?? [])];
       if (typeof handler.kind !== 'string' || !/^https:\/\/rezics\.com\/vocab\/[A-Za-z][A-Za-z0-9]*$/.test(handler.kind)
-        || typeof handler.action !== 'string' || !/^[a-z][a-z0-9-]*(\.[a-z][a-z0-9-]*)+$/.test(handler.action)
+        || !Array.isArray(handler.actions ?? []) || new Set(actions).size !== actions.length
+        || actions.some(action => typeof action !== 'string'
+          || !/^[a-z][a-z0-9-]*(\.[a-z][a-z0-9-]*)+$/.test(action))
         || typeof handler.type !== 'string' || !/^com\.rezics\.[a-z0-9.-]+\.v[1-9][0-9]*$/.test(handler.type)
         || (handler.authority !== undefined && handler.authority !== 'system')
         || typeof handler.read !== 'function' || handlers.has(handler.kind)
