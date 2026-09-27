@@ -47,6 +47,10 @@ export async function ratingAccount(apps: Record<string, string>,
     }
     const operator = await signUp('operator');
     operators.add(operator.id);
+    // A QA project can create several fixtures against one Account database.
+    // The deployment bootstrap runs once, so each fixture grants its own operator.
+    await pool.query("INSERT INTO rezics_account_operator (user_id, role) VALUES ($1, 'owner') ON CONFLICT DO NOTHING",
+      [operator.id]);
     const headers = new Headers({ cookie: operator.cookie, origin: base });
     const verifierClient = await auth.api.adminCreateOAuthClient({ headers, body: {
       client_name: 'Rating verifier', scope: 'work:create work:edit work:read space:create rating:configure rating:submit rating:read',
