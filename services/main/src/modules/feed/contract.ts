@@ -51,6 +51,8 @@ export const feedQuery = t.Object({ ...pageQuery,
   scope: t.Optional(t.Union([t.Literal('following'), t.Literal('all')])),
   sort: t.Optional(feedSort), window: t.Optional(feedWindow),
   kinds: t.Optional(t.Array(feedKind, { minItems: 1, maxItems: 7, uniqueItems: true })),
+  /** Comma-separated human kinds. The reader rejects duplicates and unknown values. */
+  interests: t.Optional(t.String({ minLength: 2, maxLength: 64 })),
   contentLanguages: t.Optional(t.Array(readLanguage, { minItems: 1, maxItems: 8, uniqueItems: true })),
   realms: t.Optional(t.Array(readId, { minItems: 1, maxItems: 8, uniqueItems: true })),
   tags: t.Optional(t.Array(readId, { minItems: 1, maxItems: 3, uniqueItems: true })),
@@ -93,6 +95,8 @@ export type FeedVoteResult = Static<typeof feedVoteResult>;
  * including all members of a group (at most 4). Tags admit 2 groups and reuse
  * the authoritative classification result for each distinct Work/Realm.
  * Group time is creation time, not the newest member, preserving New's order.
+ * Interest matching admits two reads of at most 120 rows each for eight member
+ * Works, using the same current types and accepted global Senses as onboarding.
  * No offset or unbounded count. Refresh admits 20 references after the relay
  * cut; native graph scan/sort cost is bounded by the shared 160-call/4MiB/10s
  * envelope, not claimed to be a PostgreSQL seek. Cards cap responses at 256KiB. */

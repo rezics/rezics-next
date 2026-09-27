@@ -12,7 +12,8 @@ import { readExactMainRevision, readExactWorkRevision, RevisionCorrupt }
 import { sameScalar, scalarExport, scalarFromBinding, SCALAR_PREDICATE }
   from '../modules/work/scalar-value.ts';
 import { assertGraphAdmissionOpen } from '../modules/work/restore-lineage.ts';
-import { iri } from '../modules/work/activate.ts';
+import { iri, InvalidWorkSemanticTypes, MAX_WORK_SEMANTIC_TYPES } from '../modules/work/activate.ts';
+import { workSemanticTypes } from '../modules/work/work-kinds.ts';
 import { exactMainRevision, exactWorkRevision, pendingOperation, problemResult, workResult,
   workScalarRead, workScalarValue, workScalarWrite } from '../api-contract.ts';
 import { authorizedReadProblems, writeProblems } from '../api-responses.ts';
@@ -80,11 +81,8 @@ export function workRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
           language: t.String({ minLength: 2, maxLength: 35 }) }, { additionalProperties: false })),
         description: t.Optional(t.Object({ value: t.String({ minLength: 1, maxLength: 4000 }),
           language: t.String({ minLength: 2, maxLength: 35 }) }, { additionalProperties: false })),
-        semanticTypes: t.Optional(t.Array(t.Union([
-          t.Literal('https://schema.org/Book'),
-          t.Literal('https://schema.org/DigitalDocument'),
-          t.Literal('https://schema.org/Recipe'),
-        ]), { maxItems: 3, uniqueItems: true })),
+        semanticTypes: t.Optional(t.Array(t.String({ enum: workSemanticTypes }),
+          { maxItems: MAX_WORK_SEMANTIC_TYPES, uniqueItems: true })),
         actingSubject: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
       }, { additionalProperties: false }),
       response: { 200: workResult, 201: workResult, 202: pendingOperation,
@@ -110,6 +108,9 @@ export function workRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
           status: receipt.replayed ? 200 : 201, headers: { 'cache-control': 'no-store' },
         });
       } catch (error) {
+        if (error instanceof InvalidWorkSemanticTypes) {
+          return problem(400, 'invalid_work_semantic_types', 'Work types conflict');
+        }
         return commandError(error);
       }
     })

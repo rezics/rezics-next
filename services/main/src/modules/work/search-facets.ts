@@ -96,8 +96,8 @@ export function facetPhraseResults<Row extends PhraseFacetMatch>(results: readon
   } };
 }
 
-/** Cost: one graph read, at most 512 Works, 1,536 rows and 8 MiB under the
- * shared search read budget. Counting is O(results * three types). */
+/** Cost: one graph read, at most 512 Works, 512 × admitted types rows and 8 MiB
+ * under the shared search read budget. Counting is O(results × admitted types). */
 export async function decoratePhraseRelation<Row extends PhraseFacetMatch,
   Relation extends { results: Row[]; total: number; sourcePosition: { dataEpoch: string; sequence: string } }>(
   env: WorkActivationEnvironment, relation: Relation, selection: WorkTypeSelection,

@@ -59,13 +59,12 @@ describe('the feed query sent to Main', () => {
       contentLanguages: ['ja'], realms: [realm], language: 'en', actingSubject: agent, cursor: 'c2' });
   });
 
-  test('people choose from six kinds; each maps to Main or waits for its filter', () => {
+  test('people choose from six kinds; each maps to a Main filter', () => {
     expect(interestKinds).toHaveLength(6);
     expect(feedQuery(parseFeedState({ kind: 'discussions' }, false), { language: 'en' }).kinds)
       .toEqual(['discussion', 'reply']);
-    // Main's feed filters by activity, not by what a Work is: these need its proposed `interests` filter.
-    expect(interestKinds.filter(kind => !kindAvailable(kind))).toEqual(['books', 'software', 'ai', 'recipes', 'media']);
-    expect(feedQuery(parseFeedState({ kind: 'recipes' }, false), { language: 'en' }).kinds).toBeUndefined();
+    expect(interestKinds.every(kindAvailable)).toBe(true);
+    expect(feedQuery(parseFeedState({ kind: 'recipes' }, false), { language: 'en' }).interests).toBe('recipes');
     expect(Object.keys(interestFilter)).toEqual([...interestKinds]);
   });
 });

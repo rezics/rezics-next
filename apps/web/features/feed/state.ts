@@ -15,13 +15,10 @@ type TopWindow = (typeof topWindows)[number];
 export const interestKinds = ['books', 'software', 'ai', 'recipes', 'media', 'discussions'] as const;
 export type InterestKind = (typeof interestKinds)[number];
 
-/**
- * What each kind asks Main for. Main's feed filters by activity kind, so
- * Discussions works today; the other kinds need Main to filter by what the
- * Work is (a proposed feed `interests` filter) and stay unavailable until then.
- */
-export const interestFilter: Record<InterestKind, { kinds: FeedModelKind[] } | null> = {
-  books: null, software: null, ai: null, recipes: null, media: null,
+/** What each kind asks Main for. */
+export const interestFilter: Record<InterestKind, { kinds?: FeedModelKind[]; interests?: string } | null> = {
+  books: { interests: 'books' }, software: { interests: 'software' }, ai: { interests: 'ai' },
+  recipes: { interests: 'recipes' }, media: { interests: 'media' },
   discussions: { kinds: ['discussion', 'reply'] },
 };
 
@@ -96,7 +93,7 @@ export function withChange(state: FeedState, change: Partial<FeedState>): FeedSt
   return next;
 }
 
-/** Whether Main can show this kind yet; see `interestFilter`. */
+/** Whether Main can show this kind. */
 export function kindAvailable(kind: InterestKind): boolean {
   return interestFilter[kind] !== null;
 }
@@ -116,7 +113,8 @@ export function feedQuery(state: FeedState, input: { actingSubject?: string; lan
   return {
     scope: state.tab, sort: state.sort, language: input.language,
     ...(state.sort === 'top' ? { window: state.window } : {}),
-    ...(filter ? { kinds: filter.kinds } : {}),
+    ...(filter?.kinds ? { kinds: filter.kinds } : {}),
+    ...(filter?.interests ? { interests: filter.interests } : {}),
     ...(state.languages.length ? { contentLanguages: state.languages } : {}),
     ...(state.realms.length ? { realms: state.realms } : {}),
     ...(input.actingSubject ? { actingSubject: input.actingSubject } : {}),

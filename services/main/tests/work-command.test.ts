@@ -27,7 +27,8 @@ class InMemoryCommandFuseki extends FusekiClient {
   override async commandHealth() { return { moduleVersion: COMMAND_MODULE_VERSION,
     instanceId: '11111111-1111-4111-8111-111111111111',
     publicSearchWriteEpoch: '0', publicSearchWriteActive: false,
-    profiles: { 'work-metadata-v1': profileRegistry['work-metadata-v1'].sha256 } }; }
+    profiles: { 'work-metadata-v1': profileRegistry['work-metadata-v1'].sha256,
+      'work-kind-v1': profileRegistry['work-kind-v1'].sha256 } }; }
   override async query(sparql: string): Promise<SparqlResult> {
     if (sparql.includes('ASK') && sparql.includes('rv:InvalidProfile')) {
       return { boolean: this.invalidReceipt };
@@ -90,8 +91,10 @@ test('SYS02/SYS10 Work creation sends guarded update and both generated SHACL fo
     expect(fuseki.capturedCommand?.receipt).toBe(result.receipt);
     expect(fuseki.capturedCommand?.digest).toBe(metadataWorkRequestDigest(title));
     expect(fuseki.capturedCommand?.update).toContain(`FILTER NOT EXISTS { GRAPH <urn:rezics:graph:receipts> { <${result.receipt}> ?p ?o } }`);
-    expect(fuseki.capturedCommand?.validations.map(entry => entry.shape)).toEqual([...profileRegistry['work-metadata-v1'].shapes]);
-    expect(fuseki.capturedCommand?.validations.map(entry => entry.focus[0])).toEqual([result.work, result.mainVersion]);
+    expect(fuseki.capturedCommand?.validations.map(entry => entry.shape)).toEqual([
+      ...profileRegistry['work-metadata-v1'].shapes, ...profileRegistry['work-kind-v1'].shapes]);
+    expect(fuseki.capturedCommand?.validations.map(entry => entry.focus[0]))
+      .toEqual([result.work, result.mainVersion, result.work]);
     expect(fuseki.capturedCommand?.validations.every(entry => entry.graphs.join() === 'urn:rezics:graph:current')).toBe(true);
   } finally { rmSync(state, { recursive: true, force: true }); }
 });

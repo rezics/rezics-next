@@ -11,14 +11,14 @@ import type { OwnerPartitionRoutes } from '../partition/route.ts';
 import { discardUnpublishedWorkObjects, stagedWorkObjectCandidates,
   type StagedWorkObjectCandidates } from './object-gc.ts';
 import { readWorkTerminalReceipt, workReceiptIri } from './receipt.ts';
+import { workKinds, workSemanticTypes } from './work-kinds.ts';
 
 export const RV = 'https://rezics.com/vocab/';
 export const ID = 'https://rezics.com/id/';
 export const PROFILE = 'https://rezics.com/definition/work-metadata-v1';
 export const CONTINUITY = 'https://rezics.com/definition/continuity/native-work-v1';
-export const WORK_SEMANTIC_TYPES = [
-  'https://schema.org/Book', 'https://schema.org/DigitalDocument', 'https://schema.org/Recipe',
-] as const;
+export const WORK_SEMANTIC_TYPES = workSemanticTypes;
+export const MAX_WORK_SEMANTIC_TYPES = 3;
 export const DATASET = 'urn:rezics:dataset:product';
 export const TEXT_INDEX_PROFILE = 'https://rezics.com/definition/search-index-cjk-bigram-v2';
 export const TEXT_INDEX_PROBE_GRAPH = 'urn:rezics:search:probe';
@@ -82,17 +82,26 @@ export interface WorkActivationReceipt {
 export class IdempotencyConflict extends Error {}
 export class PendingActivation extends Error {}
 export class CancelledActivation extends Error {}
+export class InvalidWorkSemanticTypes extends Error {}
 
 export function hash(value: string | Uint8Array): string {
   return createHash('sha256').update(value).digest('hex');
 }
 
 export function normalizeWorkSemanticTypes(types: readonly string[] = []): string[] {
-  if (types.length > WORK_SEMANTIC_TYPES.length || new Set(types).size !== types.length
+  if (types.length > MAX_WORK_SEMANTIC_TYPES || new Set(types).size !== types.length
     || types.some(type => !WORK_SEMANTIC_TYPES.includes(type as typeof WORK_SEMANTIC_TYPES[number]))) {
-    throw new Error('invalid Work semantic types');
+    throw new InvalidWorkSemanticTypes('invalid Work semantic types');
   }
   return [...types].sort();
+}
+
+function assertNativeWorkKindCombination(types: readonly string[]): void {
+  const interests = new Set(types.map(type => workKinds[type as keyof typeof workKinds].interest).filter(Boolean));
+  if (interests.size > 1 || types.includes('https://rezics.com/vocab/SkillPackage')
+    && types.includes('https://rezics.com/vocab/PromptTemplate')) {
+    throw new InvalidWorkSemanticTypes('conflicting Work semantic types');
+  }
 }
 
 export function metadataWorkRequestDigest(title: string,
@@ -103,6 +112,7 @@ export function metadataWorkRequestDigest(title: string,
     throw new Error('invalid title');
   }
   const types = normalizeWorkSemanticTypes(semanticTypes);
+  assertNativeWorkKindCombination(types);
   if (!/^[a-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$/.test(language) || language.length > 35) {
     throw new Error('invalid title language');
   }
@@ -291,7 +301,10 @@ export async function activateMetadataWork(env: WorkActivationEnvironment, inten
   const workRevision = ID + Bun.randomUUIDv7();
   const mainRevision = ID + Bun.randomUUIDv7();
   const operation = ID + Bun.randomUUIDv7();
-  const validations = await workMetadataValidations(env, work, main);
+  const validations = [...await workMetadataValidations(env, work, main),
+    ...await profileValidations(env.fuseki, 'work-kind-v1', [
+      { shape: profileRegistry['work-kind-v1'].shapes[0]!, focus: [work], graphs: [GRAPHS.current] },
+    ])];
   const workState = { mainVersion: main, continuityProfile: CONTINUITY, title: intent.title,
     language, ...(intent.localizedTitle ? { localizedTitle: intent.localizedTitle } : {}),
     ...(intent.description ? { description: intent.description } : {}),

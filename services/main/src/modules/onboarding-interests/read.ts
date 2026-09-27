@@ -42,7 +42,7 @@ async function readMediaAvailable(session: WorkReadSession): Promise<boolean> {
   return rows.length > 0;
 }
 
-async function readWorkKindMatches(session: WorkReadSession, works: readonly string[]) {
+export async function readWorkKindMatches(session: WorkReadSession, works: readonly string[]) {
   const matches = new Map<string, HomeInterestKind[]>();
   if (!works.length) return matches;
   const rows = await session.query(`SELECT DISTINCT ?work ?type ?term WHERE {

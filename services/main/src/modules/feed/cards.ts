@@ -5,6 +5,7 @@ import { readCompositionPage } from '../structure/read.ts';
 import { WorkReadMissing, WorkReadMoved, WorkReadUnavailable, type WorkReadSession } from '../work/read-session.ts';
 import type { feedAction, feedCard, FeedItem } from './contract.ts';
 import type { FeedSource } from './source.ts';
+import { interestSources, workKinds, workSemanticTypes } from '../work/work-kinds.ts';
 
 type Card = { card: Static<typeof feedCard>; primaryAction: Static<typeof feedAction> };
 /** Use owner data only. There is no current release semver/level/changelog,
@@ -17,12 +18,17 @@ export async function feedCardData(session: WorkReadSession, source: FeedSource,
   if (!source.work || !['work', 'contribution'].includes(source.kind)) return fallback;
   if (source.occurrence) return chapterCard(session, source, source.occurrence);
   const types = await session.query(`SELECT ?type WHERE { GRAPH ${iri(GRAPHS.current)} {
-    ${iri(source.work)} a ?type . VALUES ?type { schema:Recipe rv:PromptTemplate rv:SkillPackage schema:VideoObject schema:AudioObject }
-  } } LIMIT 6`, 6);
+    ${iri(source.work)} a ?type . VALUES ?type { ${workSemanticTypes.map(type => `<${type}>`).join(' ')} }
+  } } LIMIT ${workSemanticTypes.length + 1}`, workSemanticTypes.length + 1);
   const kinds = types.map(row => row.type?.value);
+  // A metadata-only package, prompt or film has no playable/installable
+  // revision yet. Its page remains the safe action until an owner supplies one.
+  if (kinds.some(kind => kind && workKinds[kind as keyof typeof workKinds]?.primaryAction !== 'read')) {
+    fallback.primaryAction = { kind: 'open', href };
+  }
   if (kinds.includes('https://schema.org/Recipe')) return { ...fallback,
     card: { kind: 'recipe', ...(target.cover.kind !== 'fallback' ? { heroImage: target.cover } : {}) } };
-  if (kinds.some(kind => kind === 'https://schema.org/VideoObject' || kind === 'https://schema.org/AudioObject')) {
+  if (kinds.some(kind => kind && interestSources.media.workTypes.includes(kind))) {
     return { ...fallback, card: { kind: 'media' } };
   }
   if (kinds.some(kind => kind?.endsWith('/PromptTemplate') || kind?.endsWith('/SkillPackage'))) {

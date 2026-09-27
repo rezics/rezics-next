@@ -14,6 +14,9 @@ import { feedCardData } from './cards.ts';
 import { diversityAllows, FEED_RANKING, recommendationAllowed } from './ranking.ts';
 import { digest } from '../recommendation/derived-generation.ts';
 import type { HomeExclusion } from './personal.ts';
+import { readWorkKindMatches } from '../onboarding-interests/read.ts';
+import { interestKinds, matchingActivityKinds } from '../work/work-kinds.ts';
+import type { HomeInterestKind } from '../onboarding-interests/contract.ts';
 
 export interface FeedReader { principal: VerifiedPrincipal; agent: string }
 
@@ -105,12 +108,33 @@ export async function admitFeedVote(session: WorkReadSession, target: string) {
   await replyExcerpt(session, source);
 }
 
+/** URL grammar is one comma-separated set, with no implicit fallback kind. */
+export function parseFeedInterests(value: string | undefined): HomeInterestKind[] {
+  if (value === undefined) return [];
+  const kinds = value.split(',');
+  if (kinds.length > interestKinds.length || new Set(kinds).size !== kinds.length
+    || kinds.some(kind => !interestKinds.includes(kind as HomeInterestKind))) {
+    throw new WorkReadInvalid('Invalid feed interests');
+  }
+  return kinds as HomeInterestKind[];
+}
+
+export function matchesFeedInterest(source: Pick<FeedSource, 'kind' | 'work'>,
+  interests: readonly HomeInterestKind[], workMatches: ReadonlyMap<string, readonly HomeInterestKind[]>): boolean {
+  if (!interests.length) return true;
+  const activityKinds = matchingActivityKinds(source.kind);
+  if (activityKinds.length) return interests.some(kind => activityKinds.includes(kind));
+  return !!source.work && interests.some(kind => workMatches.get(source.work!)?.includes(kind));
+}
+
 const normalized = (query: FeedQuery) => [
   [...(query.kinds ?? [])].sort(), [...new Set((query.contentLanguages ?? []).map(value => value.toLowerCase()))].sort(),
   [...(query.realms ?? [])].sort(), [...(query.tags ?? [])].sort(), query.language?.toLowerCase() ?? null,
+  parseFeedInterests(query.interests).sort(),
 ];
 
 export async function readFeed(session: WorkReadSession, query: FeedQuery, reader?: FeedReader) {
+  const interests = parseFeedInterests(query.interests);
   const store = session.deps.feed;
   const follows = session.deps.follows;
   if (!store || !follows) throw new WorkReadUnavailable('Feed owner is unavailable');
@@ -163,6 +187,11 @@ export async function readFeed(session: WorkReadSession, query: FeedQuery, reade
   const withinWindow = page.filter(row => row.sort_time.getTime() >= cutoff && row.sort_time.getTime() <= asOf);
   const memberRows = await store.members(session.position.dataEpoch, withinWindow.flatMap(row => row.group_members));
   const sources = await feedSources(session, { ids: memberRows.map(row => row.id) });
+  // At most eight member Works enter this one bounded catalogue read. The
+  // same type and accepted-Sense relation powers onboarding suggestions.
+  const workKinds = interests.length ? await readWorkKindMatches(session, [...new Set(sources
+    .filter(source => matchingActivityKinds(source.kind).length === 0)
+    .flatMap(source => source.work ? [source.work] : []))]) : new Map();
   const summaryIds = [...new Set(sources.flatMap(source => [source.work, source.realm].filter((id): id is string => !!id)))];
   const summaries = new Map((await session.summaries(summaryIds)).map(summary => [summary.reference, summary]));
   const matches = reader && scope === 'following' ? await follows.matches(reader.principal, reader.agent,
@@ -174,6 +203,7 @@ export async function readFeed(session: WorkReadSession, query: FeedQuery, reade
   for (const [index, source] of sources.entries()) {
     if (personal && excludedFeedSource(source, personal.exclusions)) continue;
     if (query.kinds && !query.kinds.includes(source.kind)) continue;
+    if (!matchesFeedInterest(source, interests, workKinds)) continue;
     if (query.realms && (!source.realm || !query.realms.includes(source.realm))) continue;
     if (source.work && tagRules.length) {
       const key = JSON.stringify([source.work, source.realm]);
@@ -209,6 +239,9 @@ export async function readFeed(session: WorkReadSession, query: FeedQuery, reade
     } catch (error) { if (!(error instanceof WorkReadMissing)) throw error; }
   }
   const final = await feedSources(session, { ids: items.map(item => item.id) });
+  const finalWorkKinds = interests.length ? await readWorkKindMatches(session,
+    [...new Set(final.filter(source => matchingActivityKinds(source.kind).length === 0)
+      .flatMap(source => source.work ? [source.work] : []))]) : new Map();
   const valid = new Set(final.map(source => source.id));
   const fenced = new Map((await session.summaries(summaryIds)).map(summary => [summary.reference, summary]));
   const disclosed: FeedItem[] = [];
@@ -223,6 +256,11 @@ export async function readFeed(session: WorkReadSession, query: FeedQuery, reade
         if (JSON.stringify(summaries.get(id)) !== JSON.stringify(fenced.get(id))) throw new WorkReadMoved('Card summary changed');
       }
       const finalSource = final.find(source => source.id === item.id)!;
+      if (finalSource.kind !== item.kind || finalSource.work !== item.target.work
+        || !matchesFeedInterest(finalSource, interests, finalWorkKinds)
+        || finalSource.work && matchingActivityKinds(finalSource.kind).length === 0
+          && JSON.stringify(workKinds.get(finalSource.work))
+          !== JSON.stringify(finalWorkKinds.get(finalSource.work))) throw new WorkReadMoved('Feed interest changed');
       await replyExcerpt(session, finalSource);
       if (item.card.kind === 'prompt' || item.card.kind === 'release') {
         const card = await feedCardData(session, finalSource, item.target, item.links.target);

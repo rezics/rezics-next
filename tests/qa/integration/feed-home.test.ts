@@ -160,6 +160,21 @@ test('G282: follows and home feed use real receipts, relay progress, public read
     expect(all.items.map(item => item.kind).sort()).toEqual(['adoption', 'collection', 'work', 'work']);
     expect(all.items.some(item => item.target.id === hidden.work)).toBe(false);
     expect(all.items.every(item => item.actor.name === 'Feed author' && item.vote === 0)).toBe(true);
+    await stack.fuseki.update(`PREFIX schema: <https://schema.org/> INSERT DATA { GRAPH ${iri(GRAPHS.current)} {
+      ${iri(first.work)} a schema:Book } }`);
+    const bookFeed = await json<Page>(await call('GET', '/v1/feed?sort=new&interests=books'));
+    expect(bookFeed.items.length).toBeGreaterThan(0);
+    expect(bookFeed.items.every(item => item.target.work === first.work)).toBe(true);
+    expect((await json<Page>(await call('GET', '/v1/feed?sort=new&interests=software'))).items).toEqual([]);
+    expect((await json<Page>(await call('GET', '/v1/feed?sort=new&interests=books,software'))).items.length)
+      .toBe(bookFeed.items.length);
+    expect((await call('GET', '/v1/feed?interests=books,books')).status).toBe(400);
+    expect((await call('GET', '/v1/feed?interests=unknown')).status).toBe(400);
+    if (bookFeed.nextCursor) {
+      expect((await call('GET', `/v1/feed?sort=new&interests=software&cursor=${bookFeed.nextCursor}`)).status).toBe(400);
+    }
+    await stack.fuseki.update(`PREFIX schema: <https://schema.org/> DELETE DATA { GRAPH ${iri(GRAPHS.current)} {
+      ${iri(first.work)} a schema:Book } }`);
     const firstItem = all.items.find(item => item.target.id === first.work && item.kind === 'work')!;
     expect(firstItem.target.excerpt).toBeTruthy();
     const authQuery = `actingSubject=${encodeURIComponent(reader)}`;
@@ -258,6 +273,8 @@ test('G282: follows and home feed use real receipts, relay progress, public read
       ${iri(first.work)} a schema:VideoObject } }`);
     const mediaInterests = await json<typeof interests>(await call('GET', '/v1/onboarding/interests?locale=en'));
     expect(mediaInterests.kinds.find(item => item.id === 'media')?.available).toBe(true);
+    const mediaFeed = await json<Page>(await call('GET', '/v1/feed?interests=media'));
+    expect(mediaFeed.items.find(item => item.target.work === first.work && item.kind === 'work')?.card.kind).toBe('media');
     await stack.fuseki.update(`PREFIX schema: <https://schema.org/> DELETE DATA { GRAPH ${iri(GRAPHS.current)} {
       ${iri(first.work)} a schema:VideoObject } }`);
     const suggested = await json<{ items: { id: string; realm: string; sampleWorks: { id: string }[] }[] }>(
@@ -269,6 +286,8 @@ test('G282: follows and home feed use real receipts, relay progress, public read
       await call('GET', '/v1/onboarding/suggested-follows?interests=ai'));
     expect(aiSuggested.items.find(item => item.realm === realm.realm)?.reason)
       .toEqual({ kind: 'matching-kind', interest: 'ai' });
+    expect((await json<Page>(await call('GET', '/v1/feed?interests=ai'))).items
+      .some(item => item.target.work === first.work)).toBe(true);
     await stack.fuseki.update(`PREFIX rv: <https://rezics.com/vocab/> DELETE DATA { GRAPH ${iri(GRAPHS.current)} {
       ${iri(first.work)} a rv:SkillPackage } }`);
     const topWeek = await json<Page>(await call('GET', '/v1/feed?sort=top&window=week'));
@@ -409,6 +428,8 @@ test('G282: follows and home feed use real receipts, relay progress, public read
     expect(discussions[0]?.target).toMatchObject({ id: discussion.reply, excerpt: 'A reviewed discussion', language: 'en' });
     expect(discussions[0]?.comments).toEqual({ value: 2, kind: 'exact' });
     expect((await collect('kinds=reply')).map(item => item.target.id)).toEqual([reply.reply]);
+    expect((await collect('interests=discussions')).map(item => item.target.id).sort())
+      .toEqual([discussion.reply, reply.reply].sort());
     expect((await collect('')).some(item => item.target.id === unreviewed.reply)).toBe(false);
     await json(await call('POST', '/v1/realm-reply-reviews', { ...accepted.review, outcome: 'revoked',
       expectedGeneration: '1', supersedes: accepted.approved.decisionId, reasonReference: 'review-revoked' }, a.token), 201);
