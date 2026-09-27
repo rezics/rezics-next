@@ -144,6 +144,14 @@ const Surface = ({
   );
 };
 
+// storybook/test types faster than a real keyboard; a key typed while the popup is
+// opening can be lost, so wait for the popup after the first character.
+const typeIntoPopup = async (input: HTMLElement, text: string) => {
+  await userEvent.type(input, text.slice(0, 1));
+  await waitFor(() => expect(input).toHaveAttribute('aria-expanded', 'true'));
+  await userEvent.type(input, text.slice(1));
+};
+
 const meta = {
   title: 'Rezics UI/Combobox',
   component: WorkPicker,
@@ -175,7 +183,7 @@ export const Default: Story = {
     const canvas = within(canvasElement);
     const page = within(canvasElement.ownerDocument.body);
     const input = canvas.getByRole('combobox', { name: 'Related Work' });
-    await userEvent.type(input, 'liu');
+    await typeIntoPopup(input, 'liu');
     await waitFor(() => expect(page.getAllByRole('option')).toHaveLength(3));
     await userEvent.click(page.getByRole('option', { name: /黑暗森林/ }));
     await waitFor(() => expect(input).toHaveValue('黑暗森林 · The Dark Forest'));
@@ -187,7 +195,7 @@ export const Keyboard: Story = {
     const canvas = within(canvasElement);
     const page = within(canvasElement.ownerDocument.body);
     const input = canvas.getByRole('combobox', { name: 'Related Work' });
-    await userEvent.type(input, '银河');
+    await typeIntoPopup(input, '银河');
     await waitFor(() => expect(page.getAllByRole('option')).toHaveLength(1));
     await userEvent.keyboard('{ArrowDown}{Enter}');
     await waitFor(() => expect(input).toHaveValue('银河英雄传说 · Legend of the Galactic Heroes'));
@@ -198,7 +206,7 @@ export const Keyboard: Story = {
 export const NoResults: Story = {
   async play({ canvasElement }) {
     const page = within(canvasElement.ownerDocument.body);
-    await userEvent.type(within(canvasElement).getByRole('combobox'), 'Solaris');
+    await typeIntoPopup(within(canvasElement).getByRole('combobox'), 'Solaris');
     await expect(
       await page.findByText('No Works match. Try the original title.'),
     ).toBeInTheDocument();
