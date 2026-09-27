@@ -17,7 +17,7 @@ export interface ModCapture {
   nestedPath?: string;
 }
 export interface ModRequest {
-  profile: 'mod-native-capture-v1';
+  profile: 'mod-native-capture-v1' | 'mod-native-capture-v2';
   ecosystem: ModEcosystem;
   side: 'CLIENT' | 'SERVER';
   runtime?: { loaderVersion: string; gameVersion: string;
@@ -363,7 +363,8 @@ function modrinth(doc: Record<string, unknown>, source: string): NativeNode {
   return { id, project, version: typeof doc.version_number === 'string'
     ? doc.version_number : null, relations };
 }
-function curseforge(doc: Record<string, unknown>, source: string): NativeNode {
+function curseforge(doc: Record<string, unknown>, source: string,
+  profile: ModRequest['profile']): NativeNode {
   // The single-file REST endpoint encloses the exact file record in `data`.
   if (doc.data !== undefined) doc = obj(doc.data);
   if (typeof doc.id !== 'number' || !Number.isSafeInteger(doc.id)
@@ -383,8 +384,9 @@ function curseforge(doc: Record<string, unknown>, source: string): NativeNode {
     const kind = names[(type as number) - 1]!;
     relations.push(relation(id, target, kind,
       kind === 'required' || kind === 'incompatible' ? 'hard'
-        : kind === 'embedded' ? 'embedded'
-        : kind === 'tool' || kind === 'include' ? 'metadata' : 'advisory'));
+        : kind === 'embedded' || (kind === 'include' && profile === 'mod-native-capture-v2')
+          ? 'embedded'
+          : kind === 'tool' || kind === 'include' ? 'metadata' : 'advisory'));
   }
   if (typeof doc.modId !== 'number' || !Number.isSafeInteger(doc.modId)
     || doc.modId < 1 || doc.modId > 0xffffffff) invalid('invalid CurseForge project ID');
@@ -420,6 +422,14 @@ function steam(doc: Record<string, unknown>, source: string, surface: string): N
       throw new Unsupported('Steam public detail unavailable');
     }
     return { id: source, project: source, version: null, relations: [] };
+  }
+  if (doc.response !== undefined) {
+    const details = array(obj(doc.response).publishedfiledetails, 'Steam published file details');
+    if (details.length !== 1) throw new Unsupported('Steam published file detail count');
+    doc = obj(details[0]);
+    if (doc.result !== undefined && doc.result !== 1) {
+      throw new Unsupported('Steam published file unavailable');
+    }
   }
   const id = string(doc.publishedfileid, 'publishedfileid');
   if (!/^\d{1,20}$/.test(id) || id !== source) invalid('invalid Steam published file ID');
@@ -465,7 +475,7 @@ function hasCycle(relations: ModRelation[]): boolean {
 /** Work: O(C·B + C² + R), with B <= 2 MiB, C <= 32 and R <= 256;
  * each ZIP member expansion is capped at 65,536 bytes. */
 export function solveModCaptures(request: ModRequest): ModOutcome {
-  if (request.profile !== 'mod-native-capture-v1'
+  if (!['mod-native-capture-v1', 'mod-native-capture-v2'].includes(request.profile)
     || !['fabric', 'forge', 'neoforge', 'modrinth', 'curseforge', 'nexus', 'steam'].includes(request.ecosystem)
     || !['CLIENT', 'SERVER'].includes(request.side) || !ID.test(request.root)
     || !Array.isArray(request.captures)) invalid('invalid mod profile request');
@@ -557,7 +567,8 @@ export function solveModCaptures(request: ModRequest): ModOutcome {
         : request.ecosystem === 'forge' || request.ecosystem === 'neoforge'
           ? forge(doc, capture.identity, request.ecosystem)
           : request.ecosystem === 'modrinth' ? modrinth(doc, capture.identity)
-          : request.ecosystem === 'curseforge' ? curseforge(doc, capture.identity)
+          : request.ecosystem === 'curseforge'
+            ? curseforge(doc, capture.identity, request.profile)
           : steam(doc, capture.identity, capture.surface);
       const previous = nodes.get(node.id);
       if (previous && request.ecosystem !== 'steam') invalid('duplicate native node');

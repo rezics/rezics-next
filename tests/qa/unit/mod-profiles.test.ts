@@ -3,6 +3,8 @@ import { describe, expect, test } from 'bun:test';
 import { ModProfileInvalid, type ModCapture, type ModRequest, solveModCaptures }
   from '../../../services/main/src/modules/package/mod-profile.ts';
 import { fixtureJar } from '../fixtures/mod-native-oracle/zip.ts';
+import { curseForgeAuthored, curseForgeRelations, steamCollectionAuthored,
+  steamRequiredItemsAuthored } from '../fixtures/mod-provider-authored.ts';
 
 function observed(identity: string, surface: string, document: unknown): ModCapture {
   const raw = typeof document === 'string' ? document : JSON.stringify(document);
@@ -232,6 +234,25 @@ describe('mod native capture profiles', () => {
     expect(curseforge.relations.at(-1)?.strength).toBe('metadata');
   });
 
+  test('PKG09: authored CurseForge response retains all six file relations and bundled downloads', () => {
+    const outcome = solveModCaptures(curseForgeAuthored);
+    expect(outcome.selection).toBe('valid');
+    expect(outcome.relations.map(edge => [edge.from, edge.to, edge.kind, edge.strength]))
+      .toEqual([
+        ['101', '20', 'embedded', 'embedded'],
+        ['101', '25', 'optional', 'advisory'],
+        ['101', '30', 'required', 'hard'],
+        ['101', '40', 'tool', 'metadata'],
+        ['101', '50', 'incompatible', 'hard'],
+        ['101', '60', 'include', 'embedded'],
+      ]);
+    expect(outcome.independentDownloads).toEqual(['101', '301']);
+    expect(outcome.cost).toMatchObject({ captures: 4, relations: 6 });
+    const source = JSON.parse(Buffer.from(curseForgeAuthored.captures[0]!.bytesBase64!,
+      'base64').toString('utf8')) as { data: { dependencies: unknown[] } };
+    expect(source.data.dependencies).toEqual(curseForgeRelations);
+  });
+
   test('PKG10: inaccessible Nexus range is recorded as incomplete, never empty', () => {
     const outcome = solveModCaptures(request('nexus', 'game/mod/file', [
       observed('game/mod/file', 'graphql-public', { data: { __typename: 'Query',
@@ -280,6 +301,61 @@ describe('mod native capture profiles', () => {
     ]));
     expect(missingChildren.selection).toBe('incomplete-source-data');
     expect(missingChildren.relations).toEqual([]);
+  });
+
+  test('PKG11: authored published-file required items stay soft and Collection members stay distinct', () => {
+    const soft = solveModCaptures(steamRequiredItemsAuthored);
+    expect(soft.selection).toBe('valid');
+    expect(soft.relations.map(edge => [edge.from, edge.to, edge.kind, edge.strength]))
+      .toEqual([
+        ['987654321', '111111111', 'soft-dependency', 'advisory'],
+        ['987654321', '222222222', 'soft-dependency', 'advisory'],
+      ]);
+    expect(soft.independentDownloads).toEqual(['987654321']);
+    expect(soft.issues).toEqual([]);
+    const collection = solveModCaptures(steamCollectionAuthored);
+    expect(collection.selection).toBe('valid');
+    expect(collection.relations.map(edge => [edge.to, edge.kind, edge.strength]))
+      .toEqual([
+        ['333333333', 'collection-member', 'collection'],
+        ['444444444', 'collection-member', 'collection'],
+      ]);
+    expect(collection.independentDownloads).toEqual(['888888888']);
+    expect(collection.cost.comparisons).toBe(0);
+  });
+
+  test('PKG09/PKG11: bundled and soft relation costs grow with authored relation count', () => {
+    for (const count of [1, 4, 16]) {
+      const includes = Array.from({ length: count }, (_, index) => ({
+        modId: 1000 + index, relationType: 6 }));
+      const files = includes.map((dep, index) => observed(String(2000 + index), 'file',
+        { data: { id: 2000 + index, modId: dep.modId, dependencies: [] } }));
+      const legacy = request('curseforge', '101', [
+        observed('101', 'file', { data: { id: 101, modId: 10, dependencies: includes } }),
+        ...files,
+      ]);
+      const bundled = solveModCaptures({ ...legacy, profile: 'mod-native-capture-v2' });
+      expect(bundled.selection).toBe('valid');
+      expect(bundled.cost.captures).toBe(count + 1);
+      expect(bundled.cost.relations).toBe(count);
+      expect(bundled.cost.comparisons).toBe(0);
+      expect(bundled.independentDownloads).toEqual(['101']);
+      const oldOutcome = solveModCaptures(legacy);
+      expect(oldOutcome.relations.every(edge =>
+        edge.kind === 'include' && edge.strength === 'metadata')).toBe(true);
+      expect(oldOutcome.independentDownloads).toEqual(['101',
+        ...files.map(file => file.identity)]);
+
+      const soft = solveModCaptures(request('steam', '123', [observed('123', 'ugc-children',
+        { response: { publishedfiledetails: [{ publishedfileid: '123', file_type: 0,
+          num_children: count, children: Array.from({ length: count }, (_, index) => ({
+            publishedfileid: String(3000 + index) })) }] } })]));
+      expect(soft.selection).toBe('valid');
+      expect(soft.cost.captures).toBe(1);
+      expect(soft.cost.relations).toBe(count);
+      expect(soft.cost.comparisons).toBe(count);
+      expect(soft.independentDownloads).toEqual(['123']);
+    }
   });
 
   test('PKG10/PKG11: provider coverage and Collection work stay bounded by captures and children', () => {

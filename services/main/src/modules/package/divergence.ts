@@ -298,28 +298,29 @@ export function explainModDivergence(receipt: Pick<ModResolution, 'requestDigest
   native: ModNativeObservation): ProfileDivergenceReport {
   const { request, outcome } = receipt;
   const ecosystem = request.ecosystem;
+  const profile = `${request.profile}:${ecosystem}`;
   const status = (value: ModOutcome['selection'] | ModNativeObservation['status']) => value === 'valid' ? 'solved' : value;
-  const snapshotMismatch = differentSnapshots(ecosystem, `mod-native-capture-v1:${ecosystem}`,
+  const snapshotMismatch = differentSnapshots(ecosystem, profile,
     status(outcome.selection), status(native.status), receipt.requestDigest, native.requestDigest);
   if (snapshotMismatch) return snapshotMismatch;
-  if (native.ecosystem !== ecosystem) return { ecosystem, profile: `mod-native-capture-v1:${ecosystem}`,
+  if (native.ecosystem !== ecosystem) return { ecosystem, profile,
     rezicsStatus: status(outcome.selection), nativeStatus: status(native.status), correspondence: 'divergent',
     logicalInstances: { rezics: 0, native: 0, shared: 0 }, divergences: [{ kind: 'source', identity: null,
       rezics: ecosystem, native: native.ecosystem,
       explanation: 'native observation uses a different mod ecosystem profile' }] };
   const identity = (item: ModOutcome['coverage'][number]) => `${item.identity}|${item.surface}|${item.sha256 ?? '-'}|${item.status}`;
-  const coverage = compareSets(ecosystem, `mod-native-capture-v1:${ecosystem}`, status(outcome.selection),
+  const coverage = compareSets(ecosystem, profile, status(outcome.selection),
     status(native.status), outcome.coverage.map(identity), native.coverage.map(identity),
     (item, side) => side === 'native' ? `native ${ecosystem} evidence is absent from the REZICS receipt: ${item}`
       : `REZICS retained ${ecosystem} evidence absent from the native observation: ${item}`);
   if (outcome.selection === 'valid' && native.status === 'valid') {
     const relationText = (relation: ModOutcome['relations'][number]) =>
       `${relation.from}->${relation.to}|${relation.kind}|${relation.strength}|${relation.range ?? ''}|${relation.side ?? ''}`;
-    const relations = compareSets(ecosystem, `mod-native-capture-v1:${ecosystem}`, 'solved', 'solved',
+    const relations = compareSets(ecosystem, profile, 'solved', 'solved',
       outcome.relations.map(relationText), native.relations.map(relationText),
       (item, side) => side === 'native' ? `native ${ecosystem} relation is missing from REZICS: ${item}`
         : `REZICS has a ${ecosystem} relation absent from native evidence: ${item}`, 'edge');
-    const downloads = compareSets(ecosystem, `mod-native-capture-v1:${ecosystem}`, 'solved', 'solved',
+    const downloads = compareSets(ecosystem, profile, 'solved', 'solved',
       outcome.independentDownloads, native.independentDownloads,
       item => `independent-download grain differs for ${item}`, 'scope');
     const divergences = [...coverage.divergences, ...relations.divergences, ...downloads.divergences];

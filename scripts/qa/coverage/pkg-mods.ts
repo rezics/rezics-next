@@ -5,7 +5,7 @@ const api = { tier: 'integration' as const, file: 'tests/qa/integration/mod-capt
   name: 'PKG07/PKG08/PKG09/PKG10/PKG11/IAM10: real Account, Access, Main and Content protect mod capture receipts' };
 const named = (name: string) => ({ tier: 'unit' as const, file: unit, name });
 
-/** PKG09-PKG11 await authenticated provider captures and remain undeclared. */
+/** PKG09-PKG11 relation-modeling declarations live in pkg-mod-providers.ts. */
 export const pkgModsCases: CaseDeclarations = {
   PKG07: [api,
     named('PKG07: native Fabric side filtering and declared nested child'),

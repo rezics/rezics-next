@@ -19,7 +19,8 @@ const capture = t.Object({ identity: t.String({ minLength: 1, maxLength: 160 }),
   nestedOf: t.Optional(t.String({ minLength: 1, maxLength: 64 })),
   nestedPath: t.Optional(t.String({ minLength: 1, maxLength: 164 })),
 }, { additionalProperties: false });
-const requestSchema = t.Object({ profile: t.Literal('mod-native-capture-v1'),
+const requestSchema = t.Object({ profile: t.Union([t.Literal('mod-native-capture-v1'),
+  t.Literal('mod-native-capture-v2')]),
   ecosystem, side: t.Union([t.Literal('CLIENT'), t.Literal('SERVER')]),
   runtime: t.Optional(t.Object({ loaderVersion: t.String({ maxLength: 32 }),
     gameVersion: t.String({ maxLength: 32 }),
@@ -47,7 +48,8 @@ const outcome = t.Object({ provenance: t.Literal('caller-supplied-captures'),
   cost: t.Object({ inputBytes: t.Number(), captures: t.Number(), relations: t.Number(),
     comparisons: t.Number() }),
 });
-const receipt = t.Object({ profile: t.Literal('mod-native-capture-receipt-v1'),
+const receipt = t.Object({ profile: t.Union([t.Literal('mod-native-capture-receipt-v1'),
+  t.Literal('mod-native-capture-receipt-v2')]),
   resolution: t.String(), requestDigest: t.String(), request: requestSchema,
   outcome, createdAt: t.String() });
 const written = t.Object({ resolution: receipt, replayed: t.Boolean() });

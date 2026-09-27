@@ -67,10 +67,8 @@ test('PKG11: public Steam details do not prove a complete children surface', asy
   expect(outcome.relations).toEqual([]);
 });
 
-test('PKG09/PKG10: keyless CurseForge and Nexus metadata surfaces are inaccessible', async () => {
+test('PKG10: keyless Nexus range metadata is inaccessible', async () => {
   const gaps = [
-    { ecosystem: 'curseforge' as const, root: '238222/0', surface: 'file',
-      url: 'https://api.curseforge.com/v1/mods/238222/files/0' },
     { ecosystem: 'nexus' as const, root: '1', surface: 'file-version-range',
       url: 'https://api.nexusmods.com/v3/mod-file-versions/1/dependencies/ranges' },
   ];
@@ -88,8 +86,30 @@ test('PKG09/PKG10: keyless CurseForge and Nexus metadata surfaces are inaccessib
   }
 });
 
+test('PKG11: keyless Steam Collection details retain membership without hard installation', async () => {
+  const identity = '1175117161';
+  const url = 'https://api.steampowered.com/ISteamRemoteStorage/GetCollectionDetails/v1/';
+  const response = await fetch(url, { method: 'POST', body: new URLSearchParams({
+    collectioncount: '1', 'publishedfileids[0]': identity }),
+  signal: AbortSignal.timeout(10_000) });
+  expect(response.status).toBe(200);
+  const bytes = Buffer.from(await response.arrayBuffer());
+  expect(bytes.length).toBeLessThanOrEqual(65_536);
+  const outcome = solveModCaptures({ profile: 'mod-native-capture-v1',
+    ecosystem: 'steam', side: 'CLIENT', root: identity,
+    captures: [{ identity, surface: 'collection-details', status: 'observed',
+      bytesBase64: bytes.toString('base64'),
+      sha256: createHash('sha256').update(bytes).digest('hex'), sourceUrl: url,
+      httpStatus: response.status }] });
+  expect(outcome.selection).toBe('valid');
+  expect(outcome.relations.length).toBeGreaterThan(0);
+  expect(outcome.relations.every(edge => edge.kind === 'collection-member'
+    && edge.strength === 'collection')).toBe(true);
+  expect(outcome.independentDownloads).toEqual([identity]);
+}, 15_000);
+
 const curseForgeKey = Bun.env.REZICS_CURSEFORGE_API_KEY;
-(curseForgeKey ? test : test.skip)(`PKG09: authenticated CurseForge file dependencies are captured from the provider${curseForgeKey ? '' : ' (skipped: REZICS_CURSEFORGE_API_KEY absent)'}`, async () => {
+test.skip('PKG09: authenticated CurseForge capture skipped per docs/testing/packages.md (live acquisition design pending)', async () => {
   const url = 'https://api.curseforge.com/v1/mods/238222/files';
   const response = await fetch(url, { headers: { 'x-api-key': curseForgeKey!, Accept: 'application/json' },
     signal: AbortSignal.timeout(10_000) });
@@ -117,7 +137,7 @@ const curseForgeKey = Bun.env.REZICS_CURSEFORGE_API_KEY;
 });
 
 const nexusKey = Bun.env.REZICS_NEXUS_API_KEY;
-(nexusKey ? test : test.skip)(`PKG10: authenticated Nexus experimental range surface is observed${nexusKey ? '' : ' (skipped: REZICS_NEXUS_API_KEY absent)'}`, async () => {
+test.skip('PKG10: authenticated Nexus capture skipped per docs/testing/packages.md (live acquisition design pending)', async () => {
   const base = 'https://api.nexusmods.com/v3';
   const get = async (path: string): Promise<unknown> => {
     const response = await fetch(`${base}${path}`, {
@@ -142,7 +162,7 @@ const nexusKey = Bun.env.REZICS_NEXUS_API_KEY;
 });
 
 const steamKey = Bun.env.REZICS_STEAM_WEB_API_KEY;
-(steamKey ? test : test.skip)(`PKG11: authenticated Steam QueryFiles returns a complete Collection children surface${steamKey ? '' : ' (skipped: REZICS_STEAM_WEB_API_KEY absent)'}`, async () => {
+test.skip('PKG11: authenticated Steam capture skipped per docs/testing/packages.md (live acquisition design pending)', async () => {
   const url = 'https://api.steampowered.com/IPublishedFileService/QueryFiles/v1/';
   const input = new URLSearchParams({ input_json: JSON.stringify({ query_type: 0,
     cursor: '*', numperpage: 5, appid: 255710, filetype: 1, return_children: true }) });

@@ -173,4 +173,13 @@ test('PKG12: mod loader and provider receipts explain each admitted ecosystem wi
   const report = explainModDivergence({ request, requestDigest, outcome: fabric }, changedNative);
   expect(report.correspondence).toBe('divergent');
   expect(report.divergences).toContainEqual(expect.objectContaining({ kind: 'edge' }));
+  const v2Request = { ...modRequest('curseforge'), profile: 'mod-native-capture-v2' as const };
+  const v2Outcome = solveModCaptures(v2Request);
+  const v2Digest = snapshotDigest(v2Request);
+  const v2Report = explainModDivergence({ request: v2Request,
+    requestDigest: v2Digest, outcome: v2Outcome }, { requestDigest: v2Digest,
+    ecosystem: 'curseforge', status: v2Outcome.selection,
+    relations: v2Outcome.relations, independentDownloads: v2Outcome.independentDownloads,
+    coverage: v2Outcome.coverage });
+  expect(v2Report.profile).toBe('mod-native-capture-v2:curseforge');
 });

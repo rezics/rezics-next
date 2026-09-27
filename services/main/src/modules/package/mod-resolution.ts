@@ -7,7 +7,7 @@ export { ModProfileInvalid } from './mod-profile.ts';
 export class ModResolutionConflict extends Error {}
 export class ModResolutionUnavailable extends Error {}
 export interface ModResolution {
-  profile: 'mod-native-capture-receipt-v1';
+  profile: 'mod-native-capture-receipt-v1' | 'mod-native-capture-receipt-v2';
   resolution: string;
   requestDigest: string;
   request: ModRequest;
@@ -36,7 +36,8 @@ export class ModResolutionStore {
       || stable(row.outcome) !== stable(solveModCaptures(row.request))) {
       throw new ModResolutionUnavailable('stored mod receipt differs from its capture');
     }
-    return { profile: 'mod-native-capture-receipt-v1',
+    return { profile: row.request.profile === 'mod-native-capture-v2'
+      ? 'mod-native-capture-receipt-v2' : 'mod-native-capture-receipt-v1',
       resolution: `https://rezics.com/id/${row.id}`, requestDigest: row.request_digest,
       request: row.request, outcome: row.outcome, createdAt: row.created_at.toISOString() };
   }
