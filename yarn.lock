@@ -8312,6 +8312,13 @@ __metadata:
     knip: "npm:6.38.0"
     oxlint: "npm:1.85.0"
     oxlint-tsgolint: "npm:7.0.2003"
+  dependenciesMeta:
+    "@ast-grep/cli":
+      built: true
+    esbuild:
+      built: true
+    workerd:
+      built: true
   languageName: unknown
   linkType: soft
 

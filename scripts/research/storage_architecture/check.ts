@@ -58,8 +58,8 @@ const commands: string[][] = [
     'tests/recovery',
   ],
   // Code-shape rules and their fixtures, then type-aware promise handling.
-  ['bun', 'scripts/static/ast-grep.ts', 'test', '--skip-snapshot-tests'],
-  ['bun', 'scripts/static/ast-grep.ts', 'scan'],
+  ['node_modules/.bin/ast-grep', 'test', '--skip-snapshot-tests'],
+  ['node_modules/.bin/ast-grep', 'scan'],
   ['node_modules/.bin/oxlint', '--type-aware', '--format=unix', ...backendSources],
   // Unused files and dependencies block; unused exports stay a `yarn check:unused` report.
   ['bun', 'scripts/static/knip.ts', '--include', 'files,dependencies'],
@@ -77,7 +77,6 @@ const commands: string[][] = [
     '.dependency-cruiser.json',
     '.oxlintrc.json',
     'knip.jsonc',
-    'scripts/static/ast-grep.ts',
     'scripts/static/knip.ts',
     'scripts/research/storage_architecture/check.ts',
     'tests/qa/unit/static-gates.test.ts',
