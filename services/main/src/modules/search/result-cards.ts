@@ -9,8 +9,8 @@ import { parsedMetadataState, selectedMetadata } from '../work/metadata-read.ts'
 import { SearchSnapshotMoved } from '../work/search-readiness.ts';
 
 export const SEARCH_CARD_COST = { works: 64, creditsPerWork: 3,
-  summaryBatches: 1, serialQueries: 1, creditQueries: 1, creditRows: 192,
-  agentNameQueries: 1, graphCallsWithoutAgentNames: 5, graphCallsWithAgentNames: 6 } as const;
+  summaryBatches: 2, serialQueries: 1, creditQueries: 1, creditRows: 192,
+  agentNameQueries: 1, graphCallsWithoutAgentNames: 6, graphCallsWithAgentNames: 7 } as const;
 
 /** Exact current metadata heads, one graph query plus the existing serial
  * stats owner batch. Missing metadata is an explicit null card state. */
@@ -119,6 +119,13 @@ export async function enrichSearchCardPage<T extends { resultGrain: string;
     const serial = await searchPageSerial(session, ids);
     const credits = await searchPageCredits(session, ids);
     const names = await namedDiscoveryCredits(session, [...credits.values()].flat(), SEARCH_CARD_COST.works);
+    const fenced: ResourceSummary[] = [];
+    for (let i = 0; i < ids.length; i += MAX_SUMMARY_BATCH) {
+      fenced.push(...await session.summaries(ids.slice(i, i + MAX_SUMMARY_BATCH)));
+    }
+    if (summaries.some((summary, index) => JSON.stringify(summary) !== JSON.stringify(fenced[index]))) {
+      throw new SearchSnapshotMoved('Search card disclosure changed during hydration');
+    }
     return new Map(ids.map((id, index) => {
       const summary = summaries[index]!;
       const value = serial.get(id);
