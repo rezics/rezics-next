@@ -3,7 +3,7 @@
   "profiles": [
     {
       "id": "agent-profile-v1",
-      "sha256": "d9449ad49a3338d9defff32e6a2270a7d5bae21e74a09566c202b76698a3916f",
+      "sha256": "d91dccf08288f5c516f4d02de93c9b722869432d75b6d4bdeb6409003fb47c56",
       "file": "shapes/agent-profile-v1.ttl"
     },
     {
@@ -178,6 +178,11 @@
       "id": "event-time-v1",
       "sha256": "99a65a3caed9f50d636b3112150a957172c87974b253248d212001449ae8a0ae",
       "file": "shapes/event-time-v1.ttl"
+    },
+    {
+      "id": "first-party-bundle-v1",
+      "sha256": "a41754111c9fd3150ef4f1666b9fce2221f5e58b7aa463022d85e87b6e7bf00e",
+      "file": "shapes/first-party-bundle-v1.ttl"
     },
     {
       "id": "fixed-native-text-release-v1",
@@ -422,6 +427,11 @@
       "file": "shapes/realm-local-selection-v1.ttl"
     },
     {
+      "id": "realm-policy-selection-v1",
+      "sha256": "c695375f402934a868fc603ce59fb228640bf7d640000a6a3c5514693b57b472",
+      "file": "shapes/realm-policy-selection-v1.ttl"
+    },
+    {
       "id": "realm-public-profile-v1",
       "sha256": "d03364027f8b706441ed9433b26360599f9b531f1a255bd1a49526d08f62ca24",
       "file": "shapes/realm-public-profile-v1.ttl"
@@ -603,7 +613,7 @@
     },
     {
       "id": "space-realm-v1",
-      "sha256": "bae6d586c9dee595adee14a30d05afe20188c73bcf1c33906c823f87ec08b86f",
+      "sha256": "74a39bad65c0fd259f557146bed386843c5919fac3491b7503032d1ce9e370c2",
       "file": "shapes/space-realm-v1.ttl"
     },
     {
@@ -799,6 +809,11 @@
       "id": "zone-capability-v1",
       "sha256": "c518389e8a7777b2358a5ed98f6016e77a803aa8c9336fefc40201fb38df4f65",
       "file": "shapes/zone-capability-v1.ttl"
+    },
+    {
+      "id": "zone-presentation-v1",
+      "sha256": "3d63c448965591516514a0323e77500e3a8b0d95da0a2c0abdd2af4110e063e2",
+      "file": "shapes/zone-presentation-v1.ttl"
     }
   ],
   "canonical": [
@@ -1166,6 +1181,16 @@
             {
               "path": "https://rezics.com/vocab/selectionBasis",
               "value": "https://rezics.com/vocab/MainMaintainer"
+            }
+          ]
+        },
+        {
+          "profile": "realm-policy-selection-v1",
+          "shape": "https://rezics.com/definition/realm-policy-selection-v1/selection-shape",
+          "when": [
+            {
+              "path": "https://rezics.com/vocab/selectionBasis",
+              "value": "https://rezics.com/vocab/RealmPolicy"
             }
           ]
         },
@@ -2504,7 +2529,7 @@
     }
   ],
   "artifacts": {
-    "contexts/agent-profile-v1.jsonld": "d8fe1c25d46293f9e93eb4b3c7ad105f677986161d665366818526b98bc100e2",
+    "contexts/agent-profile-v1.jsonld": "835586193a661d61e69b42dfafd4fe9bf105d23d836afb9e785a7684c21c53ce",
     "contexts/agent-provision-v1.jsonld": "62c2a4eda19710dab2b44d0742065e1248765ec65200654804cc16c052a21d22",
     "contexts/assessment-v1.jsonld": "e1d2d9caf13cdb769a0b5378c64150f0873a82e5d1f4954d1301cb6d6c75d432",
     "contexts/ballot-mandate-approval-v1.jsonld": "3891b117248ab7df885eee0c0fb757b99c851c8f1237cef8f2218f96804aa289",
@@ -2528,6 +2553,7 @@
     "contexts/correction-proposal-v1.jsonld": "1dc725d99ee0de234f02b1d4e2b258c20267ff0f829ca7986a9fdee7615a3fb6",
     "contexts/erasure-graph-v1.jsonld": "9b3f3247bab24f7f76527a5df2f43336549a46c38859346981baa7e92f621f94",
     "contexts/event-time-v1.jsonld": "6fc7d578a30ddb4763910fd5b59279de579c8fe094bcdbb7f8d4db3d19c46dfe",
+    "contexts/first-party-bundle-v1.jsonld": "3af86ce39c84bb8a940a071ec62fd05df66cf1e015507255762b0a7042de7b2d",
     "contexts/fixed-native-text-release-v1.jsonld": "8618b6653b4f599da8de0b8c167c4687c4ed7c24c6acbe01bd74e4f1f1241e6f",
     "contexts/global-rating-standing-context-v1.jsonld": "7c04894a0e066437ee222af5924efc3018741ee8f1cc30476cc7032d0cdec753",
     "contexts/global-rating-standing-observation-v1.jsonld": "304063fdbb0200fbb667170239dbdfc38ab494397d1514f6fba211f472ed5138",
@@ -2547,6 +2573,7 @@
     "contexts/realm-experience-rating-observation-v1.jsonld": "372fda997fd7386d284afd111f82165fc162385a252e59a1a6294ef98bc0111a",
     "contexts/realm-local-rejection-v1.jsonld": "30c3195374180744439a2ee6db2a9e6accd2c3413c63b2b41581494121bebcb5",
     "contexts/realm-local-selection-v1.jsonld": "720dfeb8c7c39eddd9fa6c19d90cdba5f2490516039151575827c095834c0f27",
+    "contexts/realm-policy-selection-v1.jsonld": "d4ac036c2458ffffea5e324129d229e7ff522d0dd56b10dfe6bf7d948e8ae8c5",
     "contexts/realm-public-profile-v1.jsonld": "2bd8add71ce29bf135d3502e255d56decc2aab83ebadb3513ebbf2aa1dce7860",
     "contexts/realm-release-rating-context-v1.jsonld": "4fc40fca2efe60bafc880649eea0c609679800c9aaa70b4bb6068a8d38937e9c",
     "contexts/realm-release-rating-observation-v1.jsonld": "760d7eaa189c387c4a88401d7967671efe136086ffef15b7cdb27fc7217033dc",
@@ -2564,7 +2591,7 @@
     "contexts/source-field-statement-v1.jsonld": "9154e0e5683d657545fdd38d1a148151dbb8310b2c7b4e3b728f7f1199cc2d98",
     "contexts/source-open-library-work-v1.jsonld": "7f19c2c76b00224ad9037200f328e60e78b19f6857006d3001212d1ee7ac8b22",
     "contexts/source-reification-v1.jsonld": "8bbf1269642d326a80b8d660e8933b14653aaaad3a5531187771aad0bdd15f8c",
-    "contexts/space-realm-v1.jsonld": "a1896fbeb306de1432a5345e2ff3f69ac6303bc9c6b4f7f1c4e04dbae9b03e3a",
+    "contexts/space-realm-v1.jsonld": "dfc2510565ef3f19f574e8095a1da78473d325d04b6e38e4d0787ed3e1b30841",
     "contexts/statement-cutover-v1.jsonld": "6bafd791bb47c90b3411bd1592324dd9b16417df27fea0fa34f51ac9c2ed5e9a",
     "contexts/statement-decision-v1.jsonld": "6fde37ebce49b673eca2752de6e7041553b3d2f2a7fdcbf26b6466b2c6af32fd",
     "contexts/statement-v1.jsonld": "cfa9f2493ab50152388e2158a1771d418bbfba84e42ddd46a6aeb069c25f87de",
@@ -2586,7 +2613,8 @@
     "contexts/work-native-child-v1.jsonld": "6f5a3d023edc2048a18af848f10cacb6264a55d486e703d5909ec7ca4e9828ba",
     "contexts/work-title-control-v1.jsonld": "6d41cee07d63c6609e3c8ba36f45043ab1ff4ef888869d859520680125bb9b29",
     "contexts/zone-capability-v1.jsonld": "e2b55a2058a3b218a3fb2a7c4542886ff1f5c79b42101293a02c38b048869dcd",
-    "shapes/agent-profile-v1.ttl": "d9449ad49a3338d9defff32e6a2270a7d5bae21e74a09566c202b76698a3916f",
+    "contexts/zone-presentation-v1.jsonld": "4ddfab60aeda8dd3b43f27db9fb7f3cad3b59fc654d36f1a7b35078effacc428",
+    "shapes/agent-profile-v1.ttl": "d91dccf08288f5c516f4d02de93c9b722869432d75b6d4bdeb6409003fb47c56",
     "shapes/agent-provision-v1.ttl": "39be9701579192f77c67c10996d9c66aa5daf0b1182fa0566c07064281038028",
     "shapes/assessment-v1.ttl": "f4dceaac4879083028d3b97903a345b01e495f1b8b8a41fcf15a4b3d8e0a75ba",
     "shapes/ballot-mandate-approval-v1.ttl": "0fecd52c8455390decae35d5641030372402236bdad2c5c96cb32c57fdea6647",
@@ -2610,6 +2638,7 @@
     "shapes/correction-proposal-v1.ttl": "9339a7d90b95ee5e93f40031bbd1564b60aff045081c590d579ff89f8e347fc5",
     "shapes/erasure-graph-v1.ttl": "4f9da33919733b1cc31907564ad8dc4c77835db6c74edab99a9b175b20db8505",
     "shapes/event-time-v1.ttl": "99a65a3caed9f50d636b3112150a957172c87974b253248d212001449ae8a0ae",
+    "shapes/first-party-bundle-v1.ttl": "a41754111c9fd3150ef4f1666b9fce2221f5e58b7aa463022d85e87b6e7bf00e",
     "shapes/fixed-native-text-release-v1.ttl": "0f1b6ac3b4891b845fe67b9cfc8ed8296dfa146ba44668645cf8d74a8a91ea22",
     "shapes/global-rating-standing-context-v1.ttl": "305e68af3c289f9cd3560a814bc34f9ab7d79b7733a2682f08c944073664191b",
     "shapes/global-rating-standing-observation-v1.ttl": "88ebf1f8b846fdbb5fbd44835c7f547280d6a4533e68a665d6804e7d77e193b9",
@@ -2629,6 +2658,7 @@
     "shapes/realm-experience-rating-observation-v1.ttl": "c3ce902cafe8b737aac34080fb1caf4b3953f5c737e500129d16e1d630654afe",
     "shapes/realm-local-rejection-v1.ttl": "8db4a0124cf3b2ac61a28595fb05677e8dff8977c4b0a126740f583de6589e02",
     "shapes/realm-local-selection-v1.ttl": "065cee2ee14324f92989a206e106a538a243621f3c54c55c9519cfcadf22def4",
+    "shapes/realm-policy-selection-v1.ttl": "c695375f402934a868fc603ce59fb228640bf7d640000a6a3c5514693b57b472",
     "shapes/realm-public-profile-v1.ttl": "d03364027f8b706441ed9433b26360599f9b531f1a255bd1a49526d08f62ca24",
     "shapes/realm-release-rating-context-v1.ttl": "7520c99bb9669d866e67b4929ee624b1dafb3f2c6d616e67fca32bbd4a679c17",
     "shapes/realm-release-rating-observation-v1.ttl": "451a60e884d8c09b3f3e0c91742be3044f2067054479ad4f662b9abe9ba02f2f",
@@ -2646,7 +2676,7 @@
     "shapes/source-field-statement-v1.ttl": "ef3347dcf04ad576bb156afcfcbb8b35316abaeb3700dc30f2d4827e686594d2",
     "shapes/source-open-library-work-v1.ttl": "708b975233ceb3e4dc670ff4821011ba91c938a73c9739cfe94052ebdf22ce07",
     "shapes/source-reification-v1.ttl": "57e5a667cb62b1b72357b77aa2c7ac6133ed4f729732e681817ad1c537839100",
-    "shapes/space-realm-v1.ttl": "bae6d586c9dee595adee14a30d05afe20188c73bcf1c33906c823f87ec08b86f",
+    "shapes/space-realm-v1.ttl": "74a39bad65c0fd259f557146bed386843c5919fac3491b7503032d1ce9e370c2",
     "shapes/statement-cutover-v1.ttl": "e2ae65228aa4e311c183d230f96530358c88e7bd4e09928f482f394f1fda8daa",
     "shapes/statement-decision-v1.ttl": "f5d5c72e0473c6abd0816c0cddceb6c70c8075a47a4d2eeb81b28f9e598b2490",
     "shapes/statement-v1.ttl": "da4cf542d30ca2d0af244fa86efd53e4a8780a7b8feae260abc05168c358aa2a",
@@ -2668,9 +2698,10 @@
     "shapes/work-native-child-v1.ttl": "1c9e1ed2ab97a4211095848ddce43f361082b5b80c042000d384658ad029d5d5",
     "shapes/work-title-control-v1.ttl": "100dddad43cac4fd47c3090e987ef9dc9aa272d189fc4240cc08302340c5d42d",
     "shapes/zone-capability-v1.ttl": "c518389e8a7777b2358a5ed98f6016e77a803aa8c9336fefc40201fb38df4f65",
-    "packages/model/src/generated/arbitraries.ts": "12bc1c7c8b045b065ed68f94c0edfc33ea9ffe312f2dfd5b6ef7aba69298fc14",
-    "packages/model/src/generated/profiles.ts": "27b9ab83aeb5657a5eb5985b75bbef3c399ba73e971cdf276377a0835e62641f",
-    "packages/model/src/generated/schemas.ts": "f54c95e553ef6a0d329da8e182ae424fde536d2e90bb85a8b2145d6d94bd65e3",
-    "packages/model/src/generated/vocabulary.ts": "5b37a21040ada3712a512d9e1bad8c1f00025b67a576f495c9b8c112ec28b813"
+    "shapes/zone-presentation-v1.ttl": "3d63c448965591516514a0323e77500e3a8b0d95da0a2c0abdd2af4110e063e2",
+    "packages/model/src/generated/arbitraries.ts": "5c377a264ce5c18b69fef905fc996505afae130b53e12c62b468f8dfe3288f3a",
+    "packages/model/src/generated/profiles.ts": "3b03b4e6e58a488f22b38495ba00723a55e944e0699c4302d39fbefe32ed8e15",
+    "packages/model/src/generated/schemas.ts": "768d73222b12c9bb7b01d8e47b4154e7503235fedfd1ca4378a0af47ef11d44a",
+    "packages/model/src/generated/vocabulary.ts": "4c1fcc0fbfe4a96ab193376677101a61b9112fea858bfa72d0706a504dbab122"
   }
 }

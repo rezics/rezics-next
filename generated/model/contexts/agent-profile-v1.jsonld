@@ -20,6 +20,12 @@
       "@id": "http://www.w3.org/1999/02/22-rdf-syntax-ns#type",
       "@type": "@id"
     },
+    "rv:profileAvatarSelection": {
+      "@id": "https://rezics.com/vocab/profileAvatarSelection"
+    },
+    "rv:profileBio": {
+      "@id": "https://rezics.com/vocab/profileBio"
+    },
     "rv:profileDisclosure": {
       "@id": "https://rezics.com/vocab/profileDisclosure",
       "@type": "@id"
