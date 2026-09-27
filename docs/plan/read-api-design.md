@@ -88,14 +88,17 @@ scale and Realm standing ratings 1–10. Personal classification decisions are
 not defined, so Mine is rejected on that collection. Classification scope
 switching preserves local rejection and Global inheritance. Recent means latest
 metadata revision, ordered by retained restore-lineage rank, descending sequence
-and Work IRI; up to 32 restore edges are admitted. History currently uses stable
-revision-IRI order and returns sequence explicitly; a chronological history view
-belongs with the full history owner below.
+and Work IRI; up to 32 restore edges are admitted. The template History used
+stable revision-IRI order; G-236 replaces that ordering below.
 
 The Overview consumes the header, credits, ratings, classifications and adoption
-resources concurrently. The Versions tab consumes its own page. Contents,
-Discussion and comprehensive History require the next owners; the template does
-not invent a Work-to-composition or Work-to-discussion-root mapping.
+resources concurrently. The Versions tab consumes its own page. Contents uses
+the current Main Version's Book composition. G-236 uses Realm reply placements
+whose exact root is the Work IRI. Its History is ordered
+by retained restore epoch, graph sequence and event IRI; it exposes metadata
+revision identities, current public publication decisions and currently released
+reply placements. Actor identities and unreleased reply bytes stay out of both
+feeds.
 
 ## Cost and evidence
 
@@ -132,7 +135,7 @@ lands; composition-root additions follow the worker protocol.
 | Task / claimable paths | API/result and dependencies | Cost/disclosure contract to implement |
 | --- | --- | --- |
 | Reader: `routes/work-contents.ts`, `modules/work-contents/**`, `tests/work-contents*.ts` | `GET /works/{id}/contents?version&language&parent&cursor`; `GET /chapters/{id}?revision&language` returns body, selected basis, previous/next and progress identity. The version is the current Main Version; the chapter revision is a stale guard on the current composition head. | ≤20 occurrences per parent; one verified body ≤1 MiB; no recursive flattening; targets admitted individually, Main Version, parent and language bound in cursor. |
-| Discussion/history: `routes/work-activity.ts`, `modules/work-activity/**`, `tests/work-activity*.ts` | `GET /works/{id}/discussion?realm&cursor`, `/history?kind&cursor`; reviewed replies and public revision/decision events. Replace template metadata-only history at integration. | ≤20 records; current public review/admission on each item; hidden actors and unreleased bodies excluded. History index required for chronological scans across epochs. |
+| Discussion/history: `routes/work-activity.ts`, `modules/work-activity/**`, `tests/work-activity*.ts` | `GET /works/{id}/discussion?realm&cursor`, `/history?kind&cursor`; reviewed Realm replies and public revision/decision events. The template metadata-only route is replaced. | ≤20 candidates, ≤4 MiB Content batch and exact active placement/review checks; hidden actors and unreleased bodies excluded. The retained-epoch graph query sorts Work-scoped candidates in O(H log H) native work for H events. An indexed chronological seek remains a separate large-corpus task. |
 | Discovery filters: `routes/discovery.ts`, `modules/discovery/**`, `tests/discovery*.ts` | Extend `/works?sort=recent|top-rated&type&term&scope`; preserve `POST /queries` phrase profiles and exact/lower-bound counts with matched-field/decision reasons. | Indexed eligible read projection with a measured seek+P bound; never synchronously aggregate all Work ratings. Depends on rating selection policy and classification query semantics, not reader/profile tasks. |
 | Agent/profile/library: `routes/profiles.ts`, `modules/profiles/**`, `tests/profiles*.ts` plus separately claimed Agent/address owners | `GET /agents/{id}`, `/handles/{handle}`, `/agents/{id}/works`, `/agents/{id}/collections`, `/me/contributions`, `/me/ratings`; public display name/kind/handle, attribution, shelf cards and ratings. Define native credit links, handle allocation and public profile disclosure first. | ≤20 items, batch summaries; public/private collection partition before pagination, Account identity and private contributions require current principal/representation proof. Reuse collections and ratings. |
 | Realm home/log: `routes/realm-reads.ts`, `modules/realm-reads/**`, `tests/realm-read*.ts` | `GET /realms/{realm}`, `/realms/{realm}/works`, `/realms/{realm}/decisions`; public Space name/icon, adopted Works, adoption/classification/semantic-Context-rule revisions. Description, banner, community rules, public moderators and public roster have no published owner yet, so the header reports null or unknown rather than inferring them from Access grants. | ≤20 records and exact page count, unknown membership total. Public graph revisions supply the decision relation without receipts or private actors; the first implementation has an O(D log D) scan/sort bound for D eligible revisions, not a measured seek bound. A materialized public decision index and public community-rule/roster publication need separate write owners before large-scale browsing or those fields become available. Private Realm reads need an Access lease owner. |

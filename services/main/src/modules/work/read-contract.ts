@@ -33,8 +33,6 @@ export const pageFields = { nextCursor: t.Nullable(t.String()), sourcePosition: 
 export const versionItem = t.Object({ id: readId,
   kind: t.Union([t.Literal('text-variant'), t.Literal('release')]), language: t.String(),
   contribution: readId, revision: readId, selected: t.Boolean() });
-export const historyItem = t.Object({ revision: readId, sequence: t.String(), dataEpoch: t.String(),
-  current: t.Boolean(), href: t.String() });
 export const adoptionItem = t.Object({ realm: readId, name: readName, selection: readId,
   contribution: readId, language: t.String() });
 export const creditItem = t.Object({ id: readId, role: t.Literal('author'),

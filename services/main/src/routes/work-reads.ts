@@ -10,7 +10,7 @@ import { readWorkHeader } from '../modules/work/read-header.ts';
 import { readWorkPage } from '../modules/work/read-pages.ts';
 import { readWorkClassifications } from '../modules/work/read-classifications.ts';
 import { readWorkRating, readWorkRatingContexts } from '../modules/work/read-rating.ts';
-import { adoptionItem, classificationItem, creditItem, historyItem, pageFields, pageQuery,
+import { adoptionItem, classificationItem, creditItem, pageFields, pageQuery,
   ratingRead, readId, readLanguage, readQuery, readScope, readUuid, scopeQuery, versionItem,
   workHeader } from '../modules/work/read-contract.ts';
 import type { MainWorkDependencies } from './dependencies.ts';
@@ -37,7 +37,6 @@ const detail: { security: Record<string, string[]>[] } = { security: [{}, { bear
 export const openApiOperations = {
   '/v1/works/{id}': { get: { bearer: false } },
   '/v1/works/{id}/versions': { get: { bearer: false } },
-  '/v1/works/{id}/history': { get: { bearer: false } },
   '/v1/works/{id}/adoptions': { get: { bearer: false } },
   '/v1/works/{id}/credits': { get: { bearer: false } },
   '/v1/works/{id}/classifications': { get: { bearer: false } },
@@ -62,13 +61,6 @@ export function workReadRoutes(work: MainWorkDependencies) {
       try { return Response.json(await workRead(work, request, options,
         session => readWorkPage(session, `https://rezics.com/id/${path.id}`, 'versions',
           { language: options.contentLanguage, kind: options.kind })), { headers }); }
-      catch (error) { return workReadError(error); }
-    })
-    .get('/v1/works/:id/history', { params, detail, query,
-      response: { 200: t.Object({ items: t.Array(historyItem), ...pageFields }), ...workReadProblems },
-    }, async ({ request, params: path, query: options }) => {
-      try { return Response.json(await workRead(work, request, options,
-        session => readWorkPage(session, `https://rezics.com/id/${path.id}`, 'history')), { headers }); }
       catch (error) { return workReadError(error); }
     })
     .get('/v1/works/:id/adoptions', { params, detail, query,

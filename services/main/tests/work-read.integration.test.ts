@@ -62,7 +62,8 @@ test('Work reads: native public/private/erased disclosure, fallback, scoped rati
     expect((await json<Page<{ language: string }>>(await get(`${root}/versions?contentLanguage=ja`))).items)
       .toMatchObject([{ language: 'ja' }]);
     expect((await get(`/v1/works/${short(second.work)}/versions?cursor=${versions.nextCursor}`)).status).toBe(400);
-    expect((await json<Page<unknown>>(await get(`${root}/history`))).items.length).toBe(1);
+    expect((await json<Page<{ kind: string }>>(await get(`${root}/history`))).items.map(item => item.kind))
+      .toEqual(['publication-decision', 'publication-decision', 'metadata-revision']);
     expect((await json<Page<unknown>>(await get(`${root}/credits`))).items).toEqual([]);
     expect((await json<Page<unknown>>(await get(`${root}/adoptions`))).items).toEqual([]);
     expect((await json<Page<unknown>>(await get(`${root}/classifications`))).items).toEqual([]);

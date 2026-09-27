@@ -113,7 +113,7 @@ export class RealmReplyStore {
     const placement = await readPlacementHead(this.env, realm, reply);
     if (!placement) return null;
     if (!await this.content.currentReview(realm, reply, placement.revisionId,
-      placement.reviewDecisionId)) return null;
+      placement.reviewDecisionId, placement.preparationId)) return null;
     return placement;
   }
 
@@ -123,7 +123,7 @@ export class RealmReplyStore {
     let count = 0;
     for (const placement of page.heads) {
       if (await this.content.currentReview(realm, placement.reply, placement.revisionId,
-        placement.reviewDecisionId)) count++;
+        placement.reviewDecisionId, placement.preparationId)) count++;
     }
     return { realm, rootTarget, count, complete: page.complete };
   }

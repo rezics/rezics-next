@@ -141,7 +141,7 @@ export async function cancelPlacement(env: WorkActivationEnvironment,
 
 export interface PlacementHead {
   placement: string; revisionId: string; reviewDecisionId: string; reply: string;
-  realm: string; rootTarget: string; author: string;
+  realm: string; rootTarget: string; author: string; preparationId: string;
 }
 
 /** One bounded Realm/root probe. The caller filters exact current Content
@@ -149,7 +149,7 @@ export interface PlacementHead {
 export async function readRootPlacementHeads(env: WorkActivationEnvironment,
   realm: string, rootTarget: string): Promise<{ heads: PlacementHead[]; complete: boolean }> {
   const result = await env.fuseki.query(`PREFIX rv: <${RV}> SELECT
-    ?reply ?placement ?revision ?review ?author WHERE {
+    ?reply ?placement ?revision ?review ?author ?preparation WHERE {
     GRAPH ${iri(GRAPHS.current)} {
       ?slot a rv:RealmReplySlot ; rv:realm ${iri(realm)} ;
         rv:rootTarget ${iri(rootTarget)} ; rv:reply ?reply ;
@@ -158,7 +158,7 @@ export async function readRootPlacementHeads(env: WorkActivationEnvironment,
       ?placement a rv:RealmReplyPlacement ; rv:realm ${iri(realm)} ;
         rv:reply ?reply ; rv:rootTarget ${iri(rootTarget)} ;
         rv:contentRevision ?revision ; rv:reviewDecision ?review ;
-        rv:author ?author ; rv:placementOutcome rv:Accepted . }
+        rv:author ?author ; rv:contentPreparation ?preparation ; rv:placementOutcome rv:Accepted . }
   } ORDER BY ?reply LIMIT 65`);
   const rows = result.results?.bindings;
   if (!rows) throw new RealmReplyUnavailable('Realm root placement query is incomplete');
@@ -166,13 +166,13 @@ export async function readRootPlacementHeads(env: WorkActivationEnvironment,
     const revision = row.revision?.value ?? '';
     const review = row.review?.value ?? '';
     if (!revision.startsWith(CONTENT_REVISION) || !review.startsWith('urn:rezics:realm-review:')
-      || !row.reply?.value || !row.placement?.value || !row.author?.value) {
+      || !row.reply?.value || !row.placement?.value || !row.author?.value || !row.preparation?.value) {
       throw new RealmReplyUnavailable('Realm root placement row is malformed');
     }
     return { realm, rootTarget, reply: row.reply.value, placement: row.placement.value,
       revisionId: revision.slice(CONTENT_REVISION.length),
       reviewDecisionId: review.slice('urn:rezics:realm-review:'.length),
-      author: row.author.value };
+      author: row.author.value, preparationId: row.preparation.value };
   });
   return { heads, complete: rows.length <= 64 };
 }
@@ -181,12 +181,12 @@ export async function readPlacementHead(env: WorkActivationEnvironment,
   realm: string, reply: string): Promise<PlacementHead | null> {
   const slot = replySlotIri(realm, reply);
   const result = await env.fuseki.query(`PREFIX rv: <${RV}> SELECT
-    ?placement ?revision ?review ?root ?author WHERE {
+    ?placement ?revision ?review ?root ?author ?preparation WHERE {
     GRAPH ${iri(GRAPHS.current)} { ${iri(slot)} rv:replyPlacementHead ?placement . }
     GRAPH ${iri(GRAPHS.revisions)} {
       ?placement a rv:RealmReplyPlacement ; rv:realm ${iri(realm)} ;
         rv:reply ${iri(reply)} ; rv:rootTarget ?root ; rv:author ?author ;
-        rv:contentRevision ?revision ; rv:reviewDecision ?review ;
+        rv:contentRevision ?revision ; rv:reviewDecision ?review ; rv:contentPreparation ?preparation ;
         rv:placementOutcome rv:Accepted . }
   }`);
   const rows = result.results?.bindings ?? [];
@@ -197,12 +197,12 @@ export async function readPlacementHead(env: WorkActivationEnvironment,
   if (!review.startsWith('urn:rezics:realm-review:')) {
     throw new RealmReplyUnavailable('placement review identity is invalid');
   }
-  if (!row.revision?.value.startsWith(CONTENT_REVISION)) {
+  if (!row.revision?.value.startsWith(CONTENT_REVISION) || !row.preparation?.value) {
     throw new RealmReplyUnavailable('placement Content revision is invalid');
   }
   return { placement: row.placement!.value, revisionId: row.revision.value.slice(CONTENT_REVISION.length),
     reviewDecisionId: review.slice('urn:rezics:realm-review:'.length), reply, realm,
-    rootTarget: row.root!.value, author: row.author!.value };
+    rootTarget: row.root!.value, author: row.author!.value, preparationId: row.preparation.value };
 }
 
 /** Exact, one-slot graph CAS. A different Realm has a different slot and count. */

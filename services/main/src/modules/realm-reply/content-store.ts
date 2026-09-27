@@ -253,14 +253,22 @@ export class RealmReplyContentStore {
   }
 
   async currentReview(realm: string, reply: string, revisionId: string,
-    reviewDecisionId?: string): Promise<boolean> {
+    reviewDecisionId?: string, preparationId?: string): Promise<boolean> {
     const result = await this.pool.query(`SELECT 1 FROM content.reply p
       JOIN content.realm_review_decision d ON d.variant_id = p.variant_id
       JOIN content.revision r ON r.variant_id = d.variant_id AND r.id = d.revision_id
       WHERE p.id = $1 AND d.realm = $2 AND d.revision_id = $3 AND d.outcome = 'approved'
         AND r.availability = 'available' AND ($4::uuid IS NULL OR d.id = $4)
+        AND ($5::text IS NULL OR EXISTS (
+          SELECT 1 FROM content.realm_placement_preparation placement
+          JOIN content.publication_preparation publication ON publication.operation_id = placement.operation_id
+          WHERE placement.operation_id = $5 AND placement.realm = d.realm
+            AND placement.variant_id = p.variant_id AND placement.revision_id = d.revision_id
+            AND placement.review_decision_id = d.id
+            AND publication.status = 'active' AND publication.pin_active))
         AND NOT EXISTS (SELECT 1 FROM content.realm_review_decision later
-          WHERE later.supersedes = d.id) LIMIT 1`, [reply, realm, revisionId, reviewDecisionId ?? null]);
+          WHERE later.supersedes = d.id) LIMIT 1`, [reply, realm, revisionId, reviewDecisionId ?? null,
+      preparationId ?? null]);
     return result.rowCount === 1;
   }
 

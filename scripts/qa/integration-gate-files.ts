@@ -17,6 +17,7 @@ export const integrationGateFiles = [
   'services/main/tests/context-schema.integration.test.ts',
   'services/main/tests/work-read.integration.test.ts',
   'services/main/tests/work-contents.integration.test.ts',
+  'services/main/tests/work-activity.integration.test.ts',
   'services/main/tests/realm-read.integration.test.ts',
   'services/main/tests/management-read.integration.test.ts',
   'services/content/tests/core.integration.test.ts',

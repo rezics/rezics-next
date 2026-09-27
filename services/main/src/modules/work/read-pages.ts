@@ -1,12 +1,11 @@
 import type { Static } from 'typebox';
 import { GRAPHS, iri, lit } from './activate.ts';
-import { adoptionItem, creditItem, historyItem, versionItem } from './read-contract.ts';
+import { adoptionItem, creditItem, versionItem } from './read-contract.ts';
 import { decodeReadCursor, encodeReadCursor, pageResult, WorkReadUnavailable, type WorkReadSession } from './read-session.ts';
 import { fenceWorkBasis, readWorkBasis } from './read-header.ts';
 
-export type WorkPageKind = 'versions' | 'history' | 'adoptions' | 'credits';
+export type WorkPageKind = 'versions' | 'adoptions' | 'credits';
 type Version = Static<typeof versionItem>;
-type History = Static<typeof historyItem>;
 type Adoption = Static<typeof adoptionItem>;
 type Credit = Static<typeof creditItem>;
 
@@ -38,12 +37,6 @@ export async function readWorkPage(session: WorkReadSession, work: string, kind:
           ?decision rv:disclosure rv:Public . FILTER NOT EXISTS { ?revision a rv:ErasedRevision } }
         GRAPH ${iri(GRAPHS.current)} { ?contribution rv:publicationHead ?decision }
         BIND("release" AS ?kind) BIND(false AS ?selected) }`;
-      break;
-    case 'history':
-      // Immutable metadata revision identities only; exact bytes use the existing disclosure-aware read.
-      relation = `GRAPH ${iri(GRAPHS.revisions)} { ?id a rv:RevisionAnchor ; rv:component ${iri(work)} ;
-        rv:modelRevision <https://rezics.com/definition/work-metadata-v1> ; rv:dataEpoch ?epoch ; rv:sequence ?sequence .
-        FILTER NOT EXISTS { ?id a rv:ErasedRevision } }`;
       break;
     case 'adoptions':
       relation = `GRAPH ${iri(GRAPHS.current)} {
@@ -77,13 +70,11 @@ export async function readWorkPage(session: WorkReadSession, work: string, kind:
     return row[key]!.value;
   };
   const names = kind === 'adoptions' ? await session.summaries(page.map(row => row.id!.value)) : [];
-  const items = page.flatMap<Version | History | Adoption | Credit>((row, index) => {
+  const items = page.flatMap<Version | Adoption | Credit>((row, index) => {
     const id = field(row, 'id');
     switch (kind) {
       case 'versions': return [{ id, kind: field(row, 'kind') as Version['kind'], language: field(row, 'language'),
         contribution: field(row, 'contribution'), revision: field(row, 'revision'), selected: row.selected?.value === 'true' }];
-      case 'history': return [{ revision: id, sequence: field(row, 'sequence'), dataEpoch: field(row, 'epoch'),
-        current: id === basis.card.revision, href: `/v1/revisions/${id.slice(-36)}` }];
       case 'credits': return [{ id, role: 'author' as const, participantKind: 'external-reference' as const,
         provider: 'open-library' as const, key: field(row, 'key'), ordinal: Number(field(row, 'ordinal')),
         agent: null, displayName: null, handle: null }];
