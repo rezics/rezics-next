@@ -139,9 +139,12 @@ lands; composition-root additions follow the worker protocol.
 | Management: `routes/management-reads.ts`, `modules/management-reads/**`, `tests/management-read*.ts` | `GET /realms/{id}/moderation?state&type&cursor`, `/realms/{id}/audit?kind&cursor`; actionable report/contribution/correction items and audited outcomes. | Indexed state/type+ID seeks ≤20; moderator admission and final revocation fence; no public alias for private queues or audit actors. Reuse report/review/admission owners. |
 | Metadata completeness: separately claim Work metadata/model, Agent credit and classification owners | Original-language title and localized metadata writes, native Agent credits/handles, bibliographic editions, and a defined relevance policy. The template's null fields can become meaningful only with these writes. | Owner schema and command validation precede reader extensions; no derived display value presented as recorded fact. |
 
-G-214 owns `scripts/qa/acceptance.ts` during this wave. Register
-`services/main/tests/work-read.integration.test.ts` in its integration gate list
-at integration. Its isolated native probe currently runs through a temporary
-worktree Task wrapper because the standard Goal QA-slot wrapper writes in the
-read-only main checkout. The manager should run the normal registered tier and
-the affected-plan remainder after merge.
+`services/main/tests/work-read.integration.test.ts` is registered in the QA
+integration gate and isolated-project lists: its classification cutover and
+restore probes require a fresh dataset. G-214's typed acceptance case descriptions
+are separate from executable test registration. The native probe passed all 59
+assertions in QA run `20260927t155248-dd7bf5` with `REZICS_QA_SHARDS=2`.
+The worktree Task adapter redirected only QA-slot bookkeeping into this worktree
+because the main checkout is read-only to this worker; the ordinary QA harness
+handled startup, bootstrap, test execution, artifacts and teardown. The manager
+should run the registered test and affected-plan remainder after merge.

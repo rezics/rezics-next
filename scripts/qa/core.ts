@@ -359,6 +359,8 @@ export function planShards(estimates: ReadonlyMap<string, number>, count: number
 // replay its outbox from sequence zero, or need a fresh graph for bounded
 // writes. Run each against its own bootstrapped QA project.
 export const isolatedIntegrationFiles = new Set([
+  // Work read probes cut over classification and replace the dataset epoch.
+  'services/main/tests/work-read.integration.test.ts',
   'tests/qa/integration/validation-command.test.ts',
   'tests/qa/integration/validation-cross-profile.test.ts',
   // MODEL22 deliberately replaces the dataset's model generation head to

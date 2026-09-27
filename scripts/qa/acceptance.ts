@@ -136,6 +136,7 @@ export const integrationGateFiles = [
   'services/main/tests/content-projection.integration.test.ts',
   'services/main/tests/content-revision-read.integration.test.ts',
   'services/main/tests/context-schema.integration.test.ts',
+  'services/main/tests/work-read.integration.test.ts',
   'services/content/tests/core.integration.test.ts',
 ] as const;
 
