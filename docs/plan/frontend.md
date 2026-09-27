@@ -22,11 +22,8 @@ site, Reddit and Goodreads: they exposed the model instead of the content.
   Every card shows the author and one primary action (want to read / add to
   shelf / rate). Shelves are curated by meaning (genre, community, "readers'
   favorites"), not by storage type.
-- **A feed home, like Reddit.** The home page is a single centred feed of
-  what happens in the communities you follow and across REZICS (new works,
-  chapters, discussions, adoptions), sortable (best, new) and filterable
-  (kinds, languages, communities, tags). Feed cards keep engagement in a bottom
-  bar. The left navigation lists followed Realms and Zones.
+- **A feed home, like Reddit.** Home is where people continue reading and keep
+  up with the communities they follow; see [Home](#home).
 - **Honest states, quietly.** Pending, stale, partial and unavailable remain
   visible and recoverable, but phrased for people ("Couldn't load ratings ·
   Retry"), not as system status.
@@ -37,6 +34,35 @@ site, Reddit and Goodreads: they exposed the model instead of the content.
   `lang` on content blocks; CJK text uses 1.8 line height and `text-autospace`.
 - **Reading surfaces are calm.** No grid canvas behind content pages; the Aura
   canvas stays for marketing-style surfaces only.
+
+## Home
+
+Decided 2026-09-28 from research into Reddit, the old site's feed and published
+critiques of Goodreads: people come back to track what they read and to get the
+next chapter, then to keep up with communities, then to discover.
+
+- **Frame.** Left navigation: followed Zones and Realms with new-activity dots,
+  official Zones, Manage for moderators. Centre: a **Continue** strip (Works in
+  progress and followed Works with unread chapters, each opening the next
+  unread chapter; packages with compatible updates), then the feed. Right rail:
+  trending in my Realms, Realms to follow, my moderation queue.
+- **Tabs and sort.** `Following` and `All`; sort `Best`, `New`, `Top` (week,
+  month, all) is always visible. Following · New is strictly chronological and
+  ends with "You're all caught up". Recommendations appear only when Following
+  is thin, labelled with their reason, never under Following · New, and can be
+  turned off.
+- **Best.** Log-scaled net engagement of real readers with a 24-hour decay,
+  normalised within each Realm and capped so no Realm holds more than 3 of any
+  10 items; the constants are versioned in the API and tested.
+- **Cards.** One anatomy for every kind: Realm · person · time, the content,
+  and a bottom bar (vote, comments, one kind-specific action such as Read,
+  Install, Copy or Want to read, share, menu). Repeated updates collapse into
+  one card ("Chapters 212–214"); shelving and ratings without text never become
+  cards. Chapter cards hide spoilers past the reader's position.
+- **States.** Signed out: All · Best with official-Zone tiles above the feed.
+  A new person picks kinds, languages and topics, then follows suggested Realms
+  in one step, so home is never empty. Infinite scroll with a "N new posts"
+  pill; filters use six human kinds, not the model's types.
 
 ## Languages and themes
 
