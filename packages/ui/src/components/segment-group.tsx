@@ -27,13 +27,16 @@ export const SegmentGroup = (props: SegmentGroupProps) => {
     <ArkSegmentGroup.Root
       className={cn(
         'group/segment-group relative',
-        'flex gap-2',
+        'flex w-fit gap-1',
         'isolate',
         'data-[orientation=vertical]:flex-col',
         'data-disabled:opacity-64',
-        'data-[variant=underline]:gap-1 data-[variant=underline]:border-input',
+        // Aura's tab tray: a translucent card with the card shadow.
+        'data-[variant=default]:rounded-2xl data-[variant=default]:border data-[variant=default]:border-border/50',
+        'data-[variant=default]:bg-card/80 data-[variant=default]:p-1.5 data-[variant=default]:shadow-(--aura-shadow-card)',
+        'data-[variant=underline]:border-border',
         'data-[orientation=horizontal]:data-[variant=underline]:border-b',
-        'data-[orientation=vertical]:data-[variant=underline]:border-l',
+        'data-[orientation=vertical]:data-[variant=underline]:border-s',
         className,
       )}
       data-slot="segment-group"
@@ -55,11 +58,18 @@ export const SegmentGroupItem = (props: React.ComponentProps<typeof ArkSegmentGr
     <ArkSegmentGroup.Item
       className={cn(
         'relative',
-        'cursor-pointer',
+        'inline-flex h-8 items-center justify-center gap-2 px-4',
+        'whitespace-nowrap font-medium text-muted-foreground text-sm',
+        'cursor-pointer select-none',
+        'transition-colors hover:text-foreground',
+        'data-[state=checked]:text-primary',
         'data-[orientation=vertical]:w-full data-[orientation=vertical]:justify-start',
-        'rounded-[inherit] border border-transparent',
+        'rounded-xl border border-transparent',
+        'group-data-[variant=underline]/segment-group:rounded-none group-data-[variant=underline]/segment-group:px-3',
         'outline-none data-focus-visible:border-primary data-focus-visible:ring-[3px] data-focus-visible:ring-ring/32',
         'data-disabled:pointer-events-none data-disabled:opacity-64',
+        "[&_svg:not([class*='size-'])]:size-4 [&_svg]:pointer-events-none [&_svg]:shrink-0",
+        'motion-reduce:transition-none!',
         className,
       )}
       data-slot="segment-group-item"
@@ -97,14 +107,13 @@ export const SegmentGroupIndicator = (
       className={cn(
         'absolute top-(--top) left-(--left) z-0',
         'h-(--height) w-(--width)',
-        'rounded-[inherit]',
-        'bg-input',
+        'rounded-xl',
+        'bg-primary/10',
         'transition-[width,height,left,top] duration-150 ease-out',
         '[transition-property:var(--transition-property,width,height,left,top)]',
-        'group-data-[variant=underline]/segment-group:bg-primary',
+        'group-data-[variant=underline]/segment-group:rounded-none group-data-[variant=underline]/segment-group:bg-primary',
         'data-[orientation=horizontal]:group-data-[variant=underline]/segment-group:top-[calc(var(--top)+var(--height)-1px)]',
-        'data-[orientation=vertical]:group-data-[variant=underline]/segment-group:right-[calc(var(--left)+var(--width)-1px)]',
-        'data-[orientation=vertical]:group-data-[variant=underline]/segment-group:-translate-x-px',
+        'data-[orientation=vertical]:group-data-[variant=underline]/segment-group:left-[-1.5px]',
         'data-[orientation=horizontal]:group-data-[variant=underline]/segment-group:h-0.5',
         'data-[orientation=vertical]:group-data-[variant=underline]/segment-group:w-0.5',
         'motion-reduce:transition-none!',
