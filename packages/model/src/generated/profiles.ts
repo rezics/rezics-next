@@ -807,7 +807,7 @@ export const profileRegistry = {
     ]
   },
   "structure-composition-v1": {
-    "sha256": "6f1a63fec2415bc3d3662b012447382493958e39d6a312af77e6e76fe1ea2b90",
+    "sha256": "0b0048428fdfc30f8472426d1a2cf83309e262d6e1531b74b7faab13acc9f549",
     "file": "shapes/structure-composition-v1.ttl",
     "shapes": [
       "https://rezics.com/definition/structure-composition-v1/structure-shape",

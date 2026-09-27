@@ -1013,6 +1013,7 @@ export const iri = {
   "rv:StructureGeneration": "https://rezics.com/vocab/StructureGeneration",
   "rv:structureHead": "https://rezics.com/vocab/structureHead",
   "rv:StructureImport": "https://rezics.com/vocab/StructureImport",
+  "rv:StructureMeasureChange": "https://rezics.com/vocab/StructureMeasureChange",
   "rv:StructureOccurrence": "https://rezics.com/vocab/StructureOccurrence",
   "rv:structureOf": "https://rezics.com/vocab/structureOf",
   "rv:structureOperation": "https://rezics.com/vocab/structureOperation",

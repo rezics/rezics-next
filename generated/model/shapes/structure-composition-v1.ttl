@@ -95,7 +95,7 @@
     sh:property [ sh:path rv:component ; sh:minCount 1 ; sh:maxCount 1 ; sh:class rv:Structure ] ;
     sh:property [ sh:path rv:predecessor ; sh:maxCount 1 ; sh:class rv:StructureRevision ] ;
     sh:property [ sh:path rv:operation ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
-    sh:property [ sh:path rv:structureOperation ; sh:minCount 1 ; sh:maxCount 1 ; sh:in ( rv:StructureCreate rv:OccurrenceInsert rv:OccurrenceMove rv:OccurrenceReorder rv:OccurrenceRemove rv:OccurrenceUpdate rv:OrderRebalance rv:StructureReplace rv:StructureImport rv:StructureRefresh rv:StructureCapture rv:StructureRestore ) ] ;
+    sh:property [ sh:path rv:structureOperation ; sh:minCount 1 ; sh:maxCount 1 ; sh:in ( rv:StructureCreate rv:OccurrenceInsert rv:OccurrenceMove rv:OccurrenceReorder rv:OccurrenceRemove rv:OccurrenceUpdate rv:OrderRebalance rv:StructureReplace rv:StructureImport rv:StructureRefresh rv:StructureCapture rv:StructureRestore rv:StructureMeasureChange ) ] ;
     sh:property [ sh:path rv:generation ; sh:minCount 1 ; sh:maxCount 1 ; sh:class rv:StructureGeneration ] ;
     sh:property [ sh:path rv:manifest ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
     sh:property [ sh:path rv:placementCount ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:integer ; sh:minInclusive 0 ; sh:maxInclusive 1048576 ] ;
@@ -115,7 +115,7 @@
           sh:property [ sh:path rv:importSource ; sh:maxCount 0 ] ;
           sh:property [ sh:path rv:importSourceRevision ; sh:maxCount 0 ] ;
           sh:property [ sh:path rv:mappingPolicy ; sh:maxCount 0 ] ]
-        [ sh:property [ sh:path rv:structureOperation ; sh:minCount 1 ; sh:maxCount 1 ; sh:in ( rv:StructureCreate rv:OccurrenceInsert rv:OccurrenceMove rv:OccurrenceReorder rv:OccurrenceRemove rv:OccurrenceUpdate rv:OrderRebalance rv:StructureReplace ) ] ;
+        [ sh:property [ sh:path rv:structureOperation ; sh:minCount 1 ; sh:maxCount 1 ; sh:in ( rv:StructureCreate rv:OccurrenceInsert rv:OccurrenceMove rv:OccurrenceReorder rv:OccurrenceRemove rv:OccurrenceUpdate rv:OrderRebalance rv:StructureReplace rv:StructureMeasureChange ) ] ;
           sh:property [ sh:path rv:restoredFrom ; sh:maxCount 0 ] ;
           sh:property [ sh:path rv:importSource ; sh:maxCount 0 ] ;
           sh:property [ sh:path rv:importSourceRevision ; sh:maxCount 0 ] ;

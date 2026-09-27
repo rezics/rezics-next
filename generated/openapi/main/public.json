@@ -43384,6 +43384,843 @@
         ]
       }
     },
+    "/v1/compositions/{id}/refreshes": {
+      "post": {
+        "operationId": "postV1CompositionsByIdRefreshes",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 128,
+              "minLength": 1,
+              "pattern": "^[A-Za-z0-9:_./-]{1,128}$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "actingSubject": {
+                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                    "type": "string"
+                  },
+                  "expectedHead": {
+                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                    "type": "string"
+                  },
+                  "sourceRevision": {
+                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                    "type": "string"
+                  },
+                  "sourceStructure": {
+                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "expectedHead",
+                  "sourceStructure",
+                  "sourceRevision",
+                  "actingSubject"
+                ],
+                "type": "object"
+              }
+            },
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "actingSubject": {
+                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                    "type": "string"
+                  },
+                  "expectedHead": {
+                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                    "type": "string"
+                  },
+                  "sourceRevision": {
+                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                    "type": "string"
+                  },
+                  "sourceStructure": {
+                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "expectedHead",
+                  "sourceStructure",
+                  "sourceRevision",
+                  "actingSubject"
+                ],
+                "type": "object"
+              }
+            },
+            "multipart/form-data": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "actingSubject": {
+                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                    "type": "string"
+                  },
+                  "expectedHead": {
+                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                    "type": "string"
+                  },
+                  "sourceRevision": {
+                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                    "type": "string"
+                  },
+                  "sourceStructure": {
+                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "expectedHead",
+                  "sourceStructure",
+                  "sourceRevision",
+                  "actingSubject"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "baseHead": {
+                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                      "type": "string"
+                    },
+                    "bytes": {
+                      "type": "integer"
+                    },
+                    "cost": {
+                      "properties": {
+                        "pagesRead": {
+                          "type": "integer"
+                        },
+                        "pagesWritten": {
+                          "type": "integer"
+                        },
+                        "placementsWritten": {
+                          "type": "integer"
+                        },
+                        "rebalanced": {
+                          "type": "integer"
+                        },
+                        "segmentsWritten": {
+                          "type": "integer"
+                        }
+                      },
+                      "required": [
+                        "pagesRead",
+                        "pagesWritten",
+                        "placementsWritten",
+                        "segmentsWritten",
+                        "rebalanced"
+                      ],
+                      "type": "object"
+                    },
+                    "fence": {
+                      "type": "string"
+                    },
+                    "generation": {
+                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                      "type": "string"
+                    },
+                    "graphDataEpoch": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "graphReceipt": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "graphSequence": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "graphStarted": {
+                      "type": "boolean"
+                    },
+                    "holder": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "id": {
+                      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                      "type": "string"
+                    },
+                    "kind": {
+                      "enum": [
+                        "replace",
+                        "import",
+                        "refresh"
+                      ],
+                      "type": "string"
+                    },
+                    "manifest": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "mappingPolicy": {
+                      "~elyTyp": 7,
+                      "enum": [
+                        "source-key",
+                        "explicit"
+                      ],
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "pages": {
+                      "type": "integer"
+                    },
+                    "placementCount": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "integer",
+                        "null"
+                      ]
+                    },
+                    "projectionBatches": {
+                      "type": "integer"
+                    },
+                    "records": {
+                      "type": "integer"
+                    },
+                    "revision": {
+                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                      "type": "string"
+                    },
+                    "sourceRef": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "sourceRevision": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "enum": [
+                        "staging",
+                        "sealed",
+                        "activated",
+                        "cancelled",
+                        "failed"
+                      ],
+                      "type": "string"
+                    },
+                    "structure": {
+                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "structure",
+                    "generation",
+                    "kind",
+                    "sourceRef",
+                    "sourceRevision",
+                    "mappingPolicy",
+                    "baseHead",
+                    "revision",
+                    "status",
+                    "holder",
+                    "fence",
+                    "pages",
+                    "records",
+                    "bytes",
+                    "manifest",
+                    "graphStarted",
+                    "projectionBatches",
+                    "placementCount",
+                    "graphReceipt",
+                    "graphDataEpoch",
+                    "graphSequence"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 200"
+          },
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "baseHead": {
+                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                      "type": "string"
+                    },
+                    "bytes": {
+                      "type": "integer"
+                    },
+                    "cost": {
+                      "properties": {
+                        "pagesRead": {
+                          "type": "integer"
+                        },
+                        "pagesWritten": {
+                          "type": "integer"
+                        },
+                        "placementsWritten": {
+                          "type": "integer"
+                        },
+                        "rebalanced": {
+                          "type": "integer"
+                        },
+                        "segmentsWritten": {
+                          "type": "integer"
+                        }
+                      },
+                      "required": [
+                        "pagesRead",
+                        "pagesWritten",
+                        "placementsWritten",
+                        "segmentsWritten",
+                        "rebalanced"
+                      ],
+                      "type": "object"
+                    },
+                    "fence": {
+                      "type": "string"
+                    },
+                    "generation": {
+                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                      "type": "string"
+                    },
+                    "graphDataEpoch": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "graphReceipt": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "graphSequence": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "graphStarted": {
+                      "type": "boolean"
+                    },
+                    "holder": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "id": {
+                      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                      "type": "string"
+                    },
+                    "kind": {
+                      "enum": [
+                        "replace",
+                        "import",
+                        "refresh"
+                      ],
+                      "type": "string"
+                    },
+                    "manifest": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "mappingPolicy": {
+                      "~elyTyp": 7,
+                      "enum": [
+                        "source-key",
+                        "explicit"
+                      ],
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "pages": {
+                      "type": "integer"
+                    },
+                    "placementCount": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "integer",
+                        "null"
+                      ]
+                    },
+                    "projectionBatches": {
+                      "type": "integer"
+                    },
+                    "records": {
+                      "type": "integer"
+                    },
+                    "revision": {
+                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                      "type": "string"
+                    },
+                    "sourceRef": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "sourceRevision": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "enum": [
+                        "staging",
+                        "sealed",
+                        "activated",
+                        "cancelled",
+                        "failed"
+                      ],
+                      "type": "string"
+                    },
+                    "structure": {
+                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "structure",
+                    "generation",
+                    "kind",
+                    "sourceRef",
+                    "sourceRevision",
+                    "mappingPolicy",
+                    "baseHead",
+                    "revision",
+                    "status",
+                    "holder",
+                    "fence",
+                    "pages",
+                    "records",
+                    "bytes",
+                    "manifest",
+                    "graphStarted",
+                    "projectionBatches",
+                    "placementCount",
+                    "graphReceipt",
+                    "graphDataEpoch",
+                    "graphSequence"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 201"
+          },
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "operationId": {
+                      "type": "string"
+                    },
+                    "phase": {
+                      "type": "string"
+                    },
+                    "result": {
+                      "type": "null"
+                    },
+                    "retry": {
+                      "properties": {
+                        "afterMs": {
+                          "type": "number"
+                        },
+                        "allowed": {
+                          "const": true,
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "allowed",
+                        "afterMs"
+                      ],
+                      "type": "object"
+                    },
+                    "status": {
+                      "const": "reconciling",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "operationId",
+                    "status",
+                    "phase",
+                    "result",
+                    "retry"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 202"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 400,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 400"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 401,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 401"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 403,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 403"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 404,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 404"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "status": {
+                          "const": 409,
+                          "type": "number"
+                        },
+                        "title": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "type",
+                        "title",
+                        "status",
+                        "code"
+                      ],
+                      "type": "object"
+                    },
+                    {
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "conflicts": {
+                          "items": {
+                            "properties": {
+                              "reason": {
+                                "type": "string"
+                              },
+                              "sourceKey": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "sourceKey",
+                              "reason"
+                            ],
+                            "type": "object"
+                          },
+                          "type": "array"
+                        },
+                        "status": {
+                          "const": 409,
+                          "type": "number"
+                        },
+                        "title": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "type",
+                        "title",
+                        "status",
+                        "code",
+                        "conflicts"
+                      ],
+                      "type": "object"
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "Response for status 409"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 500,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 500"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 503,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 503"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
     "/v1/compositions/{id}/restorations": {
       "post": {
         "operationId": "postV1CompositionsByIdRestorations",
@@ -45571,8 +46408,28 @@
                       "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
                       "type": "string"
                     },
+                    "kind": {
+                      "enum": [
+                        "replace",
+                        "import",
+                        "refresh"
+                      ],
+                      "type": "string"
+                    },
                     "manifest": {
                       "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "mappingPolicy": {
+                      "~elyTyp": 7,
+                      "enum": [
+                        "source-key",
+                        "explicit"
+                      ],
                       "nullable": true,
                       "type": [
                         "string",
@@ -45600,6 +46457,24 @@
                       "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                       "type": "string"
                     },
+                    "sourceRef": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "sourceRevision": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
                     "status": {
                       "enum": [
                         "staging",
@@ -45619,6 +46494,10 @@
                     "id",
                     "structure",
                     "generation",
+                    "kind",
+                    "sourceRef",
+                    "sourceRevision",
+                    "mappingPolicy",
                     "baseHead",
                     "revision",
                     "status",
@@ -45727,8 +46606,28 @@
                       "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
                       "type": "string"
                     },
+                    "kind": {
+                      "enum": [
+                        "replace",
+                        "import",
+                        "refresh"
+                      ],
+                      "type": "string"
+                    },
                     "manifest": {
                       "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "mappingPolicy": {
+                      "~elyTyp": 7,
+                      "enum": [
+                        "source-key",
+                        "explicit"
+                      ],
                       "nullable": true,
                       "type": [
                         "string",
@@ -45756,6 +46655,24 @@
                       "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                       "type": "string"
                     },
+                    "sourceRef": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "sourceRevision": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
                     "status": {
                       "enum": [
                         "staging",
@@ -45775,6 +46692,10 @@
                     "id",
                     "structure",
                     "generation",
+                    "kind",
+                    "sourceRef",
+                    "sourceRevision",
+                    "mappingPolicy",
                     "baseHead",
                     "revision",
                     "status",
@@ -46182,8 +47103,28 @@
                       "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
                       "type": "string"
                     },
+                    "kind": {
+                      "enum": [
+                        "replace",
+                        "import",
+                        "refresh"
+                      ],
+                      "type": "string"
+                    },
                     "manifest": {
                       "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "mappingPolicy": {
+                      "~elyTyp": 7,
+                      "enum": [
+                        "source-key",
+                        "explicit"
+                      ],
                       "nullable": true,
                       "type": [
                         "string",
@@ -46211,6 +47152,24 @@
                       "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                       "type": "string"
                     },
+                    "sourceRef": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "sourceRevision": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
                     "status": {
                       "enum": [
                         "staging",
@@ -46230,6 +47189,10 @@
                     "id",
                     "structure",
                     "generation",
+                    "kind",
+                    "sourceRef",
+                    "sourceRevision",
+                    "mappingPolicy",
                     "baseHead",
                     "revision",
                     "status",
@@ -46338,8 +47301,28 @@
                       "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
                       "type": "string"
                     },
+                    "kind": {
+                      "enum": [
+                        "replace",
+                        "import",
+                        "refresh"
+                      ],
+                      "type": "string"
+                    },
                     "manifest": {
                       "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "mappingPolicy": {
+                      "~elyTyp": 7,
+                      "enum": [
+                        "source-key",
+                        "explicit"
+                      ],
                       "nullable": true,
                       "type": [
                         "string",
@@ -46367,6 +47350,24 @@
                       "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                       "type": "string"
                     },
+                    "sourceRef": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "sourceRevision": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
                     "status": {
                       "enum": [
                         "staging",
@@ -46386,6 +47387,10 @@
                     "id",
                     "structure",
                     "generation",
+                    "kind",
+                    "sourceRef",
+                    "sourceRevision",
+                    "mappingPolicy",
                     "baseHead",
                     "revision",
                     "status",
@@ -46750,8 +47755,28 @@
                       "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
                       "type": "string"
                     },
+                    "kind": {
+                      "enum": [
+                        "replace",
+                        "import",
+                        "refresh"
+                      ],
+                      "type": "string"
+                    },
                     "manifest": {
                       "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "mappingPolicy": {
+                      "~elyTyp": 7,
+                      "enum": [
+                        "source-key",
+                        "explicit"
+                      ],
                       "nullable": true,
                       "type": [
                         "string",
@@ -46779,6 +47804,24 @@
                       "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                       "type": "string"
                     },
+                    "sourceRef": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "sourceRevision": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
                     "status": {
                       "enum": [
                         "staging",
@@ -46798,6 +47841,10 @@
                     "id",
                     "structure",
                     "generation",
+                    "kind",
+                    "sourceRef",
+                    "sourceRevision",
+                    "mappingPolicy",
                     "baseHead",
                     "revision",
                     "status",
@@ -46906,8 +47953,28 @@
                       "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
                       "type": "string"
                     },
+                    "kind": {
+                      "enum": [
+                        "replace",
+                        "import",
+                        "refresh"
+                      ],
+                      "type": "string"
+                    },
                     "manifest": {
                       "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "mappingPolicy": {
+                      "~elyTyp": 7,
+                      "enum": [
+                        "source-key",
+                        "explicit"
+                      ],
                       "nullable": true,
                       "type": [
                         "string",
@@ -46935,6 +48002,24 @@
                       "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                       "type": "string"
                     },
+                    "sourceRef": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "sourceRevision": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
                     "status": {
                       "enum": [
                         "staging",
@@ -46954,6 +48039,10 @@
                     "id",
                     "structure",
                     "generation",
+                    "kind",
+                    "sourceRef",
+                    "sourceRevision",
+                    "mappingPolicy",
                     "baseHead",
                     "revision",
                     "status",
@@ -47361,8 +48450,28 @@
                       "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
                       "type": "string"
                     },
+                    "kind": {
+                      "enum": [
+                        "replace",
+                        "import",
+                        "refresh"
+                      ],
+                      "type": "string"
+                    },
                     "manifest": {
                       "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "mappingPolicy": {
+                      "~elyTyp": 7,
+                      "enum": [
+                        "source-key",
+                        "explicit"
+                      ],
                       "nullable": true,
                       "type": [
                         "string",
@@ -47390,6 +48499,24 @@
                       "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                       "type": "string"
                     },
+                    "sourceRef": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "sourceRevision": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
                     "status": {
                       "enum": [
                         "staging",
@@ -47409,6 +48536,10 @@
                     "id",
                     "structure",
                     "generation",
+                    "kind",
+                    "sourceRef",
+                    "sourceRevision",
+                    "mappingPolicy",
                     "baseHead",
                     "revision",
                     "status",
@@ -47517,8 +48648,28 @@
                       "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
                       "type": "string"
                     },
+                    "kind": {
+                      "enum": [
+                        "replace",
+                        "import",
+                        "refresh"
+                      ],
+                      "type": "string"
+                    },
                     "manifest": {
                       "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "mappingPolicy": {
+                      "~elyTyp": 7,
+                      "enum": [
+                        "source-key",
+                        "explicit"
+                      ],
                       "nullable": true,
                       "type": [
                         "string",
@@ -47546,6 +48697,24 @@
                       "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                       "type": "string"
                     },
+                    "sourceRef": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "sourceRevision": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
                     "status": {
                       "enum": [
                         "staging",
@@ -47565,6 +48734,10 @@
                     "id",
                     "structure",
                     "generation",
+                    "kind",
+                    "sourceRef",
+                    "sourceRevision",
+                    "mappingPolicy",
                     "baseHead",
                     "revision",
                     "status",
@@ -48020,8 +49193,28 @@
                       "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
                       "type": "string"
                     },
+                    "kind": {
+                      "enum": [
+                        "replace",
+                        "import",
+                        "refresh"
+                      ],
+                      "type": "string"
+                    },
                     "manifest": {
                       "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "mappingPolicy": {
+                      "~elyTyp": 7,
+                      "enum": [
+                        "source-key",
+                        "explicit"
+                      ],
                       "nullable": true,
                       "type": [
                         "string",
@@ -48049,6 +49242,24 @@
                       "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                       "type": "string"
                     },
+                    "sourceRef": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "sourceRevision": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
                     "status": {
                       "enum": [
                         "staging",
@@ -48068,6 +49279,10 @@
                     "id",
                     "structure",
                     "generation",
+                    "kind",
+                    "sourceRef",
+                    "sourceRevision",
+                    "mappingPolicy",
                     "baseHead",
                     "revision",
                     "status",
@@ -48176,8 +49391,28 @@
                       "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
                       "type": "string"
                     },
+                    "kind": {
+                      "enum": [
+                        "replace",
+                        "import",
+                        "refresh"
+                      ],
+                      "type": "string"
+                    },
                     "manifest": {
                       "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "mappingPolicy": {
+                      "~elyTyp": 7,
+                      "enum": [
+                        "source-key",
+                        "explicit"
+                      ],
                       "nullable": true,
                       "type": [
                         "string",
@@ -48205,6 +49440,24 @@
                       "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                       "type": "string"
                     },
+                    "sourceRef": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "sourceRevision": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
                     "status": {
                       "enum": [
                         "staging",
@@ -48224,6 +49477,10 @@
                     "id",
                     "structure",
                     "generation",
+                    "kind",
+                    "sourceRef",
+                    "sourceRevision",
+                    "mappingPolicy",
                     "baseHead",
                     "revision",
                     "status",
@@ -48697,8 +49954,28 @@
                       "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
                       "type": "string"
                     },
+                    "kind": {
+                      "enum": [
+                        "replace",
+                        "import",
+                        "refresh"
+                      ],
+                      "type": "string"
+                    },
                     "manifest": {
                       "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "mappingPolicy": {
+                      "~elyTyp": 7,
+                      "enum": [
+                        "source-key",
+                        "explicit"
+                      ],
                       "nullable": true,
                       "type": [
                         "string",
@@ -48726,6 +50003,24 @@
                       "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                       "type": "string"
                     },
+                    "sourceRef": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "sourceRevision": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
                     "status": {
                       "enum": [
                         "staging",
@@ -48745,6 +50040,10 @@
                     "id",
                     "structure",
                     "generation",
+                    "kind",
+                    "sourceRef",
+                    "sourceRevision",
+                    "mappingPolicy",
                     "baseHead",
                     "revision",
                     "status",
@@ -48853,8 +50152,28 @@
                       "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
                       "type": "string"
                     },
+                    "kind": {
+                      "enum": [
+                        "replace",
+                        "import",
+                        "refresh"
+                      ],
+                      "type": "string"
+                    },
                     "manifest": {
                       "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "mappingPolicy": {
+                      "~elyTyp": 7,
+                      "enum": [
+                        "source-key",
+                        "explicit"
+                      ],
                       "nullable": true,
                       "type": [
                         "string",
@@ -48882,6 +50201,24 @@
                       "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                       "type": "string"
                     },
+                    "sourceRef": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "sourceRevision": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
                     "status": {
                       "enum": [
                         "staging",
@@ -48901,6 +50238,10 @@
                     "id",
                     "structure",
                     "generation",
+                    "kind",
+                    "sourceRef",
+                    "sourceRevision",
+                    "mappingPolicy",
                     "baseHead",
                     "revision",
                     "status",
@@ -49335,8 +50676,28 @@
                       "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
                       "type": "string"
                     },
+                    "kind": {
+                      "enum": [
+                        "replace",
+                        "import",
+                        "refresh"
+                      ],
+                      "type": "string"
+                    },
                     "manifest": {
                       "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "mappingPolicy": {
+                      "~elyTyp": 7,
+                      "enum": [
+                        "source-key",
+                        "explicit"
+                      ],
                       "nullable": true,
                       "type": [
                         "string",
@@ -49364,6 +50725,24 @@
                       "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                       "type": "string"
                     },
+                    "sourceRef": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "sourceRevision": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
                     "status": {
                       "enum": [
                         "staging",
@@ -49383,6 +50762,10 @@
                     "id",
                     "structure",
                     "generation",
+                    "kind",
+                    "sourceRef",
+                    "sourceRevision",
+                    "mappingPolicy",
                     "baseHead",
                     "revision",
                     "status",
@@ -49491,8 +50874,28 @@
                       "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
                       "type": "string"
                     },
+                    "kind": {
+                      "enum": [
+                        "replace",
+                        "import",
+                        "refresh"
+                      ],
+                      "type": "string"
+                    },
                     "manifest": {
                       "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "mappingPolicy": {
+                      "~elyTyp": 7,
+                      "enum": [
+                        "source-key",
+                        "explicit"
+                      ],
                       "nullable": true,
                       "type": [
                         "string",
@@ -49520,6 +50923,24 @@
                       "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                       "type": "string"
                     },
+                    "sourceRef": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "sourceRevision": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
                     "status": {
                       "enum": [
                         "staging",
@@ -49539,6 +50960,10 @@
                     "id",
                     "structure",
                     "generation",
+                    "kind",
+                    "sourceRef",
+                    "sourceRevision",
+                    "mappingPolicy",
                     "baseHead",
                     "revision",
                     "status",
