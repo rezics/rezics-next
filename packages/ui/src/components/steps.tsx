@@ -51,12 +51,18 @@ export const StepsItem = (props: React.ComponentProps<typeof ArkSteps.Item>) => 
         'group/step',
         'relative flex flex-1',
         'data-[orientation=vertical]:items-start',
+        // Leaves room for the vertical connector, which spans the item below the indicator.
+        'data-[orientation=vertical]:min-h-20 data-[orientation=vertical]:last:min-h-0',
         'data-[orientation=horizontal]:items-center',
         'last:flex-initial last:**:data-[slot=steps-separator]:hidden',
         className,
       )}
       data-slot="steps-item"
       {...rest}
+      // Items sit inside the tablist, where an aria-current wrapper is not an allowed child;
+      // each trigger's aria-selected already marks the current step. Zag's mergeProps skips
+      // undefined, so null is what removes the attribute.
+      {...({ 'aria-current': null } as object)}
     />
   );
 };
@@ -102,8 +108,9 @@ export const StepsIndicator = (props: React.ComponentProps<typeof ArkSteps.Indic
       data-slot="steps-indicator"
       {...rest}
     >
-      <span className="group-data-complete/step:hidden">{children}</span>
-      <CheckIcon className="hidden group-data-complete/step:block" />
+      {/* Zag marks the indicator, not the item, as complete. */}
+      <span className="in-data-complete:hidden">{children}</span>
+      <CheckIcon className="hidden in-data-complete:block" />
     </ArkSteps.Indicator>
   );
 };

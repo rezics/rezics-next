@@ -1,24 +1,62 @@
 'use client';
 
+import { ark } from '@ark-ui/react/factory';
 import { Pagination as ArkPagination, usePaginationContext } from '@ark-ui/react/pagination';
 import { ChevronLeft, ChevronRight, Ellipsis } from 'lucide-react';
-import type React from 'react';
+import React from 'react';
 import { cn } from '../utils.ts';
-import { Button } from './button.tsx';
+import { Button, buttonVariants } from './button.tsx';
 
 export const usePagination = usePaginationContext;
+
+// With type="link" Zag gives triggers an href; they must render as anchors, not buttons.
+const PaginationTypeContext = React.createContext<'button' | 'link'>('button');
+
+const PaginationControl = (props: React.ComponentProps<typeof Button>) => {
+  const { variant, size, className, children, ...rest } = props;
+  const type = React.useContext(PaginationTypeContext);
+
+  if (type === 'button') {
+    return (
+      <Button className={className} size={size} variant={variant} {...rest}>
+        {children}
+      </Button>
+    );
+  }
+
+  // A link cannot be disabled natively: drop its href and mark it aria-disabled, which also
+  // exempts the dimmed label from contrast checks. Button would overwrite aria-disabled.
+  const { href, type: _buttonType, ...anchor } = rest as React.ComponentProps<'a'>;
+  const disabled = (rest as Record<string, unknown>)['data-disabled'] !== undefined;
+
+  return (
+    <ark.a
+      aria-disabled={disabled || undefined}
+      className={cn(buttonVariants({ variant, size }), className)}
+      data-size={size}
+      data-variant={variant}
+      href={disabled ? undefined : href}
+      {...anchor}
+    >
+      {children}
+    </ark.a>
+  );
+};
 
 interface PaginationProps extends React.ComponentProps<typeof ArkPagination.Root> {}
 
 export const Pagination = (props: PaginationProps) => {
-  const { className, ...rest } = props;
+  const { className, type = 'button', ...rest } = props;
 
   return (
-    <ArkPagination.Root
-      className={cn('mx-auto', 'w-full', 'flex justify-center gap-1', className)}
-      data-slot="pagination"
-      {...rest}
-    />
+    <PaginationTypeContext.Provider value={type}>
+      <ArkPagination.Root
+        className={cn('mx-auto', 'w-full', 'flex justify-center gap-1', className)}
+        data-slot="pagination"
+        type={type}
+        {...rest}
+      />
+    </PaginationTypeContext.Provider>
   );
 };
 
@@ -30,10 +68,10 @@ export const PaginationPrevious = (
 
   return (
     <ArkPagination.PrevTrigger asChild data-slot="pagination-previous" {...rest}>
-      <Button className="rounded-full" variant="ghost">
+      <PaginationControl className="rounded-full" variant="ghost">
         <ChevronLeft className="rtl:rotate-180" />
         {children}
-      </Button>
+      </PaginationControl>
     </ArkPagination.PrevTrigger>
   );
 };
@@ -43,10 +81,10 @@ export const PaginationNext = (props: React.ComponentProps<typeof ArkPagination.
 
   return (
     <ArkPagination.NextTrigger asChild data-slot="pagination-next" {...rest}>
-      <Button className="rounded-full" variant="ghost">
+      <PaginationControl className="rounded-full" variant="ghost">
         {children}
         <ChevronRight className="rtl:rotate-180" />
-      </Button>
+      </PaginationControl>
     </ArkPagination.NextTrigger>
   );
 };
@@ -56,7 +94,7 @@ export const PaginationItem = (props: React.ComponentProps<typeof ArkPagination.
 
   return (
     <ArkPagination.Item asChild data-slot="pagination-item" {...rest}>
-      <Button
+      <PaginationControl
         className={cn(
           'tabular-nums',
           'rounded-full',
@@ -68,7 +106,7 @@ export const PaginationItem = (props: React.ComponentProps<typeof ArkPagination.
         variant="ghost"
       >
         {children}
-      </Button>
+      </PaginationControl>
     </ArkPagination.Item>
   );
 };
