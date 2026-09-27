@@ -1,0 +1,81 @@
+import type { treaty } from '@elysia/eden';
+import type { MainApp } from '@rezics/main/app';
+
+// Main's management shapes (`services/main/src/modules/management-reads/read-contract.ts`,
+// `modules/realm-admin/contract.ts`, `modules/realm-submission/schema.ts`), taken from
+// the typed Eden client so a contract change breaks this build.
+
+/** The Eden client for Main: `mainApiWithToken()` on the server, `browserMainApi()` in the browser. */
+export type MainClient = ReturnType<typeof treaty<MainApp>>;
+type Ok<Call> = Call extends (...args: never[]) => Promise<{ data: infer Data }> ? NonNullable<Data> : never;
+type Body<Call> = Call extends (body: infer Input, ...rest: never[]) => unknown ? Input : never;
+type Realm = ReturnType<MainClient['v1']['realms']>;
+type Submission = ReturnType<Realm['submissions']>;
+
+export type ModerationPage = Ok<Realm['moderation']['get']>;
+export type ModerationItem = ModerationPage['items'][number];
+export type ModerationKind = ModerationItem['kind'];
+export type AuditPage = Ok<Realm['audit']['get']>;
+export type AuditItem = AuditPage['items'][number];
+export type AuditKind = AuditItem['kind'];
+export type PublicDecisionPage = Ok<Realm['decisions']['get']>;
+export type PublicDecision = PublicDecisionPage['items'][number];
+export type MemberPage = Ok<Realm['members']['get']>;
+export type Member = MemberPage['items'][number];
+export type MemberCommand = Body<Realm['members']['post']>;
+export type MemberReceipt = Ok<Realm['members']['post']>;
+export type RoleList = Ok<Realm['roles']['get']>;
+export type Role = RoleList['roles'][number];
+export type RealmPermission = Role['permissions'][number];
+export type RoleCommand = Body<Realm['role-impact']['post']>;
+export type RoleChange = RoleCommand['change'];
+export type RoleImpact = Ok<Realm['role-impact']['post']>;
+export type RoleReceipt = Ok<Realm['role-changes']['post']>;
+export type SettingsView = Ok<Realm['settings']['get']>;
+export type RealmSettings = SettingsView['settings'];
+export type RealmRule = RealmSettings['rules'][number];
+export type WhoMaySubmit = RealmSettings['whoMaySubmit'];
+export type SettingsReceipt = Ok<Realm['settings']['put']>;
+export type EscalationReceipt = Ok<Realm['escalations']['post']>;
+export type SubmissionReview = Ok<Submission['get']>;
+export type SubmissionDecision = Body<Submission['decisions']['post']>;
+export type SubmissionResult = Ok<Submission['decisions']['post']>;
+export type RealmHeader = Ok<Realm['get']>;
+export type RealmDirectoryPage = Ok<MainClient['v1']['realms']['get']>;
+export type AgentProfile = Ok<ReturnType<MainClient['v1']['agents']>['get']>;
+export type WorkHeader = Ok<ReturnType<MainClient['v1']['works']>['get']>;
+export type LocalizedName = RealmHeader['name'];
+export type Avatar = RealmHeader['icon'];
+
+/**
+ * Why a management read has no data. `denied` is Main's 403, and its 404 for
+ * management reads, which never says whether a Realm exists to someone who
+ * cannot manage it; `moved` is its 409 when the basis changed under a cursor.
+ */
+export type ReadFailure = 'denied' | 'missing' | 'sign-in' | 'moved' | 'invalid' | 'budget' | 'unavailable';
+export type Loaded<T> = { ok: true; data: T } | { ok: false; failure: ReadFailure };
+
+export function failureOf(status: number, management = false): ReadFailure {
+  if (status === 404) return management ? 'denied' : 'missing';
+  if (status === 403) return 'denied';
+  if (status === 401) return 'sign-in';
+  if (status === 409) return 'moved';
+  if (status === 400) return 'invalid';
+  if (status === 422) return 'budget';
+  return 'unavailable';
+}
+
+/** Main's problem code from an Eden error value, when it sent one. */
+export function problemCode(value: unknown): string | undefined {
+  return typeof value === 'object' && value !== null && 'code' in value && typeof value.code === 'string'
+    ? value.code : undefined;
+}
+
+/** A person or organization as the workspace names them; `label` is null until Main answers. */
+export interface AgentSummary { iri: string; label: string | null; handle: string | null }
+/** A Work as a queue item shows it: its title in the reader's language and its cover. */
+export interface WorkSummary { iri: string; title: LocalizedName; cover: Avatar; originalTitle: string | null }
+
+export const uuidOf = (iri: string) => iri.slice(-36);
+export const iriOf = (uuid: string) => `https://rezics.com/id/${uuid}`;
+export const isUuid = (value: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(value);
