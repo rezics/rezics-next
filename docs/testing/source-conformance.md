@@ -327,7 +327,7 @@ remain partial: multi-source competition, provider runs, complaint/rights scope,
 general child withdrawal, stale-intent resolution and complete capacity/recovery
 qualification remain open. Selected integration `20260926t054355-66d87b` and
 fault/recovery `20260926t054512-998e35` passed on the same stable worker source;
-`yarn check:backend` passed. These are affected checks, not full backend acceptance.
+`task check:backend` passed. These are affected checks, not full backend acceptance.
 
 The G-014 v2 selection adds a bounded second title support for the same native
 Work. Integration `20260926t064128-c38e1e` passed the real Account/Access/Main/

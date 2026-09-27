@@ -91,15 +91,15 @@ try {
   await ready('Account', `http://127.0.0.1:${apps.ACCOUNT_PORT}/health/ready`, account, 30_000);
   const main = launch('main', 'bun', ['services/main/src/index.ts']);
   await ready('Main', `http://127.0.0.1:${apps.MAIN_PORT}/health/ready`, main, 30_000);
-  const preview = launch('preview', 'corepack', ['yarn', 'web:preview', '--profile', 'qa', '--run-id', runId]);
+  const preview = launch('preview', 'bun', ['scripts/dev/web-preview.ts', '--profile', 'qa', '--run-id', runId]);
   await ready('Web Worker', 'http://127.0.0.1:3003/search', preview, 240_000);
-  const browser = launch('playwright', 'corepack', ['yarn', 'web:e2e', ...playwrightArgs,
+  const browser = launch('playwright', 'node_modules/.bin/playwright', ['test', '--config', 'apps/web/playwright.config.ts', ...playwrightArgs,
     '--reporter=junit', '--output', join(artifactDir, 'playwright')], {
     PLAYWRIGHT_JUNIT_OUTPUT_FILE: join(artifactDir, 'e2e.xml'),
   });
   const code = await completed(browser, 180_000);
   if (code !== 0) throw new Error(`Playwright failed (${code}); see logs/e2e-playwright.log`);
-  const storybook = launch('storybook', 'corepack', ['yarn', 'storybook:test']);
+  const storybook = launch('storybook', 'node_modules/.bin/vitest', ['run', '--root', 'apps/web', '--project', 'storybook']);
   const storybookCode = await completed(storybook, 180_000);
   if (storybookCode !== 0) {
     throw new Error(`Storybook browser tests failed (${storybookCode}); see logs/e2e-storybook.log`);

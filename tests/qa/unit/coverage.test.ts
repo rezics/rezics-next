@@ -342,7 +342,7 @@ test('QA08: qualification page is generated only from a clean complete case run'
   const page = renderQualification(report);
   expect(page).toContain('`run-one` passed on clean commit `abc`');
   expect(page).toContain('[SYS02](../testing/backend-integration.md) | pass');
-  expect(renderQualification({ ...report, scope: 'backend' })).toContain('yarn qa --backend --record');
+  expect(renderQualification({ ...report, scope: 'backend' })).toContain('task qa -- --backend --record');
   expect(() => renderQualification({ ...report, certifiesFull: false })).toThrow();
   expect(() => renderQualification({ ...report, sourceStable: false })).toThrow();
   expect(() => renderQualification({ ...report, ids: { SYS02: { ...report.ids.SYS02!,

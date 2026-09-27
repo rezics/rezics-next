@@ -23,7 +23,7 @@ async function checked(command: string[], cwd: string,
 const root = process.cwd();
 const directory = resolve('.temp/package-go-checksum');
 await mkdir(directory, { recursive: true });
-await checked(['corepack', 'yarn', 'package:go-oracle'], root);
+await checked(['bun', 'scripts/package/go-oracle.ts'], root);
 const tool = resolve('.temp/package-go-oracle/toolchain/go/bin/go');
 const version = await checked([tool, 'version'], directory);
 if (!version.includes('go1.27.1 linux/amd64')) throw new Error(`Go pin mismatch: ${version}`);

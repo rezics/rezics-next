@@ -189,7 +189,7 @@ recovery time remain a separate [deployment gate](../operations/deployment.md#pr
 
 ## Execution and failure handling
 
-Run these cases in existing unit/integration/model/fault tiers through `yarn qa`;
+Run these cases in existing unit/integration/model/fault tiers through `task qa`;
 there is no new standalone command. Pure algorithm counters belong in unit tests;
 engine claims require the real engine. The load tier remains a bounded latency
 and contention check, not the sole complexity test.

@@ -35,7 +35,7 @@ export async function restoreLoadBaseline(source: string, target: string): Promi
       throw new Error('Source is not a retained successful prepared fixture');
     }
     evidence.baselineDigest = sourceRun.baselineDigest;
-    const cloned = spawnSync('corepack', ['yarn', 'stack:clone', '--profile', 'qa', '--run-id', source,
+    const cloned = spawnSync('bun', ['scripts/dev/cli.ts', 'stack:clone', '--profile', 'qa', '--run-id', source,
       '--persistent', '--to-run-id', target], { cwd: root, encoding: 'utf8', timeout: 560_000 });
     writeFileSync(join(artifacts, 'clone.log'),
       [cloned.stdout, cloned.stderr, cloned.error?.message].filter(Boolean).join('\n'));

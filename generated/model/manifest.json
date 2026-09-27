@@ -2570,9 +2570,9 @@
     "shapes/work-native-child-v1.ttl": "1c9e1ed2ab97a4211095848ddce43f361082b5b80c042000d384658ad029d5d5",
     "shapes/work-title-control-v1.ttl": "100dddad43cac4fd47c3090e987ef9dc9aa272d189fc4240cc08302340c5d42d",
     "shapes/zone-capability-v1.ttl": "c518389e8a7777b2358a5ed98f6016e77a803aa8c9336fefc40201fb38df4f65",
-    "packages/model/src/generated/arbitraries.ts": "7cc2516a49be9274e35e79679e243cc47f4a7a617316b41fbbb80c692e334970",
-    "packages/model/src/generated/profiles.ts": "328c739068f24252dee516175bc50ee75ff32b471317f068af161312d65b9f5b",
-    "packages/model/src/generated/schemas.ts": "b1bfa812e184c6f33b36043a2a68f3fddf516984279c5ca09345d3cae5c15e1e",
-    "packages/model/src/generated/vocabulary.ts": "99f0bbf36c82efcaea1d9910ce64c59915c0e20db9b372fe332688651a68319c"
+    "packages/model/src/generated/arbitraries.ts": "e9efb79a9cad90619a6b38caa1b0e205b74600fb63b0982818e9081428558657",
+    "packages/model/src/generated/profiles.ts": "94adc93bc47ee8e01915b07a10ac416833ce962a8f67bdd2ea7ad3916840a896",
+    "packages/model/src/generated/schemas.ts": "4089356274951f1dd9acb74c942069d3e45cff3a237388f45194c2ac5a390140",
+    "packages/model/src/generated/vocabulary.ts": "d262f380af7ef0e91023d4bc2b92a25d8e803e2149588cff7c19646fb5ddcac2"
   }
 }

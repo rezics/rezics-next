@@ -7,17 +7,18 @@ import { readEnv, stackDirectory, type StackOptions } from '../../../scripts/dev
 import { readFormatMarker } from '../../../scripts/dev/install.ts';
 import { assertReleasePins, releaseDigest, releaseManifest } from '../../../scripts/dev/release-manifest.ts';
 import { verifyReleaseArtifact } from '../../../scripts/dev/release-artifact.ts';
+import { scriptCommand } from '../../../scripts/dev/commands.ts';
 
 const root = resolve(import.meta.dir, '../../..');
 
 function reset(options: StackOptions): void {
-  const result = spawnSync('corepack', ['yarn', 'stack:reset', '--profile', 'qa', '--run-id', options.runId!, '--persistent'],
+  const result = spawnSync('bun', ['scripts/dev/cli.ts', 'stack:reset', '--profile', 'qa', '--run-id', options.runId!, '--persistent'],
     { cwd: root, encoding: 'utf8', timeout: 120_000 });
   if (result.error || result.status !== 0) throw new Error(`install fixture cleanup failed: ${result.stderr}`);
 }
 
 function release(args: string[], timeout = 240_000): string {
-  const result = spawnSync('corepack', ['yarn', ...args],
+  const result = spawnSync(...scriptCommand(args),
     { cwd: root, encoding: 'utf8', timeout, maxBuffer: 2_000_000 });
   if (result.error || result.status !== 0) {
     throw new Error(`Release command failed: ${(result.stderr || result.stdout || result.error?.message || '').slice(-1500)}`);

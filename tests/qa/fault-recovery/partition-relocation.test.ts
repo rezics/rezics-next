@@ -24,11 +24,12 @@ import { readCompositionSeal } from '../../../services/main/src/modules/structur
 import { checkStructureManifest } from '../../../services/main/src/modules/structure/format.ts';
 import type { MainWorkDependencies } from '../../../services/main/src/routes/dependencies.ts';
 import { readEnv, stackDirectory } from '../../../scripts/dev/config.ts';
+import { scriptCommand } from '../../../scripts/dev/commands.ts';
 
 const root = resolve(import.meta.dir, '../../..');
 
 function rootCommand(args: string[], timeout = 180_000): void {
-  const result = spawnSync('corepack', ['yarn', ...args], { cwd: root,
+  const result = spawnSync(...scriptCommand(args), { cwd: root,
     encoding: 'utf8', timeout, maxBuffer: 1_000_000 });
   if (result.status !== 0 || result.error) {
     throw new Error(`yarn ${args[0]} failed: ${(result.stderr || result.stdout

@@ -8,27 +8,29 @@ and remaining [acceptance gates](../plan/README.md#acceptance-gates).
 
 ## Fresh checkout
 
-Use the exact Bun, Node and Yarn versions in the [toolchain lock](../development/toolchain.md#runtimes-and-languages)
+Use the exact Bun, Node, Yarn and Task versions in the [toolchain lock](../development/toolchain.md#runtimes-and-languages)
 and a running Docker daemon (Docker Desktop on the development host). The root
 facade fails rather than switching to another engine when Docker is unavailable. From the repository root:
 
 ```sh
-yarn toolchain:install
-yarn dev
+task toolchain:install
+task dev
 ```
 
 `toolchain:install` performs an immutable Yarn install, checks the runtimes,
 pulls the pinned service images, builds the local Fuseki command image and
-installs Playwright Chromium. `yarn dev` starts the persistent `rezics-dev`
+installs Playwright Chromium. `task dev` starts the persistent `rezics-dev`
 Compose project, applies Account/Access/relay migrations, initializes a fresh
-graph with its data and routing epochs, and starts Account and Main in watch
-mode. It prints the generated loopback endpoints and waits for both application
-readiness checks. No host Jena or Java installation is needed for this path.
+graph with its data and routing epochs, then starts the Aspire AppHost in the
+background: Account and Main in watch mode behind readiness checks, the web app
+after Main, and Storybook, on fixed ports 3002, 3001, 3000 and 6006. It prints the
+Aspire dashboard URL; `task aspire -- describe` shows resource health and
+`task aspire -- logs <resource>` shows a process's output. No host Jena or Java installation is needed for this path.
 The service endpoint and private configuration are saved under
-`.temp/stack/rezics-dev/`; `compose.env` and `apps.env` contain secrets and must
-stay private. The generated configuration persists across ordinary restarts.
+`.temp/stack/rezics-dev/`; `compose.env`, `apps.env` and `dev.env` contain secrets
+and must stay private. The generated configuration persists across ordinary restarts.
 
-In another terminal, run `yarn stack:status`. The expected local application
+In another terminal, run `task stack:status`. The expected local application
 readiness URLs are `http://127.0.0.1:3002/health/ready` for Account and
 `http://127.0.0.1:3001/health/ready` for Main. A healthy Compose stack alone
 does not prove that Main/Account started or that product commands are admitted.
@@ -42,11 +44,11 @@ production web client or a default development account.
 
 The checked-in `scripts/dev/release-manifest.ts` fixes the Bun, Node, Yarn and
 Compose image versions for the local release profile. Build and install a
-release from the repository root after `yarn toolchain:install`:
+release from the repository root after `task toolchain:install`:
 
 ```sh
-REZICS_ARTIFACT="$(yarn release:build)"
-yarn release:install --artifact "$REZICS_ARTIFACT"
+REZICS_ARTIFACT="$(task release:build)"
+task release:install -- --artifact "$REZICS_ARTIFACT"
 ```
 
 `release:build` copies the pinned Bun runtime, Main/Account/Content source,
@@ -84,15 +86,15 @@ format version and refuses to reopen its recovery fence if it is pending or
 the stored column type differs. Keep the record with the complete recovery set;
 copying it alone does not copy PostgreSQL, graph or object data.
 
-Stop `yarn dev` with Ctrl-C. Then run `yarn stack:down` to stop the service
+Stop the processes with `task dev:stop`. Then run `task stack:down` to stop the service
 containers while retaining their named volumes and the private configuration.
-`yarn stack:up`, `yarn stack:status`, `yarn stack:logs` and `yarn stack:down`
-also work without host application processes. `yarn stack:reset` removes the
+`task stack:up`, `task stack:status`, `task stack:logs` and `task stack:down`
+also work without host application processes. `task stack:reset` removes the
 local project's volumes and object/candidate directories; use it only when
 that project's data may be discarded. A restart against retained data checks
 the stored data/routing epochs and fails rather than silently replacing them.
 
-For isolated checks, `yarn qa` creates separate `rezics-qa-<run>` projects on
+For isolated checks, `task qa` creates separate `rezics-qa-<run>` projects on
 generated ports and tears them down. Its summary in `.artifacts/qa/<run>/`
 distinguishes passed tiers from partial and uncovered acceptance IDs. The
 current runner does not qualify the full retained M01–M10 scope or a recorded

@@ -8,8 +8,9 @@ and explicit service interfaces. Keep generation reproducible and generated
 outputs separate from authored definitions.
 
 The [toolchain lock](toolchain.md) fixes every tool, version, local service and
-root command. Tests follow the [executable harness](../testing/test-harness.md):
-`yarn check` for static checks, `yarn test` for targeted runs and `yarn qa` for
+root command. Task is the command facade (`task --list`); `task dev` runs the
+shared local backend, web app and Storybook under Aspire on fixed ports. Tests follow the [executable harness](../testing/test-harness.md):
+`task check` for static checks, `task test` for targeted runs and `task qa` for
 the full suite.
 
 The [repository organization](repository-structure.md) maps executable owners,

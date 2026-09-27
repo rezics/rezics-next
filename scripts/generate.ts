@@ -5,7 +5,7 @@ import { stampFusekiImage } from './dev/fuseki-image.ts';
 
 const args = process.argv.slice(2);
 if (args.length > 1 || (args.length === 1 && args[0] !== '--check')) {
-  throw new Error('usage: yarn gen [--check]');
+  throw new Error('usage: task gen -- [--check]');
 }
 const root = resolve(import.meta.dir, '..');
 const check = args[0] === '--check';

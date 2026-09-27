@@ -53,7 +53,7 @@ Exercise each admitted writer profile through its actual owner, plus direct
 command-module negative cases; Main preflight mocks alone cannot establish
 enforcement. Retain deterministic race barriers and replay traces, exact snapshots,
 receipts and model/policy versions. Routine setup uses isolated compatible fixture
-restores under the 600-second ceiling. Run affected root `yarn test` paths and
+restores under the 600-second ceiling. Run affected root `task test` paths and
 selected backend tiers during implementation; final runtime qualification remains
-one clean `yarn qa --backend --record`. A documentation-only change uses
-`yarn docs:check` and grants no runtime pass.
+one clean `task qa -- --backend --record`. A documentation-only change uses
+`task docs:check` and grants no runtime pass.

@@ -17,6 +17,9 @@ dist/
 .next/
 .wrangler/
 .vinext/
+apphost/.aspire/
+.aspire/
+.task/
 storybook-static/
 coverage/
 !/scripts/qa/coverage/

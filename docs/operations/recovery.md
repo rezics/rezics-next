@@ -194,7 +194,7 @@ cross-owner erasure replay or a production RPO.
 Private search deliveries are part of the Access recovery cut. The state digest
 includes `access.search_read_lease`, including its durable send marker and
 receipt digest. During a hold, inspect unresolved rows with
-`ACCESS_DATABASE_URL=<Access owner URL> yarn access:pending-search`. An unarmed
+`ACCESS_DATABASE_URL=<Access owner URL> task access:pending-search`. An unarmed
 row can be aborted through its owner; an armed row may finish only with its
 matching client receipt. Socket close, elapsed lease time and process death
 do not prove that buffered result bytes were cancelled. An armed row without
@@ -571,7 +571,7 @@ reports the graph epoch/sequence and text generation only when Main finds the
 bootstrap profile, generation, CJK probe and a complete exact public MatchUnit
 inventory in the index. Check it separately from `/health/ready` after an
 isolated restore. A failed text check keeps public phrase responses unavailable
-even when graph reads are ready. `yarn search:rebuild` implements a privileged
+even when graph reads are ready. `task search:rebuild` implements a privileged
 quarantine, exact Content replay, offline indexer pass on the named volume,
 source/RDF/Lucene comparison and new-generation activation for the development
 stack or an isolated persistent QA project. The positive fault/recovery drill

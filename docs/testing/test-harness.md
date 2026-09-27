@@ -1,6 +1,6 @@
 # Executable test harness
 
-Tests are code. The target is one command, `yarn qa`, qualifying the implemented
+Tests are code. The target is one command, `task qa`, qualifying the implemented
 scope in at most 30 minutes on the development host (64 cores, 62 GB RAM).
 As of 2026-09-25, the root `qa` command runs static, unit, shared-stack
 integration, an isolated model tier with the strict 66-case Jena matrix, an
@@ -23,8 +23,8 @@ receipt replay, unrelated browser build or full recovery matrix belongs in norma
 setup. Follow the [preparation policy](../storage/workload-budgets.md#data-preparation-and-import).
 
 The root facade implements explicit `--backend` scope selection and scope-aware
-recording. Ordinary batches run [`yarn test --affected`](#affected-test-selection);
-explicit `yarn test` paths and `yarn qa --backend --tier` remain available for a
+recording. Ordinary batches run [`task test -- --affected`](#affected-test-selection);
+explicit `task test` paths and `task qa -- --backend --tier` remain available for a
 narrower diagnosis. The unscoped command below still includes web.
 
 The backend inventory retains every backend clause of mixed cases under the
@@ -42,25 +42,25 @@ one deadline across preparation steps, without automatic slow reseeding fallback
 
 ## Commands
 
-The table specifies the completed harness contract. Currently `yarn qa`,
-`yarn qa --tier` and `yarn qa --only-failed` run the implemented tiers.
-`yarn test` accepts explicit unit files and routes registered QA integration,
+The table specifies the completed harness contract. Currently `task qa`,
+`task qa -- --tier` and `task qa -- --only-failed` run the implemented tiers.
+`task test` accepts explicit unit files and routes registered QA integration,
 model, fault/recovery, load and web e2e files through their stack harness. `qa:replay`
 selects a seeded test through the same routing; successful complete `--record`
 qualification remains pending full case coverage.
 
 | Command | Behavior |
 | --- | --- |
-| `yarn test <paths> [-t <ID>]` | Runs explicit unit files through Bun. Registered stack-backed files, including `apps/web/tests/*.e2e.ts`, route through their isolated QA tier. A leading acceptance ID may select a named test; other legacy integration files still need their explicit environment until migrated. |
-| `yarn test --affected [<base>] [--list]` | Runs the [affected selection](#affected-test-selection) since `<base>`, which defaults to the merge base with `main`. `--list` prints the plan only. |
-| `yarn api:fuzz [options]` | Runs [schema-driven API fuzzing](#schema-driven-api-fuzzing) against an isolated stack. It is a diagnostic, not a tier. |
-| `yarn qa` | Orchestrates all tiers, respecting dependencies and parallelizing isolated work. The exit code is non-zero if any test fails or any tier exceeds its budget. |
-| `yarn qa --backend [--tier <name>]` | Selects the frozen backend cases and excludes the browser tier; a selected tier is diagnostic only. |
-| `yarn qa --backend --record` | Runs all six backend tiers from clean source and records only if every retained backend case is fully covered and passed. |
-| `yarn qa --tier <name>` | Runs one tier with the same environment. |
-| `yarn qa --only-failed <run-id>` | Diagnoses failed tests from an earlier run; this partial run cannot certify the whole changed tree. |
-| `yarn qa:replay --seed <seed> <file> -t <ID>` | Re-runs one fast-check test with its signed 32-bit seed through the unit or registered QA tier. The test must read `REZICS_QA_SEED`; a seed reproduces the same generated sequence and shrink. |
-| `yarn qa --record` | Currently blocked until every retained acceptance ID has declared and verified case coverage. The intended qualification workflow is described below. |
+| `task test -- <paths> [-t <ID>]` | Runs explicit unit files through Bun. Registered stack-backed files, including `apps/web/tests/*.e2e.ts`, route through their isolated QA tier. A leading acceptance ID may select a named test; other legacy integration files still need their explicit environment until migrated. |
+| `task test -- --affected [<base>] [--list]` | Runs the [affected selection](#affected-test-selection) since `<base>`, which defaults to the merge base with `main`. `--list` prints the plan only. |
+| `task api:fuzz -- [options]` | Runs [schema-driven API fuzzing](#schema-driven-api-fuzzing) against an isolated stack. It is a diagnostic, not a tier. |
+| `task qa` | Orchestrates all tiers, respecting dependencies and parallelizing isolated work. The exit code is non-zero if any test fails or any tier exceeds its budget. |
+| `task qa -- --backend [--tier <name>]` | Selects the frozen backend cases and excludes the browser tier; a selected tier is diagnostic only. |
+| `task qa -- --backend --record` | Runs all six backend tiers from clean source and records only if every retained backend case is fully covered and passed. |
+| `task qa -- --tier <name>` | Runs one tier with the same environment. |
+| `task qa -- --only-failed <run-id>` | Diagnoses failed tests from an earlier run; this partial run cannot certify the whole changed tree. |
+| `task qa:replay -- --seed <seed> <file> -t <ID>` | Re-runs one fast-check test with its signed 32-bit seed through the unit or registered QA tier. The test must read `REZICS_QA_SEED`; a seed reproduces the same generated sequence and shrink. |
+| `task qa -- --record` | Currently blocked until every retained acceptance ID has declared and verified case coverage. The intended qualification workflow is described below. |
 
 The coordinator owns batch execution under the
 [execution workflow](../plan/execution-workflow.md#batch-cadence). Tests are
@@ -76,9 +76,9 @@ Each run writes `.artifacts/qa/<run-id>/`, which contains a JUnit file per tier,
 
 ### Affected-test selection
 
-`yarn test --affected` derives the tests to run from the changed files. It
+`task test -- --affected` derives the tests to run from the changed files. It
 narrows routine batches only; final acceptance still runs the complete backend
-suite through `yarn qa --backend --record`.
+suite through `task qa -- --backend --record`.
 
 1. **Changed files.** The command uses `git diff --no-renames` against the
    base, plus untracked files, so uncommitted work is included. A rename counts
@@ -95,15 +95,15 @@ suite through `yarn qa --backend --record`.
 
 | Changed input | Selection |
 | --- | --- |
-| Documentation, agent/editor configuration, frontend workspaces | None; use `yarn docs:check` for documentation. |
-| Static configuration (Biome, dependency-cruiser, oxlint, Knip, ast-grep rules, `tsconfig`) | None; run `yarn check:backend`. |
+| Documentation, agent/editor configuration, frontend workspaces | None; use `task docs:check` for documentation. |
+| Static configuration (Biome, dependency-cruiser, oxlint, Knip, ast-grep rules, `tsconfig`) | None; run `task check:backend`. |
 | Root or workspace manifests, lockfile, Yarn or Bun configuration | Every tier, except that a root `package.json` change confined to `scripts` runs the shared-stack smoke test. |
 | `infra/jena/`, generated shapes, `infra/dev/` | Whole model, integration and fault/recovery tiers. |
 | Service migrations | Whole integration and fault/recovery tiers. |
 | `scripts/dev/`, QA bootstrap, CLI or core | Graph selection plus `tests/qa/integration/shared-stack.test.ts`. |
 
 Affected unit files run in one direct `bun test` command, and each stack tier
-runs once through `yarn qa --tier` with `--file` selections. A widened tier runs
+runs once through `task qa -- --tier` with `--file` selections. A widened tier runs
 its registered selection instead: for unit, `tests/qa/unit` plus its gate files,
 with affected unit tests outside that set still run directly.
 Every tier runs even after a failure, so one pass yields the whole repair queue,
@@ -118,7 +118,7 @@ killed at its budget would leave an empty log.
 
 ### Schema-driven API fuzzing
 
-`yarn api:fuzz` starts a disposable QA stack with Account and Main, then runs
+`task api:fuzz` starts a disposable QA stack with Account and Main, then runs
 the pinned Schemathesis image against `generated/openapi/main/public.json`. It
 checks for server errors and for status codes, content types, headers and bodies
 that the contract does not declare. Requests are unauthenticated. Public
@@ -151,7 +151,7 @@ logs are kept alongside.
 
 | Tier | Content | Isolation | Budget |
 | --- | --- | --- | --- |
-| static | `yarn check` for the full suite or `yarn check:backend` for backend scope: typechecks, Biome, ast-grep, oxlint promise rules, Knip, dependency-cruiser, generated-artifact drift | none | 2 min |
+| static | `task check` for the full suite or `task check:backend` for backend scope: typechecks, Biome, ast-grep, oxlint promise rules, Knip, dependency-cruiser, generated-artifact drift | none | 2 min |
 | unit | Pure domain rules, command-client behavior and QA harness checks | in-process | 3 min |
 | integration | In-process Main/Account behavior plus host Main `/health/ready` with work dependencies against real Fuseki and PostgreSQL | shared QA stack | 8 min |
 | model | Reviewed shape generation, seeded node-local arbitraries, native Jena command fixtures and the strict 66-case matrix; broader command sequences pending | own QA Compose project, isolated from product integration data | 3 min test budget |
@@ -166,8 +166,8 @@ reason. The overall 30-minute budget includes setup and cleanup; tier ceilings
 are not an allowance for extra unmeasured startup time.
 
 The positive Content rebuild drill starts a nested QA project with
-`yarn stack:up --profile qa --run-id <id> --persistent`. This chooses project
-named volumes so `yarn search:rebuild --profile qa --run-id <id> --persistent`
+`task stack:up -- --profile qa --run-id <id> --persistent`. This chooses project
+named volumes so `task search:rebuild -- --profile qa --run-id <id> --persistent`
 can stop Fuseki, run the offline indexer on the retained TDB2 volume, and restart
 it. The test resets that project with the same options. Other QA projects keep
 their disposable tmpfs overlay; a saved project refuses a storage-mode switch.
@@ -226,7 +226,7 @@ named volumes of a `rezics-fixture-<id>` project with its manifest under
 `.temp/fixture/<id>/`; no `stack:*` command addresses that project, and restore
 mounts it read-only. Each consumer restores its own persistent QA project
 `rezics-qa-fixture-<name>` with fresh ports, writes only there and resets it with
-`yarn stack:reset --profile qa --run-id fixture-<name> --persistent`. Restores
+`task stack:reset -- --profile qa --run-id fixture-<name> --persistent`. Restores
 share no mutable volume with the backup or with each other.
 
 ## Writing tests
@@ -243,7 +243,7 @@ share no mutable volume with the backup or with each other.
    test itself created. Never hard-code aggregate counts, lengths of shared lists or
    absolute sequence numbers; assert deltas the test caused.
 4. **Seed all randomness.** Every random input comes from fast-check with a logged
-   seed, so `yarn qa:replay` reproduces it.
+   seed, so `task qa:replay` reproduces it.
 5. **Keep tests small.** Assert outcomes and invariants, not logs. A test over about
    60 lines extracts a builder. An integration test over 10 seconds fails the timing
    check unless it belongs to the recovery or load tier.
@@ -311,7 +311,7 @@ match an implementation's output.
 
 ## Remote data
 
-`yarn fixtures:pull [--source wikidata]` runs adapters in
+`task fixtures:pull -- [--source wikidata]` runs adapters in
 `tests/fixtures/sources/`. The first registered query is Wikidata Q42 via
 [`Special:EntityData` JSON](https://www.mediawiki.org/wiki/Wikibase/EntityData/en).
 It retains only the entity ID, revision and three name labels. [Wikidata
@@ -350,7 +350,7 @@ projection offline and verifies fixture behavior with mocked HTTP responses.
   data with `REZICS_FIXTURES_OFFLINE=1` fails with a pull instruction; upstream
   drift during restoration fails explicitly.
 - `live` re-fetches and reports each digest as unchanged or drifted without
-  changing the lock. `REZICS_FIXTURES=live yarn fixtures:pull --update-lock`
+  changing the lock. `REZICS_FIXTURES=live task fixtures:pull -- --update-lock`
   accepts the current normalized bytes and atomically rewrites the lock and
   committed seed. Review the diff and reuse note before committing a refresh.
 
@@ -359,7 +359,7 @@ tier once their stage starts.
 
 ## Load
 
-`yarn qa --tier load` starts a disposable QA Compose project, bootstraps its real
+`task qa -- --tier load` starts a disposable QA Compose project, bootstraps its real
 graph and databases, starts Main as a host process, and verifies the original
 empty-corpus Main snapshot. It then creates 10 Works through product commands,
 with 10 Main selections, one Realm adoption, one rejected Realm candidate and
@@ -406,7 +406,7 @@ The numeric practical
 workload objective is in
 [initial host deployment](../operations/deployment.md#practical-load-objective).
 
-The separate `yarn load` command is the practical profile. It defaults to
+The separate `task load` command is the practical profile. It defaults to
 `--works 10000 --duration 180` and uses its own persistent per-run QA stack,
 resetting its named volumes after completion, and an
 `.artifacts/load/<run-id>/` evidence directory; `--works 10 --duration 10` is a
@@ -480,7 +480,7 @@ qualify the 10,000-Work profile or eliminate a rarer race. A later profile
 index movements (139, 124 and 97 ms). Its exact retained log showed the
 third-attempt ceiling rejected a read inside the 1,500 ms wall budget. The
 route now retries only proven movements until the shared wall and Fuseki call
-and byte budgets expire. The clean merged `2f9a0ed` tree passed full `yarn qa`
+and byte budgets expire. The clean merged `2f9a0ed` tree passed full `task qa`
 `20260925t151147-02d115`, then the separate 10,000-Work practical profile
 `load-20260925t160348-90e989` passed from the stopped 9,900-Work source and
 100 fresh admitted Works. Its 180-second mix completed 2,376 reads and 394
@@ -522,7 +522,7 @@ support the alternative offline import path but do not establish its speed or
 REZICS semantic compatibility.
 
 The deterministic bulk importer is now the routine background path.
-`yarn fixture:build --profile small|medium` derives Works, background Agents,
+`task fixture:build -- --profile small|medium` derives Works, background Agents,
 revisions, objects and Content drafts from one seed and writes them straight into
 the current owners; it never calls public commands and fabricates no receipts
 ([toolchain](../development/toolchain.md#root-commands)). Imported data sits at
@@ -535,7 +535,7 @@ deterministic `summarize` (digest and per-kind counts), `load` and a build-time
 `verify` of exact counts. A domain schema task adds its tables by adding one
 module to `owners/index.ts` and its shared identities to
 `scripts/fixture/corpus.ts`; a changed generator or model input makes older
-backups stale instead of silently serving them. `yarn fixture:restore --fixture
+backups stale instead of silently serving them. `task fixture:restore --fixture
 <id> --run-id fixture-<name>` copies the stopped backup into its own persistent
 QA stack, applies only appended migrations and checks readiness and the manifest
 samples under one 600-second deadline, reading no corpus.
@@ -583,9 +583,9 @@ backend Goal and is not a backend completion gate.
   The tier creates its own `rezics-qa-<run>-e` Compose project, runs the existing
   migrations and graph bootstrap, registers a local public OAuth client and Main
   introspection client, starts Account and Main, and waits for their ready
-  then uses `yarn web:preview --profile qa --run-id <run>-e` to build
+  then uses `task web:preview -- --profile qa --run-id <run>-e` to build
   and launch the Worker. It waits for the Worker search route before invoking
-  `yarn web:e2e` with Playwright's JUnit reporter, then runs `yarn storybook:test`
+  `task web:e2e` with Playwright's JUnit reporter, then runs `task storybook:test`
   in Chromium. The tier saves `e2e.xml`, process logs and Playwright artifacts
   under the QA run directory. Host processes
   are stopped and the isolated project is reset after the run unless `--keep` is
@@ -598,9 +598,9 @@ backend Goal and is not a backend completion gate.
 
 ### Backend-only Goal scope
 
-`yarn qa --backend` selects the frozen 276-ID backend inventory and runs static,
+`task qa -- --backend` selects the frozen 276-ID backend inventory and runs static,
 unit, shared-stack integration, model, fault/recovery and load tiers. It omits
-the e2e/Storybook tier and uses `yarn check:backend`, which does not typecheck,
+the e2e/Storybook tier and uses `task check:backend`, which does not typecheck,
 lint or cruise web/UI source. `--backend --tier <non-browser-tier>` is a partial
 diagnostic; `--backend --only-failed` and browser-tier selection are rejected.
 The artifact records `scope: backend`, the inventory fingerprint and each
@@ -613,7 +613,7 @@ Complete backend declarations may reference only backend test files and tiers.
 For WORK01, the real API integration test is the backend declaration; its
 browser test remains part of the unscoped declaration. A named API smoke test
 does not promote any other ID without a reviewed complete-case declaration.
-`yarn qa --backend --record` requires a clean source, full six-tier pass and
+`task qa -- --backend --record` requires a clean source, full six-tier pass and
 zero failed, partial or uncovered retained backend IDs. It writes the
 qualification page from that same run only when every gate passes.
 
@@ -631,7 +631,7 @@ for that run; do not copy passes from an older source snapshot. Early batches
 report future scope as uncovered; final Goal completion requires all retained
 backend cases in the explicit backend inventory.
 
-When complete case coverage exists, `yarn qa --record` will run all tiers once and regenerate the
+When complete case coverage exists, `task qa -- --record` will run all tiers once and regenerate the
 [qualification page](../plan/qualification.md) from that same full passing run on
 a clean source tree. Source identity is checked before writing the generated
 page; that output is the only permitted tracked change made by recording. Commit

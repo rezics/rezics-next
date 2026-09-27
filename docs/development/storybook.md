@@ -18,7 +18,7 @@ whole application server or establish human usability/performance acceptance.
 ## Agent access through MCP
 
 Storybook 11's `@storybook/addon-mcp` serves an MCP endpoint at
-`http://127.0.0.1:6006/mcp` while `yarn storybook` runs, with the components
+`http://127.0.0.1:6006/mcp` while `task storybook` runs, with the components
 manifest enabled. Its tools list and show component documentation
 (`docs-list`, `docs-show`, `docs-show-story`), give story-writing instructions,
 find stories by component file or change, return preview URLs and run story tests

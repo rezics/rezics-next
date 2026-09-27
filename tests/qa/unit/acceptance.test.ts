@@ -69,7 +69,7 @@ test('QA06: failure rerun selects failed names without borrowing prior passes', 
       'services/main/tests/api-contract.test.ts', '-t',
       '^.*(?:successful, pending and public query envelopes validate)$',
     ]);
-    expect(testArgs('unit')).toEqual(['tests/qa/unit', 'scripts/dev/bootstrap.test.ts',
+    expect(testArgs('unit')).toEqual(['tests/qa/unit',
       'scripts/dev/config.test.ts', 'services/main/tests/command.test.ts',
       'services/main/tests/work-command.test.ts', 'services/main/tests/content-eligibility.test.ts',
       'services/main/tests/content-projection-runtime.test.ts',

@@ -101,7 +101,7 @@ let started = false;
 let failure: string | undefined;
 try {
   if (existsSync(join(root, '.temp', 'qa-full.lock')))
-    throw new Error('A full yarn qa run is active; reserve the host for this load profile');
+    throw new Error('A full task qa run is active; reserve the host for this load profile');
   let baselineFile: string | undefined;
   if (fixtureRunId) {
     const restored = JSON.parse(readFileSync(join(root, '.artifacts', 'fixture-restore',
@@ -120,7 +120,7 @@ try {
     if (!searchProbe && duration === 180 && (manifest.entities.publicUnits ?? 0) + works >= 10_000) {
       evidence.qualification = 'practical-profile';
     }
-    record('fixture-stack-status', command(root, 'corepack', ['yarn', 'stack:status', '--profile', 'qa',
+    record('fixture-stack-status', command(root, 'bun', ['scripts/dev/cli.ts', 'stack:status', '--profile', 'qa',
       '--run-id', fixtureRunId, '--persistent'], 10_000));
   } else if (from && cohort) {
     const sourceArtifacts = join(root, '.artifacts', 'load', from);
@@ -134,11 +134,11 @@ try {
       allowCompatibleSource);
     evidence.baselineSource = sourceRun.source;
     evidence.baselineDigest = digest;
-    record('stack-clone', command(root, 'corepack', ['yarn', 'stack:clone', '--profile', 'qa',
+    record('stack-clone', command(root, 'bun', ['scripts/dev/cli.ts', 'stack:clone', '--profile', 'qa',
       '--run-id', from, '--persistent', '--to-run-id', runId], 1_200_000));
   } else {
-    record('stack-up', command(root, 'corepack',
-      ['yarn', 'stack:up', '--profile', 'qa', '--run-id', runId, '--persistent'], 180_000));
+    record('stack-up', command(root, 'bun',
+      ['scripts/dev/cli.ts', 'stack:up', '--profile', 'qa', '--run-id', runId, '--persistent'], 180_000));
   }
   started = !fixtureRunId;
   const image = fusekiImageFromCompose(readFileSync(join(root, 'infra/dev/compose.yaml'), 'utf8')).image;
@@ -190,8 +190,8 @@ try {
   failure = error instanceof Error ? error.message : String(error);
 } finally {
   if (started && !keep) {
-    const down = command(root, 'corepack',
-      ['yarn', prepare && !failure ? 'stack:down' : 'stack:reset', '--profile', 'qa',
+    const down = command(root, 'bun',
+      ['scripts/dev/cli.ts', prepare && !failure ? 'stack:down' : 'stack:reset', '--profile', 'qa',
         '--run-id', runId, '--persistent'], 180_000);
     writeFileSync(join(artifacts, prepare && !failure ? 'stack-down.log' : 'stack-reset.log'), down.output);
     evidence[prepare && !failure ? 'stackDownMs' : 'stackResetMs'] = down.elapsedMs;

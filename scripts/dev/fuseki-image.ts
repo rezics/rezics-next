@@ -65,7 +65,7 @@ export function stampFusekiImage(root: string, check: boolean): void {
   const expected = fusekiImageTag(root);
   stampReleaseManifest(root, expected, check);
   if (current === expected) return;
-  if (check) throw new Error(`Generated artifact differs: ${composeFile} Fuseki image ${current}, expected ${expected}; run yarn gen`);
+  if (check) throw new Error(`Generated artifact differs: ${composeFile} Fuseki image ${current}, expected ${expected}; run task gen`);
   lines[index] = `    image: ${expected}`;
   writeFileSync(path, lines.join('\n'));
 }
@@ -81,6 +81,6 @@ function stampReleaseManifest(root: string, image: string, check: boolean): void
   const next = text.replace(/^(    fuseki: )'[^']*',$/m, `$1'${image}',`)
     .replace(/^(  fusekiModule: )'[^']*',$/m, `$1'${module}',`);
   if (next === text) return;
-  if (check) throw new Error(`Generated artifact differs: ${releaseManifestFile} Fuseki pin; run yarn gen`);
+  if (check) throw new Error(`Generated artifact differs: ${releaseManifestFile} Fuseki pin; run task gen`);
   writeFileSync(path, next);
 }

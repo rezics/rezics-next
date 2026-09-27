@@ -10,6 +10,7 @@ import { migrateFixtureOwners } from '../fixture/migrate.ts';
 import { ownerReady } from '../load/restore.ts';
 import { projectName, readEnv, stackDirectory, type StackOptions } from './config.ts';
 import { assertReleasePins, releaseDigest, releaseManifest } from './release-manifest.ts';
+import { scriptCommand } from './commands.ts';
 
 const root = resolve(import.meta.dir, '../..');
 const markerName = 'release-format.json';
@@ -43,7 +44,7 @@ export function saveFormatMarker(options: StackOptions, marker: FormatMarker): v
 }
 
 function command(args: string[], timeout: number): string {
-  const result = spawnSync('corepack', ['yarn', ...args], { cwd: root, encoding: 'utf8', timeout });
+  const result = spawnSync(...scriptCommand(args), { cwd: root, encoding: 'utf8', timeout });
   if (result.error || result.status !== 0) {
     throw new Error(`yarn ${args[0]} failed: ${(result.stderr || result.stdout || result.error?.message || '').slice(-1500)}`);
   }
@@ -55,7 +56,7 @@ function fusekiImageId(): string {
     { cwd: root, encoding: 'utf8', timeout: 10_000 });
   const id = result.stdout.trim();
   if (result.error || result.status !== 0 || !/^sha256:[0-9a-f]{64}$/.test(id)) {
-    throw new Error('Pinned Fuseki image is absent; run yarn toolchain:install');
+    throw new Error('Pinned Fuseki image is absent; run task toolchain:install');
   }
   return id;
 }

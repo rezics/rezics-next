@@ -7,14 +7,6 @@
       "types": "./src/app.ts"
     }
   },
-  "scripts": {
-    "dev": "bun --watch src/index.ts",
-    "start": "bun src/index.ts",
-    "relay": "bun src/relay.ts",
-    "relay:init": "bun src/relay-init.ts",
-    "typecheck": "tsc --noEmit",
-    "test": "bun test"
-  },
   "dependencies": {
     "@js-temporal/polyfill": "0.5.1",
     "aws4fetch": "1.0.20",

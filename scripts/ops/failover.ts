@@ -130,7 +130,7 @@ export async function restoreRecoveryCut(id: string, target: StackOptions): Prom
       { mode: 0o600, flag: 'wx' });
     recordHostCut(target, id);
   } catch (error) {
-    const result = spawnSync('corepack', ['yarn', 'stack:reset', '--profile', 'qa', '--run-id', target.runId!, '--persistent'],
+    const result = spawnSync('bun', ['scripts/dev/cli.ts', 'stack:reset', '--profile', 'qa', '--run-id', target.runId!, '--persistent'],
       { cwd: root, encoding: 'utf8', timeout: 120_000 });
     if (result.status !== 0) for (const kind of kinds) {
       const volume = `${targetName}_${kind}`;

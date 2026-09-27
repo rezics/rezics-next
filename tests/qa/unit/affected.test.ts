@@ -31,7 +31,7 @@ test('a changed module selects every test that reaches it and routes each to its
     'fault/recovery': ['tests/qa/fault-recovery/access-restore.test.ts'] });
   expect(result.deferred).toEqual([
     { file: 'services/main/tests/recovery.integration.test.ts', reason: 'legacy host-Jena test outside the QA registry' },
-    { file: 'tests/qa/load/practical.test.ts', reason: 'capacity tier; run explicitly with yarn test <file>' },
+    { file: 'tests/qa/load/practical.test.ts', reason: 'capacity tier; run explicitly with task test -- <file>' },
   ]);
   expect(result.widened).toEqual([]);
 });
@@ -64,7 +64,7 @@ test('an unreferenced input fails closed to every registered tier', () => {
   const result = plan(['services/main/data/unknown.bin']);
   expect(result.widened.map(item => item.tier)).toEqual(['unit', 'model', 'integration', 'fault/recovery']);
   expect(affectedCommands(result).map(item => item.command)).toEqual(
-    ['unit', 'model', 'integration', 'fault/recovery'].map(tier => ['corepack', ['yarn', 'qa', '--tier', tier]]));
+    ['unit', 'model', 'integration', 'fault/recovery'].map(tier => ['bun', ['scripts/qa/cli.ts', '--tier', tier]]));
 });
 
 test('a widened unit tier still runs affected unit tests outside the registered tier', () => {
@@ -72,7 +72,7 @@ test('a widened unit tier still runs affected unit tests outside the registered 
   // tests/qa/unit is registered, so only the service test runs separately.
   expect(result.tests.unit).toEqual(['services/main/tests/rating.test.ts']);
   expect(affectedCommands(result).slice(0, 2).map(item => item.command)).toEqual([
-    ['corepack', ['yarn', 'qa', '--tier', 'unit']], ['bun', ['test', './services/main/tests/rating.test.ts']]]);
+    ['bun', ['scripts/qa/cli.ts', '--tier', 'unit']], ['bun', ['test', './services/main/tests/rating.test.ts']]]);
 });
 
 test('data files, deleted modules and spawned scripts reach tests without import edges', () => {
@@ -114,10 +114,10 @@ test('affected commands run unit files directly and stack tiers through the QA h
   const result = plan(['services/main/src/access.ts', 'services/main/src/rating.ts']);
   expect(affectedCommands(result).map(item => item.command)).toEqual([
     ['bun', ['test', './services/main/tests/rating.test.ts']],
-    ['corepack', ['yarn', 'qa', '--tier', 'integration', '--file', 'tests/qa/integration/access-api.test.ts']],
-    ['corepack', ['yarn', 'qa', '--tier', 'fault/recovery', '--file', 'tests/qa/fault-recovery/access-restore.test.ts']],
+    ['bun', ['scripts/qa/cli.ts', '--tier', 'integration', '--file', 'tests/qa/integration/access-api.test.ts']],
+    ['bun', ['scripts/qa/cli.ts', '--tier', 'fault/recovery', '--file', 'tests/qa/fault-recovery/access-restore.test.ts']],
   ]);
   expect(affectedCommands(plan(['services/main/migrations/access/020_roles.sql'])).map(item => item.command))
-    .toEqual([['corepack', ['yarn', 'qa', '--tier', 'integration']],
-      ['corepack', ['yarn', 'qa', '--tier', 'fault/recovery']]]);
+    .toEqual([['bun', ['scripts/qa/cli.ts', '--tier', 'integration']],
+      ['bun', ['scripts/qa/cli.ts', '--tier', 'fault/recovery']]]);
 });

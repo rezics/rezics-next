@@ -75,7 +75,7 @@ active publication if either reviewed native profile is absent. A successful
 live eligibility decision and MatchUnit projection have an isolated native
 integration check. Broader Content erasure/GC and restore qualification remain.
 
-`yarn search:rebuild` is a controlled development-stack or isolated persistent-QA
+`task search:rebuild` is a controlled development-stack or isolated persistent-QA
 maintenance operation. The latter uses `--profile qa --run-id <id> --persistent`
 after starting that project with the same options; ordinary QA tmpfs is rejected.
 Stop Main and other writers first. A maintenance-token-only native command

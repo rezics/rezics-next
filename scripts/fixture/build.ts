@@ -40,7 +40,7 @@ export async function buildFixture(profile: FixtureProfile, seed?: string): Prom
   return withBuildLock(id, async () => {
     const existing = readManifest(id);
     if (existing) {
-      console.log(`Fixture ${id} is already built; restore it with yarn fixture:restore --fixture ${id}`);
+      console.log(`Fixture ${id} is already built; restore it with task fixture:restore -- --fixture ${id}`);
       return existing;
     }
     return buildLocked(docker, corpus, core, planMs);

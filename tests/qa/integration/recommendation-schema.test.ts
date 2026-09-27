@@ -106,7 +106,7 @@ let seededPrincipal = '';
 beforeAll(async () => {
   const runId = Bun.env.REZICS_QA_RUN_ID;
   if (!runId || !/^[a-z0-9][a-z0-9-]{0,30}$/.test(runId)) {
-    throw new Error('Run through yarn test so the QA project provides REZICS_QA_RUN_ID');
+    throw new Error('Run through task test so the QA project provides REZICS_QA_RUN_ID');
   }
   const compose = readEnv(join(root, '.temp', 'stack', `rezics-qa-${runId}`, 'compose.env'));
   adminUrl = `postgres://postgres:${encodeURIComponent(compose.POSTGRES_PASSWORD!)}@127.0.0.1:${compose.POSTGRES_PORT}/postgres`;

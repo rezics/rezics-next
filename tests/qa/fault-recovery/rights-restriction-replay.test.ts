@@ -12,13 +12,14 @@ import { GovernanceStore, type DecisionInput, type ReportInput } from '../../../
 import { initializeFreshGraph } from '../../../services/main/src/modules/work/activate.ts';
 import { cutoverRestoredGraphLineage } from '../../../services/main/src/modules/work/restore-lineage.ts';
 import { readEnv, stackDirectory } from '../../../scripts/dev/config.ts';
+import { scriptCommand } from '../../../scripts/dev/commands.ts';
 
 const root = resolve(import.meta.dir, '../../..');
 const digest = (value: string) => createHash('sha256').update(value).digest('hex');
 const agent = () => `https://rezics.com/id/${randomUUID()}`;
 
 function rootCommand(args: string[], timeout: number): string {
-  const result = spawnSync('corepack', ['yarn', ...args], { cwd: root,
+  const result = spawnSync(...scriptCommand(args), { cwd: root,
     encoding: 'utf8', timeout, maxBuffer: 2_000_000 });
   if (result.status !== 0 || result.error) {
     throw new Error(`yarn ${args[0]} failed: ${(result.stderr || result.stdout

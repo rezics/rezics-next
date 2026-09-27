@@ -1,4 +1,4 @@
-/** Disposable graph architecture comparison. Run only through yarn research:architecture graph. */
+/** Disposable graph architecture comparison. Run only through task research:architecture graph. */
 import { closeSync, openSync } from 'node:fs';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';

@@ -30,7 +30,7 @@ found late, rather than to running commands.
 
 | Candidate | Reason | Revisit when |
 | --- | --- | --- |
-| Task/go-task | Its value is skipping file-fingerprinted steps. The only long cacheable step, the Fuseki image, is now content-addressed; the Yarn facade already serves as the one command surface. | Several long, cacheable build steps exist, or `toolchain:install` becomes a measured bottleneck. |
+| Task/go-task (superseded 2026-09-27, [below](#task-and-aspire-adopted-2026-09-27)) | Its value is skipping file-fingerprinted steps. The only long cacheable step, the Fuseki image, is now content-addressed; the Yarn facade already serves as the one command surface. | Several long, cacheable build steps exist, or `toolchain:install` becomes a measured bottleneck. |
 | Nx, Turbo, moon | Task graphs and caches work per workspace; backend tests run through shared QA stack tiers instead, so workspace-level affected detection selects too much. | CI time is dominated by independent per-workspace builds. |
 | mise | `toolchain:install` already checks the Bun, Node and Docker versions; oracle toolchains are pinned by archive digest. | The product needs more host runtimes than those checks cover. |
 | Lefthook | Hooks on every commit would slow Goal worker commits in worktrees and duplicate the manager's once-per-wave checks. | Commits with failing static checks reach `main`. |
@@ -49,3 +49,39 @@ image carries the TDB2 commands and preserve the owner receipts that restore
 checks compare. `services/main/src/app.ts` has grown to about 5,500 lines, so
 splitting it by operation family would shrink the context each worker must read.
 That split is a refactor, not a tool.
+
+## Task and Aspire adopted (2026-09-27)
+
+The frontend phase changed both premises above. Many parallel workers will need
+the whole application running (storage, Account, Main, the web app and
+Storybook with its MCP endpoint) and will lose time finding which of several
+processes failed. The maintainer also chose to make Task the only command
+facade, with Yarn reduced to dependencies and workspaces, which removes the
+objection to a second entry point.
+
+- **Task 3.53.1** replaces every `package.json` script. It adds per-command
+  descriptions that agents list with `task --list`, argument passing after
+  `--`, checksum-based skipping for generated steps (`aspire:restore` first) and
+  removes the Yarn plugin that existed only because Yarn cannot run scripts
+  before its first install. go-task was chosen over just (no up-to-date
+  checks), mise (overlaps the runtime checks in `toolchain:install`) and moon
+  (a workspace build system, rejected for the same reason as Nx and Turbo).
+- **Aspire 13.5.4** with a TypeScript AppHost runs the development processes.
+  `scripts/dev` keeps storage ownership; a new `dev:prepare` step writes the
+  application environment and Aspire starts the processes. A probe on this host
+  measured about 11 seconds for storage preparation and 9 seconds for the
+  AppHost, with Account, Main, web and Storybook healthy. Two AppHosts in
+  different directories ran side by side with `--isolated`. Aspire's agent MCP
+  server exposed 14 tools, listed every running AppHost, hid environment values
+  and returned console logs; `aspire logs web` identified a failing process in
+  one call. Structured logs and traces stay empty until Main and Account export
+  OpenTelemetry.
+- The maintainer's direction is one shared backend: the dev profile serves it on
+  fixed ports through Aspire's proxy, and worktrees usually run only the web
+  dev server or Storybook against it.
+
+Constraints found while adopting them: running `aspire start` again for the
+same AppHost path replaces the running instance; vinext allows one dev server
+per directory; Aspire detects Yarn only when the AppHost directory sits directly
+under the root that declares `packageManager`; and the npm shim for the Aspire
+CLI has a CRLF shebang, so it is started through Node.

@@ -70,7 +70,7 @@ or external tools). The maintainer may update docs at any time; adapt as the
 program describes.
 ```
 
-`/goal` may wrap the same text with the completion condition "`yarn qa --backend
+`/goal` may wrap the same text with the completion condition "`task qa --backend
 --record` passed on a clean tree and the final report is written, or the
 25-hour outer bound is reached and the final report is written".
 
@@ -106,9 +106,9 @@ recovery manifests) come first because every domain depends on them. The
    that follow a verified template, mostly at medium effort. A bundle closes
    every assertion of its cases or names the missing one as partial.
 5. **Phase D, unified testing.** Freeze new subsystems, rehearse fresh
-   construction and fixture restore, run one full `yarn qa --backend` on the
+   construction and fixture restore, run one full `task qa -- --backend` on the
    integrated source, repair in one queue, then one clean
-   `yarn qa --backend --record` and the final report.
+   `task qa -- --backend --record` and the final report.
 
 ## Worker processes
 
@@ -129,7 +129,7 @@ main checkout:
 | `merge G-NNN [--allow-scope]` | Requires an exited worker, a clean worktree and in-scope files; rebases the branch onto `main` and fast-forwards `main`. A conflict marks the task `conflict` for the worker to resolve. |
 | `close G-NNN verified|cancelled` | Removes the worktree and releases the claims. |
 | `status` / `usage` | Live workers, states, elapsed time, the usage level, burn rate and projected usage at reset. |
-| `test <yarn test args>` / `slot -- <cmd>` | Runs a check inside one of the shared QA slots. |
+| `test <task test -- args>` / `slot -- <cmd>` | Runs a check inside one of the shared QA slots. |
 
 The lifecycle is dispatch, background `wait`, handoff, then merge or resume,
 and finally close after the wave verifies it. Workers follow the
@@ -188,7 +188,7 @@ Duplicate work is prevented mechanically:
   concurrent QA stacks (default 8 slots, `GOAL_QA_SLOTS`).
 - Every 30–45 minutes, or sooner when handoffs accumulate, the manager runs an
   integration wave: merge ready tasks one at a time, regenerate derived artifacts
-  once (`yarn gen`), run `yarn check:backend` once and one
+  once (`task gen`), run `task check:backend` once and one
   `goalctl test --affected <wave base>` run, then commit plan status. Failures
   return to the responsible session through `resume`; unrelated passing tasks
   are closed as verified.
@@ -198,7 +198,7 @@ Duplicate work is prevented mechanically:
 - Run wave tests from a pinned wave worktree at the wave commit, not the main
   checkout: the harness aborts with `Source changed during QA run` when manager
   commits land during the run (observed in the first wave).
-- Only the manager runs full `yarn qa --backend` or `--record`, each once per
+- Only the manager runs full `task qa -- --backend` or `--record`, each once per
   distinct source as the [batch cadence](../plan/execution-workflow.md#batch-cadence)
   allows.
 
@@ -259,7 +259,7 @@ including during the run. Treat those changes as authoritative input:
   include them intact and say so in the commit message.
 - Workers branch from committed `main`, so uncommitted edits do not reach them.
   When maintainer edits have stayed unchanged for a checkpoint interval and
-  `yarn docs:check` passes, commit them as a separate "Adopt maintainer
+  `task docs:check` passes, commit them as a separate "Adopt maintainer
   documentation update" commit before dispatching briefs that depend on them.
 
 ## Environment ownership

@@ -1,5 +1,5 @@
 # ast-grep project: code-shape rules that import graphs and Biome cannot express.
-# Run through `yarn ast-grep scan`; rule tests run with `yarn ast-grep test`.
+# Run through `task ast-grep scan`; rule tests run with `task ast-grep test`.
 ruleDirs:
   - scripts/static/ast-grep/rules
 testConfigs:

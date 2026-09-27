@@ -36,7 +36,7 @@ distinguish acquisition, conversion, native mapping and export outcomes.
 
 The [executable harness](test-harness.md) turns these cases into tests named by
 acceptance ID and records each run's commit, configuration, host, seeds, outcomes
-and failures. `yarn qa --record` publishes per-ID status on the
+and failures. `task qa -- --record` publishes per-ID status on the
 [qualification page](../plan/qualification.md). This design collection contains
 acceptance contracts, not an implementation progress archive. Unexecuted, skipped, unavailable
 and failed are never a pass. Documentation checks prove links/structure only.

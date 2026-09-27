@@ -278,7 +278,7 @@ export async function generateMainOpenApi(root: string, check: boolean): Promise
     let actual: string;
     try { actual = readFileSync(path, 'utf8'); }
     catch { throw new Error(`Missing generated artifact: ${artifact}`); }
-    if (actual !== expected) throw new Error(`Generated artifact differs: ${artifact}; run yarn gen`);
+    if (actual !== expected) throw new Error(`Generated artifact differs: ${artifact}; run task gen`);
   } else {
     mkdirSync(dirname(path), { recursive: true });
     writeFileSync(path, expected);

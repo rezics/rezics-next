@@ -21,31 +21,35 @@ and the first PostgreSQL Content owner. Phase 0 provides a pinned local stack
 and a shared QA runner. The web client, Content-to-Main binding and complete
 qualification remain in the [plan](docs/plan/README.md#current-state).
 
-From a fresh checkout with the [pinned runtimes and Docker-compatible daemon](docs/development/toolchain.md), run:
+From a fresh checkout with the [pinned runtimes and Docker-compatible daemon](docs/development/toolchain.md)
+and [Task](https://taskfile.dev) 3.53.1 installed, run:
 
 ```sh
-yarn toolchain:install
-yarn dev
+task toolchain:install
+task dev
 ```
 
-`yarn dev` starts the stack, applies Account/Access/relay migrations, initializes
-the graph on first use, and starts Account and Main on loopback. It also starts
-the web workspace when present. In another
-terminal, inspect the local project with `yarn stack:status`. Stop `yarn dev`
-with Ctrl-C, then stop its service containers with:
+`task dev` starts the storage stack, applies Account/Access/relay migrations,
+initializes the graph on first use, then starts Account, Main, the web app and
+Storybook under [Aspire](https://aspire.dev) in the background: web on
+<http://localhost:3000>, Main on 3001, Account on 3002 and Storybook on 6006. It
+prints the Aspire dashboard URL; `task aspire -- describe` and
+`task aspire -- logs <resource>` show state and logs, and `task --list` lists every
+command. Stop the processes, then the service containers, with:
 
 ```sh
-yarn stack:down
+task dev:stop
+task stack:down
 ```
 
 The [installation guide](docs/operations/installation.md) covers readiness,
-private configuration, isolated QA runs and cleanup. `yarn qa` exercises its
+private configuration, isolated QA runs and cleanup. `task qa` exercises its
 implemented tiers in disposable projects; passing it currently leaves many
 retained acceptance IDs uncovered. See the [plan's current state](docs/plan/README.md#current-state)
 and the [qualification page](docs/plan/qualification.md) for results and remaining gates.
 
 - [Toolchain lock](docs/development/toolchain.md): every tool, version, local
-  service and root command (`yarn dev`, `yarn check`, `yarn qa`).
+  service and root command (`task dev`, `task check`, `task qa`).
 - [Executable test harness](docs/testing/test-harness.md): implemented tiers,
   uncovered cases and final recording contract.
 

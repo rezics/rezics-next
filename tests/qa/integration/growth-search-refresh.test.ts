@@ -32,8 +32,8 @@ import { contextFixture, nativeId } from './context-fixture.ts';
 const repositoryRoot = resolve(import.meta.dir, '../../..');
 function stack(action: 'stack:up' | 'stack:reset', runId: string) {
   const result = spawnSync(
-    'corepack',
-    ['yarn', action, '--profile', 'qa', '--run-id', runId, '--persistent'],
+    'bun',
+    ['scripts/dev/cli.ts', action, '--profile', 'qa', '--run-id', runId, '--persistent'],
     { cwd: repositoryRoot, encoding: 'utf8', timeout: 180_000, maxBuffer: 2_000_000 },
   );
   if (result.status !== 0 || result.error) {

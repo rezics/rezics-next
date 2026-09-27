@@ -1,0 +1,364 @@
+# Rezics command facade. Every developer and agent command runs through Task;
+# Yarn only installs dependencies and manages workspaces. Pass extra arguments
+# after `--`, for example `task qa -- --backend --record`.
+version: '3'
+
+set: [pipefail]
+
+env:
+  ASPIRE_CLI_TELEMETRY_OPTOUT: '1'
+
+vars:
+  ASPIRE: node {{.ROOT_DIR}}/node_modules/@microsoft/aspire-cli/bin/aspire.js
+
+tasks:
+  default:
+    desc: List the available commands.
+    silent: true
+    cmds:
+      - task --list
+
+  # Setup
+
+  install:
+    desc: Install the pinned workspace dependencies from the lockfile.
+    cmds:
+      - corepack yarn install --immutable
+
+  toolchain:install:
+    desc: From a clean clone, install dependencies, check runtimes, pull images, build Fuseki and install Chromium.
+    cmds:
+      - corepack yarn install --immutable
+      - bun scripts/dev/cli.ts toolchain:install
+
+  # Local development
+
+  dev:
+    desc: Prepare the stack and start Account, Main, web and Storybook under Aspire (fixed ports 3002, 3001, 3000, 6006).
+    deps: [aspire:restore]
+    cmds:
+      - bun scripts/dev/cli.ts dev {{.CLI_ARGS}}
+
+  dev:stop:
+    desc: Stop the Aspire AppHost; an isolated QA profile also removes its stack.
+    cmds:
+      - bun scripts/dev/cli.ts dev:stop {{.CLI_ARGS}}
+
+  dev:prepare:
+    desc: Start storage, apply migrations and write the application environment without starting processes.
+    cmds:
+      - bun scripts/dev/cli.ts dev:prepare {{.CLI_ARGS}}
+
+  aspire:
+    desc: Run the pinned Aspire CLI against the dev AppHost (describe, logs, wait, agent mcp, ...).
+    cmds:
+      - '{{.ASPIRE}} {{.CLI_ARGS}}'
+
+  aspire:restore:
+    desc: Generate the TypeScript AppHost SDK for the pinned Aspire version.
+    sources: [aspire.config.json]
+    generates: [apphost/.aspire/modules/aspire.mts]
+    cmds:
+      - '{{.ASPIRE}} restore --non-interactive --nologo'
+
+  stack:up:
+    desc: Start the Compose storage stack and print its endpoints.
+    cmds:
+      - bun scripts/dev/cli.ts stack:up {{.CLI_ARGS}}
+
+  stack:down:
+    desc: Stop the Compose storage stack and keep its data.
+    cmds:
+      - bun scripts/dev/cli.ts stack:down {{.CLI_ARGS}}
+
+  stack:reset:
+    desc: Stop the Compose storage stack and remove its volumes.
+    cmds:
+      - bun scripts/dev/cli.ts stack:reset {{.CLI_ARGS}}
+
+  stack:logs:
+    desc: Print recent Compose service logs.
+    cmds:
+      - bun scripts/dev/cli.ts stack:logs {{.CLI_ARGS}}
+
+  stack:status:
+    desc: Show Compose service status.
+    cmds:
+      - bun scripts/dev/cli.ts stack:status {{.CLI_ARGS}}
+
+  stack:backup:
+    desc: OPS03 fixture only; take a physical PostgreSQL backup of a disposable owner-cut QA stack.
+    cmds:
+      - bun scripts/dev/cli.ts stack:backup {{.CLI_ARGS}}
+
+  stack:clone:
+    desc: Copy a stopped persistent load stack into a new isolated QA project.
+    cmds:
+      - bun scripts/dev/cli.ts stack:clone {{.CLI_ARGS}}
+
+  # Web
+
+  web:dev:
+    desc: Run the web dev server alone against the shared `task dev` backend on its fixed ports (use -- --port <n> in a worktree).
+    dir: apps/web
+    env:
+      MAIN_ORIGIN: '{{.MAIN_ORIGIN | default "http://127.0.0.1:3001"}}'
+      ACCOUNT_ORIGIN: '{{.ACCOUNT_ORIGIN | default "http://127.0.0.1:3002"}}'
+      MAIN_RESOURCE: '{{.MAIN_RESOURCE | default "https://main.rezics.test"}}'
+    cmds:
+      - ../../node_modules/.bin/vinext dev --host 127.0.0.1 {{.CLI_ARGS}}
+
+  web:build:
+    desc: Build the vinext Workers application.
+    dir: apps/web
+    cmds:
+      - ../../node_modules/.bin/vinext build
+
+  web:preview:
+    desc: Build the web Worker for a running QA stack and serve it with wrangler on port 3003.
+    cmds:
+      - bun scripts/dev/web-preview.ts {{.CLI_ARGS}}
+
+  web:e2e:
+    desc: Run Playwright journeys against the running web preview.
+    cmds:
+      - node_modules/.bin/playwright test --config apps/web/playwright.config.ts {{.CLI_ARGS}}
+
+  web:typecheck:
+    desc: Type-check the web workspace.
+    dir: apps/web
+    cmds:
+      - ../../node_modules/.bin/tsc --noEmit -p tsconfig.json
+
+  storybook:
+    desc: Run Storybook on port 6006 with its MCP endpoint at /mcp.
+    dir: apps/web
+    cmds:
+      - ../../node_modules/.bin/storybook dev -p 6006 --host 127.0.0.1 --no-open {{.CLI_ARGS}}
+
+  storybook:build:
+    desc: Build static Storybook into .temp/storybook/static.
+    dir: apps/web
+    cmds:
+      - ../../node_modules/.bin/storybook build --output-dir ../../.temp/storybook/static
+
+  storybook:test:
+    desc: Run Storybook stories as Vitest browser tests with accessibility checks.
+    dir: apps/web
+    cmds:
+      - ../../node_modules/.bin/vitest run --project storybook {{.CLI_ARGS}}
+
+  ui:typecheck:
+    desc: Type-check Rezics UI.
+    dir: packages/ui
+    cmds:
+      - ../../node_modules/.bin/tsc --noEmit -p tsconfig.json
+
+  # Checks and tests
+
+  check:
+    desc: Run every static gate (types, generated contracts, docs, lint, format, code shape, unused files, imports).
+    cmds:
+      - bun scripts/research/storage_architecture/check.ts {{.CLI_ARGS}}
+
+  check:backend:
+    desc: Run the static gates without UI and web sources.
+    cmds:
+      - bun scripts/research/storage_architecture/check.ts --backend {{.CLI_ARGS}}
+
+  check:unused:
+    desc: Report unused files, dependencies and exports with Knip.
+    cmds:
+      - bun scripts/static/knip.ts {{.CLI_ARGS}}
+
+  ast-grep:
+    desc: Run the pinned ast-grep binary (scan or test) with sgconfig.yml.
+    cmds:
+      - node_modules/.bin/ast-grep {{.CLI_ARGS}}
+
+  docs:check:
+    desc: Check documentation links, fragments and navigation.
+    cmds:
+      - bun scripts/research/storage_architecture/docs-check.ts {{.CLI_ARGS}}
+
+  test:
+    desc: Run explicit test files or the affected plan (-- --affected [<base>] [--list]).
+    cmds:
+      - bun scripts/qa/test.ts {{.CLI_ARGS}}
+
+  qa:
+    desc: Run the QA harness tiers (-- --backend, --tier, --record, ...).
+    cmds:
+      - bun scripts/qa/cli.ts {{.CLI_ARGS}}
+
+  qa:replay:
+    desc: Replay one property or model test with a logged seed.
+    cmds:
+      - bun scripts/qa/replay.ts {{.CLI_ARGS}}
+
+  api:fuzz:
+    desc: Run Schemathesis against Main's generated OpenAPI contract on an isolated stack.
+    cmds:
+      - bun scripts/qa/api-fuzz.ts {{.CLI_ARGS}}
+
+  gen:
+    desc: Regenerate model, OpenAPI and pinned-image artifacts.
+    cmds:
+      - bun scripts/generate.ts
+
+  gen:check:
+    desc: Fail if generated artifacts are stale.
+    cmds:
+      - bun scripts/generate.ts --check
+
+  # Data, load and operations
+
+  fixture:build:
+    desc: Build a deterministic background corpus into owner storage.
+    cmds:
+      - bun scripts/fixture/cli.ts build {{.CLI_ARGS}}
+
+  fixture:restore:
+    desc: Restore a fixture backup into a new persistent QA stack.
+    cmds:
+      - bun scripts/fixture/cli.ts restore {{.CLI_ARGS}}
+
+  fixtures:pull:
+    desc: Replay verified factual fixtures from the cache or committed seed.
+    cmds:
+      - bun scripts/fixtures/pull.ts {{.CLI_ARGS}}
+
+  load:
+    desc: Run the mixed host load profile.
+    cmds:
+      - bun scripts/load/cli.ts {{.CLI_ARGS}}
+
+  load:prepare:
+    desc: Build a reusable command-created load baseline.
+    cmds:
+      - bun scripts/load/cli.ts --prepare {{.CLI_ARGS}}
+
+  load:clone-probe:
+    desc: Probe a cloned load stack for isolation and fresh commands.
+    cmds:
+      - bun scripts/load/clone-probe.ts {{.CLI_ARGS}}
+
+  release:build:
+    desc: Package a content-addressed local release artifact.
+    cmds:
+      - bun scripts/dev/release-artifact.ts build {{.CLI_ARGS}}
+
+  release:install:
+    desc: Verify a release artifact and provision a project from it.
+    cmds:
+      - bun scripts/dev/release-artifact.ts install {{.CLI_ARGS}}
+
+  search:rebuild:
+    desc: Rebuild the public search index on a stopped-writer stack.
+    cmds:
+      - bun scripts/operations/rebuild-content-search.ts {{.CLI_ARGS}}
+
+  access:pending-search:
+    desc: List unresolved private search deliveries (needs ACCESS_DATABASE_URL).
+    cmds:
+      - bun services/main/src/private-search-pending.ts {{.CLI_ARGS}}
+
+  research:architecture:
+    desc: Run the storage architecture research lab.
+    cmds:
+      - bun scripts/research/storage_architecture/lab.ts {{.CLI_ARGS}}
+
+  # Package oracles
+
+  package:go-oracle:
+    desc: Compare Go module resolution with the pinned native Go.
+    cmds:
+      - bun scripts/package/go-oracle.ts {{.CLI_ARGS}}
+
+  package:go-probe:
+    desc: Run the Go provider probe.
+    cmds:
+      - bun scripts/package/go-probe.ts {{.CLI_ARGS}}
+
+  package:go-checksum-oracle:
+    desc: Compare Go checksum provenance with the pinned native Go.
+    cmds:
+      - bun scripts/package/go-checksum-oracle.ts {{.CLI_ARGS}}
+
+  package:cargo-oracle:
+    desc: Compare Cargo resolution with the pinned native Cargo.
+    cmds:
+      - bun scripts/package/cargo-oracle.ts {{.CLI_ARGS}}
+
+  package:npm-oracle:
+    desc: Compare npm lockfile topology with the pinned native npm.
+    cmds:
+      - bun scripts/package/npm-oracle.ts {{.CLI_ARGS}}
+
+  # Services
+
+  account:dev:
+    desc: Run Account in watch mode.
+    cmds:
+      - bun --watch services/account/src/index.ts
+
+  account:test:
+    desc: Run Account unit tests.
+    cmds:
+      - bun test services/account/tests {{.CLI_ARGS}}
+
+  account:typecheck:
+    desc: Type-check Account.
+    dir: services/account
+    cmds:
+      - ../../node_modules/.bin/tsc --noEmit
+
+  content:typecheck:
+    desc: Type-check Content.
+    dir: services/content
+    cmds:
+      - ../../node_modules/.bin/tsc --noEmit
+
+  content:test:
+    desc: Run Content unit tests.
+    dir: services/content
+    cmds:
+      - bun test {{.CLI_ARGS}}
+
+  main:dev:
+    desc: Run Main in watch mode.
+    cmds:
+      - bun --watch services/main/src/index.ts
+
+  main:relay:
+    desc: Run the Main relay.
+    cmds:
+      - bun services/main/src/relay.ts {{.CLI_ARGS}}
+
+  main:relay:init:
+    desc: Initialize the Main relay.
+    cmds:
+      - bun services/main/src/relay-init.ts {{.CLI_ARGS}}
+
+  main:typecheck:
+    desc: Type-check Main.
+    dir: services/main
+    cmds:
+      - ../../node_modules/.bin/tsc --noEmit
+
+  main:test:
+    desc: Run Main unit tests.
+    cmds:
+      - bun test services/main/tests {{.CLI_ARGS}}
+
+  model:typecheck:
+    desc: Type-check the model package.
+    dir: packages/model
+    cmds:
+      - ../../node_modules/.bin/tsc --noEmit
+
+  model:test:
+    desc: Run model package tests.
+    dir: packages/model
+    cmds:
+      - bun test {{.CLI_ARGS}}

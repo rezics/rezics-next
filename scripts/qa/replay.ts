@@ -9,7 +9,7 @@ export function parseReplayArgs(args: string[]): ReplaySelection {
   if (args.length !== 5 || args[0] !== '--seed' || args[3] !== '-t'
     || !/^-?(?:0|[1-9][0-9]*)$/.test(args[1] ?? '')
     || !/^[A-Z][A-Z0-9]*\d{2,}$/.test(args[4] ?? '')) {
-    throw new Error('Usage: yarn qa:replay --seed <signed-32-bit integer> <file> -t <ID>');
+    throw new Error('Usage: task qa:replay -- --seed <signed-32-bit integer> <file> -t <ID>');
   }
   const seed = Number(args[1]);
   if (!Number.isInteger(seed) || seed < -2147483648 || seed > 2147483647) {

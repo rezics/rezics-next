@@ -8,7 +8,7 @@ const testFile = /\.(?:test|spec|e2e)\.[cm]?[jt]sx?$/;
 
 export function selectTestCommand(args: string[]): [string, string[]] {
   const paths = args.filter(arg => testFile.test(arg));
-  if (!paths.length) throw new Error('Provide explicit test file paths or --affected; full-suite execution belongs to yarn qa.');
+  if (!paths.length) throw new Error('Provide explicit test file paths or --affected; full-suite execution belongs to task qa.');
   const files = paths.map(path => {
     const absolute = resolve(root, path);
     const local = relative(root, absolute).replaceAll('\\', '/');
@@ -36,7 +36,7 @@ export function selectTestCommand(args: string[]): [string, string[]] {
     }
     id = other[1];
   }
-  return ['corepack', ['yarn', 'qa', '--tier', model.length ? 'model' : fault.length ? 'fault/recovery' : load.length ? 'load' : e2e.length ? 'e2e' : 'integration',
+  return ['bun', ['scripts/qa/cli.ts', '--tier', model.length ? 'model' : fault.length ? 'fault/recovery' : load.length ? 'load' : e2e.length ? 'e2e' : 'integration',
     ...files.flatMap(file => ['--file', file]), ...(id ? ['--id', id] : [])]];
 }
 
@@ -65,16 +65,16 @@ export function affectedCommands(plan: AffectedPlan): { label: string; command: 
     const widened = plan.widened.some(item => item.tier === tier);
     if (tier === 'unit') {
       // Widened: the registered tier, plus affected unit tests it does not include.
-      if (widened) commands.push({ label: 'unit (whole tier)', command: ['corepack', ['yarn', 'qa', '--tier', 'unit']] });
+      if (widened) commands.push({ label: 'unit (whole tier)', command: ['bun', ['scripts/qa/cli.ts', '--tier', 'unit']] });
       if (files.length) commands.push({ label: `unit (${files.length} files)`,
         command: ['bun', ['test', ...files.map(file => `./${file}`)]] });
       continue;
     }
     if (widened) {
-      commands.push({ label: `${tier} (whole tier)`, command: ['corepack', ['yarn', 'qa', '--tier', tier]] });
+      commands.push({ label: `${tier} (whole tier)`, command: ['bun', ['scripts/qa/cli.ts', '--tier', tier]] });
     } else if (files.length) {
       commands.push({ label: `${tier} (${files.length} files)`,
-        command: ['corepack', ['yarn', 'qa', '--tier', tier, ...files.flatMap(file => ['--file', file])]] });
+        command: ['bun', ['scripts/qa/cli.ts', '--tier', tier, ...files.flatMap(file => ['--file', file])]] });
     }
   }
   return commands;

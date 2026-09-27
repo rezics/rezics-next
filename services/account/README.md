@@ -9,8 +9,8 @@ generates private configuration and applies Account, Access and relay migrations
 before starting Account and Main:
 
 ```sh
-yarn toolchain:install
-yarn dev
+task toolchain:install
+task dev
 ```
 
 The generated values are in private `.temp/stack/rezics-dev/apps.env`. An

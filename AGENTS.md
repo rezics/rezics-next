@@ -3,7 +3,10 @@
 Put task-created temporary files in `.temp/`.
 
 Use only the tools, versions and root commands in `docs/development/toolchain.md`;
-change that page first to add or replace a tool.
+change that page first to add or replace a tool. Run commands through Task
+(`task --list`; arguments after `--`); Yarn only installs dependencies. `task dev`
+serves one shared local backend under Aspire on fixed ports; worktrees normally
+reuse it instead of starting another.
 
 No Goal is active; backend phase 1 finished on 2026-09-27. When the maintainer
 starts a Goal, it runs under `docs/goals/README.md`: one Claude Opus 5.5
@@ -36,8 +39,8 @@ seeding; see `docs/storage/workload-budgets.md#data-preparation-and-import`.
 Write tests with implementation. Workers run only their claimed tests through
 `goalctl test` and relevant static checks; the manager runs affected checks per
 integration wave. Final acceptance performs the clean rebuild and full backend
-verification through `yarn qa --backend --record`. Affected checks use
-`yarn test --affected [<base>]` (`--list` previews the plan); explicit `yarn test`
+verification through `task qa -- --backend --record`. Affected checks use
+`task test -- --affected [<base>]` (`--list` previews the plan); explicit `task test`
 paths and selected backend QA tiers remain for narrower diagnosis. See
 `docs/plan/execution-workflow.md#batch-cadence`.
-Documentation-only batches use `yarn docs:check`.
+Documentation-only batches use `task docs:check`.

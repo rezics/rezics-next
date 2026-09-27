@@ -42,7 +42,10 @@ claim that monorepos are universally faster or easier to operate.
 rezics-next/
 ├── README.md                    # Entry point, setup and links to design owners
 ├── AGENTS.md                    # Repository-wide working rules
-├── package.json / yarn.lock     # TypeScript workspaces and pinned Yarn
+├── package.json / yarn.lock     # TypeScript workspaces and pinned Yarn (no scripts)
+├── Taskfile.yml                 # The command facade (Task)
+├── aspire.config.json           # Pins the Aspire SDK and points at apphost/
+├── apphost/                     # Aspire TypeScript AppHost for local processes
 ├── .yarnrc.yml                  # nodeLinker: node-modules
 ├── Cargo.toml / Cargo.lock      # Only when a native component is implemented
 ├── rust-toolchain.toml          # Only with the native workspace
@@ -287,7 +290,8 @@ profiles and scoped integration tests; the web app, the general model compiler a
 the local service topology are not yet implemented. The [toolchain lock](toolchain.md)
 fixes the concrete homes that Phase 0 creates:
 
-- `infra/dev/compose.yaml` and `infra/dev/postgres/` for local services.
+- `infra/dev/compose.yaml` and `infra/dev/postgres/` for local services, and
+  `apphost/` for the Aspire AppHost that runs the application processes.
 - `infra/jena/` for the Fuseki Dockerfile, the product assembler (moved from
   [its current location](../operations/examples/fuseki-text.ttl)) and the
   `command-module/` Maven project.

@@ -88,7 +88,7 @@ bounded sweep records an armed row as `unconfirmed` only after that window.
 An expired unarmed delivery can be aborted because it never offered a frame.
 The window bounds how long a lost replica can block strong closure and recovery
 reopening, while preserving the possible-delivery record. The operator command
-`yarn access:pending-search` exposes rows awaiting terminal settlement.
+`task access:pending-search` exposes rows awaiting terminal settlement.
 
 The operation cost contract is one exact native Contribution and at most one
 result: at most ten Fuseki calls and 1 MiB of response bytes for matching, then

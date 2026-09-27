@@ -13,7 +13,7 @@ import { COMMAND_MODULE_VERSION } from '../../services/main/src/infrastructure/p
 import { fusekiImageFromCompose } from '../load/image.ts';
 
 /**
- * Graph/search state operations shared by `yarn search:rebuild` and its drills
+ * Graph/search state operations shared by `task search:rebuild` and its drills
  * (OPS09, OPS13, OPS15, OPS16). Each step addresses one Fuseki state volume
  * through a runner; nothing here opens a live TDB2 directory from a second JVM
  * or removes a database lock.

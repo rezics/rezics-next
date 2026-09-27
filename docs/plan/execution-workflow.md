@@ -134,13 +134,13 @@ to final acceptance.
    file or function. Registered integration, model, fault/recovery and load
    files start their own disposable QA project.
 2. **Integration wave, every 30–45 minutes.** The manager merges ready tasks,
-   regenerates derived artifacts once, runs `yarn check:backend` once and one
+   regenerates derived artifacts once, runs `task check:backend` once and one
    `goalctl test --affected <wave base>` run, which selects every test the merged
    changes reach. It does not run unrelated browser, full recovery, corpus or
    capacity tiers. Keep the tested source stable during the run.
 3. **Repair.** Failures form one repair queue returned to the responsible worker
    sessions and fixed together before dependent work starts. Independent work on
-   disjoint claims continues. `yarn qa --only-failed <run-id>` diagnoses recorded
+   disjoint claims continues. `task qa -- --only-failed <run-id>` diagnoses recorded
    failures; also rerun affected tests when a shared contract changed. Do not
    rerun an unchanged passing snapshot.
 
@@ -167,7 +167,7 @@ to a failing toolchain gate or a contract question that blocks it; record either
 in the handoff.
 
 For documentation tasks, implementation means authoring and reconciling the design,
-and verification runs `yarn docs:check` and a source/diff review once after the
+and verification runs `task docs:check` and a source/diff review once after the
 coherent edit. A subsequent fix warrants only its relevant recheck. Documentation
 checks never certify runtime behavior.
 
@@ -177,7 +177,7 @@ resumed manager can inspect the current state and continue.
 ## Verification boundaries
 
 The backend Goal excludes frontend and browser acceptance. The current unscoped
-`yarn qa` still runs those tiers; use the explicit backend selection and recorder
+`task qa` still runs those tiers; use the explicit backend selection and recorder
 described in the [harness](../testing/test-harness.md#backend-only-goal-scope).
 Use documented selected tiers/paths for ordinary backend work.
 UI consumes APIs; API behavior and qualification must not require a web build.
@@ -205,15 +205,15 @@ stage explicit paths, never revert those edits, and state in the message when a
 commit includes them.
 
 Commit coherent merged waves. The central run's static result supplies
-`yarn check:backend` evidence without running it again for the commit. Record the batch's
+`task check:backend` evidence without running it again for the commit. Record the batch's
 affected verification scope and repair queue; a selected pass does not qualify the
 whole backend. Continue without waiting for another user instruction.
 
 Inspect the exact staged diff and hooks, and exclude unrelated work. A checkpoint
-commit made before `yarn qa` says so in its message and is not acceptance evidence.
+commit made before `task qa` says so in its message and is not acceptance evidence.
 For final acceptance, exercise fresh construction, checkpoint the source and
 run the complete backend scope once with recording on that clean tree. The
-backend selector/recorder is available; unscoped `yarn qa --record` still
+backend selector/recorder is available; unscoped `task qa -- --record` still
 includes frontend. The final run generates qualification without an
 identical preliminary full run.
 Commit the generated page separately. Its commit reference remains the tested

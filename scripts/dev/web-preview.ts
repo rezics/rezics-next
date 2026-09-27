@@ -17,12 +17,13 @@ const publicConfig = existsSync(publicPath)
   ? JSON.parse(await Bun.file(publicPath).text()) as { clientId: string } : undefined;
 const env = { ...process.env, ...apps, ...runtime,
   ...(publicConfig ? { WEB_OAUTH_CLIENT_ID: publicConfig.clientId } : {}) };
-const built = spawnSync('corepack', ['yarn', 'workspace', '@rezics/web', 'build'],
-  { cwd: root, env, stdio: 'inherit' });
+const web = join(root, 'apps/web');
+const built = spawnSync(join(root, 'node_modules/.bin/vinext'), ['build'],
+  { cwd: web, env, stdio: 'inherit' });
 if (built.error || built.status !== 0) throw built.error ?? new Error('Web Worker build failed');
-const worker = spawn('corepack', ['yarn', 'workspace', '@rezics/web', 'exec', 'wrangler', 'dev',
+const worker = spawn(join(root, 'node_modules/.bin/wrangler'), ['dev',
   '--config', 'dist/server/wrangler.json', '--ip', '127.0.0.1', '--port', '3003'],
-{ cwd: root, env, stdio: 'inherit' });
+{ cwd: web, env, stdio: 'inherit' });
 process.once('SIGINT', () => worker.kill('SIGTERM'));
 process.once('SIGTERM', () => worker.kill('SIGTERM'));
 const code = await new Promise<number | null>(resolveExit => worker.once('exit', resolveExit));

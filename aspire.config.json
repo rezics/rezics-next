@@ -1,0 +1,6 @@
+{
+  "$schema": "https://aspire.dev/reference/cli/configuration/schema.json",
+  "appHost": { "path": "apphost/apphost.mts", "language": "typescript/nodejs" },
+  "sdk": { "version": "13.5.4" },
+  "packages": { "Aspire.Hosting.JavaScript": "13.5.4" }
+}

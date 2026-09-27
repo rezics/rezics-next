@@ -25,7 +25,7 @@ const required = (name: string) => {
   return value;
 };
 if (!artifacts || !/^fixture-[a-z0-9-]{1,30}$/.test(fixtureRunId ?? '')
-  || !process.env.REZICS_LOAD_RUN_ID) throw new Error('Run through yarn load --search-probe');
+  || !process.env.REZICS_LOAD_RUN_ID) throw new Error('Run through task load -- --search-probe');
 
 const upstream = required('FUSEKI_URL');
 const expectedPublicUnits = Number(required('REZICS_LOAD_BACKGROUND_PUBLIC_UNITS'));
@@ -87,7 +87,7 @@ async function ready(): Promise<void> {
 function coldStorageRestart(): number {
   const started = Date.now();
   for (const action of ['stack:down', 'stack:up'] as const) {
-    const result = spawnSync('corepack', ['yarn', action, '--profile', 'qa',
+    const result = spawnSync('bun', ['scripts/dev/cli.ts', action, '--profile', 'qa',
       '--run-id', fixtureRunId, '--persistent'], { cwd: root, env: process.env,
       encoding: 'utf8', timeout: 180_000 });
     writeFileSync(join(artifacts, `search-probe-${action.slice(6)}.log`),

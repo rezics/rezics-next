@@ -5,7 +5,7 @@ import { fixtureWork, oracle, sampleIds } from './fixture';
 const resultPath = resolve(import.meta.dir, '../../../.temp/storage-architecture/dgraph/results.json');
 async function evidence(): Promise<any> {
   const file = Bun.file(resultPath);
-  if (!await file.exists()) throw new Error('Run `yarn research:architecture dgraph` before this evidence test');
+  if (!await file.exists()) throw new Error('Run `task research:architecture dgraph` before this evidence test');
   const result = await file.json();
   if (result.error || !result.completedAt) throw new Error(`Incomplete Dgraph probe: ${result.error}`);
   return result;

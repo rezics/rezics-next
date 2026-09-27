@@ -16,7 +16,7 @@ not that production registration.
 From the repository root, with the pinned toolchain installed:
 
 ```sh
-corepack yarn stack:up --profile qa --run-id web-demo
+task stack:up -- --profile qa --run-id web-demo
 bun scripts/dev/web-auth-bootstrap.ts --run-id web-demo \
   --redirect-uri http://localhost:3000/auth/callback \
   --redirect-uri http://127.0.0.1:3003/auth/callback
@@ -58,7 +58,7 @@ the public client ID and exact callback, and send the resulting bearer token to
 The generated representation and grant expire after eight hours; resource
 access tokens expire after five minutes. Create a new QA project after expiry.
 
-`yarn dev --profile qa --run-id <id>` creates or loads this fixture and launches
+`task dev -- --profile qa --run-id <id>` creates or loads this fixture and launches
 Account, Main and the web development app with its registered credentials.
 The built-Worker QA tier uses the same fixture in its own isolated stack. The
 integration test proves the registered PKCE client can issue a member token and
@@ -70,6 +70,6 @@ When finished, stop the host processes and remove the disposable project.
 delete that directory too to discard generated passwords and client secrets:
 
 ```sh
-corepack yarn stack:reset --profile qa --run-id web-demo
+task stack:reset -- --profile qa --run-id web-demo
 rm -r .temp/stack/rezics-qa-web-demo
 ```

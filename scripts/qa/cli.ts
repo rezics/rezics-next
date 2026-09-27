@@ -65,11 +65,11 @@ async function runShard(tier: StackTier, projectRunId: string, files: string[], 
     ...(isolated ? { isolation: true } : {}) };
   const finish = async (run: Omit<ShardRun, 'record'>): Promise<ShardRun> => {
     if (!run.ok && needsStack) {
-      const stackLogs = await commandAsync(root, 'corepack', ['yarn', 'stack:logs', '--profile', 'qa', '--run-id', projectRunId], 20_000);
+      const stackLogs = await commandAsync(root, 'bun', ['scripts/dev/cli.ts', 'stack:logs', '--profile', 'qa', '--run-id', projectRunId], 20_000);
       writeFileSync(join(logs, `${label}-stack.log`), stackLogs.output);
     }
     if (!options.keep && needsStack) {
-      const down = await commandAsync(root, 'corepack', ['yarn', 'stack:reset', '--profile', 'qa', '--run-id', projectRunId], 120_000);
+      const down = await commandAsync(root, 'bun', ['scripts/dev/cli.ts', 'stack:reset', '--profile', 'qa', '--run-id', projectRunId], 120_000);
       if (down.ok) startedProjects.splice(startedProjects.indexOf(projectRunId), 1);
     }
     record.status = run.ok ? 'passed' : 'failed';
@@ -79,8 +79,8 @@ async function runShard(tier: StackTier, projectRunId: string, files: string[], 
   let compose: Record<string, string> = {};
   if (needsStack) {
     startedProjects.push(projectRunId);
-    const upCommand = () => commandAsync(root, 'corepack',
-      ['yarn', 'stack:up', '--profile', 'qa', '--run-id', projectRunId], 180_000);
+    const upCommand = () => commandAsync(root, 'bun',
+      ['scripts/dev/cli.ts', 'stack:up', '--profile', 'qa', '--run-id', projectRunId], 180_000);
     const up = await (startStack ? startStack(upCommand) : upCommand());
     if (!up.ok) {
       writeFileSync(join(logs, `${label}-startup.log`), up.output);
@@ -233,13 +233,13 @@ try {
     if (missing.length) throw new Error(`--record requires complete case declarations; ${missing.length} IDs remain`);
   }
   for (const tier of selected) {
-    if (tier === 'static') runTier(tier, 'corepack', ['yarn', options.backend ? 'check:backend' : 'check'], 120_000);
+    if (tier === 'static') runTier(tier, 'bun', ['scripts/research/storage_architecture/check.ts', ...(options.backend ? ['--backend'] : [])], 120_000);
     if (tier === 'unit') runTier(tier, 'bun', ['test', ...testArgs('unit', selection, chosen), '--reporter=junit',
       `--reporter-outfile=${join(directory, 'unit.xml')}`], 180_000);
     if (tier === 'model') {
       const projectRunId = `${runId}-m`;
       startedProjects.push(projectRunId);
-      const up = command(root, 'corepack', ['yarn', 'stack:up', '--profile', 'qa', '--run-id', projectRunId], 180_000);
+      const up = command(root, 'bun', ['scripts/dev/cli.ts', 'stack:up', '--profile', 'qa', '--run-id', projectRunId], 180_000);
       if (!up.ok) {
         errors.push('model stack startup failed');
         writeFileSync(join(logs, 'model-stack.log'), up.output);
@@ -262,14 +262,14 @@ try {
       if (!ok) {
         errors.push('model failed or exceeded 180s');
         writeFileSync(join(logs, 'model.log'), result.output);
-        const stackLogs = command(root, 'corepack', ['yarn', 'stack:logs', '--profile', 'qa', '--run-id', projectRunId], 20_000);
+        const stackLogs = command(root, 'bun', ['scripts/dev/cli.ts', 'stack:logs', '--profile', 'qa', '--run-id', projectRunId], 20_000);
         writeFileSync(join(logs, 'model-stack.log'), stackLogs.output);
       }
     }
     if (tier === 'e2e') {
       const projectRunId = `${runId}-e`;
       startedProjects.push(projectRunId);
-      const up = command(root, 'corepack', ['yarn', 'stack:up', '--profile', 'qa', '--run-id', projectRunId], 180_000);
+      const up = command(root, 'bun', ['scripts/dev/cli.ts', 'stack:up', '--profile', 'qa', '--run-id', projectRunId], 180_000);
       if (!up.ok) {
         errors.push('e2e stack startup failed');
         writeFileSync(join(logs, 'e2e-stack.log'), up.output);
@@ -312,7 +312,7 @@ try {
         if (!existsSync(join(directory, 'e2e.xml'))) {
           writeFileSync(join(directory, 'e2e.xml'), xmlForCommand(tier, false, result.elapsedMs, result.output));
         }
-        const stackLogs = command(root, 'corepack', ['yarn', 'stack:logs', '--profile', 'qa', '--run-id', projectRunId], 20_000);
+        const stackLogs = command(root, 'bun', ['scripts/dev/cli.ts', 'stack:logs', '--profile', 'qa', '--run-id', projectRunId], 20_000);
         writeFileSync(join(logs, 'e2e-stack.log'), stackLogs.output);
       }
     }
@@ -327,7 +327,7 @@ try {
         splitTestArgs(testArgs(tier, selection, chosen)).paths);
       const fixturePlan = loadFixturePlan(runId, selectedFiles, chosen?.id);
       startedProjects.push(projectRunId);
-      const up = command(root, 'corepack', ['yarn', 'stack:up', '--profile', 'qa', '--run-id', projectRunId],
+      const up = command(root, 'bun', ['scripts/dev/cli.ts', 'stack:up', '--profile', 'qa', '--run-id', projectRunId],
         Math.min(180_000, remainingPreparation()));
       if (!up.ok) { errors.push(`${tier} stack startup failed`); writeFileSync(join(logs, `${artifact}-stack.log`), up.output); tiers.push({ name: tier, status: 'failed' }); writeFileSync(join(directory, `${artifact}.xml`), xmlForCommand(tier, false, up.elapsedMs, up.output)); continue; }
       const stackDir = join(root, '.temp', 'stack', `rezics-qa-${projectRunId}`);
@@ -342,7 +342,7 @@ try {
       if (!bootstrap.ok) { errors.push(`${tier} shared bootstrap failed`); writeFileSync(join(logs, `${artifact}-bootstrap.log`), bootstrap.output); tiers.push({ name: tier, status: 'failed' }); writeFileSync(join(directory, `${artifact}.xml`), xmlForCommand(tier, false, bootstrap.elapsedMs, bootstrap.output)); continue; }
       const fixtureResults = await Promise.all(fixturePlan.map(async item => {
         startedFixtureProjects.push(item.runId);
-        const result = await commandAsync(root, 'corepack', ['yarn', 'fixture:restore',
+        const result = await commandAsync(root, 'bun', ['scripts/fixture/cli.ts', 'restore',
           '--fixture', LOAD_FIXTURE_ID, '--run-id', item.runId], remainingPreparation());
         writeFileSync(join(logs, `${artifact}-restore-${item.caseId}.log`), result.output);
         return { ...item, ok: result.ok, elapsedMs: result.elapsedMs, timedOut: result.timedOut };
@@ -376,7 +376,7 @@ try {
       if (!ok) {
         errors.push(`${tier} failed or exceeded ${budget / 1000}s`);
         writeFileSync(join(logs, `${artifact}.log`), result.output);
-        const stackLogs = command(root, 'corepack', ['yarn', 'stack:logs', '--profile', 'qa', '--run-id', projectRunId], 20_000);
+        const stackLogs = command(root, 'bun', ['scripts/dev/cli.ts', 'stack:logs', '--profile', 'qa', '--run-id', projectRunId], 20_000);
         writeFileSync(join(logs, `${artifact}-stack.log`), stackLogs.output);
       }
     }
@@ -385,14 +385,14 @@ try {
   errors.push(error instanceof Error ? error.message : String(error));
 } finally {
   if (!options.keep) for (const projectRunId of startedProjects) {
-    const down = command(root, 'corepack', ['yarn', 'stack:reset', '--profile', 'qa', '--run-id', projectRunId], 120_000);
+    const down = command(root, 'bun', ['scripts/dev/cli.ts', 'stack:reset', '--profile', 'qa', '--run-id', projectRunId], 120_000);
     if (!down.ok) { errors.push(`QA stack cleanup failed: ${projectRunId}`); writeFileSync(join(logs, `${projectRunId}-cleanup.log`), down.output); }
   }
   // Restored fixture copies hold large persistent volumes; removing one took over
   // 120 s in record run 20260927t054833-96d374, so the copies reset concurrently.
   if (!options.keep) {
     const resets = await Promise.all(startedFixtureProjects.map(async projectRunId => ({ projectRunId,
-      down: await commandAsync(root, 'corepack', ['yarn', 'stack:reset', '--profile', 'qa',
+      down: await commandAsync(root, 'bun', ['scripts/dev/cli.ts', 'stack:reset', '--profile', 'qa',
         '--run-id', projectRunId, '--persistent'], 300_000) })));
     for (const { projectRunId, down } of resets) {
       if (!down.ok) { errors.push(`Fixture stack cleanup failed: ${projectRunId}`);

@@ -60,7 +60,7 @@ function readLock(root: string): FixtureLock {
 function checkedBytes(path: string, entry: FixtureEntry): string {
   const bytes = readFileSync(path);
   if (bytes.length !== entry.size || hash(bytes.toString('utf8')) !== entry.sha256) {
-    throw new Error(`Fixture integrity mismatch at ${path}; run yarn fixtures:pull --source ${entry.source} --update-lock`);
+    throw new Error(`Fixture integrity mismatch at ${path}; run task fixtures:pull -- --source ${entry.source} --update-lock`);
   }
   return bytes.toString('utf8');
 }
@@ -81,11 +81,11 @@ function putImmutable(path: string, bytes: string, digest: string): void {
 /** Verified replay is available without network in a clean checkout via committed minimal seeds. */
 export function readLockedFixture(root: string, source: string, id: string): unknown {
   const entry = readLock(root).entries.find(item => item.source === source && item.id === id);
-  if (!entry) throw new Error(`No locked fixture ${source}/${id}; run yarn fixtures:pull --source ${source} --update-lock`);
+  if (!entry) throw new Error(`No locked fixture ${source}/${id}; run task fixtures:pull -- --source ${source} --update-lock`);
   const cache = cachePath(root, source, entry.sha256);
   if (!existsSync(cache)) {
     const seed = join(root, entry.seed);
-    if (!existsSync(seed)) throw new Error(`Fixture ${source}/${id} unavailable offline; run yarn fixtures:pull --source ${source} with network access`);
+    if (!existsSync(seed)) throw new Error(`Fixture ${source}/${id} unavailable offline; run task fixtures:pull -- --source ${source} with network access`);
     putImmutable(cache, checkedBytes(seed, entry), entry.sha256);
   }
   return JSON.parse(checkedBytes(cache, entry));
@@ -146,8 +146,8 @@ export async function pullFixtures(root: string, options: PullOptions = {}): Pro
         results.push({ id: request.id, source: adapter.name, status: 'hydrated', sha256: prior.sha256 });
         continue;
       }
-      if (options.offline) throw new Error(`Fixture ${adapter.name}/${request.id} unavailable offline; run yarn fixtures:pull --source ${adapter.name} with network access`);
-      if (mode === 'replay' && !prior) throw new Error(`No locked fixture ${adapter.name}/${request.id}; run REZICS_FIXTURES=live yarn fixtures:pull --source ${adapter.name} --update-lock`);
+      if (options.offline) throw new Error(`Fixture ${adapter.name}/${request.id} unavailable offline; run task fixtures:pull -- --source ${adapter.name} with network access`);
+      if (mode === 'replay' && !prior) throw new Error(`No locked fixture ${adapter.name}/${request.id}; run REZICS_FIXTURES=live task fixtures:pull -- --source ${adapter.name} --update-lock`);
       const gap = adapter.minimumIntervalMs - (Date.now() - lastRequest);
       if (gap > 0) await sleep(gap);
       const payload = await fetchNormalized(adapter, request, options.fetcher ?? fetch, sleep);
@@ -156,7 +156,7 @@ export async function pullFixtures(root: string, options: PullOptions = {}): Pro
       putImmutable(cachePath(root, adapter.name, sha256), payload, sha256);
       const drift = prior?.sha256 !== sha256;
       if (mode === 'replay' && prior && drift) {
-        throw new Error(`Fixture ${adapter.name}/${request.id} drifted while restoring replay cache; run REZICS_FIXTURES=live yarn fixtures:pull --source ${adapter.name} to inspect, then --update-lock`);
+        throw new Error(`Fixture ${adapter.name}/${request.id} drifted while restoring replay cache; run REZICS_FIXTURES=live task fixtures:pull -- --source ${adapter.name} to inspect, then --update-lock`);
       }
       if (options.updateLock) {
         const seed = `tests/fixtures/seeds/${adapter.name}/${sha256}.json`;

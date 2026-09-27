@@ -57,7 +57,7 @@ export async function restoreFixture(id: string, target: string): Promise<Fixtur
   if (existsSync(artifacts)) throw new Error(`Fixture restore evidence already exists: ${target}`);
   mkdirSync(artifacts, { recursive: true });
   const manifest = readManifest(id);
-  if (!manifest) throw new Error(`Fixture ${id} has no retained manifest; run yarn fixture:build first`);
+  if (!manifest) throw new Error(`Fixture ${id} has no retained manifest; run task fixture:build first`);
   const evidence: FixtureRestoreEvidence = { fixture: id, target, profile: manifest.profile,
     works: manifest.entities.works, startedAt: new Date(started).toISOString(),
     deadlineMs: RESTORE_DEADLINE_MS, phases: {}, artifacts };
@@ -108,14 +108,14 @@ export async function restoreFixture(id: string, target: string): Promise<Fixtur
       // Concurrent restores choose free ports before Compose binds them, so another
       // stack can take one first; a bind collision gets fresh ports, not a new copy.
       for (let attempt = 1; ; attempt++) {
-        const up = spawnSync('corepack', ['yarn', 'stack:up', '--profile', 'qa', '--run-id', target, '--persistent'],
+        const up = spawnSync('bun', ['scripts/dev/cli.ts', 'stack:up', '--profile', 'qa', '--run-id', target, '--persistent'],
           { cwd: root, env: docker, encoding: 'utf8', timeout: remaining() });
         const log = [up.stdout, up.stderr, up.error?.message].filter(Boolean).join('\n');
         writeFileSync(join(artifacts, attempt === 1 ? 'stack-up.log' : `stack-up-${attempt}.log`), log);
         if (!up.error && up.status === 0) return;
         const collision = /port is already allocated|address already in use|programming external connectivity/i.test(log);
         if (!collision || attempt >= 3) throw new Error('Restored stack did not start; see stack-up.log');
-        spawnSync('corepack', ['yarn', 'stack:down', '--profile', 'qa', '--run-id', target, '--persistent'],
+        spawnSync('bun', ['scripts/dev/cli.ts', 'stack:down', '--profile', 'qa', '--run-id', target, '--persistent'],
           { cwd: root, env: docker, encoding: 'utf8', timeout: Math.min(remaining(), 120_000) });
         await configurePorts();
       }
@@ -144,10 +144,10 @@ export async function restoreFixture(id: string, target: string): Promise<Fixtur
   evidence.completedAt = new Date().toISOString();
   if (evidence.failure && created) {
     // A failed restore leaves no half-built writable copy behind; its logs stay as evidence.
-    const logs = spawnSync('corepack', ['yarn', 'stack:logs', '--profile', 'qa', '--run-id', target, '--persistent'],
+    const logs = spawnSync('bun', ['scripts/dev/cli.ts', 'stack:logs', '--profile', 'qa', '--run-id', target, '--persistent'],
       { cwd: root, env: docker, encoding: 'utf8', timeout: 30_000 });
     writeFileSync(join(artifacts, 'stack.log'), [logs.stdout, logs.stderr].filter(Boolean).join('\n'));
-    spawnSync('corepack', ['yarn', 'stack:reset', '--profile', 'qa', '--run-id', target, '--persistent'],
+    spawnSync('bun', ['scripts/dev/cli.ts', 'stack:reset', '--profile', 'qa', '--run-id', target, '--persistent'],
       { cwd: root, env: docker, encoding: 'utf8', timeout: 120_000 });
     for (const volume of targetVolumes) {
       spawnSync('docker', ['volume', 'rm', volume], { cwd: root, env: docker, timeout: 30_000 });

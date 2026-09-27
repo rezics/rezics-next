@@ -1,6 +1,6 @@
 # Recorded qualification
 
-Full `yarn qa --backend --record` run `20260927t101230-1616d8` passed on clean commit `af3f5f401c6bb6cd9ffdafb90b1a8f2c6985e7b7` (source fingerprint `6daf196d78040472633305e241545d1cee65daa3a3efd71aedf2ea9b0e3cb485`).
+Full `task qa -- --backend --record` run `20260927t101230-1616d8` passed on clean commit `af3f5f401c6bb6cd9ffdafb90b1a8f2c6985e7b7` (source fingerprint `6daf196d78040472633305e241545d1cee65daa3a3efd71aedf2ea9b0e3cb485`).
 
 | Acceptance ID | Status | Executed evidence |
 | --- | --- | --- |

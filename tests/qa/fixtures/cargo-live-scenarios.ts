@@ -3,7 +3,7 @@ import type { CargoSolveStatus } from '../../../services/main/src/modules/packag
 
 // Root manifests solved against one live crates.io sparse-index capture. The
 // capture is `tests/live/cargo-crates-io.test.ts`; native Cargo 1.98.1 results
-// for the same bytes come from `yarn package:cargo-oracle`.
+// for the same bytes come from `task package:cargo-oracle`.
 
 export const CARGO_LIVE_REGISTRY = 'https://index.crates.io/';
 export const CARGO_LIVE_HOST: CargoTriple = 'x86_64-unknown-linux-gnu';

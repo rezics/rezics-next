@@ -118,5 +118,5 @@ if (command === 'inspect') {
   const result=await module[entry](root,manifest);
   if(result!==undefined)console.log(JSON.stringify(result,null,2));
 } else {
-  throw new Error('Usage: yarn research:architecture inspect|prepare [--skip-bridge]|graph|search|opensearch|bridge|dgraph|virtuoso|report [--retain]');
+  throw new Error('Usage: task research:architecture inspect|prepare [--skip-bridge]|graph|search|opensearch|bridge|dgraph|virtuoso|report [--retain]');
 }

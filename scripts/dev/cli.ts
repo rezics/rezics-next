@@ -1,4 +1,4 @@
-import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
+import { spawnSync } from 'node:child_process';
 import { cpSync, existsSync, mkdirSync, readFileSync, rmSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import { join, resolve } from 'node:path';
@@ -18,7 +18,6 @@ const root = resolve(import.meta.dir, '../..');
 const composeFile = join(root, 'infra/dev/compose.yaml');
 const qaComposeFile = join(root, 'infra/dev/compose.qa.yaml');
 const qaRawUpdateComposeFile = join(root, 'infra/dev/compose.qa-raw-update.yaml');
-const childProcesses: ChildProcess[] = [];
 
 function run(command: string, args: string[], env: NodeJS.ProcessEnv = process.env,
   timeout?: number): string {
@@ -230,19 +229,12 @@ async function stackConfig(options: StackOptions): Promise<{ composeEnv: Record<
     }
   }
   const composeEnv = ensureSecrets(root, options, ports);
+  // apps.env is derived from compose.env; regenerate it when an older layout
+  // lacks variables that newer services require.
   const appFile = join(dir, 'apps.env');
-  if (!existsSync(appFile)) savePrivate(appFile, appEnvironment(composeEnv, dir));
-  else {
-    const existing = readEnv(appFile);
-    if (existing.FUSEKI_MAINTENANCE_TOKEN !== composeEnv.FUSEKI_MAINTENANCE_TOKEN
-      || existing.FUSEKI_COMMAND_TOKEN !== composeEnv.FUSEKI_COMMAND_TOKEN
-      || existing.FUSEKI_TITLE_ADMISSION_KEY !== composeEnv.FUSEKI_TITLE_ADMISSION_KEY) {
-      replacePrivate(appFile, { ...existing,
-        FUSEKI_MAINTENANCE_TOKEN: composeEnv.FUSEKI_MAINTENANCE_TOKEN,
-        FUSEKI_COMMAND_TOKEN: composeEnv.FUSEKI_COMMAND_TOKEN,
-        FUSEKI_TITLE_ADMISSION_KEY: composeEnv.FUSEKI_TITLE_ADMISSION_KEY });
-    }
-  }
+  const derived = appEnvironment(composeEnv, dir);
+  if (!existsSync(appFile)) savePrivate(appFile, derived);
+  else if (JSON.stringify(readEnv(appFile)) !== JSON.stringify(derived)) replacePrivate(appFile, derived);
   const apps = readEnv(appFile);
   mkdirSync(apps.MAIN_OBJECT_DIRECTORY, { recursive: true, mode: 0o700 });
   mkdirSync(apps.MAIN_CANDIDATE_DIRECTORY, { recursive: true, mode: 0o700 });
@@ -251,8 +243,8 @@ async function stackConfig(options: StackOptions): Promise<{ composeEnv: Record<
 
 function printEndpoints(options: StackOptions, env: Record<string, string>, dir: string): void {
   console.log(`${projectName(options)} ready`);
-  console.log(`  Main:    http://127.0.0.1:${env.MAIN_PORT}/health/ready (after yarn dev)`);
-  console.log(`  Account: http://127.0.0.1:${env.ACCOUNT_PORT}/health/ready (after yarn dev)`);
+  console.log(`  Main:    http://127.0.0.1:${env.MAIN_PORT}/health/ready (after task dev)`);
+  console.log(`  Account: http://127.0.0.1:${env.ACCOUNT_PORT}/health/ready (after task dev)`);
   console.log(`  Fuseki:  http://127.0.0.1:${env.FUSEKI_PORT}/rezics/`);
   console.log(`  RustFS:  http://127.0.0.1:${env.RUSTFS_PORT}/`);
   console.log(`  Mailpit: http://127.0.0.1:${env.MAILPIT_HTTP_PORT}/`);
@@ -297,13 +289,15 @@ async function install(): Promise<void> {
   if (process.versions.bun !== '1.4.2') throw new Error('Bun 1.4.2 is required');
   if (run('node', ['--version']) !== 'v26.8.2') throw new Error('Node 26.8.2 is required');
   if (run('corepack', ['yarn', '--version']) !== '4.18.0') throw new Error('Yarn 4.18.0 is required');
+  if (run('task', ['--version']) !== '3.53.1') throw new Error('Task 3.53.1 is required; see the toolchain lock');
+  if (!run('node', [aspire, '--version']).startsWith('13.5.4+')) throw new Error('Aspire CLI 13.5.4 is required');
   const env = runtimeEnv();
   if (!existsSync(composeFile)) throw new Error(`Compose topology is missing: ${composeFile}`);
   const options: StackOptions = { profile: 'dev' };
   await stackConfig(options);
   compose(options, ['pull', '--ignore-buildable'], env);
   compose(options, ['build', 'fuseki'], env);
-  run('corepack', ['yarn', 'exec', 'playwright', 'install', 'chromium']);
+  run('node_modules/.bin/playwright', ['install', 'chromium']);
   console.log('Toolchain installed');
 }
 
@@ -355,69 +349,71 @@ async function initializeGraph(apps: Record<string, string>): Promise<void> {
   if (health.boolean !== true) throw new Error('Existing graph lineage does not match this stack; use stack:reset only if its data may be discarded');
 }
 
-async function waitHealth(url: string, name: string, child: ChildProcess): Promise<void> {
-  for (let i = 0; i < 40; i++) {
-    if (child.exitCode !== null) throw new Error(`${name} exited before becoming ready (code ${child.exitCode})`);
-    try {
-      const response = await fetch(url, { signal: AbortSignal.timeout(1000) });
-      if (response.ok) return;
-    } catch { /* service is starting */ }
-    await Bun.sleep(250);
+/** Start storage, apply migrations, check graph lineage and, for QA, the web
+ * OAuth fixture. Returns the environment the application processes need. */
+async function prepareDev(options: StackOptions): Promise<{ apps: Record<string, string>;
+  processEnv: Record<string, string> }> {
+  const { apps } = await stackUp(options);
+  await migrateApps(apps);
+  await initializeGraph(apps);
+  let processEnv = { ...apps };
+  if (options.profile === 'qa') {
+    const authDir = join(stackDirectory(root, options), 'web-auth');
+    const runtimePath = join(authDir, 'runtime.env');
+    const publicPath = join(authDir, 'public.json');
+    if (!existsSync(runtimePath) || !existsSync(publicPath)) {
+      await bootstrapWebAuth({ runId: options.runId!, redirectUris: [
+        'http://localhost:3000/auth/callback',
+        'http://127.0.0.1:3003/auth/callback',
+      ] });
+    }
+    const publicConfig = JSON.parse(readFileSync(publicPath, 'utf8')) as { clientId: string };
+    processEnv = { ...readEnv(runtimePath), WEB_OAUTH_CLIENT_ID: publicConfig.clientId };
   }
-  throw new Error(`${name} did not become ready at ${url}`);
+  return { apps, processEnv };
 }
 
-function launch(name: string, file: string, apps: Record<string, string>): ChildProcess {
-  const child = spawn('bun', ['--watch', file], { cwd: root, env: { ...process.env, ...apps }, stdio: 'inherit' });
-  childProcesses.push(child);
-  child.on('exit', code => console.log(`${name} exited (${code})`));
-  return child;
+/** Prepare the stack for an external process orchestrator and write the
+ * application environment next to the stack's other private files. */
+async function devPrepare(options: StackOptions): Promise<void> {
+  const { processEnv } = await prepareDev(options);
+  const file = join(stackDirectory(root, options), 'dev.env');
+  replacePrivate(file, processEnv);
+  console.log(file);
 }
 
-async function dev(options: StackOptions): Promise<void> {
-  let stop: (() => void) | undefined;
-  try {
-    const { apps } = await stackUp(options);
-    await migrateApps(apps);
-    await initializeGraph(apps);
-    let processEnv = { ...apps };
-    if (options.profile === 'qa') {
-      const authDir = join(stackDirectory(root, options), 'web-auth');
-      const runtimePath = join(authDir, 'runtime.env');
-      const publicPath = join(authDir, 'public.json');
-      if (!existsSync(runtimePath) || !existsSync(publicPath)) {
-        await bootstrapWebAuth({ runId: options.runId!, redirectUris: [
-          'http://localhost:3000/auth/callback',
-          'http://127.0.0.1:3003/auth/callback',
-        ] });
-      }
-      const publicConfig = JSON.parse(readFileSync(publicPath, 'utf8')) as { clientId: string };
-      processEnv = { ...readEnv(runtimePath), WEB_OAUTH_CLIENT_ID: publicConfig.clientId };
-    }
-    const account = launch('Account', 'services/account/src/index.ts', processEnv);
-    await waitHealth(`http://127.0.0.1:${apps.ACCOUNT_PORT}/health/ready`, 'Account', account);
-    const main = launch('Main', 'services/main/src/index.ts', processEnv);
-    await waitHealth(`http://127.0.0.1:${apps.MAIN_PORT}/health/ready`, 'Main', main);
-    if (existsSync(join(root, 'apps/web/package.json'))) {
-      const web = spawn('corepack', ['yarn', 'workspace', '@rezics/web', 'dev'],
-        { cwd: root, env: { ...process.env, ...processEnv }, stdio: 'inherit' });
-      childProcesses.push(web);
-    }
-    console.log('Main and Account are ready');
-    await new Promise<void>(resolveWait => {
-      stop = resolveWait;
-      process.once('SIGINT', stop); process.once('SIGTERM', stop);
-    });
-  } finally {
-    if (stop) {
-      process.off('SIGINT', stop);
-      process.off('SIGTERM', stop);
-    }
-    for (const child of childProcesses) child.kill('SIGTERM');
-    if (options.profile === 'qa') {
-      try { compose(options, ['down', '--volumes', '--remove-orphans'], runtimeEnv()); }
-      catch (error) { console.error('Could not clean up isolated QA stack:', error); }
-    }
+const appHost = join(root, 'apphost/apphost.mts');
+// The package's bin shim has a CRLF shebang, so run its launcher through Node.
+const aspire = join(root, 'node_modules/@microsoft/aspire-cli/bin/aspire.js');
+
+/** Prepare the stack, then start Account, Main, web and Storybook under Aspire
+ * in the background. The dev profile exposes fixed ports through Aspire's
+ * proxy; a QA profile runs isolated on the stack's own random ports. */
+async function devStart(options: StackOptions): Promise<void> {
+  if (options.rawUpdate) throw new Error('--raw-update cannot run with task dev');
+  const { processEnv } = await prepareDev(options);
+  const file = join(stackDirectory(root, options), 'dev.env');
+  replacePrivate(file, processEnv);
+  const started = spawnSync('node', [aspire, 'start', '--apphost', appHost, '--non-interactive', '--nologo',
+    '--format', 'Json', ...(options.profile === 'qa' ? ['--isolated'] : [])],
+  { cwd: root, stdio: 'inherit',
+    env: { ...process.env, REZICS_DEV_ENV: file, REZICS_DEV_PROFILE: options.profile } });
+  if (started.error || started.status !== 0) throw started.error ?? new Error('aspire start failed');
+  if (options.profile === 'dev') {
+    console.log('  Web:       http://localhost:3000/');
+    console.log('  Main:      http://localhost:3001/health/ready');
+    console.log('  Account:   http://localhost:3002/health/ready');
+    console.log('  Storybook: http://localhost:6006/ (MCP at /mcp)');
+  }
+  console.log('Inspect with `aspire describe`, `aspire logs <resource>` or the dashboard; stop with `task dev:stop`.');
+}
+
+function devStop(options: StackOptions): void {
+  const stopped = spawnSync('node', [aspire, 'stop', '--apphost', appHost, '--non-interactive', '--nologo'],
+    { cwd: root, stdio: 'inherit', env: process.env });
+  if (stopped.error) throw stopped.error;
+  if (options.profile === 'qa' && !options.persistent) {
+    compose(options, ['down', '--volumes', '--remove-orphans'], runtimeEnv());
   }
 }
 
@@ -425,13 +421,10 @@ async function main(): Promise<void> {
   const [command, ...args] = process.argv.slice(2);
   if (command === 'stack:clone') { await stackClone(args); return; }
   if (command === 'toolchain:install') { if (args.length) throw new Error('Unexpected arguments'); await install(); return; }
-  if (command === 'dev') {
-    const options = parseOptions(args);
-    if (options.rawUpdate) throw new Error('--raw-update cannot run with yarn dev');
-    await dev(options);
-    return;
-  }
+  if (command === 'dev') { await devStart(parseOptions(args)); return; }
+  if (command === 'dev:stop') { devStop(parseOptions(args)); return; }
   if (command === 'stack:up') { await stackUp(parseOptions(args)); return; }
+  if (command === 'dev:prepare') { await devPrepare(parseOptions(args)); return; }
   if (command === 'stack:backup') { await stackBackup(parseOptions(args)); return; }
   if (command === 'stack:logs') {
     const options = parseOptions(args);
@@ -468,7 +461,6 @@ async function main(): Promise<void> {
 
 try { await main(); }
 catch (error) {
-  for (const child of childProcesses) child.kill('SIGTERM');
   console.error(error instanceof Error ? error.message : error);
   process.exitCode = 1;
 }

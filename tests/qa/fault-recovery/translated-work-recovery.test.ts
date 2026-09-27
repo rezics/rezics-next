@@ -22,11 +22,12 @@ import { reconcileRetainedContributionDraftCreate, reconcileRetainedContribution
 import { cutoverRestoredGraphLineage } from '../../../services/main/src/modules/work/restore-lineage.ts';
 import { createAdmittedTranslationLink, readTranslationLinks,
   type TranslationLinkInput } from '../../../services/main/src/modules/work/translation-links.ts';
+import { scriptCommand } from '../../../scripts/dev/commands.ts';
 
 const root = resolve(import.meta.dir, '../../..');
 
 function rootCommand(args: string[], timeout: number): void {
-  const result = spawnSync('corepack', ['yarn', ...args], { cwd: root,
+  const result = spawnSync(...scriptCommand(args), { cwd: root,
     encoding: 'utf8', timeout, maxBuffer: 2_000_000 });
   if (result.status !== 0 || result.error) {
     throw new Error(`yarn ${args[0]} failed: ${(result.stderr || result.stdout

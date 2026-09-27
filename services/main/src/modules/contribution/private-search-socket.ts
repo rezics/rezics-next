@@ -130,7 +130,7 @@ export class PrivateSearchConnection {
   }
 
   /** Settlement failures leave the row `delivering`: the send-window sweep and
-   * `yarn access:pending-search` resolve it, never this socket. */
+   * `task access:pending-search` resolve it, never this socket. */
   private async settle(): Promise<void> {
     await this.session?.disconnect().catch(() => undefined);
   }

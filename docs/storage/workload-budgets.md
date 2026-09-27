@@ -127,7 +127,7 @@ throughput. Stopped-state clone reuse and a 600-second-enforced routine restore
 facade passed on a ten-Work source with owner/index readiness, fresh writes,
 restart and source isolation.
 
-`yarn fixture:build` now bulk-builds the current owners directly. The real
+`task fixture:build` now bulk-builds the current owners directly. The real
 graph bootstrap commits first, then the TDB2 phased loader and offline text
 index run on the stopped dataset, objects go to RustFS and PostgreSQL rows are
 loaded in 5,000-row `unnest` batches. Imported data sits at graph position 0
@@ -299,7 +299,7 @@ RustFS volume. Both are below the fixed restore bound.
 
 The fixture has 100,000 metadata-only Works. That is useful host background but
 does not provide the 10,000 published public MatchUnits required to qualify the
-named searchable host profile. `yarn load --fixture-run-id` now attaches the
+named searchable host profile. `task load -- --fixture-run-id` now attaches the
 load runner to a restored persistent fixture and limits fresh command seeding
 to its explicit `--works` count; fixture-backed runs remain diagnostic unless
 their searchable population reaches the named objective.

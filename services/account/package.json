@@ -2,12 +2,6 @@
   "name": "@rezics/account",
   "private": true,
   "type": "module",
-  "scripts": {
-    "dev": "bun --watch src/index.ts",
-    "start": "bun src/index.ts",
-    "typecheck": "tsc --noEmit",
-    "test": "bun test"
-  },
   "dependencies": {
     "@better-auth/core": "1.7.5",
     "@better-auth/oauth-provider": "1.7.5",

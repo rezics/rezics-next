@@ -166,7 +166,7 @@ The exact module/guard composition remains a runtime acceptance gate.
 
 ### Command registry
 
-`yarn gen` writes the command registry into `generated/model/manifest.json`, which
+`task gen` writes the command registry into `generated/model/manifest.json`, which
 the image ships beside the shapes. The module loads it at startup, checks that
 every route names a loaded shape, and holds no per-profile type chain:
 
@@ -197,7 +197,7 @@ link checks.
    shape that a native type selects, declare `canonical: { types, when? }`. When
    commands must supply exact identities, declare `binding: { required, optional?,
    roles, demandedBy }` on the profile.
-2. Run `yarn gen`. It rejects ambiguous routes, a type demanded by two profiles,
+2. Run `task gen`. It rejects ambiguous routes, a type demanded by two profiles,
    unknown binding roles and duplicated declarations, and it updates the manifest,
    the TypeScript profile registry and the Compose Fuseki tag.
 3. Add the profile's reviewed candidates and native fixtures, and assert its

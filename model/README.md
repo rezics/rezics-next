@@ -1,14 +1,14 @@
 # Fixed first profiles
 
 The authored `definitions/*-v1.ts` files are the SHACL subset for the first
-delivery. `yarn gen` renders their reviewed Turtle bytes into
+delivery. `task gen` renders their reviewed Turtle bytes into
 `generated/model/shapes/`, preserves the pinned profile SHA-256 digests, and
 publishes the profile registry with shape IRIs and focus roles used by Main and
 the Fuseki command module.
-`yarn gen:check` fails if any generated file has drifted.
-After `yarn toolchain:install`, run `yarn gen` to refresh generated artifacts;
-`yarn gen:check` verifies committed output. The QA model tier runs with
-`yarn qa --tier model` on an isolated Fuseki project. A generated schema or
+`task gen:check` fails if any generated file has drifted.
+After `task toolchain:install`, run `task gen` to refresh generated artifacts;
+`task gen:check` verifies committed output. The QA model tier runs with
+`task qa -- --tier model` on an isolated Fuseki project. A generated schema or
 successful model tier does not
 by itself qualify admission, Content publication or the full product journey.
 
@@ -46,7 +46,7 @@ validates the poststate graph before commit.
 The 66 previously recorded valid and rejected candidates are now static
 TypeScript fixtures under `tests/fixtures/native/`. The structural
 `tests/native-equivalence.test.ts` case checks every fixture name, outcome and
-profile digest against `tests/evidence/`. `yarn qa --tier model` starts an
+profile digest against `tests/evidence/`. `task qa -- --tier model` starts an
 isolated QA Fuseki project and runs the native case in strict mode. It stages each
 candidate through the QA-only fixture update service, calls command module
 0.5.6 with generated profiles, and checks each outcome, expected `sh:resultPath`,

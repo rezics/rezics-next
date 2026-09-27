@@ -66,7 +66,7 @@ active pin and supersession row in a restored Content owner before
 `reconcile.ts` releases its restore hold; the graph erasure is replayed first,
 and an unavailable or different receipt keeps that restore held. A replacement
 publication yields a new projection; a lost index is replayed by
-`yarn search:rebuild` from the retained Content cut.
+`task search:rebuild` from the retained Content cut.
 Both offline Lucene rebuild paths use `ErasureTextIndexer` to register the
 server's filtered-graph text assembler before opening the candidate index.
 

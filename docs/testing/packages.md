@@ -83,7 +83,7 @@ Do not claim runtime/build success from a resolver-only pass. Preserve rejected
 states, dependency explanations, installation inventory and exact run profiles.
 
 G-019 adds `npm-lock-v3-topology-v1`, a bounded caller-supplied lockfile-v3
-topology validator. `yarn package:npm-oracle` checks installed npm 11.19.1,
+topology validator. `task package:npm-oracle` checks installed npm 11.19.1,
 then uses native offline `ls --package-lock-only` and its bundled Arborist
 virtual tree against the same exact manifest/lock bytes. Eight cases compare
 paths, stable versions, literal resolved URLs, SRI and actual peer hosts:
@@ -135,7 +135,7 @@ child, a shared required platform failure, a missing required dependency,
 absent optional dependencies/peers, incompatible required and optional peer
 shadowing, a present optional peer host, an optional cycle, a dependency shared
 by optional parents, and positive/negative/any/empty platform selectors.
-`yarn package:npm-oracle` retains the original eight native cases and compares
+`task package:npm-oracle` retains the original eight native cases and compares
 exact paths, versions, source/SRI, optional flags, edges, peer hosts, active
 paths and omission causes. Results remain under `.temp/package-npm-oracle/`.
 The virtual tree itself retains every locked package; the oracle explicitly
@@ -231,13 +231,13 @@ these virtual-tree results cannot close PKG04 or qualify the whole backend.
 The affected command set for this slice is:
 
 ```sh
-yarn test tests/qa/unit/npm-identity-topology.test.ts tests/qa/unit/npm-v1-compatibility.test.ts tests/qa/unit/npm-v2-compatibility.test.ts tests/qa/unit/npm-lock-topology.test.ts tests/qa/unit/npm-platform-topology.test.ts tests/qa/unit/npm-lock-contract.test.ts
-yarn package:npm-oracle
-yarn gen
-yarn test tests/qa/integration/source-authenticated-api.test.ts
-yarn test tests/qa/fault-recovery/coordinated-owner-cut.test.ts
-yarn check:backend
-yarn docs:check
+task test -- tests/qa/unit/npm-identity-topology.test.ts tests/qa/unit/npm-v1-compatibility.test.ts tests/qa/unit/npm-v2-compatibility.test.ts tests/qa/unit/npm-lock-topology.test.ts tests/qa/unit/npm-platform-topology.test.ts tests/qa/unit/npm-lock-contract.test.ts
+task package:npm-oracle
+task gen
+task test -- tests/qa/integration/source-authenticated-api.test.ts
+task test -- tests/qa/fault-recovery/coordinated-owner-cut.test.ts
+task check:backend
+task docs:check
 ```
 
 G-026 adds the separate `npm-lock-v3-topology-v4` composed identity/target
@@ -277,13 +277,13 @@ exact-read and hold-release denial.
 The affected G-026 command set is:
 
 ```sh
-yarn test tests/qa/unit/npm-composition-topology.test.ts tests/qa/unit/npm-v3-compatibility.test.ts tests/qa/unit/npm-v2-compatibility.test.ts tests/qa/unit/npm-v1-compatibility.test.ts tests/qa/unit/npm-identity-topology.test.ts tests/qa/unit/npm-platform-topology.test.ts tests/qa/unit/npm-lock-topology.test.ts tests/qa/unit/npm-lock-contract.test.ts
-yarn package:npm-oracle
-yarn gen
-yarn test tests/qa/integration/source-authenticated-api.test.ts
-yarn test tests/qa/fault-recovery/coordinated-owner-cut.test.ts
-yarn check:backend
-yarn docs:check
+task test -- tests/qa/unit/npm-composition-topology.test.ts tests/qa/unit/npm-v3-compatibility.test.ts tests/qa/unit/npm-v2-compatibility.test.ts tests/qa/unit/npm-v1-compatibility.test.ts tests/qa/unit/npm-identity-topology.test.ts tests/qa/unit/npm-platform-topology.test.ts tests/qa/unit/npm-lock-topology.test.ts tests/qa/unit/npm-lock-contract.test.ts
+task package:npm-oracle
+task gen
+task test -- tests/qa/integration/source-authenticated-api.test.ts
+task test -- tests/qa/fault-recovery/coordinated-owner-cut.test.ts
+task check:backend
+task docs:check
 ```
 
 The worker passed 34 unit/contract tests and all 182 native comparisons, generated
@@ -319,13 +319,13 @@ qualification, and PKG04/PKG12/PKG13 remain partial.
 The affected G-033 command set is:
 
 ```sh
-yarn test tests/qa/unit/npm-policy-topology.test.ts tests/qa/unit/npm-lock-contract.test.ts tests/qa/unit/npm-v1-compatibility.test.ts tests/qa/unit/npm-v2-compatibility.test.ts tests/qa/unit/npm-v3-compatibility.test.ts tests/qa/unit/npm-composition-topology.test.ts
-yarn package:npm-oracle
-yarn gen
-yarn test tests/qa/integration/source-authenticated-api.test.ts
-yarn test tests/qa/fault-recovery/coordinated-owner-cut.test.ts
-yarn check:backend
-yarn docs:check
+task test -- tests/qa/unit/npm-policy-topology.test.ts tests/qa/unit/npm-lock-contract.test.ts tests/qa/unit/npm-v1-compatibility.test.ts tests/qa/unit/npm-v2-compatibility.test.ts tests/qa/unit/npm-v3-compatibility.test.ts tests/qa/unit/npm-composition-topology.test.ts
+task package:npm-oracle
+task gen
+task test -- tests/qa/integration/source-authenticated-api.test.ts
+task test -- tests/qa/fault-recovery/coordinated-owner-cut.test.ts
+task check:backend
+task docs:check
 ```
 
 PKG04/PKG12/PKG13 remain partial. V4 qualifies bounded virtual identity and target
@@ -351,7 +351,7 @@ conflict and yanked-lock eligibility, broader target predicates, provider
 capture, artifact checks and installation are still separate work.
 
 G-011 adds `cargo-index-exact-resolver2-v2` and an exact native `links` conflict
-witness. `yarn package:cargo-oracle` retains G-008's comparison and adds ten
+witness. `task package:cargo-oracle` retains G-008's comparison and adds ten
 local-registry scenarios: incompatible selected versions sharing a native
 name, distinct names, one owner across roles, Linux/Windows and default-feature
 variants, different package names sharing `links`, inactive target/root-optional
@@ -382,7 +382,7 @@ constraints, yanked fresh/locked eligibility, provider capture, artifact checks
 and installation remain separate requirements.
 
 G-013 adds the separately versioned `cargo-index-exact-resolver2-v3` admitted-lock
-profile. `yarn package:cargo-oracle` adds sixteen native Cargo 1.98.1 scenarios:
+profile. `task package:cargo-oracle` adds sixteen native Cargo 1.98.1 scenarios:
 fresh denial; exact locked yanked reuse; changed root identity; incompatible
 requirements; changed/missing source; changed/missing checksum; disconnected
 historical edges; absent locked package; non-yanked and unselected-yanked
@@ -409,7 +409,7 @@ physically restores exact v1/v2/v3 receipts and replays their original keys.
 Worker API run `20260926t061642-a5b188` and physical-restore run
 `20260926t061712-287f61` passed on the same stable working-tree fingerprint.
 All fifteen Cargo unit cases, the baseline/links/lock native oracle,
-`yarn check:backend` and `yarn docs:check` passed for this slice. These selected
+`task check:backend` and `task docs:check` passed for this slice. These selected
 checks do not qualify the full backend; the manager repeats affected verification
 after merging with the concurrent Access slice.
 These cases are partial PKG02/PKG12/PKG13 evidence. General semver/backtracking,
@@ -461,7 +461,7 @@ resolver fixtures using nested asymmetric matchers should avoid reusing the
 matched object as a later expected receipt; no broader matcher migration is
 included in this slice.
 
-G-005's local-replacement slice passed `yarn package:go-oracle` on pinned
+G-005's local-replacement slice passed `task package:go-oracle` on pinned
 Go 1.27.1 with `go 1.16` files and a generated local module directory. Its
 version-specific local rule overrode a path-wide rule, and native/REZICS build
 lists and selected local source identities matched. The pinned tool did not
@@ -499,7 +499,7 @@ another active principal received 404, and deactivation denied both later
 operations. This is partial IAM10/PKG05/PKG13 evidence; the selected Go profile
 still has no live module capture.
 
-`yarn package:go-oracle` compared the B51 graph against native Go 1.27.1 using
+`task package:go-oracle` compared the B51 graph against native Go 1.27.1 using
 `go list -mod=mod -m all` with a `go 1.16` main module and a local file proxy.
 The official archive was SHA-256 verified before extraction. The native and
 REZICS six-module build lists matched exactly: two direct roots, a selected
@@ -583,7 +583,7 @@ The first Go proxy capture operation passed a fixed-origin/bounded-response unit
 case and isolated PostgreSQL/Main API integration `20260925t224146-39f3c5`.
 The API test covered separate capture/read scopes, private exact read, replay
 without refetch, changed-key conflict, immutable row and inactive-principal
-denial with a deterministic proxy response. `yarn package:go-probe` then fetched
+denial with a deterministic proxy response. `task package:go-probe` then fetched
 one live `golang.org/x/sync@v0.1.0` observation from `proxy.golang.org` on
 2026-09-25 22:42 UTC: 23 stable tags in the 175-byte list, exact info and
 25-byte manifest, with raw digests in `.temp/package-go-provider/probe.json`.
@@ -629,7 +629,7 @@ evidence; checksum verification remains open.
 The capture API now reports calculated Go `go.mod` `h1:` alongside raw SHA-256.
 The empty-file reference constant, a fixed live manifest, unit tests and real
 PostgreSQL/Main API integration `20260925t225611-b2a623` passed. The pinned
-`yarn package:go-checksum-oracle` used Go 1.27.1 with `sum.golang.org` enabled
+`task package:go-checksum-oracle` used Go 1.27.1 with `sum.golang.org` enabled
 on `golang.org/x/sync@v0.1.0`; Go's verified `GoModSum` equalled the calculated
 `h1:RxMgew5VJxzue5/jJTE5uejpjVlOe/izrB70Jof72aM=`. Diagnostic metadata is
 under `.temp/package-go-checksum/result.json`. This is partial PKG05/PKG14
@@ -651,7 +651,7 @@ open.
 A bounded signed-tree primitive passed a fixed real `sum.golang.org` note
 retained by Go 1.27.1, plus malformed UTF-8, tampered tree text, tampered
 signature, wrong signer and size-limit refusals. The live
-`yarn package:go-checksum-oracle` now extracts Go's exact lookup note and checks
+`task package:go-checksum-oracle` now extracts Go's exact lookup note and checks
 it with the pinned public key. This is partial PKG05/PKG14 evidence. No lookup
 record has been authenticated by an inclusion proof in Main, and no monotonic
 trusted tree state exists, so the API still exposes only a calculated h1.

@@ -22,7 +22,7 @@ if ((args.length !== 4 && (args.length !== 5 || args[4] !== '--read-only'))
   || args[0] !== '--source-run-id' || args[2] !== '--run-id'
   || !/^load-[a-z0-9-]{1,30}$/.test(args[1] ?? '')
   || !/^[a-z0-9][a-z0-9-]{0,30}$/.test(args[3] ?? '')) {
-  throw new Error('Usage: yarn load:clone-probe --source-run-id <load-id> --run-id <target-id>');
+  throw new Error('Usage: task load:clone-probe -- --source-run-id <load-id> --run-id <target-id>');
 }
 const sourceId = args[1]!;
 const targetId = args[3]!;
@@ -102,7 +102,7 @@ async function drainContent() {
 }
 
 function stack(action: 'stack:down' | 'stack:up') {
-  const result = spawnSync('corepack', ['yarn', action, '--profile', 'qa',
+  const result = spawnSync('bun', ['scripts/dev/cli.ts', action, '--profile', 'qa',
     '--run-id', targetId, '--persistent'], { cwd: root, encoding: 'utf8', timeout: 180_000 });
   if (result.status !== 0) throw new Error(`${action} failed: ${result.stderr}`);
 }

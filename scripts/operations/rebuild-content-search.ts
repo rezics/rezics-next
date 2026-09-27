@@ -18,7 +18,7 @@ import { DEFAULT_RESERVE_BYTES, rebuildPublicContentSearch, repositoryPins,
 
 const root = resolve(import.meta.dir, '../..');
 const UUID = /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i;
-const USAGE = 'Usage: yarn search:rebuild [--job <uuid>] [--reserve-bytes <n>] [--profile qa --run-id <id> --persistent [--raw-update]]';
+const USAGE = 'Usage: task search:rebuild -- [--job <uuid>] [--reserve-bytes <n>] [--profile qa --run-id <id> --persistent [--raw-update]]';
 const args = process.argv.slice(2);
 function option(name: string, pattern: RegExp): string | undefined {
   const at = args.indexOf(name);
@@ -56,14 +56,14 @@ function compose(args: string[], env: NodeJS.ProcessEnv): string {
 async function assertWritersStopped(mainOrigin: string): Promise<void> {
   try {
     await fetch(new URL('/health/live', mainOrigin), { signal: AbortSignal.timeout(800) });
-    throw new Error('Stop yarn dev and every Main writer before rebuilding public search');
+    throw new Error('Stop task dev and every Main writer before rebuilding public search');
   } catch (error) {
-    if (error instanceof Error && error.message.startsWith('Stop yarn dev')) throw error;
+    if (error instanceof Error && error.message.startsWith('Stop task dev')) throw error;
   }
 }
 
 if (!existsSync(join(stack, 'compose.env')) || !existsSync(join(stack, 'apps.env'))) {
-  throw new Error('Stack is absent; run yarn stack:up first');
+  throw new Error('Stack is absent; run task stack:up first');
 }
 assertSavedStackStorage(options, readEnv(join(stack, 'compose.env')));
 assertSavedStackRawUpdate(options, readEnv(join(stack, 'compose.env')));
@@ -83,7 +83,7 @@ const runner: FusekiStateRunner = {
 await assertWritersStopped(apps.MAIN_ORIGIN!);
 const fuseki = new FusekiClient(apps.FUSEKI_URL!, apps.FUSEKI_MAINTENANCE_TOKEN!, apps.FUSEKI_COMMAND_TOKEN!);
 if ((await fuseki.commandHealth()).moduleVersion !== COMMAND_MODULE_VERSION) {
-  throw new Error(`Fuseki command module ${COMMAND_MODULE_VERSION} is required; run yarn toolchain:install and restart the stack`);
+  throw new Error(`Fuseki command module ${COMMAND_MODULE_VERSION} is required; run task toolchain:install and restart the stack`);
 }
 if (!saved) writeFileSync(jobFile, JSON.stringify({ id }) + '\n', { mode: 0o600, flag: 'wx' });
 const pool = new Pool({ connectionString: apps.CONTENT_DATABASE_URL, max: 4 });

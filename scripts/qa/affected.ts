@@ -5,7 +5,7 @@ import { isQaE2ePath, isQaFaultPath, isQaIntegrationPath, isQaLoadPath, isQaMode
   legacyHostJenaGateFiles, testArgs } from './acceptance.ts';
 
 // Affected-test selection for routine batches. It narrows what an agent runs;
-// final acceptance still runs the complete backend suite through `yarn qa --backend`.
+// final acceptance still runs the complete backend suite through `task qa -- --backend`.
 
 export type AffectedTier = 'unit' | 'integration' | 'model' | 'fault/recovery';
 export const affectedTiers: AffectedTier[] = ['unit', 'model', 'integration', 'fault/recovery'];
@@ -39,12 +39,12 @@ type Rule = { match: RegExp; reason: string } & (
 // Inputs that no import edge reaches. Order matters: the first match wins.
 // Anything unmatched and unreferenced widens to every tier (fail closed).
 export const inputRules: Rule[] = [
-  { match: /^docs\/|\.md$|^(?:LICENSE|NOTICE)$/, effect: 'ignore', reason: 'documentation; run yarn docs:check' },
+  { match: /^docs\/|\.md$|^(?:LICENSE|NOTICE)$/, effect: 'ignore', reason: 'documentation; run task docs:check' },
   { match: /^\.(?:claude|codex|github|vscode)\//, effect: 'ignore', reason: 'agent, editor or CI configuration' },
-  { match: /^scripts\/documentation\//, effect: 'ignore', reason: 'documentation checker; run yarn docs:check' },
+  { match: /^scripts\/documentation\//, effect: 'ignore', reason: 'documentation checker; run task docs:check' },
   { match: /^apps\/|^packages\/ui\//, effect: 'ignore', reason: 'frontend, outside the backend Goal' },
   { match: /^(?:biome\.json|\.dependency-cruiser\.json|\.oxlintrc\.json|knip\.jsonc|sgconfig\.yml|\.gitignore|\.gitattributes|\.nvmrc)$|^scripts\/static\/ast-grep\/|(?:^|\/)tsconfig[^/]*\.json$/,
-    effect: 'ignore', reason: 'static configuration; run yarn check:backend' },
+    effect: 'ignore', reason: 'static configuration; run task check:backend' },
   { match: /^(?:package\.json|yarn\.lock|\.yarnrc\.yml|bunfig\.toml)$|^\.yarn\/|^(?:services\/[^/]+|packages\/model|model)\/package\.json$/,
     effect: 'widen', tiers: affectedTiers, reason: 'dependency or runtime configuration' },
   { match: /^infra\/jena\/|^generated\/model\/shapes\//, effect: 'widen', tiers: stackTiers,
@@ -71,7 +71,7 @@ export function routeTest(path: string): { tier: AffectedTier } | { deferred: st
     return { deferred: 'legacy host-Jena test outside the QA registry' };
   }
   if (path.startsWith('tests/live/')) return { deferred: 'live network fixture; run explicitly' };
-  if (isQaLoadPath(path)) return { deferred: 'capacity tier; run explicitly with yarn test <file>' };
+  if (isQaLoadPath(path)) return { deferred: 'capacity tier; run explicitly with task test -- <file>' };
   if (isQaModelPath(path)) return { tier: 'model' };
   if (isQaIntegrationPath(path)) return { tier: 'integration' };
   if (isQaFaultPath(path)) return { tier: 'fault/recovery' };

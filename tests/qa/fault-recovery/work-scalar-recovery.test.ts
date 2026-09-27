@@ -27,7 +27,7 @@ import { cutoverRestoredGraphLineage }
 const root = resolve(import.meta.dir, '../../..');
 
 function stack(action: 'stack:up' | 'stack:reset', runId: string): void {
-  const command = spawnSync('corepack', ['yarn', action, '--profile', 'qa', '--run-id', runId],
+  const command = spawnSync('bun', ['scripts/dev/cli.ts', action, '--profile', 'qa', '--run-id', runId],
     { cwd: root, encoding: 'utf8', timeout: 180_000, maxBuffer: 2_000_000 });
   if (command.status !== 0 || command.error) throw new Error(`${action} failed: ${(
     command.stderr || command.stdout || command.error?.message || '').slice(-2000)}`);

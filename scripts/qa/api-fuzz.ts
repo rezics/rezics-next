@@ -90,7 +90,7 @@ if (import.meta.main) {
   const children: ChildProcess[] = [];
   let exitCode = 1;
   try {
-    const up = command(root, 'corepack', ['yarn', 'stack:up', '--profile', 'qa', '--run-id', runId], 180_000);
+    const up = command(root, 'bun', ['scripts/dev/cli.ts', 'stack:up', '--profile', 'qa', '--run-id', runId], 180_000);
     writeFileSync(join(directory, 'stack.log'), up.output);
     if (!up.ok) throw new Error('QA stack startup failed; see stack.log');
     const stackDir = join(root, '.temp', 'stack', `rezics-qa-${runId}`);
@@ -113,7 +113,7 @@ if (import.meta.main) {
     const baselineDir = join(root, 'tests/qa/api-fuzz');
     mkdirSync(baselineDir, { recursive: true });
     if (!options.updateBaseline && !existsSync(join(root, baselinePath))) {
-      throw new Error(`Missing ${baselinePath}; create it with yarn api:fuzz --update-baseline`);
+      throw new Error(`Missing ${baselinePath}; create it with task api:fuzz -- --update-baseline`);
     }
     const log = openSync(join(directory, 'schemathesis.log'), 'w');
     const dockerEnv = loadDockerEnvironment();
@@ -140,7 +140,7 @@ if (import.meta.main) {
   } finally {
     for (const child of children) child.kill('SIGTERM');
     if (!options.keep) {
-      const reset = command(root, 'corepack', ['yarn', 'stack:reset', '--profile', 'qa', '--run-id', runId], 120_000);
+      const reset = command(root, 'bun', ['scripts/dev/cli.ts', 'stack:reset', '--profile', 'qa', '--run-id', runId], 120_000);
       if (!reset.ok) console.error(`QA stack cleanup failed: ${runId}`);
     }
     console.log(`API fuzz artifacts: ${directory}`);

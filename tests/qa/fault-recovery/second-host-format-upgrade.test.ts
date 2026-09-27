@@ -31,7 +31,7 @@ function options(suffix: string): StackOptions {
 }
 
 function stack(action: 'stack:down' | 'stack:reset', target: StackOptions): void {
-  command('corepack', ['yarn', action, '--profile', 'qa', '--run-id', target.runId!, '--persistent']);
+  command('bun', ['scripts/dev/cli.ts', action, '--profile', 'qa', '--run-id', target.runId!, '--persistent']);
 }
 
 function crashAndFence(target: StackOptions): void {
@@ -79,14 +79,14 @@ test('OPS02/OPS04: principal crash requires manual second-host restore; failed b
   const rollback = options('c');
   const id = `ops-${Bun.env.REZICS_QA_RUN_ID!.slice(-12)}`;
   try {
-    const artifact = command('corepack', ['yarn', 'release:build'], 240_000);
-    const installArgs = (target: StackOptions) => ['yarn', 'release:install', '--artifact', artifact,
+    const artifact = command('bun', ['scripts/dev/release-artifact.ts', 'build'], 240_000);
+    const installArgs = (target: StackOptions) => ['scripts/dev/release-artifact.ts', 'install', '--artifact', artifact,
       '--profile', 'qa', '--run-id', target.runId!, '--persistent'];
-    command('corepack', installArgs(source));
+    command('bun', installArgs(source));
     const samples = await seedOwners(source);
     stack('stack:down', source);
     await createStoppedRecoveryCut(id, source, samples);
-    command('corepack', ['yarn', 'stack:up', '--profile', 'qa', '--run-id', source.runId!, '--persistent']);
+    command('bun', ['scripts/dev/cli.ts', 'stack:up', '--profile', 'qa', '--run-id', source.runId!, '--persistent']);
     const outage = capturePrincipalHost(source);
     await restoreRecoveryCut(id, second);
     await expect(qualifyManualFailover(outage, second)).rejects.toThrow('Principal is still live');
@@ -130,9 +130,9 @@ test('OPS02/OPS04: principal crash requires manual second-host restore; failed b
     await expect(assertGraphAdmissionOpen(fuseki, { dataEpoch: secondApps.MAIN_DATA_EPOCH!,
       routingEpoch: secondApps.MAIN_ROUTING_EPOCH! })).rejects.toThrow();
     await expect(installRelease(second)).rejects.toThrow('unqualified or differs');
-    expect(() => command('corepack', installArgs(second)))
+    expect(() => command('bun', installArgs(second)))
       .toThrow('unqualified or differs');
-    expect(() => command('corepack', ['yarn', 'stack:up', '--profile', 'qa',
+    expect(() => command('bun', ['scripts/dev/cli.ts', 'stack:up', '--profile', 'qa',
       '--run-id', second.runId!, '--persistent'])).toThrow('pending');
     crashAndFence(second);
     await restoreRecoveryCut(id, rollback);

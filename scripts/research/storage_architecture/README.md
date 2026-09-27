@@ -13,26 +13,26 @@ versions. All runtime data, downloads and build output stay in
 loopback servers; they do not connect to the application's running databases.
 
 ```sh
-yarn research:architecture prepare
-yarn research:architecture inspect
-yarn test scripts/research/storage_architecture/graph.test.ts scripts/research/storage_architecture/search.test.ts scripts/research/storage_architecture/bridge.test.ts
-yarn check
-GRAPH_SIZES=10000,50000 yarn research:architecture graph
-yarn research:architecture search
-yarn research:architecture opensearch
-yarn research:architecture bridge
-yarn research:architecture dgraph --prepare-only
-yarn research:architecture dgraph
-yarn test scripts/research/storage_architecture/dgraph.test.ts
-yarn research:architecture report --retain
+task research:architecture -- prepare
+task research:architecture -- inspect
+task test -- scripts/research/storage_architecture/graph.test.ts scripts/research/storage_architecture/search.test.ts scripts/research/storage_architecture/bridge.test.ts
+task check
+GRAPH_SIZES=10000,50000 task research:architecture -- graph
+task research:architecture -- search
+task research:architecture -- opensearch
+task research:architecture -- bridge
+task research:architecture -- dgraph --prepare-only
+task research:architecture -- dgraph
+task test -- scripts/research/storage_architecture/dgraph.test.ts
+task research:architecture -- report --retain
 ```
 
 The final evidence also contains three controlled supplements:
 
 ```sh
-yarn research:architecture search --pg-contains-control
-GRAPH_POST_INDEX=1 yarn research:architecture graph
-REZICS_BRIDGE_SNAPSHOT=1 yarn research:architecture bridge
+task research:architecture -- search --pg-contains-control
+GRAPH_POST_INDEX=1 task research:architecture -- graph
+REZICS_BRIDGE_SNAPSHOT=1 task research:architecture -- bridge
 ```
 
 They reuse only the probe's retained isolated databases. The first adds PostgreSQL

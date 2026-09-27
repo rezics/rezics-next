@@ -40,7 +40,7 @@ test('the Compose Fuseki tag is derived from build inputs and changes with any o
     writeFileSync(assembler, `${readFileSync(assembler, 'utf8')}\n# changed\n`);
     const after = fusekiImageTag(directory);
     expect(after).not.toBe(before);
-    expect(() => stampFusekiImage(directory, true)).toThrow('run yarn gen');
+    expect(() => stampFusekiImage(directory, true)).toThrow('run task gen');
     stampFusekiImage(directory, false);
     expect(fusekiImageFromCompose(readFileSync(join(directory, 'infra/dev/compose.yaml'), 'utf8')).image).toBe(after);
     expect(() => stampFusekiImage(directory, true)).not.toThrow();

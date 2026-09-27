@@ -730,13 +730,13 @@ async function main(argv: string[]): Promise<number> {
     }
     case 'status': await status(); return 0;
     case 'usage': console.log(JSON.stringify({ ...currentUsage(), file: usagePath })); return 0;
-    case 'test': return withSlot(['corepack', 'yarn', 'test', ...rest]);
+    case 'test': return withSlot(['bun', 'scripts/qa/test.ts', ...rest]);
     case 'slot': return withSlot(rest[0] === '--' ? rest.slice(1) : rest);
     default:
       console.error('Usage: goalctl init [--manager <name>] | dispatch <brief.md> [--dry-run] [--force-usage]'
         + ' | wait <id> | owner <path> | reclaim <id> <brief> | resume <id> (-m <text> | --file <path>) [--effort e] [--engine claude|codex] [--fresh]'
         + ' | stop <id> | scope <id> | merge <id> [--allow-scope] | close <id> verified|cancelled'
-        + ' | status | usage | test <yarn test args> | slot -- <command>');
+        + ' | status | usage | test <task test args> | slot -- <command>');
       return 2;
   }
 }

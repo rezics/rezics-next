@@ -7,7 +7,7 @@ import { root, run } from './stack.ts';
 const TRACKED = [['ACCESS_DATABASE_URL', 'services/main/migrations/access'],
   ['ACCOUNT_RELAY_DATABASE_URL', 'services/main/migrations/relay']] as const;
 
-/** The `yarn dev` ledger, so a restored fixture and a dev stack agree on applied files. */
+/** The `task dev` ledger, so a restored fixture and a dev stack agree on applied files. */
 async function migrateTracked(url: string, directory: string): Promise<string[]> {
   const client = new Client({ connectionString: url });
   await client.connect();

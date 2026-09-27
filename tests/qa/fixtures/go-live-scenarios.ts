@@ -1,6 +1,6 @@
 // Main modules resolved against one live proxy.golang.org capture. The capture is
 // `tests/live/go-proxy-live.test.ts`; native Go 1.27.1 results for the same bytes
-// come from `yarn package:go-oracle`.
+// come from `task package:go-oracle`.
 
 export interface GoLiveScenario { id: string; mainModule: string }
 

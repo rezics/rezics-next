@@ -18,7 +18,7 @@ import { readTitleControl } from '../../../services/main/src/modules/work/title-
 
 const root = resolve(import.meta.dir, '../../..');
 function stack(action: 'stack:up' | 'stack:reset', runId: string) {
-  const result = spawnSync('corepack', ['yarn', action, '--profile', 'qa', '--run-id', runId],
+  const result = spawnSync('bun', ['scripts/dev/cli.ts', action, '--profile', 'qa', '--run-id', runId],
     { cwd: root, encoding: 'utf8', timeout: 180_000, maxBuffer: 2_000_000 });
   if (result.status !== 0 || result.error) throw new Error(`${action}: ${(result.stderr || result.stdout).slice(-2000)}`);
 }

@@ -4,7 +4,7 @@ import type { CargoLiveScenario } from './cargo-live-scenarios.ts';
 // exercise: weak `dep?/feature`, `dep:` without an implicit feature, renamed
 // `package`, proc-macro host decoupling, triple and nested cfg predicates and
 // build-dependency platforms evaluated for the host. Native Cargo 1.98.1 results
-// for the same records are recorded by `yarn package:cargo-oracle`.
+// for the same records are recorded by `task package:cargo-oracle`.
 
 const CHECKSUM = '0'.repeat(64);
 type Dep = { name: string; req: string; features?: string[]; optional?: boolean;

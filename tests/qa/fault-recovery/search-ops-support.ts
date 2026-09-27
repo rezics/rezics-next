@@ -9,6 +9,7 @@ import { loadDockerEnvironment } from '../../../scripts/load/docker-env.ts';
 import { fusekiImageFromCompose } from '../../../scripts/load/image.ts';
 import { docker, type FusekiStateRunner } from '../../../scripts/operations/search-state.ts';
 import { FusekiClient } from '../../../services/main/src/infrastructure/fuseki.ts';
+import { scriptCommand } from '../../../scripts/dev/commands.ts';
 
 export const root = resolve(import.meta.dir, '../../..');
 
@@ -20,7 +21,7 @@ export function requireFaultTier(): { runId: string; artifacts: string } {
 }
 
 export function rootCommand(args: string[], timeout: number): string {
-  const result = spawnSync('corepack', ['yarn', ...args], { cwd: root,
+  const result = spawnSync(...scriptCommand(args), { cwd: root,
     encoding: 'utf8', timeout, maxBuffer: 4_000_000 });
   if (result.status !== 0 || result.error) {
     throw new Error(`yarn ${args[0]} failed: ${(result.stderr || result.stdout || result.error?.message || '').slice(-4000)}`);
@@ -30,7 +31,7 @@ export function rootCommand(args: string[], timeout: number): string {
 
 /** A root command that must fail; returns its combined output. */
 export function refusedRootCommand(args: string[], timeout: number): string {
-  const result = spawnSync('corepack', ['yarn', ...args], { cwd: root,
+  const result = spawnSync(...scriptCommand(args), { cwd: root,
     encoding: 'utf8', timeout, maxBuffer: 4_000_000 });
   if (result.status === 0) throw new Error(`yarn ${args[0]} unexpectedly succeeded`);
   return `${result.stdout}${result.stderr}`;
@@ -39,7 +40,7 @@ export function refusedRootCommand(args: string[], timeout: number): string {
 /** Runs a root command without blocking, so a test can probe the API meanwhile. */
 export function backgroundRootCommand(args: string[]): Promise<string> {
   return new Promise((done, fail) => {
-    const child = spawn('corepack', ['yarn', ...args], { cwd: root, stdio: ['ignore', 'pipe', 'pipe'] });
+    const child = spawn(...scriptCommand(args), { cwd: root, stdio: ['ignore', 'pipe', 'pipe'] });
     let stdout = '';
     let stderr = '';
     child.stdout.on('data', chunk => { stdout += chunk; });

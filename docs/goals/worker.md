@@ -40,7 +40,7 @@ what a worker does between start and handoff.
 Parallel workers must not collide on derived or registry files:
 
 - Do not commit `generated/**`, `packages/model/src/generated/**` or the Fuseki
-  image stamp in `infra/dev/compose.yaml`. Run `yarn gen` locally when your tests
+  image stamp in `infra/dev/compose.yaml`. Run `task gen` locally when your tests
   need them, then restore those paths with `git checkout --` before handoff. The
   manager regenerates them once per integration wave.
 - Add a model profile as a new `model/definitions/<name>-v1.ts`; the compiler
@@ -101,12 +101,12 @@ the other tests your change reaches without running them. List any that fall
 outside your claim in the handoff; the manager's wave runs them.
 
 Background data comes from the shared bulk fixture: restore it with
-`yarn fixture:restore --fixture fx-medium-c9f6e4fdcb52 --run-id fixture-<task-id>`
-(about 190 s); never run `yarn fixture:build` unless your brief says so.
+`task fixture:restore -- --fixture fx-medium-c9f6e4fdcb52 --run-id fixture-<task-id>`
+(about 190 s); never run `task fixture:build` unless your brief says so.
 
 Registered integration, model, fault/recovery and load files start their own
-disposable QA project through `yarn test`; keep one tier per command. Do not
-run `yarn qa` without a tier, `yarn qa --backend`, full static checks or corpus
+disposable QA project through `task test`; keep one tier per command. Do not
+run `task qa` without a tier, `task qa -- --backend`, full static checks or corpus
 and load preparation unless the brief assigns it. Routine data preparation must
 finish within 600 seconds; if it cannot, stop and report the bottleneck. Read
 `.artifacts/qa/<run-id>/summary.md` and failing logs, not full console output.

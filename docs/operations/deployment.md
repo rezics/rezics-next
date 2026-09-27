@@ -59,7 +59,7 @@ Separate three kinds of evidence:
    for the actual rollout. Neither small growth tests nor the profile below
    establishes capacity for 500 million entities. Three billion is a future scenario.
 
-Retain the existing `yarn load` default as the **10,000-Work mixed host profile**:
+Retain the existing `task load` default as the **10,000-Work mixed host profile**:
 a reproducible corpus of 10,000 Works with published MatchUnits and a hot 10% of
 Works receiving 50% of requests. Run a three-minute steady mix at 10 concurrent
 clients: 80% public Work reads/search and 20% admitted edits, selections and
@@ -130,7 +130,7 @@ the cut into a second persistent Compose project with separate writable owner
 volumes, but leaves it stopped. The drill records the cut, network, release digest
 and graph epochs. It refuses to start the second project while the principal still
 runs. After a simulated process crash, the operator fences the principal with
-`yarn stack:down`, starts the second project on a separate Docker network, then
+`task stack:down`, starts the second project on a separate Docker network, then
 checks its Account, Access, Content and
 relay databases, graph/text readiness and exact saved samples before any manual
 routing decision.

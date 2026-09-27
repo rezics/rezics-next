@@ -14,8 +14,8 @@ PostgreSQL Access and Account configuration. The [fresh installation](../../docs
 uses root commands to generate that configuration and start its dependencies:
 
 ```sh
-yarn toolchain:install
-yarn dev
+task toolchain:install
+task dev
 ```
 
 `GET /health/live` checks the process; `GET /health/ready` queries Fuseki and
@@ -26,7 +26,7 @@ before it starts serving Work commands. The local stack writes these values to
 its private `.temp/stack/rezics-dev/apps.env` file. The generated confidential
 introspection credentials are placeholders until an operator registers the
 Main client. The QA-only bootstrap can register that client for a fresh,
-disposable QA project; `yarn dev` alone does not provision a member or Access
+disposable QA project; `task dev` alone does not provision a member or Access
 grant.
 
 `POST /v1/works` is the first authenticated product command. It accepts the fixed
@@ -299,8 +299,8 @@ distributions and Java 21 runtime:
 export REZICS_FUSEKI_HOME=/absolute/path/to/apache-jena-fuseki-6.2.0
 export REZICS_JENA_HOME=/absolute/path/to/apache-jena-6.2.0
 export REZICS_JAVA_HOME=/absolute/path/to/java-21
-corepack yarn main:typecheck
-corepack yarn main:test
+task main:typecheck
+task main:test
 ```
 
 The storage test starts disposable Fuseki and PostgreSQL state in repository `.temp/`,
@@ -354,8 +354,8 @@ psql "$MAIN_RELAY_DATABASE_URL" -v ON_ERROR_STOP=1 -f services/main/migrations/r
 psql "$MAIN_RELAY_DATABASE_URL" -v ON_ERROR_STOP=1 -f services/main/migrations/relay/004_account_deletion_journal.sql
 psql "$MAIN_RELAY_DATABASE_URL" -v ON_ERROR_STOP=1 -f services/main/migrations/relay/005_recovery_coverage_head.sql
 psql "$MAIN_RELAY_DATABASE_URL" -v ON_ERROR_STOP=1 -f services/main/migrations/relay/006_account_subject_deletion.sql
-corepack yarn main:relay:init
-corepack yarn main:relay
+task main:relay:init
+task main:relay
 ```
 
 The relay reads one contiguous source batch at a time, verifies its event count,
@@ -543,7 +543,7 @@ the error handler. Keep schemas that one plugin uses in that plugin. Put schemas
 shared by several plugins in `routes/shared.ts`, owner error mapping (`problem`,
 `commandError`) in `routes/problems.ts` and injected owner dependencies in
 `routes/dependencies.ts`. Route plugins never import `app.ts`. Unless the change
-intends a contract change, `yarn gen:check` must leave
+intends a contract change, `task gen:check` must leave
 `generated/openapi/main/public.json` unchanged.
 
 Complete-case QA declarations live in `scripts/qa/coverage/*.ts`. The original

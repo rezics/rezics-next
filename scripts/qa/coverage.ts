@@ -83,7 +83,7 @@ export function renderQualification(record: QualificationRecord): string {
   });
   return [
     '# Recorded qualification', '',
-    `Full \`yarn qa${record.scope === 'backend' ? ' --backend' : ''} --record\` run \`${record.runId}\` passed on clean commit \`${record.source.head}\` `
+    `Full \`task qa -- ${record.scope === 'backend' ? '--backend ' : ''}--record\` run \`${record.runId}\` passed on clean commit \`${record.source.head}\` `
       + `(source fingerprint \`${record.source.fingerprint}\`).`, '',
     '| Acceptance ID | Status | Executed evidence |', '| --- | --- | --- |',
     ...rows, '',

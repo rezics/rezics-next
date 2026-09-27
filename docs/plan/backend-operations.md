@@ -76,14 +76,14 @@ the strengthened CTX/model/query requirements before qualification.
 | GRAPH01-GRAPH02 | E `POST /v1/queries`; P `POST /v1/relations/changes`. |
 | GRAPH03-GRAPH05 | E `POST /v1/queries`; E `POST /v1/queries/page`. |
 | GRAPH06 | E `POST /v1/graph-layouts`; E `GET /v1/graph-layouts/{layoutId}`. |
-| OPS01-OPS02 | E `GET /health/live`; E `GET /health/ready`; owner `yarn toolchain:install`, `yarn stack:up`. |
-| OPS03-OPS04 | E `GET /v1/revisions/{revision}`; P `POST /v1/owners/reconciliations`; owner `yarn stack:backup`. |
-| OPS05-OPS06 | E `POST /v1/queries`; E `POST /v1/works`; E `GET /v1/operations/backpressure`; owner `yarn load`, `yarn fixture:restore`. |
+| OPS01-OPS02 | E `GET /health/live`; E `GET /health/ready`; owner `task toolchain:install`, `task stack:up`. |
+| OPS03-OPS04 | E `GET /v1/revisions/{revision}`; P `POST /v1/owners/reconciliations`; owner `task stack:backup`. |
+| OPS05-OPS06 | E `POST /v1/queries`; E `POST /v1/works`; E `GET /v1/operations/backpressure`; owner `task load`, `task fixture:restore`. |
 | OPS07-OPS08 | E `/api/auth/*` token/session operations; E `POST /v1/me/acting-context-checks`. |
-| OPS09 | E `POST /v1/queries`; E `GET /health/search-ready`; owner `yarn search:rebuild`. |
+| OPS09 | E `POST /v1/queries`; E `GET /health/search-ready`; owner `task search:rebuild`. |
 | OPS10-OPS12 | E `POST /v1/erasures`; E `GET /v1/erasures/{erasureId}`; E `GET /v1/revisions/{revision}`. |
-| OPS13-OPS14 | E `GET /health/live`; E `GET /health/ready`; E `GET /health/search-ready`; E `POST /v1/works`; E `POST /v1/queries`; owner `yarn stack:up`. |
-| OPS15-OPS16 | E `POST /v1/queries`; E `GET /v1/search/generations/current`; E `GET /health/search-ready`; owner `yarn search:rebuild`. |
+| OPS13-OPS14 | E `GET /health/live`; E `GET /health/ready`; E `GET /health/search-ready`; E `POST /v1/works`; E `POST /v1/queries`; owner `task stack:up`. |
+| OPS15-OPS16 | E `POST /v1/queries`; E `GET /v1/search/generations/current`; E `GET /health/search-ready`; owner `task search:rebuild`. |
 | SEARCH01-SEARCH02 | E `POST /v1/queries`; E `POST /v1/queries/page`. |
 | SEARCH03-SEARCH04 | E `POST /v1/queries`; E `POST /v1/private-queries`. |
 | SEARCH05-SEARCH06 | E `POST /v1/queries`; E `POST /v1/queries/page`. |
@@ -91,8 +91,8 @@ the strengthened CTX/model/query requirements before qualification.
 | SEARCH09-SEARCH10 | E `POST /v1/queries`; E `POST /v1/queries/page`. |
 | SEARCH11-SEARCH12 | E `POST /v1/private-queries`; E `POST /v1/me/acting-context-checks`. |
 | SEARCH13-SEARCH14 | E `POST /v1/queries`; P `POST /v1/semantic/changes`. |
-| SEARCH15-SEARCH17 | E `POST /v1/queries`; owner `yarn search:rebuild`. |
-| SEARCH18-SEARCH20 | E `POST /v1/queries`; E `POST /v1/content-search-eligibility`; owner `yarn search:rebuild`, `yarn load`. |
+| SEARCH15-SEARCH17 | E `POST /v1/queries`; owner `task search:rebuild`. |
+| SEARCH18-SEARCH20 | E `POST /v1/queries`; E `POST /v1/content-search-eligibility`; owner `task search:rebuild`, `task load`. |
 | SUB01-SUB03 | E `POST /v1/subscriptions/quotes`; E `POST /v1/subscriptions/changes`; E `POST /v1/subscriptions/gifts`; E `POST /v1/subscriptions/settlements`; E `GET /v1/subscriptions/{subscriptionId}`; E `GET /v1/subscriptions/benefits`. |
 | SUB04-SUB06 | E `POST /v1/realms/{realm}/quota-reservations`; E `GET /v1/realms/{realm}/quota-reservations`; P `POST /v1/realms/{realm}/review-decisions`; P `POST /v1/realms/{realm}/replies`. |
 | SUB07-SUB08 | E `POST /v1/pro-sites/queries`; E `POST /v1/subscriptions/reconciliations`. |

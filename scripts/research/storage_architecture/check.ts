@@ -37,8 +37,8 @@ const commands: string[][] = [
     '--project',
     'scripts/research/storage_architecture/tsconfig.json',
   ],
-  ['yarn', 'gen:check'],
-  ['yarn', 'docs:check'],
+  ['bun', 'scripts/generate.ts', '--check'],
+  ['bun', 'scripts/research/storage_architecture/docs-check.ts'],
   [
     'node_modules/.bin/biome',
     'lint',
@@ -61,7 +61,7 @@ const commands: string[][] = [
   ['node_modules/.bin/ast-grep', 'test', '--skip-snapshot-tests'],
   ['node_modules/.bin/ast-grep', 'scan'],
   ['node_modules/.bin/oxlint', '--type-aware', '--format=unix', ...backendSources],
-  // Unused files and dependencies block; unused exports stay a `yarn check:unused` report.
+  // Unused files and dependencies block; unused exports stay a `task check:unused` report.
   ['bun', 'scripts/static/knip.ts', '--include', 'files,dependencies'],
   [
     'node_modules/.bin/biome',

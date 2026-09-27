@@ -51,7 +51,7 @@ if (!Number.isInteger(count) || count < 10 || count > 10_000
   || !Number.isInteger(cohort) || cohort < 10 || cohort > count
   || (prepare && (baselineFile || cohort !== count))
   || (baselineFile && cohort === count)
-  || !artifacts || !process.env.REZICS_LOAD_RUN_ID) throw new Error('Run through yarn load');
+  || !artifacts || !process.env.REZICS_LOAD_RUN_ID) throw new Error('Run through task load');
 const baseline: LoadBaseline | undefined = baselineFile
   ? validateLoadBaseline(JSON.parse(readFileSync(baselineFile, 'utf8')),
     process.env.REZICS_LOAD_SOURCE_RUN_ID!, count - cohort) : undefined;
@@ -405,7 +405,7 @@ function queryPlan(lane: string, captured: { sparql: string }[]) {
 }
 
 function stackCommand(action: 'stack:down' | 'stack:up', name: string) {
-  const result = spawnSync('corepack', ['yarn', action, '--profile', 'qa',
+  const result = spawnSync('bun', ['scripts/dev/cli.ts', action, '--profile', 'qa',
     '--run-id', stackRunId(), '--persistent'],
   { cwd: root, env: process.env, encoding: 'utf8', timeout: 180_000 });
   writeFileSync(join(artifacts, `${name}.log`), result.stdout + result.stderr);

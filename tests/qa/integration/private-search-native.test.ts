@@ -37,11 +37,12 @@ import { selectMainDefault, mainSelectionDigest }
 import { searchRoutes, type SearchRouteDependencies }
   from '../../../services/main/src/routes/search.ts';
 import { readEnv, stackDirectory } from '../../../scripts/dev/config.ts';
+import { scriptCommand } from '../../../scripts/dev/commands.ts';
 
 const root = resolve(import.meta.dir, '../../..');
 
 function rootCommand(args: string[], timeout: number): void {
-  const result = spawnSync('corepack', ['yarn', ...args], { cwd: root,
+  const result = spawnSync(...scriptCommand(args), { cwd: root,
     encoding: 'utf8', timeout, maxBuffer: 4_000_000 });
   if (result.status !== 0 || result.error) {
     throw new Error(`yarn ${args[0]} failed: ${(result.stderr || result.stdout

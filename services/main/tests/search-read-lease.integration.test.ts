@@ -8,6 +8,7 @@ import { AccessAdmissionRegistry, AdmissionConflict, AdmissionDenied, AdmissionE
   AdmissionUnavailable, engageAccessRecoveryFence, releaseAccessRecoveryFence,
 } from '../src/modules/access/admission.ts';
 import { accessStateCoverage } from '../src/modules/work/access-recovery-coverage.ts';
+import { scriptCommand } from '../../../scripts/dev/commands.ts';
 
 const root = resolve(import.meta.dir, '../../..');
 const issuer = 'https://account.search.test';
@@ -282,7 +283,7 @@ test('SEARCH12 foundation: durable private read admission, fences and two Main r
     const unresolved = await first.unresolvedContributionSearchDeliveries();
     expect(unresolved.some(row => row.id === recoveryDelivery.id
       && row.scope === `contribution:read:${recoveryTarget}` && row.sendStartedAt !== null)).toBe(true);
-    const inventory = JSON.parse(execFileSync('yarn', ['access:pending-search'], {
+    const inventory = JSON.parse(execFileSync(...scriptCommand(['access:pending-search']), {
       cwd: root, env: { ...process.env,
         ACCESS_DATABASE_URL: `postgresql://${encodeURIComponent(config.user ?? '')}@127.0.0.1:${port}/postgres` },
     }).toString()) as { rows: Array<{ id: string; sendStartedAt: string | null }> };

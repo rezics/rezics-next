@@ -173,7 +173,7 @@ about its supplied snapshot, not independent proof of upstream completeness.
 The [Go Modules Reference](https://go.dev/ref/mod) defines the MVS graph rule,
 module-path major suffixes and the effect of main-module replacements/exclusions.
 The fixed `go 1.16` snapshot used in B51 also matched the pinned Go 1.27.1
-native build list through `yarn package:go-oracle` and a local file proxy. This
+native build list through `task package:go-oracle` and a local file proxy. This
 proves correspondence for that graph, not the unimplemented Go clauses or live
 provider provenance.
 `go-mvs-stable-unpruned-main-directives-v2` adds main-module version-specific

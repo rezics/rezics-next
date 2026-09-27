@@ -4,9 +4,9 @@ import { checkedSeed, DEFAULT_SEED, type FixtureProfile, PROFILES } from './corp
 import { restoreFixture } from './restore.ts';
 
 const usage = `Usage:
-  yarn fixture:build --profile small|medium [--seed <seed>]
-  yarn fixture:restore --fixture <fixture-id> --run-id <fixture-target-id>
-  yarn fixture:restore --from <load-source-id> --run-id <fixture-target-id>`;
+  task fixture:build -- --profile small|medium [--seed <seed>]
+  task fixture:restore -- --fixture <fixture-id> --run-id <fixture-target-id>
+  task fixture:restore -- --from <load-source-id> --run-id <fixture-target-id>`;
 
 function options(args: string[], allowed: Record<string, RegExp>): Record<string, string> {
   const values: Record<string, string> = {};
