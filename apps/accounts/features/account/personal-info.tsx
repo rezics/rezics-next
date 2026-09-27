@@ -114,7 +114,9 @@ export function PersonalInfo({ user }: { user: AvatarUser & { emailVerified: boo
             {t.changeEmail}</Button>}>
             <div className="flex flex-wrap items-center gap-2">
               <span className="font-medium break-all">{user.email}</span>
-              <Badge variant={user.emailVerified ? 'success' : 'warning'}>
+              {/* Rezics UI's semantic badges colour text with the fill tone; use the text-safe one. */}
+              <Badge variant={user.emailVerified ? 'success' : 'warning'}
+                className={user.emailVerified ? 'text-success-foreground' : 'text-warning-foreground'}>
                 {user.emailVerified ? t.verified : t.unverified}</Badge>
             </div>
             {user.emailVerified ? null : <Button variant="link" className="mt-1 h-auto px-0" disabled={busy}

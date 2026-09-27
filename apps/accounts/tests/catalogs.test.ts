@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { i18n } from '../i18n/locale.ts';
 import { resources } from '../i18n/resources.ts';
 
-const namespaces = Object.keys(resources.loaders.en) as (keyof typeof resources.loaders.en)[];
+const namespaces = ['common', 'auth', 'consent', 'account'] as const;
 
 function keys(value: unknown, prefix = ''): string[] {
   if (typeof value !== 'object' || value === null || Array.isArray(value) || '$nativeI18n' in value) return [prefix];
@@ -11,6 +11,7 @@ function keys(value: unknown, prefix = ''): string[] {
 
 describe('Accounts message catalogs', () => {
   test('every namespace has the same messages in both locales', async () => {
+    expect(Object.keys(resources.loaders.en).sort()).toEqual([...namespaces].sort());
     for (const namespace of namespaces) {
       const [english, chinese] = await Promise.all([resources.loaders.en[namespace](),
         resources.loaders['zh-CN'][namespace]()]);

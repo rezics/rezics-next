@@ -108,7 +108,8 @@ describe('Account proxy', () => {
 
   test('reports an unreachable service as temporarily unavailable', async () => {
     const response = await proxyAccountRequest(new Request(`${own}/api/auth/get-session`), {
-      serviceOrigin, publicOrigin, fetch: (async () => { throw new TypeError('connect ECONNREFUSED'); }) as typeof fetch });
+      serviceOrigin, publicOrigin,
+      fetch: (async () => { throw new TypeError('connect ECONNREFUSED'); }) as unknown as typeof fetch });
     expect(response.status).toBe(503);
     expect(await response.json()).toEqual({ error: 'temporarily_unavailable' });
   });

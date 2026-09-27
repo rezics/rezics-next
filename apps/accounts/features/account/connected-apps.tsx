@@ -30,7 +30,10 @@ export function ConnectedApps({ apps }: { apps: ConnectedApp[] }) {
   const consent = useTranslation('consent').t;
   const common = useTranslation('common').t;
   const { api, refresh } = useAccountClient();
+  // The dialog keeps naming its app while it animates closed.
   const [removing, setRemoving] = useState<ConnectedApp>();
+  const [confirming, setConfirming] = useState(false);
+  const ask = (app: ConnectedApp) => { setRemoving(app); setConfirming(true); };
   const [busy, setBusy] = useState(false);
   const [failure, setFailure] = useState('');
   const [removed, setRemoved] = useState(false);
@@ -42,7 +45,7 @@ export function ConnectedApps({ apps }: { apps: ConnectedApp[] }) {
     setFailure('');
     const result = await api.removeAppAccess(removing.consentId);
     setBusy(false);
-    setRemoving(undefined);
+    setConfirming(false);
     if (!result.ok) return setFailure(failureText(result.kind, common));
     setRemoved(true);
     refresh();
@@ -80,21 +83,21 @@ export function ConnectedApps({ apps }: { apps: ConnectedApp[] }) {
                   {consent[groupTitles[group]]}</li>)}
               </ul>
             </div>
-            <Button variant="outline" className="shrink-0 max-sm:hidden" onClick={() => setRemoving(app)}>
+            <Button variant="outline" className="shrink-0 max-sm:hidden" onClick={() => ask(app)}>
               {t.removeAccess}</Button>
           </div>
-          <Button variant="outline" className="mt-4 w-full sm:hidden" onClick={() => setRemoving(app)}>
+          <Button variant="outline" className="mt-4 w-full sm:hidden" onClick={() => ask(app)}>
             {t.removeAccess}</Button>
         </li>)}
       </ul>}
-    <AlertDialog open={!!removing} onOpenChange={({ open }) => { if (!open && !busy) setRemoving(undefined); }}>
+    <AlertDialog open={confirming} onOpenChange={({ open }) => { if (!open && !busy) setConfirming(false); }}>
       <AlertDialogContent>
         <AlertDialogHeader>
           <AlertDialogTitle>{removing ? t.removeTitle({ app: label(removing) }) : null}</AlertDialogTitle>
           <AlertDialogDescription>{removing ? t.removeBody({ app: label(removing) }) : null}</AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel disabled={busy} onClick={() => setRemoving(undefined)}>{t.cancel}</AlertDialogCancel>
+          <AlertDialogCancel disabled={busy} onClick={() => setConfirming(false)}>{t.cancel}</AlertDialogCancel>
           <AlertDialogAction variant="destructive" isLoading={busy} onClick={remove}>{t.remove}</AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>

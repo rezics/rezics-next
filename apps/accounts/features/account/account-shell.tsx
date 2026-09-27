@@ -5,7 +5,7 @@ import { Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger } from '@rezics
 import { cn } from '@rezics/ui/utils';
 import { AppWindowIcon, ArrowUpRightIcon, HouseIcon, LogOutIcon, ShieldIcon, SlidersHorizontalIcon,
   UserRoundIcon } from 'lucide-react';
-import { type ReactNode, useState } from 'react';
+import { type ReactNode, useId, useState } from 'react';
 import { useAccountClient } from '../api/account-client.tsx';
 import { Brand } from '../shell/brand.tsx';
 import { type AvatarUser, UserAvatar } from '../shell/user-avatar.tsx';
@@ -101,7 +101,7 @@ export function SectionHeading({ title, intro }: { title: string; intro?: string
 /** A titled card holding the rows of one topic, as Google Account groups settings. */
 export function SettingsCard({ title, description, children, className }: { title: string;
   description?: string; children: ReactNode; className?: string }) {
-  const id = `card-${title.replace(/\W+/g, '-').toLowerCase()}`;
+  const id = useId();
   return <section aria-labelledby={id} className={cn('rounded-3xl border border-border/60 bg-card shadow-(--aura-shadow-card)', className)}>
     <header className="px-5 pt-5 pb-3 sm:px-6">
       <h2 id={id} className="text-lg font-semibold">{title}</h2>

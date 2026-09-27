@@ -3,8 +3,6 @@
 import { Alert, AlertDescription } from '@rezics/ui/alert';
 import { Badge } from '@rezics/ui/badge';
 import { Button } from '@rezics/ui/button';
-import { Checkbox } from '@rezics/ui/checkbox';
-import { Field, FieldLabel } from '@rezics/ui/field';
 import { CircleCheckIcon, HistoryIcon, LaptopIcon, MonitorIcon, SmartphoneIcon,
   TabletIcon } from 'lucide-react';
 import { type FormEvent, useState } from 'react';
@@ -75,10 +73,11 @@ function PasswordForm({ onDone, onCancel }: { onDone(): void; onCancel(): void }
     <PasswordField label={t.confirmPassword} name="confirm-password" value={values.confirm}
       error={errors.confirm} autoComplete="new-password" visibilityLabel={showLabel} disabled={busy}
       onChange={change('confirm')} />
-    <Field orientation="horizontal" disabled={busy}>
-      <Checkbox checked={signOutOthers} onCheckedChange={({ checked }) => setSignOutOthers(checked === true)} />
-      <FieldLabel>{t.signOutOthers}</FieldLabel>
-    </Field>
+    {/* Native until Rezics UI's Checkbox stops putting role="checkbox" on its label. */}
+    <label className="flex w-fit items-center gap-3 text-sm font-medium">
+      <input type="checkbox" className="size-4 accent-primary" checked={signOutOthers} disabled={busy}
+        onChange={event => setSignOutOthers(event.currentTarget.checked)} />
+      {t.signOutOthers}</label>
     {failure ? <Alert role="alert" variant="destructive"><AlertDescription>{failure}</AlertDescription></Alert> : null}
     <div className="flex justify-end gap-2">
       <Button variant="outline" disabled={busy} onClick={onCancel}>{t.cancel}</Button>
