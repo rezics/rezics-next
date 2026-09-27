@@ -18,5 +18,8 @@ export const agentProfile = {
       { path: 'rv:profileHandle', minCount: 1, maxCount: 1, datatype: 'xsd:string',
         pattern: '^agent-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' },
       { path: 'rv:profileDisclosure', minCount: 1, maxCount: 1, in: ['rv:Public', 'rv:Private'] },
+      { path: 'rv:profileAvatarSelection', maxCount: 1, datatype: 'xsd:string',
+        pattern: '^[0-9a-f-]{36}$' },
+      { path: 'rv:profileBio', maxCount: 1, datatype: 'rdf:langString' },
     ] }],
 } as const satisfies ProfileDefinition;

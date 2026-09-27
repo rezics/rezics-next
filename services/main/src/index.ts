@@ -21,6 +21,7 @@ import { AccessAdmissionRegistry } from './modules/access/admission.ts';
 import { AccessDownloadLeases } from './modules/access/download-leases.ts';
 import { AgentProvisioning } from './modules/agent/provision.ts';
 import { AgentVanityHandles } from './modules/agent/vanity.ts';
+import { AgentPublicProfiles } from './modules/agent/profile.ts';
 import { ProfilesAccess } from './modules/profiles/access.ts';
 import { ReaderLibraryStatusStore } from './modules/library/status.ts';
 import { ReaderLibraryRatings } from './modules/library/ratings.ts';
@@ -281,6 +282,7 @@ const app = createMainApp(fuseki, {
   discovery: new DiscoveryProjection(pool),
   profiles: new ProfilesAccess(pool),
   agentHandles: new AgentVanityHandles(pool),
+  agentProfiles: new AgentPublicProfiles(pool, environment, media.store),
   libraryStatus: new ReaderLibraryStatusStore(contentPool),
   libraryRatings: new ReaderLibraryRatings(pool),
   agentProvisioning: new AgentProvisioning(pool, environment),

@@ -1,6 +1,7 @@
 import type { Static } from 'typebox';
 import { GRAPHS, RV, iri, lit } from '../work/activate.ts';
 import { allocateAgentHandle, agentForHandle } from '../agent/handle.ts';
+import { avatarImageEligible, DEFAULT_MEDIA_CONTEXT } from '../media/store.ts';
 import { decodeReadCursor, encodeReadCursor, pageResult, publicWork, WorkReadMissing,
   WorkReadUnavailable, WorkReadMoved, type WorkReadSession, type ReadRow } from '../work/read-session.ts';
 import type { shelfWork } from './read-contract.ts';
@@ -32,8 +33,15 @@ export async function readAgent(session: WorkReadSession, agent: string) {
   const owner = profileAccess(session);
   const before = await owner.agentFence(agent);
   if (!before) throw new WorkReadMissing('Agent unavailable');
-  const rows = await session.query(`SELECT ?displayName ?agentKind ?handle WHERE {
-    ${publicAgent(iri(agent))} } LIMIT 2`, 2);
+  const rows = await session.query(`SELECT ?displayName ?agentKind ?handle ?agentHead ?profileHead ?predecessor
+    ?bio ?avatarSelection WHERE { ${publicAgent(iri(agent))}
+    GRAPH ${iri(GRAPHS.current)} { OPTIONAL { ${iri(agent)} rv:publicProfileHead ?profileHead }
+      OPTIONAL { ${iri(agent)} rv:profileBio ?bio }
+      OPTIONAL { ${iri(agent)} rv:profileAvatarSelection ?avatarSelection } }
+    OPTIONAL { FILTER(BOUND(?profileHead)) GRAPH ${iri(GRAPHS.revisions)} {
+      ?profileHead a rv:AgentPublicProfileRevision ;
+      rv:component ${iri(agent)} ; rv:predecessor ?predecessor . } }
+    } LIMIT 2`, 2);
   if (!rows.length) throw new WorkReadMissing('Agent unavailable');
   const row = rows[0]!;
   const kinds: Record<string, 'person' | 'organization' | 'service'> = {
@@ -41,7 +49,23 @@ export async function readAgent(session: WorkReadSession, agent: string) {
   const kind = kinds[field(row, 'agentKind')];
   const displayName = field(row, 'displayName');
   if (rows.length !== 1 || !kind || !displayName || displayName.length > 200
+    || (row.profileHead && !row.predecessor)
     || field(row, 'handle') !== allocateAgentHandle(agent)) throw new WorkReadUnavailable('Agent profile is ambiguous');
+  const revision = row.profileHead?.value ?? field(row, 'agentHead');
+  const bio = row.bio ? { text: row.bio.value, language: row.bio['xml:lang'] ?? '' } : null;
+  if (bio && (!bio.text || bio.text.length > 500
+    || !/^[a-z]{2,3}(?:-[A-Za-z0-9]{1,8})*$/u.test(bio.language))) {
+    throw new WorkReadUnavailable('Agent bio is invalid');
+  }
+  const savedAvatar = row.avatarSelection?.value ?? null;
+  let avatarSelection: string | null = null;
+  if (savedAvatar) {
+    if (!session.deps.media?.store) throw new WorkReadUnavailable('Agent avatar owner is unavailable');
+    try {
+      const mediaRow = (await session.deps.media.store.avatarRows([agent], DEFAULT_MEDIA_CONTEXT)).rows.get(agent);
+      if (mediaRow?.selection === savedAvatar && avatarImageEligible(mediaRow)) avatarSelection = savedAvatar;
+    } catch { throw new WorkReadUnavailable('Agent avatar owner is unavailable'); }
+  }
   const library = await owner.visibility.read(agent);
   let currentHandle: string;
   try { currentHandle = await session.deps.agentHandles?.current(agent) ?? field(row, 'handle'); }
@@ -56,7 +80,8 @@ export async function readAgent(session: WorkReadSession, agent: string) {
     || (await owner.visibility.read(agent)).version !== library.version) {
     throw new WorkReadMoved('Agent profile changed');
   }
-  return { profile: 'agent-read-v1' as const, id: agent, displayName, kind,
+  return { profile: 'agent-read-v1' as const, id: agent, displayName, kind, revision, bio,
+    avatarSelection, avatarUrl: avatarSelection ? `/v1/media/avatars/${avatarSelection}` : null,
     handle: currentHandle, disclosure: 'public' as const, sourcePosition: session.position,
     library: { visibility: library.visibility, statusShelvesVisible: statusShelves !== null },
     links: { profile: `/@${currentHandle}`, works: `${path}/works`, collections: `${path}/collections`,

@@ -57,4 +57,40 @@ function agentEvent(kind: 'AgentCreatedEvent' | 'AgentCompensatedEvent',
 export const outboxEventHandlers: readonly OwnerOutboxEventHandler[] = [
   agentEvent('AgentCreatedEvent', 'agent.provision', 'com.rezics.agent.created.v1'),
   agentEvent('AgentCompensatedEvent', 'agent.compensate', 'com.rezics.agent.compensated.v1'),
+  { kind: `${RV}AgentPublicProfileChangedEvent`, action: 'agent.profile.change',
+    type: 'com.rezics.agent.profile-changed.v1', authority: 'system',
+    read: async ({ fuseki, batch, eventId, value, ordinal }) => {
+      const receipt = value('receipt');
+      const digest = value('digest');
+      if (!receipt || !/^urn:rezics:receipt:agent-profile:[0-9a-f]{64}$/.test(receipt)
+        || !digest || value('outcome') !== `${RV}Succeeded`
+        || batch.batchId !== `urn:rezics:outbox:${hash(receipt)}`
+        || eventId !== `urn:rezics:event:${hash(receipt)}`
+        || ordinal !== 0 || batch.eventIds.length !== 1) {
+        throw new Error('Agent profile event differs from its source position');
+      }
+      const rows = (await fuseki.query(`PREFIX rv: <${RV}> SELECT ?agent ?revision WHERE {
+        GRAPH ${iri(GRAPHS.outbox)} { ${iri(eventId)} a rv:AgentPublicProfileChangedEvent ;
+          rv:ordinal 0 ; rv:receipt ${iri(receipt)} ; rv:agent ?agent ; rv:operation ?operation . }
+        GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} a rv:OperationReceipt ;
+          rv:requestDigest ${lit(digest)} ; rv:outcome rv:Succeeded ;
+          rv:agent ?agent ; rv:profileRevision ?revision ; rv:operation ?operation ;
+          rv:dataEpoch ${lit(batch.dataEpoch)} ; rv:sequence ${batch.sequence} . }
+        GRAPH ${iri(GRAPHS.revisions)} { ?revision a rv:AgentPublicProfileRevision ;
+          rv:component ?agent ; rv:operation ?operation ;
+          rv:dataEpoch ${lit(batch.dataEpoch)} ; rv:sequence ${batch.sequence} . }
+      } LIMIT 2`)).results?.bindings ?? [];
+      if (rows.length !== 1 || !rows[0]?.agent || !rows[0].revision) {
+        throw new Error('Agent profile event has no unique terminal graph proof');
+      }
+      const agent = rows[0].agent.value;
+      iri(agent);
+      return { specversion: '1.0', id: eventId, source: 'https://rezics.com/services/main',
+        type: 'com.rezics.agent.profile-changed.v1', datacontenttype: 'application/json',
+        data: { batchId: batch.batchId, routingEpoch: batch.routingEpoch, ordinal,
+          sourcePosition: { datasetId: 'product', dataEpoch: batch.dataEpoch, sequence: batch.sequence },
+          receipt: { id: receipt, action: 'agent.profile.change', outcome: 'succeeded',
+            requestDigest: digest, systemProof: { kind: 'agent-profile-changed',
+              agent, revision: rows[0].revision.value } } } };
+    } },
 ];

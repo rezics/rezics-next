@@ -3,6 +3,7 @@ import { problemResult } from '../api-contract.ts';
 import { authorizedReadProblems, readProblems, writeProblems } from '../api-responses.ts';
 import type { FusekiClient } from '../infrastructure/fuseki.ts';
 import { selectAdmittedAvatar } from '../modules/media/commands.ts';
+import { publicAgent } from '../modules/profiles/read.ts';
 import { DEFAULT_MEDIA_CONTEXT, MediaInvalid, MediaMissing } from '../modules/media/store.ts';
 import { MAX_SUMMARY_BATCH, readContentAvailability, readResourceSummaries,
   type SummaryReader } from '../modules/media/summary.ts';
@@ -168,7 +169,13 @@ export function resourceRoutes(fuseki: FusekiClient, work: MainWorkDependencies)
         const target = `${ID}${params.resource}`;
         // The actor must be able to read the target before Access admits the change.
         const current = await summarize(request, { resources: [target], actingSubject: body.actingSubject });
-        if (current.summaries[0]?.status !== 'available') throw new MediaMissing('resource is unavailable');
+        if (current.summaries[0]?.status !== 'available') {
+          const agent = (await fuseki.query(`PREFIX rv: <${RV}>
+            PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+            SELECT ?agentHead WHERE {
+            ${publicAgent(iri(target))} } LIMIT 2`, 8192)).results?.bindings ?? [];
+          if (agent.length !== 1 || !agent[0]?.agentHead) throw new MediaMissing('resource is unavailable');
+        }
         const result = await selectAdmittedAvatar(work.environment, work.media, work.account, work.access,
           request, { target, context: body.context ?? DEFAULT_MEDIA_CONTEXT,
             expectedSelection: body.expectedSelection, asset: body.asset, crop: body.crop ?? null,

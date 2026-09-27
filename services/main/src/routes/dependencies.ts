@@ -105,6 +105,7 @@ export interface MainWorkDependencies {
   libraryRatings?: ReaderLibraryRatings;
   agentProvisioning?: AgentProvisioning;
   agentHandles?: AgentVanityHandles;
+  agentProfiles?: import('../modules/agent/profile.ts').AgentPublicProfiles;
   governance?: { store: GovernanceStore; rules?: GovernanceRules };
   managementReads?: ManagementReadStore;
   realmSubmissions?: RealmSubmissionStore;

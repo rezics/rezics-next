@@ -1,0 +1,210 @@
+import { randomUUID } from 'node:crypto';
+import type { Pool } from 'pg';
+import { profileValidations } from '../../infrastructure/profile.ts';
+import type { VerifiedPrincipal } from '../access/admission.ts';
+import { avatarImageEligible, DEFAULT_MEDIA_CONTEXT, type MediaStore } from '../media/store.ts';
+import { assertGraphAdmissionOpen } from '../work/restore-lineage.ts';
+import { DATASET, GRAPHS, ID, RV, hash, iri, lit, type WorkActivationEnvironment }
+  from '../work/activate.ts';
+
+export class AgentProfileInvalid extends Error {}
+export class AgentProfileDenied extends Error {}
+export class AgentProfileStale extends Error {
+  constructor(readonly currentHead: string) { super('Agent profile changed'); }
+}
+export class AgentProfileConflict extends Error {}
+export class AgentProfileUnavailable extends Error {}
+
+export interface AgentBio { text: string; language: string }
+export interface AgentProfileInput {
+  agent: string; expectedHead: string; displayName: string;
+  avatarSelection: string | null; bio: AgentBio | null; idempotencyKey: string;
+}
+export interface AgentProfileResult {
+  profile: 'agent-public-profile-v1'; agent: string; revision: string; receipt: string;
+  replayed: boolean; sourcePosition: { dataEpoch: string; sequence: string };
+}
+
+const native = /^https:\/\/rezics\.com\/id\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+const headId = /^https:\/\/rezics\.com\/id\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:-agent-revision)?$/;
+const key = /^[A-Za-z0-9:_./-]{1,128}$/;
+const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+const controls = /\p{Cc}/u;
+export const AGENT_PROFILE_COST = { graphQueries: 7, graphCommands: 1, mediaPointReads: 1,
+  accessQueries: 4, nameCharacters: 200, bioCharacters: 500 } as const;
+
+export function checkedAgentProfile(input: AgentProfileInput): AgentProfileInput {
+  const displayName = input.displayName.trim();
+  const bio = input.bio && { text: input.bio.text.trim(), language: input.bio.language };
+  if (!native.test(input.agent) || !headId.test(input.expectedHead) || !key.test(input.idempotencyKey)
+    || !displayName || displayName.length > AGENT_PROFILE_COST.nameCharacters
+    || controls.test(displayName) || (input.avatarSelection !== null && !uuid.test(input.avatarSelection))
+    || (bio && (!bio.text || bio.text.length > AGENT_PROFILE_COST.bioCharacters
+      || controls.test(bio.text) || bio.language.length > 35
+      || !/^[a-z]{2,3}(?:-[A-Za-z0-9]{1,8})*$/u.test(bio.language)))) {
+    throw new AgentProfileInvalid('Agent profile is invalid');
+  }
+  return { ...input, displayName, bio };
+}
+
+interface Terminal { digest: string; agent: string; revision: string; epoch: string; sequence: string }
+const receiptFor = (principalId: string, idempotencyKey: string) =>
+  `urn:rezics:receipt:agent-profile:${hash(`${principalId}\0${idempotencyKey}`)}`;
+
+async function terminal(env: WorkActivationEnvironment, receipt: string): Promise<Terminal | null> {
+  const rows = (await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?digest ?agent ?revision ?epoch ?sequence WHERE {
+    GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} a rv:OperationReceipt ;
+      rv:requestDigest ?digest ; rv:agent ?agent ; rv:profileRevision ?revision ;
+      rv:outcome rv:Succeeded ; rv:dataEpoch ?epoch ; rv:sequence ?sequence . }
+  } LIMIT 2`, 8192)).results?.bindings ?? [];
+  if (!rows.length) return null;
+  const row = rows[0]!;
+  if (rows.length !== 1 || !row.digest || !row.agent || !row.revision || !row.epoch
+    || !/^[0-9]+$/.test(row.sequence?.value ?? '')) {
+    throw new AgentProfileUnavailable('Agent profile receipt is incomplete');
+  }
+  return { digest: row.digest.value, agent: row.agent.value, revision: row.revision.value,
+    epoch: row.epoch.value, sequence: row.sequence!.value };
+}
+
+async function currentHead(env: WorkActivationEnvironment, agent: string): Promise<string> {
+  const rows = (await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?base ?profile WHERE {
+    GRAPH ${iri(GRAPHS.current)} { ${iri(agent)} a rv:Agent ; rv:head ?base .
+      OPTIONAL { ${iri(agent)} rv:publicProfileHead ?profile }
+      FILTER NOT EXISTS { ${iri(agent)} a rv:AgentTombstone }
+      FILTER NOT EXISTS { ${iri(agent)} rv:profileDisclosure rv:Private }
+      FILTER NOT EXISTS { ${iri(agent)} rv:protectionHead ?protection } }
+    GRAPH ${iri(GRAPHS.revisions)} { ?base a rv:RevisionAnchor ; rv:component ${iri(agent)} ;
+      rv:modelRevision <https://rezics.com/definition/agent-provision-v1> .
+      FILTER NOT EXISTS { ?base a rv:ErasedRevision } }
+  } LIMIT 2`, 8192)).results?.bindings ?? [];
+  if (rows.length !== 1 || !rows[0]?.base) throw new AgentProfileDenied('Agent is unavailable');
+  return rows[0].profile?.value ?? rows[0].base.value;
+}
+
+/** One indexed Access controller check and one bounded graph CAS; no Agent roster scan.
+ * Access locks remain held until the graph command finishes, fencing concurrent revocation. */
+export class AgentPublicProfiles {
+  constructor(private readonly pool: Pool, private readonly env: WorkActivationEnvironment,
+    private readonly media: Pick<MediaStore, 'avatarDelivery'>) {}
+
+  async change(principal: VerifiedPrincipal, raw: AgentProfileInput): Promise<AgentProfileResult> {
+    const input = checkedAgentProfile(raw);
+    await assertGraphAdmissionOpen(this.env.fuseki, this.env.lineage);
+    const client = await this.pool.connect();
+    try {
+      await client.query('BEGIN');
+      await client.query("SET LOCAL lock_timeout = '2s'");
+      await client.query("SET LOCAL statement_timeout = '5s'");
+      const fence = (await client.query<{ open: boolean }>(
+        'SELECT open FROM access.recovery_fence WHERE id = true FOR SHARE')).rows[0];
+      if (!fence?.open) throw new AgentProfileUnavailable('Access recovery hold');
+      const actor = (await client.query<{ id: string }>(`SELECT id FROM access.principal
+        WHERE account_issuer = $1 AND account_subject = $2 AND active FOR SHARE`,
+      [principal.issuer, principal.subject])).rows[0];
+      if (!actor) throw new AgentProfileDenied('Agent controller is unavailable');
+      const receipt = receiptFor(actor.id, input.idempotencyKey);
+      const digest = hash(JSON.stringify({ family: 'agent-public-profile-v1', agent: input.agent,
+        expectedHead: input.expectedHead, displayName: input.displayName,
+        avatarSelection: input.avatarSelection, bio: input.bio }));
+      const prior = await terminal(this.env, receipt);
+      if (prior) {
+        if (prior.digest !== digest || prior.agent !== input.agent) {
+          throw new AgentProfileConflict('Idempotency key binds another profile change');
+        }
+        await client.query('COMMIT');
+        return { profile: 'agent-public-profile-v1', agent: input.agent,
+          revision: prior.revision, receipt, replayed: true,
+          sourcePosition: { dataEpoch: prior.epoch, sequence: prior.sequence } };
+      }
+      const control = await client.query(`SELECT 1 FROM access.representation r
+        JOIN access.authority_subject s ON s.id = r.subject_id AND s.active AND s.kind = 'agent'
+        WHERE r.principal_id = $1 AND r.subject_id = $2 AND r.action = 'agent.control'
+          AND r.active AND r.valid_until > clock_timestamp()
+        LIMIT 1 FOR SHARE OF r, s`, [actor.id, input.agent]);
+      if (control.rowCount !== 1) throw new AgentProfileDenied('Agent controller is unavailable');
+      const head = await currentHead(this.env, input.agent);
+      if (head !== input.expectedHead) throw new AgentProfileStale(head);
+      if (input.avatarSelection) {
+        const image = await this.media.avatarDelivery(input.avatarSelection);
+        if (!image || image.target !== input.agent || image.context !== DEFAULT_MEDIA_CONTEXT
+          || !avatarImageEligible(image)) throw new AgentProfileInvalid('Avatar selection is unavailable');
+      }
+      const revision = `${ID}${randomUUID()}`;
+      const operation = `urn:rezics:operation:agent-profile:${hash(receipt)}`;
+      const event = `urn:rezics:event:${hash(receipt)}`;
+      const batch = `urn:rezics:outbox:${hash(receipt)}`;
+      const initial = input.expectedHead === (await this.env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?base WHERE {
+        GRAPH ${iri(GRAPHS.current)} { ${iri(input.agent)} rv:head ?base }
+      } LIMIT 2`, 8192)).results?.bindings?.[0]?.base?.value;
+      const expected = initial ? '' : `${iri(input.agent)} rv:publicProfileHead ${iri(input.expectedHead)} .`;
+      const update = `PREFIX rv: <${RV}> PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+        DELETE { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?n }
+          GRAPH ${iri(GRAPHS.current)} { ${iri(input.agent)} rdfs:label ?oldName .
+            ${expected} ${iri(input.agent)} rv:profileBio ?oldBio .
+            ${iri(input.agent)} rv:profileAvatarSelection ?oldAvatar . } }
+        INSERT { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?next }
+          GRAPH ${iri(GRAPHS.current)} { ${iri(input.agent)} rdfs:label ${lit(input.displayName)} ;
+            rv:publicProfileHead ${iri(revision)}
+            ${input.bio ? `; rv:profileBio ${lit(input.bio.text)}@${input.bio.language}` : ''}
+            ${input.avatarSelection ? `; rv:profileAvatarSelection ${lit(input.avatarSelection)}` : ''} . }
+          GRAPH ${iri(GRAPHS.revisions)} { ${iri(revision)} a rv:AgentPublicProfileRevision, rv:RevisionAnchor ;
+            rv:component ${iri(input.agent)} ; rv:operation ${iri(operation)} ;
+            rv:predecessor ${iri(input.expectedHead)} ;
+            rv:modelRevision <https://rezics.com/definition/agent-profile-v1> ;
+            rv:shapeRevision <https://rezics.com/definition/agent-profile-v1> ;
+            rv:datasetId ${iri(DATASET)} ; rv:dataEpoch ${lit(this.env.lineage.dataEpoch)} ;
+            rv:sequence ?next . }
+          GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} a rv:OperationReceipt ;
+            rv:operation ${iri(operation)} ; rv:requestDigest ${lit(digest)} ;
+            rv:outcome rv:Succeeded ; rv:agent ${iri(input.agent)} ; rv:profileRevision ${iri(revision)} ;
+            rv:datasetId ${iri(DATASET)} ; rv:dataEpoch ${lit(this.env.lineage.dataEpoch)} ;
+            rv:sequence ?next . }
+          GRAPH ${iri(GRAPHS.outbox)} { ${iri(batch)} a rv:OutboxBatch ;
+            rv:dataEpoch ${lit(this.env.lineage.dataEpoch)} ; rv:sequence ?next ;
+            rv:eventCount 1 ; rv:event ${iri(event)} .
+            ${iri(event)} a rv:AgentPublicProfileChangedEvent ; rv:ordinal 0 ;
+            rv:receipt ${iri(receipt)} ; rv:operation ${iri(operation)} ;
+            rv:agent ${iri(input.agent)} . } }
+        WHERE { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:dataEpoch ${lit(this.env.lineage.dataEpoch)} ;
+            rv:routingEpoch ${lit(this.env.lineage.routingEpoch)} ; rv:sequence ?n . }
+          FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:restoreHold true } }
+          GRAPH ${iri(GRAPHS.current)} { ${iri(input.agent)} a rv:Agent ; rv:head ?base ;
+            rdfs:label ?oldName . OPTIONAL { ${iri(input.agent)} rv:profileBio ?oldBio }
+            OPTIONAL { ${iri(input.agent)} rv:profileAvatarSelection ?oldAvatar }
+            ${expected} }
+          ${initial ? `FILTER(?base = ${iri(input.expectedHead)}) FILTER NOT EXISTS {
+            GRAPH ${iri(GRAPHS.current)} { ${iri(input.agent)} rv:publicProfileHead ?prior } }` : ''}
+          FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} { ${iri(input.agent)} a rv:AgentTombstone } }
+          FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} { ${iri(input.agent)} rv:profileDisclosure rv:Private } }
+          FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} { ${iri(input.agent)} rv:protectionHead ?protection } }
+          FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} ?p ?o } }
+          BIND(?n + 1 AS ?next) }`;
+      const validations = await profileValidations(this.env.fuseki, 'agent-profile-v1', [{
+        shape: 'https://rezics.com/definition/agent-profile-v1/profile-shape',
+        focus: [input.agent], graphs: [GRAPHS.current] }]);
+      try { await this.env.fuseki.commandWithReceipt({ receipt, digest, update,
+        validations, deadlineMs: 10_000 }); } catch { /* exact receipt decides an uncertain response */ }
+      const saved = await terminal(this.env, receipt);
+      if (!saved) {
+        const now = await currentHead(this.env, input.agent);
+        if (now !== input.expectedHead) throw new AgentProfileStale(now);
+        throw new AgentProfileUnavailable('Agent profile outcome is unknown');
+      }
+      if (saved.digest !== digest || saved.agent !== input.agent) {
+        throw new AgentProfileConflict('Idempotency key binds another profile change');
+      }
+      await client.query('COMMIT');
+      return { profile: 'agent-public-profile-v1', agent: input.agent,
+        revision: saved.revision, receipt, replayed: false,
+        sourcePosition: { dataEpoch: saved.epoch, sequence: saved.sequence } };
+    } catch (error) {
+      await client.query('ROLLBACK').catch(() => {});
+      if (error && typeof error === 'object' && 'code' in error
+        && ['40001', '40P01', '55P03', '57014'].includes(String(error.code))) {
+        throw new AgentProfileUnavailable('Agent profile owner timed out');
+      }
+      throw error;
+    } finally { client.release(); }
+  }
+}

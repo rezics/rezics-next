@@ -11,6 +11,8 @@ import { activateUploadedBytes, changeAdmittedAssetState, MediaDenied, reserveAd
 import { DEFAULT_MEDIA_CONTEXT, MAX_UPLOAD_BYTES, MediaConflict, MediaFenced, MediaInvalid, MediaMissing, MediaStale,
   MediaUnavailable, avatarImageEligible } from '../modules/media/store.ts';
 import { readResourceSummaries } from '../modules/media/summary.ts';
+import { publicAgent } from '../modules/profiles/read.ts';
+import { GRAPHS, RV, iri, lit } from '../modules/work/activate.ts';
 import { assertGraphAdmissionOpen } from '../modules/work/restore-lineage.ts';
 import type { MainWorkDependencies } from './dependencies.ts';
 import { commandError, problem } from './problems.ts';
@@ -217,6 +219,17 @@ export function mediaRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
         await assertGraphAdmissionOpen(fuseki, work.environment.lineage);
         const basis = await work.media.store.avatarDelivery(params.selection);
         if (!basis || !avatarImageEligible(basis)) return unavailable();
+        if (basis.context === DEFAULT_MEDIA_CONTEXT) {
+          const agents = (await fuseki.query(`PREFIX rv: <${RV}>
+            PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+            SELECT ?avatar WHERE { ${publicAgent(iri(basis.target))}
+              GRAPH ${iri(GRAPHS.current)} { ${iri(basis.target)} rv:profileAvatarSelection ?avatar }
+              FILTER(?avatar = ${lit(params.selection)}) } LIMIT 2`, 8192)).results?.bindings ?? [];
+          if (agents.length === 1 && agents[0]?.avatar?.value === params.selection) {
+            return await deliver(work.media, { objectNamespace: basis.objectNamespace,
+              sha256: basis.sha256!, mediaType: basis.mediaType! }, true);
+          }
+        }
         const target = (await readResourceSummaries(work.environment, undefined,
           await readerFor(request, query.actingSubject),
           { resources: [basis.target], context: basis.context!, language: null })).summaries[0]!;

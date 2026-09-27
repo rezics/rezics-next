@@ -3,6 +3,8 @@ import { problemResult } from '../api-contract.ts';
 import { writeProblems } from '../api-responses.ts';
 import { AgentProvisionConflict, AgentProvisionDenied, AgentProvisionInvalid,
   AgentProvisionUnavailable } from '../modules/agent/provision.ts';
+import { AgentProfileConflict, AgentProfileDenied, AgentProfileInvalid, AgentProfileStale,
+  AgentProfileUnavailable } from '../modules/agent/profile.ts';
 import { VanityConflict, VanityCooldown, VanityDenied, VanityInvalid, VanityUnavailable,
   VANITY_HANDLE_PATTERN } from '../modules/agent/vanity.ts';
 import type { MainWorkDependencies } from './dependencies.ts';
@@ -11,6 +13,7 @@ import { commandError, problem } from './problems.ts';
 export const openApiOperations = {
   '/v1/agents': { post: { bearer: true, idempotencyKey: true } },
   '/v1/agents/{id}/handle': { put: { bearer: true, idempotencyKey: true } },
+  '/v1/agents/{id}/profile': { put: { bearer: true, idempotencyKey: true } },
   '/v1/handles/{handle}/availability': { get: { bearer: false } },
 };
 
@@ -28,6 +31,14 @@ const handleChangeResult = t.Object({ profile: t.Literal('agent-handle-v1'),
 const availabilityResult = t.Object({ profile: t.Literal('agent-handle-availability-v1'),
   handle: t.String(), available: t.Boolean(), reason: t.Union([t.Literal('available'),
     t.Literal('invalid'), t.Literal('reserved'), t.Literal('claimed'), t.Literal('retained')]) });
+const profileChangeBody = t.Object({ profile: t.Literal('agent-public-profile-v1'),
+  expectedHead: t.String(), displayName: t.String({ minLength: 1, maxLength: 200 }),
+  avatarSelection: t.Nullable(t.String()), bio: t.Nullable(t.Object({
+    text: t.String({ minLength: 1, maxLength: 500 }), language: t.String({ minLength: 2, maxLength: 35 }),
+  }, { additionalProperties: false })) }, { additionalProperties: false });
+const profileChangeResult = t.Object({ profile: t.Literal('agent-public-profile-v1'),
+  agent: t.String(), revision: t.String(), receipt: t.String(), replayed: t.Boolean(),
+  sourcePosition: t.Object({ dataEpoch: t.String(), sequence: t.String() }) });
 const resultSchema = t.Object({ profile: t.Literal('agent-provision-v1'),
   operationId: t.String(), agent: t.String(),
   state: t.Union([t.Literal('pending'), t.Literal('active'),
@@ -75,6 +86,35 @@ export function agentRoutes(work: MainWorkDependencies) {
       return Response.json(result, { status, headers: { 'cache-control': 'no-store' } });
     } catch (error) { return agentError(error); }
   })
+    .put('/v1/agents/:id/profile', {
+      params: t.Object({ id: t.String({ pattern:
+        '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' }) }),
+      body: profileChangeBody,
+      response: { 200: profileChangeResult, 201: profileChangeResult, ...writeProblems },
+    }, async ({ request, params, body }) => {
+      try {
+        if (!work.agentProfiles) return problem(503, 'agent_profile_unavailable', 'Agent profiles are unavailable');
+        const principal = await work.account.verify(request, ['agent:create']);
+        const result = await work.agentProfiles.change(principal, {
+          agent: `https://rezics.com/id/${params.id}`, expectedHead: body.expectedHead,
+          displayName: body.displayName, avatarSelection: body.avatarSelection,
+          bio: body.bio, idempotencyKey: request.headers.get('idempotency-key') ?? '',
+        });
+        return Response.json(result, { status: result.replayed ? 200 : 201,
+          headers: { 'cache-control': 'no-store' } });
+      } catch (error) {
+        if (error instanceof AgentProfileInvalid) return problem(400, 'invalid_agent_profile', error.message);
+        if (error instanceof AgentProfileDenied) return problem(403, 'agent_profile_denied', error.message);
+        if (error instanceof AgentProfileStale) return Response.json({
+          type: 'https://rezics.com/problems/stale_agent_profile', title: error.message,
+          status: 409, code: 'stale_agent_profile', currentHead: error.currentHead,
+        }, { status: 409, headers: { 'content-type': 'application/problem+json',
+          'cache-control': 'no-store' } });
+        if (error instanceof AgentProfileConflict) return problem(409, 'agent_profile_conflict', error.message);
+        if (error instanceof AgentProfileUnavailable) return problem(503, 'agent_profile_unavailable', error.message);
+        return commandError(error);
+      }
+    })
     .put('/v1/agents/:id/handle', {
       params: t.Object({ id: t.String({ pattern:
         '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' }) }),
