@@ -361,6 +361,8 @@ export function planShards(estimates: ReadonlyMap<string, number>, count: number
 export const isolatedIntegrationFiles = new Set([
   // Work read probes cut over classification and replace the dataset epoch.
   'services/main/tests/work-read.integration.test.ts',
+  // Realm read probes change public disclosure, erasure and the restore hold.
+  'services/main/tests/realm-read.integration.test.ts',
   'tests/qa/integration/validation-command.test.ts',
   'tests/qa/integration/validation-cross-profile.test.ts',
   // MODEL22 deliberately replaces the dataset's model generation head to
