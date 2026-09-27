@@ -1,1 +1,32 @@
-export default {} satisfies Partial<typeof import('./en.ts').default>;
+import { insert } from 'native-i18n';
+
+export default {
+  title: insert('{{app}} quiere acceder a tu cuenta de REZICS', { app: String }),
+  unknownApp: 'Una aplicación',
+  signedInAs: 'Has iniciado sesión como',
+  switchAccount: '¿No eres tú? Cambiar de cuenta',
+  allowIntro: insert('Esto permitirá que {{app}}:', { app: String }),
+  groupIdentity: 'Conocer tu identidad',
+  groupWorks: 'Trabajar con tus obras',
+  groupOffline: 'Mantener el acceso',
+  groupOther: 'Otros permisos',
+  scopeOpenid: 'Vincularte a tu cuenta de REZICS',
+  scopeProfile: 'Ver tu nombre y foto de perfil',
+  scopeEmail: 'Ver tu correo electrónico',
+  scopeOfflineAccess: 'Mantener el acceso cuando no uses la aplicación',
+  scopeWorkRead: 'Consultar obras, incluidas las que puedes ver de forma privada',
+  scopeWorkCreate: 'Crear obras en tu nombre',
+  scopeWorkEdit: 'Editar obras en tu nombre',
+  scopeOtherPrefix: 'Usar',
+  trust: insert('Asegúrate de que confías en {{app}}. Puedes quitarle el acceso en cualquier momento desde tu cuenta de REZICS.', { app: String }),
+  appPolicy: 'Política de privacidad',
+  appTerms: 'Condiciones del servicio',
+  allow: 'Permitir',
+  deny: 'Cancelar',
+  working: 'Procesando…',
+  expired: 'Esta solicitud ha caducado. Vuelve a la aplicación e inténtalo de nuevo.',
+  unavailable: 'No se ha podido completar esta solicitud. Vuelve a intentarlo dentro de un momento.',
+  invalidTitle: 'Esta solicitud no es válida',
+  invalidBody: 'El enlace está incompleto o ha caducado. Vuelve a la aplicación y empieza de nuevo.',
+  signedOutBody: 'Tu sesión ha caducado antes de responder. Inicia sesión de nuevo para revisar esta solicitud.',
+} satisfies Partial<typeof import('./en.ts').default>;

@@ -1,1 +1,32 @@
-export default {} satisfies Partial<typeof import('./en.ts').default>;
+import { insert } from 'native-i18n';
+
+export default {
+  title: insert('{{app}} souhaite accéder à votre compte REZICS', { app: String }),
+  unknownApp: 'Une application',
+  signedInAs: 'Connecté en tant que',
+  switchAccount: 'Ce n’est pas vous ? Changer de compte',
+  allowIntro: insert('Cette autorisation permettra à {{app}} de :', { app: String }),
+  groupIdentity: 'Vous identifier',
+  groupWorks: 'Gérer vos œuvres',
+  groupOffline: 'Conserver son accès',
+  groupOther: 'Autres accès',
+  scopeOpenid: 'Associer l’application à votre compte REZICS',
+  scopeProfile: 'Voir votre nom et votre photo de profil',
+  scopeEmail: 'Voir votre adresse e-mail',
+  scopeOfflineAccess: 'Rester connectée lorsque vous n’utilisez pas l’application',
+  scopeWorkRead: 'Voir les œuvres, y compris celles que vous pouvez consulter en privé',
+  scopeWorkCreate: 'Créer des œuvres en votre nom',
+  scopeWorkEdit: 'Modifier des œuvres en votre nom',
+  scopeOtherPrefix: 'Utiliser',
+  trust: insert('Vérifiez que vous faites confiance à {{app}}. Vous pouvez révoquer son accès à tout moment dans votre compte REZICS.', { app: String }),
+  appPolicy: 'Règles de confidentialité',
+  appTerms: 'Conditions d’utilisation',
+  allow: 'Autoriser',
+  deny: 'Annuler',
+  working: 'Traitement…',
+  expired: 'Cette demande a expiré. Retournez dans l’application et réessayez.',
+  unavailable: 'Nous n’avons pas pu traiter cette demande. Réessayez dans quelques instants.',
+  invalidTitle: 'Cette demande n’est pas valide',
+  invalidBody: 'Le lien est incomplet ou a expiré. Retournez dans l’application et recommencez.',
+  signedOutBody: 'Votre session a expiré avant votre réponse. Reconnectez-vous pour examiner cette demande.',
+} satisfies Partial<typeof import('./en.ts').default>;
