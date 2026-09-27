@@ -7,6 +7,7 @@ import { DISCOVERY_COST, discoveryItem, type DiscoveryCredit, type DiscoveryQuer
 import { MAX_SUMMARY_BATCH, type ResourceSummary } from '../media/summary.ts';
 import { admitDiscoveryBasis } from './source.ts';
 import { readSerialSummaries } from '../work/summary-serial.ts';
+import { canonicalChapterWorks } from '../structure/chapter-work.ts';
 import { namedDiscoveryCredits } from './credits.ts';
 import { readAuthorNames } from '../source/author-name-read.ts';
 import type { DiscoveryProjection } from './store.ts';
@@ -40,6 +41,7 @@ export async function readDiscovery(session: WorkReadSession, projection: Discov
     after && cursor ? { key: after.key, work: cursor.after } : undefined);
   const page = rows.slice(0, limit);
   const ids = page.map(row => row.work);
+  const chapterParents = await canonicalChapterWorks(session, ids);
   // Retained ordering is independent of live title/cover disclosure. Stale
   // classification/credit payloads lack a current protection/erasure proof and
   // are withheld below, including term matches, until a fresh build is active.
@@ -67,6 +69,7 @@ export async function readDiscovery(session: WorkReadSession, projection: Discov
   };
   const fenced = await session.summaries(ids);
   const items: Static<typeof discoveryItem>[] = page.flatMap((row, index) => {
+    if (chapterParents.has(row.work)) return [];
     const summary = summaries[index];
     if (summary?.status !== 'available' || summary.type !== 'work' || summary.disclosure !== 'public'
       || fenced[index]?.status !== 'available' || fenced[index]?.disclosure !== 'public') return [];

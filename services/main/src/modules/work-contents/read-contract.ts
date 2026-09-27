@@ -32,4 +32,4 @@ export const chapterRead = t.Object({ profile: t.Literal('work-chapter-v1'), wor
 
 /** One parent page, one exact body; no descendant flattening or unbounded sibling walk. */
 export const WORK_CONTENTS_COST = { pageSize: 20, bodyBytes: 1024 * 1024,
-  navigationCandidates: 20 } as const;
+  navigationCandidates: 20, legacyTitleBatch: 4, legacyTitleOwnerCalls: 5 } as const;

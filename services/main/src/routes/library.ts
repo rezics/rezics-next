@@ -6,6 +6,7 @@ import { readPublicShelves, readPublicStatusShelf } from '../modules/library/pub
 import { InvalidLibraryStatus, LibraryStatusConflict, StaleLibraryStatus }
   from '../modules/library/status.ts';
 import { readWorkBasis } from '../modules/work/read-header.ts';
+import { canonicalChapterWorks } from '../modules/structure/chapter-work.ts';
 import { workRead, WorkReadInvalid } from '../modules/work/read-session.ts';
 import { pageQuery, readAvatar, readId, readName, readPosition, readQuery, readUuid } from '../modules/work/read-contract.ts';
 import { shelfWork } from '../modules/profiles/read-contract.ts';
@@ -154,9 +155,13 @@ export function libraryRoutes(work: MainWorkDependencies) {
       try {
         if (!await reader(request, body.actingSubject)) return problem(403, 'reader_library_denied', 'Reader library is unavailable');
         const workId = `https://rezics.com/id/${params.id}`;
-        await workRead(work, request, { actingSubject: body.actingSubject },
-          session => readWorkBasis(session, workId));
-        const result = await work.libraryStatus.write({ agent: body.actingSubject, work: workId,
+        const parentWork = await workRead(work, request, { actingSubject: body.actingSubject },
+          async session => {
+            const parent = (await canonicalChapterWorks(session, [workId])).get(workId) ?? workId;
+            await readWorkBasis(session, parent);
+            return parent;
+          });
+        const result = await work.libraryStatus.write({ agent: body.actingSubject, work: parentWork,
           status: body.status, startedOn: body.startedOn, finishedOn: body.finishedOn,
           expectedVersion: body.expectedVersion, idempotencyKey });
         return Response.json(result, { headers: privateHeaders });

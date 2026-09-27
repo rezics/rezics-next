@@ -42,7 +42,13 @@ export async function projectDiscoveryWork(session: WorkReadSession, basis: Disc
   const epochs = await readEpochOrder(session);
   const rows = await session.query(`SELECT DISTINCT ?work ?sequence ?epochOrder WHERE {
     ${epochs} ${publicWork('?work', '?main')}
-    GRAPH ${iri(GRAPHS.current)} { ?work rv:head ?head }
+    GRAPH ${iri(GRAPHS.current)} { ?work rv:head ?head .
+      FILTER NOT EXISTS { ?work schema:isPartOf ?parentWork }
+      FILTER NOT EXISTS { ?legacyStructure a rv:Structure ;
+        rv:structureProfile rv:BookComposition ; rv:selectedGeneration ?legacyGeneration .
+        ?legacyPlacement a rv:OccurrencePlacement ; rv:generation ?legacyGeneration ;
+          rv:occurrenceRole rv:ChapterRole ; schema:item ?work .
+        FILTER NOT EXISTS { ?legacyPlacement rv:removedBy ?legacyRemoval } } }
     GRAPH ${iri(GRAPHS.revisions)} { ?head a rv:RevisionAnchor ; rv:component ?work ;
       rv:dataEpoch ?revisionEpoch ; rv:sequence ?sequence }
     FILTER(STR(?work) > ${lit(after)})

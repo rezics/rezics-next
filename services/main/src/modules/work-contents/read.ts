@@ -16,6 +16,52 @@ const localizedLabel = (labels: readonly { value: string; language: string }[], 
   labels.find(label => label.language.toLowerCase() === language.toLowerCase())
   ?? labels.find(label => label.language.toLowerCase().split('-')[0] === language.toLowerCase().split('-')[0])
   ?? labels[0] ?? null;
+const missingTitle = (label: { value: string; language: string } | null) =>
+  !label || /^(?:untitled chapter|未命名章节)$/iu.test(label.value.trim());
+
+/** Legacy imports put a chapter heading in the body but saved a placeholder label. */
+export function firstChapterHeading(body: Record<string, unknown>): string | null {
+  if (typeof body.body !== 'string') return null;
+  for (const line of body.body.split(/\r?\n/u).slice(0, 12)) {
+    const text = line.trim();
+    if (!text) continue;
+    const heading = /^(?:#{1,6}\s+(.+)|((?:第[一二三四五六七八九十百千万零〇两0-9]+[章节回卷部]|Chapter\s+[0-9IVXLCDM]+\b).*))$/iu.exec(text);
+    return heading && (heading[1] ?? heading[2])!.trim().slice(0, 200) || null;
+  }
+  return null;
+}
+
+async function legacyChapterLabels(session: WorkReadSession,
+  candidates: Array<{ target: string; revision: string; variant: string; language: string }>) {
+  const labels = new Map<string, { value: string; language: string }>();
+  const unique = [...new Map(candidates.map(item => [item.revision, item])).values()];
+  if (unique.length !== new Set(candidates.map(item => `${item.revision}\0${item.target}\0${item.variant}`)).size) {
+    throw new WorkReadUnavailable('Chapter publication is ambiguous');
+  }
+  const content = session.deps.content;
+  if (!content) {
+    if (!candidates.length) return labels;
+    throw new WorkReadUnavailable('Content owner is unavailable');
+  }
+  // The Content owner caps a batch at 4 MiB; four bodies fit its per-body ceiling.
+  for (let offset = 0; offset < unique.length; offset += WORK_CONTENTS_COST.legacyTitleBatch) {
+    const batch = unique.slice(offset, offset + WORK_CONTENTS_COST.legacyTitleBatch);
+    const revisions = batch.map(item => item.revision.slice(contentPrefix.length));
+    const exacts = await content.readExactBatch(revisions, async ids => new Set(ids))
+      .catch(() => { throw new WorkReadUnavailable('Content owner is unavailable'); });
+    for (const [index, exact] of exacts.entries()) {
+      const item = batch[index]!;
+      if (exact?.status !== 'available' || exact.reference.resourceId !== item.target
+        || exact.reference.variantId !== item.variant || exact.reference.language.kind !== 'tag'
+        || exact.reference.language.tag.toLowerCase() !== item.language) {
+        throw new WorkReadUnavailable('Chapter publication differs from its Content');
+      }
+      const value = firstChapterHeading(exact.body);
+      if (value) labels.set(item.revision, { value, language: item.language });
+    }
+  }
+  return labels;
+}
 
 function structureError(error: unknown): never {
   if (error instanceof CompositionUnavailable) throw missing();
@@ -102,18 +148,28 @@ export async function readContents(session: WorkReadSession, work: string,
       canReadTarget: target => canReadTarget(session, target),
     });
     if (page.revision !== header.head) throw new WorkReadMoved('Composition changed');
+    const legacy: Array<{ target: string; revision: string; variant: string; language: string }> = [];
     const items = await Promise.all(page.occurrences.map(async record => {
       const selected = record.role === 'chapter' && record.target && language
         ? await selectedContent(session, record.target, language,
           record.selection?.mode === 'fixed-revision' ? record.selection.revision : null) : null;
+      const label = localizedLabel(record.labels, language ?? '');
+      if (record.target && selected && language && missingTitle(label)) {
+        legacy.push({ target: record.target, revision: selected.revision,
+          variant: selected.variant, language });
+      }
       return { occurrence: record.occurrence, parent: record.parent,
-        role: record.role as 'group' | 'chapter', label: localizedLabel(record.labels, language ?? ''),
+        role: record.role as 'group' | 'chapter', label,
         target: record.target?.startsWith('https://rezics.com/id/') ? record.target : null,
         selectedRevision: selected?.revision ?? null,
         progress: selected ? { composition: header.structure, occurrence: record.occurrence,
           selectedRevision: selected.revision } : null,
         availability: record.role === 'group' || selected ? 'available' as const : 'unavailable' as const };
     }));
+    const derived = await legacyChapterLabels(session, legacy);
+    for (const item of items) if (item.selectedRevision && missingTitle(item.label)) {
+      item.label = derived.get(item.selectedRevision) ?? item.label;
+    }
     await fenceWorkBasis(session, basis);
     return { profile: 'work-contents-v1' as const, work, version: header.component,
       composition: header.structure, compositionRevision: header.head, language,
@@ -205,11 +261,14 @@ export async function readChapter(session: WorkReadSession, occurrence: string,
     const again = await selectedContent(session, record.target, language,
       record.selection.mode === 'fixed-revision' ? record.selection.revision : null);
     if (!await canReadTarget(session, record.target) || again?.revision !== selected.revision) throw missing();
+    const savedLabel = localizedLabel(record.labels, language);
+    const heading = missingTitle(savedLabel) ? firstChapterHeading(exact.body) : null;
     return { profile: 'work-chapter-v1' as const, work: header.work, version: header.component,
       composition: header.structure, compositionRevision: header.head, occurrence,
       parent: record.parent, parentPath: page.occurrenceContext.path.map(item => ({
         occurrence: item.occurrence, label: localizedLabel(item.labels, language) })),
-      ordinal: page.occurrenceContext.ordinal, label: localizedLabel(record.labels, language),
+      ordinal: page.occurrenceContext.ordinal,
+      label: heading ? { value: heading, language } : savedLabel,
       language, selectedRevision: selected.revision,
       progress: { composition: header.structure, occurrence, selectedRevision: selected.revision },
       previous, next, content: { reference: exact.reference, serializedJson: exact.serializedJson,

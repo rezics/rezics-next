@@ -81,6 +81,7 @@ export function workRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
           language: t.String({ minLength: 2, maxLength: 35 }) }, { additionalProperties: false })),
         description: t.Optional(t.Object({ value: t.String({ minLength: 1, maxLength: 4000 }),
           language: t.String({ minLength: 2, maxLength: 35 }) }, { additionalProperties: false })),
+        authoring: t.Optional(t.Literal('own-work')),
         semanticTypes: t.Optional(t.Array(t.String({ enum: workSemanticTypes }),
           { maxItems: MAX_WORK_SEMANTIC_TYPES, uniqueItems: true })),
         actingSubject: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
@@ -91,7 +92,8 @@ export function workRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
         500: problemResult(500), 503: problemResult(503) },
     }, async ({ request, body }) => {
       const idempotencyKey = request.headers.get('idempotency-key');
-      if (!idempotencyKey || !/^[A-Za-z0-9:_./-]{1,128}$/.test(idempotencyKey)) {
+      if (!idempotencyKey || !/^[A-Za-z0-9:_./-]{1,128}$/.test(idempotencyKey)
+        || idempotencyKey.startsWith('source-adopt-')) {
         return problem(400, 'invalid_idempotency_key', 'A valid Idempotency-Key header is required');
       }
       try {
@@ -100,6 +102,7 @@ export function workRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
             localizedTitle: body.localizedTitle, description: body.description,
             semanticTypes: body.semanticTypes,
             actingSubject: body.actingSubject,
+            authorAgent: body.authoring === 'own-work' ? body.actingSubject : undefined,
             authorityPath: body.authorityPath, idempotencyKey });
         return Response.json({ work: receipt.work, mainVersion: receipt.mainVersion,
           workRevision: receipt.workRevision, mainRevision: receipt.mainRevision,

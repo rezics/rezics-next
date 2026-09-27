@@ -62,7 +62,7 @@ test('BOOK01/BOOK03/BOOK08: native Book follows published Post while a fixed rel
         profile: 'content-search-eligibility-v1', resourceId: post.work, variantId,
         publicationDecision: decision, expectedEligibilityHead: head, actingSubject: f.actor,
         rightsBasis: 'original-contribution', disclosure: 'public' }), 201);
-    const firstContent = await save('First published Post body', null);
+    const firstContent = await save('# Chapter One\nFirst published Post body', null);
     const firstPublication = await publish(firstContent, null);
     expect(firstPublication.status).toBe('active');
     const firstEligibility = await eligible(firstPublication.decision, null);
@@ -85,6 +85,13 @@ test('BOOK01/BOOK03/BOOK08: native Book follows published Post while a fixed rel
     const fixed = await json<{ revision: string; occurrences: string[] }>(await call('POST',
       `${path}/changes`, insert(follow.revision, post.work,
         { mode: 'fixed-revision', revision: revisionRef(firstContent.revisionId) })), 200);
+    const contents = await json<{ items: Array<{ label: { value: string } | null }> }>(await call('GET',
+      `/v1/works/${shortId(book.work)}/contents?language=en&actingSubject=${encodeURIComponent(f.actor)}`), 200);
+    expect(contents.items.map(item => item.label?.value)).toEqual(['Chapter One', 'Chapter One']);
+    const chapter = await json<{ label: { value: string } | null }>(await call('GET',
+      `/v1/chapters/${shortId(follow.occurrences[0]!)}`
+        + `?language=en&actingSubject=${encodeURIComponent(f.actor)}`), 200);
+    expect(chapter.label?.value).toBe('Chapter One');
     const readPath = `${path}?actingSubject=${encodeURIComponent(f.actor)}`;
     const chapterPage = await json<{ occurrences: Array<{ target: string;
       selection: { mode: string; revision?: string } }> }>(await call('GET', readPath), 200);

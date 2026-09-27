@@ -12,6 +12,8 @@ import { assertGraphAdmissionOpen } from './restore-lineage.ts';
 
 export interface AdmittedMetadataWorkInput {
   actingSubject: string;
+  /** Set only by the direct authoring route; source adoption has its own authors. */
+  authorAgent?: string;
   authorityPath?: 'represented-agent' | 'direct-principal';
   idempotencyKey: string;
   title: string;
@@ -100,7 +102,7 @@ export async function createAdmittedMetadataWork(
     const result = await activateMetadataWork(env, { admission, title: input.title,
       language: input.language,
       localizedTitle: input.localizedTitle, description: input.description,
-      semanticTypes: input.semanticTypes });
+      semanticTypes: input.semanticTypes, authorAgent: input.authorAgent });
     const terminal = await readWorkTerminalReceipt(env.fuseki, admission.id);
     if (!terminal || terminal.outcome !== 'succeeded') {
       throw new PendingActivation('Work receipt needs Access reconciliation');

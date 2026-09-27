@@ -3,6 +3,11 @@ import { createHash, randomUUID } from 'node:crypto';
 import { resolve } from 'node:path';
 import { Elysia } from 'elysia';
 import { StudioAccess } from '../../../services/main/src/modules/studio/access.ts';
+import { createAgentGraph } from '../../../services/main/src/modules/agent/graph.ts';
+import { agentProvisionDigest } from '../../../services/main/src/modules/agent/provision.ts';
+import { canonicalChapterWorks } from '../../../services/main/src/modules/structure/chapter-work.ts';
+import { WorkReadSession } from '../../../services/main/src/modules/work/read-session.ts';
+import type { MainWorkDependencies } from '../../../services/main/src/routes/dependencies.ts';
 import { readMainOutboxEnvelope } from '../../../services/main/src/modules/outbox/relay.ts';
 import { hash } from '../../../services/main/src/modules/work/activate.ts';
 import { studioRoutes } from '../../../services/main/src/routes/studio.ts';
@@ -17,8 +22,11 @@ test('STUDIO draft heads and Work title language survive edits and stale retries
   const f = await authorCreditFixture(Bun.env as Record<string, string>,
     resolve('.temp', `studio-heads-${randomUUID()}`));
   try {
+    const agent = { kind: 'person' as const, displayName: 'Studio Author' };
+    await createAgentGraph(f.env, { id: randomUUID(), agent: f.actor,
+      ...agent, digest: agentProvisionDigest(agent) });
     const created = await f.json<{ work: string; mainVersion: string; workRevision: string }>(await f.call('POST', '/v1/works', {
-      profile: 'metadata-only-v1', title: '日本語の作品', language: 'ja',
+      profile: 'metadata-only-v1', authoring: 'own-work', title: '日本語の作品', language: 'ja',
       semanticTypes: ['https://schema.org/Book'],
       localizedTitle: { value: 'A Japanese work', language: 'en' },
       description: { value: '作品の説明', language: 'ja' }, actingSubject: f.actor,
@@ -132,6 +140,13 @@ test('STUDIO draft heads and Work title language survive edits and stale retries
       variantId: string; replayed: boolean }>(await chapterCall(), 200);
     expect(chapter.replayed).toBe(false);
     expect(chapter.variantId).toMatch(/^urn:rezics:variant:/);
+    const mapping = await canonicalChapterWorks(new WorkReadSession(
+      { environment: f.env } as MainWorkDependencies,
+      new Request('http://main.local'), {},
+      { dataEpoch: f.env.lineage.dataEpoch, sequence: chapter.compositionRevision }),
+    [chapter.work, created.work]);
+    expect(mapping.get(chapter.work)).toBe(created.work);
+    expect(mapping.has(created.work)).toBe(false);
     expect((await f.json<typeof chapter>(await chapterCall(), 200))).toMatchObject({
       work: chapter.work, occurrence: chapter.occurrence,
       compositionRevision: chapter.compositionRevision, replayed: true });
@@ -156,7 +171,24 @@ test('STUDIO draft heads and Work title language survive edits and stale retries
     expect(chapterEvent.data.receipt).toMatchObject({ chapter: { work: chapter.work,
       compositionRevision: chapter.compositionRevision } });
     const chapterInventory = await f.json<{ items: Array<{ id: string }> }>(await studioCall(), 200);
-    expect(chapterInventory.items.map(item => item.id)).toContain(chapter.work);
+    expect(chapterInventory.items.map(item => item.id)).toContain(created.work);
+    expect(chapterInventory.items.map(item => item.id)).not.toContain(chapter.work);
+    const source = await f.propose(`OL${Math.floor(Math.random() * 900000 + 100000)}W`,
+      undefined, 'Imported studio classic');
+    const imported = await f.adoptWork(source);
+    const curated = await f.json<{ work: string }>(await f.call('POST', '/v1/works', {
+      profile: 'metadata-only-v1', title: 'Curated studio Work', actingSubject: f.actor,
+    }), 201);
+    const authored = await f.json<{ items: Array<{ id: string }> }>(await studioCall(), 200);
+    expect(authored.items.map(item => item.id)).not.toContain(imported.work);
+    expect(authored.items.map(item => item.id)).not.toContain(curated.work);
+    const imports = await f.json<{ items: Array<{ id: string; relationship: string }> }>(
+      await studio.handle(new Request(`http://main.local${studioPath}?view=curated`,
+        { headers: { authorization: `Bearer ${f.account.tokenA}` } })), 200);
+    expect(imports.items).toContainEqual(expect.objectContaining({ id: imported.work,
+      relationship: 'curated' }));
+    expect(imports.items).toContainEqual(expect.objectContaining({ id: curated.work,
+      relationship: 'curated' }));
     await f.grant(`work:read:${chapter.work}`, 'work.read');
     const chapterHead = await f.json<{ title: string; language: string }>(await f.call('GET',
       `/v1/revisions/${shortId(chapter.workRevision)}?actingSubject=${encodeURIComponent(f.actor)}`), 200);

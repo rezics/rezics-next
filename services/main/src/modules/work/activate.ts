@@ -59,12 +59,15 @@ export interface WorkActivationEnvironment {
 
 export interface CreateMetadataWorkIntent {
   /** Trusted Access record; never populated from a browser request body. */
-  admission: Pick<RegisteredAdmission, 'id' | 'scope' | 'action' | 'idempotencyKey' | 'requestDigest' | 'authorityEpoch' | 'expiresAt'>;
+  admission: Pick<RegisteredAdmission, 'id' | 'scope' | 'action' | 'idempotencyKey' | 'requestDigest' | 'authorityEpoch' | 'expiresAt'>
+    & Partial<Pick<RegisteredAdmission, 'actingSubject'>>;
   title: string;
   language?: string;
   localizedTitle?: { value: string; language: string };
   description?: { value: string; language: string };
   semanticTypes?: readonly string[];
+  /** Direct authoring only. Source adoption leaves attribution to source credits. */
+  authorAgent?: string;
 }
 
 export interface WorkActivationReceipt {
@@ -107,7 +110,7 @@ function assertNativeWorkKindCombination(types: readonly string[]): void {
 export function metadataWorkRequestDigest(title: string,
   semanticTypes?: readonly string[], language = 'en',
   details: { localizedTitle?: { value: string; language: string };
-    description?: { value: string; language: string } } = {}): string {
+    description?: { value: string; language: string }; authorAgent?: string } = {}): string {
   if (title.length < 1 || title.length > 200 || /[\u0000-\u001f\u007f]/.test(title)) {
     throw new Error('invalid title');
   }
@@ -122,10 +125,14 @@ export function metadataWorkRequestDigest(title: string,
       || !/^[a-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$/.test(value.language)
       || value.language.length > 35)) throw new Error(`invalid ${name}`);
   }
+  if (details.authorAgent && !/^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/.test(details.authorAgent)) {
+    throw new Error('invalid author Agent');
+  }
   return hash(JSON.stringify({ family: 'create-metadata-work-v1', title, continuity: CONTINUITY,
     ...(language === 'en' ? {} : { language }),
     ...(details.localizedTitle ? { localizedTitle: details.localizedTitle } : {}),
     ...(details.description ? { description: details.description } : {}),
+    ...(details.authorAgent ? { authorAgent: details.authorAgent } : {}),
     ...(types.length ? { semanticTypes: types } : {}) }));
 }
 
@@ -234,6 +241,7 @@ function updateText(env: WorkActivationEnvironment, args: {
   semanticTypes: readonly string[];
   admission: CreateMetadataWorkIntent['admission'];
   workManifest: string; mainManifest: string;
+  credit?: { id: string; revision: string; agent: string };
 }): string {
   const g = GRAPHS;
   const outbox = `urn:rezics:outbox:${hash(args.receipt)}`;
@@ -246,11 +254,13 @@ function updateText(env: WorkActivationEnvironment, args: {
     `  ${iri(args.work)} a schema:CreativeWork${args.semanticTypes.map(type => `, <${type}>`).join('')} ; rv:mainVersion ${iri(args.main)} ; rv:continuityProfile ${iri(CONTINUITY)} ; rdfs:label ${lit(args.title)}@${args.language} ; rv:head ${iri(args.workRevision)} .\n` +
     (args.localizedTitle ? `  ${iri(args.work)} schema:alternateName ${lit(args.localizedTitle.value)}@${args.localizedTitle.language} .\n` : '') +
     (args.description ? `  ${iri(args.work)} schema:description ${lit(args.description.value)}@${args.description.language} .\n` : '') +
+    (args.credit ? `  ${iri(args.credit.id)} a rv:NativeAgentCredit ; rv:creditRevision ${iri(args.credit.revision)} ; rv:work ${iri(args.work)} ; rv:agent ${iri(args.credit.agent)} ; schema:roleName "author" .\n` : '') +
     `  ${iri(args.main)} a rv:MainVersion ; rv:work ${iri(args.work)} ; rv:hostingPolicy rv:MetadataOnly ; rv:head ${iri(args.mainRevision)} .\n` +
     ` }\n` +
     ` GRAPH ${iri(g.revisions)} {\n` +
     `  ${iri(args.workRevision)} a rv:RevisionAnchor ; rv:component ${iri(args.work)} ; rv:operation ${iri(args.operation)} ; rv:manifest ${iri(`urn:rezics:sha256:${args.workManifest}`)} ; rv:modelRevision ${iri(PROFILE)} ; rv:shapeRevision ${iri(PROFILE)} ; rv:datasetId ${iri(DATASET)} ; rv:dataEpoch ${lit(env.lineage.dataEpoch)} ; rv:sequence ?next .\n` +
     `  ${iri(args.mainRevision)} a rv:RevisionAnchor ; rv:component ${iri(args.main)} ; rv:operation ${iri(args.operation)} ; rv:manifest ${iri(`urn:rezics:sha256:${args.mainManifest}`)} ; rv:modelRevision ${iri(PROFILE)} ; rv:shapeRevision ${iri(PROFILE)} ; rv:datasetId ${iri(DATASET)} ; rv:dataEpoch ${lit(env.lineage.dataEpoch)} ; rv:sequence ?next .\n` +
+    (args.credit ? `  ${iri(args.credit.revision)} a rv:NativeAgentCreditRevision, rv:RevisionAnchor ; rv:component ${iri(args.credit.id)} ; rv:work ${iri(args.work)} ; rv:agent ${iri(args.credit.agent)} ; schema:roleName "author" ; rv:workRevision ${iri(args.workRevision)} ; rv:modelRevision <https://rezics.com/definition/native-agent-credit-v1> ; rv:shapeRevision <https://rezics.com/definition/native-agent-credit-v1> ; rv:dataEpoch ${lit(env.lineage.dataEpoch)} ; rv:sequence ?next .\n` : '') +
     ` }\n` +
     ` GRAPH ${iri(g.receipts)} { ${iri(args.receipt)} a rv:OperationReceipt ; rv:operation ${iri(args.operation)} ; rv:requestDigest ${lit(args.digest)} ; rv:admissionId ${lit(args.admission.id)} ; rv:authorityEpoch ${lit(args.admission.authorityEpoch)} ; rv:admittedScope ${lit(args.admission.scope)} ; rv:outcome rv:Succeeded ; rv:work ${iri(args.work)} ; rv:mainVersion ${iri(args.main)} ; rv:workRevision ${iri(args.workRevision)} ; rv:mainRevision ${iri(args.mainRevision)} ; rv:datasetId ${iri(DATASET)} ; rv:dataEpoch ${lit(env.lineage.dataEpoch)} ; rv:sequence ?next . }\n` +
     ` GRAPH ${iri(g.outbox)} { ${iri(outbox)} a rv:OutboxBatch ; rv:dataEpoch ${lit(env.lineage.dataEpoch)} ; rv:sequence ?next ; rv:eventCount 1 ; rv:event ${iri(event)} . ${iri(event)} a rv:WorkCreatedEvent ; rv:ordinal 0 ; rv:action "work.create" ; rv:receipt ${iri(args.receipt)} ; rv:operation ${iri(args.operation)} ; rv:work ${iri(args.work)} . }\n` +
@@ -260,11 +270,15 @@ function updateText(env: WorkActivationEnvironment, args: {
     ` FILTER NOT EXISTS { GRAPH ${iri(g.receipts)} { ${iri(args.receipt)} ?p ?o } }\n` +
     ` FILTER NOT EXISTS { GRAPH ${iri(g.current)} { ${iri(args.work)} ?wp ?wo } }\n` +
     ` FILTER NOT EXISTS { GRAPH ${iri(g.current)} { ${iri(args.main)} ?mp ?mo } }\n` +
+    (args.credit ? ` GRAPH ${iri(g.current)} { ${iri(args.credit.agent)} a rv:Agent . }\n` : '') +
     ` BIND(?n + 1 AS ?next)\n}`;
 }
 
 export async function activateMetadataWork(env: WorkActivationEnvironment, intent: CreateMetadataWorkIntent): Promise<WorkActivationReceipt> {
   const admission = intent.admission;
+  if (intent.authorAgent && intent.authorAgent !== admission.actingSubject) {
+    throw new Error('author Agent differs from admitted acting subject');
+  }
   if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(admission.id)
     || !/^[A-Za-z0-9:_./-]{1,128}$/.test(admission.scope)
     || !/^[A-Za-z0-9:_./-]{1,128}$/.test(admission.idempotencyKey)
@@ -301,10 +315,23 @@ export async function activateMetadataWork(env: WorkActivationEnvironment, inten
   const workRevision = ID + Bun.randomUUIDv7();
   const mainRevision = ID + Bun.randomUUIDv7();
   const operation = ID + Bun.randomUUIDv7();
+  // An explicit own-work request must commit its author credit with the Work.
+  const authorReady = intent.authorAgent ? (await env.fuseki.query(`PREFIX rv: <${RV}> ASK {
+    GRAPH ${iri(GRAPHS.current)} { ${iri(intent.authorAgent)} a rv:Agent ; rv:head ?head . }
+    GRAPH ${iri(GRAPHS.revisions)} { ?head a rv:RevisionAnchor ;
+      rv:component ${iri(intent.authorAgent)} . } }`)).boolean === true : false;
+  if (intent.authorAgent && !authorReady) throw new Error('Author Agent graph is unavailable');
+  const credit = authorReady && intent.authorAgent ? { id: ID + Bun.randomUUIDv7(),
+    revision: ID + Bun.randomUUIDv7(), agent: intent.authorAgent } : undefined;
   const validations = [...await workMetadataValidations(env, work, main),
     ...await profileValidations(env.fuseki, 'work-kind-v1', [
       { shape: profileRegistry['work-kind-v1'].shapes[0]!, focus: [work], graphs: [GRAPHS.current] },
-    ])];
+    ]), ...(credit ? await profileValidations(env.fuseki, 'native-agent-credit-v1', [
+      { shape: 'https://rezics.com/definition/native-agent-credit-v1/credit-shape',
+        focus: [credit.id], graphs: [GRAPHS.current, GRAPHS.revisions] },
+      { shape: 'https://rezics.com/definition/native-agent-credit-v1/revision-shape',
+        focus: [credit.revision], graphs: [GRAPHS.current, GRAPHS.revisions] },
+    ]) : [])];
   const workState = { mainVersion: main, continuityProfile: CONTINUITY, title: intent.title,
     language, ...(intent.localizedTitle ? { localizedTitle: intent.localizedTitle } : {}),
     ...(intent.description ? { description: intent.description } : {}),
@@ -335,7 +362,7 @@ export async function activateMetadataWork(env: WorkActivationEnvironment, inten
     commandResult = await validatedCommand(env, { receipt, digest,
       update: updateText(env, { work, main, workRevision, mainRevision, operation, receipt,
         digest, title: intent.title, language, localizedTitle: intent.localizedTitle,
-        description: intent.description, semanticTypes, admission, workManifest, mainManifest }),
+        description: intent.description, semanticTypes, admission, workManifest, mainManifest, credit }),
       validations, deadlineMs: 10_000 }, admission);
     if (commandResult.status === 'invalid' || commandResult.status === 'unknown-profile'
       || commandResult.status === 'conflict') throw new CommandRejected(commandResult);

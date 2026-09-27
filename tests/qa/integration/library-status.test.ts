@@ -277,7 +277,16 @@ test('G285: status set, clear, retry, stale and concurrent commands preserve one
       body: JSON.stringify({ profile: 'book-composition', work: book.work,
         mainVersion: book.mainVersion, actingSubject: person.agent }) }));
     expect(compositionResponse.status).toBe(201);
-    const composition = await compositionResponse.json() as { structure: string };
+    const composition = await compositionResponse.json() as { structure: string; revision: string };
+    const chapterResponse = await app.handle(new Request(
+      `http://main.local/v1/works/${book.work.slice(-36)}/chapters`, { method: 'POST',
+        headers: { authorization: `Bearer ${a.token}`, 'content-type': 'application/json',
+          'idempotency-key': randomUUID() },
+        body: JSON.stringify({ profile: 'book-chapter-create-v1', title: 'Chapter One',
+          language: 'en', direction: 'ltr', parent: composition.structure, position: 'last',
+          expectedCompositionHead: composition.revision, actingSubject: person.agent }) }));
+    expect(chapterResponse.status).toBe(200);
+    const chapter = await chapterResponse.json() as { work: string };
     const occurrence = id();
     await new StructureProgressStore(stack.contentPool).write({ principal: a.principal,
       structure: composition.structure, occurrence, completed: false, position: 'paragraph-4',
@@ -337,6 +346,39 @@ test('G285: status set, clear, retry, stale and concurrent commands preserve one
     expect(olderPage.status).toBe(200);
     expect(await olderPage.json()).toMatchObject({ items: [{ id: olderCollection, disclosure: 'public' }],
       nextCursor: null });
+    const chapterShelf = await app.handle(new Request(
+      `http://main.local/v1/works/${chapter.work.slice(-36)}/reader-status`, { method: 'PUT',
+        headers: { authorization: `Bearer ${a.token}`, 'content-type': 'application/json',
+          'idempotency-key': randomUUID() },
+        body: JSON.stringify({ actingSubject: person.agent, expectedVersion: 2,
+          status: 'want-to-read', startedOn: null, finishedOn: null }) }));
+    expect(chapterShelf.status).toBe(200);
+    expect(await chapterShelf.json()).toMatchObject({ work: book.work,
+      status: 'want-to-read', version: 3 });
+    expect((await status.batch(person.agent, [chapter.work, book.work])).map(row => row.status))
+      .toEqual([null, 'want-to-read']);
+    await status.write({ agent: person.agent, work: chapter.work, status: 'reading',
+      startedOn: null, finishedOn: null, expectedVersion: 0, idempotencyKey: randomUUID() });
+    const parentPrecedence = await app.handle(new Request(
+      `http://main.local/v1/me/shelves?actingSubject=${actingSubject}`,
+      { headers: { authorization: `Bearer ${a.token}` } }));
+    expect(await parentPrecedence.json()).toMatchObject({ statusShelves: expect.arrayContaining([
+      expect.objectContaining({ status: 'want-to-read', count: 1 }),
+      expect.objectContaining({ status: 'reading', count: 1 })]) });
+    await status.write({ agent: person.agent, work: book.work, status: null,
+      startedOn: null, finishedOn: null, expectedVersion: 3, idempotencyKey: randomUUID() });
+    const legacyState = await app.handle(new Request(
+      `http://main.local/v1/works/${chapter.work.slice(-36)}/reader-state?actingSubject=${actingSubject}`,
+      { headers: { authorization: `Bearer ${a.token}` } }));
+    expect(legacyState.status).toBe(200);
+    expect(await legacyState.json()).toMatchObject({ work: book.work,
+      status: { work: book.work, status: 'reading', version: 4 } });
+    const legacyShelf = await app.handle(new Request(
+      `http://main.local/v1/me/shelves/status/reading/works?actingSubject=${actingSubject}`,
+      { headers: { authorization: `Bearer ${a.token}` } }));
+    expect(legacyShelf.status).toBe(200);
+    expect(await legacyShelf.json()).toMatchObject({ items: expect.arrayContaining([
+      expect.objectContaining({ work: book.work, version: 4 })]) });
     await stack.accessPool.query('UPDATE access.recovery_fence SET open = false WHERE id = true');
     try {
       expect((await visibilityRequest(a.token, { visibility: 'public', expectedVersion: 3 })).status).toBe(503);
@@ -346,7 +388,6 @@ test('G285: status set, clear, retry, stale and concurrent commands preserve one
     expect(await (await app.handle(new Request(`http://main.local${visibilityPath}`,
       { headers: { authorization: `Bearer ${a.token}` } }))).json())
       .toMatchObject({ visibility: 'private', version: 3 });
-
     // Read after the next graph commit, before its admission seals the Access
     // inventory. The prior immutable rating remains usable and is marked stale.
     const command = stack.fuseki.commandWithReceipt.bind(stack.fuseki);
@@ -373,5 +414,10 @@ test('G285: status set, clear, retry, stale and concurrent commands preserve one
       expect(catchupRead).toBe(true);
     } finally { stack.fuseki.commandWithReceipt = command; }
     expect(await (await view()).json()).toMatchObject({ rating: { global: { value: 4, stale: false } } });
+    expect((await visibilityRequest(a.token, { visibility: 'public', expectedVersion: 3 })).status).toBe(200);
+    const legacyPublic = await app.handle(new Request(`http://main.local${publicShelfPath}`));
+    expect(legacyPublic.status).toBe(200);
+    expect(await legacyPublic.json()).toMatchObject({ statusShelves: expect.arrayContaining([
+      expect.objectContaining({ status: 'reading', count: 2 })]) });
   } finally { await stack.stop(); }
 }, 120_000);

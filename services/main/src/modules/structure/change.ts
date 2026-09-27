@@ -1130,9 +1130,11 @@ export async function changeComposition(env: WorkActivationEnvironment,
   const chapter = intent.newWork;
   const chapterWorkManifest = chapter ? env.workObjects
     ? await prepareWorkComponent(env.workObjects, chapter.work, { mainVersion: chapter.mainVersion,
-      continuityProfile: CONTINUITY, title: chapter.title, language: chapter.language })
+      continuityProfile: CONTINUITY, title: chapter.title, language: chapter.language,
+      parentWork: header.owner })
     : prepareComponent(env.objectDirectory, chapter.work, { mainVersion: chapter.mainVersion,
-      continuityProfile: CONTINUITY, title: chapter.title, language: chapter.language }) : null;
+      continuityProfile: CONTINUITY, title: chapter.title, language: chapter.language,
+      parentWork: header.owner }) : null;
   const chapterMainManifest = chapter ? env.workObjects
     ? await prepareWorkComponent(env.workObjects, chapter.mainVersion,
       { work: chapter.work, hostingPolicy: 'metadata-only' })
@@ -1140,7 +1142,8 @@ export async function changeComposition(env: WorkActivationEnvironment,
       { work: chapter.work, hostingPolicy: 'metadata-only' }) : null;
   const chapterCurrent = chapter ? `${iri(chapter.work)} a schema:CreativeWork ;
     rv:mainVersion ${iri(chapter.mainVersion)} ; rv:continuityProfile ${iri(CONTINUITY)} ;
-    rdfs:label ${lit(chapter.title)}@${chapter.language} ; rv:head ${iri(chapter.workRevision)} .
+    schema:isPartOf ${iri(header.owner)} ; rdfs:label ${lit(chapter.title)}@${chapter.language} ;
+    rv:head ${iri(chapter.workRevision)} .
     ${iri(chapter.mainVersion)} a rv:MainVersion ; rv:work ${iri(chapter.work)} ;
     rv:hostingPolicy rv:MetadataOnly ; rv:head ${iri(chapter.mainRevision)} .` : '';
   const chapterRevisions = chapter ? `${iri(chapter.workRevision)} a rv:RevisionAnchor ;

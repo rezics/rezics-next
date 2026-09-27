@@ -23,6 +23,7 @@ const submission = t.Object({ id: readUuid, realm: readId, state: t.String(),
   openedAt: t.String(), updatedAt: t.String() });
 const item = t.Object({ id: readId, mainVersion: readId, workRevision: readId,
   mainRevision: readId, title: t.Object({ value: t.String(), language: t.String() }),
+  relationship: t.Union([t.Literal('authored'), t.Literal('curated')]),
   cover: readAvatar, types: t.Array(t.String()),
   disclosure: t.Union([t.Literal('public'), t.Literal('restricted')]),
   state: t.Union([t.Literal('empty'), t.Literal('draft'), t.Literal('published')]),
@@ -37,6 +38,7 @@ export function studioRoutes(work: MainWorkDependencies) {
     params: t.Object({ agent: readUuid }),
     query: t.Object({ state: t.Optional(t.Union([t.Literal('empty'), t.Literal('draft'),
       t.Literal('published')])), type: t.Optional(workType),
+    view: t.Optional(t.Union([t.Literal('authored'), t.Literal('curated')])),
     limit: t.Optional(t.Integer({ minimum: 1, maximum: 20 })),
     cursor: t.Optional(t.String({ minLength: 1, maxLength: 2048 })) },
     { additionalProperties: false }),
@@ -46,7 +48,8 @@ export function studioRoutes(work: MainWorkDependencies) {
     try {
       return Response.json(await workRead(work, request,
         { actingSubject: agent, limit: query.limit, cursor: query.cursor },
-        session => readStudioWorks(session, agent, { state: query.state, type: query.type })),
+        session => readStudioWorks(session, agent, { state: query.state, type: query.type,
+          view: query.view })),
       { headers: { 'cache-control': 'private, no-store' } });
     } catch (error) {
       if (error instanceof ControlDenied) return problem(403, 'studio_denied', 'Agent control is unavailable');

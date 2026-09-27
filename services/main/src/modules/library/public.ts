@@ -2,9 +2,10 @@ import { iri } from '../work/activate.ts';
 import { decodeReadCursor, encodeReadCursor, pageResult, publicWork, WorkReadMoved,
   WorkReadMissing, WorkReadUnavailable, type WorkReadSession } from '../work/read-session.ts';
 import { readAgent, shelfWorks } from '../profiles/read.ts';
+import { canonicalStatusCandidates, CANONICAL_STATUS_COST } from './canonical.ts';
 import type { ReaderLibraryStatusStore, ReadingStatus, StatusState } from './status.ts';
 
-export const PUBLIC_SHELF_COST = { candidates: 240, disclosureBatch: 24,
+export const PUBLIC_SHELF_COST = { ...CANONICAL_STATUS_COST, disclosureBatch: 24,
   disclosureQueries: 10, summaryBatches: 2, pageSize: 20 } as const;
 
 async function projection(session: WorkReadSession, agent: string, store: ReaderLibraryStatusStore) {
@@ -15,17 +16,17 @@ async function projection(session: WorkReadSession, agent: string, store: Reader
   if (visibility.visibility !== 'public') throw new WorkReadMissing('Shelf unavailable');
   const agentFence = await owner.agentFence(agent);
   const statusFence = await store.fence(agent);
-  const candidates = await store.publicCandidates(agent);
+  const entries = await canonicalStatusCandidates(session, agent, store);
   const published = new Set<string>();
-  for (let offset = 0; offset < candidates.length; offset += PUBLIC_SHELF_COST.disclosureBatch) {
-    const batch = candidates.slice(offset, offset + PUBLIC_SHELF_COST.disclosureBatch);
+  for (let offset = 0; offset < entries.length; offset += PUBLIC_SHELF_COST.disclosureBatch) {
+    const batch = entries.slice(offset, offset + PUBLIC_SHELF_COST.disclosureBatch);
     const rows = await session.query(`SELECT DISTINCT ?id WHERE {
       VALUES ?id { ${batch.map(row => iri(row.work)).join(' ')} }
       ${publicWork('?id', '?main')}
     } LIMIT ${PUBLIC_SHELF_COST.disclosureBatch + 1}`, PUBLIC_SHELF_COST.disclosureBatch + 1);
     for (const row of rows) if (row.id?.value) published.add(row.id.value);
   }
-  const visible = candidates.filter(row => published.has(row.work));
+  const visible = entries.filter(row => published.has(row.work));
   const counts = (['want-to-read', 'reading', 'read'] as const).map(status => {
     const items = visible.filter(item => item.status === status);
     return { status, count: items.length, changedAt: items[0]?.changedAt ?? null };

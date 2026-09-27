@@ -46,8 +46,9 @@ export class StudioAccess {
     }
   }
 
-  async studioWorks(principal: VerifiedPrincipal, agent: string, after: string, limit: number) {
-    if (!Number.isInteger(limit) || limit < 1 || limit > 21) {
+  async studioWorks(principal: VerifiedPrincipal, agent: string, after: string, limit: number,
+    view: 'authored' | 'curated' = 'authored') {
+    if (!Number.isInteger(limit) || limit < 1 || limit > 201) {
       throw new WorkReadUnavailable('Invalid Studio page size');
     }
     return this.transaction(async client => {
@@ -57,9 +58,10 @@ export class StudioAccess {
         FROM access.authority_subject WHERE id = $1 AND kind = 'agent' AND active FOR SHARE`, [agent])).rows[0];
       if (!subject) throw new WorkReadUnavailable('Studio Agent is unavailable');
       const rows = (await client.query<{ id: string; action: string; created_at: Date }>(`SELECT id::text,
-        action, registered_at AS created_at FROM access.admission
-        WHERE acting_subject = $1 AND action IN ('work.create', 'work.edit') AND state = 'sealed'
+        action, registered_at AS created_at FROM access.admission a
+        WHERE acting_subject = $1 AND action = 'work.create' AND state = 'sealed'
           AND graph_outcome = 'succeeded' AND id > $2::uuid
+          ${view === 'authored' ? "AND a.idempotency_key NOT LIKE 'source-adopt-%'" : ''}
         ORDER BY id LIMIT $3`, [agent, after, limit])).rows;
       return { rows, stamp: JSON.stringify([actor.id, actor.epoch, mandate.id,
         mandate.generation, subject.generation]) };

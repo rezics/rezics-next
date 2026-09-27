@@ -2,11 +2,13 @@ import { GRAPHS, RV, iri, lit } from '../work/activate.ts';
 import { decodeReadCursor, encodeReadCursor, pageResult, WorkReadInvalid, WorkReadLimit,
   WorkReadMissing, WorkReadMoved, WorkReadUnavailable, type WorkReadSession } from '../work/read-session.ts';
 import { shelfWorks } from '../profiles/read.ts';
+import { canonicalChapterWorks } from '../structure/chapter-work.ts';
+import { canonicalStatusCandidates, CANONICAL_STATUS_COST } from './canonical.ts';
 import type { ReaderLibraryStatusStore, ReadingStatus } from './status.ts';
 
 const id = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
 export const READER_LIBRARY_COST = { batchWorks: 24, graphCalls: 64, graphRows: 481,
-  sqlReads: 5, responseBytes: 256 * 1024 } as const;
+  sqlReads: 16, responseBytes: 256 * 1024, ...CANONICAL_STATUS_COST } as const;
 
 export async function readReaderStates(session: WorkReadSession, agent: string, works: string[],
   status: ReaderLibraryStatusStore, realm?: string) {
@@ -14,6 +16,9 @@ export async function readReaderStates(session: WorkReadSession, agent: string, 
     || new Set(works).size !== works.length || works.some(work => !id.test(work))) {
     throw new WorkReadInvalid('Invalid reader state batch');
   }
+  const parents = await canonicalChapterWorks(session, works);
+  works = works.map(work => parents.get(work) ?? work);
+  if (new Set(works).size !== works.length) throw new WorkReadInvalid('Duplicate parent Work in reader state batch');
   const before = await session.deps.profiles?.agentFence(agent);
   if (!before) throw new WorkReadMissing('Reader Agent is unavailable');
   const statusFence = await status.fence(agent);
@@ -21,7 +26,12 @@ export async function readReaderStates(session: WorkReadSession, agent: string, 
   if (summaries.some(summary => summary.status !== 'available' || summary.type !== 'work')) {
     throw new WorkReadMissing('Work is unavailable');
   }
-  const states = await status.batch(agent, works);
+  const directStates = await status.batch(agent, works);
+  const legacyStates = directStates.some(state => state.status === null)
+    ? new Map((await canonicalStatusCandidates(session, agent, status))
+      .map(state => [state.work, state])) : new Map();
+  const states = directStates.map(state => state.status === null
+    ? legacyStates.get(state.work) ?? state : state);
   const shelves = new Map<string, { id: string; name: string; disclosure: 'public' | 'private' }[]>();
   const structures = new Map<string, string>();
   let currentMains: { work: string; main: string }[] = [];
@@ -135,7 +145,11 @@ export async function readMyShelves(session: WorkReadSession, agent: string,
   if (new Set(rows.map(row => row.id?.value)).size !== rows.length) {
     throw new WorkReadUnavailable('Collection shelf is ambiguous');
   }
-  const statusShelves = await status.shelves(agent);
+  const statuses = await canonicalStatusCandidates(session, agent, status);
+  const statusShelves = (['want-to-read', 'reading', 'read'] as const).map(value => {
+    const matches = statuses.filter(item => item.status === value);
+    return { status: value, count: matches.length, changedAt: matches[0]?.changedAt ?? null };
+  }).sort((a, b) => (b.changedAt ?? '').localeCompare(a.changedAt ?? ''));
   if (await status.fence(agent) !== statusFence
     || await session.deps.profiles?.agentFence(agent) !== before
     || !await session.deps.access.canReadAsBaselineMember?.(session.principal, agent)) {
@@ -164,8 +178,12 @@ export async function readStatusShelf(session: WorkReadSession, agent: string,
     if (order[0] !== fence) throw new WorkReadMoved('Status shelf changed');
     after = { work: cursor.after, changedAt: order[1] };
   }
-  const rows = await statusStore.page(agent, status, limit + 1, after);
-  const page = rows.slice(0, limit);
+  const rows = (await canonicalStatusCandidates(session, agent, statusStore))
+    .filter(row => row.status === status);
+  const start = after ? rows.findIndex(row => row.work === after.work
+    && row.changedAt === after.changedAt) + 1 : 0;
+  if (after && !start) throw new WorkReadMoved('Status shelf changed');
+  const page = rows.slice(start, start + limit);
   const cards = await shelfWorks(session, page.map(row => row.work));
   if (await statusStore.fence(agent) !== fence || await session.deps.profiles?.agentFence(agent) !== before
     || !await session.deps.access.canReadAsBaselineMember?.(session.principal, agent)) {
@@ -173,6 +191,6 @@ export async function readStatusShelf(session: WorkReadSession, agent: string,
   }
   return { profile: 'reader-status-shelf-v1' as const, status,
     ...pageResult(session, page.map(value => ({ ...value, card: cards.get(value.work) ?? null })),
-      rows.length > limit ? encodeReadCursor(binding, session.position,
+      start + limit < rows.length ? encodeReadCursor(binding, session.position,
         page.at(-1)!.work, JSON.stringify([fence, page.at(-1)!.changedAt])) : null) };
 }

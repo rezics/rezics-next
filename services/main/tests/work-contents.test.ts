@@ -22,7 +22,7 @@ test('Reader routes expose bounded, typed Work contents and exact chapter bodies
   };
   expect(typedReader).toBeFunction();
   expect(WORK_CONTENTS_COST).toEqual({ pageSize: 20, bodyBytes: 1024 * 1024,
-    navigationCandidates: 20 });
+    navigationCandidates: 20, legacyTitleBatch: 4, legacyTitleOwnerCalls: 5 });
   const graph = new FusekiClient('http://127.0.0.1:1/rezics');
   const app = createMainApp(graph, { environment: { fuseki: graph,
     lineage: { dataEpoch: 'one', routingEpoch: 'one' }, objectDirectory: '.temp/work-contents' },
