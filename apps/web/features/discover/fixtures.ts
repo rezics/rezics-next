@@ -53,6 +53,8 @@ export function page(items: DiscoveryItem[], options: { next?: boolean; seen?: n
     matchedTerm: items[0]?.match.classification ?? null,
     context: options.context ? id(900) : null, items, nextCursor: next ? 'cursor-2' : null,
     sourcePosition: { dataEpoch: 'story', sequence: '47' },
+    generation: '00000000-0000-4000-8000-000000000047', stale: false,
+    projectionPosition: { dataEpoch: 'story', sequence: '47' },
     count: { value: items.length, kind: 'exact-page', total: null },
     matches: { value: (options.seen ?? 0) + items.length, kind: next ? 'lower-bound' : 'exact' } };
 }
