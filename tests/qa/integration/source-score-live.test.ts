@@ -30,7 +30,7 @@ test('LIVE08: current Open Library ratings and reading-log counts remain source-
     const ratings = run.run.surfaces.find(surface => surface.surface === 'ratings')!;
     const bookshelves = run.run.surfaces.find(surface => surface.surface === 'bookshelves')!;
     expect(ratings.outcome.outcome).toBe('qualified');
-    expect(bookshelves.outcome.outcome).toBe('qualified');
+    expect(bookshelves.outcome.outcome, JSON.stringify(bookshelves.outcome)).toBe('qualified');
     const rating = ratings.captures[0]!;
     const shelf = bookshelves.captures[0]!;
     expect(rating.record).not.toBe(shelf.record);

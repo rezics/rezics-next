@@ -99,8 +99,10 @@ test('OPS09: a cold public Content body read and exact RDF/Lucene rebuild stay w
     expect(storage.freeBytes).toBeGreaterThanOrEqual(storage.requiredBytes);
     // An impossible reserve refuses before the quarantine command; the saved
     // job then resumes normally with a valid reserve.
-    const impossible = storage.freeBytes + 1;
-    expect(Number.isSafeInteger(impossible)).toBe(true);
+    // Other QA projects can release disk space after the measurement. Keep the
+    // refusal independent of their cleanup while staying inside the CLI's cap.
+    const impossible = 1_000_000_000_000_000;
+    expect(impossible).toBeGreaterThan(storage.freeBytes);
     const denied = refusedRootCommand(['search:rebuild', ...stack.args,
       '--reserve-bytes', String(impossible)], 120_000);
     expect(denied).toContain('insufficient storage headroom');

@@ -355,12 +355,19 @@ export function planShards(estimates: ReadonlyMap<string, number>, count: number
   return shards.filter(shard => shard.files.length).map(shard => shard.files.sort());
 }
 
-// These tests initialize, clear or temporarily remove state in the shared
-// product graph, or replay its outbox from sequence zero. Run each against its
-// own bootstrapped QA project so no later file observes changed graph state
-// and replay tests do not consume unrelated earlier events.
+// These tests clear or temporarily remove state in the shared product graph,
+// replay its outbox from sequence zero, or need a fresh graph for bounded
+// writes. Run each against its own bootstrapped QA project.
 export const isolatedIntegrationFiles = new Set([
   'tests/qa/integration/validation-command.test.ts',
+  'tests/qa/integration/validation-cross-profile.test.ts',
+  'tests/qa/integration/export-api.test.ts',
+  'tests/qa/integration/context-rule-cases.test.ts',
+  'tests/qa/integration/search-grouped-native.test.ts',
+  'tests/qa/integration/search-statement-query.test.ts',
+  'tests/qa/integration/event-time.test.ts',
+  'tests/qa/integration/access-org-realm-move-api.test.ts',
+  'tests/qa/integration/theme-activation-api.test.ts',
   'tests/qa/integration/owner-operations.test.ts',
   'tests/qa/integration/owner-relay-gap.test.ts',
   'tests/qa/integration/owner-outbox-recovery.test.ts',

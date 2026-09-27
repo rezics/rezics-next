@@ -192,7 +192,12 @@ test('QA shards: shard count keeps each project near half its budget and plannin
   expect(() => maximumShards({ REZICS_QA_SHARDS: '9' }, 'fault/recovery')).toThrow('1 to 8');
 });
 
-test('QA shards: graph reset and outbox gap files get singleton integration projects', () => {
+test('QA shards: graph reset, outbox gap and fresh-graph files get singleton integration projects', () => {
+  for (const file of ['validation-cross-profile', 'export-api', 'context-rule-cases',
+    'search-grouped-native', 'search-statement-query', 'event-time', 'access-org-realm-move-api',
+    'theme-activation-api']) {
+    expect(isolatedIntegrationFiles.has(`tests/qa/integration/${file}.test.ts`)).toBe(true);
+  }
   const files = new Map<string, number>([
     ['tests/qa/integration/claim-template.test.ts', 100],
     ['tests/qa/integration/governance-report.test.ts', 80],
