@@ -4,6 +4,7 @@ import type { VerifiedPrincipal } from '../access/admission.ts';
 import { decisionOutcomes, enforcementEffects, GLOBAL_CONTEXT, governanceComponents, governanceOwners,
   processSteps } from './schema.ts';
 import type { ModerationEffects } from './effects.ts';
+import type { ReviewReportOwner } from './report-review.ts';
 
 export class GovernanceInvalid extends Error {}
 export class GovernanceDenied extends Error {}
@@ -136,7 +137,7 @@ function validTarget(target: { owner: string; resource: string; component: strin
 export class GovernanceStore {
   constructor(private readonly pool: Pool, private readonly evidence: EvidenceCapture,
     private readonly heads: TargetHeads, private readonly rules: RuleBasis,
-    private readonly effects?: ModerationEffects) {}
+    private readonly effects?: ModerationEffects, private readonly reviews?: ReviewReportOwner) {}
 
   private async transaction<T>(work: (client: PoolClient) => Promise<T>): Promise<T> {
     const client = await this.pool.connect().catch(() => {
@@ -212,7 +213,12 @@ export class GovernanceStore {
     // write rechecks representation so a revoked reporter cannot commit.
     const captured: CapturedEvidence[] = [];
     for (const target of input.evidence) {
-      captured.push(await this.evidence.capture(principal, input.actingSubject, target));
+      const evidence = await this.evidence.capture(principal, input.actingSubject, target);
+      if (target.owner === 'review' && ![GLOBAL_CONTEXT, evidence.provenance.context,
+        evidence.provenance.realm].includes(input.context)) {
+        throw new GovernanceInvalid('review report context does not match its rating Context');
+      }
+      captured.push(evidence);
     }
     const evidenceDigest = sha256(canonical(captured.map(item => [item.owner, item.resource, item.component,
       item.locator, item.revision, item.revisionDigest, item.state])));
@@ -452,6 +458,16 @@ export class GovernanceStore {
         if (await this.heads.current(target) !== target.expectedHead) {
           throw new GovernanceStale('target changed since review');
         }
+        if (target.owner === 'review') {
+          if (!this.reviews) throw new GovernanceUnavailable('review moderation owner is unavailable');
+          await this.reviews.lockCurrent(client, target);
+        }
+      }
+      const reviewVisibility = new Map<string, boolean>();
+      for (const target of input.targets) {
+        if (target.owner === 'review' && !reviewVisibility.has(target.resource)) {
+          reviewVisibility.set(target.resource, await this.reviews!.visible(client, target.resource));
+        }
       }
       // The owner decides the final CAS in its own write transaction. A saved
       // receipt is reconciled by the same identity if its response was lost.
@@ -470,6 +486,10 @@ export class GovernanceStore {
           await this.effects!.apply(operationId, index + 1, target);
         }
       }
+      // Review writers acquire the ranking position before notification
+      // position. Hold that same order when the decision trigger emits a
+      // moderation notification, avoiding cross-review lock inversion.
+      if (reviewVisibility.size) await this.reviews!.lockRanking(client);
       const decisionId = randomUUID();
       const sequence = (BigInt(caseRow.generation) + 1n).toString();
       await client.query(`INSERT INTO access.moderation_decision (id, kind, outcome, context, case_id, case_sequence,
@@ -518,6 +538,10 @@ export class GovernanceStore {
             state = 'released', fence_epoch = fence_epoch + 1, updated_at = clock_timestamp() WHERE id = $1`,
           [fence.id, decisionId, index + 1]);
         }
+      }
+      for (const [review, wasVisible] of reviewVisibility) {
+        await this.reviews!.rankChanged(client, review, wasVisible);
+        await this.reviews!.bumpCollection(client, review);
       }
       await client.query(`UPDATE access.governance_case SET decision_head = $2, generation = $3 WHERE id = $1`,
         [caseRow.id, decisionId, sequence]);

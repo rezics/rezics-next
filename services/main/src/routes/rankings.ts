@@ -20,7 +20,7 @@ export const openApiOperations = {
 } as const;
 
 export function rankingRoutes(work: MainWorkDependencies) {
-  const read = async (request: Request, options: { metric?: 'reads' | 'finished-chapters';
+  const read = async (request: Request, options: { metric?: 'reads' | 'finished-chapters' | 'reviews';
     interval?: 'day' | 'week' | 'month'; limit?: number; cursor?: string; language?: string },
   realm: string | null, order: 'score' | 'growth') => {
     if (!work.readRankings) return problem(503, 'rankings_unavailable', 'Rankings are unavailable');

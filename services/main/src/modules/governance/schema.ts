@@ -6,7 +6,7 @@ import { bigint, jsonb, pgSchema, primaryKey, smallint, text, timestamp, uuid } 
 const access = pgSchema('access');
 const at = (name: string) => timestamp(name, { withTimezone: true, mode: 'date' });
 
-export const governanceOwners = ['graph', 'content', 'source', 'media'] as const;
+export const governanceOwners = ['graph', 'content', 'source', 'media', 'review'] as const;
 export const governanceComponents = ['name', 'title', 'body', 'structure', 'media_use', 'synopsis',
   'cover', 'publication', 'record'] as const;
 export const evidenceStates = ['available', 'empty', 'unavailable', 'erased', 'unsupported'] as const;

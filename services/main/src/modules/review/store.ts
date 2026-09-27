@@ -45,6 +45,13 @@ export function validateReviewIntent(input: ReviewIntent, key: string) {
 }
 
 const rowColumns = `r.*, r.started_on::text AS started_on, r.finished_on::text AS finished_on`;
+/** A component fence covers every revision. An exact fence covers only its
+ * named revision; writers cannot edit a fenced current head to escape it. */
+export const reviewVisibleSql = `NOT EXISTS (SELECT 1 FROM access.governance_enforcement e
+  WHERE e.owner = 'review' AND e.resource = r.id::text AND e.component = 'body'
+    AND e.state = 'restricted' AND e.effect IN ('disclosure','publication')
+    AND (e.revision IS NULL OR e.revision = r.revision::text)
+    AND e.context IN ('urn:rezics:context:global', r.context, r.realm))`;
 async function bumpCollection(client: PoolClient, context: string, work: string) {
   await client.query(`INSERT INTO access.reader_review_collection (context, work) VALUES ($1,$2)
     ON CONFLICT (context, work) DO UPDATE SET revision = gen_random_uuid()`, [context, work]);
@@ -90,6 +97,10 @@ export class ReaderReviews {
         WHERE principal_id = $1 AND context = $2 AND work = $3 FOR UPDATE`,
       [owner, input.context, input.work])).rows[0];
       if ((prior?.revision ?? null) !== input.expectedRevision) throw new ControlStale('Review changed');
+      if (prior && !(await client.query(`SELECT 1 FROM access.reader_review r
+        WHERE r.id = $1 AND ${reviewVisibleSql}`, [prior.id])).rowCount) {
+        throw new ControlDenied('Review is restricted');
+      }
       const head = (await client.query<{ main_version: string; observation: string; revision: string }>(`
         SELECT h.main_version, h.observation, h.revision
         FROM access.rating_aggregate_head h JOIN access.admission a ON a.id = h.admission_id
@@ -111,6 +122,7 @@ export class ReaderReviews {
           rating_observation = $4, rating_revision = $5, rating = $6, realm = $7,
           language = $8, body = $9, spoiler = $10, started_on = $11, finished_on = $12,
           revision = $13, deleted = false, helpful_count = CASE WHEN deleted THEN 0 ELSE helpful_count END,
+          created_at = CASE WHEN deleted THEN clock_timestamp() ELSE created_at END,
           updated_at = clock_timestamp() WHERE id = $1`,
         [id, input.actingSubject, linked.mainVersion, linked.observation, linked.revision,
           linked.value, linked.realm, input.language, input.text, input.spoiler,
@@ -126,6 +138,13 @@ export class ReaderReviews {
           linked.mainVersion, linked.observation, linked.revision, linked.value,
           input.language, input.text, input.spoiler, shelfDates.startedOn, shelfDates.finishedOn, revision]);
       }
+      await client.query(`INSERT INTO access.reader_review_revision
+        (review_id, revision, acting_subject, rating_observation, rating_revision,
+         rating, language, body, spoiler, started_on, finished_on, deleted)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,false)`,
+      [id, revision, input.actingSubject, linked.observation, linked.revision,
+        linked.value, input.language, input.text, input.spoiler,
+        shelfDates.startedOn, shelfDates.finishedOn]);
       await bumpCollection(client, input.context, input.work);
       await client.query(`INSERT INTO access.reader_review_event (review_id, revision, kind)
         VALUES ($1,$2,$3)`, [id, revision, !prior || prior.deleted ? 'created' : 'edited']);
@@ -154,6 +173,12 @@ export class ReaderReviews {
       const revision = randomUUID();
       await client.query('UPDATE access.reader_review SET deleted = true, revision = $2, updated_at = clock_timestamp() WHERE id = $1',
         [review, revision]);
+      await client.query(`INSERT INTO access.reader_review_revision
+        (review_id, revision, acting_subject, rating_observation, rating_revision,
+         rating, language, body, spoiler, started_on, finished_on, deleted)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,true)`,
+      [review, revision, row.acting_subject, row.rating_observation, row.rating_revision,
+        row.rating, row.language, row.body, row.spoiler, row.started_on, row.finished_on]);
       await client.query('DELETE FROM access.reader_review_vote WHERE review_id = $1', [review]);
       await bumpCollection(client, row.context, row.work);
       await client.query(`INSERT INTO access.reader_review_event (review_id, revision, kind)
@@ -177,7 +202,7 @@ export class ReaderReviews {
       const replay = await receipt<HelpfulReceipt>(client, owner, key, intent);
       if (replay) return { ...replay, replayed: true };
       const row = (await client.query<ReviewRow>(`SELECT ${rowColumns} FROM access.reader_review r
-        WHERE id = $1 FOR UPDATE`, [review])).rows[0];
+        WHERE id = $1 AND ${reviewVisibleSql} FOR UPDATE`, [review])).rows[0];
       if (!row || row.deleted) throw new ControlDenied('Review is unavailable');
       if (row.principal_id === owner) throw new ControlDenied('A reader cannot vote on their own review');
       const prior = (await client.query<{ revision: string; helpful: boolean }>(`
@@ -237,7 +262,7 @@ export class ReaderReviews {
         ON s.id = r.acting_subject AND s.active
       LEFT JOIN access.reader_review_vote v
         ON v.review_id = r.id AND v.principal_id = $6
-      WHERE r.context = $1 AND r.work = $2 AND NOT r.deleted
+      WHERE r.context = $1 AND r.work = $2 AND NOT r.deleted AND ${reviewVisibleSql}
         AND ($3::text IS NULL OR r.language = $3)
         AND ($4::integer IS NULL OR r.rating = $4)
         AND ($6::uuid IS NULL OR r.principal_id <> $6)
@@ -251,6 +276,7 @@ export class ReaderReviews {
     const row = (await controlTransaction(this.pool, client => client.query<ReviewRow>(`SELECT ${rowColumns}
       FROM access.reader_review r JOIN access.authority_subject s ON s.id = r.acting_subject AND s.active
       WHERE r.principal_id = $1 AND r.context = $2 AND r.work = $3 AND NOT r.deleted
+        AND ${reviewVisibleSql}
         AND ($4::text IS NULL OR r.language = $4)
         AND ($5::integer IS NULL OR r.rating = $5)`,
     [principalId, context, work, filters.language ?? null, filters.rating ?? null]))).rows[0];
@@ -265,14 +291,15 @@ export class ReaderReviews {
         ON s.id = r.acting_subject AND s.active
       LEFT JOIN access.reader_review_vote v
         ON v.review_id = r.id AND v.principal_id = $2
-      WHERE r.id = $1 AND NOT r.deleted`, [review, principalId]))).rows[0] ?? null;
+      WHERE r.id = $1 AND NOT r.deleted AND ${reviewVisibleSql}`,
+    [review, principalId]))).rows[0] ?? null;
   }
 
   async quotes(realm: string, limit: number): Promise<ReviewRow[]> {
     if (!ID.test(realm) || limit < 1 || limit > REVIEW_COST.quoteSize) throw new ControlInvalid('Invalid quote page');
     return (await controlTransaction(this.pool, client => client.query<ReviewRow>(`SELECT ${rowColumns}
       FROM access.reader_review r JOIN access.authority_subject s ON s.id = r.acting_subject AND s.active
-      WHERE r.realm = $1 AND NOT r.deleted AND NOT r.spoiler
+      WHERE r.realm = $1 AND NOT r.deleted AND NOT r.spoiler AND ${reviewVisibleSql}
       ORDER BY r.helpful_count DESC, r.created_at DESC, r.id DESC LIMIT $2`,
     [realm, limit]))).rows;
   }

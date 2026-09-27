@@ -96,7 +96,7 @@ export const notificationItemRead = access.table('notification_item_read', {
 }, table => [primaryKey({ columns: [table.principalId, table.itemId] })]);
 
 export const notificationKinds = ['reply', 'submission_decision', 'moderation_outcome',
-  'realm_role_change', 'follow', 'claim_correction'] as const;
+  'realm_role_change', 'follow', 'claim_correction', 'review', 'review_helpful'] as const;
 export const notificationDisplayContext = access.table('notification_display_context', {
   itemId: uuid('item_id').primaryKey(),
   kind: text('kind', { enum: notificationKinds }).notNull(),

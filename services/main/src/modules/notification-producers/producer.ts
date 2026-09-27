@@ -2,6 +2,7 @@ import type { Pool, PoolClient } from 'pg';
 import type { FusekiClient } from '../../infrastructure/fuseki.ts';
 import { GRAPHS, RV, iri } from '../work/activate.ts';
 import type { NotificationEvent, NotificationStore } from '../notification/store.ts';
+import { reviewNotification } from '../notification/producer-review.ts';
 
 /** One serialized source position, one bounded owner read and at most 256 inbox writes per event. */
 export const PRODUCER_COST = { accessEventsPerTick: 16, relayEventsPerBatch: 256,
@@ -10,7 +11,7 @@ const cursorName = 'notification-producer-v1';
 const native = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 type AccessKind = 'submission_decision' | 'moderation_outcome' | 'realm_role_change'
-  | 'realm_membership_change';
+  | 'realm_membership_change' | 'review_created' | 'review_helpful_milestone';
 interface AccessEvent { position: string; kind: AccessKind; event_id: string }
 interface RelayEnvelope { id: string; type: string; data: { receipt?: Record<string, unknown> } }
 
@@ -47,6 +48,9 @@ export class NotificationProducer {
 
   /** Source and recipient identities are read after their owner commits. */
   private async accessNotification(event: AccessEvent): Promise<NotificationEvent | null> {
+    if (event.kind === 'review_created' || event.kind === 'review_helpful_milestone') {
+      return reviewNotification(this.access, this.graph, event.kind, event.event_id);
+    }
     if (event.kind === 'submission_decision') {
       const row = (await this.access.query<{ id: string; realm: string; work: string;
         submitting_agent: string; reviewer: string; state: string; actor: string }>(`

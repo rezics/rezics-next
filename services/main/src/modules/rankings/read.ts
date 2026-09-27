@@ -13,7 +13,7 @@ export async function readRankings(session: WorkReadSession, projection: ReadRan
   const checkpoint = await projection.current();
   const bucket = rankingBuckets(new Date(), options.interval).current;
   const binding = ['read-rankings-v1', options.realm, options.metric, options.interval,
-    options.order, bucket, checkpoint.generation, checkpoint.contentSequence,
+    options.order, bucket, checkpoint.generation, checkpoint.contentSequence, checkpoint.reviewPosition,
     session.options.language ?? null];
   const cursor = decodeReadCursor(session.options.cursor, binding, session.position);
   const after = cursor ? { value: cursor.order, work: cursor.after } : null;
@@ -77,6 +77,7 @@ export async function readRankings(session: WorkReadSession, projection: ReadRan
   if (options.realm) await readRealmBasis(session, options.realm);
   const end = await projection.current();
   if (end.generation !== checkpoint.generation || end.contentSequence !== checkpoint.contentSequence
+    || end.reviewPosition !== checkpoint.reviewPosition
     || rankingBuckets(new Date(), options.interval).current !== bucket) {
     throw new WorkReadMoved('Ranking changed; restart from the first page');
   }

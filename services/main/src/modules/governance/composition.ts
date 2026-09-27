@@ -8,12 +8,14 @@ import { ownerModerationEffects } from './effects.ts';
 import { ContentModeration } from '../../../../content/src/moderation.ts';
 import { GovernanceRules } from './rules.ts';
 import { GovernanceStore } from './store.ts';
+import { ReviewReportOwner } from './report-review.ts';
 
 /** Main's real owner readers; every evidence lookup stays on the pinned revision. */
 export function governanceServices(accessPool: Pool, contentPool: Pool, content: ContentCore,
   source: SourceIntakeStore, registry: AccessAdmissionRegistry, env: WorkActivationEnvironment) {
   const rules = new GovernanceRules(accessPool);
-  const store = new GovernanceStore(accessPool, ownerEvidenceCapture({
+  const reviews = new ReviewReportOwner(accessPool, registry, env);
+  const evidence = ownerEvidenceCapture({
     content: { core: content, canRead: async (principal, actingSubject, ids) => {
       const disclosed = new Set<string>();
       for (const id of ids) {
@@ -34,7 +36,14 @@ export function governanceServices(accessPool: Pool, contentPool: Pool, content:
         byteDigest: observation.byteDigest, mediaType: observation.mediaType,
       } : null;
     },
-  }), ownerTargetHeads({ graph: env, content: contentPool }), rules,
-  ownerModerationEffects(new ContentModeration(contentPool), env));
+  });
+  const heads = ownerTargetHeads({ graph: env, content: contentPool });
+  const store = new GovernanceStore(accessPool, {
+    capture: (principal, actingSubject, target) => target.owner === 'review'
+      ? reviews.capture(principal, actingSubject, target)
+      : evidence.capture(principal, actingSubject, target),
+  }, {
+    current: target => target.owner === 'review' ? reviews.current(target) : heads.current(target),
+  }, rules, ownerModerationEffects(new ContentModeration(contentPool), env), reviews);
   return { store, rules };
 }

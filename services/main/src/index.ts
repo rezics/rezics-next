@@ -255,7 +255,7 @@ notificationStore.registerReadSubjectReader('verification-correction-subscriptio
   verificationCorrectionSubjectReader(new VerificationStore(contentPool)));
 const notificationSourceReader = notificationProducerSubjectReader(pool, contentPool, environment);
 for (const basis of ['realm-reply-v1', 'submission-decision-v1', 'moderation-outcome-v1',
-  'realm-role-change-v1']) notificationStore.registerReadSubjectReader(basis, notificationSourceReader);
+  'realm-role-change-v1', 'review-created-v1', 'review-helpful-v1']) notificationStore.registerReadSubjectReader(basis, notificationSourceReader);
 if (relayPool) await notificationStore.reconcileRetainedErasures(relayPool);
 const notificationProviderConfig = {
   url: config.MAIN_NOTIFICATION_PROVIDER_URL,
@@ -278,7 +278,7 @@ const notificationDispatcher = notificationProvider
 notificationDispatcher?.registerSubjectReader('verification-correction-subscription-v1',
   verificationCorrectionSubjectReader(new VerificationStore(contentPool)));
 for (const basis of ['realm-reply-v1', 'submission-decision-v1', 'moderation-outcome-v1',
-  'realm-role-change-v1']) notificationDispatcher?.registerSubjectReader(basis, notificationSourceReader);
+  'realm-role-change-v1', 'review-created-v1', 'review-helpful-v1']) notificationDispatcher?.registerSubjectReader(basis, notificationSourceReader);
 const notificationProducerWorker = new NotificationProducerWorker(new NotificationProducer(
   pool, relayPool ?? null, contentPool, fuseki, notificationStore, config.MAIN_RELAY_CONSUMER ?? null));
 const notificationRealtime = relayPool ? new NotificationRealtimeHub(pool) : undefined;

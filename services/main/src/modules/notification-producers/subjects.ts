@@ -4,6 +4,7 @@ import { readPlacementHead } from '../realm-reply/graph.ts';
 import { RealmReplyContentStore } from '../realm-reply/content-store.ts';
 import { publicReplyRoot } from '../realm-reply/root.ts';
 import { GRAPHS, RV, iri, type WorkActivationEnvironment } from '../work/activate.ts';
+import { reviewSubject } from '../notification/producer-review.ts';
 
 const native = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -38,6 +39,9 @@ export function notificationProducerSubjectReader(access: Pool, content: Pool,
   env: WorkActivationEnvironment): NotificationSubjectReader {
   const replies = new RealmReplyContentStore(content);
   return { async resolve(input): Promise<SubjectResolution> {
+    if (input.disclosureBasis === 'review-created-v1' || input.disclosureBasis === 'review-helpful-v1') {
+      return reviewSubject(access, env.fuseki, input);
+    }
     if (input.disclosureBasis === 'realm-reply-v1') {
       if (input.owner !== 'graph' || !native.test(input.ref) || !input.realm || !native.test(input.realm)
         || !input.revision?.startsWith('urn:rezics:content:revision:')) return hidden;

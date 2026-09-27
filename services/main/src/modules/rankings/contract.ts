@@ -2,7 +2,7 @@ import { t } from 'elysia';
 import { pageFields, readId, readPosition, workCard } from '../work/read-contract.ts';
 import { RANKING_COST } from './projection.ts';
 
-export const rankingMetric = t.Union([t.Literal('reads'), t.Literal('finished-chapters')]);
+export const rankingMetric = t.Union([t.Literal('reads'), t.Literal('finished-chapters'), t.Literal('reviews')]);
 export const rankingInterval = t.Union([t.Literal('day'), t.Literal('week'), t.Literal('month')]);
 export const rankingPage = t.Object({
   profile: t.Union([t.Literal('read-rankings-v1'), t.Literal('rising-v1')]),
