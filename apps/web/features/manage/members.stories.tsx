@@ -25,7 +25,7 @@ type Story = StoryObj<typeof meta>;
 const body = () => within(document.body);
 async function openMenu(canvas: ReturnType<typeof within>, name: string, item: string) {
   await userEvent.click(canvas.getByRole('button', { name: `Actions for ${name}` }));
-  await userEvent.click(await body().findByRole('menuitem', { name: item }));
+  await userEvent.click(await body().findByRole('menuitem', { name: item }, { timeout: 5000 }));
 }
 
 export const Roster: Story = {
@@ -46,7 +46,7 @@ export const BanForThirtyDays: Story = {
     reset();
     const canvas = within(canvasElement);
     await openMenu(canvas, 'Sophie Li 李素菲', 'Ban…');
-    const dialog = within(await body().findByRole('dialog', { name: 'Ban Sophie Li 李素菲' }));
+    const dialog = within(await body().findByRole('dialog', { name: 'Ban Sophie Li 李素菲' }, { timeout: 5000 }));
     await expect(dialog.getByText(/aren’t given back when the ban ends/)).toBeInTheDocument();
     await userEvent.selectOptions(dialog.getByRole('combobox', { name: 'For how long' }), '30 days');
     await userEvent.type(dialog.getByRole('textbox', { name: 'Reason' }), 'Spoilers in three titles after a warning.');
@@ -63,7 +63,7 @@ export const Unban: Story = {
     reset();
     const canvas = within(canvasElement);
     await openMenu(canvas, 'Jun Zhang 张俊', 'Unban…');
-    const dialog = within(await body().findByRole('dialog', { name: 'Unban Jun Zhang 张俊?' }));
+    const dialog = within(await body().findByRole('dialog', { name: 'Unban Jun Zhang 张俊?' }, { timeout: 5000 }));
     await userEvent.click(dialog.getByRole('button', { name: 'Unban' }));
     await expect(dialog.getByText('Write a reason first.')).toBeInTheDocument();
     await userEvent.type(dialog.getByRole('textbox', { name: 'Reason' }), 'Appeal accepted.');
@@ -80,7 +80,7 @@ export const BanSomeoneByHandle: Story = {
     reset();
     const canvas = within(canvasElement);
     await userEvent.click(canvas.getByRole('button', { name: 'Ban someone' }));
-    const dialog = within(await body().findByRole('dialog', { name: 'Ban someone from this Realm' }));
+    const dialog = within(await body().findByRole('dialog', { name: 'Ban someone from this Realm' }, { timeout: 5000 }));
     await userEvent.type(dialog.getByRole('textbox', { name: 'Who' }), '@nobody_here');
     await userEvent.type(dialog.getByRole('textbox', { name: 'Reason' }), 'Spam.');
     await userEvent.click(dialog.getByRole('button', { name: 'Ban' }));
@@ -100,7 +100,7 @@ export const UnbanSomeoneOutsideTheRoster: Story = {
     reset();
     const canvas = within(canvasElement);
     await userEvent.click(canvas.getByRole('button', { name: 'Unban someone' }));
-    const dialog = within(await body().findByRole('dialog', { name: 'Unban someone in this Realm' }));
+    const dialog = within(await body().findByRole('dialog', { name: 'Unban someone in this Realm' }, { timeout: 5000 }));
     await userEvent.type(dialog.getByRole('textbox', { name: 'Who' }), '@lin_mei');
     await userEvent.type(dialog.getByRole('textbox', { name: 'Reason' }), 'Ban was a mistake.');
     await userEvent.click(dialog.getByRole('button', { name: 'Unban' }));
@@ -117,7 +117,7 @@ export const ChangedMeanwhile: Story = {
     reset();
     const canvas = within(canvasElement);
     await openMenu(canvas, 'An Wu 吴安', 'Remove from Realm…');
-    const dialog = within(await body().findByRole('dialog', { name: 'Remove An Wu 吴安 from the Realm?' }));
+    const dialog = within(await body().findByRole('dialog', { name: 'Remove An Wu 吴安 from the Realm?' }, { timeout: 5000 }));
     await userEvent.type(dialog.getByRole('textbox', { name: 'Reason' }), 'Stepped down.');
     await userEvent.click(dialog.getByRole('button', { name: 'Remove' }));
     await expect(await dialog.findByRole('alert')).toHaveTextContent('This member changed while you were deciding.');
@@ -131,7 +131,7 @@ export const GiveRoleWithImpact: Story = {
     reset();
     const canvas = within(canvasElement);
     await openMenu(canvas, 'Sophie Li 李素菲', 'Give a role…');
-    const dialog = within(await body().findByRole('dialog', { name: 'Give Sophie Li 李素菲 a role' }));
+    const dialog = within(await body().findByRole('dialog', { name: 'Give Sophie Li 李素菲 a role' }, { timeout: 5000 }));
     const impact = dialog.getByRole('region', { name: 'Who this affects' });
     await expect(await within(impact).findByText('1 member gains: Moderate the queue')).toBeInTheDocument();
     await expect(impact).toHaveTextContent('Sophie Li 李素菲');

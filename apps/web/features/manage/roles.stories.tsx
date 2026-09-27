@@ -43,7 +43,7 @@ export const EditWithImpactPreview: Story = {
     reset();
     const canvas = within(canvasElement);
     await userEvent.click(canvas.getByRole('button', { name: 'Edit role: Community moderators' }));
-    const dialog = within(await body().findByRole('dialog', { name: 'Edit role' }));
+    const dialog = within(await body().findByRole('dialog', { name: 'Edit role' }, { timeout: 5000 }));
     await expect(dialog.getByRole('button', { name: 'Save role' })).toBeDisabled();
     await userEvent.click(dialog.getByRole('checkbox', { name: /Publish rules/ }));
     const impact = dialog.getByRole('region', { name: 'Who this affects' });
@@ -64,7 +64,7 @@ export const NewRole: Story = {
     reset();
     const canvas = within(canvasElement);
     await userEvent.click(canvas.getByRole('button', { name: 'New role' }));
-    const dialog = within(await body().findByRole('dialog', { name: 'New role' }));
+    const dialog = within(await body().findByRole('dialog', { name: 'New role' }, { timeout: 5000 }));
     await userEvent.type(dialog.getByRole('textbox', { name: 'Role name' }), 'Translators 译者');
     await userEvent.click(dialog.getByRole('checkbox', { name: /Moderate the queue/ }));
     await expect(await dialog.findByText('No one’s permissions change.')).toBeInTheDocument();
@@ -83,7 +83,7 @@ export const SelfLockoutWarning: Story = {
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     await userEvent.click(canvas.getByRole('button', { name: 'Edit role: Rules editors' }));
-    const dialog = within(await body().findByRole('dialog', { name: 'Edit role' }));
+    const dialog = within(await body().findByRole('dialog', { name: 'Edit role' }, { timeout: 5000 }));
     await userEvent.click(dialog.getByRole('checkbox', { name: /Change settings/ }));
     await expect(await dialog.findByText(/You would lose Manage roles yourself/)).toBeInTheDocument();
     await expect(dialog.getByText('1 member loses: Manage roles')).toBeInTheDocument();

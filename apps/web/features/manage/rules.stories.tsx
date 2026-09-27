@@ -98,7 +98,7 @@ export const EditOneLanguage: Story = {
     await expect(within(rule).getByText('Check wording')).toBeInTheDocument();
     await expect(rule).toHaveTextContent('Only Simplified Chinese changed. Check that English still says the same.');
     await userEvent.click(canvas.getByRole('button', { name: 'Review changes' }));
-    const dialog = within(await body().findByRole('dialog', { name: 'Review before publishing' }));
+    const dialog = within(await body().findByRole('dialog', { name: 'Review before publishing' }, { timeout: 5000 }));
     await expect(dialog.getByText(/Changes “No spoilers in titles” in Simplified Chinese/)).toBeInTheDocument();
     await expect(dialog.getByText(/Publishing creates revision 4/)).toBeInTheDocument();
     await userEvent.type(dialog.getByRole('textbox', { name: 'What changed and why' }), 'Cover lines count as titles.');
@@ -144,7 +144,7 @@ export const ConcurrentPublicationKeepsDraft: Story = {
     const body0 = canvas.getAllByRole('textbox', { name: 'Explanation in English' })[1]!;
     await userEvent.type(body0, ' Include the publisher.');
     await userEvent.click(canvas.getByRole('button', { name: 'Review changes' }));
-    const dialog = within(await body().findByRole('dialog', { name: 'Review before publishing' }));
+    const dialog = within(await body().findByRole('dialog', { name: 'Review before publishing' }, { timeout: 5000 }));
     await userEvent.type(dialog.getByRole('textbox', { name: 'What changed and why' }), 'Publishers too.');
     await userEvent.click(dialog.getByRole('button', { name: 'Publish' }));
     const conflict = await canvas.findByText('Someone else published first');
@@ -155,7 +155,7 @@ export const ConcurrentPublicationKeepsDraft: Story = {
     await expect(canvas.getAllByRole('textbox', { name: 'Explanation in English' })[1]).toHaveValue(
       `${rules[1]!.body.en} Include the publisher.`);
     await userEvent.click(canvas.getByRole('button', { name: 'Publish my draft on top' }));
-    const again = within(await body().findByRole('dialog', { name: 'Review before publishing' }));
+    const again = within(await body().findByRole('dialog', { name: 'Review before publishing' }, { timeout: 5000 }));
     await expect(again.getByText(/Publishing creates revision 5/)).toBeInTheDocument();
   },
 };

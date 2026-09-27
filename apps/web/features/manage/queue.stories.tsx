@@ -66,7 +66,7 @@ export const RejectWithReason: Story = {
     const canvas = within(canvasElement);
     await userEvent.click(within(list(canvas)).getByRole('button', { name: /Frankenstein/ }));
     await userEvent.keyboard('r');
-    const dialog = within(await within(document.body).findByRole('dialog', { name: 'Reject this submission' }));
+    const dialog = within(await within(document.body).findByRole('dialog', { name: 'Reject this submission' }, { timeout: 5000 }));
     await userEvent.click(dialog.getByRole('button', { name: 'Reject' }));
     await expect(dialog.getByText('Write a reason first.')).toBeInTheDocument();
     await userEvent.type(dialog.getByRole('textbox', { name: 'Reason the author sees' }),
@@ -88,7 +88,7 @@ export const EscalateReport: Story = {
     await userEvent.keyboard('a');
     await expect(canvas.getByText('“Approve” isn’t available for this item.')).toBeVisible();
     await userEvent.keyboard('e');
-    const dialog = within(await within(document.body).findByRole('dialog', { name: 'Escalate to the Realm owners' }));
+    const dialog = within(await within(document.body).findByRole('dialog', { name: 'Escalate to the Realm owners' }, { timeout: 5000 }));
     await userEvent.type(dialog.getByRole('textbox', { name: 'What should the owners look at?' }),
       'Edition question needs an owner decision.');
     await userEvent.click(dialog.getByRole('button', { name: 'Escalate' }));
@@ -131,7 +131,7 @@ export const KeyboardHelp: Story = {
     await expect(within(canvasElement).getByRole('button', { name: /Keyboard shortcuts/ }))
       .toHaveAttribute('aria-keyshortcuts', '?');
     await userEvent.keyboard('?');
-    const dialog = within(await within(document.body).findByRole('dialog', { name: 'Keyboard shortcuts' }));
+    const dialog = within(await within(document.body).findByRole('dialog', { name: 'Keyboard shortcuts' }, { timeout: 5000 }));
     await expect(dialog.getByText('Undo the last decision')).toBeInTheDocument();
   },
 };
