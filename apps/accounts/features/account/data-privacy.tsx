@@ -7,16 +7,19 @@ import { Input } from '@rezics/ui/input';
 import { TriangleAlertIcon } from 'lucide-react';
 import { type FormEvent, useState } from 'react';
 import { SectionHeading, SettingsCard } from './account-shell.tsx';
+import { useStepUp } from './step-up.tsx';
 import { useAccountClient } from '../api/account-client.tsx';
 import { PasswordField } from '../auth/fields.tsx';
 import { useTranslation } from '../../i18n/client.ts';
 
 /** Account deletion through Better Auth's delete-user flow, which Account
- * enables only with its Access deletion fence. */
-export function DataPrivacy() {
+ * enables only with its Access deletion fence. A passkey-only account has no
+ * password to type; it confirms with its passkey instead. */
+export function DataPrivacy({ hasPassword = true }: { hasPassword?: boolean }) {
   const { t } = useTranslation('account');
   const showLabel = useTranslation('auth').t.showPassword;
   const { api, navigate } = useAccountClient();
+  const stepUp = useStepUp();
   const [password, setPassword] = useState('');
   const [phrase, setPhrase] = useState('');
   const [passwordError, setPasswordError] = useState('');
@@ -27,12 +30,13 @@ export function DataPrivacy() {
   async function submit(event: FormEvent) {
     event.preventDefault();
     if (!confirmed) return;
-    if (!password) return setPasswordError(t.deletePassword);
+    if (hasPassword && !password) return setPasswordError(t.deletePassword);
     setBusy(true);
     setFailure('');
-    const result = await api.deleteAccount(password);
+    const result = await stepUp(() => api.deleteAccount(password), { password: password || undefined });
     if (result.ok) return navigate('/sign-in?deleted=1');
     setBusy(false);
+    if (result.kind === 'cancelled') return;
     if (result.kind === 'invalid-credentials') return setPasswordError(t.wrongCurrentPassword);
     setFailure(result.kind === 'conflict' ? t.deleteBlocked : result.kind === 'not-enabled'
       ? t.deleteNotAvailable : t.deleteRetry);
@@ -51,10 +55,12 @@ export function DataPrivacy() {
             </ul>
           </div>
         </div>
-        <input type="text" name="username" autoComplete="username" hidden readOnly />
-        <PasswordField label={t.deletePassword} name="password" value={password} error={passwordError}
-          autoComplete="current-password" visibilityLabel={showLabel} disabled={busy}
-          onChange={value => { setPassword(value); setPasswordError(''); }} />
+        {hasPassword ? <>
+          <input type="text" name="username" autoComplete="username" hidden readOnly />
+          <PasswordField label={t.deletePassword} name="password" value={password} error={passwordError}
+            autoComplete="current-password" visibilityLabel={showLabel} disabled={busy}
+            onChange={value => { setPassword(value); setPasswordError(''); }} />
+        </> : null}
         <Field disabled={busy}>
           <FieldLabel>{t.deleteConfirm({ phrase: t.deletePhrase })}</FieldLabel>
           <Input size="lg" name="confirmation" autoComplete="off" spellCheck={false} value={phrase}

@@ -53,14 +53,42 @@ export const ExpiredResetLink: Story = {
 };
 
 export const EmailVerified: Story = {
-  render: () => <VerifyEmailResult failed={false} />,
+  render: () => <VerifyEmailResult failed={false} signedIn />,
   async play({ canvasElement }) {
-    await expect(await within(canvasElement).findByRole('heading', { name: 'Your email is verified' })).toBeVisible();
+    const canvas = within(canvasElement);
+    await expect(await canvas.findByRole('heading', { name: 'Your email is verified' })).toBeVisible();
+    await expect(canvas.getByRole('link', { name: 'Continue to your account' })).toHaveAttribute('href', '/');
+  },
+};
+
+export const VerifiedThenContinue: Story = {
+  render: () => <VerifyEmailResult failed={false} signedIn={false} carry="client_id=reader&sig=abc" />,
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await expect(await canvas.findByText(/Sign in to continue where you left off/)).toBeVisible();
+    await expect(canvas.getByRole('link', { name: 'Sign in to continue' }))
+      .toHaveAttribute('href', '/sign-in?client_id=reader&sig=abc');
+  },
+};
+
+export const EmailChangeConfirmed: Story = {
+  render: () => <VerifyEmailResult failed={false} signedIn change="requested" />,
+  async play({ canvasElement }) {
+    await expect(await within(canvasElement).findByRole('heading', { name: 'Now check your new inbox' })).toBeVisible();
+  },
+};
+
+export const EmailChanged: Story = {
+  render: () => <VerifyEmailResult failed={false} signedIn={false} change="verified" />,
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await expect(await canvas.findByRole('heading', { name: 'Your email address was changed' })).toBeVisible();
+    await expect(canvas.getByRole('link', { name: 'Sign in' })).toHaveAttribute('href', '/sign-in');
   },
 };
 
 export const VerificationFailed: Story = {
-  render: () => <VerifyEmailResult failed />,
+  render: () => <VerifyEmailResult failed signedIn={false} />,
   async play({ canvasElement }) {
     await expect(await within(canvasElement).findByRole('heading', { name: 'This verification link doesn’t work' }))
       .toBeVisible();

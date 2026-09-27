@@ -58,6 +58,17 @@ export const WrongPassword: Story = {
   },
 };
 
+export const PasskeyOnly: Story = {
+  args: { hasPassword: false },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await expect(await canvas.findByRole('heading', { level: 1, name: 'Data & privacy' })).toBeVisible();
+    await expect(canvas.queryByLabelText('Enter your password')).toBeNull();
+    await userEvent.type(canvas.getByRole('textbox', { name: 'Type “delete my account” to confirm' }), 'delete my account');
+    await expect(canvas.getByRole('button', { name: 'Delete account' })).toBeEnabled();
+  },
+};
+
 export const Dark: Story = { ...StillHasDuties, globals: dark };
 export const Phone: Story = { ...DeleteAccount, parameters: {}, play: async ({ canvasElement }) => {
   await confirm(canvasElement);

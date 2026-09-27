@@ -3,9 +3,10 @@
 import { Button } from '@rezics/ui/button';
 import { Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger } from '@rezics/ui/menu';
 import { cn } from '@rezics/ui/utils';
-import { AppWindowIcon, ArrowUpRightIcon, HouseIcon, LogOutIcon, ShieldIcon, SlidersHorizontalIcon,
-  UserRoundIcon } from 'lucide-react';
+import { AppWindowIcon, ArrowUpRightIcon, ChevronRightIcon, HouseIcon, LogOutIcon, ShieldIcon,
+  SlidersHorizontalIcon, UserRoundIcon } from 'lucide-react';
 import { type ReactNode, useEffect, useId, useRef, useState } from 'react';
+import { type StepUpMethods, StepUpProvider } from './step-up.tsx';
 import { useAccountClient } from '../api/account-client.tsx';
 import { Brand } from '../shell/brand.tsx';
 import { type AvatarUser, UserAvatar } from '../shell/user-avatar.tsx';
@@ -51,9 +52,12 @@ function AccountMenu({ user }: { user: AvatarUser }) {
   </Menu>;
 }
 
-/** Account centre frame: left navigation on desktop, scrolling tabs on phones. */
-export function AccountShell({ section, user, webOrigin, children }: { section?: AccountSection;
-  user?: AvatarUser; webOrigin: string; children: ReactNode }) {
+const defaultStepUp: StepUpMethods = { password: true, passkey: false, totp: false };
+
+/** Account centre frame: left navigation on desktop, scrolling tabs on phones.
+ * Sensitive changes inside it confirm it's the person through `stepUp`. */
+export function AccountShell({ section, user, webOrigin, stepUp = defaultStepUp, children }: {
+  section?: AccountSection; user?: AvatarUser; webOrigin: string; stepUp?: StepUpMethods; children: ReactNode }) {
   const common = useTranslation('common').t;
   const { t } = useTranslation('account');
   const tabs = useRef<HTMLElement>(null);
@@ -90,14 +94,19 @@ export function AccountShell({ section, user, webOrigin, children }: { section?:
     <div className="mx-auto grid max-w-6xl gap-8 px-4 py-6 sm:px-6 md:grid-cols-[15rem_minmax(0,1fr)] md:py-10">
       <nav aria-label={t.sections} className="sticky top-24 flex flex-col gap-1 self-start max-md:hidden">
         {sections.map(item => link(item, false))}</nav>
-      <main className="min-w-0 max-w-3xl">{children}</main>
+      <main className="min-w-0 max-w-3xl"><StepUpProvider methods={stepUp}>{children}</StepUpProvider></main>
     </div>
   </div>;
 }
 
-/** Page heading used by every account section. */
-export function SectionHeading({ title, intro }: { title: string; intro?: string }) {
+/** Page heading used by every account section; a focused page names the
+ * section it belongs to and links back to it. */
+export function SectionHeading({ title, intro, back }: { title: string; intro?: ReactNode;
+  back?: { href: string; label: string } }) {
   return <header className="mb-6 md:mb-8">
+    {back ? <a href={back.href} className="mb-3 inline-flex items-center gap-1 rounded-md text-sm font-medium text-primary
+      outline-none hover:underline focus-visible:ring-[3px] focus-visible:ring-ring/32">
+      <ChevronRightIcon className="size-4 rotate-180" aria-hidden="true" />{back.label}</a> : null}
     <h1 className="text-3xl font-semibold tracking-tight md:text-[34px]">{title}</h1>
     {intro ? <p className="mt-2 text-base text-muted-foreground">{intro}</p> : null}
   </header>;
@@ -127,4 +136,17 @@ export function SettingsRow({ label, children, action }: { label: string; childr
       {children}</div> : null}
     {action ? <div className="col-start-2 row-start-1 justify-self-end sm:col-start-3">{action}</div> : null}
   </div>;
+}
+
+/** A settings row that opens a focused page: the whole row is the link. */
+export function SettingsLinkRow({ label, href, icon, children }: { label: string; href: string;
+  icon?: ReactNode; children?: ReactNode }) {
+  return <a href={href} className="group grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-1 px-5 py-4 outline-none
+    transition-colors hover:bg-accent/40 focus-visible:bg-accent/40 focus-visible:ring-[3px] focus-visible:ring-ring/32
+    focus-visible:ring-inset sm:grid-cols-[10rem_minmax(0,1fr)_auto] sm:px-6">
+    <span className="flex items-center gap-3 text-sm font-medium text-muted-foreground">{icon}{label}</span>
+    <span className="col-start-1 row-start-2 min-w-0 sm:col-start-2 sm:row-start-1">{children}</span>
+    <ChevronRightIcon className="col-start-2 row-span-2 size-5 text-muted-foreground transition-transform
+      group-hover:translate-x-0.5 sm:col-start-3 sm:row-span-1" aria-hidden="true" />
+  </a>;
 }

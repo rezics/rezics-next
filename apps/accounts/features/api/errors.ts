@@ -3,7 +3,14 @@
 // raw server text, so no message reveals whether an account exists.
 export type FailureKind = 'invalid-credentials' | 'email-not-verified' | 'rate-limited'
   | 'not-enabled' | 'password-too-short' | 'password-too-long' | 'invalid-token'
-  | 'expired-request' | 'unauthenticated' | 'stale' | 'conflict' | 'unavailable' | 'failed';
+  | 'expired-request' | 'unauthenticated' | 'stale' | 'conflict' | 'unavailable' | 'failed'
+  // A sensitive change needs the person to confirm it's them first.
+  | 'step-up-required'
+  // Removing this would leave no way to sign in.
+  | 'last-method'
+  | 'invalid-code'
+  // The browser's passkey prompt was dismissed, timed out or is unsupported.
+  | 'cancelled';
 
 interface Failure { ok: false; kind: FailureKind; status: number }
 export type Result<T> = { ok: true; data: T } | Failure;
@@ -24,6 +31,26 @@ const byCode: Record<string, FailureKind> = {
   // Sensitive reads and changes need a session signed in within the last day.
   SESSION_EXPIRED: 'stale',
   SESSION_NOT_FRESH: 'stale',
+  STEP_UP_REQUIRED: 'step-up-required',
+  INVALID_CODE: 'invalid-code',
+  INVALID_BACKUP_CODE: 'invalid-code',
+  // The two-factor challenge from the password step has expired.
+  INVALID_TWO_FACTOR_COOKIE: 'stale',
+  TOO_MANY_ATTEMPTS_REQUEST_NEW_CODE: 'rate-limited',
+  ACCOUNT_TEMPORARILY_LOCKED: 'rate-limited',
+  PASSKEY_NOT_FOUND: 'invalid-credentials',
+  AUTHENTICATION_FAILED: 'invalid-credentials',
+  USER_VERIFICATION_REQUIRED: 'invalid-credentials',
+  CHALLENGE_NOT_FOUND: 'stale',
+};
+
+// The Account service's own routes answer `{ error: <code> }`.
+const byError: Record<string, FailureKind> = {
+  step_up_required: 'step-up-required',
+  last_sign_in_method: 'last-method',
+  stale_request: 'stale',
+  stale_credential_session: 'stale',
+  unauthenticated: 'unauthenticated',
 };
 
 export function classifyFailure(status: number, body: unknown): FailureKind {
@@ -34,6 +61,7 @@ export function classifyFailure(status: number, body: unknown): FailureKind {
   if (status === 429) return 'rate-limited';
   if (status >= 500) return 'unavailable';
   if (code && byCode[code]) return byCode[code];
+  if (error && byError[error]) return byError[error];
   if (error === 'invalid_signature' || error === 'invalid_request' && status === 400) return 'expired-request';
   if (/isn't enabled|is disabled/i.test(message)) return 'not-enabled';
   if (status === 404) return 'not-enabled';

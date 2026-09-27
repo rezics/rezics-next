@@ -8,7 +8,8 @@ import { ReadStatePanel } from '../shell/state-panel.tsx';
 
 const meta = {
   title: 'Accounts/Account centre/Home', component: AccountHome,
-  args: { summary: { user: ada, signInMethods: 1, devices: 2, apps: 3 } },
+  args: { summary: { user: ada, issues: [], failedSignIns: 0, security: { passkeys: 2, twoStep: true }, devices: 2,
+    apps: 3 } },
   decorators: [(Story, { parameters }) => <AccountFrame section="home"
     signedIn={parameters.signedIn !== false}><Story /></AccountFrame>],
 } satisfies Meta<typeof AccountHome>;
@@ -19,21 +20,39 @@ export const Overview: Story = {
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     await expect(await canvas.findByRole('heading', { level: 1, name: 'Welcome, Ada Lovelace' })).toBeVisible();
-    await expect(canvas.getByText('Email verified')).toBeVisible();
+    // Nothing needs doing, so there is no status card.
+    await expect(canvas.queryByRole('heading', { name: /needs attention|safer/ })).toBeNull();
+    await expect(canvas.getByText('2-Step Verification is on')).toBeVisible();
+    await expect(canvas.getByText('2 passkeys')).toBeVisible();
     await expect(canvas.getByText('Signed in on 2 devices')).toBeVisible();
     await expect(canvas.getByText('3 apps can use your account')).toBeVisible();
     await expect(canvas.getAllByRole('link', { name: 'Home' })[0]).toHaveAttribute('aria-current', 'page');
-    await expect(canvas.getByRole('link', { name: 'Review security' })).toHaveAttribute('href', '/security');
+    await expect(canvas.getByRole('link', { name: 'Manage security' })).toHaveAttribute('href', '/security');
   },
 };
 
 export const NeedsAttention: Story = {
-  args: { summary: { user: { ...ada, emailVerified: false }, signInMethods: null, devices: null, apps: 0 } },
+  args: { summary: { user: { ...ada, emailVerified: false }, issues: ['verify-email', 'failed-sign-ins', 'add-second-step'],
+    failedSignIns: 4, security: { passkeys: 0, twoStep: false }, devices: null, apps: 0 } },
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
-    await expect(await canvas.findByText('Email not verified')).toBeVisible();
+    await expect(await canvas.findByRole('heading', { level: 2, name: 'Your account needs attention: 3 things to check' }))
+      .toBeVisible();
+    await expect(canvas.getByText('4 failed sign-in attempts in the last 24 hours')).toBeVisible();
+    await expect(canvas.getByRole('link', { name: 'Verify email' })).toHaveAttribute('href', '/personal-info');
+    await expect(canvas.getByRole('link', { name: 'Review activity' })).toHaveAttribute('href', '/security/activity');
+    await expect(canvas.getByRole('link', { name: 'Create a passkey' })).toHaveAttribute('href', '/security/passkeys');
     await expect(canvas.getByText('No apps can use your account')).toBeVisible();
     await expect(canvas.queryByText(/devices?$/)).toBeNull();
+  },
+};
+
+export const Recommendation: Story = {
+  args: { summary: { user: ada, issues: ['add-second-step'], failedSignIns: 0, security: { passkeys: 0, twoStep: false },
+    devices: 1, apps: 1 } },
+  async play({ canvasElement }) {
+    await expect(await within(canvasElement).findByRole('heading', { level: 2, name: 'One way to make your account safer' }))
+      .toBeVisible();
   },
 };
 
@@ -64,7 +83,7 @@ export const Unavailable: Story = {
   },
 };
 
-export const Dark: Story = { ...Overview, globals: dark };
+export const Dark: Story = { ...NeedsAttention, globals: dark };
 export const Phone: Story = {
   globals: phone,
   async play({ canvasElement }) {
@@ -77,10 +96,12 @@ export const Phone: Story = {
   },
 };
 export const Chinese: Story = {
+  ...NeedsAttention,
   globals: chinese,
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     await expect(await canvas.findByRole('heading', { level: 1, name: '欢迎，Ada Lovelace' })).toBeVisible();
-    await expect(canvas.getByText('已在 2 台设备上登录')).toBeVisible();
+    await expect(canvas.getByRole('heading', { level: 2, name: '您的账号有 3 项需要处理' })).toBeVisible();
+    await expect(canvas.getByText('过去 24 小时内有 4 次登录失败')).toBeVisible();
   },
 };

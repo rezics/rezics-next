@@ -1,27 +1,95 @@
 import { describe, expect, test } from 'bun:test';
-import { describeUserAgent } from '../features/account/device.ts';
+import { presentActivity, securityCheckup } from '../features/account/activity.ts';
 import { calendarDate, relativeTime } from '../features/account/format.ts';
+import { manualKey } from '../features/account/two-step.tsx';
+import { activityPage, connectedAppViews, deviceViews } from '../features/account/views.ts';
+import type { SecurityEvent, SignInMethods } from '../features/api/account-data.ts';
 import { groupScopes } from '../features/consent/scopes.ts';
 
-describe('device names', () => {
-  test('come from the session’s User-Agent', () => {
-    expect(describeUserAgent('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36'))
-      .toEqual({ browser: 'Chrome', os: 'macOS', kind: 'computer' });
-    expect(describeUserAgent('Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1'))
-      .toEqual({ browser: 'Safari', os: 'iOS', kind: 'phone' });
-    expect(describeUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 Edg/140.0.0.0'))
-      .toEqual({ browser: 'Edge', os: 'Windows', kind: 'computer' });
-    expect(describeUserAgent('Mozilla/5.0 (Linux; Android 15; Pixel 9) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Mobile Safari/537.36'))
-      .toEqual({ browser: 'Chrome', os: 'Android', kind: 'phone' });
-    expect(describeUserAgent('Mozilla/5.0 (X11; Linux x86_64; rv:140.0) Gecko/20100101 Firefox/140.0'))
-      .toEqual({ browser: 'Firefox', os: 'Linux', kind: 'computer' });
-    expect(describeUserAgent(null)).toEqual({ browser: null, os: null, kind: 'unknown' });
+const now = new Date('2026-09-27T12:00:00Z');
+const at = (seconds: number) => new Date(now.getTime() - seconds * 1000).toISOString();
+let serial = 0;
+const event = (action: string, secondsAgo: number, extra: Partial<SecurityEvent> = {}): SecurityEvent => ({
+  id: `e${++serial}`, action, occurredAt: at(secondsAgo), method: null, browser: null, platform: null, network: null,
+  clientId: null, ...extra });
+
+describe('security activity', () => {
+  test('folds the sessions an action ended into that action', () => {
+    const { entries } = presentActivity([
+      event('session_revoked', 60), event('session_revoked', 61), event('password_changed', 62),
+      event('sign_out', 3_600), event('session_revoked', 3_600),
+      event('session_revoked', 7_200), event('session_revoked', 7_203),
+      event('app_revoked', 9_000, { clientId: 'reader' }), event('consent_revoked', 9_000, { clientId: 'reader' }),
+    ], now, false);
+    expect(entries.map(entry => [entry.kind, entry.count])).toEqual([['password-changed', 1], ['signed-out', 1],
+      ['device-signed-out', 2], ['app-removed', 1]]);
+  });
+
+  test('runs of failed sign-ins become one entry; unknown actions stay out', () => {
+    const { entries } = presentActivity([event('sign_in_failed', 10), event('sign_in_failed', 70),
+      event('sign_in_failed', 130), event('future_action', 140),
+      event('sign_in', 200, { method: 'verify-authentication', browser: 'Chrome', platform: 'macOS' })], now, false);
+    expect(entries).toMatchObject([{ kind: 'sign-in-failed', count: 3 },
+      { kind: 'signed-in', method: 'passkey', browser: 'Chrome', platform: 'macOS' }]);
+  });
+
+  test('shows 90 days and says when older pages may remain', () => {
+    const recent = [event('sign_in', 60), event('sign_in', 86_400 * 89)];
+    expect(presentActivity(recent, now, true).complete).toBe(false);
+    expect(presentActivity(recent, now, false).complete).toBe(true);
+    const crossing = presentActivity([...recent, event('sign_in', 86_400 * 91)], now, true);
+    expect(crossing.entries).toHaveLength(2);
+    expect(crossing.complete).toBe(true);
+    expect(activityPage({ items: recent, nextCursor: 'next', failedLast24Hours: { count: 0, capped: false } }, now, 'en'))
+      .toMatchObject({ older: 'next', entries: [{ when: '1 minute ago' }, { when: '3 months ago' }] });
+  });
+});
+
+describe('security checkup', () => {
+  const methods = (change: Partial<SignInMethods> = {}): SignInMethods => ({ password: true, passwordChangedAt: null,
+    passkeys: [], totp: null, ...change });
+  const passkey = { id: 'p', name: null, provider: null, createdAt: at(0), lastUsedAt: null, backedUp: true };
+
+  test('lists only what needs doing, most urgent first', () => {
+    expect(securityCheckup({ emailVerified: false, methods: methods(), failedLast24Hours: 5 }))
+      .toEqual(['verify-email', 'failed-sign-ins', 'add-second-step']);
+    expect(securityCheckup({ emailVerified: true, methods: methods({ passkeys: [passkey] }), failedLast24Hours: 2 }))
+      .toEqual([]);
+    expect(securityCheckup({ emailVerified: true, methods: methods({ totp: { name: 'Phone', verified: true } }),
+      failedLast24Hours: null })).toEqual([]);
+    // An unfinished authenticator setup protects nothing yet; unknown methods raise nothing.
+    expect(securityCheckup({ emailVerified: true, methods: methods({ totp: { name: 'Phone', verified: false } }),
+      failedLast24Hours: 0 })).toEqual(['add-second-step']);
+    expect(securityCheckup({ emailVerified: true, methods: null, failedLast24Hours: null })).toEqual([]);
+  });
+});
+
+describe('view models', () => {
+  test('pin this device first, then the most recently active', () => {
+    const device = (id: string, lastActive: number, thisDevice = false) => ({ id, createdAt: at(86_400),
+      lastActiveAt: at(lastActive), browser: 'Firefox', platform: 'Linux', network: null, thisDevice });
+    expect(deviceViews([device('old', 7_200), device('me', 10_800, true), device('new', 60)], now, 'en')
+      .map(view => [view.id, view.lastActive])).toEqual([['me', '3 hours ago'], ['new', '1 minute ago'],
+      ['old', '2 hours ago']]);
+  });
+
+  test('describe an app’s permissions in the page’s language', () => {
+    const scope = (scope: string, en: string, zh: string) => ({ scope, description: { en, 'zh-CN': zh } });
+    const [app] = connectedAppViews([{ clientId: 'r', name: 'Reader', uri: null, icon: null, trusted: false,
+      withdrawn: false, grantedAt: '2026-09-01T00:00:00Z', lastUsedAt: at(3_600),
+      scopes: [scope('openid', 'Identify your REZICS account', '识别你的 REZICS 账号'),
+        scope('work:read', 'Read works', '读取作品')] }], now, 'zh-CN');
+    expect(app).toMatchObject({ permissions: ['识别你的 REZICS 账号', '读取作品'], lastUsed: '1小时前' });
+  });
+
+  test('an authenticator key is grouped for typing', () => {
+    expect(manualKey('otpauth://totp/REZICS:ada?secret=JBSWY3DPEHPK3PXPABCD&issuer=REZICS'))
+      .toBe('JBSW Y3DP EHPK 3PXP ABCD');
   });
 });
 
 describe('dates', () => {
   test('are localized once on the server', () => {
-    const now = new Date('2026-09-27T12:00:00Z');
     expect(relativeTime('2026-09-27T09:00:00Z', now, 'en')).toBe('3 hours ago');
     expect(relativeTime('2026-09-26T12:00:00Z', now, 'en')).toBe('yesterday');
     expect(relativeTime('2026-09-27T11:59:40Z', now, 'en')).toBe('this minute');

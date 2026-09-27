@@ -1,6 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { expect, fn, userEvent, within } from 'storybook/test';
+import { expect, fn, userEvent, waitFor, within } from 'storybook/test';
 import { SignInFlow } from './sign-in-flow.tsx';
+import { pendingAutofill } from '../../.storybook/account-client.ts';
 import { chinese, dark, phone } from '../../.storybook/variants.ts';
 import { AuthFrame } from '../shell/auth-frame.tsx';
 import { AuthSkeleton } from '../shell/skeletons.tsx';
@@ -77,6 +78,59 @@ export const ForAnApp: Story = {
   },
 };
 
+const verified = fn(async (): Promise<{ ok: true; data: object } | { ok: false; kind: 'invalid-code'; status: number }> =>
+  verified.mock.calls.length === 1 ? { ok: false, kind: 'invalid-code', status: 401 } : { ok: true, data: {} });
+const afterCode = fn();
+export const TwoStepVerification: Story = {
+  args: { next: '/security' },
+  parameters: { account: { navigate: afterCode, api: { signIn: async () => ({ ok: true, data: { twoFactor: true } }),
+    verifyTwoFactor: verified } } },
+  async play({ canvasElement }) {
+    const canvas = await toPassword(canvasElement);
+    await userEvent.type(canvas.getByLabelText('Enter your password'), 'correct horse battery');
+    await userEvent.click(canvas.getByRole('button', { name: 'Next' }));
+    await expect(await canvas.findByRole('heading', { level: 1, name: '2-Step Verification' })).toBeVisible();
+    await userEvent.click(canvas.getByRole('button', { name: 'Next' }));
+    await expect(canvas.getByText('Enter the 6-digit code')).toBeVisible();
+    await userEvent.type(canvas.getByRole('textbox', { name: 'Enter code' }), '123456');
+    await userEvent.click(canvas.getByRole('checkbox', { name: 'Don’t ask again on this device' }));
+    await userEvent.click(canvas.getByRole('button', { name: 'Next' }));
+    await expect(await canvas.findByText('Wrong code. Try again.')).toBeVisible();
+    await userEvent.click(canvas.getByRole('button', { name: 'Use a backup code' }));
+    await userEvent.type(canvas.getByRole('textbox', { name: 'Backup code' }), 'k3Hx7-Qm2pW');
+    await userEvent.click(canvas.getByRole('button', { name: 'Next' }));
+    await expect(verified).toHaveBeenLastCalledWith({ code: 'k3Hx7-Qm2pW', method: 'backup-code', trustDevice: true,
+      oauthQuery: undefined });
+    await waitFor(() => expect(afterCode).toHaveBeenCalledWith('/security'));
+  },
+};
+
+const withPasskey = fn(async ({ conditional, signal }: { conditional?: boolean; signal?: AbortSignal }) => conditional
+  ? pendingAutofill(signal) : { ok: true as const, data: { redirect: '/consent?client_id=reader&sig=next' } });
+const afterPasskey = fn();
+export const Passkey: Story = {
+  args: { appName: 'Reader', oauthQuery: 'client_id=reader&sig=abc&ba_param=client_id' },
+  parameters: { account: { navigate: afterPasskey, api: { signInWithPasskey: withPasskey } } },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await expect(await canvas.findByText('to continue to Reader')).toBeVisible();
+    await expect(canvas.getByRole('textbox', { name: 'Email' })).toHaveAttribute('autocomplete', 'username webauthn');
+    await userEvent.click(canvas.getByRole('button', { name: 'Sign in with a passkey' }));
+    await expect(withPasskey).toHaveBeenCalledWith({ oauthQuery: 'client_id=reader&sig=abc&ba_param=client_id' });
+    await waitFor(() => expect(afterPasskey).toHaveBeenCalledWith('/consent?client_id=reader&sig=next'));
+  },
+};
+
+export const PasskeyDidNotWork: Story = {
+  parameters: { account: { api: { signInWithPasskey: async ({ conditional, signal }: { conditional?: boolean;
+    signal?: AbortSignal }) => conditional ? pendingAutofill(signal) : { ok: false, kind: 'invalid-credentials', status: 401 } } } },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await userEvent.click(await canvas.findByRole('button', { name: 'Sign in with a passkey' }));
+    await expect(await canvas.findByRole('alert')).toHaveTextContent('That passkey didn’t sign you in. Try another way.');
+  },
+};
+
 export const EmailNotVerified: Story = {
   parameters: { account: { api: { signIn: async () => ({ ok: false, kind: 'email-not-verified', status: 403 }) } } },
   async play({ canvasElement }) {
@@ -122,7 +176,7 @@ export const Loading: Story = {
   },
 };
 
-export const Dark: Story = { ...Password, globals: dark };
+export const Dark: Story = { ...TwoStepVerification, globals: dark };
 export const Phone: Story = { ...Password, globals: phone };
 export const Chinese: Story = {
   globals: chinese,

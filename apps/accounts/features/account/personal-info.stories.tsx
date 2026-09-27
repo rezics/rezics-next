@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { expect, fn, userEvent, within } from 'storybook/test';
+import { expect, fn, screen, userEvent, waitFor, within } from 'storybook/test';
 import { PersonalInfo } from './personal-info.tsx';
 import { AccountFrame, ada } from '../../.storybook/account-frame.tsx';
 import { chinese, dark, phone } from '../../.storybook/variants.ts';
@@ -19,6 +19,20 @@ export const Details: Story = {
     await expect(canvas.getByText('Ada Lovelace', { selector: 'span' })).toBeVisible();
     await expect(canvas.getByText('Verified')).toBeVisible();
     await expect(canvas.getByRole('combobox', { name: 'Language' })).toHaveValue('en');
+    await expect(canvas.queryByText('Coming soon')).toBeNull();
+  },
+};
+
+const chosen = fn(async () => ({ ok: true as const, data: undefined }));
+const reloaded = fn();
+export const ChooseLanguage: Story = {
+  parameters: { account: { navigate: reloaded, api: { setLocale: chosen } } },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await userEvent.selectOptions(await canvas.findByRole('combobox', { name: 'Language' }), 'zh-CN');
+    // Stored on the account, then remembered in this browser through ?hl=.
+    await expect(chosen).toHaveBeenCalledWith('zh-CN');
+    await waitFor(() => expect(reloaded).toHaveBeenCalledWith(expect.stringContaining('hl=zh-CN')));
   },
 };
 
@@ -38,6 +52,28 @@ export const EditName: Story = {
     await expect(renamed).toHaveBeenCalledWith('Augusta Ada King');
     await expect(refreshed).toHaveBeenCalled();
     await expect(await canvas.findByText('Saved')).toBeVisible();
+  },
+};
+
+const emailChange = fn(async (): Promise<{ ok: true; data: undefined } | { ok: false; kind: 'step-up-required'; status: number }> =>
+  emailChange.mock.calls.length === 1 ? { ok: false, kind: 'step-up-required', status: 403 } : { ok: true, data: undefined });
+export const ChangeEmail: Story = {
+  parameters: { account: { api: { changeEmail: emailChange } } },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await userEvent.click(await canvas.findByRole('button', { name: 'Change email' }));
+    const field = canvas.getByRole('textbox', { name: 'New email' });
+    await userEvent.type(field, 'ada@example.test');
+    await userEvent.click(canvas.getByRole('button', { name: 'Save' }));
+    await expect(canvas.getByText('That’s already your email')).toBeVisible();
+    await userEvent.clear(field);
+    await userEvent.type(field, 'ada@new.example');
+    await userEvent.click(canvas.getByRole('button', { name: 'Save' }));
+    const confirm = await screen.findByRole('dialog', { name: 'Confirm it’s you' });
+    await userEvent.type(within(confirm).getByLabelText('Enter your password'), 'correct horse battery');
+    await userEvent.click(within(confirm).getByRole('button', { name: 'Confirm' }));
+    await expect(await canvas.findByText(/To confirm, open the link we sent to ada@example\.test\. Then verify ada@new\.example/))
+      .toBeVisible();
   },
 };
 

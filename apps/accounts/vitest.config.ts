@@ -7,6 +7,8 @@ export default defineConfig({
   test: { projects: [{
     plugins: [storybookTest({ configDir: fileURLToPath(new URL('.storybook', import.meta.url)) })],
     test: { name: 'storybook', browser: { enabled: true, headless: true,
-      provider: playwright({}), instances: [{ browser: 'chromium' }] } },
+      // Stories assert states, not transitions: with reduced motion (which Rezics
+      // UI honours) a field error or dialog is complete when it appears.
+      provider: playwright({ contextOptions: { reducedMotion: 'reduce' } }), instances: [{ browser: 'chromium' }] } },
   }] },
 });

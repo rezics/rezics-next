@@ -1,28 +1,25 @@
+import { securityCheckup } from '../../../features/account/activity.ts';
 import { renderAccountPage } from '../../../features/account/account-page.tsx';
-import { describeUserAgent } from '../../../features/account/device.ts';
-import { relativeTime } from '../../../features/account/format.ts';
-import { type DevicesView, SecurityOverview } from '../../../features/account/security.tsx';
-import { readDeviceSessions, readLinkedAccounts } from '../../../features/api/server.ts';
-import { getTranslation, requestLocale } from '../../../i18n/server.ts';
+import { calendarDate } from '../../../features/account/format.ts';
+import { SecurityOverview } from '../../../features/account/security.tsx';
+import { activityPage, deviceViews } from '../../../features/account/views.ts';
+import { readSecurityActivity, readSessions } from '../../../features/api/server.ts';
+
+/** How many recent events the overview shows before "Review security activity". */
+const RECENT = 4;
 
 export default async function SecurityPage() {
-  return renderAccountPage('security', async ({ sessionId }) => {
-    const [accounts, sessions, locale] = await Promise.all([readLinkedAccounts(), readDeviceSessions(),
-      requestLocale()]);
-    const { t } = await getTranslation('account', [locale]);
-    const now = new Date();
-    const devices: DevicesView = sessions.status === 'ok' ? { status: 'ok', items: sessions.data
-      .toSorted((a, b) => Number(b.id === sessionId) - Number(a.id === sessionId)
-        || Date.parse(b.updatedAt) - Date.parse(a.updatedAt))
-      .map(session => {
-        const device = describeUserAgent(session.userAgent);
-        const current = session.id === sessionId;
-        return { id: session.id, token: session.token, current, kind: device.kind,
-          title: device.browser && device.os ? t.deviceOn({ browser: device.browser, os: device.os })
-            : device.browser ?? device.os ?? t.unknownDevice,
-          activity: current ? t.activeNow : t.lastActive({ time: relativeTime(session.updatedAt, now, locale) }) };
-      }) } : { status: sessions.status === 'stale' ? 'stale' : 'unavailable' };
-    return <SecurityOverview devices={devices} hasPassword={accounts.status === 'ok'
-      ? accounts.data.some(account => account.providerId === 'credential') : null} />;
+  return renderAccountPage('security', async ({ session, methods, locale, now }) => {
+    const [sessions, activity] = await Promise.all([readSessions(), readSecurityActivity()]);
+    const known = methods.status === 'ok' ? methods.data : null;
+    const failed = activity.status === 'ok' ? activity.data.failedLast24Hours.count : null;
+    return <SecurityOverview failedSignIns={failed ?? 0}
+      issues={securityCheckup({ emailVerified: session.user.emailVerified, methods: known, failedLast24Hours: failed })}
+      signIn={known ? { password: known.password, passkeys: known.passkeys.length, twoStep: known.totp?.verified === true,
+        passwordChanged: known.passwordChangedAt ? calendarDate(known.passwordChangedAt, locale) : null } : null}
+      devices={sessions.status === 'ok' ? { status: 'ok', items: deviceViews(sessions.data.items, now, locale) }
+        : { status: 'unavailable' }}
+      activity={activity.status === 'ok' ? { status: 'ok',
+        entries: activityPage(activity.data, now, locale).entries.slice(0, RECENT) } : { status: 'unavailable' }} />;
   });
 }

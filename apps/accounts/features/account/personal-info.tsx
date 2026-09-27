@@ -3,15 +3,20 @@
 import { Alert, AlertDescription } from '@rezics/ui/alert';
 import { Badge } from '@rezics/ui/badge';
 import { Button } from '@rezics/ui/button';
+import { NativeSelect } from '@rezics/ui/native-select';
 import { type FormEvent, type ReactNode, useState } from 'react';
 import { SectionHeading, SettingsCard, SettingsRow } from './account-shell.tsx';
+import { useStepUp } from './step-up.tsx';
 import { useAccountClient } from '../api/account-client.tsx';
+import type { AccountLocale } from '../api/account-data.ts';
 import type { FailureKind } from '../api/errors.ts';
 import { failureText } from './failure-text.ts';
 import { EmailField, emailPattern, NameField } from '../auth/fields.tsx';
-import { LocaleSelect } from '../shell/locale-select.tsx';
 import { type AvatarUser, UserAvatar } from '../shell/user-avatar.tsx';
-import { useTranslation } from '../../i18n/client.ts';
+import { useLocale, useTranslation } from '../../i18n/client.ts';
+import { uiLocales } from '../../i18n/locale.ts';
+
+const languageNames: Record<AccountLocale, string> = { en: 'English', 'zh-CN': '简体中文' };
 
 type Outcome = { tone: 'success' | 'destructive' | 'info'; text: string };
 
@@ -32,9 +37,39 @@ function InlineForm({ onSubmit, busy, children, onCancel }: { onSubmit(event: Fo
   </form>;
 }
 
-export function PersonalInfo({ user }: { user: AvatarUser & { emailVerified: boolean } }) {
+/** The account's language: stored on the account for its pages and emails,
+ * and remembered in this browser through `?hl=`. */
+function LanguageRow({ chosen }: { chosen: AccountLocale | null }) {
+  const { t } = useTranslation('account');
+  const common = useTranslation('common').t;
+  const locale = useLocale();
+  const { api, navigate } = useAccountClient();
+  const [busy, setBusy] = useState(false);
+  const [failure, setFailure] = useState('');
+  const value = chosen ?? (locale.current as AccountLocale);
+  async function choose(next: AccountLocale) {
+    setBusy(true);
+    setFailure('');
+    const result = await api.setLocale(next);
+    if (!result.ok) { setBusy(false); return setFailure(failureText(result.kind, common)); }
+    const url = new URL(window.location.href);
+    url.searchParams.set('hl', next);
+    navigate(url.toString());
+  }
+  return <SettingsRow label={t.language}>
+    <NativeSelect aria-label={t.language} value={value} size="md" className="w-full max-w-60" disabled={busy}
+      onChange={event => void choose(event.currentTarget.value as AccountLocale)}>
+      {uiLocales.map(item => <option key={item} value={item} lang={item}>{languageNames[item]}</option>)}
+    </NativeSelect>
+    <p className="mt-2 text-sm text-muted-foreground">{t.languageHelp}</p>
+    {failure ? <Alert role="alert" variant="destructive" className="mt-3"><AlertDescription>{failure}</AlertDescription></Alert> : null}
+  </SettingsRow>;
+}
+
+export function PersonalInfo({ user }: { user: AvatarUser & { emailVerified: boolean; locale: AccountLocale | null } }) {
   const { t } = useTranslation('account');
   const { api, refresh } = useAccountClient();
+  const stepUp = useStepUp();
   const [editing, setEditing] = useState<'name' | 'email'>();
   const [name, setName] = useState(user.name);
   const [email, setEmail] = useState('');
@@ -60,12 +95,18 @@ export function PersonalInfo({ user }: { user: AvatarUser & { emailVerified: boo
     event.preventDefault();
     const value = email.trim();
     if (!emailPattern.test(value)) return setFieldError(t.emailInvalid);
+    if (value.toLowerCase() === user.email.toLowerCase()) return setFieldError(t.emailUnchanged);
     setBusy(true);
-    const result = await api.changeEmail(value);
+    const result = await stepUp(() => api.changeEmail(value));
     setBusy(false);
-    if (!result.ok) return setOutcome({ row: 'email', value: { tone: 'destructive', text: failure(result.kind) } });
+    if (!result.ok) {
+      if (result.kind === 'cancelled') return;
+      return setOutcome({ row: 'email', value: { tone: 'destructive', text: failure(result.kind) } });
+    }
     setEditing(undefined);
-    setOutcome({ row: 'email', value: { tone: 'info', text: t.changeEmailSent({ email: value }) } });
+    // A verified address confirms the change first; then the new one verifies.
+    setOutcome({ row: 'email', value: { tone: 'info', text: user.emailVerified
+      ? t.changeEmailConfirmCurrent({ email: user.email, next: value }) : t.changeEmailSent({ email: value }) } });
   }
 
   async function sendVerification() {
@@ -85,8 +126,7 @@ export function PersonalInfo({ user }: { user: AvatarUser & { emailVerified: boo
     <SectionHeading title={t.personalInfo} intro={t.personalIntro} />
     <div className="flex flex-col gap-6">
       <SettingsCard title={t.basicInfo}>
-        <SettingsRow label={t.profilePicture}
-          action={<Badge variant="secondary">{common.comingSoon}</Badge>}>
+        <SettingsRow label={t.profilePicture}>
           <div className="flex items-center gap-4"><UserAvatar user={user} size="lg" />
             <p className="text-sm text-muted-foreground">{t.profilePictureHelp}</p></div>
         </SettingsRow>
@@ -125,10 +165,7 @@ export function PersonalInfo({ user }: { user: AvatarUser & { emailVerified: boo
           </SettingsRow>}
       </SettingsCard>
       <SettingsCard title={t.preferences}>
-        <SettingsRow label={t.language}>
-          <LocaleSelect />
-          <p className="mt-2 text-sm text-muted-foreground">{t.languageHelp}</p>
-        </SettingsRow>
+        <LanguageRow chosen={user.locale} />
       </SettingsCard>
     </div>
   </>;

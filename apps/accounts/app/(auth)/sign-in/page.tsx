@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation';
-import { readSession } from '../../../features/api/server.ts';
+import { pendingAuthorization } from '../../../features/api/oauth-query.ts';
+import { readRequestingClient, readSession } from '../../../features/api/server.ts';
 import { authQuery } from '../../../features/auth/auth-query.ts';
 import { SignInFlow } from '../../../features/auth/sign-in-flow.tsx';
 import { SignUpForm } from '../../../features/auth/sign-up-form.tsx';
@@ -10,14 +11,17 @@ export default async function SignInPage({ searchParams }: { searchParams: PageS
   const query = await pageQuery(searchParams);
   const { oauthQuery, next, carry, wantsSignUp } = authQuery(query);
   const reauth = query.get('reauth') === '1';
-  const session = await readSession();
+  const pending = oauthQuery ? pendingAuthorization(oauthQuery) : undefined;
+  const [session, client] = await Promise.all([readSession(),
+    pending && oauthQuery ? readRequestingClient(pending.clientId, oauthQuery) : undefined]);
   const signedIn = session.status === 'ok' ? session.data : undefined;
   // A signed-in visitor has nothing to do here unless an app or a sensitive
   // page asked for a fresh sign-in.
   if (signedIn && !oauthQuery && !reauth) redirect(next);
+  const appName = client?.status === 'ok' ? client.data.name?.trim() || null : null;
   return <AuthFrame>{wantsSignUp
-    ? <SignUpForm next={next} oauthQuery={oauthQuery} carry={carry} />
-    : <SignInFlow next={next} oauthQuery={oauthQuery} carry={carry}
+    ? <SignUpForm next={next} oauthQuery={oauthQuery} carry={carry} appName={appName} />
+    : <SignInFlow next={next} oauthQuery={oauthQuery} carry={carry} appName={appName}
       reauthEmail={reauth ? signedIn?.user.email : undefined}
       notice={query.get('deleted') === '1' ? 'deleted' : undefined} />}</AuthFrame>;
 }

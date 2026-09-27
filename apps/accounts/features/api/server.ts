@@ -1,8 +1,8 @@
 // Server Component reads from the Account service with the visitor's cookies.
 import { headers } from 'next/headers';
 import { cache } from 'react';
-import { type AccountSession, list, parseConsent, parseDeviceSession, parseLinkedAccount,
-  parsePublicClient, parseSession, record } from './account-data.ts';
+import { parseActivity, parseConnectedApps, parseMethods, parsePublicClient, parseSession,
+  parseSessions, record } from './account-data.ts';
 import { accountsConfig, httpOrigin } from '../config/env.ts';
 
 export type { AccountSession } from './account-data.ts';
@@ -12,14 +12,24 @@ export type { AccountSession } from './account-data.ts';
 export type Read<T> = { status: 'ok'; data: T } | { status: 'signed-out' } | { status: 'stale' }
   | { status: 'unavailable' } | { status: 'missing' };
 
-async function read<T>(path: string, parse: (value: unknown) => T | null): Promise<Read<T>> {
+const origins = () => {
+  const config = accountsConfig();
+  return { service: httpOrigin('ACCOUNT_SERVICE_ORIGIN', config.ACCOUNT_SERVICE_ORIGIN),
+    public: httpOrigin('ACCOUNT_BASE_URL', config.ACCOUNT_BASE_URL) };
+};
+
+async function read<T>(path: string, parse: (value: unknown) => T | null,
+  init: { body?: Record<string, unknown>; anonymous?: boolean } = {}): Promise<Read<T>> {
   const cookie = (await headers()).get('cookie');
-  if (!cookie) return { status: 'signed-out' };
-  const origin = httpOrigin('ACCOUNT_SERVICE_ORIGIN', accountsConfig().ACCOUNT_SERVICE_ORIGIN);
+  if (!cookie && !init.anonymous) return { status: 'signed-out' };
+  const { service, public: publicOrigin } = origins();
   let response: Response;
   try {
-    response = await fetch(new URL(`/api/auth${path}`, origin), { cache: 'no-store',
-      headers: { accept: 'application/json', cookie }, signal: AbortSignal.timeout(8_000) });
+    response = await fetch(new URL(path, service), { cache: 'no-store', signal: AbortSignal.timeout(8_000),
+      method: init.body ? 'POST' : 'GET', body: init.body ? JSON.stringify(init.body) : undefined,
+      headers: { accept: 'application/json', ...(cookie ? { cookie } : {}),
+        // A POST read speaks for this public Account origin, as the proxy does.
+        ...(init.body ? { 'content-type': 'application/json', origin: publicOrigin } : {}) } });
   } catch {
     return { status: 'unavailable' };
   }
@@ -28,17 +38,21 @@ async function read<T>(path: string, parse: (value: unknown) => T | null): Promi
   const body = await response.json().catch(() => undefined) as unknown;
   if (response.status === 403 && record(body)?.code === 'SESSION_NOT_FRESH') return { status: 'stale' };
   if (!response.ok) return { status: 'unavailable' };
-  if (body === null && path === '/get-session') return { status: 'signed-out' };
+  if (body === null && path === '/api/auth/get-session') return { status: 'signed-out' };
   const data = parse(body);
   return data === null ? { status: 'unavailable' } : { status: 'ok', data };
 }
 
 /** One session read per request, shared by the page and its sections. */
-export const readSession = cache(() => read('/get-session', parseSession));
-export const readDeviceSessions = cache(() =>
-  read('/list-sessions', value => list(value, parseDeviceSession)));
-export const readLinkedAccounts = cache(() =>
-  read('/list-accounts', value => list(value, parseLinkedAccount)));
-export const readConsents = cache(() => read('/oauth2/get-consents', value => list(value, parseConsent)));
+export const readSession = cache(() => read('/api/auth/get-session', parseSession));
+export const readMethods = cache(() => read('/api/account/methods', parseMethods));
+export const readSessions = cache(() => read('/api/account/sessions?limit=100', parseSessions));
+export const readSecurityActivity = cache((cursor?: string) => read(`/api/account/security-activity?limit=50${
+  cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`, parseActivity));
+export const readConnectedApps = cache(() => read('/api/account/connected-apps?limit=100', parseConnectedApps));
 export const readPublicClient = cache((clientId: string) =>
-  read(`/oauth2/public-client?client_id=${encodeURIComponent(clientId)}`, parsePublicClient));
+  read(`/api/auth/oauth2/public-client?client_id=${encodeURIComponent(clientId)}`, parsePublicClient));
+/** The App behind a signed authorization request, before anyone signs in. */
+export const readRequestingClient = cache((clientId: string, oauthQuery: string) =>
+  read('/api/auth/oauth2/public-client-prelogin', parsePublicClient,
+    { anonymous: true, body: { client_id: clientId, oauth_query: oauthQuery } }));

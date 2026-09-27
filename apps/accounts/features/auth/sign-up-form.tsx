@@ -8,13 +8,16 @@ import type { FailureKind } from '../api/errors.ts';
 import { AuthHeading } from '../shell/auth-frame.tsx';
 import { EmailField, emailPattern, NameField, PasswordField, passwordLength } from './fields.tsx';
 import { AuthOutcome } from './auth-outcome.tsx';
-import { useTranslation } from '../../i18n/client.ts';
+import type { AccountLocale } from '../api/account-data.ts';
+import { useLocale, useTranslation } from '../../i18n/client.ts';
 
 type Errors = Partial<Record<'name' | 'email' | 'password' | 'confirm', string>>;
 
-export function SignUpForm({ next, oauthQuery, carry = '' }: { next: string; oauthQuery?: string;
-  carry?: string }) {
+export function SignUpForm({ next, oauthQuery, carry = '', appName }: { next: string; oauthQuery?: string;
+  carry?: string; appName?: string | null }) {
   const { t } = useTranslation('auth');
+  // The account keeps the language it was created in, for its pages and emails.
+  const locale = useLocale().current as AccountLocale;
   const { api, navigate } = useAccountClient();
   const [values, setValues] = useState({ name: '', email: '', password: '', confirm: '' });
   const [errors, setErrors] = useState<Errors>({});
@@ -39,7 +42,8 @@ export function SignUpForm({ next, oauthQuery, carry = '' }: { next: string; oau
     setFailure(undefined);
     if (Object.values(found).some(Boolean)) return;
     setBusy(true);
-    const result = await api.signUp({ name: values.name.trim(), email, password: values.password, oauthQuery });
+    const result = await api.signUp({ name: values.name.trim(), email, password: values.password, locale, oauthQuery,
+      carry });
     if (result.ok) {
       if (result.data.verify) { setBusy(false); return setSentTo(email); }
       return navigate(result.data.redirect ?? next);
@@ -59,7 +63,7 @@ export function SignUpForm({ next, oauthQuery, carry = '' }: { next: string; oau
     : failure === 'expired-request' ? t.requestExpired
       : failure === 'unavailable' || failure === 'not-enabled' ? t.unavailable : t.signUpFailed;
   return <>
-    <AuthHeading title={t.signUpTitle} subtitle={t.signUpSubtitle} />
+    <AuthHeading title={t.signUpTitle} subtitle={appName ? t.signUpForApp({ app: appName }) : t.signUpSubtitle} />
     {failure ? <Alert role="alert" variant="destructive" className="mb-6">
       <AlertDescription>{failureMessage}</AlertDescription></Alert> : null}
     <form method="post" noValidate onSubmit={event => void submit(event)} className="flex flex-col gap-5">

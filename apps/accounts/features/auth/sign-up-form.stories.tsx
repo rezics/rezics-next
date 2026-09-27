@@ -30,7 +30,7 @@ export const Form: Story = {
     await userEvent.click(canvas.getByRole('button', { name: 'Next' }));
     await expect(canvas.getByText('Enter your name')).toBeVisible();
     await expect(canvas.getByText('Enter an email')).toBeVisible();
-    await expect(canvas.getByText('Use 8 characters or more for your password')).toBeVisible();
+    await expect(canvas.getByText('Use 12 characters or more for your password')).toBeVisible();
     await userEvent.clear(canvas.getByLabelText('Password'));
     await fill(canvasElement);
     await expect(created).toHaveBeenCalledWith('/');
@@ -60,6 +60,23 @@ export const CouldNotCreate: Story = {
     // The same words whether or not the email already has an account.
     await expect(await canvas.findByRole('alert')).toHaveTextContent(
       'We couldn’t create an account with these details. If you already have one, sign in or reset your password.');
+  },
+};
+
+const signedUp = fn(async () => ({ ok: true as const, data: { verify: true } }));
+export const ForAnApp: Story = {
+  args: { appName: 'Reader', oauthQuery: 'client_id=reader&sig=abc&ba_param=client_id',
+    carry: 'client_id=reader&sig=abc&ba_param=client_id' },
+  parameters: { account: { api: { signUp: signedUp } } },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await expect(await canvas.findByText('One account for every REZICS product, starting with Reader')).toBeVisible();
+    await fill(canvasElement);
+    // The account keeps the page's language; verification returns to the app's request.
+    await expect(signedUp).toHaveBeenCalledWith(expect.objectContaining({ locale: 'en',
+      carry: 'client_id=reader&sig=abc&ba_param=client_id' }));
+    await expect(await canvas.findByRole('link', { name: 'Back to sign in' }))
+      .toHaveAttribute('href', '/sign-in?client_id=reader&sig=abc&ba_param=client_id');
   },
 };
 

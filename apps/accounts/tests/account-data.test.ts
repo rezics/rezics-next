@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
-import { list, parseConsent, parseDeviceSession, parsePublicClient,
-  parseSession } from '../features/api/account-data.ts';
+import { list, parseActivity, parseConnectedApps, parseMethods, parsePublicClient, parseSession,
+  parseSessions } from '../features/api/account-data.ts';
 import { classifyFailure } from '../features/api/errors.ts';
 import { pendingAuthorization, safeReturnPath, signedOAuthQuery } from '../features/api/oauth-query.ts';
 
@@ -9,25 +9,45 @@ const at = '2026-09-27T12:00:00.000Z';
 describe('Account responses', () => {
   test('a session narrows to the fields the pages show', () => {
     expect(parseSession({ session: { id: 's1', token: 'secret' }, user: { id: 'u1', email: 'a@example.test',
-      name: 'Ada', emailVerified: true, image: null, createdAt: at, role: 'x' } })).toEqual({
+      name: 'Ada', emailVerified: true, image: 'javascript:alert(1)', createdAt: at, role: 'x', locale: 'zh-CN',
+      twoFactorEnabled: true } })).toEqual({
       sessionId: 's1', user: { id: 'u1', email: 'a@example.test', name: 'Ada', emailVerified: true,
-        image: null, createdAt: at } });
+        image: null, createdAt: at, locale: 'zh-CN', twoFactorEnabled: true } });
+    expect(parseSession({ session: { id: 's1' }, user: { id: 'u1', email: 'a@example.test', createdAt: at,
+      locale: 'fr' } })?.user).toMatchObject({ locale: null, twoFactorEnabled: false });
     expect(parseSession(null)).toBeNull();
     expect(parseSession({ user: { id: 'u1' }, session: { id: 's1' } })).toBeNull();
   });
 
-  test('lists fail as a whole when any item is malformed', () => {
-    const device = { id: 'd1', token: 't1', createdAt: at, updatedAt: at, ipAddress: '', userAgent: 'UA' };
-    expect(list([device], parseDeviceSession)).toEqual([{ ...device, ipAddress: null }]);
-    expect(list([device, { id: 'd2' }], parseDeviceSession)).toBeNull();
-    expect(list('nope', parseDeviceSession)).toBeNull();
+  test('sign-in methods keep what an older service omits as unknown', () => {
+    const passkey = { id: 'p1', name: ' ', createdAt: at, backedUp: true, deviceType: 'multiDevice' };
+    expect(parseMethods({ password: true, passkeys: [passkey], totp: null })).toEqual({ password: true,
+      passwordChangedAt: null, totp: null,
+      passkeys: [{ id: 'p1', name: null, provider: null, createdAt: at, lastUsedAt: null, backedUp: true }] });
+    expect(parseMethods({ password: false, passwordChangedAt: null, totp: { id: 't', name: 'Phone', verified: true },
+      passkeys: [{ ...passkey, name: 'Laptop', provider: 'iCloud Keychain', lastUsedAt: at }] })).toMatchObject({
+      totp: { name: 'Phone', verified: true }, passkeys: [{ name: 'Laptop', provider: 'iCloud Keychain', lastUsedAt: at }] });
+    expect(parseMethods({ password: true, passkeys: [{ id: 'p1' }], totp: null })).toBeNull();
   });
 
-  test('consents accept array or space-separated scopes', () => {
-    expect(parseConsent({ id: 'c1', clientId: 'app', scopes: ['openid', 'work:read'], createdAt: at }))
-      .toEqual({ id: 'c1', clientId: 'app', scopes: ['openid', 'work:read'], createdAt: at });
-    expect(parseConsent({ id: 'c1', clientId: 'app', scopes: 'openid profile', createdAt: at })?.scopes)
-      .toEqual(['openid', 'profile']);
+  test('devices, activity and apps are pages; one malformed item fails the page', () => {
+    const device = { id: 'd1', createdAt: at, lastActiveAt: at, expiresAt: at, thisDevice: true, network: '192.0.2.0/24',
+      device: { browser: 'Unknown browser', platform: 'Linux', label: 'Unknown browser' } };
+    expect(parseSessions({ items: [device], nextCursor: null })).toEqual({ nextCursor: null, items: [{ id: 'd1',
+      createdAt: at, lastActiveAt: at, browser: null, platform: 'Linux', network: '192.0.2.0/24', thisDevice: true }] });
+    expect(parseSessions({ items: [device, { id: 'd2' }], nextCursor: null })).toBeNull();
+    expect(list('nope', item => item)).toBeNull();
+    expect(parseActivity({ items: [{ id: 'e1', action: 'sign_in', occurredAt: at, detail: { method: 'email',
+      device: { browser: 'Chrome', platform: 'macOS' }, network: '192.0.2.0/24' } }], nextCursor: 'c',
+    failedAttemptsLast24Hours: { count: 2, capped: false } })).toEqual({ nextCursor: 'c',
+      failedLast24Hours: { count: 2, capped: false }, items: [{ id: 'e1', action: 'sign_in', occurredAt: at,
+        method: 'email', browser: 'Chrome', platform: 'macOS', network: '192.0.2.0/24', clientId: null }] });
+    const app = { clientId: 'reader', name: '', uri: 'https://reader.example', icon: 'javascript:x', trusted: true,
+      scopes: [{ scope: 'openid', description: { en: 'Identify your REZICS account', 'zh-CN': '识别你的 REZICS 账号' } }],
+      grantedAt: at, lastUsedAt: null, installationId: 'i1', installationState: 'revoked' };
+    expect(parseConnectedApps({ items: [app], nextCursor: null })?.items[0]).toEqual({ clientId: 'reader',
+      name: 'reader', uri: 'https://reader.example', icon: null, trusted: true, withdrawn: true, grantedAt: at,
+      lastUsedAt: null, scopes: app.scopes });
   });
 
   test('a public client links only to web pages', () => {
@@ -52,6 +72,17 @@ describe('Account failures', () => {
     expect(classifyFailure(503, { error: 'temporarily_unavailable' })).toBe('unavailable');
     // An existing email at sign-up is an ordinary failure, never a distinct outcome.
     expect(classifyFailure(422, { code: 'USER_ALREADY_EXISTS_USE_ANOTHER_EMAIL' })).toBe('failed');
+  });
+
+  test('name the steps a sensitive change or a second factor needs', () => {
+    expect(classifyFailure(403, { error: 'step_up_required' })).toBe('step-up-required');
+    expect(classifyFailure(403, { code: 'STEP_UP_REQUIRED' })).toBe('step-up-required');
+    expect(classifyFailure(409, { error: 'last_sign_in_method' })).toBe('last-method');
+    expect(classifyFailure(403, { error: 'stale_request' })).toBe('stale');
+    expect(classifyFailure(401, { code: 'INVALID_CODE' })).toBe('invalid-code');
+    expect(classifyFailure(401, { code: 'INVALID_BACKUP_CODE' })).toBe('invalid-code');
+    expect(classifyFailure(401, { code: 'INVALID_TWO_FACTOR_COOKIE' })).toBe('stale');
+    expect(classifyFailure(401, { code: 'PASSKEY_NOT_FOUND' })).toBe('invalid-credentials');
   });
 });
 
