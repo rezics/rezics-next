@@ -14,6 +14,7 @@ import { SemanticStageStore } from './modules/semantic/staging.ts';
 import { AccessAdmissionRegistry } from './modules/access/admission.ts';
 import { AccessDownloadLeases } from './modules/access/download-leases.ts';
 import { AgentProvisioning } from './modules/agent/provision.ts';
+import { ProfilesAccess } from './modules/profiles/access.ts';
 import { ProtectionAdmissionSigner } from './modules/access/protection-admission.ts';
 import { ErasureService } from './modules/erasure/request.ts';
 import { ContentProtectionStore } from './modules/protection/content-store.ts';
@@ -248,6 +249,7 @@ const correctionWorker = new VerificationCorrectionWorker(new VerificationCorrec
 const actingContextDiscovery = new AccessActingContexts(pool, environment);
 const app = createMainApp(fuseki, {
   discovery: new DiscoveryProjection(pool),
+  profiles: new ProfilesAccess(pool),
   agentProvisioning: new AgentProvisioning(pool,
     { ...environment, ...(workObjects ? { workObjects } : {}) }),
   environment: {

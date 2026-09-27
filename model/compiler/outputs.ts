@@ -115,6 +115,8 @@ function arbitraryValue(property: PropertyDefinition, prefixes: ReadonlyMap<stri
   }
   if (property.pattern) {
     const examples: Record<string, string> = {
+      '^agent-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$':
+        'agent-00000000-0000-4000-8000-000000000001',
       '^\\d{4}-\\d{2}-\\d{2}$': '2026-03-08',
       '^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$': 'en',
       '^[A-Za-z]{2,8}(-[A-Za-z0-9]{1,8})*$': 'en-US',

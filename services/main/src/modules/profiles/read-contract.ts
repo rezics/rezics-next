@@ -1,0 +1,33 @@
+import { t } from 'elysia';
+import { readAvatar, readId, readName, readPosition, WORK_READ_COST } from '../work/read-contract.ts';
+import { AGENT_HANDLE_PATTERN } from '../agent/handle.ts';
+
+export const profileHandle = t.String({ pattern: AGENT_HANDLE_PATTERN });
+export const creditRole = t.Union([t.Literal('author'), t.Literal('translator'), t.Literal('editor')]);
+export const agentProfile = t.Object({ profile: t.Literal('agent-read-v1'), id: readId,
+  displayName: t.String({ minLength: 1, maxLength: 200 }),
+  kind: t.Union([t.Literal('person'), t.Literal('organization'), t.Literal('service')]),
+  handle: profileHandle, disclosure: t.Literal('public'), sourcePosition: readPosition,
+  links: t.Object({ profile: t.String(), works: t.String(), collections: t.String() }) });
+export const shelfWork = t.Object({ id: readId, title: readName, cover: readAvatar });
+export const creditedWork = t.Object({ ...shelfWork.properties,
+  attribution: t.Array(t.Object({ credit: readId, role: creditRole }), { maxItems: 3 }) });
+export const shelfCollection = t.Object({ id: readId, revision: readId, name: t.String({ maxLength: 300 }),
+  kind: t.Union([t.Literal('static'), t.Literal('captured')]), disclosure: t.Literal('public'),
+  structure: readId });
+export const libraryContribution = t.Object({ id: readId, work: t.Nullable(shelfWork),
+  revision: readId, language: t.String(),
+  publication: t.Union([t.Literal('draft'), t.Literal('public'), t.Literal('private')]) });
+export const libraryRating = t.Object({ id: readId, revision: readId, work: t.Nullable(shelfWork),
+  context: readId, mainVersion: readId, scope: t.Literal('global'),
+  value: t.Nullable(t.Integer({ minimum: 1, maximum: 5 })),
+  availability: t.Union([t.Literal('available'), t.Literal('withdrawn')]),
+  scale: t.Object({ min: t.Literal(1), max: t.Literal(5), step: t.Literal(1) }) });
+
+/** Shared metered graph envelope. Agent reads use 3 graph calls; collections
+ * use 5; Work pages use ≤8 including bounded attribution hydration. Library hydration
+ * is O(P), P≤20, with two summary batches and final authority checks. SQL uses
+ * five-second statements. Relation ordering may scan/sort D heads (O(D log D));
+ * LIMIT bounds output, not native execution cost. No corpus-scale claim. */
+export const PROFILE_READ_COST = { ...WORK_READ_COST, sqlStatementMs: 5_000,
+  responseBytes: 512 * 1024, creditRoles: 3 } as const;

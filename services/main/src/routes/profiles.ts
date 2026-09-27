@@ -1,0 +1,102 @@
+import { Elysia, t } from 'elysia';
+import { workRead, WorkReadLimit } from '../modules/work/read-session.ts';
+import { pendingOperation } from '../api-contract.ts';
+import { pageFields, pageQuery, readId, readPosition, readQuery, readUuid } from '../modules/work/read-contract.ts';
+import { agentProfile, creditedWork, creditRole, libraryContribution, libraryRating,
+  PROFILE_READ_COST, profileHandle, shelfCollection } from '../modules/profiles/read-contract.ts';
+import { readAgent, readAgentCollections, readAgentWorks, readHandle } from '../modules/profiles/read.ts';
+import { readMyContributions, readMyRatings } from '../modules/profiles/library.ts';
+import { createNativeCredit, readNativeCredits } from '../modules/profiles/credits.ts';
+import { ControlDenied, ControlUnavailable } from '../modules/access/topology-control.ts';
+import { RevisionReadBudgetExceeded } from '../modules/work/history.ts';
+import { workReadError, workReadProblems } from './work-reads.ts';
+import type { MainWorkDependencies } from './dependencies.ts';
+import { problem } from './problems.ts';
+
+const params = t.Object({ id: readUuid });
+const detail: { security: Record<string, string[]>[] } = { security: [{}, { bearerAuth: [] }] };
+const headers = { 'cache-control': 'private, no-store' };
+function response(value: unknown, status = 200) {
+  const body = JSON.stringify(value);
+  if (Buffer.byteLength(body) > PROFILE_READ_COST.responseBytes) throw new WorkReadLimit('Profile response exceeds budget');
+  return new Response(body, { status, headers: { ...headers, 'content-type': 'application/json' } });
+}
+function readError(error: unknown) {
+  if (error instanceof RevisionReadBudgetExceeded) error = new WorkReadLimit('Rating manifest read exceeds budget');
+  const result = error instanceof ControlDenied ? problem(403, 'library_denied', 'Library authority is unavailable')
+    : error instanceof ControlUnavailable ? problem(503, 'profile_owner_unavailable', 'Profile owner is unavailable')
+    : workReadError(error);
+  result.headers.set('cache-control', 'private, no-store');
+  return result;
+}
+export const openApiOperations = {
+  '/v1/agents/{id}': { get: { bearer: false } },
+  '/v1/handles/{handle}': { get: { bearer: false } },
+  '/v1/agents/{id}/works': { get: { bearer: false } },
+  '/v1/agents/{id}/collections': { get: { bearer: false } },
+  '/v1/me/contributions': { get: { bearer: true } },
+  '/v1/me/ratings': { get: { bearer: true } },
+  '/v1/works/{id}/agent-credits': { get: { bearer: false }, post: { bearer: true, idempotencyKey: true } },
+} as const;
+
+export function profileRoutes(work: MainWorkDependencies) {
+  return new Elysia()
+    .get('/v1/agents/:id', { params, detail,
+      query: t.Object(readQuery, { additionalProperties: false }),
+      response: { 200: agentProfile, ...workReadProblems },
+    }, async ({ request, params: path, query }) => {
+      try { return response(await workRead(work, request, query, s => readAgent(s, `https://rezics.com/id/${path.id}`))); }
+      catch (error) { return readError(error); }
+    })
+    .get('/v1/handles/:handle', { params: t.Object({ handle: t.String({ minLength: 1, maxLength: 64 }) }), detail,
+      query: t.Object(readQuery, { additionalProperties: false }),
+      response: { 200: agentProfile, ...workReadProblems },
+    }, async ({ request, params: path, query }) => {
+      try { return response(await workRead(work, request, query, s => readHandle(s, path.handle))); }
+      catch (error) { return readError(error); }
+    })
+    .get('/v1/agents/:id/works', { params, detail, query: t.Object(pageQuery, { additionalProperties: false }),
+      response: { 200: t.Object({ items: t.Array(creditedWork, { maxItems: 20 }), ...pageFields }), ...workReadProblems },
+    }, async ({ request, params: path, query }) => {
+      try { return response(await workRead(work, request, query, s => readAgentWorks(s, `https://rezics.com/id/${path.id}`))); }
+      catch (error) { return readError(error); }
+    })
+    .get('/v1/agents/:id/collections', { params, detail, query: t.Object(pageQuery, { additionalProperties: false }),
+      response: { 200: t.Object({ items: t.Array(shelfCollection, { maxItems: 20 }), ...pageFields }), ...workReadProblems },
+    }, async ({ request, params: path, query }) => {
+      try { return response(await workRead(work, request, query, s => readAgentCollections(s, `https://rezics.com/id/${path.id}`))); }
+      catch (error) { return readError(error); }
+    })
+    .get('/v1/me/contributions', { query: t.Object(pageQuery, { additionalProperties: false }),
+      response: { 200: t.Object({ items: t.Array(libraryContribution, { maxItems: 20 }), ...pageFields }), ...workReadProblems },
+    }, async ({ request, query }) => {
+      try { return response(await workRead(work, request, query, readMyContributions)); }
+      catch (error) { return readError(error); }
+    })
+    .get('/v1/me/ratings', { query: t.Object({ ...pageQuery, scope: t.Optional(t.Literal('global')) }, { additionalProperties: false }),
+      response: { 200: t.Object({ items: t.Array(libraryRating, { maxItems: 20 }), ...pageFields }), ...workReadProblems },
+    }, async ({ request, query }) => {
+      try { return response(await workRead(work, request, query, readMyRatings)); }
+      catch (error) { return readError(error); }
+    })
+    .get('/v1/works/:id/agent-credits', { params, detail, query: t.Object(pageQuery, { additionalProperties: false }),
+      response: { 200: t.Object({ items: t.Array(t.Object({ id: readId, role: creditRole,
+        agent: readId, displayName: t.String(), handle: profileHandle }), { maxItems: 20 }), ...pageFields }), ...workReadProblems },
+    }, async ({ request, params: path, query }) => {
+      try { return response(await workRead(work, request, query, s => readNativeCredits(s, `https://rezics.com/id/${path.id}`))); }
+      catch (error) { return readError(error); }
+    })
+    .post('/v1/works/:id/agent-credits', { params,
+      body: t.Object({ profile: t.Literal('native-agent-credit-v1'), credit: readId, agent: readId,
+        role: creditRole, expectedWorkHead: readId, actingSubject: readId }, { additionalProperties: false }),
+      response: { 200: creditResult, 201: creditResult, 202: pendingOperation, ...workReadProblems },
+    }, async ({ request, params: path, body }) => {
+      try {
+        const result = await createNativeCredit(work, request, { ...body, work: `https://rezics.com/id/${path.id}` },
+          request.headers.get('idempotency-key') ?? '');
+        return response(result, result.replayed ? 200 : 201);
+      } catch (error) { return readError(error); }
+    });
+}
+const creditResult = t.Object({ profile: t.Literal('native-agent-credit-v1'), credit: readId,
+  revision: readId, work: readId, agent: readId, role: creditRole, replayed: t.Boolean(), sourcePosition: readPosition });

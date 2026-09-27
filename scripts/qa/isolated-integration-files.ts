@@ -46,4 +46,6 @@ export const isolatedIntegrationFileList = [
   'tests/qa/integration/work-derivation.test.ts',
   // Discovery probes cut over classification and toggle the dataset restore hold.
   'tests/qa/integration/discovery-projection.test.ts',
+  // Profile/library probes change disclosure, erasure and the dataset restore hold.
+  'services/main/tests/profiles.integration.test.ts',
 ] as const;

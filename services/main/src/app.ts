@@ -65,6 +65,7 @@ import { workReadRoutes } from './routes/work-reads.ts';
 import { realmReadRoutes } from './routes/realm-reads.ts';
 import { workContentsRoutes } from './routes/work-contents.ts';
 import { workActivityRoutes } from './routes/work-activity.ts';
+import { profileRoutes } from './routes/profiles.ts';
 import { discoveryRoutes } from './routes/discovery.ts';
 import { managementReadRoutes } from './routes/management-reads.ts';
 
@@ -115,6 +116,7 @@ function domainRoutes(fuseki: FusekiClient, work: SearchRouteDependencies) {
     .use(realmReadRoutes(work))
     .use(workContentsRoutes(work))
     .use(workActivityRoutes(work))
+    .use(profileRoutes(work))
     .use(discoveryRoutes(work))
     .use(managementReadRoutes(work))
     .use(collectionRoutes(fuseki, work))

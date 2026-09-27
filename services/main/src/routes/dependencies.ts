@@ -83,9 +83,11 @@ import type { RightsStore } from '../modules/rights/store.ts';
 import type { ConnectedAppStore } from '../modules/connected-apps/store.ts';
 import type { ThemeStore } from '../modules/theme/store.ts';
 import type { PrivateContextSelections } from '../modules/context/private-selection.ts';
+import type { ProfilesAccess } from '../modules/profiles/access.ts';
 
 export interface MainWorkDependencies {
   discovery?: import('../modules/discovery/store.ts').DiscoveryProjection;
+  profiles?: ProfilesAccess;
   agentProvisioning?: AgentProvisioning;
   governance?: { store: GovernanceStore; rules?: GovernanceRules };
   managementReads?: ManagementReadStore;

@@ -18,6 +18,11 @@ export const agentProvisionProfile = {
       { path: 'rv:agentKind', minCount: 1, maxCount: 1,
         in: ['rv:PersonAgent', 'rv:OrganizationAgent', 'rv:ServiceAgent'] },
       { path: 'rdfs:label', minCount: 1, maxCount: 1, datatype: 'xsd:string' },
+      // Optional only for legacy public provision heads. New provisioning also
+      // validates agent-profile-v1, which requires both allocated fields.
+      { path: 'rv:profileHandle', maxCount: 1, datatype: 'xsd:string',
+        pattern: '^agent-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' },
+      { path: 'rv:profileDisclosure', maxCount: 1, in: ['rv:Public', 'rv:Private'] },
     ] },
     { iri: 'https://rezics.com/definition/agent-provision-v1/tombstone-shape',
       canonical: { types: ['rv:AgentTombstone'] },
