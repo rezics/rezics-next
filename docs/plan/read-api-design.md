@@ -80,7 +80,7 @@ security. `services/main/tests/work-read.test.ts` compiles a web-style
 | `/v1/works/{id}/adoptions` | language, cursor; public Realm names, exact selection, contribution and language | Realm selection and public Realm summary owners |
 | `/v1/works/{id}/credits` | cursor; confirmed external author references, explicit null native Agent/name/handle | Existing AuthorCredit current/revision projection |
 | `/v1/works/{id}/history` | cursor; metadata revision identities, epoch/sequence and exact-read links | Work revision anchors; no unreviewed historical text or private audit actors |
-| `/v1/works` | language, cursor; recent public Work cards, no phrase required | Current Work heads, publication disclosure, batched summaries/media |
+| `/v1/works` | scoped recent/top-rated public Work cards, type/Sense filters, language, cursor; no phrase required | Discovery generation, current publication/protection fences, batched summaries/media |
 
 If several supported rating Contexts exist, callers select one from the Context
 collection; the aggregate never silently chooses a question. Global has a 1–5
@@ -108,19 +108,19 @@ Exceeding the envelope withholds the response. Existing Access and object adapte
 retain their own time/byte limits; there is no new remote retry loop. The header
 uses five graph calls, checked by the native test. Simple pages add one candidate
 query and one bounded hydration batch (public Realm names add their owner reads).
-Recent adds one capped lineage query, one candidate query, one type batch and two
-summary batches between position fences. Hydration is O(P) for P ≤ 20, with
-O(P × 3) type comparisons. Classification composes at most 20 existing resolutions,
+Discovery now reads its indexed projection before two summary batches between
+position fences; its build and cost evidence are owned below. Hydration is O(P)
+for P ≤ 20. Classification composes at most 20 existing resolutions,
 one exact support association/batch and up to 512 judgment checks; the owner's
 support overflow is a budget failure, not an exact empty page. Ratings reuse
 100 sealed slots, one graph snapshot and 512 KiB of verified manifests; Mine
 verifies that same complete population before reducing only its own slot.
 
-These are logical/output bounds. Native Jena may scan and sort N eligible heads
-for recent discovery (O(N log N) conservative bound), or D relation candidates
-for a high-degree Work (O(D log D)); LIMIT does not prove indexed early stopping.
-The first template is **not** large-corpus cost qualification. A measured browse
-projection/index is a follow-up before scaling Discover. Tests exercise native
+These are logical/output bounds. Native Jena may scan and sort D relation
+candidates for a high-degree Work (O(D log D)); LIMIT does not prove indexed
+early stopping. The first template is **not** large-corpus cost qualification.
+The discovery owner separately measures its PostgreSQL page seeks; graph build
+enumeration remains unqualified at large corpus sizes. Tests exercise native
 Jena/Access/Content, cursor continuation, private/erased exclusion, missing-title
 translation, Global/Realm/Mine distributions, concurrent revocation and restore.
 No bulk fixture preparation is needed for these correctness probes.
@@ -136,7 +136,7 @@ lands; composition-root additions follow the worker protocol.
 | --- | --- | --- |
 | Reader: `routes/work-contents.ts`, `modules/work-contents/**`, `tests/work-contents*.ts` | `GET /works/{id}/contents?version&language&parent&cursor`; `GET /chapters/{id}?revision&language` returns body, selected basis, previous/next and progress identity. The version is the current Main Version; the chapter revision is a stale guard on the current composition head. | ≤20 occurrences per parent; one verified body ≤1 MiB; no recursive flattening; targets admitted individually, Main Version, parent and language bound in cursor. |
 | Discussion/history: `routes/work-activity.ts`, `modules/work-activity/**`, `tests/work-activity*.ts` | `GET /works/{id}/discussion?realm&cursor`, `/history?kind&cursor`; reviewed Realm replies and public revision/decision events. The template metadata-only route is replaced. | ≤20 candidates, ≤4 MiB Content batch and exact active placement/review checks; hidden actors and unreleased bodies excluded. The retained-epoch graph query sorts Work-scoped candidates in O(H log H) native work for H events. An indexed chronological seek remains a separate large-corpus task. |
-| Discovery filters: `routes/discovery.ts`, `modules/discovery/**`, `tests/discovery*.ts` | Extend `/works?sort=recent|top-rated&type&term&scope`; preserve `POST /queries` phrase profiles and exact/lower-bound counts with matched-field/decision reasons. | Requires the eligible discovery projection described below before the GET extension. G-212 supplies the read envelope, not this dependency. Reserve projection migrations and build/lifecycle ownership; measure seek+P for each admitted filter/order combination. Never synchronously aggregate all Work ratings. |
+| Discovery filters: `routes/discovery.ts`, `modules/discovery/**`, `tests/discovery*.ts` | `/works?sort=recent|top-rated&type&term&scope&context`; explicit standing rating Context for top-rated/Mine, Sense term, decision reasons, exact page and cumulative exact/lower-bound match counts. Phrase profiles are preserved. | Access migration 315 and explicit bounded build/activation APIs provide the eligible projection. Native tests measure one seek and ≤21 candidates for every filter/order combination. Graph or relevant Access changes invalidate the generation; refresh is explicit. GET never aggregates Work ratings. |
 | Agent/profile/library: `routes/profiles.ts`, `modules/profiles/**`, `tests/profiles*.ts` plus separately claimed Agent/address owners | `GET /agents/{id}`, `/handles/{handle}`, `/agents/{id}/works`, `/agents/{id}/collections`, `/me/contributions`, `/me/ratings`; public display name/kind/handle, attribution, shelf cards and ratings. Define native credit links, handle allocation and public profile disclosure first. | ≤20 items, batch summaries; public/private collection partition before pagination, Account identity and private contributions require current principal/representation proof. Reuse collections and ratings. |
 | Realm home/log: `routes/realm-reads.ts`, `modules/realm-reads/**`, `tests/realm-read*.ts` | `GET /realms/{realm}`, `/realms/{realm}/works`, `/realms/{realm}/decisions`; public Space name/icon, adopted Works, adoption/classification/semantic-Context-rule revisions. Description, banner, community rules, public moderators and public roster have no published owner yet, so the header reports null or unknown rather than inferring them from Access grants. | ≤20 records and exact page count, unknown membership total. Public graph revisions supply the decision relation without receipts or private actors; the first implementation has an O(D log D) scan/sort bound for D eligible revisions, not a measured seek bound. A materialized public decision index and public community-rule/roster publication need separate write owners before large-scale browsing or those fields become available. Private Realm reads need an Access lease owner. |
 | Management: `routes/management-reads.ts`, `modules/management-reads/**`, `tests/management-read*.ts` | `GET /realms/{realm}/moderation?state&type&cursor` pages Realm-scoped governance report cases; `/realms/{realm}/audit?kind&cursor` pages attributable governance and organization-publication decisions. A Realm governance reader must represent an active Agent with `governance.moderate` on `governance:realm:{realm IRI}`. | ≤20 rows; private, no-store; final Access authority and graph Realm/restore checks. The existing Access indexes seek by scope/state/time (case) or scope/time (decision); kind filtering can scan earlier nonmatches, bounded by the 5-second SQL statement timeout. The cursor binds the graph position and selected Access head identities. Pending contribution and correction queues need their own Realm-keyed owner indexes and admission contract; they are not represented as empty report pages. |
@@ -172,32 +172,19 @@ conservative cursor fence for current writes; a durable Realm read revision is
 needed for precise continuation across every Access update at scale. G-250 owns
 those follow-up indexes and report-scope enforcement.
 
-The G-237 dependency inspection found no eligible discovery projection. The
-[recent reader](../../services/main/src/modules/discovery/recent.ts) sorts graph
-heads; the [rating owner](../../services/main/src/modules/rating/README.md)
-explicitly leaves materialized rating projections to later implementation.
-The existing [ranking generation](../../services/main/src/modules/recommendation/ranking.ts)
-has a useful resumable build lifecycle and score index, but its score is the sum
-of latest signal weights. Its public population does not select the independent
-Global standing Context, and its signal fold does not partition by rating
-Context, cadence or target grain. Reusing that score as `top-rated` would change
-the meaning of the requested scope. It also has no metadata-recency, Work-type
-or classification-term index, and its delivery omits counts and match reasons.
-
-The prerequisite owner therefore needs an explicit rating Context/selection
-policy, separate Global/Realm/Mine populations, and an eligible projection of
-Work types and effective classification decisions (including local rejection).
-The projection must retain decision reasons and rating basis, track graph and
-Access protection/erasure changes, and fence stale generations and restores.
-Counts must describe admitted matches without exposing suppressed candidates.
-Reserve storage migrations and the bounded build/activation integration before
-redispatching the read extension; G-237's original claim reserves neither.
-Existing generation machinery is a possible lifecycle template, not a compatible
-discovery index. An ordered B-tree can avoid a full sort for a bounded page
-([PostgreSQL ordering guidance](https://www.postgresql.org/docs/18/indexes-ordering.html),
-consulted 2026-09-28); native query plans under selective type/term filters and
-deep continuation must still demonstrate the promised bound. Filtering an
-unrelated score page after selection cannot establish that bound.
+G-237's expanded claim implemented the missing projection as a separate derived
+family. The [discovery owner](../../services/main/src/modules/discovery/README.md)
+records the rating/population choices, build/refresh procedure and cost limits;
+the [contract](../../services/main/src/modules/discovery/contract.ts) and
+[native test](../../tests/qa/integration/discovery-projection.test.ts) carry the
+schemas and assertions. QA `20260927t162614-85bc8d` passed native disclosure,
+Global/Realm/Mine, migrated classification protection, concurrent activation,
+lease recovery and first/deep page plans over 20,000 Works/80,000 index entries.
+The Work template now explicitly builds discovery generations; its integration
+passed in `20260927t162237-c0a66b`. The discovery fixture must run alone until the
+manager adds it to `isolatedIntegrationFiles` in `scripts/qa/core.ts` (G-244's
+claim during this implementation). The integration-directory path is already
+discovered by the QA tier; no acceptance case ID was assigned by this brief.
 
 `services/main/tests/work-read.integration.test.ts` is registered in the QA
 integration gate and isolated-project lists: its classification cutover and
