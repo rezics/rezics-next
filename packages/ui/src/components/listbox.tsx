@@ -5,6 +5,7 @@ import { CheckIcon } from 'lucide-react';
 import type React from 'react';
 import { tv, type VariantProps } from 'tailwind-variants';
 import { cn } from '../utils.ts';
+import { FieldLabel } from './field.tsx';
 import { MenuShortcut } from './menu.tsx';
 
 export const useListbox = useListboxContext;
@@ -20,6 +21,12 @@ export const Listbox: ArkListbox.RootComponent = (props) => {
     />
   );
 };
+
+export const ListboxLabel = (props: React.ComponentProps<typeof ArkListbox.Label>) => (
+  <FieldLabel asChild>
+    <ArkListbox.Label data-slot="listbox-label" {...props} />
+  </FieldLabel>
+);
 
 export const ListboxContent = (props: React.ComponentProps<typeof ArkListbox.Content>) => {
   const { className, ...rest } = props;
@@ -45,8 +52,8 @@ const listboxItemVariants = tv({
     'group/listbox-item',
     'relative',
     'flex items-center gap-2',
-    'px-2.5 py-2',
-    'rounded-2xl',
+    'px-3 py-2',
+    'rounded-xl',
     'select-none text-sm',
     'cursor-pointer',
     'outline-hidden',
@@ -60,6 +67,9 @@ const listboxItemVariants = tv({
         'data-[state=checked]:bg-accent data-[state=checked]:text-accent-foreground',
         'hover:bg-accent hover:text-accent-foreground',
         'data-highlighted:bg-accent data-highlighted:text-accent-foreground',
+        // Muted text on the dark accent is 4.48:1, so secondary text takes the accent tone.
+        'data-[state=checked]:[&_.text-muted-foreground]:text-accent-foreground/80',
+        'data-highlighted:[&_.text-muted-foreground]:text-accent-foreground/80',
       ],
       destructive: [
         'text-destructive dark:text-destructive-foreground',
@@ -138,8 +148,8 @@ export const ListboxItemGroupLabel = (
   return (
     <ArkListbox.ItemGroupLabel
       className={cn(
-        'px-2.5 py-2',
-        'font-medium text-muted-foreground',
+        'px-3 py-1.5',
+        'font-semibold text-muted-foreground text-xs',
         'pointer-events-none',
         className,
       )}
