@@ -119,8 +119,13 @@ previous key **retiring**: it stops signing, its private material is destroyed,
 and it verifies only the tokens it could have signed, until the 300-second
 access-token lifetime plus a five-second in-flight allowance has passed. A
 **retired** key is neither published nor accepted. Account introspection checks
-the token's key generation and that its `iat` lies in that key's signing window,
-and both Account and Main reject resource tokens issued more than five seconds
+the token's key generation and that its `iat` lies in that key's signing window.
+Better Auth fixes `iat` before it obtains the signing key, so a token signed
+during first-key creation or activation may record `iat` up to five seconds
+before `activated_at`; Account admits only that bounded pre-signing interval.
+It also admits a token signed by the superseded key within the five-second
+in-flight interval after activation. Both Account and Main reject resource tokens
+issued more than five seconds
 in the future or with an expiry beyond 300 seconds from issuance,
 so a retired key's token is inactive at once even while the provider's or Main's
 300-second JWKS cache still holds the key. Main's verifier refetches JWKS when a
