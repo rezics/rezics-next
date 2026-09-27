@@ -17,6 +17,9 @@ export const WORK_CREATE_CONTEXT = {
   task: 'work.create', scope: 'work:create:root', action: 'work.create',
 } as const;
 
+/** The selected proof branch is part of a command's authority context. */
+export type ActingAuthorityPath = 'represented-agent' | 'direct-principal';
+
 export interface ActingContextDiscovery {
   profile: 'work-create-acting-contexts-v1';
   task: typeof WORK_CREATE_CONTEXT.task;
@@ -48,7 +51,7 @@ export interface ActingContextCheck {
   task: typeof WORK_CREATE_CONTEXT.task;
   scope: typeof WORK_CREATE_CONTEXT.scope;
   actingSubject: string;
-  authorityPath: 'represented-agent' | 'direct-principal';
+  authorityPath: ActingAuthorityPath;
   authorityEpoch: string;
   decision: 'eligible-now';
   reusable: false;
@@ -225,7 +228,7 @@ export class AccessActingContexts {
 
   async check(principal: VerifiedPrincipal, actingSubject: string,
     expectedAuthorityEpoch: string,
-    authorityPath: 'represented-agent' | 'direct-principal' = 'represented-agent'):
+    authorityPath: ActingAuthorityPath = 'represented-agent'):
     Promise<ActingContextCheck> {
     if (!agentId.test(actingSubject) || !epoch.test(expectedAuthorityEpoch)) {
       throw new ActingContextInvalid('invalid selected context');

@@ -1,8 +1,9 @@
 # Service boundaries and dependency contracts
 
 Account remains a separate process because credentials, sessions and OAuth
-protocol grants are private identity authority. Access remains a separately
-owned private model inside Main: extracting it needs a measured consumer,
+protocol grants are private identity authority.
+[Access](../contracts/identity-and-access.md) remains a separately owned private
+model inside Main: extracting it needs a measured consumer,
 isolation or scaling reason, not an assumption that every logical boundary
 needs RPC. [Placement research](../research/access-and-interaction-placement.md)
 records that threshold.

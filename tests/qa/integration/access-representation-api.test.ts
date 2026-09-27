@@ -191,6 +191,13 @@ test('IAM25/IAM26/IAM33: recipient request admits one exact Agent mandate', asyn
     const managerKey = `accept-${randomUUID()}`;
     const accepted = await request('POST', changePath, managerToken, acceptedBody, managerKey);
     expect(accepted.status).toBe(200);
+    const acceptedRequest = await request('GET',
+      `/v1/access/representation-requests/${requestId}?issuerSubject=${encodeURIComponent(subject)}`,
+      managerToken);
+    expect(acceptedRequest.status).toBe(200);
+    expect(await acceptedRequest.json()).toMatchObject({
+      status: 'accepted', representationId,
+    });
     const acceptedEpoch = (await accepted.json() as { authorityEpoch: string }).authorityEpoch;
     expect(BigInt(acceptedEpoch)).toBe(BigInt(priorEpoch) + 1n);
     expect((await request('POST', changePath, managerToken,

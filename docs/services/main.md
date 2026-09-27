@@ -1,7 +1,7 @@
 # REZICS Main service
 
 The [service boundary](../architecture/services.md) explains why Main hosts
-semantic, Access and Content owners. The [application](../../services/main/src/app.ts)
+semantic, [Access](../contracts/identity-and-access.md) and Content owners. The [application](../../services/main/src/app.ts)
 registers routes; its [typed dependencies](../../services/main/src/routes/dependencies.ts)
 and [storage adapters](../../services/main/src/infrastructure/) carry request
 and failure contracts. [Readiness qualification](../../tests/qa/integration/main-readiness.test.ts)

@@ -14,14 +14,16 @@ const idPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}
 const agentPattern = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
 const epochPattern = /^(0|[1-9][0-9]*)$/;
 
-export interface RepresentationRequestResult {
+interface RepresentationRequestBase {
   requestId: string;
   actingSubject: string;
   validUntil: string;
   expiresAt: string;
-  status: 'pending' | 'expired' | 'accepted';
-  representationId: string | null;
 }
+export type RepresentationRequestResult = RepresentationRequestBase & (
+  | { status: 'pending' | 'expired'; representationId: null }
+  | { status: 'accepted'; representationId: string }
+);
 export interface RepresentationResult {
   id: string;
   actingSubject: string;
@@ -122,11 +124,13 @@ export class AccessRepresentations {
   }
 
   private requestResult(row: RequestRow): RepresentationRequestResult {
-    return { requestId: row.id, actingSubject: row.subject_id,
-      validUntil: row.valid_until.toISOString(), expiresAt: row.expires_at.toISOString(),
-      status: row.representation_id ? 'accepted'
-        : row.expires_at.getTime() <= Date.now() ? 'expired' : 'pending',
-      representationId: row.representation_id };
+    const result = { requestId: row.id, actingSubject: row.subject_id,
+      validUntil: row.valid_until.toISOString(), expiresAt: row.expires_at.toISOString() };
+    if (row.representation_id) {
+      return { ...result, status: 'accepted', representationId: row.representation_id };
+    }
+    return { ...result, status: row.expires_at.getTime() <= Date.now() ? 'expired' : 'pending',
+      representationId: null };
   }
 
   private async requestRow(client: PoolClient, requestId: string): Promise<RequestRow | null> {

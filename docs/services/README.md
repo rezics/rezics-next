@@ -1,6 +1,6 @@
 # Service implementation designs
 
-[Account](account.md), [Access](access.md), [Main](main.md),
+[Account](account.md), [Access](../contracts/identity-and-access.md), [Main](main.md),
 [package runtime](package-runtime.md) and [workers](workers.md) have explicit
 ownership boundaries. Access initially runs inside Main through an in-process
 interface. [Architecture](../architecture/services.md) owns these authority and
