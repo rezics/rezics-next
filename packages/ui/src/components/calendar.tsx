@@ -8,13 +8,19 @@ import { Button } from './button.tsx';
 import { nativeSelectVariants } from './native-select.tsx';
 
 export const Calendar = (props: React.ComponentProps<typeof ArkCalendar.Root>) => {
-  const { lazyMount = true, unmountOnExit = true, className, ...rest } = props;
+  const { inline = true, lazyMount = true, unmountOnExit = true, className, ...rest } = props;
 
   return (
     <ArkCalendar.Root
-      className={cn('[--cell-size:--spacing(9)]', 'w-fit', className)}
+      className={cn(
+        '[--cell-size:--spacing(9)]',
+        'w-fit',
+        // Inline calendars sit on Aura's card; in a Date Picker the popover is the card.
+        inline && 'rounded-2xl border border-border/60 bg-card p-4 shadow-(--aura-shadow-card)',
+        className,
+      )}
       data-slot="calendar"
-      inline
+      inline={inline}
       lazyMount={lazyMount}
       unmountOnExit={unmountOnExit}
       {...rest}
@@ -55,7 +61,7 @@ export const CalendarViewDate = (props: React.ComponentProps<typeof ArkCalendar.
 };
 
 export const CalendarTodayTrigger = (props: React.ComponentProps<typeof Button>) => {
-  const { variant = 'outline', size = 'lg', ...rest } = props;
+  const { variant = 'outline', size = 'lg', children = 'Today', ...rest } = props;
 
   return (
     <CalendarContext>
@@ -67,7 +73,7 @@ export const CalendarTodayTrigger = (props: React.ComponentProps<typeof Button>)
           variant={variant}
           {...rest}
         >
-          Today
+          {children}
         </Button>
       )}
     </CalendarContext>
@@ -307,7 +313,7 @@ export const CalendarTableHeader = (
       className={cn(
         'h-(--cell-size) w-full',
         'flex items-center justify-center',
-        'select-none font-medium text-muted-foreground/64 text-xs',
+        'select-none font-medium text-muted-foreground text-xs',
         'rounded-xl',
         className,
       )}
@@ -349,7 +355,9 @@ export const CalendarTableCell = (props: React.ComponentProps<typeof ArkCalendar
           'outline-none focus-visible:border-primary focus-visible:ring-[3px] focus-visible:ring-ring/32',
           'data-disabled:pointer-events-none data-disabled:opacity-64',
           'data-unavailable:pointer-events-none data-unavailable:line-through data-unavailable:opacity-64',
-          'data-[view=day]:data-in-range:rounded-none data-[view=day]:data-in-range:not-[data-selected]:bg-primary/10',
+          'data-[view=day]:data-in-range:rounded-none',
+          'data-[view=day]:data-in-range:not-data-selected:bg-accent data-[view=day]:data-in-range:not-data-selected:text-accent-foreground',
+          'data-outside-range:text-muted-foreground',
           'data-selected:bg-primary! data-selected:text-primary-foreground!',
           'data-hover-range-start:rounded-l-xl! data-range-start:rounded-l-xl!',
           'data-hover-range-end:rounded-r-xl! data-range-end:rounded-r-xl!',
