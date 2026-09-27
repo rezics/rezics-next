@@ -7,6 +7,8 @@ import { currentIntrospection, presentedToken } from './introspection.ts';
 import { guardedAuthorizationCodeExchange } from './oauth-code-guard.ts';
 import { consumeAccountLimit } from './rate-limit.ts';
 import { consentApi } from './consent.ts';
+import { methodsApi, requireStepUp, sensitiveAuthPaths } from './methods.ts';
+import { accountFailure, accountSession } from './http.ts';
 import { AccountRecoveryConflict, AccountRecoveryDenied, AccountRecoveryStale,
   activateAccountRecovery, approveAccountRecovery, enrollAccountRecovery,
   readAccountRecoveryClaim, requestAccountRecovery } from './recovery-claim.ts';
@@ -112,6 +114,19 @@ export function createAccountApp(auth: ReturnType<typeof createAccountAuth>, poo
     '/api/auth/link-social', '/api/auth/unlink-account']);
   const guardedAuthHandler = async (request: Request): Promise<Response> => {
     const path = new URL(request.url).pathname;
+    if (sensitiveAuthPaths.has(path)) {
+      try {
+        const session = await accountSession(auth, request, true);
+        await requireStepUp(pool, session);
+        if (path === '/api/auth/passkey/delete-passkey') {
+          const { id } = await request.clone().json() as { id?: string };
+          const methods = await pool.query(`SELECT 1 FROM passkey WHERE "userId" = $1 AND id <> $2
+            UNION ALL SELECT 1 FROM account WHERE "userId" = $1 AND "providerId" = 'credential' AND password IS NOT NULL LIMIT 1`,
+          [session.user.id, id ?? '']);
+          if (!methods.rowCount) return Response.json({ error: 'last_sign_in_method' }, { status: 409 });
+        }
+      } catch (error) { return accountFailure(error); }
+    }
     const emailPaths = new Set(['/api/auth/sign-up/email', '/api/auth/request-password-reset',
       '/api/auth/send-verification-email']);
     if (request.method === 'POST' && emailPaths.has(path)) {
@@ -189,6 +204,7 @@ export function createAccountApp(auth: ReturnType<typeof createAccountAuth>, poo
       return currentIntrospection(pool, token, await auth.handler(request));
     })
     .use(consentApi(auth, pool))
+    .use(methodsApi(auth, pool))
     .post('/api/auth/oauth2/token', ({ request }) =>
       guardedAuthorizationCodeExchange(guard(), request, () => auth.handler(request)))
     // A product must bind and consume state at its callback. Require the input

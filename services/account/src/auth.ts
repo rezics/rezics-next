@@ -1,6 +1,7 @@
 import { betterAuth } from 'better-auth';
 import { APIError } from 'better-auth/api';
-import { jwt } from 'better-auth/plugins';
+import { jwt, twoFactor } from 'better-auth/plugins';
+import { passkey } from '@better-auth/passkey';
 import { oauthProvider } from '@better-auth/oauth-provider';
 import { Pool } from 'pg';
 import { AUTH_MODE_CLAIM, CONSENT_CLAIM, CONSENT_GENERATION_CLAIM,
@@ -33,6 +34,7 @@ export function accountAuthOptions(config: AccountConfig) {
     baseURL: config.baseURL,
     secret: config.secret,
     database: config.pool,
+    session: { freshAge: 300 },
     emailAndPassword: { enabled: true,
       requireEmailVerification: config.requireEmailVerification ?? true,
       minPasswordLength: 12,
@@ -79,6 +81,25 @@ export function accountAuthOptions(config: AccountConfig) {
       },
     } },
     plugins: [
+      twoFactor({ issuer: 'REZICS', allowPasswordless: true,
+        backupCodeOptions: { storeBackupCodes: 'encrypted' } }),
+      passkey({ rpName: 'REZICS', rpID: new URL(config.baseURL).hostname,
+        origin: new URL(config.baseURL).origin,
+        authenticatorSelection: { residentKey: 'required', userVerification: 'required' },
+        registration: { afterVerification: async ({ verification, user }) => {
+          if (!verification.registrationInfo?.userVerified) {
+            throw new APIError('FORBIDDEN', { code: 'USER_VERIFICATION_REQUIRED', message: 'Verify on your device' });
+          }
+          const count = await config.pool.query<{ count: number }>(
+            'SELECT count(*)::int AS count FROM passkey WHERE "userId" = $1', [user.id]);
+          if (count.rows[0]!.count >= 32) throw new APIError('CONFLICT', { message: 'Passkey limit reached' });
+        } },
+        authentication: { afterVerification: async ({ verification }) => {
+          if (!verification.authenticationInfo.userVerified) {
+            throw new APIError('FORBIDDEN', { code: 'USER_VERIFICATION_REQUIRED', message: 'Verify on your device' });
+          }
+        } },
+      }),
       jwt(signingKeyOptions(config.pool)),
       oauthProvider({
         loginPage: '/sign-in',

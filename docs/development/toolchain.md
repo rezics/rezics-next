@@ -385,6 +385,7 @@ validation. Use only the documented CLI flags.
 | `@elysia/eden` | 2.0.0-beta.5 | Adopted, gate | Main exports `type MainApp` through a type-only package export. `task check` compiles an external Eden consumer under 30 seconds on TypeScript 7; Server Component and client BFF calls remain P0.6 work. |
 | openapi-typescript / openapi-fetch | — | Not used | Revisit when an external TypeScript SDK ships. |
 | Nodemailer | 10.0.10 (`@types/nodemailer` 8.0.2) | Adopted | Account transactional SMTP, encrypted PostgreSQL queue and multipart messages; loopback Mailpit in development. [SMTP transport](https://nodemailer.com/smtp). |
+| Better Auth passkey | 1.7.5 | Adopted | Account WebAuthn plugin; requires user verification on registration and sign-in. |
 | Better Auth | 1.7.5 | Adopted | Account; plugin activation follows the [Account owner](../services/account.md). |
 | pg | 8.23.0 | Adopted | PostgreSQL driver for Content/Account/Access/operations/relay. Kysely 0.29.6 stays inside Account's Better Auth integration only. |
 | Drizzle ORM | 0.45.3 | Adopted for Content slice | Reuses the existing `pg` PoolClient transaction for typed owner sequence, receipt and outbox writes. Content's real PostgreSQL test passed CAS, forced-outbox rollback, exact JSONB payload, bigint above 2⁵³, empty install and v3 upgrade. Extend table coverage with owner features; do not infer full Content coverage from this slice. |
