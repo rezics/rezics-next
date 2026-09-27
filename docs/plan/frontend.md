@@ -64,6 +64,32 @@ next chapter, then to keep up with communities, then to discover.
   in one step, so home is never empty. Infinite scroll with a "N new posts"
   pill; filters use six human kinds, not the model's types.
 
+## Zones
+
+Decided 2026-09-28 from KadoKado (the maintainer's reference), the old site
+and how Reddit, Discourse, Fandom, Tumblr and Shopify admit custom code.
+
+- **A Zone is a Realm's publication.** Its page is built from named editorial
+  modules (hero carousel, rankings by day, week and month, editor lists,
+  new and rising, reader quotes, recent decisions, genre entry points), each
+  reading the Realm's curation; every pick links to the decision behind it.
+  Covers carry a one-line hook, as KadoKado's do.
+- **Customization tiers.** Every Zone gets theme tokens with presets (Clean,
+  Editorial, Vibrant and a KadoKado-like Serial) and a module layout. Filtered
+  community CSS is deferred. **Official Zones** may ship full CSS and JS as
+  reviewed first-party packages in this repository, rendered server-side
+  through named slots and loaded only while their build digest holds an active
+  approval. A sandboxed iframe was rejected: it can paint only its own box and
+  breaks SSR, SEO, focus and scrolling.
+- **Safety.** Each official Zone keeps a complete token-and-layout fallback, a
+  reader opt-out and a safe-mode URL; a kill switch works globally, per theme
+  and per viewer; a nonce CSP; budgets of 40 KB CSS and 50 KB JS gzipped with
+  Core Web Vitals and accessibility checks.
+- **Official Zones.** Fiction first, then Books, Mods and AI Workshop, each
+  backed by an official Realm so its picks are public decisions; Software and
+  Kitchen start on tokens; Screen follows. They use `/r/{slug}` and appear as
+  tiles above the signed-out home feed.
+
 ## Languages and themes
 
 The UI ships eight locales, as the old site did: English, 繁體中文, 简体中文,
