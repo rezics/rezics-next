@@ -76,6 +76,7 @@ const SignaturePadClear = (props: React.ComponentProps<typeof ArkSignaturePad.Cl
     >
       <Button size="icon-md" variant="ghost">
         <RotateCcw />
+        <span className="sr-only">Clear signature</span>
       </Button>
     </ArkSignaturePad.ClearTrigger>
   );

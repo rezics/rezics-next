@@ -57,7 +57,14 @@ export const CarouselPrevious = (props: React.ComponentProps<typeof ArkCarousel.
       {...rest}
       asChild
     >
-      <Button aria-label="Previous" clickEffect={false} pill size="icon-md" variant="outline">
+      <Button
+        aria-label="Previous"
+        className="shadow-[var(--aura-shadow-card)] transition-all duration-300 hover:scale-105 hover:shadow-[var(--aura-shadow-card-hover)]"
+        clickEffect={false}
+        pill
+        size="icon-md"
+        variant="outline"
+      >
         <ChevronLeftIcon aria-hidden />
       </Button>
     </ArkCarousel.PrevTrigger>
@@ -79,7 +86,14 @@ export const CarouselNext = (props: React.ComponentProps<typeof ArkCarousel.Next
       asChild
       data-slot="carousel-next"
     >
-      <Button aria-label="Next" clickEffect={false} pill size="icon-md" variant="outline">
+      <Button
+        aria-label="Next"
+        className="shadow-[var(--aura-shadow-card)] transition-all duration-300 hover:scale-105 hover:shadow-[var(--aura-shadow-card-hover)]"
+        clickEffect={false}
+        pill
+        size="icon-md"
+        variant="outline"
+      >
         <ChevronRightIcon aria-hidden />
       </Button>
     </ArkCarousel.NextTrigger>

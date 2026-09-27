@@ -86,17 +86,21 @@ export const ChartContainer = (props: ChartContainerProps) => {
     <ChartContext.Provider value={{ config }}>
       <div
         className={cn(
+          // Aura treats charts as raised cards so dense marks read as one unit.
+          'rounded-2xl border border-border/60 bg-card/80 p-4 shadow-[var(--aura-shadow-card)] transition-shadow duration-300 hover:shadow-[var(--aura-shadow-card-hover)]',
           'flex justify-center',
           'aspect-video',
           'text-xs',
           '[&_.recharts-cartesian-axis-tick_text]:fill-muted-foreground',
-          "[&_.recharts-cartesian-grid_line[stroke='#ccc']]:stroke-border/50",
-          '[&_.recharts-curve.recharts-tooltip-cursor]:stroke-border',
+          "[&_.recharts-cartesian-grid_line[stroke='#ccc']]:stroke-border/30",
+          '[&_.recharts-curve.recharts-tooltip-cursor]:stroke-primary/40',
           "[&_.recharts-dot[stroke='#fff']]:stroke-transparent",
           '[&_.recharts-layer]:outline-hidden',
-          "[&_.recharts-polar-grid_[stroke='#ccc']]:stroke-border",
-          '[&_.recharts-radial-bar-background-sector]:fill-muted',
-          '[&_.recharts-rectangle.recharts-tooltip-cursor]:fill-muted',
+          "[&_.recharts-polar-grid_[stroke='#ccc']]:stroke-border/30",
+          '[&_.recharts-radial-bar-background-sector]:fill-muted/50',
+          '[&_.recharts-rectangle.recharts-tooltip-cursor]:fill-primary/10',
+          "[&_.recharts-reference-line_[stroke='#ccc']]:stroke-border/30",
+          "[&_.recharts-sector]:outline-hidden [&_.recharts-sector[stroke='#fff']]:stroke-transparent [&_.recharts-surface]:outline-hidden",
           className,
         )}
         data-chart={chartId}
@@ -202,10 +206,10 @@ export const ChartTooltipContent = (props: CustomTooltipProps) => {
       className={cn(
         'min-w-32',
         'grid items-start gap-1.5',
-        'px-2.5 py-1.5',
-        'bg-background',
+        'px-3 py-2.5',
+        'bg-card',
         'text-xs',
-        'rounded-xl border border-border/50 shadow-xl',
+        'rounded-xl border border-border/60 shadow-[var(--aura-shadow-card)] backdrop-blur-sm',
         className,
       )}
     >
@@ -235,11 +239,12 @@ export const ChartTooltipContent = (props: CustomTooltipProps) => {
                   ) : (
                     !hideIndicator && (
                       <div
-                        className={cn('shrink-0 rounded-[2px] border-border bg-(--color-bg)', {
+                        className={cn('shrink-0 border-border bg-(--color-bg)', {
+                          'rounded-full': indicator === 'dot',
                           'h-2.5 w-2.5': indicator === 'dot',
                           'my-0.5': nestLabel && indicator === 'dashed',
                           'w-0 border-[1.5px] border-dashed bg-transparent': indicator === 'dashed',
-                          'w-1': indicator === 'line',
+                          'w-1 rounded-sm': indicator === 'line',
                         })}
                         style={
                           {
@@ -262,7 +267,7 @@ export const ChartTooltipContent = (props: CustomTooltipProps) => {
                         {itemConfig?.label || item.name}
                       </span>
                     </div>
-                    {item.value && (
+                    {item.value !== undefined && item.value !== null && (
                       <span className="font-medium font-mono text-foreground tabular-nums">
                         {item.value.toLocaleString()}
                       </span>

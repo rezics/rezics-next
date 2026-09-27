@@ -48,11 +48,8 @@ export const ColorPicker = (props: ColorPickerProps) => {
   const isControlled = value !== undefined;
 
   const handleValueChange = (e: ColorPickerValueChangeDetails) => {
-    if (isControlled) {
-      onValueChange?.(e);
-    } else {
-      setInternalValue(e.valueAsString);
-    }
+    if (!isControlled) setInternalValue(e.valueAsString);
+    onValueChange?.(e);
   };
 
   return (
@@ -90,6 +87,18 @@ export const ColorPickerTrigger = (props: React.ComponentProps<typeof ArkColorPi
   <ArkColorPicker.Trigger data-slot="color-picker-trigger" {...props} />
 );
 
+export const ColorPickerLabel = (props: React.ComponentProps<typeof ArkColorPicker.Label>) => {
+  const { className, ...rest } = props;
+
+  return (
+    <ArkColorPicker.Label
+      className={cn('font-medium text-sm text-foreground', className)}
+      data-slot="color-picker-label"
+      {...rest}
+    />
+  );
+};
+
 export const ColorPickerTransparencyGrid = (
   props: React.ComponentProps<typeof ArkColorPicker.TransparencyGrid>,
 ) => {
@@ -123,7 +132,7 @@ export const ColorPickerContent = (props: React.ComponentProps<typeof ArkColorPi
             'flex flex-col gap-4',
             'p-(--space)',
             'bg-popover',
-            'rounded-2xl border shadow-lg/5',
+            'rounded-2xl border border-border/60 shadow-[var(--aura-shadow-float)]',
             'outline-none',
             'origin-(--transform-origin)',
             'data-[state=open]:fade-in-0 data-[state=open]:zoom-in-[98%] data-[state=open]:animate-in',

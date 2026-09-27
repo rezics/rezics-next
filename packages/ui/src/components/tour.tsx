@@ -57,11 +57,17 @@ interface TourProps extends Omit<React.ComponentProps<typeof ArkTour.Root>, 'tou
 }
 
 export const Tour = (props: TourProps) => {
-  const { steps = [], lazyMount = true, unmountOnExit = true, ...rest } = props;
+  const {
+    steps = [],
+    keyboardNavigation = true,
+    lazyMount = true,
+    unmountOnExit = true,
+    ...rest
+  } = props;
 
   const [isStarted, setIsStarted] = React.useState(false);
 
-  const tour = useTour({ steps });
+  const tour = useTour({ keyboardNavigation, steps });
 
   React.useEffect(() => {
     if (isStarted) {
@@ -160,7 +166,7 @@ export const TourContent = (props: TourContentProps) => {
             'w-full max-w-md',
             'flex flex-col gap-4',
             'bg-background',
-            'rounded-xl border shadow-lg',
+            'rounded-3xl border border-border/60 shadow-[var(--aura-shadow-float)]',
             'focus:outline-none focus:ring-0',
             'data-[state=closed]:animate-out data-[state=open]:animate-in',
             'data-[state=open]:fade-in-0 data-[state=closed]:fade-out-0',
