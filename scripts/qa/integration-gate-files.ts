@@ -18,5 +18,6 @@ export const integrationGateFiles = [
   'services/main/tests/work-read.integration.test.ts',
   'services/main/tests/work-contents.integration.test.ts',
   'services/main/tests/realm-read.integration.test.ts',
+  'services/main/tests/management-read.integration.test.ts',
   'services/content/tests/core.integration.test.ts',
 ] as const;

@@ -7,6 +7,8 @@ export const isolatedIntegrationFileList = [
   'services/main/tests/work-read.integration.test.ts',
   // Realm read probes change public disclosure, erasure and the restore hold.
   'services/main/tests/realm-read.integration.test.ts',
+  // Management read probes hide a Realm and toggle its restore hold.
+  'services/main/tests/management-read.integration.test.ts',
   'tests/qa/integration/validation-command.test.ts',
   'tests/qa/integration/validation-cross-profile.test.ts',
   // MODEL22 deliberately replaces the dataset's model generation head to

@@ -1,0 +1,192 @@
+import type { Pool, PoolClient } from 'pg';
+import { FusekiQueryResponseTooLarge, FusekiReadBudgetExceeded, fusekiReadBudget }
+  from '../../infrastructure/fuseki.ts';
+import type { VerifiedPrincipal } from '../access/admission.ts';
+import type { WorkActivationEnvironment } from '../work/activate.ts';
+import { DATASET, GRAPHS, RV, iri, lit } from '../work/activate.ts';
+import { decodeReadCursor, encodeReadCursor, WorkReadInvalid, WorkReadMoved } from '../work/read-session.ts';
+import { MANAGEMENT_READ_COST, type ManagementPosition } from './read-contract.ts';
+
+export class ManagementReadMissing extends Error {}
+export class ManagementReadUnavailable extends Error {}
+export class ManagementReadLimit extends Error {}
+
+const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+const native = /^https:\/\/rezics\.com\/id\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/;
+export const realmGovernanceScope = (realm: string) => `governance:realm:${realm}`;
+const organizationScope = (realm: string) => `publication:reject:${realm}`;
+
+interface Options { actingSubject: string; limit?: number; cursor?: string }
+interface CaseRow { id: string; kind: 'content_report' | 'rights_complaint'; state: 'open' | 'closed';
+  generation: string; decision_head: string | null; opened_at: Date; opened_key: string; target_owner: string;
+  target_resource: string; target_component: string; context: string }
+interface DecisionRow { id: string; case_id: string | null; kind: 'content_moderation' | 'rights_disposition'
+  | 'organization_publication_rejection'; outcome: string; acting_subject: string; decided_at: Date;
+  decided_key: string;
+  case_sequence: string | null }
+
+/** One indexed Access page, two bounded graph reads and a final lock-backed authority check. */
+export class ManagementReadStore {
+  constructor(private readonly pool: Pool, private readonly environment: WorkActivationEnvironment) {}
+
+  private async graphBasis(realm: string): Promise<{ epoch: string; sequence: string; exists: boolean }> {
+    const env = this.environment;
+    const rows = (await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?epoch ?sequence ?realm WHERE {
+      GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:dataEpoch ?epoch ; rv:sequence ?sequence ;
+        rv:routingEpoch ${lit(env.lineage.routingEpoch)} .
+        FILTER(?epoch = ${lit(env.lineage.dataEpoch)})
+        FILTER NOT EXISTS { ${iri(DATASET)} rv:restoreHold true } }
+      OPTIONAL { GRAPH ${iri(GRAPHS.current)} { BIND(${iri(realm)} AS ?realm)
+        ?realm a rv:Realm ; rv:realmState rv:Active . } }
+    } LIMIT 2`, MANAGEMENT_READ_COST.graphBytes)).results?.bindings ?? [];
+    if (rows.length !== 1 || !rows[0]?.epoch || !/^\d+$/.test(rows[0].sequence?.value ?? '')) {
+      throw new ManagementReadUnavailable('Graph basis is unavailable');
+    }
+    return { epoch: rows[0].epoch.value, sequence: rows[0].sequence!.value,
+      exists: rows[0].realm?.value === realm };
+  }
+
+  private async authority(client: PoolClient, principal: VerifiedPrincipal, subject: string, scope: string) {
+    const row = (await client.query(`SELECT 1 FROM access.principal p
+      JOIN access.representation r ON r.principal_id = p.id AND r.subject_id = $3
+        AND r.active AND r.valid_until > clock_timestamp()
+      JOIN access.authority_subject s ON s.id = r.subject_id AND s.active
+      JOIN access.permission_grant g ON g.recipient_subject = s.id AND g.scope_id = $4
+        AND g.action = 'governance.moderate' AND g.active AND g.valid_until > clock_timestamp()
+      JOIN access.scope_gate gate ON gate.id = g.scope_id AND gate.open AND gate.dispatch_open
+      WHERE p.account_issuer = $1 AND p.account_subject = $2 AND p.active
+      LIMIT 1 FOR SHARE OF p, r, s, g, gate`, [principal.issuer, principal.subject, subject, scope])).rows[0];
+    if (!row) throw new ManagementReadMissing('Realm management is unavailable');
+  }
+
+  private async revision(client: PoolClient, realm: string, family: 'moderation' | 'audit',
+    filter: string | null): Promise<string> {
+    const scope = realmGovernanceScope(realm);
+    const [state, kind] = family === 'moderation' ? filter!.split(':') : [null, filter];
+    const cases = family === 'moderation' ? (await client.query<{ id: string; generation: string }>(
+      `SELECT id, generation::text FROM access.governance_case
+        WHERE authority_scope_id = $1 AND authority_kind = 'realm' AND context = $2
+          AND state = $3 AND ($4::text = '*' OR kind = $4)
+        ORDER BY opened_at DESC, id DESC LIMIT 1`, [scope, realm, state, kind])).rows[0] : undefined;
+    const decisions = (await client.query<{ id: string }>(`SELECT id FROM (
+      (SELECT id, decided_at FROM access.moderation_decision
+        WHERE authority_kind = 'realm' AND context = $1 AND authority_scope_id = $2
+          AND ($4::text IS NULL OR kind = $4)
+        ORDER BY decided_at DESC, id DESC LIMIT 1)
+      UNION ALL
+      (SELECT id, decided_at FROM access.moderation_decision
+        WHERE authority_kind = 'realm' AND context = $1 AND authority_scope_id = $3
+          AND ($4::text IS NULL OR kind = $4)
+        ORDER BY decided_at DESC, id DESC LIMIT 1)
+      ) heads ORDER BY decided_at DESC, id DESC LIMIT 1`,
+    [realm, scope, organizationScope(realm), family === 'audit' ? filter : null])).rows[0];
+    return `${cases?.id ?? '-'}:${cases?.generation ?? '-'}:${decisions?.id ?? '-'}`;
+  }
+
+  private async page<T extends { id: string }>(principal: VerifiedPrincipal, realm: string, options: Options,
+    family: 'moderation' | 'audit', filter: string | null,
+    select: (client: PoolClient, after: { time: string; id: string } | null, limit: number) => Promise<T[]>,
+    map: (row: T) => unknown, time: (row: T) => string) {
+    if (!native.test(realm) || !native.test(options.actingSubject)) throw new WorkReadInvalid('Invalid Realm read');
+    const limit = options.limit ?? MANAGEMENT_READ_COST.pageSize;
+    if (!Number.isInteger(limit) || limit < 1 || limit > MANAGEMENT_READ_COST.pageSize) {
+      throw new WorkReadInvalid('Invalid page size');
+    }
+    const client = await this.pool.connect().catch(() => {
+      throw new ManagementReadUnavailable('Access owner is unavailable');
+    });
+    const signal = AbortSignal.timeout(MANAGEMENT_READ_COST.deadlineMs);
+    try {
+      return await fusekiReadBudget.run({ signal, callsLeft: MANAGEMENT_READ_COST.graphCalls,
+        bytesLeft: MANAGEMENT_READ_COST.graphBytes * MANAGEMENT_READ_COST.graphCalls }, async () => {
+      await client.query('BEGIN');
+      await client.query(`SET LOCAL statement_timeout = '${MANAGEMENT_READ_COST.statementTimeoutMs}ms'`);
+      const scope = realmGovernanceScope(realm);
+      await this.authority(client, principal, options.actingSubject, scope);
+      const start = await this.graphBasis(realm);
+      if (!start.exists) throw new ManagementReadMissing('Realm management is unavailable');
+      const revision = await this.revision(client, realm, family, filter);
+      const position: ManagementPosition = { dataEpoch: start.epoch,
+        sequence: `${start.sequence}:${revision}` };
+      const binding = [family, realm, options.actingSubject, principal.issuer, principal.subject, filter];
+      const cursor = decodeReadCursor(options.cursor, binding, position);
+      const after = cursor ? { time: cursor.after, id: cursor.order } : null;
+      if (after && (!Number.isFinite(Date.parse(after.time)) || !uuid.test(after.id))) {
+        throw new WorkReadInvalid('Invalid page cursor');
+      }
+      const rows = await select(client, after, limit + 1);
+      if (rows.length > limit + 1) throw new ManagementReadLimit('Page exceeds its row budget');
+      const chosen = rows.slice(0, limit);
+      const nextCursor = rows.length > limit
+        ? encodeReadCursor(binding, position, time(chosen.at(-1)!), chosen.at(-1)!.id) : null;
+      const end = await this.graphBasis(realm);
+      if (!end.exists || end.epoch !== start.epoch || end.sequence !== start.sequence) {
+        throw new WorkReadMoved('Realm basis changed');
+      }
+      if (await this.revision(client, realm, family, filter) !== revision) {
+        throw new WorkReadMoved('Access basis changed');
+      }
+      await this.authority(client, principal, options.actingSubject, scope);
+      signal.throwIfAborted();
+      await client.query('COMMIT');
+      return { items: chosen.map(map), nextCursor, sourcePosition: position,
+        count: { value: chosen.length, kind: 'exact-page' as const, total: null } };
+      });
+    } catch (error) {
+      await client.query('ROLLBACK').catch(() => {});
+      if (signal.aborted) throw new ManagementReadUnavailable('Management read deadline exceeded');
+      if (error instanceof FusekiReadBudgetExceeded || error instanceof FusekiQueryResponseTooLarge) {
+        throw new ManagementReadLimit('Graph read budget exceeded');
+      }
+      if (error instanceof WorkReadInvalid || error instanceof WorkReadMoved || error instanceof ManagementReadMissing
+        || error instanceof ManagementReadLimit || error instanceof ManagementReadUnavailable) throw error;
+      throw new ManagementReadUnavailable('Management read is unavailable');
+    } finally { client.release(); }
+  }
+
+  moderation(principal: VerifiedPrincipal, realm: string, options: Options,
+    state: 'open' | 'closed', kind: CaseRow['kind'] | null) {
+    const scope = realmGovernanceScope(realm);
+    return this.page(principal, realm, options, 'moderation', `${state}:${kind ?? '*'}`,
+      async (client, after, limit) => (await client.query<CaseRow>(`SELECT id, kind, state,
+        generation::text, decision_head, opened_at,
+        to_char(opened_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS opened_key,
+        target_owner, target_resource, target_component, context
+        FROM access.governance_case WHERE authority_scope_id = $1 AND authority_kind = 'realm'
+          AND context = $2 AND state = $3 AND ($4::text IS NULL OR kind = $4)
+          AND ($5::timestamptz IS NULL OR (opened_at, id) > ($5::timestamptz, $6::uuid))
+        ORDER BY opened_at, id LIMIT $7`, [scope, realm, state, kind, after?.time ?? null,
+        after?.id ?? null, limit])).rows,
+      row => ({ id: row.id, kind: row.kind, state: row.state, generation: row.generation,
+        decisionHead: row.decision_head, openedAt: row.opened_at.toISOString(),
+        target: { owner: row.target_owner, resource: row.target_resource,
+          component: row.target_component }, context: row.context }), row => row.opened_key);
+  }
+
+  audit(principal: VerifiedPrincipal, realm: string, options: Options, kind: DecisionRow['kind'] | null) {
+    const scope = realmGovernanceScope(realm);
+    return this.page(principal, realm, options, 'audit', kind,
+      async (client, after, limit) => (await client.query<DecisionRow>(`SELECT id, case_id, kind, outcome,
+        acting_subject, decided_at,
+        to_char(decided_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS decided_key,
+        case_sequence::text FROM (
+        (SELECT id, case_id, kind, outcome, acting_subject, decided_at, case_sequence
+          FROM access.moderation_decision
+          WHERE authority_kind = 'realm' AND context = $1 AND authority_scope_id = $2
+            AND ($4::text IS NULL OR kind = $4)
+            AND ($5::timestamptz IS NULL OR (decided_at, id) > ($5::timestamptz, $6::uuid))
+          ORDER BY decided_at, id LIMIT $7)
+        UNION ALL
+        (SELECT id, case_id, kind, outcome, acting_subject, decided_at, case_sequence
+          FROM access.moderation_decision
+          WHERE authority_kind = 'realm' AND context = $1 AND authority_scope_id = $3
+            AND ($4::text IS NULL OR kind = $4)
+            AND ($5::timestamptz IS NULL OR (decided_at, id) > ($5::timestamptz, $6::uuid))
+          ORDER BY decided_at, id LIMIT $7)
+        ) candidates ORDER BY decided_at, id LIMIT $7`, [realm, scope, organizationScope(realm), kind,
+        after?.time ?? null, after?.id ?? null, limit])).rows,
+      row => ({ id: row.id, caseId: row.case_id, kind: row.kind, outcome: row.outcome,
+        actingSubject: row.acting_subject, decidedAt: row.decided_at.toISOString(),
+        caseSequence: row.case_sequence }), row => row.decided_key);
+  }
+}
