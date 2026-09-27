@@ -278,13 +278,8 @@ test('an app’s OAuth request continues through sign-up, verification and conse
   test.skip(!admin, 'REZICS_WEB_AUTH_PRIVATE_PATH must name the stack’s web-auth private.json');
   const origin = new URL(baseURL!).origin;
 
-  // An operator registers a public client that requires consent. The stack's
-  // fixture operator starts unverified, and Account requires a verified email.
+  // An operator registers a public client that requires consent.
   const operatorContext = await browser.newContext({ baseURL });
-  await operatorContext.request.post('/api/auth/send-verification-email', { headers: { origin },
-    data: { email: admin!.email, callbackURL: '/verify-email' } });
-  await operatorContext.request.get(await emailLink(admin!.email, /^Verify your email address$/),
-    { maxRedirects: 0 });
   const signedIn = await operatorContext.request.post('/api/auth/sign-in/email', {
     headers: { origin }, data: { email: admin!.email, password: admin!.password } });
   expect(signedIn.ok()).toBe(true);
