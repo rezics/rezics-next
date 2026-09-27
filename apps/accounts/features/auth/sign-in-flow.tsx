@@ -12,6 +12,7 @@ import { AuthHeading } from '../shell/auth-frame.tsx';
 import { autofocus, CodeField, EmailField, emailPattern, PasswordField } from './fields.tsx';
 import { autofillSupported, passkeysSupported } from './webauthn.ts';
 import { useTranslation } from '../../i18n/client.ts';
+import { authorizationAfterCreate } from './auth-query.ts';
 
 export interface SignInFlowProps {
   /** Where to go after a plain sign-in; an OAuth request decides its own next step. */
@@ -51,7 +52,7 @@ export function SignInFlow({ next, oauthQuery, appName, carry = '', reauthEmail,
   const autofill = useRef<AbortController>(undefined);
   const suffix = carry ? `?${carry}` : '';
 
-  const finish = (redirect?: string) => navigate(redirect ?? next);
+  const finish = (redirect?: string) => navigate(authorizationAfterCreate(oauthQuery) ?? redirect ?? next);
   // Offer this account's passkeys in the email field's autofill while it shows.
   useEffect(() => {
     setPasskeys(passkeysSupported());

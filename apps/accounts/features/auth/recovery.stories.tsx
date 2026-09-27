@@ -67,7 +67,7 @@ export const VerifiedThenContinue: Story = {
     const canvas = within(canvasElement);
     await expect(await canvas.findByText(/Sign in to continue where you left off/)).toBeVisible();
     await expect(canvas.getByRole('link', { name: 'Sign in to continue' }))
-      .toHaveAttribute('href', '/sign-in?client_id=reader&sig=abc');
+      .toHaveAttribute('href', '/sign-in?client_id=reader&sig=abc&sign_in=1');
   },
 };
 

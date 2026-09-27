@@ -10,3 +10,18 @@ export function authQuery(query: URLSearchParams) {
   const prompts = new URLSearchParams(oauthQuery ?? '').get('prompt')?.split(' ') ?? [];
   return { oauthQuery, next, carry, wantsSignUp: prompts.includes('create') };
 }
+
+/** After a verified new person signs in, start the same PKCE authorization
+ * without the one-time create prompt. Signed provider metadata belongs only to
+ * the previous request and must be left behind. */
+export function authorizationAfterCreate(oauthQuery: string | undefined): string | undefined {
+  if (!oauthQuery) return undefined;
+  const query = new URLSearchParams(oauthQuery);
+  const prompts = (query.get('prompt') ?? '').split(' ').filter(Boolean);
+  if (!prompts.includes('create')) return undefined;
+  const remaining = prompts.filter(prompt => prompt !== 'create');
+  if (remaining.length) query.set('prompt', remaining.join(' '));
+  else query.delete('prompt');
+  for (const field of ['sig', 'ba_param', 'ba_iat', 'exp']) query.delete(field);
+  return `/api/auth/oauth2/authorize?${query}`;
+}

@@ -76,7 +76,7 @@ export const ForAnApp: Story = {
     await expect(signedUp).toHaveBeenCalledWith(expect.objectContaining({ locale: 'en',
       carry: 'client_id=reader&sig=abc&ba_param=client_id' }));
     await expect(await canvas.findByRole('link', { name: 'Back to sign in' }))
-      .toHaveAttribute('href', '/sign-in?client_id=reader&sig=abc&ba_param=client_id');
+      .toHaveAttribute('href', '/sign-in?client_id=reader&sig=abc&ba_param=client_id&sign_in=1');
   },
 };
 

@@ -24,6 +24,9 @@ export function SignUpForm({ next, oauthQuery, carry = '', appName }: { next: st
   const [failure, setFailure] = useState<FailureKind>();
   const [busy, setBusy] = useState(false);
   const [sentTo, setSentTo] = useState<string>();
+  const signInQuery = new URLSearchParams(carry);
+  if (carry) signInQuery.set('sign_in', '1');
+  const signInHref = `/sign-in${signInQuery.size ? `?${signInQuery}` : ''}`;
   const change = (field: keyof typeof values) => (value: string) => {
     setValues(current => ({ ...current, [field]: value }));
     setErrors(current => ({ ...current, [field]: undefined }));
@@ -56,7 +59,7 @@ export function SignUpForm({ next, oauthQuery, carry = '', appName }: { next: st
 
   if (sentTo) {
     return <AuthOutcome title={t.checkEmailTitle} body={t.checkEmailBody({ email: sentTo })}
-      action={<Button asChild variant="outline" size="lg"><a href={`/sign-in${carry ? `?${carry}` : ''}`}>
+      action={<Button asChild variant="outline" size="lg"><a href={signInHref}>
         {t.backToSignIn}</a></Button>} />;
   }
   const failureMessage = failure === 'rate-limited' ? t.tooManyAttempts
@@ -82,7 +85,7 @@ export function SignUpForm({ next, oauthQuery, carry = '', appName }: { next: st
       <p className="-mt-2 text-sm text-muted-foreground">{t.passwordHint}</p>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <Button variant="link" className="px-0" asChild>
-          <a href={`/sign-in${carry ? `?${carry}` : ''}`}>{t.signInInstead}</a></Button>
+          <a href={signInHref}>{t.signInInstead}</a></Button>
         <Button type="submit" size="lg" isLoading={busy}>{busy ? t.creatingAccount : t.next}</Button>
       </div>
     </form>

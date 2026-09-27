@@ -9,7 +9,9 @@ import { useTranslation } from '../../i18n/client.ts';
 export function VerifyEmailResult({ failed, signedIn, change, carry = '' }: { failed: boolean; signedIn: boolean;
   change?: 'requested' | 'verified'; carry?: string }) {
   const { t } = useTranslation('auth');
-  const signIn = <Button asChild size="lg"><a href={`/sign-in${carry ? `?${carry}` : ''}`}>
+  const signInQuery = new URLSearchParams(carry);
+  if (carry) signInQuery.set('sign_in', '1');
+  const signIn = <Button asChild size="lg"><a href={`/sign-in${signInQuery.size ? `?${signInQuery}` : ''}`}>
     {carry ? t.continueSignIn : t.signInNow}</a></Button>;
   const account = <Button asChild size="lg"><a href="/personal-info">{t.continueToAccount}</a></Button>;
   if (failed) {

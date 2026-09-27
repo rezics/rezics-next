@@ -19,7 +19,9 @@ export default async function SignInPage({ searchParams }: { searchParams: PageS
   // page asked for a fresh sign-in.
   if (signedIn && !oauthQuery && !reauth) redirect(next);
   const appName = client?.status === 'ok' ? client.data.name?.trim() || null : null;
-  return <AuthFrame>{wantsSignUp
+  // A verified account may resume a signed request whose original prompt was
+  // "create". The unsigned sign_in flag selects sign-in without altering it.
+  return <AuthFrame>{wantsSignUp && query.get('sign_in') !== '1'
     ? <SignUpForm next={next} oauthQuery={oauthQuery} carry={carry} appName={appName} />
     : <SignInFlow next={next} oauthQuery={oauthQuery} carry={carry} appName={appName}
       reauthEmail={reauth ? signedIn?.user.email : undefined}
