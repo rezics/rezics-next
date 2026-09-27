@@ -17,7 +17,10 @@ async function json<T>(response: Response, status = 200): Promise<T> {
 }
 interface Generation { generation: string; checkpoint: string; complete: boolean; state: string; replayed: boolean }
 interface Page { items: { id: string; rating: { mean: number; count: number; sum: number } | null;
-  match: { classification: { source: string; decision: string } | null } }[];
+  primaryCredits: { ordinal: number; key: string; displayName: null }[];
+  classifications: { sense: string; name: { value: string; language: string; basis: string } }[];
+  match: { classification: { source: string; decision: string; name: { value: string; language: string } } | null } }[];
+  matchedTerm: { sense: string; name: { value: string; language: string } } | null;
   nextCursor: string | null; matches: { value: number; kind: string }; count: { value: number; kind: string; total: null } }
 const uuid = () => `https://rezics.com/id/${randomUUID()}`;
 
@@ -48,6 +51,8 @@ test('Discovery projection: native scoped reads, durable builds, disclosure, cur
       { profile: 'global-rating-standing-context-v1', question: 'Global quality', actingSubject: a.actor }), 201);
     const local = await json<{ context: string }>(await a.send('POST', '/v1/rating-contexts',
       { profile: 'realm-standing-rating-context-v1', realm: realm.realm, question: 'Local quality', actingSubject: a.actor }), 201);
+    const other = await json<{ context: string }>(await a.send('POST', '/v1/global-rating-contexts',
+      { profile: 'global-rating-standing-context-v1', question: 'Would you recommend this?', actingSubject: a.actor }), 201);
     for (const [member, target, value, context, path, profile] of [
       [a, first, 5, global.context, 'global-rating-observations', 'global-rating-standing-observation-v1'],
       [b, first, 1, global.context, 'global-rating-observations', 'global-rating-standing-observation-v1'],
@@ -67,6 +72,8 @@ test('Discovery projection: native scoped reads, durable builds, disclosure, cur
       { profile: 'classification-context-v1', realm: realm.realm, actingSubject: a.actor }), 201);
     const term = await json<{ sense: string; concept: string }>(await a.send('POST', '/v1/classification-propositions',
       { profile: 'classification-proposition-v1', label: 'Discovery adventure', actingSubject: a.actor }), 201);
+    await stack.fuseki.update(`INSERT DATA { GRAPH ${iri(GRAPHS.current)} {
+      ${iri(term.concept)} <http://www.w3.org/2004/02/skos/core#prefLabel> "Aventure"@fr . } }`);
     for (const target of [first, second]) await json(await a.send('POST', '/v1/classification-decisions', {
       profile: 'classification-direct-decision-v1', work: target.work, mainVersion: target.mainVersion,
       sense: term.sense, context: { kind: 'global' }, outcome: 'accepted', expectedDecisionHead: null, actingSubject: a.actor }), 201);
@@ -90,6 +97,20 @@ test('Discovery projection: native scoped reads, durable builds, disclosure, cur
       ...(body ? { body: JSON.stringify(body) } : {}) }));
     const get = (params: Record<string, string> = {}, member = a) => call(`/v1/works?${new URLSearchParams(params)}`, undefined, member);
     const base: DiscoveryBasis = { scope: 'global', realm: null, context: null };
+    interface ContextPage { items: { context: string; question: string; scale: { min: number; max: number; step: number } }[];
+      nextCursor: string | null }
+    const contexts = await json<ContextPage>(await call('/v1/rating-contexts?limit=1'));
+    const remainingContexts = await json<ContextPage>(await call(`/v1/rating-contexts?cursor=${contexts.nextCursor}`));
+    expect([...contexts.items, ...remainingContexts.items].map(item => item.context).sort())
+      .toEqual([global.context, other.context].sort());
+    expect([...contexts.items, ...remainingContexts.items].find(item => item.context === global.context))
+      .toMatchObject({ question: 'Global quality', scale: { min: 1, max: 5, step: 1 } });
+    expect(await json<ContextPage>(await call(`/v1/rating-contexts?scope=realm&realm=${encodeURIComponent(realm.realm)}`)))
+      .toMatchObject({ items: [{ context: local.context, question: 'Local quality', scale: { min: 1, max: 10, step: 1 } }] });
+    expect((await call('/v1/rating-contexts?scope=realm')).status).toBe(400);
+    expect((await call('/v1/rating-contexts?scope=mine')).status).toBe(400);
+    expect((await call(`/v1/rating-contexts?scope=realm&realm=${encodeURIComponent(uuid())}`)).status).toBe(404);
+    expect((await call(`/v1/rating-contexts?scope=realm&realm=${encodeURIComponent(realm.realm)}&cursor=${contexts.nextCursor}`)).status).toBe(400);
     const buildBody = (basis: DiscoveryBasis, member = a) =>
       ({ profile: 'discovery-generation-build-v1', actingSubject: member.actor, basis });
     const register = (basis: DiscoveryBasis, member = a, key = randomUUID()) =>
@@ -149,10 +170,15 @@ test('Discovery projection: native scoped reads, durable builds, disclosure, cur
     const filtered = await json<Page>(await get({ type: 'https://schema.org/Book', term: term.sense }));
     expect(filtered.items.map(item => item.id)).toEqual([first.work]);
     expect(filtered.items[0]?.match.classification).toMatchObject({ source: 'global' });
+    expect(filtered.matchedTerm).toMatchObject({ sense: term.sense, name: { value: 'Discovery adventure', language: 'en' } });
+    const translated = await json<Page>(await get({ term: term.sense, language: 'fr' }));
+    expect(translated.matchedTerm).toMatchObject({ sense: term.sense, name: { value: 'Aventure', language: 'fr' } });
+    expect(translated.items[0]?.classifications[0]?.name).toMatchObject({ value: 'Aventure', basis: 'requested' });
+    expect(translated.items[0]?.primaryCredits).toEqual([]);
     expect((await json<Page>(await get({ term: uuid() }))).matches).toEqual({ value: 0, kind: 'exact' });
     const beforeReads = stack.fuseki.queries;
     const ranked = await json<Page>(await get({ sort: 'top-rated', context: global.context }));
-    expect(stack.fuseki.queries - beforeReads).toBeLessThanOrEqual(7);
+    expect(stack.fuseki.queries - beforeReads).toBeLessThanOrEqual(8);
     expect(ranked.items.map(item => item.id)).toEqual([second.work, first.work]);
     expect(ranked.items.map(item => item.rating?.mean)).toEqual([4, 3]);
     const localPage = await json<Page>(await get({ sort: 'top-rated', scope: 'realm', realm: realm.realm, context: local.context }));
@@ -274,6 +300,7 @@ test('Discovery projection: native scoped reads, durable builds, disclosure, cur
       ${iri(realm.space)} rv:disclosure rv:Public } } INSERT { GRAPH ${iri(GRAPHS.current)} {
       ${iri(realm.space)} rv:disclosure rv:Private } } WHERE {}`);
     expect((await get({ scope: 'realm', realm: realm.realm, context: local.context })).status).toBe(404);
+    expect((await call(`/v1/rating-contexts?scope=realm&realm=${encodeURIComponent(realm.realm)}`)).status).toBe(404);
     await stack.fuseki.update(`PREFIX rv: <${RV}> INSERT DATA {
       GRAPH ${iri(GRAPHS.control)} { <urn:rezics:dataset:product> rv:restoreHold true } }`);
     expect((await get()).status).toBe(503);
@@ -282,5 +309,6 @@ test('Discovery projection: native scoped reads, durable builds, disclosure, cur
     // A normal graph write invalidates source positions and old cursors.
     await stack.publicWork(a.actor, ['en'], 'Discovery changed');
     expect((await get({ cursor: page.nextCursor! })).status).toBe(409);
+    expect((await call(`/v1/rating-contexts?cursor=${contexts.nextCursor}`)).status).toBe(409);
   } finally { await stack.stop(); }
 }, 240_000);

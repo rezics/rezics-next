@@ -8,6 +8,7 @@ import { publicWork, WorkReadInvalid, WorkReadLimit, WorkReadMissing, WorkReadUn
   type WorkReadSession } from '../work/read-session.ts';
 import { DISCOVERY_COST, type DiscoveryBasis, type ProjectedWork } from './contract.ts';
 import { readEpochOrder } from './lineage.ts';
+import { primaryDiscoveryCredits } from './credits.ts';
 
 const epochWidth = 1n << 63n;
 export function discoveryRecentOrder(epoch: number, sequence: string): string {
@@ -65,6 +66,7 @@ export async function projectDiscoveryWork(session: WorkReadSession, basis: Disc
     if (basis.scope === 'mine' && !rating?.count) return { ...next, item: null };
     const sum = rating?.distribution.reduce((total, bin) => total + bin.value * bin.count, 0) ?? 0;
     const item: ProjectedWork = { work, revision: header.card.revision, mainVersion: header.card.mainVersion,
+      primaryCredits: await primaryDiscoveryCredits(session, work),
       types: header.card.types, recentOrder: discoveryRecentOrder(Number(first.epochOrder.value), first.sequence.value),
       rating: rating?.count ? { context: basis.context!, count: rating.count, sum, mean: sum / rating.count,
         scale: { min: 1, max: basis.scope === 'realm' ? 10 : 5 } } : null,

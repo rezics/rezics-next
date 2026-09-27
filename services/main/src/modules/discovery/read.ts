@@ -2,7 +2,8 @@ import { AccountAssertionDenied } from '../account/verify-assertion.ts';
 import { decodeReadCursor, encodeReadCursor, pageResult, WorkReadInvalid, WorkReadLimit, WorkReadUnavailable,
   type WorkReadSession } from '../work/read-session.ts';
 import type { Static } from 'typebox';
-import { discoveryItem, type DiscoveryQuery, type OwnedDiscoveryBasis } from './contract.ts';
+import { discoveryItem, type DiscoveryQuery, type OwnedDiscoveryBasis, type DiscoveryPayload } from './contract.ts';
+import { MAX_SUMMARY_BATCH, type ResourceSummary } from '../media/summary.ts';
 import { admitDiscoveryBasis } from './source.ts';
 import type { DiscoveryProjection } from './store.ts';
 
@@ -37,6 +38,20 @@ export async function readDiscovery(session: WorkReadSession, projection: Discov
   // Projection freshness fences graph publication, types, decisions and ratings;
   // summaries recheck current title/cover disclosure without copying stored names.
   const summaries = await session.summaries(ids);
+  const concepts = [...new Set(page.flatMap(row => [
+    ...(row.payload.classifications ?? []).map(tag => tag.concept),
+    ...(row.payload.classification ? [row.payload.classification.concept] : []),
+  ]))];
+  const names = new Map<string, ResourceSummary>();
+  for (let offset = 0; offset < concepts.length; offset += MAX_SUMMARY_BATCH) {
+    for (const summary of await session.summaries(concepts.slice(offset, offset + MAX_SUMMARY_BATCH))) {
+      names.set(summary.reference, summary);
+    }
+  }
+  const named = (tag: NonNullable<DiscoveryPayload['classification']>) => {
+    const summary = names.get(tag.concept);
+    return summary?.status === 'available' && summary.type === 'concept' ? { ...tag, name: summary.name } : null;
+  };
   const fenced = await session.summaries(ids);
   const items: Static<typeof discoveryItem>[] = page.flatMap((row, index) => {
     const summary = summaries[index];
@@ -45,9 +60,13 @@ export async function readDiscovery(session: WorkReadSession, projection: Discov
     if (query.term && payload.classification?.sense !== query.term) {
       throw new WorkReadUnavailable('Discovery match basis is unavailable');
     }
+    const classification = payload.classification ? named(payload.classification) : null;
+    if (query.term && !classification) return [];
     return [{ id: row.work, revision: payload.revision, mainVersion: payload.mainVersion,
       types: payload.types, title: summary.name, cover: summary.avatar, rating: payload.rating,
-      match: { publication: 'public-main' as const, type: query.type ?? null, classification: payload.classification } }];
+      primaryCredits: payload.primaryCredits ?? [],
+      classifications: (payload.classifications ?? []).flatMap(tag => { const item = named(tag); return item ? [item] : []; }),
+      match: { publication: 'public-main' as const, type: query.type ?? null, classification } }];
   });
   await projection.active(basis, session.position, active.generation_id);
   const seen = (after?.seen ?? 0) + items.length;
@@ -57,5 +76,6 @@ export async function readDiscovery(session: WorkReadSession, projection: Discov
     JSON.stringify({ generation: active.generation_id, key: last.order_key, seen })) : null;
   return { profile: 'discovery-works-v1' as const, order: sort,
     scope: { kind: basis.scope, realm: basis.realm }, context: basis.context,
+    matchedTerm: query.term ? items[0]?.match.classification ?? null : null,
     ...pageResult(session, items, next), matches: { value: seen, kind: next ? 'lower-bound' as const : 'exact' as const } };
 }

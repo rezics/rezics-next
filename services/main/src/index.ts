@@ -6,6 +6,8 @@ import { ContentComments, ContentCore, ContentProjectionCursor,
 import { createMainApp } from './app.ts';
 import { ContentProjectionWorker } from './content-projection-worker.ts';
 import { DiscoveryProjection } from './modules/discovery/store.ts';
+import { DiscoveryRefreshWorker } from './modules/discovery/refresh.ts';
+import { DiscoveryRefreshStore } from './modules/discovery/refresh-store.ts';
 import { FusekiClient } from './infrastructure/fuseki.ts';
 import { S3ImmutableObjects } from './infrastructure/immutable-objects.ts';
 import { StructureProgressStore } from './modules/progress/store.ts';
@@ -362,8 +364,14 @@ const app = createMainApp(fuseki, {
 const worker = new ContentProjectionWorker(
   () => relayContentProjectionOnce(environment, content, cursor, consumer),
   config.CONTENT_PROJECTION_INTERVAL_MS);
+const discoveryWorker = relayPool ? new DiscoveryRefreshWorker({ environment, access, account, media,
+  judgments: new AccessJudgments(pool),
+  governance: governanceServices(pool, contentPool, content, sourceIntake, access, environment),
+  relayPosition: new RelayHandoffPositions(relayPool, relayConsumer!) },
+new DiscoveryRefreshStore(pool), new DiscoveryProjection(pool)) : undefined;
 app.listen({ hostname: '127.0.0.1', port });
 worker.start();
+discoveryWorker?.start();
 recommendationWorker?.start();
 correctionWorker.start();
 notificationDeliveryWorker?.start();
@@ -373,6 +381,7 @@ async function stop(): Promise<void> {
   if (stopping) return;
   stopping = true;
   await app.stop();
+  await discoveryWorker?.stop();
   await correctionWorker.stop();
   await notificationDeliveryWorker?.stop();
   await notificationRealtime?.stop();

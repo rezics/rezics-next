@@ -73,6 +73,7 @@ import { profileRoutes } from './routes/profiles.ts';
 import { realmProfileRoutes } from './routes/realm-profile.ts';
 import { workMetadataRoutes } from './routes/work-metadata.ts';
 import { discoveryRoutes } from './routes/discovery.ts';
+import { ratingContextReadRoutes } from './routes/rating-contexts.ts';
 import { managementReadRoutes } from './routes/management-reads.ts';
 
 export type { MainWorkDependencies } from './routes/dependencies.ts';
@@ -127,6 +128,11 @@ function domainRoutes(fuseki: FusekiClient, work: SearchRouteDependencies) {
     .use(workActivityRoutes(work))
     .use(profileRoutes(work))
     .use(realmProfileRoutes(work));
+    .use(realmProfileRoutes(work))
+    .use(workMetadataRoutes(work))
+    .use(discoveryRoutes(work))
+    .use(ratingContextReadRoutes(work))
+    .use(managementReadRoutes(work));
 }
 
 function extraRoutes1(fuseki: FusekiClient, work: SearchRouteDependencies) {

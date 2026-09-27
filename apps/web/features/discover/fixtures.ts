@@ -12,6 +12,7 @@ function item(n: number, title: string, language: string, types: string[],
   rating: { mean: number; count: number; max?: 5 | 10 } | null = null): DiscoveryItem {
   const max = rating?.max ?? 5;
   return { id: id(n), revision: id(n + 100), mainVersion: id(n + 200), types,
+    primaryCredits: [], classifications: [],
     title: { value: title, language, direction: 'ltr', basis: 'requested' },
     cover: { kind: 'fallback', policy: 'avatar-fallback-v1', key: `work-${n}`, resourceType: 'work' },
     rating: rating ? { context: id(900), count: rating.count, sum: Math.round(rating.mean * rating.count),
@@ -37,12 +38,14 @@ export const works = {
 } satisfies Record<string, DiscoveryItem>;
 
 export const classified = (source: 'local' | 'global', entry: DiscoveryItem): DiscoveryItem => ({ ...entry,
-  match: { ...entry.match, classification: { sense: id(700), concept: id(701), decision: id(702), source } } });
+  match: { ...entry.match, classification: { sense: id(700), concept: id(701), decision: id(702), source,
+    name: { value: 'Adventure', language: 'en', direction: 'ltr', basis: 'fallback' } } } });
 
 export function page(items: DiscoveryItem[], options: { next?: boolean; seen?: number; context?: boolean } = {}):
   DiscoveryPage {
   const next = options.next ?? false;
   return { profile: 'discovery-works-v1', order: 'recent', scope: { kind: 'global', realm: null },
+    matchedTerm: items[0]?.match.classification ?? null,
     context: options.context ? id(900) : null, items, nextCursor: next ? 'cursor-2' : null,
     sourcePosition: { dataEpoch: 'story', sequence: '47' },
     count: { value: items.length, kind: 'exact-page', total: null },

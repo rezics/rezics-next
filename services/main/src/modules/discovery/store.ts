@@ -7,6 +7,9 @@ import { activateHead, authorizeManager, claimLease, digest, fenceLease, inAcces
 import type { ReadPosition } from '../work/read-session.ts';
 import { DISCOVERY_COST, type DiscoveryBasis, type DiscoveryRow, type OwnedDiscoveryBasis,
   type ProjectedWork } from './contract.ts';
+import { discoveryAutomation, DISCOVERY_SERVICE_PRINCIPAL, type DiscoveryAutomation } from './automation.ts';
+
+type DiscoveryOperator = ManageContext | DiscoveryAutomation;
 
 export interface DiscoveryGeneration {
   generation_id: string; scope: DiscoveryBasis['scope']; realm: string | null; context: string | null;
@@ -27,7 +30,7 @@ export function discoverySeekSql(sort: 'recent' | 'top-rated', continuation: boo
     ORDER BY ${key}, work COLLATE "C" LIMIT $4`;
 }
 
-async function sourceFence(client: PoolClient) {
+export async function sourceFence(client: PoolClient) {
   await requireRecoveryOpen(client);
   const row = (await client.query<{ revision: string; generation: string }>(`SELECT
     d.revision::text, f.generation::text FROM access.discovery_source_fence d
@@ -46,7 +49,7 @@ async function assertFence(client: PoolClient, row: DiscoveryGeneration) {
     throw new RecommendationRestart('Discovery Access basis changed');
   }
 }
-async function generation(client: PoolClient, id: string): Promise<DiscoveryGeneration> {
+export async function generation(client: PoolClient, id: string): Promise<DiscoveryGeneration> {
   const row = (await client.query<DiscoveryGeneration>(`SELECT d.*, g.state, h.revision::text AS active_head,
     d.source_sequence::text, d.access_revision::text, d.work_count::text
     FROM access.discovery_generation d JOIN access.derived_generation g ON g.id = d.generation_id
@@ -55,8 +58,20 @@ async function generation(client: PoolClient, id: string): Promise<DiscoveryGene
   if (!row) throw new RecommendationMissing('Discovery generation is unavailable');
   return row;
 }
-async function operatorPrincipal(client: PoolClient, context: ManageContext,
+async function operatorPrincipal(client: PoolClient, context: DiscoveryOperator,
   scope: DiscoveryBasis['scope'], owner?: string | null) {
+  if (discoveryAutomation in context) {
+    const principal = context[discoveryAutomation];
+    if (scope !== 'mine') {
+      if (principal) throw new RecommendationDenied('Shared refresh cannot select a principal');
+      return DISCOVERY_SERVICE_PRINCIPAL;
+    }
+    if (!principal || (owner && owner !== principal)
+      || !(await client.query('SELECT id FROM access.principal WHERE id = $1 AND active FOR SHARE', [principal])).rowCount) {
+      throw new RecommendationDenied('Refresh principal is unavailable');
+    }
+    return principal;
+  }
   if (scope !== 'mine') return authorizeManager(client, context);
   // A person may rebuild only their own private rating population. The acting
   // Agent cannot select another principal, including for organization personas.
@@ -69,7 +84,7 @@ async function operatorPrincipal(client: PoolClient, context: ManageContext,
   }
   return principal;
 }
-const manager = (client: PoolClient, context: ManageContext, row: DiscoveryGeneration) =>
+const manager = (client: PoolClient, context: DiscoveryOperator, row: DiscoveryGeneration) =>
   operatorPrincipal(client, context, row.scope, row.principal_id);
 
 /** Durable generation/checkpoint protocol; no method in the GET path builds or
@@ -77,7 +92,7 @@ const manager = (client: PoolClient, context: ManageContext, row: DiscoveryGener
 export class DiscoveryProjection {
   constructor(private readonly pool: Pool) {}
 
-  async register(context: ManageContext, basis: DiscoveryBasis, position: ReadPosition, key: ReceiptKey) {
+  async register(context: DiscoveryOperator, basis: DiscoveryBasis, position: ReadPosition, key: ReceiptKey) {
     return inAccess(this.pool, async client => {
       await requireRecoveryOpen(client);
       const principal = await operatorPrincipal(client, context, basis.scope);
@@ -111,7 +126,7 @@ export class DiscoveryProjection {
     });
   }
 
-  async view(context: ManageContext, id: string) {
+  async view(context: DiscoveryOperator, id: string) {
     return inAccess(this.pool, async client => {
       await requireRecoveryOpen(client);
       const row = await generation(client, id);
@@ -120,7 +135,7 @@ export class DiscoveryProjection {
     });
   }
 
-  async beginStep(context: ManageContext, id: string, checkpoint: string) {
+  async beginStep(context: DiscoveryOperator, id: string, checkpoint: string) {
     return inAccess(this.pool, async client => {
       await requireRecoveryOpen(client);
       const row = await generation(client, id);
@@ -132,7 +147,7 @@ export class DiscoveryProjection {
     });
   }
 
-  async commitStep(context: ManageContext, id: string, lease: string, checkpoint: string,
+  async commitStep(context: DiscoveryOperator, id: string, lease: string, checkpoint: string,
     result: { after: string; complete: boolean; item: ProjectedWork | null }, position: ReadPosition) {
     return inAccess(this.pool, async client => {
       await requireRecoveryOpen(client);
@@ -147,12 +162,14 @@ export class DiscoveryProjection {
       const item = result.item;
       if (item) {
         if (item.work !== result.after || item.types.length > 3
-          || item.classifications.length > DISCOVERY_COST.termsPerWork) {
+          || item.classifications.length > DISCOVERY_COST.termsPerWork
+          || item.primaryCredits.length > DISCOVERY_COST.primaryCredits) {
           throw new RecommendationUnavailable('Discovery projection exceeds its fanout');
         }
         const entries = ['', ...item.types].flatMap(type => [null, ...item.classifications].map(term => ({
           type, term: term?.sense ?? '', payload: { revision: item.revision, mainVersion: item.mainVersion,
-            types: item.types, rating: item.rating, classification: term } })));
+            types: item.types, rating: item.rating, classification: term,
+            primaryCredits: item.primaryCredits, classifications: item.classifications.slice(0, DISCOVERY_COST.cardTags) } })));
         await client.query(`INSERT INTO access.discovery_entry
           (generation_id, work, work_type, term, recent_order, rating_count, rating_sum, payload)
           SELECT $1,$2,e.type,e.term,$3,$4,$5,e.payload
@@ -173,7 +190,7 @@ export class DiscoveryProjection {
     });
   }
 
-  async cancel(context: ManageContext, id: string) {
+  async cancel(context: DiscoveryOperator, id: string) {
     return inAccess(this.pool, async client => {
       await requireRecoveryOpen(client);
       const row = await generation(client, id);
@@ -186,7 +203,7 @@ export class DiscoveryProjection {
     });
   }
 
-  async activate(context: ManageContext, id: string, expected: string | null,
+  async activate(context: DiscoveryOperator, id: string, expected: string | null,
     position: ReadPosition, key: ReceiptKey) {
     return inAccess(this.pool, async client => {
       await requireRecoveryOpen(client);
