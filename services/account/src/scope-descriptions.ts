@@ -42,6 +42,9 @@ const identity: Record<string, Description> = {
   // Scopes whose meaning is not "<action> <owner noun>" get an exact description.
   'realm:profile': { en: "Publish the public profile of communities you manage", 'zh-CN': '发布你管理的社区的公开资料' },
   'realm:public-role': { en: 'Show or hide your public moderator role in communities', 'zh-CN': '公开或隐藏你在社区中的版主身份' },
+  'follow:read': { en: 'See the communities, works and people you follow', 'zh-CN': '查看你关注的社区、作品和用户' },
+  'follow:write': { en: 'Follow or unfollow communities, works and people for you', 'zh-CN': '为你关注或取消关注社区、作品和用户' },
+  'feed:vote': { en: 'Cast, change or remove your votes on feed activity', 'zh-CN': '为你提交、更改或撤回动态投票' },
 };
 
 /** No silent untranslated fallback: a new scope must define what the person

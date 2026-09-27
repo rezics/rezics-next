@@ -3,6 +3,8 @@
 // branches append entries; git's union merge driver keeps both sides (see
 // .gitattributes), so add a comment line and a path line, never reorder.
 export const isolatedIntegrationFileList = [
+  // Home feed replays the relay from zero and exercises private/disclosure fences.
+  'tests/qa/integration/feed-home.test.ts',
   // Work read probes cut over classification and replace the dataset epoch.
   'services/main/tests/work-read.integration.test.ts',
   // Realm read probes change public disclosure, erasure and the restore hold.

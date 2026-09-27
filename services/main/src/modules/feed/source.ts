@@ -1,0 +1,185 @@
+import { GRAPHS, iri, lit } from '../work/activate.ts';
+import { PUBLIC_SEARCH_GRAPH } from '../work/select-main.ts';
+import { publicWork, unerased, WorkReadUnavailable, type ReadRow, type WorkReadSession } from '../work/read-session.ts';
+import { FEED_COST, type FeedKind } from './contract.ts';
+
+export interface FeedSource { id: string; sequence: string; kind: FeedKind; target: string;
+  work: string | null; actor: string; realm: string | null; zone: string | null;
+  language: string | null; excerpt: string | null; title: string | null;
+  occurrence: string | null; contentTarget: string | null; reply: string | null; contentRevision: string | null; review: string | null }
+export interface FeedCut { epoch: string; through: string; afterSequence: string; afterId: string }
+export interface FeedReference { id: string; sequence: string; kind: FeedKind; work?: string | null; realm?: string | null; target?: string; groupKind?: 'chapter' | 'hub' }
+
+/** Ingestion retains only opaque references, including currently hidden ones.
+ * Otherwise a later disclosure/review change could never reveal an older
+ * activity. Hydration below is always the independent current public gate. */
+export async function feedReferences(session: WorkReadSession, cut: FeedCut): Promise<FeedReference[]> {
+  const rows = await session.query(`SELECT DISTINCT ?id ?sequence ?kind WHERE {
+    GRAPH ${iri(GRAPHS.revisions)} {
+      ?id rv:dataEpoch ${lit(cut.epoch)} ; rv:sequence ?sequence ; a ?type .
+      VALUES (?type ?kind) { (rv:PublicationSelection "work") (rv:ClassificationDecision "decision")
+        (rv:RealmReplyPlacement "reply") (rv:CollectionRevision "collection") (rv:ContentSearchEligibilityDecision "contribution") }
+      FILTER(?sequence <= ${cut.through})
+      FILTER(?sequence > ${cut.afterSequence} || (?sequence = ${cut.afterSequence} && STR(?id) > ${lit(cut.afterId)}))
+    } } ORDER BY ?sequence STR(?id) LIMIT ${FEED_COST.refreshItems + 1}`, FEED_COST.refreshItems + 1);
+  if (rows.some(row => !row.id || !row.sequence || !row.kind)
+    || new Set(rows.map(row => row.id!.value)).size !== rows.length) throw new WorkReadUnavailable('Ambiguous feed reference');
+  return rows.map(row => ({ id: row.id!.value, sequence: row.sequence!.value, kind: row.kind!.value as FeedKind }));
+}
+
+const canonicalWork = publicWork('?otherWork', '?otherMain').replace(/\?([A-Za-z]\w*)/g,
+  (_, name: string) => ['otherWork', 'otherMain'].includes(name) ? `?${name}` : `?canonical${name}`);
+const publicRealm = `GRAPH ${iri(GRAPHS.current)} {
+  ?realm a rv:Realm ; rv:realmState rv:Active ; rv:space ?space .
+  ?space a rv:Space ; rv:realmCapability ?realm ; rv:disclosure rv:Public .
+  FILTER NOT EXISTS { ?space rv:disclosure rv:Private }
+  FILTER NOT EXISTS { ?realm rv:protectionHead ?realmProtection }
+  OPTIONAL { ?space rv:zoneCapability ?zone . ?zone a rv:Zone ; rv:zoneState rv:Active ; rv:disclosure rv:Public .
+    FILTER NOT EXISTS { ?zone rv:disclosure rv:Private }
+    FILTER NOT EXISTS { ?zone rv:protectionHead ?zoneProtection } }
+}`;
+
+/** Re-admit exact activity references against current public publication,
+ * Realm and review heads. A changed Main selection can retain an earlier
+ * publication's activity; replacing/erasing that publication cannot. */
+export async function feedSources(session: WorkReadSession, selection: { ids: string[] } | FeedCut): Promise<FeedSource[]> {
+  if ('ids' in selection && selection.ids.length === 0) return [];
+  const limit = 'ids' in selection ? selection.ids.length : FEED_COST.refreshItems;
+  if (limit > 20) throw new WorkReadUnavailable('Feed source budget exceeded');
+  const select = 'ids' in selection ? `VALUES ?id { ${selection.ids.map(iri).join(' ')} }`
+    : `FILTER(?epoch = ${lit(selection.epoch)} && ?sequence <= ${selection.through})
+       FILTER(?sequence > ${selection.afterSequence} || (?sequence = ${selection.afterSequence}
+         && STR(?id) > ${lit(selection.afterId)}))`;
+  const rows = await session.query(`SELECT DISTINCT ?id ?sequence ?kind ?target ?work ?actor ?realm ?zone
+    ?language ?excerpt ?title ?reply ?contentRevision ?review ?occurrence ?contentTarget WHERE {
+    ${select}
+    {
+      GRAPH ${iri(GRAPHS.current)} {
+        ?main a rv:MainVersion ; rv:work ?work .
+        ?contribution a rv:TextContribution ; rv:work ?work ; rv:author ?actor ; rv:publicationHead ?decision . }
+      GRAPH ${iri(GRAPHS.revisions)} {
+        ?id a rv:PublicationSelection ; rv:context ?main ; rv:work ?work ; rv:contribution ?contribution ;
+          rv:publicationDecision ?decision ; rv:selectedDraft ?draft ; rv:language ?language ;
+          rv:selectionBasis rv:MainMaintainer ; rv:dataEpoch ?epoch ; rv:sequence ?sequence .
+        ?decision rv:disclosure rv:Public ; rv:selectedDraft ?draft .
+        FILTER NOT EXISTS { ?draft a rv:ErasedRevision }
+        BIND(EXISTS { ?id rv:predecessor ?previous } AS ?successor) }
+      ${publicWork('?work', '?main')}
+      BIND(IF(?successor, "contribution", "work") AS ?kind)
+      BIND(IF(?successor, ?contribution, ?work) AS ?target)
+      OPTIONAL { GRAPH ${iri(PUBLIC_SEARCH_GRAPH)} { ?unit rv:selection ?id ; rv:revision ?draft ; rv:searchBody ?body }
+        BIND(SUBSTR(STR(?body),1,400) AS ?excerpt) }
+    } UNION {
+      GRAPH ${iri(GRAPHS.current)} { ?slot a rv:RealmPublicationSlot ; rv:realm ?realm ;
+        rv:work ?work ; rv:selectionHead ?id .
+        ?contribution a rv:TextContribution ; rv:work ?work ; rv:publicationHead ?decision . }
+      GRAPH ${iri(GRAPHS.revisions)} { ?id a rv:PublicationSelection ; rv:context ?realm ; rv:work ?work ;
+        rv:contribution ?contribution ; rv:publicationDecision ?decision ; rv:selectedDraft ?draft ;
+        rv:reviewer ?actor ; rv:language ?language ; rv:dataEpoch ?epoch ; rv:sequence ?sequence .
+        ?decision rv:disclosure rv:Public ; rv:selectedDraft ?draft .
+        FILTER NOT EXISTS { ?draft a rv:ErasedRevision } }
+      ${publicRealm} ${publicWork('?work', '?main')}
+      BIND("adoption" AS ?kind) BIND(?work AS ?target)
+    } UNION {
+      GRAPH ${iri(GRAPHS.current)} { ?application a rv:ClassificationApplication ; rv:decisionHead ?id ;
+        rv:targetMainVersion ?main ; rv:classificationContext ?context ; rv:applicationState rv:Active .
+        ?context a rv:ClassificationContext ; rv:realm ?realm ; rv:contextState rv:Active .
+        ?main rv:work ?work . }
+      GRAPH ${iri(GRAPHS.revisions)} { ?id a rv:ClassificationDecision ; rv:component ?application ;
+        rv:decidedBy ?actor ; rv:outcome ?outcome ; rv:dataEpoch ?epoch ; rv:sequence ?sequence .
+        FILTER(?outcome IN (rv:Accepted, rv:Rejected)) }
+      ${publicRealm} ${publicWork('?work', '?main')}
+      BIND("decision" AS ?kind) BIND(?work AS ?target)
+    } UNION {
+      GRAPH ${iri(GRAPHS.current)} { ?slot a rv:RealmReplySlot ; rv:realm ?realm ;
+        rv:rootTarget ?work ; rv:reply ?reply ; rv:replyPlacementHead ?id . }
+      GRAPH ${iri(GRAPHS.revisions)} { ?id a rv:RealmReplyPlacement ; rv:rootTarget ?work ; rv:realm ?realm ;
+        rv:reply ?reply ; rv:author ?actor ; rv:contentRevision ?contentRevision ; rv:reviewDecision ?review ;
+        rv:placementOutcome rv:Accepted ; rv:dataEpoch ?epoch ; rv:sequence ?sequence .
+        BIND(EXISTS { ?id rv:parentReply ?parent } AS ?isReply) }
+      ${publicRealm} ${publicWork('?work', '?main')}
+      BIND(IF(?isReply, "reply", "discussion") AS ?kind) BIND(?reply AS ?target)
+    } UNION {
+      GRAPH ${iri(GRAPHS.revisions)} { ?id a rv:ContentSearchEligibilityDecision ;
+        rv:publicationDecision ?contentPublication ; rv:disclosure rv:Public ; rv:dataEpoch ?epoch ; rv:sequence ?sequence .
+        ?contentPublication a rv:ContentPublicationDecision ; rv:component ?variant ;
+        rv:resource ?contentTarget ; rv:contentRevision ?contentRevision ; rv:contentLanguage ?language .
+        FILTER NOT EXISTS { ?contentRevision a rv:ErasedRevision } }
+      GRAPH ${iri(GRAPHS.current)} { ?variant rv:resource ?contentTarget ; rv:contentPublicationHead ?contentPublication ;
+          rv:publicSearchEligibilityHead ?id .
+        ?structure a rv:Structure ; rv:structureProfile rv:BookComposition ; rv:structureOf ?main ;
+          rv:selectedGeneration ?generation .
+        ?main a rv:MainVersion ; rv:work ?work .
+        ?placement a rv:OccurrencePlacement ; rv:generation ?generation ; rv:occurrence ?occurrence ;
+          rv:occurrenceRole rv:ChapterRole ; schema:item ?contentTarget .
+        FILTER NOT EXISTS { ?placement rv:removedBy ?removed }
+        FILTER NOT EXISTS { ?placement rv:selectionMode rv:FixedRevision ; rv:pinnedRevision ?pinned .
+          FILTER(?pinned != ?contentRevision) } }
+      ${publicWork('?work', '?main')} ${unerased('?contentTarget')}
+      # One public placement represents a reused Content publication. Choose
+      # by Work/occurrence identity, so repeated placements cannot break a page.
+      FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} {
+        ?otherStructure a rv:Structure ; rv:structureProfile rv:BookComposition ; rv:structureOf ?otherMain ;
+          rv:selectedGeneration ?otherGeneration . ?otherMain rv:work ?otherWork .
+        ?otherPlacement a rv:OccurrencePlacement ; rv:generation ?otherGeneration ; rv:occurrence ?otherOccurrence ;
+          rv:occurrenceRole rv:ChapterRole ; schema:item ?contentTarget .
+        FILTER NOT EXISTS { ?otherPlacement rv:removedBy ?otherRemoved }
+        FILTER NOT EXISTS { ?otherPlacement rv:selectionMode rv:FixedRevision ; rv:pinnedRevision ?otherPinned .
+          FILTER(?otherPinned != ?contentRevision) }
+        FILTER(CONCAT(STR(?otherWork), STR(?otherOccurrence)) < CONCAT(STR(?work), STR(?occurrence)))
+      } ${canonicalWork} }
+      BIND("contribution" AS ?kind) BIND(?contentTarget AS ?target)
+    } UNION {
+      GRAPH ${iri(GRAPHS.revisions)} { ?id a rv:ContentSearchEligibilityDecision ;
+        rv:publicationDecision ?contentPublication ; rv:disclosure rv:Public ; rv:dataEpoch ?epoch ; rv:sequence ?sequence .
+        ?contentPublication a rv:ContentPublicationDecision ; rv:component ?variant ; rv:resource ?work ;
+          rv:contentRevision ?contentRevision ; rv:contentLanguage ?language .
+        FILTER NOT EXISTS { ?contentRevision a rv:ErasedRevision } }
+      GRAPH ${iri(GRAPHS.current)} { ?variant rv:resource ?work ; rv:contentPublicationHead ?contentPublication ;
+          rv:publicSearchEligibilityHead ?id .
+        ?work a ?hubKind . VALUES ?hubKind { rv:PromptTemplate rv:SkillPackage } }
+      ${publicWork('?work', '?main')}
+      BIND(?work AS ?contentTarget) BIND(?work AS ?target) BIND("contribution" AS ?kind)
+    } UNION {
+      GRAPH ${iri(GRAPHS.current)} { ?target a rv:Collection ; rv:collectionHead ?id ; rv:curator ?actor ;
+        rv:disclosure rv:Public ; rv:collectionState rv:Active ; rv:structure ?structure ; schema:name ?title .
+        FILTER NOT EXISTS { ?target rv:disclosure rv:Private }
+        FILTER NOT EXISTS { ?target rv:protectionHead ?collectionProtection } }
+      GRAPH ${iri(GRAPHS.revisions)} { ?id a rv:CollectionRevision ; rv:component ?target ;
+        rv:dataEpoch ?epoch ; rv:sequence ?sequence . }
+      BIND("collection" AS ?kind)
+    }
+    FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.revisions)} { ?id a rv:ErasedRevision } }
+  } ORDER BY ?sequence STR(?id) LIMIT ${limit + 1}`, limit + 1);
+  if ('ids' in selection && rows.length > limit) throw new WorkReadUnavailable('Feed source is ambiguous');
+  const required = (row: ReadRow, name: string) => {
+    if (!row[name]) throw new WorkReadUnavailable('Feed source is incomplete');
+    return row[name]!.value;
+  };
+  if (new Set(rows.map(row => row.id?.value)).size !== rows.length) throw new WorkReadUnavailable('Feed source is ambiguous');
+  const mapped: FeedSource[] = [];
+  for (const row of rows) {
+    let actor = row.actor?.value;
+    let excerpt: string | null = row.excerpt?.value ?? null;
+    if (row.contentTarget) {
+      if (!session.deps.content || !row.contentRevision) throw new WorkReadUnavailable('Published Content owner unavailable');
+      const id = row.contentRevision.value.slice('urn:rezics:content:revision:'.length);
+      const exact = (await session.deps.content.readExactBatch([id], async ids => new Set(ids)))[0];
+      if (!exact || ['missing', 'erased', 'denied'].includes(exact.status)) continue;
+      if (exact.status !== 'available' || exact.reference.resourceId !== row.contentTarget?.value) {
+        throw new WorkReadUnavailable('Published Content differs');
+      }
+      const author = exact.reference.provenance.author;
+      if (exact.reference.provenance.kind !== 'admitted-original-contribution-v1'
+        || typeof author !== 'string' || !/^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/.test(author)) continue;
+      actor = author; excerpt = typeof exact.body.body === 'string' ? exact.body.body.slice(0, 400) : null;
+    }
+    if (!actor) throw new WorkReadUnavailable('Feed actor unavailable');
+    mapped.push({ id: required(row, 'id'), sequence: required(row, 'sequence'),
+    kind: required(row, 'kind') as FeedKind, target: required(row, 'target'), actor,
+    work: row.work?.value ?? null, realm: row.realm?.value ?? null, zone: row.zone?.value ?? null,
+    language: row.language?.value ?? null, excerpt, title: row.title?.value ?? null,
+    occurrence: row.occurrence?.value ?? null, contentTarget: row.contentTarget?.value ?? null, reply: row.reply?.value ?? null, contentRevision: row.contentRevision?.value ?? null, review: row.review?.value ?? null });
+  }
+  return mapped;
+}

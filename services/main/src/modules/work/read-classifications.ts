@@ -13,14 +13,19 @@ import { decodeReadCursor, encodeReadCursor, pageResult, WorkReadInvalid,
   WorkReadUnavailable, type WorkReadSession } from './read-session.ts';
 
 /** Curated acceptance and separately recorded editor relevance retain distinct authority. */
-export async function readWorkClassifications(session: WorkReadSession, work: string) {
+export async function readWorkClassifications(session: WorkReadSession, work: string, selectedSenses?: readonly string[]) {
+  if (selectedSenses && (selectedSenses.length < 1 || selectedSenses.length > 3
+    || selectedSenses.some(sense => !/^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/.test(sense)))) {
+    throw new WorkReadInvalid('Invalid classification selection');
+  }
   const basis = await readWorkBasis(session, work);
   const scope = await session.scope();
   if (scope.kind === 'mine') throw new WorkReadInvalid('Personal classification decisions are not defined');
   const limit = session.options.limit ?? 20;
-  const binding = ['classifications', work, scope, session.options.language ?? null];
+  const binding = ['classifications', work, scope, session.options.language ?? null, ...(selectedSenses ? [selectedSenses] : [])];
   const cursor = decodeReadCursor(session.options.cursor, binding, session.position);
   const rows = await session.query(`SELECT DISTINCT ?sense ?revision ?concept WHERE {
+    ${selectedSenses ? `VALUES ?sense { ${selectedSenses.map(iri).join(' ')} }` : ''}
     GRAPH ${iri(GRAPHS.current)} {
       ?sense a rv:ClassificationSense ; rv:senseState rv:Active ; rv:head ?revision ; rv:expression ?expression .
       ?expression rv:assertedConcept ?concept ; rv:expressionState rv:Active .

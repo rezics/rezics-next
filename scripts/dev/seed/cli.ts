@@ -7,6 +7,7 @@ import { SeedApi, SeedApiError, type SeedEndpoints } from './api.ts';
 import { people, realms, seedKey, semanticTypes, works } from './plan.ts';
 import { seedReply } from './replies.ts';
 import { seedRealmManagement } from './realm-management.ts';
+import { seedFeed } from './feed.ts';
 
 interface Options { dryRun: boolean; resetOwn: boolean }
 interface WorkReceipt { work: string; mainVersion: string; workRevision: string; mainRevision: string;
@@ -215,6 +216,9 @@ async function run(options: Options): Promise<boolean> {
   const managed = createdRealms.find(realm => realm.id === 'classics');
   if (managed) await optional('Realm moderation team and queue', () => seedRealmManagement(api,
     managed.receipt.realm, owner, sessions.slice(1, 3), [...created.values()]));
+
+  const feed = await optional('Home follows and votes', () => seedFeed(api, sessions, createdRealms));
+  if (feed) console.log(`Home: ${feed.activities} activities, ${feed.followed} follows, ${feed.votes} votes.`);
 
   const search = await optional('Public search', () => fetch(`${endpoints.main}/v1/queries`, { method: 'POST',
     headers: { 'content-type': 'application/json' }, body: JSON.stringify({

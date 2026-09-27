@@ -24,6 +24,7 @@ export const MAIN_SITE_SCOPES = [
   'address:claim', 'address:manage',
   // Community: comments, ratings, judgments, statements, events and claims.
   'comment:create', 'rating:read', 'rating:submit', 'rating:configure',
+  'follow:read', 'follow:write', 'feed:vote',
   'judgment:read', 'judgment:write', 'statement:write', 'statement:decide',
   'event:read', 'event:submit',
   'claim:read', 'claim:create', 'claim:evidence', 'claim:challenge', 'claim:lineage',

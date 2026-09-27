@@ -6,6 +6,9 @@ import { ContentComments, ContentCore, ContentProjectionCursor,
 import { createMainApp } from './app.ts';
 import { ContentProjectionWorker } from './content-projection-worker.ts';
 import { DiscoveryProjection } from './modules/discovery/store.ts';
+import { FollowsStore } from './modules/follows/store.ts';
+import { FeedStore } from './modules/feed/store.ts';
+import { FeedRefreshWorker } from './modules/feed/refresh.ts';
 import { DiscoveryRefreshWorker } from './modules/discovery/refresh.ts';
 import { DiscoveryRefreshStore } from './modules/discovery/refresh-store.ts';
 import { FusekiClient } from './infrastructure/fuseki.ts';
@@ -263,6 +266,8 @@ const correctionWorker = new VerificationCorrectionWorker(new VerificationCorrec
   new VerificationStore(contentPool), new NotificationStore(pool)));
 const actingContextDiscovery = new AccessActingContexts(pool, environment);
 const app = createMainApp(fuseki, {
+  follows: new FollowsStore(pool),
+  feed: new FeedStore(pool),
   discovery: new DiscoveryProjection(pool),
   profiles: new ProfilesAccess(pool),
   agentHandles: new AgentVanityHandles(pool),
@@ -384,6 +389,9 @@ const discoveryWorker = relayPool ? new DiscoveryRefreshWorker({ environment, ac
   relayPosition: new RelayHandoffPositions(relayPool, relayConsumer!) },
 new DiscoveryRefreshStore(pool), new DiscoveryProjection(pool)) : undefined;
 app.listen({ hostname: '127.0.0.1', port });
+const feedWorker = relayPool ? new FeedRefreshWorker({ environment, account, access, content,
+  relayPosition: new RelayHandoffPositions(relayPool, relayConsumer!) }, new FeedStore(pool), relayPool) : undefined;
+feedWorker?.start();
 worker.start();
 discoveryWorker?.start();
 recommendationWorker?.start();
@@ -395,6 +403,7 @@ async function stop(): Promise<void> {
   if (stopping) return;
   stopping = true;
   await app.stop();
+  await feedWorker?.stop();
   await discoveryWorker?.stop();
   await correctionWorker.stop();
   await notificationDeliveryWorker?.stop();

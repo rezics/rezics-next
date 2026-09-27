@@ -1,3 +1,4 @@
+import type { FeedViewerStateReader } from '../modules/feed/viewer-state.ts';
 import type { ContentCore } from '../../../content/src/core.ts';
 import type { ContentProtectionStore } from '../modules/protection/content-store.ts';
 import type { ProtectionAdmissionSigner } from '../modules/access/protection-admission.ts';
@@ -93,6 +94,10 @@ import type { ReaderLibraryRatings } from '../modules/library/ratings.ts';
 
 export interface MainWorkDependencies {
   realmAdmin?: import('../modules/access/realm-management.ts').AccessRealmManagement;
+  media?: import('../modules/media/commands.ts').MediaDependencies;
+  follows?: import('../modules/follows/store.ts').FollowsStore;
+  feed?: import('../modules/feed/store.ts').FeedStore;
+  feedViewerState?: FeedViewerStateReader;
   maintainers?: import('../modules/work/maintainers.ts').WorkMaintainers;
   discovery?: import('../modules/discovery/store.ts').DiscoveryProjection;
   profiles?: ProfilesAccess;
