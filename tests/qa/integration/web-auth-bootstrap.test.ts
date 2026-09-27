@@ -3,6 +3,7 @@ import { readFileSync, rmSync, statSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { expect, test } from 'bun:test';
 import { Pool } from 'pg';
+import { MAIN_SITE_SCOPE } from '../../../apps/web/features/auth/scopes.ts';
 import { bootstrapWebAuth } from '../../../scripts/dev/web-auth-bootstrap.ts';
 import { grantQaWorkRead } from '../../../scripts/dev/qa-work-read.ts';
 import { readEnv } from '../../../scripts/dev/config.ts';
@@ -43,7 +44,7 @@ test('IAM01/WORK01: authenticated metadata-only Work has an empty Main Version',
     'http://127.0.0.1:3003/auth/callback']);
   expect(JSON.stringify(publicConfig)).not.toContain(privateConfig.mainClient.secret);
   expect(publicConfig.actingSubject).toBe(result.actingSubject);
-  expect(publicConfig.scope).toBe('openid work:create work:read');
+  expect(publicConfig.scope).toBe(MAIN_SITE_SCOPE);
   const accountPool = new Pool({ connectionString: runtime.ACCOUNT_DATABASE_URL });
   const accessPool = new Pool({ connectionString: runtime.ACCESS_DATABASE_URL });
   const account = createAccountApp(createAccountAuth({

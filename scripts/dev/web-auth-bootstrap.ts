@@ -6,11 +6,21 @@ import { Pool } from 'pg';
 import { createAccountAuth } from '../../services/account/src/auth.ts';
 import { createAccountApp } from '../../services/account/src/app.ts';
 import { FusekiClient } from '../../services/main/src/infrastructure/fuseki.ts';
+import { MAIN_SITE_SCOPE } from '../../apps/web/features/auth/scopes.ts';
 import { appEnvironment, readEnv, savePrivate, stackDirectory } from './config.ts';
 
 const root = resolve(import.meta.dir, '../..');
 const runIdPattern = /^[a-z0-9][a-z0-9-]{0,30}$/;
-const scope = 'openid work:create work:read';
+// The web client's registration is its installation ceiling: the main site's
+// scopes, and refresh tokens so a session outlives the access token.
+const scope = MAIN_SITE_SCOPE;
+const webGrantTypes = ['authorization_code', 'refresh_token'];
+
+export function webClientRegistration(redirectUris: string[]) {
+  return { client_name: 'QA-only loopback PKCE', application_type: 'native' as const,
+    redirect_uris: redirectUris, token_endpoint_auth_method: 'none' as const,
+    grant_types: webGrantTypes, scope, skip_consent: true, require_pkce: true };
+}
 
 export interface WebAuthOptions { runId: string; redirectUris: string[]; profile?: 'dev' | 'qa' }
 
@@ -193,10 +203,7 @@ export async function bootstrapWebAuth(options: WebAuthOptions): Promise<WebAuth
         client_credentials_scopes: ['work:create'] } });
     if (!mainClient.client_secret) throw new Error('Account did not issue a Main client secret');
     const webClient = await auth.api.adminCreateOAuthClient({ headers,
-      body: { client_name: 'QA-only loopback PKCE', application_type: 'native',
-        redirect_uris: redirectUris,
-        token_endpoint_auth_method: 'none', grant_types: ['authorization_code'],
-        scope, skip_consent: true, require_pkce: true } });
+      body: webClientRegistration(redirectUris) });
     const member = await signUp(app, apps.ACCOUNT_BASE_URL!, 'member');
     const discoveryResponse = await app.handle(new Request(
       `${apps.ACCOUNT_BASE_URL}/api/auth/.well-known/openid-configuration`));
@@ -216,7 +223,7 @@ export async function bootstrapWebAuth(options: WebAuthOptions): Promise<WebAuth
       issuer: discovery.issuer, authorizationEndpoint: discovery.authorization_endpoint,
       tokenEndpoint: discovery.token_endpoint, resource: apps.ACCOUNT_MAIN_RESOURCE,
       clientId: webClient.client_id, applicationType: 'native', redirectUris,
-      scope, actingSubject: actor,
+      scope, grantTypes: webGrantTypes, actingSubject: actor,
       mainBaseUrl: `http://127.0.0.1:${apps.MAIN_PORT}`,
     }, null, 2) + '\n', { mode: 0o600 });
     writeFileSync(privateConfigPath, JSON.stringify({
@@ -234,6 +241,46 @@ export async function bootstrapWebAuth(options: WebAuthOptions): Promise<WebAuth
     await accountPool.end();
     await accessPool.end();
   }
+}
+
+/** Whether a stack's registered web client already has today's scopes and grants. */
+export function webClientCurrent(registered: { scope: string; grantTypes?: string[] }): boolean {
+  return registered.scope === scope && webGrantTypes.every(grant => registered.grantTypes?.includes(grant));
+}
+
+/** A stack prepared before the main site's current scopes or refresh grant
+ * keeps a web client whose installation ceiling refuses them. Register a new
+ * client with the fixture's operator and point the public config at it; the
+ * old client stays installed until the stack is reset. Returns whether it did. */
+export async function upgradeWebClient(options: { runId: string; profile?: 'dev' | 'qa' }): Promise<boolean> {
+  const profile = options.profile ?? 'qa';
+  const stackDir = stackDirectory(root, profile === 'dev' ? { profile } : { profile, runId: options.runId });
+  const publicPath = join(stackDir, 'web-auth', 'public.json');
+  const current = JSON.parse(readFileSync(publicPath, 'utf8')) as {
+    clientId: string; redirectUris: string[]; scope: string; grantTypes?: string[] };
+  if (webClientCurrent(current)) return false;
+  const { operator } = JSON.parse(readFileSync(join(stackDir, 'web-auth', 'private.json'), 'utf8')) as {
+    operator: { id: string; email: string; password: string } };
+  const apps = readEnv(join(stackDir, 'apps.env'));
+  requireLocalApps(apps);
+  const pool = new Pool({ connectionString: apps.ACCOUNT_DATABASE_URL });
+  try {
+    const auth = createAccountAuth({ baseURL: apps.ACCOUNT_BASE_URL!, secret: apps.ACCOUNT_SECRET!,
+      resource: apps.ACCOUNT_MAIN_RESOURCE!, pool, operatorUserIds: new Set([operator.id]) });
+    const signIn = await createAccountApp(auth, pool).handle(new Request(
+      `${apps.ACCOUNT_BASE_URL}/api/auth/sign-in/email`, { method: 'POST',
+        headers: { 'content-type': 'application/json', origin: apps.ACCOUNT_BASE_URL! },
+        body: JSON.stringify({ email: operator.email, password: operator.password }) }));
+    const cookie = signIn.headers.get('set-cookie');
+    await signIn.body?.cancel();
+    if (signIn.status !== 200 || !cookie) throw new Error(`Local operator sign-in failed with HTTP ${signIn.status}`);
+    const webClient = await auth.api.adminCreateOAuthClient({
+      headers: new Headers({ cookie, origin: apps.ACCOUNT_BASE_URL! }),
+      body: webClientRegistration(current.redirectUris) });
+    writeFileSync(publicPath, JSON.stringify({ ...current, clientId: webClient.client_id, scope,
+      grantTypes: webGrantTypes }, null, 2) + '\n', { mode: 0o600 });
+    return true;
+  } finally { await pool.end(); }
 }
 
 if (import.meta.main) {

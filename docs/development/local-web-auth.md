@@ -50,13 +50,17 @@ bun services/account/src/index.ts
 bun services/main/src/index.ts
 ```
 
-The web app must perform a fresh S256 PKCE challenge for each sign-in, request
-`openid work:create` for the configured Main resource, exchange the code using
-the public client ID and exact callback, and send the resulting bearer token to
-`POST /v1/works` with a unique `Idempotency-Key`. The request body includes
-`profile: "metadata-only-v1"`, a title, and `actingSubject` from `public.json`.
-The generated representation and grant expire after eight hours; resource
-access tokens expire after five minutes. Create a new QA project after expiry.
+The client is registered with the main site's scopes
+(`apps/web/features/auth/scopes.ts`) and the refresh-token grant; registration
+is its installation ceiling. When those change, `task dev:prepare` (and so
+`task dev`) registers a replacement client for an existing stack and points
+`public.json` at it. The web session layer in `apps/web/features/auth/` owns the
+PKCE sign-in, refresh and sign-out; see its code for the details. A direct API
+caller sends the bearer token to `POST /v1/works` with a unique
+`Idempotency-Key`, `profile: "metadata-only-v1"`, a title, and `actingSubject`
+from `public.json`. The generated representation and grant expire after eight
+hours; resource access tokens expire after five minutes and the web app
+refreshes them. Create a new QA project after the grant expires.
 
 `task dev -- --profile qa --run-id <id>` creates or loads this fixture and launches
 Account, Main and the web development app with its registered credentials.

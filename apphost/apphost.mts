@@ -87,7 +87,9 @@ configure(builder.addExecutable('web', 'sh', web,
   ['-c', 'exec ../../node_modules/.bin/vinext dev --host 127.0.0.1 --port "$PORT"']),
 webSpec, ['MAIN_ORIGIN', 'ACCOUNT_ORIGIN'])
   .withEnvironment('MAIN_ORIGIN', mainUrl)
-  .withEnvironment('ACCOUNT_ORIGIN', accountUrl)
+  // Account accepts browser-originated writes (sign-in, sign-out) only from its
+  // own base URL; Aspire's endpoint says localhost where that URL says 127.0.0.1.
+  .withEnvironment('ACCOUNT_ORIGIN', env.ACCOUNT_BASE_URL ?? accountUrl)
   .withHttpEndpoint(frontendEndpoint(3000))
   .waitFor(backend);
 

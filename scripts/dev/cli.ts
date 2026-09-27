@@ -10,7 +10,7 @@ import { initializeFreshGraph, GRAPHS, DATASET, RV } from '../../services/main/s
 import { appEnvironment, assertSavedStackRawUpdate, assertSavedStackStorage,
   composeProcessEnvironment, devPorts, ensureSecrets, parseOptions, projectName,
   readEnv, replacePrivate, savePrivate, stackDirectory, type StackOptions } from './config.ts';
-import { bootstrapWebAuth } from './web-auth-bootstrap.ts';
+import { bootstrapWebAuth, upgradeWebClient } from './web-auth-bootstrap.ts';
 import { compatibleLoadStorage, loadCompatibility,
   type LoadCompatibility } from '../load/compatibility.ts';
 import { fusekiImageFromCompose } from '../load/image.ts';
@@ -372,7 +372,7 @@ async function prepareDev(options: StackOptions): Promise<Record<string, string>
       redirectUris: options.profile === 'dev'
         ? ['http://localhost:3000/auth/callback', 'http://127.0.0.1:3000/auth/callback']
         : ['http://localhost:3000/auth/callback', 'http://127.0.0.1:3003/auth/callback'] });
-  }
+  } else await upgradeWebClient({ profile: options.profile, runId: options.runId ?? 'dev' });
   const issued = readEnv(runtimePath);
   const publicConfig = JSON.parse(readFileSync(publicPath, 'utf8')) as { clientId: string };
   const overrides = existsSync(overridesFile) ? parseEnv(readFileSync(overridesFile, 'utf8')) : {};
