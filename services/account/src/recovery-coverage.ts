@@ -23,7 +23,7 @@ const TABLES = [
   'rezics_account_security', 'rezics_account_grant', 'rezics_account_operator',
   'rezics_account_operator_bootstrap', 'rezics_account_operator_audit', 'rezics_account_operator_note',
   'rezics_account_operator_command', 'rezics_account_operator_preference', 'rezics_account_operator_job',
-  'rezics_account_operator_job_item',
+  'rezics_account_operator_job_item', 'rezics_display_preferences',
 ] as const;
 const UUID_ID_TABLES = new Set<string>([
   'rezics_account_recovery_activation', 'rezics_account_recovery_approval',
@@ -41,6 +41,7 @@ const KEYS: Record<string, [string, string][]> = {
   rezics_account_operator_command: [['actor_id', 'text'], ['command_id', 'uuid']],
   rezics_account_operator_preference: [['user_id', 'text']],
   rezics_account_operator_job_item: [['job_id', 'uuid'], ['position', 'integer']],
+  rezics_display_preferences: [['user_id', 'text']],
 };
 
 /** Offline coverage of every private Account table at one UTC snapshot. */
@@ -52,9 +53,14 @@ export async function accountRecoveryCoverage(pool: Pool): Promise<AccountRecove
     const schema = await client.query<{ table_name: string }>(
       `SELECT table_name FROM information_schema.tables
        WHERE table_schema = 'public' AND table_type = 'BASE TABLE' ORDER BY table_name`);
-    if (JSON.stringify(schema.rows.map(row => row.table_name)) !==
-      JSON.stringify([...TABLES].sort())) {
-      throw new AccountRecoveryCoverageConflict('Account table set differs from pinned recovery profile');
+    const actual = new Set(schema.rows.map(row => row.table_name));
+    const expected = new Set<string>(TABLES);
+    const missing = [...expected].filter(table => !actual.has(table)).sort();
+    const unexpected = [...actual].filter(table => !expected.has(table)).sort();
+    if (missing.length || unexpected.length) {
+      throw new AccountRecoveryCoverageConflict(
+        `Account table set differs from pinned recovery profile: missing ${JSON.stringify(missing)}; `
+        + `unexpected ${JSON.stringify(unexpected)}`);
     }
     const digest = createHash('sha256');
     let count = 0n;

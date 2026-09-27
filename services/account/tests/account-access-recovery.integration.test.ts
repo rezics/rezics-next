@@ -34,6 +34,7 @@ import { assertAccountSubjectDeletionsAbsent, backfillAccountSubjectDeletions,
   retainAccountSubjectDeletion } from
   '../../main/src/modules/outbox/account-subject-deletion.ts';
 import { sealRecoveryPayload } from '../src/recovery-envelope.ts';
+import { accountRecoveryCoverage, assertAccountRecoveryCoverage } from '../src/recovery-coverage.ts';
 
 const root = resolve(import.meta.dir, '../../..');
 const coverageKey = 'ab'.repeat(32);
@@ -48,6 +49,64 @@ async function freePort(): Promise<number> {
       server.close(() => resolvePort(address.port));
     });
   });
+}
+
+/** Keep these rows in the physical backup and WAL cut, including second-page keys. */
+async function seedCurrentAccountCoverage(pool: Pool): Promise<void> {
+  await pool.query('ALTER TABLE public.rezics_display_preferences RENAME TO recovery_inventory_unexpected');
+  try {
+    await expect(accountRecoveryCoverage(pool)).rejects.toThrow(
+      'missing ["rezics_display_preferences"]; unexpected ["recovery_inventory_unexpected"]');
+  } finally {
+    await pool.query('ALTER TABLE public.recovery_inventory_unexpected RENAME TO rezics_display_preferences');
+  }
+  const prefix = `coverage-${Bun.randomUUIDv7()}`;
+  const user = `${prefix}-1000`;
+  await pool.query(`INSERT INTO public."user"
+    (id, name, email, "emailVerified", "createdAt", "updatedAt", locale)
+    SELECT $1 || '-' || lpad(n::text, 4, '0'), 'Recovery coverage',
+      $1 || '-' || n || '@example.test', true, now(), now(), 'en'
+    FROM generate_series(0, 1000) AS n`, [prefix]);
+  const beforePreferences = await accountRecoveryCoverage(pool);
+  await pool.query(`INSERT INTO public.rezics_display_preferences
+    (user_id, display_mode, show_zone_themes)
+    SELECT $1 || '-' || lpad(n::text, 4, '0'), 'system', true
+    FROM generate_series(0, 1000) AS n`, [prefix]);
+  expect(BigInt((await accountRecoveryCoverage(pool)).rowCount))
+    .toBe(BigInt(beforePreferences.rowCount) + 1001n);
+  await pool.query(`INSERT INTO public.rezics_account_operator_preference (user_id) VALUES ($1)`, [user]);
+  const passkey = Bun.randomUUIDv7();
+  await pool.query(`INSERT INTO public.passkey
+    (id, name, "publicKey", "userId", "credentialID", counter, "deviceType", "backedUp", "createdAt")
+    VALUES ($1, 'Recovery key', 'fixture', $2, $1, 0, 'singleDevice', false, now())`, [passkey, user]);
+  const beforeJob = await accountRecoveryCoverage(pool);
+  const job = Bun.randomUUIDv7();
+  await pool.query(`INSERT INTO public.rezics_account_operator_job
+    (id, actor_id, session_id, command_id, digest, action, reason_code, reason, locale)
+    VALUES ($1, $2, 'coverage-session', $1, 'fixture', 'suspend', 'user-request', 'Recovery fixture', 'en')`,
+  [job, user]);
+  await pool.query(`INSERT INTO public.rezics_account_operator_job_item (job_id, position, user_id)
+    SELECT $1, n, $2 || '-' || lpad(n::text, 4, '0') FROM generate_series(0, 1000) AS n`, [job, prefix]);
+  expect(BigInt((await accountRecoveryCoverage(pool)).rowCount)).toBe(BigInt(beforeJob.rowCount) + 1002n);
+  // A same-count change in each recent table/column must invalidate the retained cut.
+  // The two position-1000 edits also prove text and UUID/integer composite pagination.
+  for (const [sql, key] of [
+    ["UPDATE public.rezics_display_preferences SET display_mode = 'dark' WHERE user_id = $1", user],
+    ["UPDATE public.\"user\" SET locale = 'zh-Hans' WHERE id = $1", user],
+    ["UPDATE public.rezics_account_operator_preference SET density = 'compact' WHERE user_id = $1", user],
+    ['UPDATE public.passkey SET "rezicsLastUsedAt" = now() WHERE id = $1', passkey],
+    ["UPDATE public.rezics_account_operator_job SET locale = 'zh-CN' WHERE id = $1", job],
+    ["UPDATE public.rezics_account_operator_job_item SET state = 'failed' WHERE job_id = $1 AND position = 1000", job],
+  ]) {
+    const retained = await accountRecoveryCoverage(pool);
+    expect((await pool.query(sql!, [key])).rowCount).toBe(1);
+    const changed = await accountRecoveryCoverage(pool);
+    expect(changed.rowCount).toBe(retained.rowCount);
+    expect(changed.rowDigest).not.toBe(retained.rowDigest);
+    await expect(assertAccountRecoveryCoverage(pool, retained))
+      .rejects.toThrow('Account rows differ from retained recovery coverage');
+    await expect(assertAccountRecoveryCoverage(pool, changed)).resolves.toBeUndefined();
+  }
 }
 
 test('OPS03/IAM10 partial: two-owner deletion cut rejects either missing WAL frontier', async () => {
@@ -196,6 +255,7 @@ test('OPS03/IAM10 partial: two-owner deletion cut rejects either missing WAL fro
       } };
     await (await getMigrations(accountAuthOptions(config))).runMigrations();
     await installConsentRefreshFence(account.pool);
+    await seedCurrentAccountCoverage(account.pool);
     for (const file of [...new Bun.Glob('*.sql').scanSync({
       cwd: join(root, 'services/main/migrations/access'),
     })].sort()) {
@@ -280,6 +340,9 @@ test('OPS03/IAM10 partial: two-owner deletion cut rejects either missing WAL fro
       '012_owner_relocation.sql', '013_owner_reconciliation.sql']) {
       await relay.pool.query(readFileSync(join(root, 'services/main/migrations/relay', file), 'utf8'));
     }
+    // Fence before capturing: closing/reopening Access also advances discovery's
+    // covered source revision. Keep the restored owner fenced until verification.
+    const recoveryGeneration = await engageAccessRecoveryFence(access.pool);
     const captured = execFileSync(process.execPath, [cli, 'capture', issuer, subject], {
       cwd: root, env: { ...process.env, ACCOUNT_RECOVERY_DATABASE_URL: accountUrl,
         ACCESS_RECOVERY_DATABASE_URL: accessUrl,
@@ -353,7 +416,6 @@ test('OPS03/IAM10 partial: two-owner deletion cut rejects either missing WAL fro
     await releaseAccessRecoveryFence(accessOlder.pool, olderFence);
     const fullOutbox = await accessOutboxCoverage(accessFull.pool);
     const fullState = await accessStateCoverage(accessFull.pool);
-    const olderAccountFence = await engageAccessRecoveryFence(accessFull.pool);
     await expect(releaseGraphHold(new FusekiClient('http://127.0.0.1:1/rezics'),
       accessFull.pool, relay.pool,
       { dataEpoch: Bun.randomUUIDv7(), routingEpoch: '2' }, {
@@ -363,7 +425,6 @@ test('OPS03/IAM10 partial: two-owner deletion cut rejects either missing WAL fro
         commerce: await captureCommerceRecoveryCoverage(accessFull.pool),
         relay: await relayCoverage(relay.pool, 'deleted-member-release'),
       }, undefined, accountOlder.pool)).rejects.toThrow('Account WAL differs from recovery coverage');
-    await releaseAccessRecoveryFence(accessFull.pool, olderAccountFence);
     expect((await accountOlder.pool.query('SELECT id FROM "user" WHERE id = $1', [subject])).rowCount)
       .toBe(1);
     expect((await accessOlder.pool.query<{ active: boolean }>(
@@ -378,7 +439,6 @@ test('OPS03/IAM10 partial: two-owner deletion cut rejects either missing WAL fro
       'SELECT active FROM access.principal WHERE id = $1', [principalId])).rows[0]?.active).toBe(false);
     await expect(assertDeletionRecoverySet(accountFull.pool, accessFull.pool, retained))
       .resolves.toBeUndefined();
-    const recoveryGeneration = await engageAccessRecoveryFence(accessFull.pool);
     await expect(assertGraphDeletionEvidence(accessFull.pool))
       .rejects.toThrow('Account deletion recovery evidence is incomplete');
     await expect(assertGraphDeletionEvidence(accessFull.pool, {
@@ -451,7 +511,6 @@ test('OPS03/IAM10 partial: two-owner deletion cut rejects either missing WAL fro
       await expect(assertGraphAdmissionOpen(fuseki, nextLineage)).resolves.toBeUndefined();
       await stopFuseki();
     }
-    await releaseAccessRecoveryFence(accessFull.pool, recoveryGeneration);
     const verified = execFileSync(process.execPath, [cli, 'verify', setFile], {
       cwd: root, env: { ...process.env,
         ACCOUNT_RECOVERY_DATABASE_URL: `postgres://127.0.0.1:${accountFull.port}/postgres?user=${process.env.USER}`,
@@ -462,6 +521,7 @@ test('OPS03/IAM10 partial: two-owner deletion cut rejects either missing WAL fro
     await expect(assertDeletionRecoverySet(accountFull.pool, accessFull.pool, {
       ...retained, deletion: { ...retained.deletion, accessPrincipalId: Bun.randomUUIDv7() },
     })).rejects.toBeInstanceOf(DeletionRecoveryConflict);
+    await releaseAccessRecoveryFence(accessFull.pool, recoveryGeneration);
   } finally {
     await app?.stop();
     await stopFuseki();
