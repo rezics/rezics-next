@@ -1,55 +1,23 @@
-# Implementation and documentation workflow
+# Development workflow
 
-Implement the selected Apache Jena architecture through owner contracts and the
-[staged plan](../plan/README.md). Main uses TypeScript/Elysia 2 on Bun and calls Fuseki through HTTP;
-TDB2 and jena-text/Lucene share one JVM. Account/Access retain PostgreSQL. Yarn owns workspace dependencies and the lockfile. Use a
-shared typed model IR, a published OpenAPI description, the first-party Eden client
-and explicit service interfaces. Keep generation reproducible and generated
-outputs separate from authored definitions.
+Start at the [task reading routes](../plan/README.md#task-reading-routes) for the
+contract, implementation owner and acceptance cases of one change. The
+[repository map](repository-structure.md) locates workspaces and generated files;
+the [toolchain](toolchain.md) records pinned tools and root commands. Frontend
+owners are in [web organization](web-features.md), the [design system](design-system.md)
+and [Storybook review](storybook.md).
 
-The [toolchain](toolchain.md) lists pinned runtimes, direct dependencies,
-service images and root commands. Task is the command facade (`task --list`);
-`task dev` runs the shared local backend and frontends under Aspire on fixed
-ports. Tests follow the [executable harness](../testing/test-harness.md):
-`task check` for static checks, `task test` for targeted runs and `task qa` for
-the full suite.
+Run commands from the repository root through Task. `task --list` shows the
+current facade; `task urls` and `task env` show running addresses and masked
+configuration. For a development stack and its cleanup, follow
+[installation](../operations/installation.md). The [disposable local web auth
+fixture](local-web-auth.md) has its own run procedure.
 
-The [repository organization](repository-structure.md) maps executable owners,
-workspaces and generated artifacts. The [graph quickstart](../operations/installation.md)
-is the first independently usable infrastructure recipe, not a complete backend.
-[Web organization](web-features.md), the [design system](design-system.md) and
-[component review](storybook.md) specify frontend boundaries, the Rezics UI
-component library and its theme.
-The [disposable local web authorization fixture](local-web-auth.md) supplies a
-QA-only PKCE client and acting identity for the first Work browser journey.
+Use `task test -- <explicit test files>` for changed behavior. Preview the
+dependency-selected plan with `task test -- --affected --list`, then run
+`task test -- --affected` when appropriate. The [test harness](../testing/test-harness.md)
+explains QA tiers, evidence and `.artifacts/qa/<run-id>/summary.md`.
 
-[Official documentation sources](external-sources.md) maps task-specific upstream
-lookups to local owners, version selection and checked `llms.txt` entry points.
-Use the [task reading routes](../plan/README.md#task-reading-routes) to select the
-local contracts and acceptance needed for one delivery slice.
-
-Documentation integrity tooling uses Python 3.10+ and only the standard library.
-Run it from the repository root during the verification phase:
-
-```sh
-python -B -m unittest discover -s scripts/documentation -p 'test_*.py'
-python -B scripts/documentation/check_docs.py
-```
-
-These checks cover local links, fragments and reachability from the design entry; they do not start or
-qualify Fuseki, PostgreSQL, Main or the frontend. Compiler derivative-integrity
-tests stay with the implemented compiler owner. External URLs, full Markdown
-rendering and semantic ownership are reviewed separately. The checker supports
-ATX headings, explicit HTML anchors, inline links and reference definitions.
-The root goal specification and authored research READMEs are included; installed
-`node_modules` and disposable research `lab` directories are excluded. Follow
-[execution phases](../plan/execution-workflow.md) for checks and commits. A
-documentation-only task does not activate servers, performance experiments
-or runtime implementation. Shell/SPARQL/assembler examples remain recipes until
-an activated implementation scope executes their acceptance. The
-[goal specification](../../GOAL.md) describes the maintainer-activated implementation
-scope and its completion evidence.
-
-Temporary outputs belong to task-owned ignored storage; maintained documents
-never depend on discussion attachments. Create runtime directories/packages with
-their first consumer, rather than treating an empty scaffold as delivered behavior.
+For documentation changes, run `task docs:check`; it checks local links,
+fragments and navigation. It does not qualify runtime behavior or check external
+URLs. Use the [primary-source procedure](external-sources.md) for upstream facts.
