@@ -8,6 +8,7 @@ import {
 import { XIcon } from 'lucide-react';
 import type React from 'react';
 import { cn } from '../utils.ts';
+import { FieldLabel } from './field.tsx';
 import type { InputProps } from './input.tsx';
 import {
   InputGroup,
@@ -17,6 +18,13 @@ import {
 } from './input-group.tsx';
 
 export const useDateInput = useArkDateInput;
+
+/** Date Input does not read Field context, so it takes its own label part. */
+export const DateInputLabel = (props: React.ComponentProps<typeof ArkDateInput.Label>) => (
+  <FieldLabel asChild>
+    <ArkDateInput.Label data-slot="date-input-label" {...props} />
+  </FieldLabel>
+);
 export const useDateInputContext = useArkDateInputContext;
 
 interface DateInputProps
@@ -55,6 +63,7 @@ export const DateInput = (props: DateInputProps) => {
     shouldForceLeadingZeros = true,
     separator = '-',
     className,
+    children,
     ...rest
   } = props;
 
@@ -67,6 +76,8 @@ export const DateInput = (props: DateInputProps) => {
       shouldForceLeadingZeros={shouldForceLeadingZeros}
       {...rest}
     >
+      {/* Children render above the control, for a DateInputLabel. */}
+      {children}
       <DateInputControl showClear={showClear} size={size}>
         <DateInputSegmentGroup index={0} />
         {selectionMode === 'range' && (
@@ -135,7 +146,7 @@ const DateInputSegmentGroup = (props: React.ComponentProps<typeof ArkDateInput.S
 
   return (
     <ArkDateInput.SegmentGroup
-      className={cn('flex min-w-0 grow items-center gap-px', className)}
+      className={cn('flex min-w-0 items-center gap-px', className)}
       data-slot="date-input-segment-group"
       index={index}
       {...rest}
@@ -157,8 +168,9 @@ const DateInputSegment = (props: React.ComponentProps<typeof ArkDateInput.Segmen
         'rounded-sm border-0 shadow-none ring-0',
         'not-data-[type=literal]:px-0.5',
         'not-data-[type=literal]:focus:bg-primary not-data-[type=literal]:focus:text-primary-foreground',
-        'data-[type=literal]:select-none data-[type=literal]:px-px data-[type=literal]:text-muted-foreground/64',
-        'data-placeholder-shown:text-muted-foreground/64',
+        'data-[type=literal]:select-none data-[type=literal]:px-px data-[type=literal]:text-muted-foreground',
+        // Placeholder segments are real text, so they need the full muted tone for 4.5:1.
+        'data-placeholder-shown:text-muted-foreground',
         'outline-none',
         'data-readonly:cursor-default',
         'group-aria-invalid/date-input:text-destructive group-data-invalid/date-input:text-destructive',
