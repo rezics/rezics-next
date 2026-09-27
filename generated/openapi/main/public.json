@@ -137812,7 +137812,10 @@
                     "type": "string"
                   },
                   "profile": {
-                    "const": "mod-native-capture-v1",
+                    "enum": [
+                      "mod-native-capture-v1",
+                      "mod-native-capture-v2"
+                    ],
                     "type": "string"
                   },
                   "root": {
@@ -137960,7 +137963,10 @@
                     "type": "string"
                   },
                   "profile": {
-                    "const": "mod-native-capture-v1",
+                    "enum": [
+                      "mod-native-capture-v1",
+                      "mod-native-capture-v2"
+                    ],
                     "type": "string"
                   },
                   "root": {
@@ -138108,7 +138114,10 @@
                     "type": "string"
                   },
                   "profile": {
-                    "const": "mod-native-capture-v1",
+                    "enum": [
+                      "mod-native-capture-v1",
+                      "mod-native-capture-v2"
+                    ],
                     "type": "string"
                   },
                   "root": {
@@ -138384,7 +138393,10 @@
                           "type": "object"
                         },
                         "profile": {
-                          "const": "mod-native-capture-receipt-v1",
+                          "enum": [
+                            "mod-native-capture-receipt-v1",
+                            "mod-native-capture-receipt-v2"
+                          ],
                           "type": "string"
                         },
                         "request": {
@@ -138475,7 +138487,10 @@
                               "type": "string"
                             },
                             "profile": {
-                              "const": "mod-native-capture-v1",
+                              "enum": [
+                                "mod-native-capture-v1",
+                                "mod-native-capture-v2"
+                              ],
                               "type": "string"
                             },
                             "root": {
@@ -138774,7 +138789,10 @@
                           "type": "object"
                         },
                         "profile": {
-                          "const": "mod-native-capture-receipt-v1",
+                          "enum": [
+                            "mod-native-capture-receipt-v1",
+                            "mod-native-capture-receipt-v2"
+                          ],
                           "type": "string"
                         },
                         "request": {
@@ -138865,7 +138883,10 @@
                               "type": "string"
                             },
                             "profile": {
-                              "const": "mod-native-capture-v1",
+                              "enum": [
+                                "mod-native-capture-v1",
+                                "mod-native-capture-v2"
+                              ],
                               "type": "string"
                             },
                             "root": {
@@ -139399,7 +139420,10 @@
                       "type": "object"
                     },
                     "profile": {
-                      "const": "mod-native-capture-receipt-v1",
+                      "enum": [
+                        "mod-native-capture-receipt-v1",
+                        "mod-native-capture-receipt-v2"
+                      ],
                       "type": "string"
                     },
                     "request": {
@@ -139490,7 +139514,10 @@
                           "type": "string"
                         },
                         "profile": {
-                          "const": "mod-native-capture-v1",
+                          "enum": [
+                            "mod-native-capture-v1",
+                            "mod-native-capture-v2"
+                          ],
                           "type": "string"
                         },
                         "root": {
