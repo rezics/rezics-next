@@ -8,20 +8,29 @@ import { buttonVariants } from './button.tsx';
 
 export const useToggle = useToggleContext;
 
+// Pressed toggles use the accent surface, the Rezics color for selected states; sizes
+// match Button (32/36/40px).
 export const toggleVariants = tv({
   base: [
     'relative',
-    'data-[state=on]:bg-input/64 dark:data-[state=on]:bg-input/64',
+    'text-muted-foreground hover:text-foreground',
+    'data-[state=on]:bg-accent data-[state=on]:text-accent-foreground',
+    'data-[state=on]:hover:bg-accent data-[state=on]:hover:text-accent-foreground',
     'pointer-coarse:after:absolute pointer-coarse:after:size-full pointer-coarse:after:min-h-11 pointer-coarse:after:min-w-11',
   ],
   variants: {
+    variant: {
+      ghost: '',
+      outline: 'data-[state=on]:border-primary/40',
+    },
     size: {
-      sm: 'h-7 min-w-7 px-1.5',
-      md: 'h-8 min-w-8 px-2',
-      lg: 'h-9 min-w-9 px-2.5',
+      sm: 'h-8 min-w-8 px-2 text-xs',
+      md: 'h-9 min-w-9 px-2.5',
+      lg: 'h-10 min-w-10 px-3',
     },
   },
   defaultVariants: {
+    variant: 'ghost',
     size: 'md',
   },
 });
@@ -32,7 +41,7 @@ export interface ToggleProps
   /**
    * The variant of the toggle
    *
-   * @default "outline"
+   * @default "ghost"
    */
   variant?: Extract<VariantProps<typeof buttonVariants>['variant'], 'outline' | 'ghost'>;
 }
@@ -44,7 +53,7 @@ export const Toggle = (props: ToggleProps) => {
     <ArkToggle.Root
       className={cn(
         buttonVariants({ variant, clickEffect: false }),
-        toggleVariants({ size }),
+        toggleVariants({ variant, size }),
         className,
       )}
       data-slot="toggle"

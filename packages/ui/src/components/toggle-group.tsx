@@ -7,7 +7,8 @@ import {
 import React from 'react';
 import { tv } from 'tailwind-variants';
 import { cn } from '../utils.ts';
-import { Toggle, type ToggleProps } from './toggle.tsx';
+import { buttonVariants } from './button.tsx';
+import { type ToggleProps, toggleVariants } from './toggle.tsx';
 
 export const useToggleGroup = useArkToggleGroupContext;
 
@@ -26,8 +27,16 @@ interface ToggleGroupProps
   extends React.ComponentProps<typeof ArkToggleGroup.Root>,
     ToggleGroupContextProps {}
 
+// Aura: items keep their own rounding. With no spacing, an outline group becomes one
+// bordered tray and its items drop their borders, like a segmented control.
 const toggleGroupVariants = tv({
-  base: ['w-fit', 'flex items-center gap-[--spacing(var(--gap))]', 'rounded-xl'],
+  base: [
+    'w-fit',
+    'flex items-center gap-[--spacing(var(--gap))]',
+    'rounded-2xl',
+    'data-[spacing=0]:data-[variant=outline]:gap-1 data-[spacing=0]:data-[variant=outline]:border',
+    'data-[spacing=0]:data-[variant=outline]:border-border/60 data-[spacing=0]:data-[variant=outline]:bg-card data-[spacing=0]:data-[variant=outline]:p-1',
+  ],
   variants: {
     orientation: {
       horizontal: 'flex-row pointer-coarse:*:after:min-w-auto',
@@ -56,6 +65,8 @@ export const ToggleGroup = (props: ToggleGroupProps) => {
       <ArkToggleGroup.Root
         className={cn(toggleGroupVariants({ orientation }), className)}
         data-slot="toggle-group"
+        data-spacing={spacing}
+        data-variant={variant}
         multiple={multiple}
         orientation={orientation}
         style={
@@ -72,34 +83,29 @@ export const ToggleGroup = (props: ToggleGroupProps) => {
 
 interface ToggleGroupItemProps extends React.ComponentProps<typeof ArkToggleGroup.Item> {}
 
+// The item carries the toggle styles itself: wrapping Ark's standalone Toggle would add a
+// second state machine, a stale aria-pressed on role="radio" items and broken roving focus.
 export const ToggleGroupItem = (props: ToggleGroupItemProps) => {
-  const { value, className, ...rest } = props;
+  const { className, ...rest } = props;
 
-  const { variant, size, spacing } = _useToggleGroup();
+  const { variant = 'ghost', size = 'md', spacing } = _useToggleGroup();
 
   return (
-    <ArkToggleGroup.Item asChild data-slot="toggle-group-item" value={value}>
-      <Toggle
-        className={cn(
-          'shrink-0 focus:z-10 focus-visible:z-10',
-          'data-[spacing=0]:rounded-none',
-          'data-[spacing=0]:px-2',
-          'data-[orientation=horizontal]:data-[spacing=0]:first:rounded-l-xl',
-          'data-[orientation=vertical]:data-[spacing=0]:first:rounded-t-xl',
-          'data-[orientation=horizontal]:data-[spacing=0]:last:rounded-r-xl',
-          'data-[orientation=vertical]:data-[spacing=0]:last:rounded-b-xl',
-          'data-[orientation=horizontal]:data-[spacing=0]:data-[variant=outline]:border-l-0',
-          'data-[orientation=vertical]:data-[spacing=0]:data-[variant=outline]:border-t-0',
-          'data-[orientation=horizontal]:data-[spacing=0]:data-[variant=outline]:first:border-l',
-          className,
-        )}
-        data-spacing={spacing}
-        data-variant={variant}
-        size={size}
-        variant={variant}
-        {...rest}
-      />
-    </ArkToggleGroup.Item>
+    <ArkToggleGroup.Item
+      className={cn(
+        buttonVariants({ variant, clickEffect: false }),
+        toggleVariants({ variant, size }),
+        'shrink-0 focus:z-10 focus-visible:z-10',
+        'data-[spacing=0]:data-[variant=outline]:border-transparent',
+        'data-[spacing=0]:data-[variant=outline]:data-[state=off]:bg-transparent',
+        'dark:data-[spacing=0]:data-[variant=outline]:data-[state=off]:bg-transparent',
+        className,
+      )}
+      data-slot="toggle-group-item"
+      data-spacing={spacing}
+      data-variant={variant}
+      {...rest}
+    />
   );
 };
 
