@@ -21,14 +21,8 @@ const meta = {
     },
   },
   decorators: [
-    (Story, context) => (
-      <main
-        className={
-          context.name === 'Dark Mode'
-            ? 'dark aura-canvas min-h-screen bg-background p-6'
-            : 'aura-canvas min-h-screen bg-background p-6'
-        }
-      >
+    (Story) => (
+      <main className={'aura-canvas min-h-screen bg-background p-6'}>
         <div className="mx-auto max-w-2xl pt-8">
           <Story />
         </div>
@@ -47,7 +41,7 @@ const Crop = ({
   dark?: boolean;
   cropShape?: 'rectangle' | 'circle';
 }) => (
-  <div className={dark ? 'dark rounded-2xl bg-background p-5 text-foreground' : undefined}>
+  <div className={dark ? 'rounded-2xl bg-background p-5 text-foreground' : undefined}>
     <p className="mb-3 font-medium text-foreground">Crop a Realm cover</p>
     <ImageCropper
       aria-label="Crop the Realm cover image"
@@ -80,4 +74,4 @@ export const RealmCover: Story = {
 };
 
 export const CircularCrop: Story = { render: () => <Crop cropShape="circle" /> };
-export const DarkMode: Story = { render: () => <Crop dark /> };
+export const DarkMode: Story = { globals: { theme: 'dark' }, render: () => <Crop dark /> };

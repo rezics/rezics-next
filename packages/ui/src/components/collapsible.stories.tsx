@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, fn, userEvent, waitFor, within } from 'storybook/test';
-import { withTheme } from '../stories/support.tsx';
+import { withSurface } from '../stories/support.tsx';
 import { Button } from './button.tsx';
 import {
   Collapsible,
@@ -13,7 +13,7 @@ const meta = {
   title: 'Rezics UI/Collapsible',
   component: Collapsible,
   tags: ['autodocs'],
-  decorators: [withTheme],
+  decorators: [withSurface],
   args: { onOpenChange: fn() },
 } satisfies Meta<typeof Collapsible>;
 export default meta;
@@ -132,5 +132,5 @@ export const Chinese: Story = {
 
 export const Dark: Story = {
   ...Spoiler,
-  parameters: { theme: 'dark' },
+  globals: { theme: 'dark' },
 };

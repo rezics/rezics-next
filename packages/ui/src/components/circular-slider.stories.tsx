@@ -14,13 +14,9 @@ const meta = {
     },
   },
   decorators: [
-    (Story, context) => (
+    (Story) => (
       <main
-        className={
-          context.name === 'Dark Mode'
-            ? 'dark aura-canvas flex min-h-screen items-center justify-center bg-background p-6'
-            : 'aura-canvas flex min-h-screen items-center justify-center bg-background p-6'
-        }
+        className={'aura-canvas flex min-h-screen items-center justify-center bg-background p-6'}
       >
         <Story />
       </main>
@@ -40,7 +36,7 @@ const Dial = ({
   disabled?: boolean;
   size?: number;
 }) => (
-  <div className={dark ? 'dark rounded-2xl bg-background p-8 text-foreground' : 'p-8'}>
+  <div className={dark ? 'rounded-2xl bg-background p-8 text-foreground' : 'p-8'}>
     <div className="flex flex-col items-center gap-4">
       <CircularSlider
         aria-label="Reading session target"
@@ -62,4 +58,4 @@ const Dial = ({
 export const Standard: Story = { render: () => <Dial /> };
 export const Compact: Story = { render: () => <Dial size={96} /> };
 export const Disabled: Story = { render: () => <Dial disabled /> };
-export const DarkMode: Story = { render: () => <Dial dark /> };
+export const DarkMode: Story = { globals: { theme: 'dark' }, render: () => <Dial dark /> };

@@ -8,7 +8,6 @@ import {
   SearchIcon,
 } from 'lucide-react';
 import { expect, userEvent, within } from 'storybook/test';
-import { cn } from '../utils.ts';
 import { Button } from './button.tsx';
 import { ButtonGroup, ButtonGroupSeparator, ButtonGroupText } from './button-group.tsx';
 import { Input } from './input.tsx';
@@ -28,7 +27,7 @@ const meta = {
   args: { 'aria-label': 'Chapter navigation' },
   decorators: [
     (Story, { parameters }) => (
-      <div className={cn(parameters.theme === 'dark' && 'dark')}>
+      <div>
         <div className="flex min-h-32 flex-col items-start gap-6 bg-background p-6 font-sans text-foreground">
           <Story />
         </div>
@@ -176,7 +175,7 @@ export const LongContent: Story = {
 };
 
 export const Dark: Story = {
-  parameters: { theme: 'dark' },
+  globals: { theme: 'dark' },
   render: (args, context) => (
     <>
       {meta.render(args)}

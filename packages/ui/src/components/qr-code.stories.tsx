@@ -15,13 +15,9 @@ const meta = {
     },
   },
   decorators: [
-    (Story, context) => (
+    (Story) => (
       <main
-        className={
-          context.name === 'Dark Mode'
-            ? 'dark aura-canvas flex min-h-screen items-center justify-center bg-background p-6'
-            : 'aura-canvas flex min-h-screen items-center justify-center bg-background p-6'
-        }
+        className={'aura-canvas flex min-h-screen items-center justify-center bg-background p-6'}
       >
         <Story />
       </main>
@@ -33,7 +29,7 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 
 const RealmCode = ({ dark = false }: { dark?: boolean }) => (
-  <div className={dark ? 'dark rounded-2xl bg-background p-6 text-foreground' : 'p-6'}>
+  <div className={dark ? 'rounded-2xl bg-background p-6 text-foreground' : 'p-6'}>
     <figure className="grid justify-items-center gap-3">
       <QrCode
         data-testid="science-fiction-realm-code"
@@ -69,4 +65,4 @@ export const RealmLink: Story = {
   },
 };
 
-export const DarkMode: Story = { render: () => <RealmCode dark /> };
+export const DarkMode: Story = { globals: { theme: 'dark' }, render: () => <RealmCode dark /> };

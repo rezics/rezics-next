@@ -8,7 +8,6 @@ import {
   TableIcon,
 } from 'lucide-react';
 import { expect, userEvent, within } from 'storybook/test';
-import { cn } from '../utils.ts';
 import { ToggleGroup, ToggleGroupItem } from './toggle-group.tsx';
 
 const meta = {
@@ -26,7 +25,7 @@ const meta = {
   args: { 'aria-label': 'Text formatting', defaultValue: ['bold'] },
   decorators: [
     (Story, { parameters }) => (
-      <div className={cn(parameters.theme === 'dark' && 'dark')}>
+      <div>
         <div className="flex min-h-32 flex-col items-start gap-4 bg-background p-6 font-sans text-foreground">
           <Story />
         </div>
@@ -152,7 +151,7 @@ export const Disabled: Story = {
 };
 
 export const Dark: Story = {
-  parameters: { theme: 'dark' },
+  globals: { theme: 'dark' },
   render: (args) => (
     <>
       {meta.render(args)}

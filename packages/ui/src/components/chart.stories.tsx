@@ -29,14 +29,8 @@ const meta = {
     },
   },
   decorators: [
-    (Story, context) => (
-      <main
-        className={
-          context.name === 'Dark Mode'
-            ? 'dark aura-canvas min-h-screen bg-background p-6'
-            : 'aura-canvas min-h-screen bg-background p-6'
-        }
-      >
+    (Story) => (
+      <main className={'aura-canvas min-h-screen bg-background p-6'}>
         <div className="mx-auto max-w-3xl pt-10">
           <Story />
         </div>
@@ -49,7 +43,7 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 
 const RatingsChart = ({ dark = false, empty = false }: { dark?: boolean; empty?: boolean }) => (
-  <div className={dark ? 'dark rounded-2xl bg-background p-4 text-foreground' : undefined}>
+  <div className={dark ? 'rounded-2xl bg-background p-4 text-foreground' : undefined}>
     <figure>
       <figcaption className="mb-3">
         <h2 className="font-semibold text-foreground text-lg">Realm ratings this year</h2>
@@ -83,4 +77,4 @@ const RatingsChart = ({ dark = false, empty = false }: { dark?: boolean; empty?:
 
 export const RatingsOverTime: Story = { render: () => <RatingsChart /> };
 export const Empty: Story = { render: () => <RatingsChart empty /> };
-export const DarkMode: Story = { render: () => <RatingsChart dark /> };
+export const DarkMode: Story = { globals: { theme: 'dark' }, render: () => <RatingsChart dark /> };

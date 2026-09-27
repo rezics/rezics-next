@@ -1,14 +1,14 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { BookOpenIcon, LibraryIcon, MessagesSquareIcon, StarIcon } from 'lucide-react';
 import { expect, fn, userEvent, waitFor, within } from 'storybook/test';
-import { withTheme } from '../stories/support.tsx';
+import { withSurface } from '../stories/support.tsx';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './tabs.tsx';
 
 const meta = {
   title: 'Rezics UI/Tabs',
   component: Tabs,
   tags: ['autodocs'],
-  decorators: [withTheme],
+  decorators: [withSurface],
   args: { defaultValue: 'overview', onValueChange: fn() },
 } satisfies Meta<typeof Tabs>;
 export default meta;
@@ -143,10 +143,10 @@ export const Chinese: Story = {
 
 export const Dark: Story = {
   ...Default,
-  parameters: { theme: 'dark' },
+  globals: { theme: 'dark' },
 };
 
 export const DarkUnderline: Story = {
   ...Underline,
-  parameters: { theme: 'dark' },
+  globals: { theme: 'dark' },
 };

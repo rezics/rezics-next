@@ -1,13 +1,13 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, userEvent, within } from 'storybook/test';
-import { withTheme } from '../stories/support.tsx';
+import { withSurface } from '../stories/support.tsx';
 import { SkipNavContent, SkipNavLink } from './skip-nav.tsx';
 
 const meta = {
   title: 'Rezics UI/Skip Nav',
   component: SkipNavLink,
   tags: ['autodocs'],
-  decorators: [withTheme],
+  decorators: [withSurface],
   parameters: {
     padded: false,
   },
@@ -78,5 +78,6 @@ export const Chinese: Story = {
 
 export const Dark: Story = {
   ...Focused,
-  parameters: { theme: 'dark', padded: false },
+  globals: { theme: 'dark' },
+  parameters: { padded: false },
 };

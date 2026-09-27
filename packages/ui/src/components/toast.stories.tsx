@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, fn, screen, userEvent, waitFor, within } from 'storybook/test';
-import { dismissed, settled, withTheme } from '../stories/support.tsx';
+import { dismissed, settled, withSurface } from '../stories/support.tsx';
 import { Button } from './button.tsx';
 import { Toaster, toast } from './toast.tsx';
 
@@ -25,7 +25,7 @@ const meta = {
   title: 'Rezics UI/Toast',
   component: Toaster,
   tags: ['autodocs'],
-  decorators: [withTheme],
+  decorators: [withSurface],
   beforeEach: () => () => toast.remove(),
   parameters: {
     docs: {
@@ -176,5 +176,5 @@ export const Chinese: Story = {
 
 export const Dark: Story = {
   ...Types,
-  parameters: { theme: 'dark' },
+  globals: { theme: 'dark' },
 };

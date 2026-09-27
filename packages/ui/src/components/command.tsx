@@ -135,6 +135,7 @@ export const CommandContent = (props: React.ComponentProps<typeof ArkCombobox.Co
 
   return (
     <ArkCombobox.Content
+      aria-label="Command results"
       hidden={empty || undefined}
       className={cn(
         'flex flex-1 flex-col',
@@ -169,8 +170,7 @@ export const CommandInput = (props: CommandInputProps) => {
   );
 };
 
-// CommandContent is already the listbox. Ark's List part would sit between it and the
-// options with a stray aria-labelledby, which axe reports as a disallowed listbox child.
+// Ark renders CommandContent as a dialog; the options need a listbox parent.
 export const CommandList = (props: React.ComponentProps<'div'>) => {
   const { className, ...rest } = props;
 
@@ -178,7 +178,9 @@ export const CommandList = (props: React.ComponentProps<'div'>) => {
     <div className="max-h-72 min-h-0 flex-1">
       <div
         className={cn('flex flex-1 flex-col pr-2.5', className)}
+        aria-label="Commands"
         data-slot="command-list"
+        role="listbox"
         {...rest}
       />
     </div>

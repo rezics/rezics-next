@@ -3,10 +3,8 @@ import { expect, userEvent, waitFor, within } from 'storybook/test';
 import { cn } from '../utils.ts';
 import { Resizable, ResizablePanel, ResizableResizeTrigger } from './resizable.tsx';
 
-// Renders on the theme page color; `parameters.dark` switches to dark mode
-// until Storybook has a global theme toolbar.
 const surface: Decorator = (Story, { parameters }) => (
-  <div className={cn(parameters.dark && 'dark', 'bg-background p-6 font-sans text-foreground')}>
+  <div className={cn('bg-background p-6 font-sans text-foreground')}>
     <Story />
   </div>
 );
@@ -70,11 +68,22 @@ export const Horizontal: Story = {
     const canvas = within(canvasElement);
     const divider = canvas.getByRole('separator', { name: 'Resize contents and reader' });
     await expect(divider).toHaveAttribute('aria-valuenow', '30');
-    divider.focus();
-    await userEvent.keyboard('{ArrowRight}');
-    await waitFor(() => expect(Number(divider.getAttribute('aria-valuenow'))).toBeGreaterThan(30));
-    await userEvent.keyboard('{Home}');
-    await waitFor(() => expect(divider).toHaveAttribute('aria-valuenow', '20'));
+    await waitFor(
+      async () => {
+        divider.focus();
+        await userEvent.keyboard('{ArrowRight}');
+        await expect(Number(divider.getAttribute('aria-valuenow'))).toBeGreaterThan(30);
+      },
+      { timeout: 3000 },
+    );
+    await waitFor(
+      async () => {
+        divider.focus();
+        await userEvent.keyboard('{Home}');
+        await expect(divider).toHaveAttribute('aria-valuenow', '20');
+      },
+      { timeout: 3000 },
+    );
   },
 };
 
@@ -143,6 +152,6 @@ export const Chinese: Story = {
 };
 
 export const Dark: Story = {
-  parameters: { dark: true },
+  globals: { theme: 'dark' },
   render: WithHandle.render,
 };

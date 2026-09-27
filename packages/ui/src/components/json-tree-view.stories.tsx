@@ -25,14 +25,8 @@ const meta = {
     },
   },
   decorators: [
-    (Story, context) => (
-      <main
-        className={
-          context.name === 'Dark Mode'
-            ? 'dark aura-canvas min-h-screen bg-background p-6'
-            : 'aura-canvas min-h-screen bg-background p-6'
-        }
-      >
+    (Story) => (
+      <main className={'aura-canvas min-h-screen bg-background p-6'}>
         <div className="mx-auto max-w-2xl rounded-2xl border border-border/60 bg-card p-5 shadow-[var(--aura-shadow-card)]">
           <Story />
         </div>
@@ -62,8 +56,9 @@ export const Empty: Story = {
 };
 
 export const DarkMode: Story = {
+  globals: { theme: 'dark' },
   render: () => (
-    <div className="dark rounded-2xl bg-background p-5 text-foreground">
+    <div className="rounded-2xl bg-background p-5 text-foreground">
       <JsonTreeView data={workRecord} defaultExpandedDepth={10} />
     </div>
   ),

@@ -10,7 +10,7 @@ import {
   UsersIcon,
 } from 'lucide-react';
 import { expect, screen, userEvent, within } from 'storybook/test';
-import { dismissed, settled, withTheme } from '../stories/support.tsx';
+import { dismissed, settled, withSurface } from '../stories/support.tsx';
 import { Avatar, AvatarFallback } from './avatar.tsx';
 import {
   Sidebar,
@@ -41,7 +41,7 @@ const meta = {
   title: 'Rezics UI/Sidebar',
   component: Sidebar,
   tags: ['autodocs'],
-  decorators: [withTheme],
+  decorators: [withSurface],
   parameters: {
     padded: false,
     docs: {
@@ -336,5 +336,6 @@ export const Chinese: Story = {
 
 export const Dark: Story = {
   ...Default,
-  parameters: { theme: 'dark', padded: false },
+  globals: { theme: 'dark' },
+  parameters: { padded: false },
 };

@@ -2,7 +2,7 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import { CompassIcon, HomeIcon, InboxIcon, LibraryIcon, PlusIcon } from 'lucide-react';
 import React from 'react';
 import { expect, userEvent, within } from 'storybook/test';
-import { withTheme } from '../stories/support.tsx';
+import { withSurface } from '../stories/support.tsx';
 import {
   BottomNavigation,
   BottomNavigationItem,
@@ -15,7 +15,7 @@ const meta = {
   title: 'Rezics UI/Bottom Navigation',
   component: BottomNavigation,
   tags: ['autodocs'],
-  decorators: [withTheme],
+  decorators: [withSurface],
   parameters: {
     padded: false,
     docs: {
@@ -172,5 +172,6 @@ export const Chinese: Story = {
 
 export const Dark: Story = {
   ...Default,
-  parameters: { theme: 'dark', padded: false },
+  globals: { theme: 'dark' },
+  parameters: { padded: false },
 };

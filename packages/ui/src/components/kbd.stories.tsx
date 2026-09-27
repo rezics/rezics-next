@@ -4,10 +4,8 @@ import { expect, within } from 'storybook/test';
 import { cn } from '../utils.ts';
 import { Kbd, KbdGroup } from './kbd.tsx';
 
-// Renders on the theme page color; `parameters.dark` switches to dark mode
-// until Storybook has a global theme toolbar.
 const surface: Decorator = (Story, { parameters }) => (
-  <div className={cn(parameters.dark && 'dark', 'bg-background p-6 font-sans text-foreground')}>
+  <div className={cn('bg-background p-6 font-sans text-foreground')}>
     <Story />
   </div>
 );
@@ -49,7 +47,7 @@ export const Variants: Story = {
 export const Combination: Story = {
   render: () => (
     <div className="flex flex-col gap-3 text-sm">
-      <p className="flex items-center gap-2">
+      <div className="flex items-center gap-2">
         Open the command palette
         <KbdGroup aria-label="Command K" role="group">
           <Kbd>
@@ -57,8 +55,8 @@ export const Combination: Story = {
           </Kbd>
           <Kbd>K</Kbd>
         </KbdGroup>
-      </p>
-      <p className="flex items-center gap-2">
+      </div>
+      <div className="flex items-center gap-2">
         Rate the Work you are reading
         <KbdGroup>
           <Kbd>Shift</Kbd>
@@ -67,7 +65,7 @@ export const Combination: Story = {
           <span className="text-muted-foreground">to</span>
           <Kbd>5</Kbd>
         </KbdGroup>
-      </p>
+      </div>
     </div>
   ),
   async play({ canvasElement }) {
@@ -95,7 +93,7 @@ export const Chinese: Story = {
 };
 
 export const Dark: Story = {
-  parameters: { dark: true },
+  globals: { theme: 'dark' },
   render: () => (
     <div className="flex items-center gap-3 text-sm">
       <Kbd>Esc</Kbd>

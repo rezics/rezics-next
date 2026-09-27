@@ -15,14 +15,8 @@ const meta = {
     },
   },
   decorators: [
-    (Story, context) => (
-      <main
-        className={
-          context.name === 'Dark Mode'
-            ? 'dark aura-canvas min-h-screen bg-background p-6'
-            : 'aura-canvas min-h-screen bg-background p-6'
-        }
-      >
+    (Story) => (
+      <main className={'aura-canvas min-h-screen bg-background p-6'}>
         <div className="mx-auto w-full max-w-xl pt-8">
           <Story />
         </div>
@@ -35,7 +29,7 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 
 const Signature = ({ dark = false, disabled = false }: { dark?: boolean; disabled?: boolean }) => (
-  <div className={dark ? 'dark rounded-2xl bg-background p-5 text-foreground' : 'p-5'}>
+  <div className={dark ? 'rounded-2xl bg-background p-5 text-foreground' : 'p-5'}>
     <p className="mb-2 font-medium text-foreground">Moderator acknowledgement</p>
     <SignaturePad
       defaultPaths={['M 20 80 C 40 24, 78 24, 108 74']}
@@ -64,4 +58,13 @@ export const Acknowledgement: Story = {
 };
 
 export const Disabled: Story = { render: () => <Signature disabled /> };
-export const DarkMode: Story = { render: () => <Signature dark /> };
+export const DarkMode: Story = {
+  globals: { theme: 'dark' },
+  render: () => <Signature dark />,
+  async play({ canvasElement }) {
+    const path = canvasElement.querySelector('[data-part="segment-path"]');
+    await expect(path).toBeInTheDocument();
+    await expect(getComputedStyle(path!).fill).toBe('none');
+    await expect(getComputedStyle(path!).stroke).not.toBe('none');
+  },
+};

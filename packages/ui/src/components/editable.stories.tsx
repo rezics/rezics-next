@@ -1,7 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { CheckIcon, PencilIcon, XIcon } from 'lucide-react';
 import { expect, userEvent, waitFor, within } from 'storybook/test';
-import { cn } from '../utils.ts';
 import { Button } from './button.tsx';
 import {
   Editable,
@@ -53,7 +52,7 @@ const meta = {
   },
   decorators: [
     (Story, { parameters }) => (
-      <div className={cn(parameters.theme === 'dark' && 'dark')}>
+      <div>
         <div className="min-h-40 bg-background p-6 font-sans text-foreground">
           <div className="flex max-w-md flex-col gap-6">
             <Story />
@@ -149,7 +148,7 @@ export const Chinese: Story = {
 };
 
 export const Dark: Story = {
-  parameters: { theme: 'dark' },
+  globals: { theme: 'dark' },
   render: (args) => (
     <>
       {meta.render(args)}

@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, fireEvent, fn, screen, userEvent, within } from 'storybook/test';
-import { dismissed, settled, withTheme } from '../stories/support.tsx';
+import { dismissed, settled, withSurface } from '../stories/support.tsx';
 import {
   ContextMenu,
   ContextMenuContent,
@@ -18,7 +18,7 @@ const meta = {
   title: 'Rezics UI/Context Menu',
   component: ContextMenu,
   tags: ['autodocs'],
-  decorators: [withTheme],
+  decorators: [withSurface],
   args: { onSelect: fn() },
   parameters: {
     docs: {
@@ -136,5 +136,5 @@ export const Chinese: Story = {
 
 export const Dark: Story = {
   ...Default,
-  parameters: { theme: 'dark' },
+  globals: { theme: 'dark' },
 };

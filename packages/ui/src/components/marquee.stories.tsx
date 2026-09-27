@@ -22,14 +22,8 @@ const meta = {
     },
   },
   decorators: [
-    (Story, context) => (
-      <main
-        className={
-          context.name === 'Dark Mode'
-            ? 'dark aura-canvas flex min-h-screen items-center bg-background p-6'
-            : 'aura-canvas flex min-h-screen items-center bg-background p-6'
-        }
-      >
+    (Story) => (
+      <main className={'aura-canvas flex min-h-screen items-center bg-background p-6'}>
         <div className="mx-auto w-full max-w-3xl">
           <Story />
         </div>
@@ -48,7 +42,7 @@ const RealmStream = ({
   dark?: boolean;
   orientation?: 'horizontal' | 'vertical';
 }) => (
-  <section className={dark ? 'dark rounded-2xl bg-background p-6 text-foreground' : 'p-6'}>
+  <section className={dark ? 'rounded-2xl bg-background p-6 text-foreground' : 'p-6'}>
     <h2 className="mb-4 font-semibold text-foreground">Active reading communities</h2>
     <Marquee
       aria-label="Active reading communities"
@@ -71,4 +65,4 @@ const RealmStream = ({
 
 export const Horizontal: Story = { render: () => <RealmStream /> };
 export const Vertical: Story = { render: () => <RealmStream orientation="vertical" /> };
-export const DarkMode: Story = { render: () => <RealmStream dark /> };
+export const DarkMode: Story = { globals: { theme: 'dark' }, render: () => <RealmStream dark /> };

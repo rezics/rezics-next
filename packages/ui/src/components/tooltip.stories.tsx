@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { ArrowBigDownIcon, ArrowBigUpIcon, BookmarkIcon, Share2Icon } from 'lucide-react';
 import { expect, screen, userEvent, within } from 'storybook/test';
-import { dismissed, settled, withTheme } from '../stories/support.tsx';
+import { dismissed, settled, withSurface } from '../stories/support.tsx';
 import { Button } from './button.tsx';
 import { Tooltip, TooltipContent, TooltipTrigger } from './tooltip.tsx';
 
@@ -9,7 +9,7 @@ const meta = {
   title: 'Rezics UI/Tooltip',
   component: Tooltip,
   tags: ['autodocs'],
-  decorators: [withTheme],
+  decorators: [withSurface],
   parameters: {
     docs: {
       story: { inline: false, iframeHeight: 240 },
@@ -140,5 +140,5 @@ export const Chinese: Story = {
 
 export const Dark: Story = {
   ...Default,
-  parameters: { theme: 'dark' },
+  globals: { theme: 'dark' },
 };

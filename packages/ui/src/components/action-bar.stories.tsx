@@ -1,8 +1,7 @@
 import type { Decorator, Meta, StoryObj } from '@storybook/react-vite';
 import { EyeOffIcon, ShieldCheckIcon, XIcon } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { expect, fn, userEvent, waitFor, within } from 'storybook/test';
-import { cn } from '../utils.ts';
 import {
   ActionBar,
   ActionBarBody,
@@ -14,29 +13,11 @@ import {
 } from './action-bar.tsx';
 import { Button, buttonVariants } from './button.tsx';
 
-// Renders on the theme page color; `parameters.dark` switches to dark mode
-// until Storybook has a global theme toolbar. The bar is portalled to the
-// body, so dark mode also marks the document root while the story is shown.
-const surface: Decorator = (Story, { parameters }) => {
-  useEffect(() => {
-    if (!parameters.dark) {
-      return;
-    }
-    document.documentElement.classList.add('dark');
-    return () => document.documentElement.classList.remove('dark');
-  }, [parameters.dark]);
-
-  return (
-    <div
-      className={cn(
-        parameters.dark && 'dark',
-        'min-h-96 max-w-xl bg-background p-6 pb-24 font-sans text-foreground',
-      )}
-    >
-      <Story />
-    </div>
-  );
-};
+const surface: Decorator = (Story) => (
+  <div className="min-h-96 max-w-xl bg-background p-6 pb-24 font-sans text-foreground">
+    <Story />
+  </div>
+);
 
 const reports = [
   { id: 'r1', summary: "Spoilers for the ending of Death's End", count: 4 },
@@ -212,6 +193,6 @@ export const Placement: Story = {
 };
 
 export const Dark: Story = {
-  parameters: { dark: true },
+  globals: { theme: 'dark' },
   render: () => <ModerationQueue initialSelection={['r1', 'r4']} />,
 };

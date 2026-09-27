@@ -1,7 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { Fragment, useState } from 'react';
 import { expect, userEvent, within } from 'storybook/test';
-import { cn } from '../utils.ts';
 import { Field, FieldError, FieldHelper, FieldLabel } from './field.tsx';
 import { InputOTP, InputOTPSeparator, InputOTPSlot } from './input-otp.tsx';
 
@@ -30,7 +29,7 @@ const meta = {
   },
   decorators: [
     (Story, { parameters }) => (
-      <div className={cn(parameters.theme === 'dark' && 'dark')}>
+      <div>
         <div className="min-h-40 bg-background p-6 font-sans text-foreground">
           <Story />
         </div>
@@ -166,7 +165,7 @@ export const Chinese: Story = {
 };
 
 export const Dark: Story = {
-  parameters: { theme: 'dark' },
+  globals: { theme: 'dark' },
   render: (args, context) => (
     <div className="flex flex-col gap-6">
       {meta.render({ ...args, defaultValue: ['4', '2', '1'] })}

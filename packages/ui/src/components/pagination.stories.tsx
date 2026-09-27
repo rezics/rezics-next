@@ -1,13 +1,13 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, fn, userEvent, within } from 'storybook/test';
-import { withTheme } from '../stories/support.tsx';
+import { withSurface } from '../stories/support.tsx';
 import { Pagination, PaginationItems, PaginationNext, PaginationPrevious } from './pagination.tsx';
 
 const meta = {
   title: 'Rezics UI/Pagination',
   component: Pagination,
   tags: ['autodocs'],
-  decorators: [withTheme],
+  decorators: [withSurface],
   args: { count: 1284, pageSize: 20, defaultPage: 1, onPageChange: fn() },
 } satisfies Meta<typeof Pagination>;
 export default meta;
@@ -115,5 +115,5 @@ export const Chinese: Story = {
 
 export const Dark: Story = {
   ...MiddlePage,
-  parameters: { theme: 'dark' },
+  globals: { theme: 'dark' },
 };

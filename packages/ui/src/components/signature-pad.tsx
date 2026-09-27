@@ -42,8 +42,8 @@ const SignaturePadControl = (props: React.ComponentProps<typeof ArkSignaturePad.
         'relative',
         'size-full min-h-0 min-w-0',
         'flex flex-col',
-        'bg-muted/64',
-        'rounded-2xl border shadow-xs/5',
+        'bg-card',
+        'rounded-2xl border border-border/80 shadow-xs/5',
         'data-disabled:cursor-not-allowed',
         className,
       )}
@@ -57,7 +57,14 @@ const SignaturePadSegment = (props: React.ComponentProps<typeof ArkSignaturePad.
   const { className, ...rest } = props;
   return (
     <ArkSignaturePad.Segment
-      className={cn('size-full', 'min-h-0', 'fill-foreground', 'touch-none', className)}
+      className={cn(
+        'size-full',
+        'min-h-0',
+        'fill-none stroke-foreground stroke-2',
+        '[stroke-linecap:round]',
+        'touch-none',
+        className,
+      )}
       data-slot="signature-pad-segment"
       {...rest}
     />

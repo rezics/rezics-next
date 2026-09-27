@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, fn, userEvent, within } from 'storybook/test';
-import { withTheme } from '../stories/support.tsx';
+import { withSurface } from '../stories/support.tsx';
 import { Button } from './button.tsx';
 import {
   Steps,
@@ -44,7 +44,7 @@ const meta = {
   title: 'Rezics UI/Steps',
   component: Steps,
   tags: ['autodocs'],
-  decorators: [withTheme],
+  decorators: [withSurface],
   args: { count: realmSteps.length, defaultStep: 0, onStepChange: fn() },
 } satisfies Meta<typeof Steps>;
 export default meta;
@@ -166,5 +166,5 @@ export const Chinese: Story = {
 
 export const Dark: Story = {
   ...InProgress,
-  parameters: { theme: 'dark' },
+  globals: { theme: 'dark' },
 };

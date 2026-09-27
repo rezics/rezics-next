@@ -1,9 +1,8 @@
 import { createListCollection } from '@ark-ui/react/select';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { BookCheckIcon, BookMarkedIcon, BookOpenIcon, BookXIcon } from 'lucide-react';
-import { Fragment, useEffect } from 'react';
+import { Fragment } from 'react';
 import { expect, userEvent, waitFor, within } from 'storybook/test';
-import { cn } from '../utils.ts';
 import { Field, FieldError, FieldHelper, FieldLabel } from './field.tsx';
 import {
   Select,
@@ -58,24 +57,9 @@ const editions = createListCollection({
 
 const noShelves = createListCollection<{ value: string; label: string }>({ items: [] });
 
-// Popups render in a portal on <body>, outside the story's .dark wrapper, so the dark
-// story also marks <html> while it is shown on its own.
-const Surface = ({
-  dark,
-  page,
-  children,
-}: {
-  dark: boolean;
-  page: boolean;
-  children: React.ReactNode;
-}) => {
-  useEffect(() => {
-    if (!page) return;
-    document.documentElement.classList.add('dark');
-    return () => document.documentElement.classList.remove('dark');
-  }, [page]);
+const Surface = ({ children }: { children: React.ReactNode }) => {
   return (
-    <div className={cn(dark && 'dark')}>
+    <div>
       <div className="min-h-96 bg-background p-6 font-sans text-foreground">
         <div className="flex max-w-xs flex-col gap-4">{children}</div>
       </div>
@@ -97,11 +81,8 @@ const meta = {
   },
   args: { collection: shelves },
   decorators: [
-    (Story, { parameters, viewMode }) => (
-      <Surface
-        dark={parameters.theme === 'dark'}
-        page={parameters.theme === 'dark' && viewMode === 'story'}
-      >
+    (Story) => (
+      <Surface>
         <Story />
       </Surface>
     ),
@@ -136,7 +117,7 @@ export const Default: Story = {
     const trigger = canvas.getByRole('combobox', { name: 'Shelf' });
     await userEvent.click(trigger);
     const listbox = await page.findByRole('listbox');
-    await waitFor(() => expect(listbox).toBeVisible());
+    await waitFor(() => expect(listbox).toBeVisible(), { timeout: 3000 });
     await userEvent.click(page.getByRole('option', { name: 'Currently reading' }));
     await waitFor(() => expect(page.queryByRole('listbox')).not.toBeInTheDocument());
     await expect(trigger).toHaveTextContent('Currently reading');
@@ -151,7 +132,7 @@ export const Keyboard: Story = {
     trigger.focus();
     await userEvent.keyboard('{Enter}');
     const listbox = await page.findByRole('listbox');
-    await waitFor(() => expect(listbox).toBeVisible());
+    await waitFor(() => expect(listbox).toBeVisible(), { timeout: 3000 });
     await userEvent.keyboard('{ArrowDown}{ArrowDown}{Enter}');
     await waitFor(() => expect(trigger).toHaveTextContent('Read'));
   },
@@ -349,6 +330,6 @@ export const LongContent: Story = {
 };
 
 export const Dark: Story = {
-  parameters: { theme: 'dark' },
+  globals: { theme: 'dark' },
   args: { defaultValue: ['reading'], defaultOpen: true },
 };

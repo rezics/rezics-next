@@ -1,7 +1,6 @@
 import { parseDate } from '@ark-ui/react/date-picker';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, userEvent, waitFor, within } from 'storybook/test';
-import { cn } from '../utils.ts';
 import {
   Calendar,
   CalendarMonthSelect,
@@ -58,7 +57,7 @@ const meta = {
   },
   decorators: [
     (Story, { parameters }) => (
-      <div className={cn(parameters.theme === 'dark' && 'dark [color-scheme:dark]')}>
+      <div>
         <div className="min-h-96 bg-background p-6 font-sans text-foreground">
           <Story />
         </div>
@@ -171,7 +170,7 @@ export const Chinese: Story = {
 export const Disabled: Story = { args: { disabled: true } };
 
 export const Dark: Story = {
-  parameters: { theme: 'dark' },
+  globals: { theme: 'dark' },
   render: (args) => (
     <div className="flex flex-wrap gap-6">
       <Calendar {...args}>

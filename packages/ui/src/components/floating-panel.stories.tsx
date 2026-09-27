@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { NotebookPenIcon, XIcon } from 'lucide-react';
 import { expect, screen, userEvent, waitFor, within } from 'storybook/test';
-import { dismissed, settled, withTheme } from '../stories/support.tsx';
+import { dismissed, settled, withSurface } from '../stories/support.tsx';
 import { Button } from './button.tsx';
 import {
   FloatingPanel,
@@ -22,7 +22,7 @@ const meta = {
   title: 'Rezics UI/Floating Panel',
   component: FloatingPanel,
   tags: ['autodocs'],
-  decorators: [withTheme],
+  decorators: [withSurface],
   args: {
     defaultPosition: { x: 160, y: 80 },
     defaultSize: { width: 380, height: 380 },
@@ -155,5 +155,5 @@ export const Chinese: Story = {
 
 export const Dark: Story = {
   ...Default,
-  parameters: { theme: 'dark' },
+  globals: { theme: 'dark' },
 };

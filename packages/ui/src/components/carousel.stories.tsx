@@ -39,13 +39,9 @@ const meta = {
     },
   },
   decorators: [
-    (Story, context) => (
+    (Story) => (
       <main
-        className={
-          context.name === 'Dark Mode'
-            ? 'dark aura-canvas flex min-h-screen items-center justify-center bg-background p-6'
-            : 'aura-canvas flex min-h-screen items-center justify-center bg-background p-6'
-        }
+        className={'aura-canvas flex min-h-screen items-center justify-center bg-background p-6'}
       >
         <div className="w-full max-w-3xl px-14">
           <Story />
@@ -59,7 +55,7 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 
 const FeaturedWorks = ({ dark = false }: { dark?: boolean }) => (
-  <div className={dark ? 'dark rounded-2xl bg-background p-6 text-foreground' : undefined}>
+  <div className={dark ? 'rounded-2xl bg-background p-6 text-foreground' : undefined}>
     <Carousel
       aria-label="Featured Works in the Science Fiction Realm"
       slideCount={works.length}
@@ -120,4 +116,4 @@ export const LongMultilingualTitle: Story = {
   ),
 };
 
-export const DarkMode: Story = { render: () => <FeaturedWorks dark /> };
+export const DarkMode: Story = { globals: { theme: 'dark' }, render: () => <FeaturedWorks dark /> };

@@ -1,6 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, userEvent, within } from 'storybook/test';
-import { cn } from '../utils.ts';
 import { FieldDescription, FieldLegend, FieldSet, FieldSetError } from './field.tsx';
 import { RadioGroup, RadioGroupItem, RadioGroupLabel } from './radio-group.tsx';
 
@@ -26,7 +25,7 @@ const meta = {
   args: { defaultValue: 'spoiler', name: 'report-reason' },
   decorators: [
     (Story, { parameters }) => (
-      <div className={cn(parameters.theme === 'dark' && 'dark')}>
+      <div>
         <div className="min-h-40 bg-background p-6 font-sans text-foreground">
           <Story />
         </div>
@@ -156,7 +155,7 @@ export const LongLabels: Story = {
 };
 
 export const Dark: Story = {
-  parameters: { theme: 'dark' },
+  globals: { theme: 'dark' },
   render: (args) => (
     <div className="flex flex-col gap-8">
       <RadioGroup {...args}>

@@ -1,6 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, userEvent, waitFor, within } from 'storybook/test';
-import { cn } from '../utils.ts';
 import { Slider, SliderLabel, SliderValue } from './slider.tsx';
 
 const meta = {
@@ -18,7 +17,7 @@ const meta = {
   args: { defaultValue: [62] },
   decorators: [
     (Story, { parameters }) => (
-      <div className={cn(parameters.theme === 'dark' && 'dark')}>
+      <div>
         <div className="min-h-40 bg-background p-6 font-sans text-foreground">
           <div className="flex max-w-sm flex-col gap-8">
             <Story />
@@ -135,7 +134,7 @@ export const Chinese: Story = {
 };
 
 export const Dark: Story = {
-  parameters: { theme: 'dark' },
+  globals: { theme: 'dark' },
   render: (args, context) => (
     <>
       {meta.render(args)}

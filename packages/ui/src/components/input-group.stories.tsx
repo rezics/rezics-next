@@ -2,7 +2,6 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import { CheckIcon, CopyIcon, LinkIcon, SearchIcon, SendIcon } from 'lucide-react';
 import { useState } from 'react';
 import { expect, userEvent, within } from 'storybook/test';
-import { cn } from '../utils.ts';
 import { Field, FieldError, FieldLabel } from './field.tsx';
 import {
   InputGroup,
@@ -29,7 +28,7 @@ const meta = {
   },
   decorators: [
     (Story, { parameters }) => (
-      <div className={cn(parameters.theme === 'dark' && 'dark')}>
+      <div>
         <div className="min-h-40 bg-background p-6 font-sans text-foreground">
           <div className="flex max-w-md flex-col gap-4">
             <Story />
@@ -237,7 +236,7 @@ export const LongContent: Story = {
 };
 
 export const Dark: Story = {
-  parameters: { theme: 'dark' },
+  globals: { theme: 'dark' },
   render: (args, context) => (
     <>
       {meta.render(args)}

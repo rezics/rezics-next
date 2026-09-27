@@ -1,6 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, userEvent, within } from 'storybook/test';
-import { cn } from '../utils.ts';
 import { Field, FieldContent, FieldDescription, FieldError, FieldLabel } from './field.tsx';
 import { Switch } from './switch.tsx';
 
@@ -18,7 +17,7 @@ const meta = {
   },
   decorators: [
     (Story, { parameters }) => (
-      <div className={cn(parameters.theme === 'dark' && 'dark')}>
+      <div>
         <div className="min-h-40 bg-background p-6 font-sans text-foreground">
           <Story />
         </div>
@@ -128,7 +127,7 @@ export const Chinese: Story = {
 };
 
 export const Dark: Story = {
-  parameters: { theme: 'dark' },
+  globals: { theme: 'dark' },
   render: () => (
     <div className="flex flex-col gap-4">
       <Field className="w-fit" orientation="horizontal">

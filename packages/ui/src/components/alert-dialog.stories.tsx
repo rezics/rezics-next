@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, fn, screen, userEvent, within } from 'storybook/test';
-import { dismissed, settled, withTheme } from '../stories/support.tsx';
+import { dismissed, settled, withSurface } from '../stories/support.tsx';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -16,7 +16,7 @@ const meta = {
   title: 'Rezics UI/Alert Dialog',
   component: AlertDialog,
   tags: ['autodocs'],
-  decorators: [withTheme],
+  decorators: [withSurface],
   args: { onOpenChange: fn() },
   parameters: {
     docs: {
@@ -159,5 +159,5 @@ export const Chinese: Story = {
 
 export const Dark: Story = {
   ...RemovePost,
-  parameters: { theme: 'dark' },
+  globals: { theme: 'dark' },
 };

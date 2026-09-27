@@ -1,6 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, userEvent, within } from 'storybook/test';
-import { cn } from '../utils.ts';
 import { Field, FieldError, FieldHelper, FieldLabel } from './field.tsx';
 import {
   PasswordInput,
@@ -24,7 +23,7 @@ const meta = {
   args: { autoComplete: 'current-password' },
   decorators: [
     (Story, { parameters }) => (
-      <div className={cn(parameters.theme === 'dark' && 'dark')}>
+      <div>
         <div className="min-h-40 bg-background p-6 font-sans text-foreground">
           <div className="flex max-w-sm flex-col gap-4">
             <Story />
@@ -175,7 +174,7 @@ export const Chinese: Story = {
 };
 
 export const Dark: Story = {
-  parameters: { theme: 'dark' },
+  globals: { theme: 'dark' },
   render: (args, context) => (
     <>
       {meta.render(args)}

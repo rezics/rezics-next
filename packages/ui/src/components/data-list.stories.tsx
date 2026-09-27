@@ -4,15 +4,8 @@ import { cn } from '../utils.ts';
 import { Badge } from './badge.tsx';
 import { DataList, DataListItem, DataListItemLabel, DataListItemValue } from './data-list.tsx';
 
-// Renders on the theme page color; `parameters.dark` switches to dark mode
-// until Storybook has a global theme toolbar.
 const surface: Decorator = (Story, { parameters }) => (
-  <div
-    className={cn(
-      parameters.dark && 'dark',
-      'max-w-lg bg-background p-6 font-sans text-foreground',
-    )}
-  >
+  <div className={cn('max-w-lg bg-background p-6 font-sans text-foreground')}>
     <Story />
   </div>
 );
@@ -123,6 +116,6 @@ export const LongContent: Story = {
 };
 
 export const Dark: Story = {
-  parameters: { dark: true },
+  globals: { theme: 'dark' },
   render: () => <EditionList />,
 };

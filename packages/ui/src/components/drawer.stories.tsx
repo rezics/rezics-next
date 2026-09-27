@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { BookmarkIcon, CompassIcon, HomeIcon, InboxIcon, LibraryIcon } from 'lucide-react';
 import { expect, screen, userEvent, within } from 'storybook/test';
-import { dismissed, settled, withTheme } from '../stories/support.tsx';
+import { dismissed, settled, withSurface } from '../stories/support.tsx';
 import { Button } from './button.tsx';
 import {
   Drawer,
@@ -17,7 +17,7 @@ const meta = {
   title: 'Rezics UI/Drawer',
   component: Drawer,
   tags: ['autodocs'],
-  decorators: [withTheme],
+  decorators: [withSurface],
   parameters: {
     docs: {
       story: { inline: false, iframeHeight: 600 },
@@ -201,5 +201,5 @@ export const Chinese: Story = {
 
 export const Dark: Story = {
   ...Bottom,
-  parameters: { theme: 'dark' },
+  globals: { theme: 'dark' },
 };

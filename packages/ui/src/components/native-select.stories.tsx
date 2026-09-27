@@ -1,6 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, userEvent, within } from 'storybook/test';
-import { cn } from '../utils.ts';
 import { Field, FieldError, FieldHelper, FieldLabel } from './field.tsx';
 import { NativeSelect, NativeSelectOptGroup, NativeSelectOption } from './native-select.tsx';
 
@@ -29,7 +28,7 @@ const meta = {
   args: { defaultValue: '' },
   decorators: [
     (Story, { parameters }) => (
-      <div className={cn(parameters.theme === 'dark' && 'dark [color-scheme:dark]')}>
+      <div>
         <div className="min-h-40 bg-background p-6 font-sans text-foreground">
           <div className="flex max-w-xs flex-col gap-4">
             <Story />
@@ -160,7 +159,7 @@ export const LongOption: Story = {
 };
 
 export const Dark: Story = {
-  parameters: { theme: 'dark' },
+  globals: { theme: 'dark' },
   render: (args, context) => (
     <>
       {meta.render({ ...args, defaultValue: 'reading' })}

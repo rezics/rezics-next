@@ -11,15 +11,8 @@ import { cn } from '../utils.ts';
 import { Alert, AlertAction, AlertDescription, AlertTitle } from './alert.tsx';
 import { Button } from './button.tsx';
 
-// Renders on the theme page color; `parameters.dark` switches to dark mode
-// until Storybook has a global theme toolbar.
 const surface: Decorator = (Story, { parameters }) => (
-  <div
-    className={cn(
-      parameters.dark && 'dark',
-      'max-w-2xl bg-background p-6 font-sans text-foreground',
-    )}
-  >
+  <div className={cn('max-w-2xl bg-background p-6 font-sans text-foreground')}>
     <Story />
   </div>
 );
@@ -176,6 +169,6 @@ export const LongContent: Story = {
 };
 
 export const Dark: Story = {
-  parameters: { dark: true },
+  globals: { theme: 'dark' },
   render: Variants.render,
 };

@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, screen, userEvent, waitFor, within } from 'storybook/test';
-import { dismissed, settled, withTheme } from '../stories/support.tsx';
+import { dismissed, settled, withSurface } from '../stories/support.tsx';
 import { Button } from './button.tsx';
 import {
   Dialog,
@@ -18,7 +18,7 @@ const meta = {
   title: 'Rezics UI/Dialog',
   component: Dialog,
   tags: ['autodocs'],
-  decorators: [withTheme],
+  decorators: [withSurface],
   parameters: {
     docs: {
       story: { inline: false, iframeHeight: 560 },
@@ -68,7 +68,9 @@ export const Default: Story = {
   render: () => <NewShelf />,
   async play({ canvasElement }) {
     const dialog = await openDialog(canvasElement, 'New shelf');
-    await expect(within(dialog).getByRole('heading', { name: 'Create a shelf' })).toBeVisible();
+    const title = within(dialog).getByRole('heading', { name: 'Create a shelf' });
+    await expect(title).toBeVisible();
+    await expect(title).toHaveClass('font-sans');
     await expect(within(dialog).getByLabelText('Shelf name')).toHaveValue('Hard science fiction');
   },
 };
@@ -281,5 +283,5 @@ export const Chinese: Story = {
 
 export const Dark: Story = {
   ...Invalid,
-  parameters: { theme: 'dark' },
+  globals: { theme: 'dark' },
 };

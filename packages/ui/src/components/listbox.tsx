@@ -67,9 +67,6 @@ const listboxItemVariants = tv({
         'data-[state=checked]:bg-accent data-[state=checked]:text-accent-foreground',
         'hover:bg-accent hover:text-accent-foreground',
         'data-highlighted:bg-accent data-highlighted:text-accent-foreground',
-        // Muted text on the dark accent is 4.48:1, so secondary text takes the accent tone.
-        'data-[state=checked]:[&_.text-muted-foreground]:text-accent-foreground/80',
-        'data-highlighted:[&_.text-muted-foreground]:text-accent-foreground/80',
       ],
       destructive: [
         'text-destructive dark:text-destructive-foreground',

@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { expect, userEvent, within } from 'storybook/test';
+import { expect, userEvent, waitFor, within } from 'storybook/test';
 import {
   Tour,
   TourActions,
@@ -48,11 +48,7 @@ const meta = {
   decorators: [
     (Story, context) => (
       <main
-        className={
-          context.name === 'Dark Mode'
-            ? 'dark aura-canvas flex min-h-screen items-center justify-center bg-background p-6'
-            : 'aura-canvas flex min-h-screen items-center justify-center bg-background p-6'
-        }
+        className={'aura-canvas flex min-h-screen items-center justify-center bg-background p-6'}
       >
         <Story />
       </main>
@@ -64,7 +60,7 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 
 const ReadingTour = ({ dark = false }: { dark?: boolean }) => (
-  <div className={dark ? 'dark rounded-2xl bg-background p-6 text-foreground' : 'p-6'}>
+  <div className={dark ? 'rounded-2xl bg-background p-6 text-foreground' : 'p-6'}>
     <Tour keyboardNavigation steps={steps}>
       <TourTrigger className="rounded-xl bg-primary px-5 py-2.5 font-medium text-primary-foreground shadow-[var(--aura-shadow-card)] focus-visible:outline-2 focus-visible:outline-ring">
         Show reading guide
@@ -90,13 +86,15 @@ export const GuidedReading: Story = {
     await userEvent.click(
       within(canvasElement).getByRole('button', { name: 'Show reading guide' }),
     );
-    await expect(page.getByRole('alertdialog')).toBeVisible();
+    await waitFor(() => expect(page.getByRole('alertdialog')).toBeVisible());
     await expect(page.getByRole('heading', { name: 'Start a personal shelf' })).toBeVisible();
     await userEvent.click(page.getByRole('button', { name: 'next step' }));
-    await expect(page.getByRole('heading', { name: 'Join a Realm conversation' })).toBeVisible();
+    await waitFor(() =>
+      expect(page.getByRole('heading', { name: 'Join a Realm conversation' })).toBeVisible(),
+    );
     await userEvent.keyboard('{Escape}');
     await expect(page.getByRole('alertdialog')).toHaveAttribute('data-state', 'closed');
   },
 };
 
-export const DarkMode: Story = { render: () => <ReadingTour dark /> };
+export const DarkMode: Story = { globals: { theme: 'dark' }, render: () => <ReadingTour dark /> };

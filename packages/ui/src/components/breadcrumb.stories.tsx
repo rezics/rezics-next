@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { SlashIcon } from 'lucide-react';
 import { expect, userEvent, within } from 'storybook/test';
-import { withTheme } from '../stories/support.tsx';
+import { withSurface } from '../stories/support.tsx';
 import {
   Breadcrumb,
   BreadcrumbEllipsis,
@@ -16,7 +16,7 @@ const meta = {
   title: 'Rezics UI/Breadcrumb',
   component: Breadcrumb,
   tags: ['autodocs'],
-  decorators: [withTheme],
+  decorators: [withSurface],
 } satisfies Meta<typeof Breadcrumb>;
 export default meta;
 type Story = StoryObj<typeof meta>;
@@ -161,5 +161,5 @@ export const Chinese: Story = {
 
 export const Dark: Story = {
   ...Default,
-  parameters: { theme: 'dark' },
+  globals: { theme: 'dark' },
 };

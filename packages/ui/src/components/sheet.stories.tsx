@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, screen, userEvent, within } from 'storybook/test';
-import { dismissed, settled, withTheme } from '../stories/support.tsx';
+import { dismissed, settled, withSurface } from '../stories/support.tsx';
 import { Button } from './button.tsx';
 import {
   Sheet,
@@ -16,7 +16,7 @@ const meta = {
   title: 'Rezics UI/Sheet',
   component: Sheet,
   tags: ['autodocs'],
-  decorators: [withTheme],
+  decorators: [withSurface],
   parameters: {
     docs: {
       story: { inline: false, iframeHeight: 560 },
@@ -182,5 +182,5 @@ export const Chinese: Story = {
 
 export const Dark: Story = {
   ...Right,
-  parameters: { theme: 'dark' },
+  globals: { theme: 'dark' },
 };

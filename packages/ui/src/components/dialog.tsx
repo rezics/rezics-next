@@ -269,7 +269,7 @@ export const DialogTitle = (props: React.ComponentProps<typeof ArkDialog.Title>)
   return (
     <ArkDialog.Title
       // Sans, not font-heading: the serif face is reserved for Work titles.
-      className={cn('font-semibold text-lg leading-tight tracking-tight', className)}
+      className={cn('font-sans font-semibold text-lg leading-tight tracking-tight', className)}
       data-slot="dialog-title"
       {...rest}
     />

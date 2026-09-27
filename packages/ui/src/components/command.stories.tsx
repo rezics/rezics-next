@@ -3,7 +3,7 @@ import { useFilter } from '@ark-ui/react/locale';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { BookOpenIcon, InboxIcon, PenSquareIcon, SearchIcon, UsersIcon } from 'lucide-react';
 import { expect, fn, screen, userEvent, waitFor, within } from 'storybook/test';
-import { settled, withTheme } from '../stories/support.tsx';
+import { settled, withSurface } from '../stories/support.tsx';
 import { Button } from './button.tsx';
 import {
   Command,
@@ -156,7 +156,7 @@ const meta = {
   title: 'Rezics UI/Command',
   component: Command,
   tags: ['autodocs'],
-  decorators: [withTheme],
+  decorators: [withSurface],
   // Stories build their own filtered collection; this one only satisfies the required prop.
   args: { collection: createListCollection<unknown>({ items: entries }), onValueChange: fn() },
   parameters: {
@@ -281,5 +281,5 @@ export const DialogOpen: Story = {
 
 export const Dark: Story = {
   ...Inline,
-  parameters: { theme: 'dark' },
+  globals: { theme: 'dark' },
 };

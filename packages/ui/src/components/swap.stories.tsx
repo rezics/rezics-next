@@ -17,13 +17,9 @@ const meta = {
     },
   },
   decorators: [
-    (Story, context) => (
+    (Story) => (
       <main
-        className={
-          context.name === 'Dark Mode'
-            ? 'dark aura-canvas flex min-h-screen items-center justify-center bg-background p-6'
-            : 'aura-canvas flex min-h-screen items-center justify-center bg-background p-6'
-        }
+        className={'aura-canvas flex min-h-screen items-center justify-center bg-background p-6'}
       >
         <Story />
       </main>
@@ -37,7 +33,7 @@ type Story = StoryObj<typeof meta>;
 const ShelfToggle = ({ dark = false }: { dark?: boolean }) => {
   const [saved, setSaved] = React.useState(false);
   return (
-    <div className={dark ? 'dark rounded-2xl bg-background p-6 text-foreground' : 'p-6'}>
+    <div className={dark ? 'rounded-2xl bg-background p-6 text-foreground' : 'p-6'}>
       <button
         aria-pressed={saved}
         className="inline-flex min-h-10 items-center gap-2 rounded-xl border border-border/60 bg-card px-4 font-medium text-sm text-foreground shadow-xs/5 focus-visible:outline-2 focus-visible:outline-ring"
@@ -72,4 +68,4 @@ export const ShelfAction: Story = {
   },
 };
 
-export const DarkMode: Story = { render: () => <ShelfToggle dark /> };
+export const DarkMode: Story = { globals: { theme: 'dark' }, render: () => <ShelfToggle dark /> };

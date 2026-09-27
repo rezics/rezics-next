@@ -15,13 +15,9 @@ const meta = {
     },
   },
   decorators: [
-    (Story, context) => (
+    (Story) => (
       <main
-        className={
-          context.name === 'Dark Mode'
-            ? 'dark aura-canvas flex min-h-screen items-center justify-center bg-background p-6'
-            : 'aura-canvas flex min-h-screen items-center justify-center bg-background p-6'
-        }
+        className={'aura-canvas flex min-h-screen items-center justify-center bg-background p-6'}
       >
         <Story />
       </main>
@@ -33,7 +29,7 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 
 const CoverCard = ({ dark = false }: { dark?: boolean }) => (
-  <div className={dark ? 'dark rounded-2xl bg-background p-8 text-foreground' : 'p-8'}>
+  <div className={dark ? 'rounded-2xl bg-background p-8 text-foreground' : 'p-8'}>
     <article className="relative w-72 rounded-2xl border border-border/60 bg-card p-5 shadow-[var(--aura-shadow-card)]">
       <div className="relative mb-4 grid size-20 place-items-center rounded-xl bg-accent text-accent-foreground">
         <Bell aria-hidden="true" className="size-8" />
@@ -53,4 +49,4 @@ const CoverCard = ({ dark = false }: { dark?: boolean }) => (
 );
 
 export const UpdateBadge: Story = { render: () => <CoverCard /> };
-export const DarkMode: Story = { render: () => <CoverCard dark /> };
+export const DarkMode: Story = { globals: { theme: 'dark' }, render: () => <CoverCard dark /> };

@@ -151,7 +151,7 @@ export const Button = (props: ButtonProps) => {
       type="button"
       {...rest}
       aria-busy={isLoading}
-      aria-disabled={isLoading}
+      aria-disabled={isLoading || props['aria-disabled']}
     >
       {isLoading ? (
         <>

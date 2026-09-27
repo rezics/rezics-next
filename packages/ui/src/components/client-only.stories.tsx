@@ -16,13 +16,9 @@ const meta = {
     },
   },
   decorators: [
-    (Story, context) => (
+    (Story) => (
       <main
-        className={
-          context.name === 'Dark Mode'
-            ? 'dark aura-canvas flex min-h-screen items-center justify-center bg-background p-6'
-            : 'aura-canvas flex min-h-screen items-center justify-center bg-background p-6'
-        }
+        className={'aura-canvas flex min-h-screen items-center justify-center bg-background p-6'}
       >
         <Story />
       </main>
@@ -37,7 +33,7 @@ const ShelfPreview = ({ dark = false, empty = false }: { dark?: boolean; empty?:
   <section
     className={
       dark
-        ? 'dark rounded-2xl bg-background p-6 text-foreground'
+        ? 'rounded-2xl bg-background p-6 text-foreground'
         : 'rounded-2xl border border-border/60 bg-card p-6'
     }
   >
@@ -67,4 +63,4 @@ export const RestoredShelf: Story = {
 };
 
 export const EmptyShelf: Story = { render: () => <ShelfPreview empty /> };
-export const DarkMode: Story = { render: () => <ShelfPreview dark /> };
+export const DarkMode: Story = { globals: { theme: 'dark' }, render: () => <ShelfPreview dark /> };

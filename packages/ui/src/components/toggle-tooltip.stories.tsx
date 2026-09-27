@@ -2,7 +2,7 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import { InfoIcon } from 'lucide-react';
 import React from 'react';
 import { expect, screen, userEvent, within } from 'storybook/test';
-import { dismissed, settled, withTheme } from '../stories/support.tsx';
+import { dismissed, settled, withSurface } from '../stories/support.tsx';
 import { Button } from './button.tsx';
 import { ToggleTooltip, ToggleTooltipContent, ToggleTooltipTrigger } from './toggle-tooltip.tsx';
 
@@ -10,7 +10,7 @@ const meta = {
   title: 'Rezics UI/Toggle Tooltip',
   component: ToggleTooltip,
   tags: ['autodocs'],
-  decorators: [withTheme],
+  decorators: [withSurface],
   parameters: {
     docs: {
       story: { inline: false, iframeHeight: 260 },
@@ -117,5 +117,5 @@ export const Chinese: Story = {
 
 export const Dark: Story = {
   ...Default,
-  parameters: { theme: 'dark' },
+  globals: { theme: 'dark' },
 };

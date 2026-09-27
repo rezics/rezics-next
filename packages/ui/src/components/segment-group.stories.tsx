@@ -1,7 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { LayoutGridIcon, ListIcon } from 'lucide-react';
 import { expect, userEvent, within } from 'storybook/test';
-import { cn } from '../utils.ts';
 import { SegmentGroup, SegmentGroupItem, SegmentGroupItemText } from './segment-group.tsx';
 
 const sorts = [
@@ -25,7 +24,7 @@ const meta = {
   args: { defaultValue: 'hot', 'aria-label': 'Sort posts' },
   decorators: [
     (Story, { parameters }) => (
-      <div className={cn(parameters.theme === 'dark' && 'dark')}>
+      <div>
         <div className="flex min-h-32 flex-col items-start gap-6 bg-background p-6 font-sans text-foreground">
           <Story />
         </div>
@@ -117,7 +116,7 @@ export const Chinese: Story = {
 };
 
 export const Dark: Story = {
-  parameters: { theme: 'dark' },
+  globals: { theme: 'dark' },
   render: (args) => (
     <>
       {meta.render(args)}

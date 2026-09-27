@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, screen, userEvent, waitFor, within } from 'storybook/test';
-import { settled, withTheme } from '../stories/support.tsx';
+import { settled, withSurface } from '../stories/support.tsx';
 import { Avatar, AvatarFallback } from './avatar.tsx';
 import { HoverCard, HoverCardContent, HoverCardTrigger } from './hover-card.tsx';
 
@@ -8,7 +8,7 @@ const meta = {
   title: 'Rezics UI/Hover Card',
   component: HoverCard,
   tags: ['autodocs'],
-  decorators: [withTheme],
+  decorators: [withSurface],
   parameters: {
     docs: {
       story: { inline: false, iframeHeight: 360 },
@@ -109,5 +109,5 @@ export const Chinese: Story = {
 
 export const Dark: Story = {
   ...Default,
-  parameters: { theme: 'dark' },
+  globals: { theme: 'dark' },
 };

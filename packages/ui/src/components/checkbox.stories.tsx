@@ -1,6 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, userEvent, waitFor, within } from 'storybook/test';
-import { cn } from '../utils.ts';
 import { Checkbox, CheckboxGroup } from './checkbox.tsx';
 import {
   Field,
@@ -26,7 +25,7 @@ const meta = {
   },
   decorators: [
     (Story, { parameters }) => (
-      <div className={cn(parameters.theme === 'dark' && 'dark')}>
+      <div>
         <div className="min-h-40 bg-background p-6 font-sans text-foreground">
           <Story />
         </div>
@@ -53,6 +52,24 @@ export const Default: Story = {
     await expect(checkbox).toBeChecked();
     await userEvent.keyboard(' ');
     await expect(checkbox).not.toBeChecked();
+  },
+};
+
+export const CallerRole: Story = {
+  render: () => (
+    <Field orientation="horizontal">
+      <Checkbox role="checkbox" />
+      <FieldLabel>Notify me about updates</FieldLabel>
+    </Field>
+  ),
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    const checkbox = canvas.getByRole('checkbox', { name: 'Notify me about updates' });
+    await expect(canvas.getAllByRole('checkbox')).toHaveLength(1);
+    await expect(checkbox.tagName).toBe('INPUT');
+    await expect(canvasElement.querySelector('[data-slot="checkbox"]')).not.toHaveAttribute('role');
+    await userEvent.click(checkbox);
+    await expect(checkbox).toBeChecked();
   },
 };
 
@@ -164,7 +181,7 @@ export const LongLabel: Story = {
 };
 
 export const Dark: Story = {
-  parameters: { theme: 'dark' },
+  globals: { theme: 'dark' },
   render: () => (
     <div className="flex flex-col gap-3">
       <Field orientation="horizontal">

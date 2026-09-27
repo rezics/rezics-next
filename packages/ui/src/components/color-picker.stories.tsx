@@ -37,13 +37,9 @@ const meta = {
     },
   },
   decorators: [
-    (Story, context) => (
+    (Story) => (
       <main
-        className={
-          context.name === 'Dark Mode'
-            ? 'dark aura-canvas flex min-h-screen items-center justify-center bg-background p-6'
-            : 'aura-canvas flex min-h-screen items-center justify-center bg-background p-6'
-        }
+        className={'aura-canvas flex min-h-screen items-center justify-center bg-background p-6'}
       >
         <Story />
       </main>
@@ -57,7 +53,7 @@ type Story = StoryObj<typeof meta>;
 const Picker = ({ dark = false, disabled = false }: { dark?: boolean; disabled?: boolean }) => {
   const [value, setValue] = React.useState('#2f63ad');
   return (
-    <div className={dark ? 'dark rounded-2xl bg-background p-6 text-foreground' : 'p-6'}>
+    <div className={dark ? 'rounded-2xl bg-background p-6 text-foreground' : 'p-6'}>
       <div className="grid gap-3">
         <ColorPicker
           defaultValue={value}
@@ -117,4 +113,4 @@ export const Palette: Story = {
 };
 
 export const Disabled: Story = { render: () => <Picker disabled /> };
-export const DarkMode: Story = { render: () => <Picker dark /> };
+export const DarkMode: Story = { globals: { theme: 'dark' }, render: () => <Picker dark /> };

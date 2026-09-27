@@ -1,7 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { ImageIcon } from 'lucide-react';
 import { expect, userEvent, waitFor, within } from 'storybook/test';
-import { cn } from '../utils.ts';
 import { Button } from './button.tsx';
 import {
   FileUpload,
@@ -51,7 +50,7 @@ const meta = {
   args: { accept: 'image/*', maxFiles: 1, maxFileSize: 5 * 1024 * 1024 },
   decorators: [
     (Story, { parameters }) => (
-      <div className={cn(parameters.theme === 'dark' && 'dark')}>
+      <div>
         <div className="min-h-40 bg-background p-6 font-sans text-foreground">
           <div className="max-w-md">
             <Story />
@@ -160,6 +159,6 @@ export const Chinese: Story = {
 };
 
 export const Dark: Story = {
-  parameters: { theme: 'dark' },
+  globals: { theme: 'dark' },
   args: { accept: undefined, maxFiles: 5, defaultAcceptedFiles: [cover, notes] },
 };

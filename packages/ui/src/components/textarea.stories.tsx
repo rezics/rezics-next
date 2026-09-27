@@ -1,6 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, userEvent, within } from 'storybook/test';
-import { cn } from '../utils.ts';
 import { Field, FieldError, FieldHelper, FieldLabel } from './field.tsx';
 import { Textarea } from './textarea.tsx';
 
@@ -22,7 +21,7 @@ const meta = {
   args: { placeholder: 'What did you think of this Work?' },
   decorators: [
     (Story, { parameters }) => (
-      <div className={cn(parameters.theme === 'dark' && 'dark')}>
+      <div>
         <div className="min-h-40 bg-background p-6 font-sans text-foreground">
           <div className="max-w-lg">
             <Story />
@@ -108,7 +107,7 @@ export const Invalid: Story = {
 };
 
 export const Dark: Story = {
-  parameters: { theme: 'dark' },
+  globals: { theme: 'dark' },
   render: (args) => (
     <div className="flex flex-col gap-6">
       <Field>

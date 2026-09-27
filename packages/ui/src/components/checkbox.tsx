@@ -43,7 +43,9 @@ export const checkboxVariants = tv({
 });
 
 export const Checkbox = (props: React.ComponentProps<typeof ArkCheckbox.Root>) => {
-  const { className, tabIndex, ...rest } = props;
+  // The native input owns the checkbox role. A role forwarded to Ark's label
+  // creates a second checkbox and is invalid on a label.
+  const { className, tabIndex, role: _role, ...rest } = props;
 
   return (
     <ArkCheckbox.Root className={cn(checkboxVariants(), className)} data-slot="checkbox" {...rest}>

@@ -46,8 +46,8 @@ choice is a cookie the server reads, and the `dark` variant in `styles.css`
 answers both an explicit `.dark` class and the system preference, so the first
 paint is right without an inline script and without a hydration mismatch.
 [`features/shell/preferences.ts`](../../apps/web/features/shell/preferences.ts)
-holds the cookie contract. A `.dark` class on any element also switches the
-colors inside it, which stories use to show both themes side by side.
+holds the cookie contract. Storybook's theme and locale toolbars set these
+choices on the document root, including for portaled content.
 
 ## Radius, surfaces and type
 
@@ -69,9 +69,13 @@ falls back to the platform's Simplified Chinese faces.
 ## Components
 
 Button, Input, Textarea, Card and Badge are aligned with Aura's classes; their
-`tv()` variants are the record. Other components keep SharkUI's structure under
-the new tokens and radii: review each against Aura's matching component when a
-feature first uses it, and align it in place.
+`tv()` variants are the record. Checkbox uses a 6px corner because a 12px
+corner makes the square control read like a radio. Input Group, Number Input and
+Native Select share Input's chrome so mixed forms look like one family. Pressed
+toggles use the accent surface; Segment Group uses Aura's tab tray to make the
+selected option distinct without a raised button. Rating uses `--rating`
+because stars are non-text marks. Separator uses `border/60` so a rule groups
+content without competing with the surrounding card edge.
 
 ## Layout
 

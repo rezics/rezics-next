@@ -10,7 +10,7 @@ import {
 } from 'lucide-react';
 import React from 'react';
 import { expect, fn, screen, userEvent, waitFor, within } from 'storybook/test';
-import { dismissed, settled, withTheme } from '../stories/support.tsx';
+import { dismissed, settled, withSurface } from '../stories/support.tsx';
 import { Button } from './button.tsx';
 import {
   Menu,
@@ -32,7 +32,7 @@ const meta = {
   title: 'Rezics UI/Menu',
   component: Menu,
   tags: ['autodocs'],
-  decorators: [withTheme],
+  decorators: [withSurface],
   args: { onSelect: fn() },
   parameters: {
     docs: {
@@ -290,5 +290,5 @@ export const Chinese: Story = {
 
 export const Dark: Story = {
   ...PostActions,
-  parameters: { theme: 'dark' },
+  globals: { theme: 'dark' },
 };

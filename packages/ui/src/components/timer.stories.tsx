@@ -24,13 +24,9 @@ const meta = {
     },
   },
   decorators: [
-    (Story, context) => (
+    (Story) => (
       <main
-        className={
-          context.name === 'Dark Mode'
-            ? 'dark aura-canvas flex min-h-screen items-center justify-center bg-background p-6'
-            : 'aura-canvas flex min-h-screen items-center justify-center bg-background p-6'
-        }
+        className={'aura-canvas flex min-h-screen items-center justify-center bg-background p-6'}
       >
         <Story />
       </main>
@@ -42,7 +38,7 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 
 const ReadingTimer = ({ dark = false }: { dark?: boolean }) => (
-  <section className={dark ? 'dark rounded-2xl bg-background p-6 text-foreground' : 'p-6'}>
+  <section className={dark ? 'rounded-2xl bg-background p-6 text-foreground' : 'p-6'}>
     <h2 className="mb-4 font-semibold text-foreground">Reading sprint</h2>
     <Timer
       autoStart={false}
@@ -88,4 +84,4 @@ export const ReadingSession: Story = {
   },
 };
 
-export const DarkMode: Story = { render: () => <ReadingTimer dark /> };
+export const DarkMode: Story = { globals: { theme: 'dark' }, render: () => <ReadingTimer dark /> };

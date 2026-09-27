@@ -4,15 +4,8 @@ import { expect, userEvent, within } from 'storybook/test';
 import { cn } from '../utils.ts';
 import { LinkBox, LinkOverlay } from './link-overlay.tsx';
 
-// Renders on the theme page color; `parameters.dark` switches to dark mode
-// until Storybook has a global theme toolbar.
 const surface: Decorator = (Story, { parameters }) => (
-  <div
-    className={cn(
-      parameters.dark && 'dark',
-      'max-w-md bg-background p-6 font-sans text-foreground',
-    )}
-  >
+  <div className={cn('max-w-md bg-background p-6 font-sans text-foreground')}>
     <Story />
   </div>
 );
@@ -106,6 +99,6 @@ export const Chinese: Story = {
 };
 
 export const Dark: Story = {
-  parameters: { dark: true },
+  globals: { theme: 'dark' },
   render: () => <WorkCard />,
 };

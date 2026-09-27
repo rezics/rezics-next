@@ -16,13 +16,9 @@ const meta = {
     },
   },
   decorators: [
-    (Story, context) => (
+    (Story) => (
       <main
-        className={
-          context.name === 'Dark Mode'
-            ? 'dark aura-canvas flex min-h-screen items-center justify-center bg-background p-6'
-            : 'aura-canvas flex min-h-screen items-center justify-center bg-background p-6'
-        }
+        className={'aura-canvas flex min-h-screen items-center justify-center bg-background p-6'}
       >
         <Story />
       </main>
@@ -39,7 +35,7 @@ const LocaleSummary = ({ dark = false }: { dark?: boolean }) => {
     <div
       className={
         dark
-          ? 'dark rounded-2xl bg-background p-6 text-foreground'
+          ? 'rounded-2xl bg-background p-6 text-foreground'
           : 'rounded-2xl border border-border/60 bg-card p-6'
       }
     >
@@ -77,6 +73,7 @@ export const SimplifiedChinese: Story = {
 };
 
 export const DarkMode: Story = {
+  globals: { theme: 'dark' },
   render: () => (
     <LocaleProvider locale="zh-CN">
       <LocaleSummary dark />

@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, fn, userEvent, waitFor, within } from 'storybook/test';
-import { withTheme } from '../stories/support.tsx';
+import { withSurface } from '../stories/support.tsx';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from './accordion.tsx';
 
 const rules = [
@@ -30,7 +30,7 @@ const meta = {
   title: 'Rezics UI/Accordion',
   component: Accordion,
   tags: ['autodocs'],
-  decorators: [withTheme],
+  decorators: [withSurface],
   args: { defaultValue: ['spoilers'], onValueChange: fn() },
 } satisfies Meta<typeof Accordion>;
 export default meta;
@@ -150,5 +150,5 @@ export const Chinese: Story = {
 
 export const Dark: Story = {
   ...Default,
-  parameters: { theme: 'dark' },
+  globals: { theme: 'dark' },
 };

@@ -1,9 +1,7 @@
 import { useListCollection } from '@ark-ui/react/combobox';
 import { useFilter } from '@ark-ui/react/locale';
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { useEffect } from 'react';
 import { expect, userEvent, waitFor, within } from 'storybook/test';
-import { cn } from '../utils.ts';
 import {
   Combobox,
   ComboboxContent,
@@ -119,24 +117,9 @@ const WorkPicker = ({
   );
 };
 
-// Popups render in a portal on <body>, outside the story's .dark wrapper, so the dark
-// story also marks <html> while it is shown on its own.
-const Surface = ({
-  dark,
-  page,
-  children,
-}: {
-  dark: boolean;
-  page: boolean;
-  children: React.ReactNode;
-}) => {
-  useEffect(() => {
-    if (!page) return;
-    document.documentElement.classList.add('dark');
-    return () => document.documentElement.classList.remove('dark');
-  }, [page]);
+const Surface = ({ children }: { children: React.ReactNode }) => {
   return (
-    <div className={cn(dark && 'dark')}>
+    <div>
       <div className="min-h-[28rem] bg-background p-6 font-sans text-foreground">
         <div className="flex max-w-sm flex-col gap-4">{children}</div>
       </div>
@@ -165,11 +148,8 @@ const meta = {
     },
   },
   decorators: [
-    (Story, { parameters, viewMode }) => (
-      <Surface
-        dark={parameters.theme === 'dark'}
-        page={parameters.theme === 'dark' && viewMode === 'story'}
-      >
+    (Story) => (
+      <Surface>
         <Story />
       </Surface>
     ),
@@ -240,6 +220,6 @@ export const Chinese: Story = {
 };
 
 export const Dark: Story = {
-  parameters: { theme: 'dark' },
+  globals: { theme: 'dark' },
   args: { defaultOpen: true, defaultValue: ['dark-forest'] },
 };

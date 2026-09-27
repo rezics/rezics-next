@@ -3,10 +3,8 @@ import { expect, userEvent, waitFor } from 'storybook/test';
 import { cn } from '../utils.ts';
 import { ScrollArea } from './scroll-area.tsx';
 
-// Renders on the theme page color; `parameters.dark` switches to dark mode
-// until Storybook has a global theme toolbar.
 const surface: Decorator = (Story, { parameters }) => (
-  <div className={cn(parameters.dark && 'dark', 'bg-background p-6 font-sans text-foreground')}>
+  <div className={cn('bg-background p-6 font-sans text-foreground')}>
     <Story />
   </div>
 );
@@ -143,7 +141,7 @@ export const Chinese: Story = {
 };
 
 export const Dark: Story = {
-  parameters: { dark: true },
+  globals: { theme: 'dark' },
   args: { className: 'h-64 w-80 rounded-2xl border border-border/60 bg-card' },
   render: Vertical.render,
 };

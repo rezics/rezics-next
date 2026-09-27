@@ -3,10 +3,8 @@ import { expect } from 'storybook/test';
 import { cn } from '../utils.ts';
 import { AspectRatio } from './aspect-ratio.tsx';
 
-// Renders on the theme page color; `parameters.dark` switches to dark mode
-// until Storybook has a global theme toolbar.
 const surface: Decorator = (Story, { parameters }) => (
-  <div className={cn(parameters.dark && 'dark', 'bg-background p-6 font-sans text-foreground')}>
+  <div className={cn('bg-background p-6 font-sans text-foreground')}>
     <Story />
   </div>
 );
@@ -105,7 +103,7 @@ export const Chinese: Story = {
 };
 
 export const Dark: Story = {
-  parameters: { dark: true },
+  globals: { theme: 'dark' },
   render: () => (
     <div className="flex items-start gap-4">
       <AspectRatio className="w-32 rounded-sm bg-muted" ratio={2 / 3}>

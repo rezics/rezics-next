@@ -1,7 +1,6 @@
 import { parseDate } from '@ark-ui/react/date-picker';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, userEvent, waitFor, within } from 'storybook/test';
-import { cn } from '../utils.ts';
 import { DateInput, DateInputLabel } from './date-input.tsx';
 
 const meta = {
@@ -19,7 +18,7 @@ const meta = {
   args: { locale: 'en-US', defaultValue: [parseDate('2008-01-01')] },
   decorators: [
     (Story, { parameters }) => (
-      <div className={cn(parameters.theme === 'dark' && 'dark')}>
+      <div>
         <div className="min-h-40 bg-background p-6 font-sans text-foreground">
           <div className="flex max-w-xs flex-col gap-4">
             <Story />
@@ -109,7 +108,7 @@ export const Chinese: Story = {
 };
 
 export const Dark: Story = {
-  parameters: { theme: 'dark' },
+  globals: { theme: 'dark' },
   render: (args, context) => (
     <>
       {meta.render(args)}

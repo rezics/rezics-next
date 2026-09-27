@@ -8,7 +8,6 @@ import {
   ItalicIcon,
 } from 'lucide-react';
 import { expect, userEvent, within } from 'storybook/test';
-import { cn } from '../utils.ts';
 import { Toggle, ToggleIndicator } from './toggle.tsx';
 
 const meta = {
@@ -26,7 +25,7 @@ const meta = {
   args: { 'aria-label': 'Bookmark 《三体》', children: <BookmarkIcon /> },
   decorators: [
     (Story, { parameters }) => (
-      <div className={cn(parameters.theme === 'dark' && 'dark')}>
+      <div>
         <div className="flex min-h-32 items-start gap-3 bg-background p-6 font-sans text-foreground">
           <Story />
         </div>
@@ -141,7 +140,7 @@ export const LongLabel: Story = {
 };
 
 export const Dark: Story = {
-  parameters: { theme: 'dark' },
+  globals: { theme: 'dark' },
   render: () => (
     <>
       <Toggle aria-label="Bookmark">

@@ -2,7 +2,6 @@ import { createListCollection } from '@ark-ui/react/listbox';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { FlagIcon, HashIcon, TrashIcon } from 'lucide-react';
 import { expect, userEvent, waitFor, within } from 'storybook/test';
-import { cn } from '../utils.ts';
 import {
   Listbox,
   ListboxContent,
@@ -54,7 +53,7 @@ const meta = {
   args: { collection: realms, defaultValue: ['scifi'] },
   decorators: [
     (Story, { parameters }) => (
-      <div className={cn(parameters.theme === 'dark' && 'dark')}>
+      <div>
         <div className="min-h-40 bg-background p-6 font-sans text-foreground">
           <div className="max-w-xs">
             <Story />
@@ -217,7 +216,7 @@ export const LongContent: Story = {
 };
 
 export const Dark: Story = {
-  parameters: { theme: 'dark' },
+  globals: { theme: 'dark' },
   render: (args, context) => (
     <div className="flex flex-col gap-8">
       {meta.render(args)}
