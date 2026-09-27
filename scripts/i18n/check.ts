@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 const root = resolve(import.meta.dir, '../..');
@@ -10,13 +10,14 @@ type Catalog = Map<string, Message>;
 type CatalogSpec = { app: 'web' | 'accounts'; namespace: string; english: string; inline?: boolean;
   localeFiles?: Partial<Record<Locale, string>> };
 
-const webFeatures = ['auth', 'discover', 'home', 'search', 'shell', 'studio', 'work', 'work-page'] as const;
+const webFeatures = ['auth', 'discover', 'home', 'realm', 'search', 'shell', 'studio', 'work', 'work-page', 'zones'] as const;
 const accountsFeatures = ['shell', 'auth', 'consent', 'account', 'admin'] as const;
 const specs: CatalogSpec[] = [
   ...webFeatures.map(feature => {
     const namespace = feature === 'work-page' ? 'workPage' : feature;
     const base = `apps/web/features/${feature}/messages`;
-    if (feature === 'home' || feature === 'shell') {
+    // A feature with a messages/ directory keeps one file per locale; the rest are still inline.
+    if (existsSync(resolve(root, base))) {
       return { app: 'web' as const, namespace, english: `${base}.ts`, localeFiles: Object.fromEntries(
         locales.filter(locale => locale !== 'en').map(locale => [locale, `${base}/${locale}.ts`])) as
           Partial<Record<Locale, string>> };
