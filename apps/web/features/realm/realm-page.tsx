@@ -82,8 +82,10 @@ export async function loadRealmView(ref: string, locale: UiLocale, search: Searc
     reader.actingSubject ? readMembership(reader.personal, realm.header.id, reader.actingSubject) : null]);
   // A Zone whose presentation cannot be read still renders its Realm with the default layout.
   const presentation: ZonePresentation = read?.ok ? { ...read.data.presentation,
-    modules: read.data.presentation.modules.map(module => ({ ...module,
-      title: module.titles?.[locale] ?? module.title })) } : defaultPresentation(zoneMessages);
+    modules: read.data.presentation.modules.map(({ titles, tabs, ...module }) => ({ ...module,
+      title: titles?.[locale] ?? module.title,
+      ...tabs ? { tabs: tabs.map(({ labels, ...tab }) => ({ ...tab, label: labels?.[locale] ?? tab.label })) } : {} })) }
+    : defaultPresentation(zoneMessages);
   const bannerMedia = read?.ok ? read.data.bannerMedia : [];
   const lookEnabled = zoneLookEnabled(jar.get(ZONE_LOOK_COOKIE)?.value);
   const main = read?.ok ? mainExecution(read.data) : null;

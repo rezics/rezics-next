@@ -29,6 +29,7 @@ export interface PresentationModule {
   type: ZoneModuleType;
   title: string;
   source: ModuleSource;
+  /** `label` in the reader's language; the Realm adapter picks it from Main's localized `labels`. */
   tabs?: { id: string; label: string; source: ModuleSource }[];
   options?: { layout?: 'covers' | 'rows'; shuffle?: boolean; rail?: boolean; limit?: number;
     metric?: RankingMetric; interval?: RankingInterval };

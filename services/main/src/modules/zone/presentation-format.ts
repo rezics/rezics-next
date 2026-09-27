@@ -21,7 +21,8 @@ const moduleSource = Type.Union([
   Type.Object({ kind: Type.Literal('collection'), collection: id }, { additionalProperties: false }),
   Type.Object({ kind: Type.Literal('context'), context: id }, { additionalProperties: false }),
 ]);
-const moduleTab = Type.Object({ id: slug, label, source: moduleSource },
+/** A tab's `label` is its default; `labels` gives it in the reader's language, as `titles` does for a module. */
+const moduleTab = Type.Object({ id: slug, label, labels: Type.Optional(localizedTitles), source: moduleSource },
   { additionalProperties: false });
 
 export const ZonePresentation = Type.Object({
