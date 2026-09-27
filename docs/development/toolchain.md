@@ -387,8 +387,8 @@ neither dependency-cruiser nor TypeScript typechecking proves asymptotic cost.
 | Nix native oracle container | Nix 2.35.2, `docker.io/nixos/nix:2.35.2@sha256:617d914dba5384bf75adf17081583b69371031ec7defce36c34c5fa14fc819b0` (linux/amd64) | Adopted for PKG06 | Main's bounded adapter and `bun scripts/package/nix-oracle.ts` run this exact image through the adopted Docker CLI against disposable fixtures under `.temp/`, with network disabled. They record the flake lock, selected derivation and observed output closure separately; evaluation and building are executable native Nix operations. The image manifest digest was inspected with the adopted Docker CLI on 2026-09-27. [Official image](https://hub.docker.com/r/nixos/nix/tags), [Nix derivation format](https://nix.dev/manual/nix/stable/command-ref/new-cli/nix3-derivation-show). |
 | Node package hook container | Node 26.8.2, `docker.io/library/node:26.8.2-bookworm-slim@sha256:6e685d638c472d81fdf86b944e3487f0d3b5e747d5099f936d4d2256cd1201d5` (linux/amd64) | Adopted for PKG15 | Main's approved npm lifecycle hooks run in this digest-pinned image through the adopted Docker CLI. The container has no network or inherited host environment, a read-only root, a single staged package bind mount, a non-root user, resource caps and a deadline. The linux/amd64 manifest digest was inspected with `docker buildx imagetools inspect` on 2026-09-27. [Official image](https://hub.docker.com/_/node), [Docker run isolation options](https://docs.docker.com/reference/cli/docker/container/run/). |
 | fast-check | 4.10.2 | Adopted | Properties, model-based command sequences, shrinking and logged seeds. |
-| Vitest, `@vitest/browser-playwright` | 4.1.11 | Adopted | Storybook component tests. Vitest 5 is not used while `@storybook/addon-vitest` 10.6 accepts only `^3 \|\| ^4`. |
-| Storybook | 10.6.0 (`storybook`, `@storybook/react-vite`, `@storybook/addon-vitest`, `@storybook/addon-a11y`) | Adopted | Component states and accessibility checks. |
+| Vitest, `@vitest/browser-playwright` | 5.0.2 | Adopted | Storybook component tests in browser mode. `@storybook/addon-vitest` 11 accepts Vitest 5; 10.6 did not. |
+| Storybook | 11.0.0-alpha.1 (`storybook`, `@storybook/react-vite`, `@storybook/addon-vitest`, `@storybook/addon-a11y`, `@storybook/addon-mcp`) | Adopted, prerelease (maintainer direction, 2026-09-27) | Component states, accessibility checks and the MCP endpoint through which agents read component docs and write and test stories. Chosen for Storybook 11's agent features over stability; move to beta, RC and stable as they ship (GA planned 2026-11-10) and fix breakage when it appears. |
 | `@testing-library/react` | 16.3.3 | Adopted | Component interaction assertions. |
 | msw | 2.15.0 | Adopted | Network mocks in stories and component tests only; never in backend integration tests. |
 | `@playwright/test`, `playwright` | 1.63.0 | Adopted | End-to-end journeys against the local stack and `wrangler dev`; Vitest's browser provider uses Playwright. |
@@ -437,7 +437,7 @@ Aspire (the copied `aspire` skill does not apply to this repository), Task/go-ta
 Nx/Turbo, moon, mise, Lefthook, PGlite, oasdiff, Spectral (the
 [2026-09-27 re-evaluation](../research/agent-efficiency-tooling.md) records
 revisit triggers), Redis, MinIO, openapi-fetch for the web, third-party Eden query wrappers
-(`@ap0nia/eden-react-query`, `eden2query`), Vitest 5, Lingui, Paraglide, and Python
+(`@ap0nia/eden-react-query`, `eden2query`), Lingui, Paraglide, and Python
 model validators. Operations tooling (pgBackRest, restic, OpenTelemetry Collector,
 Prometheus, Grafana, VictoriaLogs, Caddy) is stage G; recheck versions from the
 survey when that stage starts.
