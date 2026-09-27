@@ -942,7 +942,8 @@ export class AccessAdmissionRegistry {
         } else {
           const represented = await client.query(
             `SELECT id FROM access.representation
-             WHERE principal_id = $1 AND subject_id = $2 AND action = $3
+             WHERE principal_id = $1 AND subject_id = $2
+               AND (action = $3 OR action = 'agent.control' AND $3 IN ('review.decide','publication.adopt'))
                AND active AND valid_until > clock_timestamp()
              ORDER BY id LIMIT 1 FOR SHARE`,
             [principalId, request.actingSubject, authorityAction]);
@@ -1097,6 +1098,18 @@ export class AccessAdmissionRegistry {
         [row.principal_id]);
       if (principal.rows[0]?.active !== true) throw new AdmissionDenied('principal dispatch is fenced');
       await requireRealmParticipation(client, row.scope_id, row.action, row.principal_id, row.acting_subject);
+      if (row.action === 'review.decide' || row.action === 'publication.adopt') {
+        const current = await client.query(`SELECT 1 FROM access.representation r
+          JOIN access.authority_subject s ON s.id = r.subject_id AND s.active
+          JOIN access.permission_grant g ON g.recipient_subject = s.id AND g.scope_id = $4
+            AND g.action = $3 AND g.active AND g.valid_until > clock_timestamp()
+            AND (g.membership_id IS NULL OR EXISTS (SELECT 1 FROM access.membership m
+              WHERE m.id = g.membership_id AND m.state = 'joined' AND m.generation = g.membership_generation))
+          WHERE r.principal_id = $1 AND r.subject_id = $2 AND r.action IN ($3,'agent.control')
+            AND r.active AND r.valid_until > clock_timestamp() LIMIT 1 FOR SHARE OF r,s,g`,
+        [row.principal_id, row.acting_subject, row.action, row.scope_id]);
+        if (!current.rowCount) throw new AdmissionDenied('Reviewer authority changed before claim');
+      }
       const baseline = await savedBaselineProof(client, row.id);
       if (baseline) {
         const identity = principal.rows[0]!;

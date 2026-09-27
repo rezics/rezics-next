@@ -64,7 +64,7 @@ export class AccessMembershipConsents {
     return result.rows[0];
   }
 
-  async issue(input: MembershipConsentRequest): Promise<MembershipConsentResult> {
+  async issue(input: MembershipConsentRequest, transaction?: PoolClient): Promise<MembershipConsentResult> {
     if (!agent.test(input.ownerSubject) || !agent.test(input.memberSubject)
       || !epoch.test(input.expectedGeneration) || !epoch.test(input.expectedPolicyRevision)
       || !input.termsRevision || input.termsRevision.length > 128
@@ -72,9 +72,9 @@ export class AccessMembershipConsents {
       || input.idempotencyKey.includes('\0') || !/^[0-9a-f]{64}$/.test(input.requestDigest)) {
       throw new MembershipDenied('invalid consent request');
     }
-    const client = await this.pool.connect();
+    const client = transaction ?? await this.pool.connect();
     try {
-      await this.begin(client);
+      if (!transaction) await this.begin(client);
       const principal = await this.principal(client, input.principal);
       const prior = await client.query<{ request_digest: string; consent_id: string }>(`
         SELECT request_digest, consent_id FROM access.membership_consent_receipt
@@ -87,7 +87,7 @@ export class AccessMembershipConsents {
         const saved = await client.query<ConsentRow>(`SELECT id, next_generation, expires_at
           FROM access.membership_consent WHERE id = $1`, [prior.rows[0].consent_id]);
         if (!saved.rows[0]) throw new MembershipUnavailable('consent receipt history missing');
-        await client.query('COMMIT');
+        if (!transaction) await client.query('COMMIT');
         return { consentReference: saved.rows[0].id,
           nextGeneration: saved.rows[0].next_generation,
           expiresAt: saved.rows[0].expires_at.toISOString(), replayed: true };
@@ -125,7 +125,7 @@ export class AccessMembershipConsents {
         JOIN LATERAL (SELECT id, generation, valid_until
           FROM access.representation
           WHERE subject_id = s.id AND principal_id = $1
-            AND action = 'access.membership.consent'
+            AND action IN ('access.membership.consent', 'agent.control')
             AND active AND valid_until > clock_timestamp()
           LIMIT 1 FOR SHARE) r ON true
         JOIN LATERAL (SELECT id, generation, valid_until
@@ -154,13 +154,13 @@ export class AccessMembershipConsents {
       await client.query(`INSERT INTO access.membership_consent_receipt
         (principal_id, idempotency_key, request_digest, consent_id) VALUES ($1,$2,$3,$4)`,
       [principal.id, input.idempotencyKey, input.requestDigest, consentReference]);
-      await client.query('COMMIT');
+      if (!transaction) await client.query('COMMIT');
       return { consentReference, nextGeneration,
         expiresAt: mandate.rows[0].expires_at.toISOString(), replayed: false };
     } catch (error) {
-      try { await client.query('ROLLBACK'); } catch { /* preserve original */ }
+      if (!transaction) try { await client.query('ROLLBACK'); } catch { /* preserve original */ }
       throw this.normalize(error);
-    } finally { client.release(); }
+    } finally { if (!transaction) client.release(); }
   }
 
   async revoke(asserted: VerifiedPrincipal, consentReference: string): Promise<void> {

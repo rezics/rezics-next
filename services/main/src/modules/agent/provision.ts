@@ -157,6 +157,12 @@ export class AgentProvisioning {
         (id, principal_id, subject_id, action, valid_until, assigned_by_principal)
         VALUES ($1,$2,$3,'agent.control','infinity',$2)`,
       [representationId, row.principal_id, row.agent_id]);
+      // A controller may consent for this person Agent, but cannot add anybody
+      // to a Realm. Both the control mandate and this narrow grant are revocable.
+      if (row.agent_kind === 'person') await client.query(`INSERT INTO access.permission_grant
+        (id,issuer_subject,recipient_subject,scope_id,action,valid_until,assigned_by_principal)
+        VALUES ($1,$2,$2,'work:create:root','access.membership.consent','infinity',$3)`,
+      [randomUUID(), row.agent_id, row.principal_id]);
       await client.query(`UPDATE access.agent_provision SET state = 'active',
         representation_id = $2 WHERE id = $1`, [id, representationId]);
       return { ...row, state: 'active' };

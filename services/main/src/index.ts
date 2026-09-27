@@ -107,6 +107,11 @@ import { OwnerOperations } from './modules/owner/operations.ts';
 import { governanceServices } from './modules/governance/composition.ts';
 import { AccessRealmManagement } from './modules/access/realm-management.ts';
 import { ManagementReadStore } from './modules/management-reads/read-store.ts';
+import { ManagementDecisionBasis } from './modules/management-reads/decision-basis.ts';
+import { ownerTargetHeads } from './modules/governance/evidence.ts';
+import { AccessRealmJoining } from './modules/access/realm-management-joining.ts';
+import { AccessRealmRoster } from './modules/access/roster.ts';
+import { AccessManagedRealms } from './modules/access/realm-management-managed.ts';
 import { RealmSubmissionStore } from './modules/realm-submission/store.ts';
 import { RealmSubmissionReads } from './modules/realm-submission/reads.ts';
 import { AccessProposalExecutions } from './modules/proposal/access.ts';
@@ -322,6 +327,10 @@ const app = createMainApp(fuseki, {
   recommendations,
   governance: governanceServices(pool, contentPool, content, sourceIntake, access, environment),
   managementReads: new ManagementReadStore(pool, environment),
+  managementDecisionBasis: new ManagementDecisionBasis(pool, environment, ownerTargetHeads({ graph: environment, content: contentPool })),
+  realmJoining: new AccessRealmJoining(pool, environment),
+  realmRoster: new AccessRealmRoster(pool, environment),
+  managedRealms: new AccessManagedRealms(pool, environment),
   realmAdmin: new AccessRealmManagement(pool),
   realmSubmissions: new RealmSubmissionStore(pool, access, environment),
   realmSubmissionReads: new RealmSubmissionReads(pool),

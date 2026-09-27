@@ -13,6 +13,8 @@ import { deliverRealmPolicy, type RealmPolicyDelivery } from '../space/policy.ts
 import { DATASET, GRAPHS, iri, lit, RV, type WorkActivationEnvironment } from '../work/activate.ts';
 
 export const realmAdminScope = (realm: string) => `governance:realm:${realm}`;
+export const realmPermissionScope = (realm: string, action: string) => action === 'review.decide'
+  ? `review:decide:${realm}` : action === 'publication.adopt' ? `publication:adopt:${realm}` : realmAdminScope(realm);
 const native = /^https:\/\/rezics\.com\/id\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const digest = (value: unknown): string => createHash('sha256').update(JSON.stringify(value, (_key, item) =>
   item && typeof item === 'object' && !Array.isArray(item)
@@ -59,7 +61,7 @@ export class AccessRealmManagement {
 
   /** One-time owner enrollment from the server-read successful creation receipt.
    * Replaying enrollment can never recreate a subsequently revoked grant.
-   * Cost: one exact graph read (8 KiB), one admission probe and six grant rows. */
+   * Cost: one exact graph read (8 KiB), one admission probe and eight grant rows. */
   async initialize(principal: VerifiedPrincipal, realm: string, actor: string, env: WorkActivationEnvironment) {
     if (!native.test(realm) || !native.test(actor)) throw new RealmAdminInvalid('Invalid Realm owner');
     const rows = (await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?receipt ?admission WHERE {
@@ -93,10 +95,13 @@ export class AccessRealmManagement {
       await client.query(`INSERT INTO access.authority_subject (id,kind) VALUES ($1,'institution') ON CONFLICT DO NOTHING`, [realm]);
       await client.query(`INSERT INTO access.membership_policy (kind,owner_subject,revision,terms_revision)
         VALUES ('realm',$1,0,'realm-membership-v1') ON CONFLICT DO NOTHING`, [realm]);
+      await client.query(`INSERT INTO access.scope_gate (id) SELECT unnest($1::text[]) ON CONFLICT DO NOTHING`,
+        [[`review:decide:${realm}`, `publication:adopt:${realm}`]]);
       await client.query(`INSERT INTO access.permission_grant
         (id,issuer_subject,recipient_subject,scope_id,action,valid_until,assigned_by_principal)
-        SELECT gen_random_uuid(),$1,$1,$2,action,$3,$4 FROM unnest($5::text[]) AS action`,
-      [actor, realmAdminScope(realm), identity.valid_until, identity.id, [...realmPermissions, 'realm.owner']]);
+        SELECT gen_random_uuid(),$1,$1,scope,action,$3,$4 FROM unnest($2::text[],$5::text[]) AS p(scope,action)`,
+      [actor, [...realmPermissions, 'realm.owner'].map(action => realmPermissionScope(realm, action)),
+        identity.valid_until, identity.id, [...realmPermissions, 'realm.owner']]);
       await client.query(`INSERT INTO access.realm_admin_owner_bootstrap
         (realm,owner_subject,admission_id,receipt_id,principal_id) VALUES ($1,$2,$3,$4,$5)`,
       [realm, actor, proof.admission!.value, receiptId, identity.id]);
@@ -125,7 +130,7 @@ export class AccessRealmManagement {
       WHERE p.account_issuer = $1 AND p.account_subject = $2 AND p.active
       ORDER BY LEAST(r.valid_until, g.valid_until) DESC LIMIT 1 FOR SHARE OF p, r, a, g, gate`,
     [principal.issuer, principal.subject, actor,
-      action === 'review.decide' ? `review:decide:${realm}` : realmAdminScope(realm), action])).rows[0];
+      realmPermissionScope(realm, action), action])).rows[0];
     if (!row) throw new RealmAdminDenied('Realm permission is missing');
     return { id: row.id, validUntil: row.valid_until };
   }
@@ -315,12 +320,14 @@ export class AccessRealmManagement {
       g.generation::text, g.valid_until, link.role_id FROM access.permission_grant g
       JOIN access.authority_subject a ON a.id = g.recipient_subject AND a.active
       LEFT JOIN access.realm_admin_role_grant link ON link.grant_id = g.id
-      WHERE g.recipient_subject = ANY($1::text[]) AND g.scope_id = $2
+      WHERE g.recipient_subject = ANY($1::text[]) AND g.scope_id = CASE g.action
+        WHEN 'review.decide' THEN 'review:decide:' || $2
+        WHEN 'publication.adopt' THEN 'publication:adopt:' || $2 ELSE 'governance:realm:' || $2 END
         AND g.action = ANY($3::text[]) AND g.active AND g.valid_until > clock_timestamp()
         AND (g.membership_id IS NULL OR EXISTS (SELECT 1 FROM access.membership m
           WHERE m.id = g.membership_id AND m.state = 'joined' AND m.generation = g.membership_generation))
       ORDER BY g.id LIMIT $4 FOR SHARE OF g`,
-    [members, realmAdminScope(realm), realmPermissions, REALM_ADMIN_COST.grantRows + 1])).rows;
+    [members, realm, realmPermissions, REALM_ADMIN_COST.grantRows + 1])).rows;
     if (grants.length > REALM_ADMIN_COST.grantRows) throw new RealmAdminLimit('Grant impact exceeds its exact preview budget');
     const byMember = new Map<string, Grant[]>();
     for (const grant of grants) {
@@ -376,17 +383,21 @@ export class AccessRealmManagement {
           ON CONFLICT (realm,role_id,member) DO UPDATE SET valid_until = EXCLUDED.valid_until`,
         [realm, change.roleId, change.member, change.assigned ? change.validUntil : new Date(0)]);
         if (change.kind === 'role' || change.assigned) {
+          await client.query(`INSERT INTO access.scope_gate (id) SELECT unnest($1::text[]) ON CONFLICT DO NOTHING`,
+            [[`review:decide:${realm}`, `publication:adopt:${realm}`]]);
           // One bounded set insert rather than one query per member/permission.
           await client.query(`WITH recipients AS (SELECT * FROM unnest($4::text[], $5::timestamptz[])
             AS r(member, valid_until)), inserted AS (
             INSERT INTO access.permission_grant (id,issuer_subject,recipient_subject,scope_id,action,valid_until,assigned_by_principal)
-            SELECT gen_random_uuid(),$2,r.member,$3,p.action,r.valid_until,$7 FROM recipients r
-              CROSS JOIN unnest($6::text[]) AS p(action) RETURNING id,recipient_subject)
+            SELECT gen_random_uuid(),$2,r.member,p.scope,p.action,r.valid_until,$7 FROM recipients r
+              CROSS JOIN unnest($3::text[],$6::text[]) AS p(scope,action) RETURNING id,recipient_subject)
             INSERT INTO access.realm_admin_role_grant (realm,role_id,member,grant_id)
             SELECT $1,$8,recipient_subject,id FROM inserted`,
-          [realm, input.actingSubject, realmAdminScope(realm), plan.assignments.map(a => a.member),
+          [realm, input.actingSubject, plan.permissions.map(action => realmPermissionScope(realm, action)), plan.assignments.map(a => a.member),
             plan.assignments.map(a => a.valid_until), plan.permissions, principalId, change.roleId]);
         }
+        await client.query(`UPDATE access.scope_gate SET authority_epoch = authority_epoch + 1 WHERE id = ANY($1::text[])`,
+          [[`review:decide:${realm}`, `publication:adopt:${realm}`]]);
         return { receiptId, generation, replayed: false, impact: plan.impact };
       });
   }

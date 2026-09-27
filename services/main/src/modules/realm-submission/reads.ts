@@ -35,7 +35,7 @@ export class RealmSubmissionReads {
     const row = (await client.query(`SELECT 1 FROM access.principal p
       JOIN access.representation r ON r.principal_id = p.id AND r.subject_id = $3
         AND r.active AND r.valid_until > clock_timestamp()
-        AND r.action = ${realm ? "'review.decide'" : "'submission.submit'"}
+        AND ${realm ? "r.action IN ('review.decide','agent.control')" : "r.action = 'submission.submit'"}
       JOIN access.authority_subject s ON s.id = r.subject_id AND s.kind = 'agent' AND s.active
       ${realm ? `JOIN access.permission_grant g ON g.recipient_subject = s.id
         AND g.scope_id = $4 AND g.action = 'review.decide' AND g.active AND g.valid_until > clock_timestamp()

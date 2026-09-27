@@ -4,6 +4,7 @@ import { accessAuthorityRoutes } from './routes/access-authority.ts';
 import { agentRoutes } from './routes/agents.ts';
 import { onboardingRoutes } from './routes/onboarding.ts';
 import { accessMembershipRoutes } from './routes/access-memberships.ts';
+import { managedRealmRoutes } from './routes/managed-realms.ts';
 import { accessPolicyRoutes } from './routes/access-policy.ts';
 import { accessRoleRoutes } from './routes/access-roles.ts';
 import { accessTopologyRoutes } from './routes/access-topology.ts';
@@ -132,6 +133,7 @@ function contentCommunityRoutes(fuseki: FusekiClient, work: SearchRouteDependenc
 function domainRoutes(fuseki: FusekiClient, work: SearchRouteDependencies) {
   return new Elysia()
     .use(reviewRoutes(work))
+    .use(managedRealmRoutes(work))
     .use(studioRoutes(work))
     .use(realmAdminRoutes(work))
     .use(memberReplyRoutes(work))

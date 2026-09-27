@@ -72,13 +72,15 @@ export async function changeRealmMember(client: PoolClient, realm: string, input
   }
   if (input.action === 'remove' || input.action === 'ban') {
     const grants = (await client.query<{ grant_id: string }>(`SELECT grant_id FROM access.realm_admin_role_grant
-      WHERE realm = $1 AND member = $2 ORDER BY grant_id LIMIT 161`, [realm, input.member])).rows;
-    if (grants.length > 160) throw new RealmAdminLimit('Member role cleanup budget exceeded');
+      WHERE realm = $1 AND member = $2 ORDER BY grant_id LIMIT 225`, [realm, input.member])).rows;
+    if (grants.length > 224) throw new RealmAdminLimit('Member role cleanup budget exceeded');
     await client.query(`UPDATE access.permission_grant SET active = false WHERE id = ANY($1::uuid[]) AND active`,
       [grants.map(row => row.grant_id)]);
     await client.query(`DELETE FROM access.realm_admin_role_grant WHERE realm = $1 AND member = $2`, [realm, input.member]);
     await client.query(`UPDATE access.realm_admin_assignment SET valid_until = clock_timestamp()
       WHERE realm = $1 AND member = $2 AND valid_until > clock_timestamp()`, [realm, input.member]);
+    await client.query(`UPDATE access.scope_gate SET authority_epoch = authority_epoch + 1 WHERE id = ANY($1::text[])`,
+      [[`review:decide:${realm}`, `publication:adopt:${realm}`]]);
   }
   let bannedUntil = banned?.expires_at?.toISOString() ?? null;
   if (input.action === 'ban' || input.action === 'unban') {

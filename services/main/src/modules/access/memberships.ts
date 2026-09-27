@@ -156,7 +156,7 @@ export async function currentMembershipConsent(client: PoolClient,
       AND s.kind = 'agent' AND s.active AND s.generation = c.member_generation
     JOIN access.representation r ON r.id = c.representation_id
       AND r.principal_id = c.principal_id AND r.subject_id = c.member_subject
-      AND r.action = 'access.membership.consent' AND r.active
+      AND r.action IN ('access.membership.consent', 'agent.control') AND r.active
       AND r.generation = c.representation_generation
       AND r.valid_until > clock_timestamp()
     JOIN access.permission_grant g ON g.id = c.grant_id

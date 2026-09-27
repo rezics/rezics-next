@@ -9,6 +9,8 @@ import { WorkReadInvalid, WorkReadMoved } from '../modules/work/read-session.ts'
 import { readUuid } from '../modules/work/read-contract.ts';
 import type { MainWorkDependencies } from './dependencies.ts';
 import { commandError, problem } from './problems.ts';
+import { decisionBasisPage, DECISION_BASIS_COST } from '../modules/management-reads/decision-basis.ts';
+import { realmOperationError } from './managed-realms.ts';
 
 const problems = { ...authorizedReadProblems, 409: problemResult(409), 422: problemResult(422) };
 const detail = { security: [{ bearerAuth: [] }] };
@@ -17,6 +19,7 @@ const params = t.Object({ realm: readUuid });
 export const openApiOperations = {
   '/v1/realms/{realm}/moderation': { get: { bearer: true } },
   '/v1/realms/{realm}/audit': { get: { bearer: true } },
+  '/v1/realms/{realm}/moderation/{caseId}': { get: { bearer: true } },
 } as const;
 
 function readError(error: unknown): Response {
@@ -32,6 +35,19 @@ function readError(error: unknown): Response {
 
 export function managementReadRoutes(work: MainWorkDependencies) {
   return new Elysia()
+    .get('/v1/realms/:realm/moderation/:caseId', { params: t.Object({ realm: readUuid, caseId: readUuid }), detail,
+      query: t.Object({ ...managementQuery, limit: t.Optional(t.Integer({ minimum: 1, maximum: DECISION_BASIS_COST.reports })) },
+        { additionalProperties: false }), response: { 200: decisionBasisPage, ...problems },
+    }, async ({ request, params: path, query }) => {
+      try {
+        const principal = await work.account.verify(request, ['governance:decide']);
+        if (!work.managementDecisionBasis) throw new ManagementReadUnavailable('Decision basis owner is unavailable');
+        return Response.json(await work.managementDecisionBasis.read(principal, `https://rezics.com/id/${path.realm}`, path.caseId, query), { headers });
+      } catch (error) {
+        if (error instanceof WorkReadInvalid || error instanceof WorkReadMoved || error instanceof ManagementReadUnavailable) return readError(error);
+        return realmOperationError(error);
+      }
+    })
     .get('/v1/realms/:realm/moderation', { params, detail,
       query: t.Object({ ...managementQuery,
         state: t.Optional(t.Union([t.Literal('open'), t.Literal('closed')])),

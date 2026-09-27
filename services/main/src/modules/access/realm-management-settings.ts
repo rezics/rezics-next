@@ -14,15 +14,15 @@ const hash = (input: unknown) => createHash('sha256').update(JSON.stringify(inpu
 /** Settings keep the localized title/body maps intact. The immutable rule
  * revision is shared with GovernanceRules, so moderation uses the exact basis. */
 export async function readRealmSettings(client: PoolClient, realm: string) {
-  const row = (await client.query<{ who_may_submit: RealmSettings['whoMaySubmit']; visibility: RealmSettings['visibility']; review_mode: RealmReviewMode }>(`
-    SELECT who_may_submit,visibility,review_mode FROM access.realm_admin_settings WHERE realm = $1`, [realm])).rows[0];
+  const row = (await client.query<{ who_may_submit: RealmSettings['whoMaySubmit']; visibility: RealmSettings['visibility']; review_mode: RealmReviewMode; self_join: boolean }>(`
+    SELECT who_may_submit,visibility,review_mode,self_join FROM access.realm_admin_settings WHERE realm = $1`, [realm])).rows[0];
   const rules = (await client.query<{ revision: string; digest: string; document: { rules?: unknown } }>(`
     SELECT h.revision::text,h.digest,r.document FROM access.governance_rule_head h
     JOIN access.governance_rule_revision r ON r.ref = h.ref AND r.revision = h.revision
     WHERE h.ref = $1 AND h.scope_id = $2`, [realmRulesRef(realm), `governance:realm:${realm}`])).rows[0];
   const settings = { visibility: row?.visibility ?? 'public', reviewRequired: (row?.review_mode ?? 'mandatory') === 'mandatory',
     reviewMode: row?.review_mode ?? 'mandatory',
-    whoMaySubmit: row?.who_may_submit ?? 'granted', rules: rules?.document.rules ?? [] };
+    whoMaySubmit: row?.who_may_submit ?? 'granted', selfJoin: row?.self_join ?? false, rules: rules?.document.rules ?? [] };
   if (!Value.Check(realmSettings, settings)) throw new RealmAdminInvalid('Realm rules document has an unsupported shape');
   return { settings, ruleBasis: { ref: realmRulesRef(realm), revision: rules?.revision ?? null, digest: rules?.digest ?? null } };
 }
@@ -48,9 +48,11 @@ export async function saveRealmSettings(client: PoolClient, realm: string, princ
     if (error instanceof GovernanceDenied) throw new RealmAdminDenied(error.message);
     throw error;
   });
-  await client.query(`INSERT INTO access.realm_admin_settings (realm,who_may_submit,visibility,review_mode) VALUES ($1,$2,$3,$4)
+  await client.query(`INSERT INTO access.realm_admin_settings (realm,who_may_submit,visibility,review_mode,self_join) VALUES ($1,$2,$3,$4,$5)
     ON CONFLICT (realm) DO UPDATE SET who_may_submit = EXCLUDED.who_may_submit,
-      visibility = EXCLUDED.visibility,review_mode = EXCLUDED.review_mode`, [realm, settings.whoMaySubmit,settings.visibility,mode]);
+      visibility = EXCLUDED.visibility,review_mode = EXCLUDED.review_mode,
+      self_join = CASE WHEN $6 THEN EXCLUDED.self_join ELSE access.realm_admin_settings.self_join END`,
+  [realm, settings.whoMaySubmit,settings.visibility,mode,settings.selfJoin ?? false,settings.selfJoin !== undefined]);
   return { settings, ruleBasis: { ref, revision: published.revision, digest: published.digest } };
 }
 

@@ -114,6 +114,10 @@ export interface MainWorkDependencies {
   agentProfiles?: import('../modules/agent/profile.ts').AgentPublicProfiles;
   governance?: { store: GovernanceStore; rules?: GovernanceRules };
   managementReads?: ManagementReadStore;
+  managementDecisionBasis?: import('../modules/management-reads/decision-basis.ts').ManagementDecisionBasis;
+  realmJoining?: import('../modules/access/realm-management-joining.ts').AccessRealmJoining;
+  realmRoster?: import('../modules/access/roster.ts').AccessRealmRoster;
+  managedRealms?: import('../modules/access/realm-management-managed.ts').AccessManagedRealms;
   realmSubmissions?: RealmSubmissionStore;
   realmSubmissionReads?: RealmSubmissionReads;
   proposalExecutions?: AccessProposalExecutions;
