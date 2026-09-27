@@ -268,8 +268,17 @@ export const Sidebar = (props: SidebarProps) => {
   );
 };
 
-export const SidebarTrigger = (props: React.ComponentProps<typeof Button>) => {
-  const { className, onClick, ...rest } = props;
+interface SidebarTriggerProps extends React.ComponentProps<typeof Button> {
+  /**
+   * The accessible label, for example 切换侧边栏 in zh-CN.
+   *
+   * @default "Toggle Sidebar"
+   */
+  label?: string;
+}
+
+export const SidebarTrigger = (props: SidebarTriggerProps) => {
+  const { label = 'Toggle Sidebar', className, onClick, ...rest } = props;
 
   const { toggleSidebar } = useSidebar();
 
@@ -287,7 +296,7 @@ export const SidebarTrigger = (props: React.ComponentProps<typeof Button>) => {
       {...rest}
     >
       <PanelLeftIcon className="rtl:rotate-180" />
-      <ark.span className="sr-only">Toggle Sidebar</ark.span>
+      <ark.span className="sr-only">{label}</ark.span>
     </Button>
   );
 };
@@ -410,7 +419,9 @@ export const SidebarContent = (props: SidebarContentProps) => {
 
   return (
     <ScrollArea
-      className="[--fade-size:3rem] **:data-[slot=scroll-area-scrollbar]:hidden"
+      // Ark sizes scroll content to fit-content inline, which lets a long Realm name widen the
+      // menu past the sidebar, defeating truncation and pushing badges and actions off-screen.
+      className="[--fade-size:3rem] **:data-[slot=scroll-area-content]:min-w-0! **:data-[slot=scroll-area-scrollbar]:hidden"
       scrollFade={scrollFade}
     >
       <ark.div
@@ -576,6 +587,7 @@ export const SidebarMenuButton = ({ tooltip, ...props }: SidebarMenuButtonProps)
         'motion-reduce:transition-none!',
         className,
       )}
+      aria-current={isActive ? 'page' : undefined}
       clickEffect={false}
       data-active={isActive}
       data-sidebar="menu-button"
@@ -757,6 +769,7 @@ export const SidebarMenuSubButton = (props: SidebarMenuSubButtonProps) => {
         '[&_svg]:text-sidebar-accent-foreground',
         className,
       )}
+      aria-current={isActive ? 'page' : undefined}
       data-active={isActive}
       data-sidebar="menu-sub-button"
       data-size={size}
