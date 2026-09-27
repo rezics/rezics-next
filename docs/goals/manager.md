@@ -97,6 +97,12 @@ Claude 7d was 24% used and reset on 2026-09-28 at 23:00 CST, and each weekly
 reset follows at the same time; Codex was 45% used (reset 2026-10-04 02:50 CST);
 `codex-1` was 4% used (reset 2026-10-04 20:16 CST).
 
+- **Measured ratio (2026-09-28).** A full 5-hour window is about 15% of the
+  Claude week: the first 96 minutes moved the 5-hour window 32 points and the
+  week 5 points, with the manager, 4–5 Opus workers and research subagents. Four
+  to five saturated windows fill the rest of a day, so with a day left before
+  the weekly reset the week and the 5-hour window bind together; beyond two or
+  three Opus workers, extra width goes to Codex and Astra.
 - **Claude 7d.** `goalctl status` projects the week at reset from the recent
   burn rate. Below 95% it prints `widen`; add Opus workers or raise their effort.
   New Claude dispatch stops when the week would run out before its reset, or at
