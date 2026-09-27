@@ -278640,7 +278640,10 @@
                     },
                     "rightsStatus": {
                       "~elyTyp": 7,
-                      "const": "undetermined",
+                      "enum": [
+                        "undetermined",
+                        "restricted"
+                      ],
                       "nullable": true,
                       "type": [
                         "string",
