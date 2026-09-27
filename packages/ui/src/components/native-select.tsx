@@ -7,28 +7,28 @@ import type React from 'react';
 import { tv, type VariantProps } from 'tailwind-variants';
 import { cn } from '../utils.ts';
 
+// Input's chrome and heights, so native and custom selects line up with text fields.
 export const nativeSelectVariants = tv({
   base: [
     'appearance-none',
     'w-full min-w-0',
-    'ps-2.5 pe-8',
     'select-none text-sm',
-    'bg-transparent dark:bg-input/30',
-    'rounded-xl border border-input shadow-xs/5',
+    'bg-primary/5',
+    'rounded-xl border border-border/80 shadow-[inset_0_1px_2px_rgba(0,0,0,0.04)] hover:border-border',
     'transition-colors',
     'outline-none',
-    "[&:has(option[value='']:checked)]:text-muted-foreground/64",
+    "[&:has(option[value='']:checked)]:text-muted-foreground",
     'disabled:pointer-events-none disabled:cursor-not-allowed',
-    'focus-visible:border-primary focus-visible:ring-[3px] focus-visible:ring-ring/32',
+    'focus-visible:border-ring/50 focus-visible:ring-2 focus-visible:ring-ring/20',
     'aria-invalid:border-destructive aria-invalid:ring-[3px] aria-invalid:ring-destructive/24',
     'dark:aria-invalid:border-destructive-foreground dark:aria-invalid:text-destructive-foreground dark:aria-invalid:ring-destructive-foreground/20',
     'motion-reduce:transition-none!',
   ],
   variants: {
     size: {
-      sm: ['h-7'],
-      md: ['h-8'],
-      lg: ['h-9'],
+      sm: ['h-8', 'ps-3 pe-8', 'rounded-lg'],
+      md: ['h-9', 'ps-4 pe-9'],
+      lg: ['h-10', 'ps-5 pe-10', 'text-[15px]'],
     },
   },
   defaultVariants: {
@@ -63,12 +63,13 @@ export const NativeSelect = (props: NativeSelectProps) => {
       <ArkField.Select
         aria-invalid={invalid}
         className={cn(nativeSelectVariants({ size }))}
+        data-size={size}
         data-slot="native-select"
         {...rest}
       />
       <ChevronsUpDownIcon
         aria-hidden="true"
-        className={cn('absolute inset-e-2.5 top-1/2 -translate-y-1/2')}
+        className="absolute inset-e-3 top-1/2 -translate-y-1/2"
         data-slot="native-select-icon"
       />
     </ark.div>
