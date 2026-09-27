@@ -81,7 +81,7 @@ export function accountEmailQueue(pool: Pool, secret: string, send: ReturnType<t
         const claimed = await pool.query<{ id: string; user_id: string; payload: string }>(`
           UPDATE rezics_account_email SET state = 'sending', started_at = now()
           WHERE id = (SELECT id FROM rezics_account_email WHERE state = 'queued'
-            AND expires_at > now() ORDER BY created_at, id FOR UPDATE SKIP LOCKED LIMIT 1)
+            AND expires_at > now() AND available_at <= now() ORDER BY available_at, created_at, id FOR UPDATE SKIP LOCKED LIMIT 1)
           RETURNING id, user_id, payload`);
         const row = claimed.rows[0];
         if (!row) break;
@@ -92,8 +92,9 @@ export function accountEmailQueue(pool: Pool, secret: string, send: ReturnType<t
           // Verification of a new address legitimately targets a different email.
           const user = await pool.query<{ email: string }>('SELECT email FROM "user" WHERE id = $1', [row.user_id]);
           if (!user.rowCount) {
-            await pool.query(`UPDATE rezics_account_email SET state = 'queued', started_at = NULL WHERE id = $1`, [row.id]);
-            break;
+            await pool.query(`UPDATE rezics_account_email SET state = 'queued', started_at = NULL,
+              available_at = now() + interval '10 seconds' WHERE id = $1`, [row.id]);
+            continue;
           }
           if (input.purpose !== 'verify' && user.rows[0]!.email !== input.to) {
             await pool.query(`UPDATE rezics_account_email SET state = 'expired', payload = NULL WHERE id = $1`, [row.id]);

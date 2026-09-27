@@ -48,14 +48,16 @@ CREATE INDEX IF NOT EXISTS account_directory_email ON public."user" (lower(email
 CREATE INDEX IF NOT EXISTS account_directory_name ON public."user" (lower(name), id);
 CREATE INDEX IF NOT EXISTS account_directory_email_prefix ON public."user" (lower(email) text_pattern_ops);
 CREATE INDEX IF NOT EXISTS account_directory_name_prefix ON public."user" (lower(name) text_pattern_ops);
-CREATE INDEX IF NOT EXISTS account_directory_id_prefix ON public."user" (id text_pattern_ops);
+CREATE INDEX IF NOT EXISTS account_directory_id_prefix ON public."user" (lower(id) text_pattern_ops);
 
 CREATE OR REPLACE FUNCTION public.rezics_account_last_owner() RETURNS trigger
 LANGUAGE plpgsql AS $$ BEGIN
   PERFORM pg_advisory_xact_lock(hashtextextended('account-operator-roles', 0));
   IF TG_OP = 'UPDATE' AND NEW.role = 'owner' THEN RETURN NEW; END IF;
   IF OLD.role = 'owner' AND NOT EXISTS (
-    SELECT 1 FROM public.rezics_account_operator WHERE role = 'owner' AND user_id <> OLD.user_id) THEN
+    SELECT 1 FROM public.rezics_account_operator o JOIN public.rezics_account_security s ON s.user_id = o.user_id
+    WHERE o.role = 'owner' AND o.user_id <> OLD.user_id AND s.deletion_started_at IS NULL
+      AND NOT s.password_reset_required AND (s.suspended_at IS NULL OR s.suspended_until <= now())) THEN
     RAISE EXCEPTION 'last_owner' USING ERRCODE = '23514';
   END IF;
   IF TG_OP = 'UPDATE' THEN RETURN NEW; ELSE RETURN OLD; END IF;

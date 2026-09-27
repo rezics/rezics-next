@@ -36,5 +36,14 @@ test('G205 activity: private paginated events, coarse devices, failure summary a
     const events = (await f.pool.query('SELECT action FROM rezics_account_security_event WHERE user_id = $1', [member.id])).rows;
     expect(events.map(row => row.action)).toContain('sign_out');
     expect(events.map(row => row.action)).toContain('session_revoked');
+    await f.pool.query(`CREATE FUNCTION reject_failure_log_probe() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN
+      IF NEW.action = 'sign_in_failed' THEN RAISE EXCEPTION 'log unavailable probe'; END IF;
+      RETURN NEW; END $$;
+      CREATE TRIGGER reject_failure_log_probe BEFORE INSERT ON rezics_account_security_event
+      FOR EACH ROW EXECUTE FUNCTION reject_failure_log_probe()`);
+    const known = await f.request('/api/auth/sign-in/email', { email: member.email, password: 'incorrect password' });
+    const unknown = await f.request('/api/auth/sign-in/email', { email: 'unknown@example.test', password: 'incorrect password' });
+    expect(known.status).toBe(unknown.status);
+    expect(await known.json()).toEqual(await unknown.json());
   } finally { await f.close(); }
 }, 60_000);

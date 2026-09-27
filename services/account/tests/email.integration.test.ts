@@ -121,5 +121,17 @@ test('G205 email: sender failure is private; concurrent delivery claims once and
     await queue.drain();
     expect(attempts).toBe(1);
     expect(renderAccountEmail('verify', 'en', `${f.baseURL}/?q="<x>`).html).not.toContain('"<x>');
+    await queue.enqueue({ userId: 'signup-not-committed-yet', to: 'new@example.test', url: f.baseURL, purpose: 'verify', locale: 'en' });
+    await queue.enqueue({ userId: member.id, to: member.email, url: f.baseURL, purpose: 'reset', locale: 'en' });
+    await queue.drain();
+    expect(attempts).toBe(2); // An uncommitted signup must not starve ready mail.
+    await f.pool.query(`CREATE FUNCTION reject_email_probe() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN
+      RAISE EXCEPTION 'queue unavailable probe'; END $$;
+      CREATE TRIGGER reject_email_probe BEFORE INSERT ON rezics_account_email
+      FOR EACH ROW EXECUTE FUNCTION reject_email_probe()`);
+    const known = await f.request('/api/auth/request-password-reset', { email: member.email });
+    const unknown = await f.request('/api/auth/request-password-reset', { email: 'unknown@example.test' });
+    expect(known.status).toBe(unknown.status);
+    expect(await known.json()).toEqual(await unknown.json());
   } finally { await f.close(); }
 }, 60_000);

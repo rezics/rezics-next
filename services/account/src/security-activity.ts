@@ -1,9 +1,12 @@
 import { isIP } from 'node:net';
 import { Elysia, t } from 'elysia';
+import { parseCookies } from 'better-call';
+import { createHMAC } from '@better-auth/utils/hmac';
 import type { Pool } from 'pg';
 import { accountFailure, accountJson, accountSession, type AccountAuth } from './http.ts';
 import { decodeCursor, encodeCursor, pageQuery } from './pagination.ts';
 import { requireStepUp } from './methods.ts';
+import { accountResponses, activityView, pageView, sessionView } from './views.ts';
 
 export function deviceLabel(userAgent?: string | null) {
   const ua = userAgent ?? '';
@@ -73,17 +76,17 @@ export async function readSessions(pool: Pool, secret: string, userId: string, c
 export function securityActivityApi(auth: AccountAuth, pool: Pool) {
   const secret = String(auth.options.secret);
   return new Elysia()
-    .get('/api/account/security-activity', { query: t.Object(pageQuery) }, async ({ request, query }) => {
+    .get('/api/account/security-activity', { response: accountResponses(activityView), query: t.Object(pageQuery) }, async ({ request, query }) => {
       try { return accountJson(await readSecurityActivity(pool, secret, (await accountSession(auth, request)).user.id, query)); }
       catch (error) { return accountFailure(error); }
     })
-    .get('/api/account/sessions', { query: t.Object(pageQuery) }, async ({ request, query }) => {
+    .get('/api/account/sessions', { response: accountResponses(pageView(sessionView)), query: t.Object(pageQuery) }, async ({ request, query }) => {
       try {
         const session = await accountSession(auth, request);
         return accountJson(await readSessions(pool, secret, session.user.id, session.session.id, query));
       } catch (error) { return accountFailure(error); }
     })
-    .post('/api/account/sessions/revoke', { body: t.Union([
+    .post('/api/account/sessions/revoke', { response: accountResponses(t.Object({ revoked: t.Integer() })), body: t.Union([
       t.Object({ sessionId: t.String({ minLength: 1, maxLength: 128 }) }),
       t.Object({ others: t.Literal(true) }),
     ]) }, async ({ request, body }) => {
@@ -107,8 +110,22 @@ export async function observeAuthentication(auth: AccountAuth, pool: Pool, reque
     '/api/auth/two-factor/verify-totp', '/api/auth/two-factor/verify-backup-code'].includes(path);
   const signingOut = path === '/api/auth/sign-out';
   if (!signingIn && !signingOut) return handle();
-  const input = await request.clone().json().catch(() => ({})) as { email?: string };
+  const input = await request.clone().json().catch(() => ({})) as { email?: string; response?: { id?: string } };
   const before = await auth.api.getSession({ headers: request.headers });
+  let challengeUser: string | undefined;
+  if (!before && path.startsWith('/api/auth/two-factor/')) {
+    try {
+      // Read the signed challenge before the provider consumes it (including
+      // its final failed attempt). Never attribute arbitrary cookie contents.
+      const context = await auth.$context;
+      const signed = parseCookies(request.headers.get('cookie') ?? '').get(context.createAuthCookie('two_factor').name);
+      const split = signed?.lastIndexOf('.') ?? -1;
+      if (signed && split > 0 && await createHMAC('SHA-256', 'base64').verify(context.secret, signed.slice(0, split), signed.slice(split + 1))) {
+        const proof = await context.internalAdapter.findVerificationValue(signed.slice(0, split));
+        if (proof && proof.expiresAt > new Date()) challengeUser = proof.value;
+      }
+    } catch { console.error('Account authentication activity unavailable'); }
+  }
   const response = await handle();
   const output = await response.clone().json().catch(() => null) as {
     user?: { id: string }; token?: string; session?: { id: string }; twoFactorRedirect?: boolean;
@@ -118,9 +135,18 @@ export async function observeAuthentication(auth: AccountAuth, pool: Pool, reque
     await securityEvent(pool, output.user.id, 'sign_in', { method: path.split('/').at(-1),
       device: deviceLabel(request.headers.get('user-agent')),
       network: coarseNetwork(request.headers.get('x-rezics-client-ip')) });
-  } else if (signingIn && !response.ok && typeof input.email === 'string') {
-    const user = await pool.query<{ id: string }>('SELECT id FROM "user" WHERE email = $1', [input.email.toLowerCase()]);
-    if (user.rows[0]) await securityEvent(pool, user.rows[0].id, 'sign_in_failed', { method: 'password' });
+  } else if (signingIn && !response.ok) {
+    try {
+      const userId = typeof input.email === 'string'
+        ? (await pool.query<{ id: string }>('SELECT id FROM "user" WHERE email = $1', [input.email.toLowerCase()])).rows[0]?.id
+        : path === '/api/auth/passkey/verify-authentication' && typeof input.response?.id === 'string'
+          ? (await pool.query<{ id: string }>('SELECT "userId" AS id FROM passkey WHERE "credentialID" = $1', [input.response.id])).rows[0]?.id
+          : before?.user.id ?? challengeUser;
+      if (userId) await securityEvent(pool, userId, 'sign_in_failed', { method: path.split('/').at(-1) });
+    } catch {
+      // Failure logging must not turn a storage fault into an address oracle.
+      console.error('Account authentication activity unavailable');
+    }
   }
   return response;
 }

@@ -123,15 +123,18 @@ CREATE TRIGGER rezics_security_refresh_guard BEFORE INSERT OR UPDATE OF "rotated
 -- after a new credential has actually been stored.
 CREATE OR REPLACE FUNCTION public.rezics_account_password_fence() RETURNS trigger
 LANGUAGE plpgsql AS $$ BEGIN
-  IF OLD.password IS DISTINCT FROM NEW.password THEN
+  IF NEW."providerId" <> 'credential' OR NEW.password IS NULL THEN RETURN NEW; END IF;
+  IF TG_OP = 'INSERT' THEN
+    IF NOT EXISTS (SELECT 1 FROM public.rezics_account_security WHERE user_id = NEW."userId" AND password_reset_required) THEN RETURN NEW; END IF;
+  ELSIF OLD.password IS NOT DISTINCT FROM NEW.password THEN RETURN NEW;
+  END IF;
     UPDATE public.rezics_account_security SET generation = generation + 1, password_reset_required = false
       WHERE user_id = NEW."userId";
     DELETE FROM public."session" WHERE "userId" = NEW."userId";
     DELETE FROM public.verification WHERE value = NEW."userId";
     UPDATE public."oauthRefreshToken" SET revoked = now() WHERE "userId" = NEW."userId" AND revoked IS NULL;
-  END IF;
   RETURN NEW;
 END $$;
 DROP TRIGGER IF EXISTS account_password_fence ON public.account;
-CREATE TRIGGER account_password_fence AFTER UPDATE OF password ON public.account
+CREATE TRIGGER account_password_fence AFTER INSERT OR UPDATE OF password ON public.account
   FOR EACH ROW EXECUTE FUNCTION public.rezics_account_password_fence();

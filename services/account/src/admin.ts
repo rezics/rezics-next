@@ -10,6 +10,8 @@ import { readMethods } from './methods.ts';
 import { readSecurityActivity, readSessions } from './security-activity.ts';
 import { readConnectedApps } from './connected-apps.ts';
 import { accountLocale, enqueueAccountEmail } from './email.ts';
+import { accountResponses, activityView, auditView, clientView, commandView, connectedAppView,
+  operatorRoleView, pageView, profileView as profileSchema, sessionView, userDetailView } from './views.ts';
 
 export const adminActions = ['suspend', 'unsuspend', 'revoke-sessions', 'require-password-reset',
   'resend-verification', 'add-note'] as const;
@@ -62,7 +64,7 @@ export async function readDirectory(pool: Pool, secret: string, actorId: string,
     const result = await db.query<AccountProfile & { sortKey: string }>(`SELECT ${profileFields}, ${column}::text AS "sortKey"
       FROM "user" u JOIN rezics_account_security s ON s.user_id = u.id
       WHERE ($1::text = '' OR lower(u.email) LIKE $1 || '%' ESCAPE '\\'
-        OR lower(u.name) LIKE $1 || '%' ESCAPE '\\' OR u.id LIKE $1 || '%' ESCAPE '\\')
+        OR lower(u.name) LIKE $1 || '%' ESCAPE '\\' OR lower(u.id) LIKE $1 || '%' ESCAPE '\\')
         AND ($2::text IS NULL OR ($2 = 'suspended' AND s.suspended_at IS NOT NULL AND (s.suspended_until IS NULL OR s.suspended_until > now()))
           OR ($2 = 'password-reset-required' AND s.password_reset_required)
           OR ($2 = 'active' AND NOT s.password_reset_required AND (s.suspended_at IS NULL OR s.suspended_until <= now())))
@@ -115,6 +117,7 @@ export async function administerUser(auth: AccountAuth, pool: Pool, request: Req
     if (targetRole.rows[0]?.role === 'owner' && ['suspend', 'require-password-reset'].includes(body.action)) {
       const otherOwner = await db.query(`SELECT 1 FROM rezics_account_operator o JOIN rezics_account_security s ON s.user_id = o.user_id
         WHERE o.role = 'owner' AND o.user_id <> $1 AND NOT s.password_reset_required
+          AND s.deletion_started_at IS NULL
           AND (s.suspended_at IS NULL OR s.suspended_until <= now()) LIMIT 1`, [userId]);
       if (!otherOwner.rowCount) throw new AccountProblem('conflict', 409);
     }
@@ -161,21 +164,21 @@ export function adminApi(auth: AccountAuth, pool: Pool) {
   const secret = String(auth.options.secret);
   const userParams = t.Object({ userId: t.String({ minLength: 1, maxLength: 128 }) });
   return new Elysia()
-    .get('/api/account/admin/me', async ({ request }) => {
+    .get('/api/account/admin/me', { response: accountResponses(t.Object({ role: t.Nullable(operatorRoleView), permissions: t.Array(t.String()) })) }, async ({ request }) => {
       try {
         const session = await accountSession(auth, request);
         const role = await operatorRole(pool, session.user.id);
         return accountJson({ role, permissions: role ? operatorPermissions[role] : [] });
       } catch (error) { return accountFailure(error); }
     })
-    .get('/api/account/admin/clients', { query: t.Object(pageQuery) }, async ({ request, query }) => {
+    .get('/api/account/admin/clients', { response: accountResponses(pageView(clientView)), query: t.Object(pageQuery) }, async ({ request, query }) => {
       try {
         const actor = await requireOperator(auth, pool, request, 'clients:manage');
         const scope = `clients:${actor.userId}`;
         const cursor = decodeCursor(secret, scope, query.cursor);
         const limit = query.limit ?? 25;
         const result = await pool.query<{ clientId: string; name: string; disabled: boolean | null;
-          scopes: string[]; grantTypes: string[]; redirectUris: string[]; userId: string | null; skipConsent: boolean | null }>(`
+          scopes: string[] | null; grantTypes: string[] | null; redirectUris: string[]; userId: string | null; skipConsent: boolean | null }>(`
           SELECT "clientId", name, disabled, scopes, "grantTypes", "redirectUris", "userId", "skipConsent"
           FROM "oauthClient" WHERE ($1::text IS NULL OR "clientId" > $1) ORDER BY "clientId" LIMIT $2`, [cursor?.id ?? null, limit + 1]);
         const rows = result.rows.slice(0, limit); const last = rows.at(-1);
@@ -183,7 +186,7 @@ export function adminApi(auth: AccountAuth, pool: Pool) {
           ? encodeCursor(secret, scope, last.clientId, last.clientId) : null });
       } catch (error) { return accountFailure(error); }
     })
-    .get('/api/account/admin/users', { query: t.Object({ ...pageQuery,
+    .get('/api/account/admin/users', { response: accountResponses(pageView(profileSchema)), query: t.Object({ ...pageQuery,
       q: t.Optional(t.String({ maxLength: 200 })),
       status: t.Optional(t.Union([t.Literal('active'), t.Literal('suspended'), t.Literal('password-reset-required')])),
       verified: t.Optional(t.Boolean()), hasTwoFactor: t.Optional(t.Boolean()),
@@ -194,7 +197,7 @@ export function adminApi(auth: AccountAuth, pool: Pool) {
       try { return accountJson(await readDirectory(pool, secret, (await requireOperator(auth, pool, request, 'users:read')).userId, query)); }
       catch (error) { return accountFailure(error); }
     })
-    .get('/api/account/admin/users/:userId', { params: userParams }, async ({ request, params }) => {
+    .get('/api/account/admin/users/:userId', { response: accountResponses(userDetailView), params: userParams }, async ({ request, params }) => {
       try {
         await requireOperator(auth, pool, request, 'users:read');
         const user = await profile(pool, params.userId);
@@ -208,25 +211,25 @@ export function adminApi(auth: AccountAuth, pool: Pool) {
           notes: notes.rows.map(row => ({ ...row, createdAt: row.createdAt.toISOString() })) });
       } catch (error) { return accountFailure(error); }
     })
-    .get('/api/account/admin/users/:userId/sessions', { params: userParams, query: t.Object(pageQuery) }, async ({ request, params, query }) => {
+    .get('/api/account/admin/users/:userId/sessions', { response: accountResponses(pageView(sessionView)), params: userParams, query: t.Object(pageQuery) }, async ({ request, params, query }) => {
       try {
         await requireOperator(auth, pool, request, 'users:read');
         return accountJson(await readSessions(pool, secret, params.userId, '', query));
       } catch (error) { return accountFailure(error); }
     })
-    .get('/api/account/admin/users/:userId/apps', { params: userParams, query: t.Object(pageQuery) }, async ({ request, params, query }) => {
+    .get('/api/account/admin/users/:userId/apps', { response: accountResponses(pageView(connectedAppView)), params: userParams, query: t.Object(pageQuery) }, async ({ request, params, query }) => {
       try {
         await requireOperator(auth, pool, request, 'users:read');
         return accountJson(await readConnectedApps(pool, secret, params.userId, query));
       } catch (error) { return accountFailure(error); }
     })
-    .get('/api/account/admin/users/:userId/security-activity', { params: userParams, query: t.Object(pageQuery) }, async ({ request, params, query }) => {
+    .get('/api/account/admin/users/:userId/security-activity', { response: accountResponses(activityView), params: userParams, query: t.Object(pageQuery) }, async ({ request, params, query }) => {
       try {
         await requireOperator(auth, pool, request, 'users:read');
         return accountJson(await readSecurityActivity(pool, secret, params.userId, query));
       } catch (error) { return accountFailure(error); }
     })
-    .post('/api/account/admin/users/:userId/actions', { params: userParams,
+    .post('/api/account/admin/users/:userId/actions', { response: accountResponses(commandView), params: userParams,
       body: t.Object({ action: t.Union(adminActions.map(action => t.Literal(action))),
         reason: t.String({ minLength: 3, maxLength: 1000 }), commandId: t.String({ format: 'uuid' }),
         expiresAt: t.Optional(t.String({ format: 'date-time' })), note: t.Optional(t.String({ minLength: 1, maxLength: 4000 })),
@@ -234,7 +237,7 @@ export function adminApi(auth: AccountAuth, pool: Pool) {
       try { return accountJson(await administerUser(auth, pool, request, params.userId, body)); }
       catch (error) { return accountFailure(error); }
     })
-    .post('/api/account/admin/operators/:userId', { params: userParams,
+    .post('/api/account/admin/operators/:userId', { response: accountResponses(commandView), params: userParams,
       body: t.Object({ role: t.Union([t.Literal('owner'), t.Literal('admin'), t.Literal('support'), t.Null()]),
         reason: t.String({ minLength: 3, maxLength: 1000 }) }) }, async ({ request, params, body }) => {
       let db: PoolClient | undefined;
@@ -246,7 +249,7 @@ export function adminApi(auth: AccountAuth, pool: Pool) {
         await db.query("SELECT pg_advisory_xact_lock(hashtextextended('account-operator-roles', 0))");
         await checkActor(db, actor, 'operators:manage');
         await profile(db, params.userId);
-        const before = await operatorRole(db, params.userId);
+        const before = (await db.query<{ role: OperatorRole }>('SELECT role FROM rezics_account_operator WHERE user_id = $1', [params.userId])).rows[0]?.role ?? null;
         if (body.role) await db.query(`INSERT INTO rezics_account_operator (user_id, role) VALUES ($1, $2)
           ON CONFLICT (user_id) DO UPDATE SET role = $2, assigned_at = now()`, [params.userId, body.role]);
         else await db.query('DELETE FROM rezics_account_operator WHERE user_id = $1', [params.userId]);
@@ -261,7 +264,7 @@ export function adminApi(auth: AccountAuth, pool: Pool) {
         return accountFailure(error instanceof Error && error.message === 'last_owner' ? new AccountProblem('conflict', 409) : error);
       } finally { db?.release(); }
     })
-    .get('/api/account/admin/audit', { query: t.Object({ ...pageQuery,
+    .get('/api/account/admin/audit', { response: accountResponses(pageView(auditView)), query: t.Object({ ...pageQuery,
       actorId: t.Optional(t.String({ maxLength: 128 })), targetId: t.Optional(t.String({ maxLength: 256 })),
       action: t.Optional(t.String({ maxLength: 128 })), from: t.Optional(t.String({ format: 'date-time' })),
       to: t.Optional(t.String({ format: 'date-time' })),

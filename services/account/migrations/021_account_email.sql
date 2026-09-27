@@ -7,9 +7,10 @@ CREATE TABLE IF NOT EXISTS public.rezics_account_email (
   state text NOT NULL DEFAULT 'queued' CHECK (state IN ('queued', 'sending', 'sent', 'expired', 'uncertain')),
   created_at timestamptz NOT NULL DEFAULT now(),
   started_at timestamptz,
+  available_at timestamptz NOT NULL DEFAULT now(),
   expires_at timestamptz NOT NULL
 );
-CREATE INDEX IF NOT EXISTS account_email_pending ON public.rezics_account_email (created_at, id)
+CREATE INDEX IF NOT EXISTS account_email_pending ON public.rezics_account_email (available_at, created_at, id)
   WHERE state = 'queued';
 CREATE INDEX IF NOT EXISTS account_email_sending ON public.rezics_account_email (started_at)
   WHERE state = 'sending';

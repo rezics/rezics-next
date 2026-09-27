@@ -4,6 +4,7 @@ import { accountFailure, accountJson, AccountProblem, accountSession, type Accou
 import { decodeCursor, encodeCursor, pageQuery } from './pagination.ts';
 import { requireStepUp } from './methods.ts';
 import { describeScope } from './scope-descriptions.ts';
+import { accountResponses, connectedAppView, pageView, statusView } from './views.ts';
 
 /** One indexed grant seek and bounded PK/lateral joins; no token scan or
  * credential material. Revoked grants stay historical but leave this list. */
@@ -14,7 +15,7 @@ export async function readConnectedApps(pool: Pool, secret: string, userId: stri
   const limit = query.limit ?? 25;
   const result = await pool.query<{ clientId: string; name: string; uri: string | null; icon: string | null;
     scopes: string[]; grantedAt: Date; lastUsedAt: Date | null; installationId: string | null;
-    installationState: string | null; trusted: boolean | null; cursorKey: string }>(`SELECT g.client_id AS "clientId", c.name, c.uri, c.icon,
+    installationState: string | null; trusted: boolean | null; cursorKey: string }>(`SELECT g.client_id AS "clientId", coalesce(c.name, g.client_id) AS name, c.uri, c.icon,
       g.scopes, g.granted_at AS "grantedAt", g.last_used_at AS "lastUsedAt", c."skipConsent" AS trusted,
       g.granted_at::text AS "cursorKey",
       i.id AS "installationId", i.state AS "installationState"
@@ -56,12 +57,13 @@ export async function revokeConnectedApp(pool: Pool, userId: string, clientId: s
 
 export function connectedAppsApi(auth: AccountAuth, pool: Pool) {
   return new Elysia()
-    .get('/api/account/connected-apps', { query: t.Object(pageQuery) }, async ({ request, query }) => {
+    .get('/api/account/connected-apps', { response: accountResponses(pageView(connectedAppView)), query: t.Object(pageQuery) }, async ({ request, query }) => {
       try { return accountJson(await readConnectedApps(pool, String(auth.options.secret),
         (await accountSession(auth, request)).user.id, query)); }
       catch (error) { return accountFailure(error); }
     })
     .post('/api/account/connected-apps/:clientId/revoke', {
+      response: accountResponses(statusView),
       params: t.Object({ clientId: t.String({ minLength: 1, maxLength: 256 }) }),
     }, async ({ request, params }) => {
       try {

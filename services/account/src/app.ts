@@ -1,4 +1,5 @@
-import { Elysia, t } from 'elysia';
+import { Elysia, NotFound, ParseError, ValidationError, t } from 'elysia';
+import { toOpenAPISchema } from '@elysia/openapi';
 import { Pool } from 'pg';
 import type { createAccountAuth } from './auth.ts';
 import { currentInstallationIn, installClient, InstallationConflict, InstallationInvalid,
@@ -107,22 +108,37 @@ export function createAccountApp(auth: ReturnType<typeof createAccountAuth>, poo
   // before recovery rotates the credential, or observe the new recovery fence
   // and fail. Holding the policy's share lock through Better Auth's handler
   // gives those writes the same ordering as recovery activation's update.
-  const credentialPaths = new Set(['/api/auth/change-password', '/api/auth/set-password',
-    '/api/auth/change-email', '/api/auth/update-user',
-    '/api/auth/link-social', '/api/auth/unlink-account']);
+  const credentialPaths = new Set([...sensitiveAuthPaths].filter(path => path !== '/api/auth/delete-user'));
+  credentialPaths.add('/api/auth/update-user');
+  credentialPaths.add('/api/auth/two-factor/verify-totp');
   const guardedAuthHandler = async (request: Request): Promise<Response> => {
     const path = new URL(request.url).pathname;
+    if (path === '/api/auth/two-factor/verify-totp') {
+      const session = await auth.api.getSession({ headers: request.headers });
+      if (session) {
+        const pending = await pool.query('SELECT 1 FROM "twoFactor" WHERE "userId" = $1 AND verified = false', [session.user.id]);
+        if (pending.rowCount) {
+          try { await requireStepUp(pool, session); } catch (error) { return accountFailure(error); }
+        }
+      }
+    }
+    if (request.method === 'POST' && (path === '/api/auth/sign-in/email' || path === '/api/auth/reset-password'
+      || path === '/api/auth/passkey/verify-authentication' || path.startsWith('/api/auth/two-factor/verify-'))) {
+      try {
+        const body = await request.clone().json().catch(() => ({})) as { email?: unknown; token?: unknown; response?: { id?: unknown } };
+        const target = typeof body.email === 'string' ? body.email.toLowerCase()
+          : typeof body.token === 'string' ? body.token
+          : typeof body.response?.id === 'string' ? body.response.id
+          : request.headers.get('cookie')?.split(';').find(value => value.includes('two_factor='))?.trim() ?? 'anonymous';
+        if (!await consumeAccountLimit(pool, String(auth.options.secret), `authenticate:${path}:${target}`, 20, 300)) {
+          return Response.json({ error: 'rate_limited' }, { status: 429, headers: { 'retry-after': '300' } });
+        }
+      } catch (error) { return accountFailure(error); }
+    }
     if (sensitiveAuthPaths.has(path)) {
       try {
         const session = await accountSession(auth, request, true);
         await requireStepUp(pool, session);
-        if (path === '/api/auth/passkey/delete-passkey') {
-          const { id } = await request.clone().json() as { id?: string };
-          const methods = await pool.query(`SELECT 1 FROM passkey WHERE "userId" = $1 AND id <> $2
-            UNION ALL SELECT 1 FROM account WHERE "userId" = $1 AND "providerId" = 'credential' AND password IS NOT NULL LIMIT 1`,
-          [session.user.id, id ?? '']);
-          if (!methods.rowCount) return Response.json({ error: 'last_sign_in_method' }, { status: 409 });
-        }
       } catch (error) { return accountFailure(error); }
     }
     const emailPaths = new Set(['/api/auth/sign-up/email', '/api/auth/request-password-reset',
@@ -176,7 +192,12 @@ export function createAccountApp(auth: ReturnType<typeof createAccountAuth>, poo
       return Response.json({ error: 'temporarily_unavailable' }, { status: 503 });
     } finally { client.release(); }
   };
-  return new Elysia()
+  const app = new Elysia({ introspect: true })
+    .error(({ error }) => {
+      if (error instanceof ValidationError || error instanceof ParseError) return Response.json({ error: 'invalid_request' }, { status: 400 });
+      if (error instanceof NotFound) return Response.json({ error: 'not_found' }, { status: 404 });
+      return accountFailure(error);
+    })
     .get('/health/live', { response: t.Object({ status: t.Literal('ok') }) },
       () => ({ status: 'ok' as const }))
     .get('/health/ready', {
@@ -350,4 +371,11 @@ export function createAccountApp(auth: ReturnType<typeof createAccountAuth>, poo
     })
     .cleanup(async () => { await guardPool?.end(); })
     .mount((request: Request) => observeAuthentication(auth, pool, request, () => guardedAuthHandler(request)));
+  return app.get('/api/account/openapi.json', () => ({ openapi: '3.1.2',
+    info: { title: 'REZICS Account API', version: '1' },
+    ...toOpenAPISchema(app, { paths: [/^\/api\/auth\//, /^\/health\//, '/api/account/openapi.json'] }),
+  }));
 }
+
+/** Import this type only in the Accounts site; never bundle the server module. */
+export type AccountApp = ReturnType<typeof createAccountApp>;

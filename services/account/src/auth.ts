@@ -1,7 +1,7 @@
 import { betterAuth } from 'better-auth';
 import { createHash } from 'node:crypto';
 import { APIError } from 'better-auth/api';
-import { jwt, twoFactor } from 'better-auth/plugins';
+import { jwt, openAPI, twoFactor } from 'better-auth/plugins';
 import { passkey } from '@better-auth/passkey';
 import { oauthProvider } from '@better-auth/oauth-provider';
 import { Pool } from 'pg';
@@ -39,6 +39,7 @@ export function accountAuthOptions(config: AccountConfig) {
     baseURL: config.baseURL,
     secret: config.secret,
     database: config.pool,
+    advanced: { ipAddress: { ipAddressHeaders: ['x-rezics-client-ip'] } },
     // The HTTP boundary checks our session-bound reauthentication proof. The
     // provider's age-only check cannot recognize that proof after step-up.
     session: { freshAge: 0 },
@@ -59,7 +60,8 @@ export function accountAuthOptions(config: AccountConfig) {
       sendResetPassword: async ({ user, url }: { user: { id: string; email: string }; url: string }, request?: Request) => {
         if (!config.email) throw new Error('Account email delivery is not configured');
         await config.email.enqueue({ userId: user.id, to: user.email, url,
-          purpose: 'reset', locale: accountLocale(request) });
+          purpose: 'reset', locale: accountLocale(request) })
+          .catch(() => console.error('Account email intent unavailable'));
       },
     },
     emailVerification: { sendOnSignUp: true, expiresIn: 1800,
@@ -67,7 +69,8 @@ export function accountAuthOptions(config: AccountConfig) {
         if (!config.email && !requireEmailVerification) return;
         if (!config.email) throw new Error('Account email delivery is not configured');
         await config.email.enqueue({ userId: user.id, to: user.email, url,
-          purpose: 'verify', locale: accountLocale(request) });
+          purpose: 'verify', locale: accountLocale(request) })
+          .catch(() => console.error('Account email intent unavailable'));
       },
     },
     user: { changeEmail: { enabled: true,
@@ -103,6 +106,7 @@ export function accountAuthOptions(config: AccountConfig) {
       },
     } },
     plugins: [
+      openAPI({ disableDefaultReference: true }),
       twoFactor({ issuer: 'REZICS', allowPasswordless: true,
         backupCodeOptions: { storeBackupCodes: 'encrypted' } }),
       passkey({ rpName: 'REZICS', rpID: new URL(config.baseURL).hostname,

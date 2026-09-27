@@ -44,5 +44,5 @@ export async function oauthFixture(f: Awaited<ReturnType<typeof accountFixture>>
     if (!response.ok) throw new Error(`Introspect: ${response.status}`);
     return response.json() as Promise<{ active: boolean }>;
   };
-  return { owner, createClient, code, issue, token, introspect };
+  return { owner, verifier, createClient, code, issue, token, introspect };
 }

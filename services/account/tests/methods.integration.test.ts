@@ -1,4 +1,6 @@
 import { expect, test } from 'bun:test';
+import { randomUUID } from 'node:crypto';
+import type { PoolClient } from 'pg';
 import { symmetricDecrypt } from 'better-auth/crypto';
 import { createOTP } from '@better-auth/utils/otp';
 import { chromium } from '@playwright/test';
@@ -29,6 +31,9 @@ test('G205 methods: TOTP enrollment, rename, sign-in challenge, backup consumpti
     expect(await passwordSignIn.json()).toMatchObject({ twoFactorRedirect: true });
     const challengeCookie = cookies(passwordSignIn);
     expect(await (await f.request('/api/auth/get-session', undefined, challengeCookie)).json()).toBeNull();
+    expect((await f.request('/api/auth/two-factor/verify-totp', { code: 'invalid' }, challengeCookie)).ok).toBe(false);
+    expect((await f.pool.query(`SELECT count(*)::integer AS n FROM rezics_account_security_event
+      WHERE user_id = $1 AND action = 'sign_in_failed' AND detail->>'method' = 'verify-totp'`, [member.id])).rows[0].n).toBe(2);
     const backup = await f.request('/api/auth/two-factor/verify-backup-code', { code: enrollment.backupCodes[0] }, challengeCookie);
     expect(backup.status).toBe(200);
     expect((await f.request('/api/auth/two-factor/verify-backup-code', { code: enrollment.backupCodes[0] }, challengeCookie)).ok).toBe(false);
@@ -42,6 +47,40 @@ test('G205 methods: TOTP enrollment, rename, sign-in challenge, backup consumpti
     const current = await f.request('/api/auth/sign-in/email', { email: member.email, password: member.password });
     expect((await f.request('/api/account/methods/password/remove', {}, current.headers.get('set-cookie')!)).status).toBe(409);
   } finally { await f.close(); }
+}, 60_000);
+
+test('G205 methods: recovery fences credential writes already waiting on the old session', async () => {
+  const f = await accountFixture();
+  let blocker: PoolClient | undefined;
+  let committed = false;
+  try {
+    const member = await f.signup('recover-methods@example.test');
+    const guardian = await f.signup('method-guardian@example.test');
+    await f.pool.query('INSERT INTO rezics_account_recovery_policy (id, guardian_user_id) VALUES ($1, $2)', [member.id, guardian.id]);
+    await f.pool.query(`INSERT INTO passkey (id, name, "publicKey", "userId", "credentialID", counter, "deviceType", "backedUp", "createdAt")
+      VALUES ($1, 'Existing authenticator', 'test-fixture', $2, $3, 0, 'singleDevice', false, now())`, [randomUUID(), member.id, randomUUID()]);
+    blocker = await f.pool.connect();
+    await blocker.query('BEGIN');
+    await blocker.query('UPDATE rezics_account_recovery_policy SET recovered_at = clock_timestamp() WHERE id = $1', [member.id]);
+    const removals = Promise.all([
+      f.request('/api/account/methods/password/remove', {}, member.cookie),
+      f.request('/api/auth/two-factor/enable', { password: member.password }, member.cookie),
+    ]);
+    let waiting = 0;
+    const deadline = Date.now() + 1500;
+    do {
+      waiting = (await f.pool.query(`SELECT count(*)::integer AS n FROM pg_stat_activity
+        WHERE wait_event_type = 'Lock' AND query LIKE 'SELECT recovered_at%'`)).rows[0].n;
+      if (waiting < 2) await Bun.sleep(10);
+    } while (waiting < 2 && Date.now() < deadline);
+    await blocker.query('DELETE FROM "session" WHERE "userId" = $1', [member.id]);
+    await blocker.query('COMMIT');
+    committed = true;
+    expect(waiting).toBe(2);
+    expect((await removals).map(result => result.status)).toEqual([403, 403]);
+    expect((await f.pool.query('SELECT password FROM account WHERE "userId" = $1', [member.id])).rows[0].password).not.toBeNull();
+    expect((await f.pool.query('SELECT 1 FROM "twoFactor" WHERE "userId" = $1', [member.id])).rowCount).toBe(0);
+  } finally { if (blocker) { if (!committed) await blocker.query('ROLLBACK'); blocker.release(); } await f.close(); }
 }, 60_000);
 
 test('G205 methods: real WebAuthn enrollment and sign-in, rename, foreign removal and last-method concurrency', async () => {
@@ -88,6 +127,8 @@ test('G205 methods: real WebAuthn enrollment and sign-in, rename, foreign remova
     const signedCookie = signed.headers.get('set-cookie')!;
     const replay = await f.request('/api/auth/passkey/verify-authentication', { response: assertion }, authentication.headers.get('set-cookie')!);
     expect(replay.ok).toBe(false);
+    expect((await f.pool.query(`SELECT 1 FROM rezics_account_security_event WHERE user_id = $1
+      AND action = 'sign_in_failed' AND detail->>'method' = 'verify-authentication'`, [member.id])).rowCount).toBe(1);
     const removals = await Promise.all([
       f.request('/api/auth/passkey/delete-passkey', { id: passkey.id }, signedCookie),
       f.request('/api/account/methods/password/remove', {}, signedCookie),

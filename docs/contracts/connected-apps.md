@@ -57,10 +57,11 @@ The first Account fence uses the durable `oauthConsent.id` and a database
 generated revision UUID as the basis for one user, client and optional
 reference. The pinned provider edits an existing consent row in place after
 new consent and through `/oauth2/update-consent`; every row update advances
-the revision, including narrowing and later widening. Account blocks the
-direct update endpoint in this first profile because it permits scope widening
-without the authorization/consent round trip. Users change consent through
-that explicit flow or withdraw it through delete. The
+the revision, including narrowing and later widening. Account replaces raw grant editing with a signed pending-request decision at
+`/api/account/consent` (also accepted at `/api/auth/oauth2/update-consent`). This
+requires the authorization/consent round trip, binds the first read/decision to
+the session and consumes a decision once. Users can withdraw an app through
+`/api/account/connected-apps/{clientId}/revoke`. The
 [PostgreSQL migration](../../services/account/migrations/001_consent_refresh_fence.sql)
 stores ID and revision on refresh tokens. Its insert/rotation trigger locks the
 matching consent row, checks the current scope and resource ceiling, and
@@ -91,13 +92,16 @@ issuance rejects pairwise clients until Account has a signed internal subject
 binding. Opaque user access tokens from explicit-consent clients
 are inactive at Account introspection because the provider re-derives their
 custom claims and cannot prove their issuance generation. `skip_consent` and
-client-credentials clients have separate semantics and no consent row; app
-installation and selected acting-Agent revocation remain future basis types.
+client-credentials clients have separate semantics and no consent row; installation revocation is checked independently, and Access owns selected
+acting-Agent revocation. Account also fences each user/client grant and the
+account itself: withdrawal, suspension and required password reset invalidate
+trusted-client tokens without relying on a consent row. Reauthorization and
+unsuspension never rebind an old code or token to a newer generation.
 The [Account HTTP integration fixture](../../services/account/tests/consent-revocation.integration.test.ts)
 checks client, subject and scope isolation, old refresh rejection, in-place
 narrow/widen re-consent, stale authorization-code exchange, deletion and a
-refresh/delete race. It is queued for
-the next central QA batch; source/type checks alone do not qualify IAM09. The broader
+refresh/delete race. The Account suite also tests trusted-client withdrawal and operator suspension.
+Merged qualification remains the manager’s recorded QA run. The broader
 [RFC 9700 refresh-token guidance](https://www.rfc-editor.org/rfc/rfc9700.html)
 remains the security basis.
 

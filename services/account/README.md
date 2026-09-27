@@ -23,10 +23,10 @@ a fresh, isolated QA project. It is a test fixture, not a production setup or
 default development identity. A production web client needs its own registered
 redirect URI and operator-controlled setup.
 
-Set `ACCOUNT_OPERATOR_USER_IDS` to a comma-separated list of verified private
-Better Auth user IDs allowed to manage OAuth clients and resources. Its default
-is empty and denies those mutations. Register and verify an operator identity
-before setting this value. Dynamic client registration is disabled. Clients
+`ACCOUNT_OPERATOR_USER_IDS` bootstraps the first stored owner role once. Register
+and verify that private identity first, then restart Account with its user ID.
+Subsequent roles are managed through the operator APIs; the env list is not an
+ongoing permission source. Dynamic client registration is disabled. Clients
 requesting Main access must be registered by an operator; the first resource
 profile admits `openid`, `offline_access`, `work:create`, `work:edit` and
 `work:read`; Main resource access tokens expire after five minutes. Main must
@@ -98,8 +98,9 @@ PKCE is exchanged; signing out makes the user's still signed token inactive
 at introspection. A separate member's deletion removes an offline refresh token;
 an unavailable Access fence and attempted operator/client owner deletion keep
 their users intact. This qualifies a first Account/Main protocol path, not the
-remaining recovery, consent UI, method linking, multi-product SSO, physical
-erasure or full Access admission lifecycle. The [plan](../../docs/plan/README.md#active-execution)
+Accounts UI, multi-product SSO, physical erasure or full Access admission
+lifecycle. The newer Account integration tests cover email delivery, passkeys,
+TOTP, consent decisions, connected apps, security activity and operator actions. The [plan](../../docs/plan/README.md#active-execution)
 tracks those gates.
 
 The [Account WAL recovery result](tests/evidence/2026-09-24-account-pitr.xml)

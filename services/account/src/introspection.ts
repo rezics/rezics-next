@@ -40,6 +40,7 @@ export async function currentIntrospection(pool: Pool, presented: string | null,
     || (expiresAt as number) > (issuedAt as number) + ACCESS_TOKEN_SECONDS) return inactive();
   try {
     const client = await pool.connect();
+    let committed = false;
     try {
       await client.query('BEGIN');
       const active = await signingKeyAccepts(client, kid, payload.iat as number)
@@ -48,9 +49,10 @@ export async function currentIntrospection(pool: Pool, presented: string | null,
         && (payload[AUTH_MODE_CLAIM] === 'workload'
           || (await recoveryBasisActive(client, payload) && await accountBasisActive(client, payload, clientId)));
       await client.query('COMMIT');
+      committed = true;
       return active ? provider : inactive();
     } finally {
-      try { await client.query('ROLLBACK'); } finally { client.release(); }
+      try { if (!committed) await client.query('ROLLBACK'); } finally { client.release(); }
     }
   } catch {
     return unavailable();

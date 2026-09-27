@@ -5,6 +5,7 @@ import type { Pool } from 'pg';
 import { currentInstallationIn } from './installations.ts';
 import { accountFailure, accountJson, AccountProblem, accountSession, type AccountAuth } from './http.ts';
 import { describeScope } from './scope-descriptions.ts';
+import { accountResponses, consentDecisionView, consentView } from './views.ts';
 
 const canonicalQuery = (query: URLSearchParams) => new URLSearchParams([...query.entries()]
   .sort(([ak, av], [bk, bv]) => ak < bk ? -1 : ak > bk ? 1 : av < bv ? -1 : av > bv ? 1 : 0)).toString();
@@ -54,7 +55,7 @@ export function consentApi(auth: AccountAuth, pool: Pool) {
       WHERE id = $1 AND session_id = $2 AND installation_id = $3
         AND expires_at > now() AND decided_at IS NULL`, [id, session.session.id, installation.id]);
     if (!current.rowCount) throw new AccountProblem('stale_request', 409);
-    return { id, session, installation, view: { client: { id: clientId, name: client.name,
+    return { id, session, installation, view: { client: { id: clientId, name: client.name || clientId,
       uri: client.uri, icon: client.icon }, scopes: scopes.map(describeScope),
     resources: query.getAll('resource'), expiresAt: expiry.toISOString() } };
   };
@@ -82,12 +83,12 @@ export function consentApi(auth: AccountAuth, pool: Pool) {
     } catch (error) { return accountFailure(error); }
   };
   const routes = new Elysia()
-    .get('/api/account/consent', { query: t.Object({ oauth_query: t.String({ minLength: 1, maxLength: 16_384 }) }) },
+    .get('/api/account/consent', { query: t.Object({ oauth_query: t.String({ minLength: 1, maxLength: 16_384 }) }), response: accountResponses(consentView) },
       async ({ request, query }) => {
         try { return accountJson((await pending(request, query.oauth_query)).view); }
         catch (error) { return accountFailure(error); }
       })
-    .post('/api/account/consent', { body: t.Object({ oauth_query: t.String({ minLength: 1, maxLength: 16_384 }),
+    .post('/api/account/consent', { response: accountResponses(consentDecisionView), body: t.Object({ oauth_query: t.String({ minLength: 1, maxLength: 16_384 }),
       accept: t.Boolean(), scope: t.Optional(t.String({ maxLength: 4096 })) }) }, ({ request, body }) => decide(request, body))
     .post('/api/auth/oauth2/consent', ({ request, body }) => decide(request, body))
     .post('/api/auth/oauth2/update-consent', ({ request, body }) => decide(request, body));
