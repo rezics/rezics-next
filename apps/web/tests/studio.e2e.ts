@@ -29,7 +29,8 @@ async function shoot(page: Page, info: TestInfo, name: string) {
 /** Every theme and size for one Studio page: 1440×900 and 390×844, light and dark. */
 async function shootAll(page: Page, context: BrowserContext, info: TestInfo, path: string, name: string) {
   for (const theme of ['light', 'dark'] as const) {
-    await context.addCookies([{ name: 'rezics_theme', value: theme, url: new URL(path, page.url()).toString() }]);
+    // One site-wide cookie: a cookie scoped to a page path would shadow or lose to another page's.
+    await context.addCookies([{ name: 'rezics_theme', value: theme, url: new URL('/', page.url()).toString() }]);
     for (const viewport of [{ width: 1440, height: 900 }, { width: 390, height: 844 }]) {
       await page.setViewportSize(viewport);
       await page.goto(path);
@@ -37,7 +38,7 @@ async function shootAll(page: Page, context: BrowserContext, info: TestInfo, pat
       await shoot(page, info, `${name}-${theme}-${viewport.width}`);
     }
   }
-  await context.addCookies([{ name: 'rezics_theme', value: 'light', url: new URL(path, page.url()).toString() }]);
+  await context.addCookies([{ name: 'rezics_theme', value: 'light', url: new URL('/', page.url()).toString() }]);
   await page.setViewportSize({ width: 1440, height: 900 });
 }
 

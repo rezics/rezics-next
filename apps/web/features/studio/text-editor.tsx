@@ -229,7 +229,9 @@ export function TextEditor({ agent, work, language, text: initialText, initial, 
         readOnly={conflict || snapshot.denied} onChange={event => change(event.target.value)} onKeyDown={keyDown}
         onBlur={() => void autosave.flush()} autoFocus={!initial.body} />
     </div>
-    <div className="sticky bottom-0 border-border/60 border-t bg-background/90 backdrop-blur">
+    {/* On phones the shell's bottom navigation covers the last 4rem; the counts sit above it. */}
+    <div className="sticky bottom-[calc(4rem+env(safe-area-inset-bottom))] border-border/60 border-t bg-background/90
+      backdrop-blur md:bottom-0">
       <EditorFooter className="mx-auto w-full max-w-[44rem] px-4 py-2 sm:px-6">
         <span>{t.wordCount(stats.words)}</span><span>{t.characterCount(stats.characters)}</span>
       </EditorFooter>

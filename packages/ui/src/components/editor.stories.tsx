@@ -72,6 +72,18 @@ export const Phone: Story = {
   },
 };
 
+/** A long paragraph (or the placeholder) wraps inside a grid or flex column instead of widening it. */
+export const PhoneLongParagraph: Story = {
+  globals: { viewport: { value: 'phone' } },
+  render: () => <div className="grid">
+    <Editor aria-label="Chapter text" lang="en" placeholder="Start writing. Each line is a paragraph, however long it grows."
+      defaultValue={'It was the best of times, it was the worst of times, '.repeat(12)} />
+  </div>,
+  async play() {
+    await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
+  },
+};
+
 /** Counting rules: Han and kana count per character; other scripts, Korean included, per word. */
 export const Counting: Story = {
   render: () => <Manuscript initial="" lang="en" />,

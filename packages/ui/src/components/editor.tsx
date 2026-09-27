@@ -21,7 +21,9 @@ export const Editor = ({ className, typeface = 'serif', ...props }: React.Compon
 }) => (
   <textarea
     className={cn(
-      'field-sizing-content block min-h-[60dvh] w-full resize-none',
+      // Grows with the text in height only: without inline-size containment the unwrapped
+      // longest line (or the placeholder) becomes the textarea's min-content width and widens its layout.
+      'field-sizing-content block min-h-[60dvh] w-full resize-none [contain:inline-size]',
       'bg-transparent px-0 py-2 text-foreground caret-primary',
       typeface === 'serif' ? 'font-work-title' : 'font-sans',
       'text-lg/[1.8] [text-autospace:normal] [overflow-wrap:anywhere]',

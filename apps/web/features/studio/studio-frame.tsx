@@ -57,7 +57,8 @@ export function StudioFrame({ agent, agents, session, path, locale, messages, ch
 }) {
   const t = materializeData(messages, { locale });
   const names = Object.fromEntries(agents.map(option => [option.iri, studioAgentName(option, t)]));
-  return <div className="grid">
+  // One minmax(0, 1fr) column: a page's widest content never widens the Studio past the viewport.
+  return <div className="grid grid-cols-1">
     <div className="border-border/60 border-b bg-background/80">
       <div className="mx-auto flex w-full max-w-6xl flex-wrap items-center justify-between gap-3 px-4 py-2.5 sm:px-6 lg:px-10">
         <section aria-label={t.writingAs} className="flex min-w-0 items-center gap-3">
