@@ -1,4 +1,4 @@
-import { insert } from 'native-i18n';
+import { asValue, insert, number, plural } from 'native-i18n';
 
 export const messages = {
   home: 'REZICS home', skipToContent: 'Skip to content',
@@ -7,7 +7,13 @@ export const messages = {
   navigation: 'Main navigation', menu: 'Menu', openNavigation: 'Open navigation', close: 'Close',
   collapseNavigation: 'Collapse navigation', expandNavigation: 'Expand navigation',
   notifications: 'Notifications',
+  notificationsUnread: insert('Notifications, {{count}} unread', { count: String }),
+  yourZones: 'Your Zones', yourRealms: 'Your Realms', officialZones: 'Official Zones',
+  moderation: 'Moderation', manage: 'Manage', queueWaiting: insert('{{count}} waiting', { count: String }),
+  newActivity: 'new posts', showAll: insert('Show all {{count}}', { count: String }), showFewer: 'Show fewer',
+  noCommunities: 'Follow Realms and Zones to see them here.', findCommunities: 'Find communities',
   language: 'Language', displayMode: 'Display mode',
+  displayModeNotSaved: 'Couldn’t save your display mode to your account. It still applies on this device.',
   themeSystem: 'Match system', themeLight: 'Light', themeDark: 'Dark',
   soon: 'Soon', comingSoonTitle: insert('{{feature}} is on its way', { feature: String }),
   backHome: 'Back to home', searchWorks: 'Search works',
@@ -16,6 +22,36 @@ export const messages = {
   errorTitle: 'Something went wrong',
   errorBody: 'This page could not load. Try again, or come back in a moment.',
   retry: 'Try again', errorReference: 'Reference', loading: 'Loading…',
+
+  // The notifications page
+  notificationsIntro: 'Replies to you, decisions on what you submitted and changes to your roles.',
+  markAllRead: 'Mark all as read', markedAllRead: 'All notifications marked as read.',
+  markReadFailed: 'Couldn’t mark them as read. Try again.',
+  unread: 'Unread',
+  noNotifications: 'Nothing here yet',
+  noNotificationsBody: 'Replies, decisions on your submissions and role changes will appear here.',
+  signInForNotifications: 'Sign in to see your notifications',
+  signInForNotificationsBody: 'Replies, decisions and role changes from the Realms you take part in arrive here.',
+  signIn: 'Sign in',
+  notificationsFailed: 'Couldn’t load your notifications',
+  notificationsFailedBody: 'Check your connection, then try again.',
+  olderNotifications: 'Show older', olderFailed: 'Couldn’t load older notifications.',
+  notificationUnavailable: 'This notification is no longer available.',
+  someone: 'Someone',
+  replied: insert('{{name}} replied', { name: String }),
+  repliedOn: insert('{{name}} replied on “{{title}}”', { name: String, title: String }),
+  submissionAccepted: insert('Your submission “{{title}}” was accepted', { title: String }),
+  submissionRejected: insert('Your submission “{{title}}” was declined', { title: String }),
+  submissionChanges: insert('Changes were requested on your submission “{{title}}”', { title: String }),
+  submissionDecided: 'A Realm decided on your submission',
+  moderationOn: insert('Moderators reached a decision on “{{title}}”', { title: String }),
+  moderationDecided: 'Moderators reached a decision on a report',
+  roleChanged: 'Your role in a Realm changed',
+  followedYou: insert('{{name}} followed you', { name: String }),
+  correctionOn: insert('A correction was made to “{{title}}”', { title: String }),
+  correctionMade: 'A correction was made to something you follow',
+  moreLikeThis: plural({ one: insert('and {{count}} more like this'), other: insert('and {{count}} more like this') },
+    { count: asValue(number()) }),
 };
 
 export type ShellMessages = typeof messages;

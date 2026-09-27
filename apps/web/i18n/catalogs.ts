@@ -21,6 +21,15 @@ function splitCatalog<T extends object>(english: () => Promise<T>, translations:
 export const catalogs = {
   auth: inlineCatalog(() => import('../features/auth/messages.ts').then(module => module.messages)),
   discover: inlineCatalog(() => import('../features/discover/messages.ts').then(module => module.messages)),
+  feed: splitCatalog(() => import('../features/feed/messages.ts').then(module => module.messages), {
+    'zh-Hant': () => import('../features/feed/messages/zh-Hant.ts').then(module => module.default),
+    'zh-Hans': () => import('../features/feed/messages/zh-Hans.ts').then(module => module.default),
+    ja: () => import('../features/feed/messages/ja.ts').then(module => module.default),
+    ko: () => import('../features/feed/messages/ko.ts').then(module => module.default),
+    de: () => import('../features/feed/messages/de.ts').then(module => module.default),
+    fr: () => import('../features/feed/messages/fr.ts').then(module => module.default),
+    es: () => import('../features/feed/messages/es.ts').then(module => module.default),
+  }),
   home: splitCatalog(() => import('../features/home/messages.ts').then(module => module.messages), {
     'zh-Hant': () => import('../features/home/messages/zh-Hant.ts').then(module => module.default),
     'zh-Hans': () => import('../features/home/messages/zh-Hans.ts').then(module => module.default),

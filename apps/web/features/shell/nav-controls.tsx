@@ -4,7 +4,7 @@ import { Button } from '@rezics/ui/button';
 import { Sheet, SheetClose, SheetContent, SheetTitle } from '@rezics/ui/sheet';
 import { MenuIcon, PanelLeftCloseIcon, PanelLeftOpenIcon, XIcon } from 'lucide-react';
 import { usePathname } from 'next/navigation';
-import { useState } from 'react';
+import { type ReactNode, useState } from 'react';
 import { LogoMark } from './logo.tsx';
 import { useShell } from './shell-provider.tsx';
 import { SideNav } from './side-nav.tsx';
@@ -24,7 +24,7 @@ export function NavCollapseToggle() {
 }
 
 /** Phones: the side navigation in a drawer. */
-export function NavDrawer() {
+export function NavDrawer({ communities }: { communities?: ReactNode }) {
   const { t } = useShell();
   const pathname = usePathname();
   // Remember where the drawer opened: any navigation closes it without an effect.
@@ -46,7 +46,7 @@ export function NavDrawer() {
           </Button>
         </SheetClose>
       </div>
-      <SideNav variant="drawer" onNavigate={() => setOpen(false)} />
+      <SideNav variant="drawer" onNavigate={() => setOpen(false)} communities={communities} />
     </SheetContent>
   </Sheet>;
 }

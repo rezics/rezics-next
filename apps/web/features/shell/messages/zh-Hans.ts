@@ -1,4 +1,4 @@
-import { insert } from 'native-i18n';
+import { asValue, insert, number, plural } from 'native-i18n';
 import type { ShellMessages } from '../messages.ts';
 
 export default {
@@ -8,7 +8,13 @@ export default {
   navigation: '主导航', menu: '菜单', openNavigation: '打开导航', close: '关闭',
   collapseNavigation: '收起导航', expandNavigation: '展开导航',
   notifications: '通知',
+  notificationsUnread: insert('通知，{{count}} 条未读', { count: String }),
+  yourZones: '我的专区', yourRealms: '我的领域', officialZones: '官方专区',
+  moderation: '管理', manage: '管理中心', queueWaiting: insert('{{count}} 项待处理', { count: String }),
+  newActivity: '有新内容', showAll: insert('显示全部 {{count}} 个', { count: String }), showFewer: '收起',
+  noCommunities: '关注领域和专区后，它们会显示在这里。', findCommunities: '发现社区',
   language: '语言', displayMode: '显示模式',
+  displayModeNotSaved: '未能把显示模式保存到你的账户，但它仍会在这台设备上生效。',
   themeSystem: '跟随系统', themeLight: '浅色', themeDark: '深色',
   soon: '即将推出', comingSoonTitle: insert('{{feature}}即将推出', { feature: String }),
   backHome: '返回首页', searchWorks: '搜索作品',
@@ -17,4 +23,32 @@ export default {
   errorTitle: '出了点问题',
   errorBody: '此页面无法加载。请重试，或稍后再来。',
   retry: '重试', errorReference: '参考编号', loading: '正在加载…',
+
+  notificationsIntro: '别人对你的回复、你提交内容的处理结果，以及你角色的变动。',
+  markAllRead: '全部标为已读', markedAllRead: '所有通知已标为已读。',
+  markReadFailed: '未能标为已读，请重试。',
+  unread: '未读',
+  noNotifications: '暂时没有通知',
+  noNotificationsBody: '回复、提交的处理结果和角色变动会显示在这里。',
+  signInForNotifications: '登录后查看通知',
+  signInForNotificationsBody: '你参与的领域中的回复、决定和角色变动会显示在这里。',
+  signIn: '登录',
+  notificationsFailed: '未能加载通知',
+  notificationsFailedBody: '请检查网络连接后重试。',
+  olderNotifications: '显示更早的通知', olderFailed: '未能加载更早的通知。',
+  notificationUnavailable: '这条通知已不可用。',
+  someone: '有人',
+  replied: insert('{{name}} 回复了你', { name: String }),
+  repliedOn: insert('{{name}} 在《{{title}}》中回复了你', { name: String, title: String }),
+  submissionAccepted: insert('你提交的《{{title}}》已被接受', { title: String }),
+  submissionRejected: insert('你提交的《{{title}}》未被接受', { title: String }),
+  submissionChanges: insert('你提交的《{{title}}》需要修改', { title: String }),
+  submissionDecided: '领域已处理你的提交',
+  moderationOn: insert('管理员已对《{{title}}》作出处理', { title: String }),
+  moderationDecided: '管理员已对一项举报作出处理',
+  roleChanged: '你在某个领域中的角色有变动',
+  followedYou: insert('{{name}} 关注了你', { name: String }),
+  correctionOn: insert('《{{title}}》有一处更正', { title: String }),
+  correctionMade: '你关注的内容有一处更正',
+  moreLikeThis: plural({ other: insert('另有 {{count}} 条类似通知') }, { count: asValue(number()) }),
 } satisfies Partial<ShellMessages>;

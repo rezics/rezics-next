@@ -5,10 +5,13 @@ import { messages as auth } from '../auth/messages.ts';
 import type { Session } from '../auth/session.ts';
 import { SignInLink } from '../auth/sign-in-link.tsx';
 import { AppShell } from './app-shell.tsx';
+import type { CommunityNavigation } from './communities.ts';
+import { CommunityNav } from './community-nav.tsx';
 import { messages } from './messages.ts';
 import zhHans from './messages/zh-Hans.ts';
 import { NotificationsLink } from './notifications-link.tsx';
 import { PageContainer, PageHeader } from './page.tsx';
+import { setUnread } from './unread.ts';
 
 const zhHansShellMessages = { ...messages, ...zhHans };
 
@@ -25,6 +28,18 @@ const longNames: Session = { ...signedIn,
     email: 'maximiliana.theodora.von.aschenbrenner-kowalczyk@example-institution.test', image: null },
   agent: { status: 'selected', agent: society }, agents: [society] };
 
+const realm = (n: number) => `https://rezics.com/id/${String(n).padStart(8, '0')}-aaaa-4a6f-8c2d-3e7b5c1a9f40`;
+const communities: CommunityNavigation = { signedIn: true, avatarQuery: '',
+  followed: { zones: [], realms: [
+    { id: realm(1), kind: 'realm', name: '中文网络小说 · Chinese Web Fiction', language: 'zh-Hans',
+      icon: { kind: 'fallback', key: 'fiction' }, href: `/r/${realm(1).slice(-36)}`, activity: 'new' },
+    { id: realm(2), kind: 'realm', name: 'Classic Literature', language: 'en', icon: { kind: 'fallback', key: 'classics' },
+      href: `/r/${realm(2).slice(-36)}`, activity: 'none' },
+  ] },
+  official: [{ id: realm(3), kind: 'zone', name: 'Fiction · 小说', language: 'en', icon: { kind: 'fallback', key: 'f' },
+    href: '/r/fiction', activity: 'unknown' }],
+  moderated: [{ realm: realm(2), name: 'Classic Literature', open: 8, more: false }] };
+
 function Placeholder() {
   return <PageContainer className="grid gap-6">
     <PageHeader title="Page title" description="Routes render their content here, inside the shell." />
@@ -37,6 +52,8 @@ const meta = {
   args: { locale: 'en', messages, theme: 'light', navCollapsed: false,
     account: <SignInLink label={auth.en.signIn} />, children: <Placeholder /> },
   globals: { viewport: { value: 'desktop' } },
+  // The unread count is shared across the page, so each story starts without one.
+  beforeEach() { setUnread(null); },
 } satisfies Meta<typeof AppShell>;
 export default meta;
 type Story = StoryObj<typeof meta>;
@@ -64,7 +81,8 @@ export const SignedIn: Story = {
   parameters: { route: { pathname: '/en/studio' } },
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
-    await expect(canvas.getByRole('link', { name: 'Notifications' })).toHaveAttribute('href', '/inbox');
+    await expect(within(canvasElement.querySelector('header')!).getByRole('link', { name: 'Notifications' }))
+      .toHaveAttribute('href', '/en/notifications');
     await userEvent.click(canvas.getByRole('button', { name: 'Account menu' }));
     const menu = within(await within(document.body).findByRole('menu'));
     await waitFor(() => expect(menu.getByRole('menuitem', { name: 'Switch Agent' })).toBeVisible());
@@ -187,4 +205,78 @@ export const PhoneDark: Story = {
   args: { theme: 'dark' },
   globals: { theme: 'dark', viewport: { value: 'phone' } },
   parameters: { route: { pathname: '/en/studio' } },
+};
+
+/**
+ * Signed in: the Realms the reader follows with a dot where there is activity
+ * they have not seen, the official Zones, and Manage with the queue for a
+ * moderator; the bell and the navigation carry the unread count.
+ */
+export const Communities: Story = {
+  args: { signedIn: true, communities: <CommunityNav data={communities} />, notifications: <NotificationsLink />,
+    account: <AccountMenu accountOrigin="https://account.rezics.test" session={signedIn} messages={auth.en} /> },
+  parameters: { route: { pathname: '/en' } },
+  beforeEach() { setUnread({ count: 3, overflow: false }); },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    const nav = canvas.getByRole('navigation', { name: 'Main navigation' });
+    const realms = within(nav).getByRole('region', { name: 'Your Realms' });
+    await expect(within(realms).getByRole('link', { name: /^中文网络小说 · Chinese Web Fiction\s*, new posts$/ }))
+      .toHaveAttribute('href', `/en/r/${realm(1).slice(-36)}`);
+    await expect(within(realms).getByRole('link', { name: 'Classic Literature' })).toBeVisible();
+    await expect(within(within(nav).getByRole('region', { name: 'Official Zones' })).getByRole('link',
+      { name: 'Fiction · 小说' })).toHaveAttribute('href', '/en/r/fiction');
+    await expect(within(nav).getByRole('link', { name: /^Manage/ })).toHaveTextContent('8 waiting');
+    await expect(within(canvasElement.querySelector('header')!).getByRole('link', { name: 'Notifications, 3 unread' }))
+      .toHaveAttribute('href', '/en/notifications');
+    await expect(within(nav).getByRole('link', { name: /^Notifications/ })).toHaveTextContent('3');
+  },
+};
+
+/** Collapsed to icons, a community with new activity keeps its dot. */
+export const CommunitiesCollapsed: Story = {
+  args: { signedIn: true, navCollapsed: true, communities: <CommunityNav data={communities} />,
+    account: <AccountMenu accountOrigin="https://account.rezics.test" session={signedIn} messages={auth.en} /> },
+  parameters: { navCollapsed: true, route: { pathname: '/en' } },
+  async play({ canvasElement }) {
+    const nav = within(canvasElement).getByRole('navigation', { name: 'Main navigation' });
+    await expect(within(nav).getByRole('link', { name: /^中文网络小说 · Chinese Web Fiction\s*, new posts$/ })).toBeVisible();
+  },
+};
+
+/** On phones the bar's Notifications item carries the count and the drawer lists the communities. */
+export const PhoneCommunities: Story = {
+  args: { signedIn: true, communities: <CommunityNav data={communities} />,
+    account: <AccountMenu accountOrigin="https://account.rezics.test" session={signedIn} messages={auth.en} /> },
+  globals: { viewport: { value: 'phone' } },
+  parameters: { route: { pathname: '/en' } },
+  beforeEach() { setUnread({ count: 120, overflow: true }); },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    const bar = canvas.getByRole('navigation', { name: 'Main navigation' });
+    await expect(within(bar).getByRole('link', { name: 'Notifications · Notifications, 99+ unread' })).toBeVisible();
+    await userEvent.click(canvas.getByRole('button', { name: 'Open navigation' }));
+    const drawer = within(await within(document.body).findByRole('dialog', { name: 'Menu' }));
+    await waitFor(() => expect(drawer.getByRole('region', { name: 'Your Realms' })).toBeVisible());
+    await userEvent.click(drawer.getByRole('button', { name: 'Close' }));
+    await waitFor(() => expect(within(document.body).queryByRole('dialog')).toBeNull());
+  },
+};
+
+/** Signed in, a display-mode choice is saved to the Account; when that fails, a quiet note says it still applies here. */
+export const DisplayModeNotSaved: Story = {
+  args: { signedIn: true, account: <AccountMenu accountOrigin="https://account.rezics.test" session={signedIn} messages={auth.en} /> },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await userEvent.click(canvas.getByRole('button', { name: 'Account menu' }));
+    const menu = within(await within(document.body).findByRole('menu'));
+    await waitFor(() => expect(menu.getByRole('menuitem', { name: 'Display mode' })).toBeVisible());
+    await userEvent.click(menu.getByRole('menuitem', { name: 'Display mode' }));
+    await userEvent.click(await within(document.body).findByRole('menuitemradio', { name: 'Dark' }));
+    await expect(document.documentElement).toHaveClass('dark');
+    // Storybook has no Account behind /api/preferences, so the save fails.
+    const note = await canvas.findByText('Couldn’t save your display mode to your account. It still applies on this device.');
+    await userEvent.click(within(note.closest('[role="status"]') as HTMLElement).getByRole('button', { name: 'Close' }));
+    await expect(canvas.queryByText(/Couldn’t save your display mode/)).toBeNull();
+  },
 };

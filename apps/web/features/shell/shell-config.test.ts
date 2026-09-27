@@ -50,8 +50,9 @@ describe('navigation', () => {
   });
 
   test('a planned route shows its coming-soon item; unknown routes stay not found', () => {
-    expect(plannedItem('/shelves')?.label.en).toBe('Shelves');
-    expect(plannedItem('/inbox/42')?.label.en).toBe('Inbox');
+    expect(plannedItem('/library')?.label.en).toBe('Library');
+    expect(plannedItem('/zh-Hans/library/want-to-read')?.label['zh-Hans']).toBe('书架');
+    expect(plannedItem('/notifications')).toBeUndefined();
     expect(plannedItem('/nowhere')).toBeUndefined();
     expect(plannedItem('/search')).toBeUndefined();
   });

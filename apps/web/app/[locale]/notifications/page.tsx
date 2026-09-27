@@ -1,0 +1,29 @@
+import type { Metadata } from 'next';
+import { mainApi } from '../../../features/api/main.ts';
+import { signInPath } from '../../../features/auth/paths.ts';
+import { readSession } from '../../../features/auth/session.ts';
+import { shellReader } from '../../../features/shell/communities-read.ts';
+import { NotificationsUnavailable, NotificationsView }
+  from '../../../features/shell/notifications/notifications-view.tsx';
+import { readLatest } from '../../../features/shell/notifications/window.ts';
+import { isUiLocale } from '../../../i18n/define.ts';
+import { localizedPath } from '../../../i18n/locale.ts';
+import { getTranslation } from '../../../i18n/server.ts';
+
+export async function generateMetadata({ params }: { params: Promise<{ locale: string }> }): Promise<Metadata> {
+  const { locale } = await params;
+  if (!isUiLocale(locale)) return {};
+  const { data } = await getTranslation('shell', [locale]);
+  return { title: data.notifications, robots: { index: false } };
+}
+
+export default async function NotificationsPage({ params }: { params: Promise<{ locale: string }> }) {
+  const { locale: requested } = await params;
+  const locale = isUiLocale(requested) ? requested : 'en';
+  const signInHref = signInPath(localizedPath('/notifications', locale));
+  if (!await readSession()) return <NotificationsUnavailable reason="signed-out" signInHref={signInHref} />;
+  // Notifications belong to the person, not an Agent, so they read with the session's token alone.
+  const [latest, reader] = await Promise.all([readLatest(await mainApi()), shellReader()]);
+  if (!latest.ok) return <NotificationsUnavailable reason="failed" signInHref={signInHref} />;
+  return <NotificationsView initial={latest.data} now={Date.now()} avatarQuery={reader.avatarQuery} />;
+}

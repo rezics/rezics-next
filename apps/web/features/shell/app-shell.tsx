@@ -10,6 +10,7 @@ import type { Theme } from './preferences.ts';
 import { SearchField } from './search-field.tsx';
 import { ShellProvider } from './shell-provider.tsx';
 import { SideNav } from './side-nav.tsx';
+import { ThemeNotice } from './theme-notice.tsx';
 import { ThemeMenu } from './theme-switch.tsx';
 
 export const MAIN_CONTENT_ID = 'main-content';
@@ -24,6 +25,8 @@ export interface AppShellProps {
   account: ReactNode;
   /** The notifications slot; omitted while signed out. */
   notifications?: ReactNode;
+  /** Followed and official communities below the main items, normally <ShellCommunities />. */
+  communities?: ReactNode;
   children: ReactNode;
 }
 
@@ -32,13 +35,15 @@ export interface AppShellProps {
  * navigation. Phones: a compact top bar, a bottom navigation and the side
  * navigation in a drawer. Routes render their content, not a second <main>.
  */
-export function AppShell({ locale, messages, theme, navCollapsed, signedIn, account, notifications, children }: AppShellProps) {
-  return <ShellProvider locale={locale} messages={messages} initialTheme={theme} initialCollapsed={navCollapsed}>
+export function AppShell({ locale, messages, theme, navCollapsed, signedIn, account, notifications, communities,
+  children }: AppShellProps) {
+  return <ShellProvider locale={locale} messages={messages} initialTheme={theme} initialCollapsed={navCollapsed}
+    signedIn={signedIn}>
     <SkipNavLink id={MAIN_CONTENT_ID}>{messages.skipToContent}</SkipNavLink>
     <header className="sticky top-0 z-40 border-border/60 border-b bg-background/85 backdrop-blur-md">
       <div className="flex min-h-16 flex-wrap items-center gap-2 px-2 py-2 sm:h-16 sm:flex-nowrap sm:gap-3 sm:px-4 sm:py-0">
         <div className="flex shrink-0 items-center gap-1 md:w-56 md:group-data-[nav=collapsed]/shell:w-auto">
-          <NavDrawer />
+          <NavDrawer communities={communities} />
           <NavCollapseToggle />
           <Logo label={messages.home} locale={locale} />
         </div>
@@ -53,11 +58,12 @@ export function AppShell({ locale, messages, theme, navCollapsed, signedIn, acco
     <div className="flex">
       <aside id={SIDE_NAVIGATION_ID} className="sticky top-16 hidden h-[calc(100dvh-4rem)] w-64 shrink-0
         border-border/60 border-e bg-sidebar/90 md:block md:group-data-[nav=collapsed]/shell:w-18">
-        <SideNav variant="rail" />
+        <SideNav variant="rail" communities={communities} />
       </aside>
       <main id={MAIN_CONTENT_ID} tabIndex={-1} className="min-w-0 flex-1 outline-none
         pb-[calc(4rem+env(safe-area-inset-bottom))] md:pb-0">{children}</main>
     </div>
     <BottomNav />
+    <ThemeNotice />
   </ShellProvider>;
 }

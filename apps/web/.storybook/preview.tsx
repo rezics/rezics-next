@@ -1,6 +1,7 @@
 import type { Decorator, Preview } from '@storybook/react-vite';
 import { useLayoutEffect } from 'react';
 import { messages as shell } from '../features/shell/messages.ts';
+import shellZhHans from '../features/shell/messages/zh-Hans.ts';
 import { ShellProvider } from '../features/shell/shell-provider.tsx';
 import type { UiLocale } from '../i18n/define.ts';
 import '../app/styles.css';
@@ -26,7 +27,7 @@ const withDocument: Decorator = (Story, { globals, parameters }) => {
       <ShellProvider
         key={`${theme}-${locale}`}
         locale={locale}
-        messages={shell}
+        messages={locale === 'zh-Hans' ? { ...shell, ...shellZhHans } : shell}
         initialTheme={theme}
         initialCollapsed={Boolean(parameters.navCollapsed)}
       >

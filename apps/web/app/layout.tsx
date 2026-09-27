@@ -7,6 +7,7 @@ import { DisplayPreferenceSync } from '../features/api/preferences-sync.tsx';
 import { readSession } from '../features/auth/session.ts';
 import { SignInLink } from '../features/auth/sign-in-link.tsx';
 import { AppShell } from '../features/shell/app-shell.tsx';
+import { ShellCommunities } from '../features/shell/communities-slot.tsx';
 import { NotificationsLink } from '../features/shell/notifications-link.tsx';
 import { NAV_COOKIE, parseNavCollapsed, parseTheme, THEME_COOKIE, themeClass } from '../features/shell/preferences.ts';
 import { getMessages, requestLocale } from '../i18n/server.ts';
@@ -29,7 +30,7 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
     <body className="min-h-dvh bg-background">
       <AppShell locale={locale} messages={messages} theme={theme} signedIn={Boolean(session)}
         navCollapsed={parseNavCollapsed(jar.get(NAV_COOKIE)?.value)}
-        notifications={session ? <NotificationsLink /> : null}
+        notifications={session ? <NotificationsLink /> : null} communities={<ShellCommunities locale={locale} />}
         account={session ? <AccountMenu session={session} messages={auth}
           accountOrigin={serviceOrigin('ACCOUNT_ORIGIN')} /> : <SignInLink label={auth.signIn} />}>
         {session ? <DisplayPreferenceSync userId={session.user.id} /> : null}

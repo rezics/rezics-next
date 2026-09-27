@@ -1,0 +1,69 @@
+import type { MainClient } from '../../feed/types.ts';
+import type { NotificationWindow, StreamItem } from './window.ts';
+
+// Story data: an inbox as Main's notification stream returns it, and just
+// enough of the Eden client for the page's reads and commands, in memory.
+
+export const NOW = Date.parse('2026-09-28T09:00:00.000Z');
+const id = (n: number) => `${String(n).padStart(8, '0')}-5555-4a6f-8c2d-3e7b5c1a9f40`;
+const iri = (n: number) => `https://rezics.com/id/${id(n)}`;
+const daniel = { id: iri(802), name: 'Daniel Chen', handle: 'daniel_chen', avatar: null };
+const aria = { id: iri(803), name: 'Aria Wang 王雅', handle: 'aria_wang', avatar: null };
+
+function item(sequence: number, display: StreamItem['display'], read = false, minutes = sequence * 45): StreamItem {
+  return { id: id(sequence), sequence: String(sequence), purpose: 'social', topic: 'reply', read,
+    state: display ? 'active' : 'withdrawn', subject: null, display, createdAt: new Date(NOW - minutes * 60_000).toISOString() };
+}
+
+const target = (title: string | null, excerpt: string | null, linkTarget: string | null, language = 'en') =>
+  ({ title, excerpt, language, linkTarget });
+
+/** Sequences 101–108, oldest first as Main pages them; three replies share a thread. */
+export const inbox: StreamItem[] = [
+  item(101, null, true, 3000),
+  item(102, { kind: 'follow', actor: aria, realm: null, groupKey: null, target: target(null, null, null) }, true, 2000),
+  item(103, { kind: 'realm_role_change', actor: daniel, realm: iri(902), groupKey: null,
+    target: target(null, null, iri(902)) }, true, 1500),
+  item(104, { kind: 'reply', actor: aria, realm: iri(901), groupKey: 'thread-1',
+    target: target('雨夜书店', '第三章的结尾太好了，那张车票到底是谁寄的？', iri(701), 'zh-Hans') }, false, 300),
+  item(105, { kind: 'reply', actor: daniel, realm: iri(901), groupKey: 'thread-1',
+    target: target('雨夜书店', 'I think the ticket is from her mother.', iri(702)) }, false, 200),
+  item(106, { kind: 'submission_decision', actor: null, realm: iri(902), groupKey: null,
+    target: target('Middlemarch: A Study of Provincial Life', 'accepted', iri(703)) }, false, 90),
+  item(107, { kind: 'moderation_outcome', actor: null, realm: iri(902), groupKey: null,
+    target: target(null, 'removed', iri(704)) }, false, 40),
+  item(108, { kind: 'reply', actor: daniel, realm: iri(901), groupKey: 'thread-1',
+    target: target('雨夜书店', 'Also: chapter four is up!', iri(705)) }, false, 10),
+];
+
+export function inboxWindow(items: StreamItem[], from = '0', head = '108'): NotificationWindow {
+  const groups = [...new Set(items.flatMap(entry => entry.display?.groupKey ? [entry.display.groupKey] : []))]
+    .map(key => ({ kind: 'reply', key, itemIds: items.filter(entry => entry.display?.groupKey === key).map(entry => entry.id) }));
+  return { generation: '1', head, readThrough: '100', items: [...items].reverse(), groups, from };
+}
+
+/** The Eden calls the page makes, answered from `stream`; each call is recorded. */
+export function memoryInbox(stream: StreamItem[], options: { refuse?: boolean } = {}) {
+  const calls: string[] = [];
+  const answer = <T>(data: T) => Promise.resolve(options.refuse
+    ? { data: null, error: { status: 503, value: null } } : { data, error: null });
+  const notifications = Object.assign((params: { item: string }) => ({ read: { put: () => {
+    calls.push(`read:${params.item.slice(0, 8)}`);
+    return answer({ profile: 'notification-item-read-v1', id: params.item, readAt: new Date(NOW).toISOString() });
+  } } }), {
+    get: ({ query }: { query: { after: string; limit: number } }) => {
+      calls.push(`page:${query.after}:${query.limit}`);
+      const after = Number(query.after.split(':')[1]);
+      const page = stream.filter(entry => Number(entry.sequence) > after).slice(0, query.limit);
+      return answer({ profile: 'notification-stream-page-v1', generation: '1', head: '108', reset: false,
+        readThrough: '100', items: page, groups: [], next: null });
+    },
+    hint: { get: () => answer({ profile: 'notification-stream-hint-v1', generation: '1', head: '108' }) },
+  });
+  const main = { v1: { me: { notifications, 'notification-read-watermarks': { inbox: { put: (body: {
+    readThrough: string }) => {
+    calls.push(`read-through:${body.readThrough}`);
+    return answer({ profile: 'notification-read-watermark-v1', generation: '1', readThrough: body.readThrough });
+  } } } } } } as unknown as MainClient;
+  return { main, calls };
+}
