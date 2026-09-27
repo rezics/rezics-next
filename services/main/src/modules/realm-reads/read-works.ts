@@ -4,6 +4,7 @@ import { decodeReadCursor, encodeReadCursor, pageResult, publicWork,
 import { readRealmBasis } from './read-realm.ts';
 import type { Static } from 'typebox';
 import { realmWork } from './read-contract.ts';
+import { readSerialSummaries } from '../work/summary-serial.ts';
 
 type RealmWork = Static<typeof realmWork>;
 
@@ -39,6 +40,9 @@ export async function readRealmWorks(session: WorkReadSession, realm: string) {
   const page = rows.slice(0, limit);
   const ids = page.map(row => row.work!.value);
   const summaries = await session.summaries(ids);
+  const serial = await readSerialSummaries(session, ids.filter((id, index) =>
+    summaries[index]?.status === 'available' && summaries[index]?.disclosure === 'public'
+    && summaries[index]?.type === 'work'));
   const typeRows = ids.length ? await session.query(`SELECT ?work ?type WHERE {
     VALUES ?work { ${ids.map(iri).join(' ')} }
     VALUES ?type { ${WORK_SEMANTIC_TYPES.map(type => `<${type}>`).join(' ')} }
@@ -61,7 +65,7 @@ export async function readRealmWorks(session: WorkReadSession, realm: string) {
     return [{ id: row.work!.value, revision: row.head!.value, mainVersion: row.main!.value,
       selection: row.selection!.value, contribution: row.contribution!.value,
       language: row.language!.value, title: summary.name, cover: summary.avatar,
-      types: (types.get(row.work!.value) ?? []).sort() }];
+      types: (types.get(row.work!.value) ?? []).sort(), ...serial.get(row.work!.value)! }];
   });
   await readRealmBasis(session, realm);
   const last = page.at(-1);

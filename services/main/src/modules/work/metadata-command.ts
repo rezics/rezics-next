@@ -113,13 +113,15 @@ export async function commitMetadata(env: WorkActivationEnvironment, admission: 
       GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?n }
       GRAPH ${iri(GRAPHS.current)} { ${iri(component)} rv:metadataHead ${old} ;
         rv:editionState ?oldStatus ; rv:editionLanguage ?oldLanguage .
-        ${state.kind === 'header' ? `${iri(work)} rv:descriptiveMetadataHead ${old} .` : ''} }
+        ${state.kind === 'header' ? `${iri(work)} rv:descriptiveMetadataHead ${old} ;
+          rv:completionStatus ?oldCompletion .` : ''} }
     }
     INSERT {
       GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?next }
       GRAPH ${iri(GRAPHS.current)} { ${iri(component)} a rv:WorkMetadataComponent ;
         rv:work ${iri(work)} ; rv:metadataKind ${lit(state.kind)} ; rv:metadataHead ${iri(revision)} .
-        ${state.kind === 'header' ? `${iri(work)} rv:descriptiveMetadataHead ${iri(revision)} .` : ''}
+        ${state.kind === 'header' ? `${iri(work)} rv:descriptiveMetadataHead ${iri(revision)} .
+          ${state.completionStatus ? `${iri(work)} rv:completionStatus ${lit(state.completionStatus)} .` : ''}` : ''}
         ${state.kind === 'edition' ? `${iri(component)} rv:editionState rv:${state.status === 'active' ? 'Active' : 'Withdrawn'} .
           ${state.contentLanguage === null ? '' : `${iri(component)} rv:editionLanguage ${lit(state.contentLanguage)} .`}` : ''}
       }
@@ -146,6 +148,7 @@ export async function commitMetadata(env: WorkActivationEnvironment, admission: 
       GRAPH ${iri(GRAPHS.current)} { ${iri(work)} rv:head ${iri(row.head.value)} ; rv:mainVersion ${iri(row.main.value)} .
         OPTIONAL { ${iri(component)} rv:editionState ?oldStatus }
         OPTIONAL { ${iri(component)} rv:editionLanguage ?oldLanguage }
+        ${state.kind === 'header' ? `OPTIONAL { ${iri(work)} rv:completionStatus ?oldCompletion }` : ''}
         ${expectedHead ? `${iri(component)} a rv:WorkMetadataComponent ; rv:work ${iri(work)} ;
           rv:metadataKind ${lit(state.kind)} ; rv:metadataHead ${iri(expectedHead)} .`
           : `FILTER NOT EXISTS { ${iri(component)} ?occupiedProperty ?occupiedValue }`}

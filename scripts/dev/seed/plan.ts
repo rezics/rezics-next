@@ -1,6 +1,7 @@
 export interface DemoPerson { id: string; name: string; handle: string; email: string; password: string }
 export interface DemoWork { id: string; title: string; type: 'book' | 'document' | 'recipe';
-  language: 'en' | 'zh-Hans'; excerpt?: string }
+  language: 'en' | 'zh-Hans'; excerpt?: string; tagline?: string;
+  completionStatus?: 'ongoing' | 'completed' | 'hiatus' }
 
 export const people: readonly DemoPerson[] = [
   { id: 'mei', handle: 'lin_mei', name: 'Lin Mei 林梅', email: 'rezics-demo-mei@example.test', password: 'Rezics-demo-2026-mei' },
@@ -14,6 +15,8 @@ export const people: readonly DemoPerson[] = [
 
 export const works: readonly DemoWork[] = [
   { id: 'pride', title: 'Pride and Prejudice', type: 'book', language: 'en',
+    tagline: 'Elizabeth Bennet meets a proud stranger, and first impressions begin to unravel.',
+    completionStatus: 'completed',
     excerpt: 'Chapter 1\nIt is a truth universally acknowledged, that a single man in possession of a good fortune, must be in want of a wife.' },
   { id: 'pride-ch2', title: 'Pride and Prejudice — Chapter 2', type: 'document', language: 'en',
     excerpt: 'Chapter 2\nMr. Bennet was among the earliest of those who waited on Mr. Bingley.' },
@@ -28,6 +31,7 @@ export const works: readonly DemoWork[] = [
   { id: 'little-women', title: 'Little Women', type: 'book', language: 'en' },
   { id: 'secret-garden', title: 'The Secret Garden', type: 'book', language: 'en' },
   { id: 'journey-west', title: '西游记', type: 'book', language: 'zh-Hans',
+    tagline: '一场西行取经之旅，从石猴出世开始。', completionStatus: 'completed',
     excerpt: '第一回 灵根育孕源流出 心性修持大道生\n诗曰：混沌未分天地乱，茫茫渺渺无人见。' },
   { id: 'journey-west-ch2', title: '西游记 · 第二回 悟彻菩提真妙理', type: 'document', language: 'zh-Hans' },
   { id: 'red-chamber', title: '红楼梦', type: 'book', language: 'zh-Hans',
@@ -38,6 +42,7 @@ export const works: readonly DemoWork[] = [
   { id: 'three-kingdoms', title: '三国演义', type: 'book', language: 'zh-Hans' },
   { id: 'water-margin', title: '水浒传', type: 'book', language: 'zh-Hans' },
   { id: 'serial', title: '雨夜书店 · 连载小说', type: 'book', language: 'zh-Hans',
+    tagline: '一封没有地址的信，把雨夜书店带向二十年前的秘密。', completionStatus: 'ongoing',
     excerpt: '第一章 雨夜\n雨停在书店打烊前。林梅在门口发现一封没有地址的信。' },
   { id: 'serial-ch2', title: '雨夜书店 · 第二章 未寄出的信', type: 'document', language: 'zh-Hans',
     excerpt: '第二章 未寄出的信\n信封里只有一张旧车票，日期是二十年前。' },

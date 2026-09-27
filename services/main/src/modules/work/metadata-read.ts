@@ -13,7 +13,7 @@ export function parsedMetadataState(raw: string): MetadataState {
 }
 /** Exact head lookup, one ≤64 KiB state. Missing data behind a pointer is damage, not absence. */
 export async function readMetadataHeader(session: WorkReadSession, work: string, revision: string | null) {
-  if (!revision) return { revision: null, originalTitle: null, localized: [] };
+  if (!revision) return { revision: null, originalTitle: null, completionStatus: null, localized: [] };
   const empty: MetadataHeaderState = { kind: 'header', originalTitle: null, localized: [] };
   const component = metadataComponent(work, empty);
   const rows = await session.query(`SELECT ?state WHERE {
@@ -26,11 +26,13 @@ export async function readMetadataHeader(session: WorkReadSession, work: string,
   if (rows.length !== 1 || !rows[0]?.state) throw new WorkReadUnavailable('Metadata head is incomplete');
   const state = parsedMetadataState(rows[0].state.value);
   if (state.kind !== 'header') throw new WorkReadUnavailable('Metadata head has the wrong kind');
-  return { revision, originalTitle: state.originalTitle, localized: state.localized };
+  return { revision, originalTitle: state.originalTitle,
+    completionStatus: state.completionStatus ?? null, localized: state.localized };
 }
 export const recordedDisplayText = (value: { value: string; language: string }) =>
   ({ ...value, direction: direction(value.language) });
-export function selectedMetadata(header: Awaited<ReturnType<typeof readMetadataHeader>>, requested?: string) {
+export function selectedMetadata(header: { revision?: string | null; originalTitle?: MetadataHeaderState['originalTitle'];
+  completionStatus?: MetadataHeaderState['completionStatus']; localized: MetadataHeaderState['localized'] }, requested?: string) {
   const language = requested?.toLowerCase();
   const locale = header.localized.find(row => row.language === language)
     ?? header.localized.find(row => row.language === 'en') ?? header.localized[0];
@@ -38,11 +40,12 @@ export function selectedMetadata(header: Awaited<ReturnType<typeof readMetadataH
     : { value, language: locale.language, direction: direction(locale.language),
       basis: language === locale.language ? 'requested' as const : 'fallback' as const };
   return { title: name(locale?.title), description: name(locale?.description),
+    tagline: name(locale?.tagline),
     mainVersionLabel: name(locale?.mainVersionLabel) };
 }
 export async function readWorkMetadata(session: WorkReadSession, work: string) {
   const basis = await readWorkBasis(session, work);
-  const header = await readMetadataHeader(session, work, basis.metadataRevision);
+  const header = basis.metadata;
   await fenceWorkBasis(session, basis);
   return { work, ...header, sourcePosition: session.position };
 }

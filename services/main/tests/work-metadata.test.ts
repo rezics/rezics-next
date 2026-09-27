@@ -58,7 +58,7 @@ test('Work metadata selection marks fallbacks and never promotes a display trans
   expect(selectedMetadata(stored, 'fr')).toMatchObject({ title: { value: 'English title', basis: 'fallback', language: 'en' } });
   expect(stored.originalTitle).toBeNull();
   expect(selectedMetadata({ revision: null, originalTitle: null, localized: [] }, 'ja')).toEqual({ title: null,
-    description: null, mainVersionLabel: null });
+    description: null, tagline: null, mainVersionLabel: null });
 });
 
 test('Work metadata routes and concrete facts type-check in the web-style Eden consumer', () => {

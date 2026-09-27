@@ -15,9 +15,12 @@ const text = (maxLength: number) => t.String({ minLength: 1, maxLength,
   pattern: '^[^\\u0000-\\u001f\\u007f]+$' });
 export const recordedText = t.Object({ value: text(500), language }, closed);
 export const localizedMetadata = t.Object({ language, title: t.Nullable(text(500)),
-  description: t.Nullable(text(4000)), mainVersionLabel: t.Nullable(text(200)) }, closed);
+  description: t.Nullable(text(4000)), mainVersionLabel: t.Nullable(text(200)),
+  tagline: t.Optional(t.Nullable(text(180))) }, closed);
+export const serialStatus = t.Union([t.Literal('ongoing'), t.Literal('completed'), t.Literal('hiatus')]);
 export const metadataHeaderState = t.Object({ kind: t.Literal('header'),
   originalTitle: t.Nullable(recordedText),
+  completionStatus: t.Optional(t.Nullable(serialStatus)),
   localized: t.Array(localizedMetadata, { maxItems: WORK_METADATA_COST.locales }) }, closed);
 /** Edition facts follow https://schema.org/Book (consulted 2026-09-28).
  * An edition has its own identity; it does not imply a native release or translation link. */
@@ -62,13 +65,16 @@ export function checkedMetadataState(input: unknown): MetadataState {
   let state: MetadataState;
   if (input.kind === 'header') {
     const localized = input.localized.map(row => ({ language: canonicalLanguage(row.language),
-      title: row.title, description: row.description, mainVersionLabel: row.mainVersionLabel }))
+      title: row.title, description: row.description, mainVersionLabel: row.mainVersionLabel,
+      tagline: row.tagline ?? null }))
       .sort((a, b) => a.language < b.language ? -1 : a.language > b.language ? 1 : 0);
     if (new Set(localized.map(row => row.language)).size !== localized.length
-      || localized.some(row => row.title === null && row.description === null && row.mainVersionLabel === null)) {
+      || localized.some(row => row.title === null && row.description === null
+        && row.mainVersionLabel === null && row.tagline === null)) {
       throw new InvalidWorkMetadata('Locale entries must be unique and record at least one value');
     }
-    state = { kind: 'header', originalTitle: input.originalTitle === null ? null : canonicalText(input.originalTitle), localized };
+    state = { kind: 'header', originalTitle: input.originalTitle === null ? null : canonicalText(input.originalTitle),
+      completionStatus: input.completionStatus ?? null, localized };
   } else if (input.kind === 'edition') {
     if (input.isbn13 && [...input.isbn13].reduce((sum, digit, index) =>
       sum + Number(digit) * (index % 2 === 0 ? 1 : 3), 0) % 10 !== 0) {

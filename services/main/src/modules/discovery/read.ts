@@ -5,6 +5,7 @@ import type { Static } from 'typebox';
 import { discoveryItem, type DiscoveryQuery, type OwnedDiscoveryBasis, type DiscoveryPayload } from './contract.ts';
 import { MAX_SUMMARY_BATCH, type ResourceSummary } from '../media/summary.ts';
 import { admitDiscoveryBasis } from './source.ts';
+import { readSerialSummaries } from '../work/summary-serial.ts';
 import type { DiscoveryProjection } from './store.ts';
 
 export async function readDiscovery(session: WorkReadSession, projection: DiscoveryProjection, query: DiscoveryQuery) {
@@ -38,6 +39,9 @@ export async function readDiscovery(session: WorkReadSession, projection: Discov
   // Projection freshness fences graph publication, types, decisions and ratings;
   // summaries recheck current title/cover disclosure without copying stored names.
   const summaries = await session.summaries(ids);
+  const serial = await readSerialSummaries(session, ids.filter((id, index) =>
+    summaries[index]?.status === 'available' && summaries[index]?.disclosure === 'public'
+    && summaries[index]?.type === 'work'));
   const concepts = [...new Set(page.flatMap(row => [
     ...(row.payload.classifications ?? []).map(tag => tag.concept),
     ...(row.payload.classification ? [row.payload.classification.concept] : []),
@@ -55,7 +59,8 @@ export async function readDiscovery(session: WorkReadSession, projection: Discov
   const fenced = await session.summaries(ids);
   const items: Static<typeof discoveryItem>[] = page.flatMap((row, index) => {
     const summary = summaries[index];
-    if (summary?.status !== 'available' || summary.type !== 'work' || fenced[index]?.status !== 'available') return [];
+    if (summary?.status !== 'available' || summary.type !== 'work' || summary.disclosure !== 'public'
+      || fenced[index]?.status !== 'available' || fenced[index]?.disclosure !== 'public') return [];
     const payload = row.payload;
     if (query.term && payload.classification?.sense !== query.term) {
       throw new WorkReadUnavailable('Discovery match basis is unavailable');
@@ -64,6 +69,7 @@ export async function readDiscovery(session: WorkReadSession, projection: Discov
     if (query.term && !classification) return [];
     return [{ id: row.work, revision: payload.revision, mainVersion: payload.mainVersion,
       types: payload.types, title: summary.name, cover: summary.avatar, rating: payload.rating,
+      ...serial.get(row.work)!,
       primaryCredits: payload.primaryCredits ?? [],
       classifications: (payload.classifications ?? []).flatMap(tag => { const item = named(tag); return item ? [item] : []; }),
       match: { publication: 'public-main' as const, type: query.type ?? null, classification } }];

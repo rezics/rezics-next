@@ -16,8 +16,11 @@ interface Page<T> { items: T[]; nextCursor: string | null; count: { value: numbe
 interface Header { revision: string; metadataRevision: string | null; originalTitle: { value: string; language: string } | null;
   title: { value: string; language: string; basis: string }; description: { value: string } | null }
 const metadata: MetadataHeaderState = { kind: 'header', originalTitle: { value: '銀河の旅', language: 'ja' },
-  localized: [{ language: 'ja', title: '銀河の旅', description: '記録された説明', mainVersionLabel: '本文' },
-    { language: 'en', title: 'A Galactic Journey', description: 'Recorded synopsis', mainVersionLabel: 'Main text' }] };
+  completionStatus: 'ongoing',
+  localized: [{ language: 'ja', title: '銀河の旅', description: '記録された説明', mainVersionLabel: '本文',
+    tagline: '星を越えて届く一通の手紙' },
+    { language: 'en', title: 'A Galactic Journey', description: 'Recorded synopsis', mainVersionLabel: 'Main text',
+      tagline: 'A letter crosses the stars' }] };
 const edition = (editionId = id()): MetadataEditionState => ({ kind: 'edition', id: editionId, status: 'active',
   title: { value: 'A Galactic Journey', language: 'en' }, contentLanguage: 'en', editionStatement: 'Second edition',
   publisher: 'Recorded publisher', publicationYear: 2001, isbn13: '9780306406157' });
@@ -54,10 +57,11 @@ test('Work metadata: native writes, disclosure, editions, relevance, concurrent 
     expect((await put({ ...metadata, originalTitle: null }, null, key)).status).toBe(409);
     const afterQueries = stack.fuseki.queries;
     const header = await json<Header>(await get(`${root}?language=ja`));
-    expect(stack.fuseki.queries - afterQueries).toBe(6);
+    expect(stack.fuseki.queries - afterQueries).toBe(7);
     expect(header).toMatchObject({ revision: before.revision, metadataRevision: saved.revision,
       originalTitle: { value: '銀河の旅', language: 'ja' }, title: { value: '銀河の旅', language: 'ja', basis: 'requested' },
-      description: { value: '記録された説明' }, mainVersionLabel: { value: '本文' } });
+      description: { value: '記録された説明' }, tagline: { value: '星を越えて届く一通の手紙' },
+      completionStatus: 'ongoing', mainVersionLabel: { value: '本文' } });
     expect(await json(await get(`${root}?language=fr`))).toMatchObject({
       originalTitle: { language: 'ja' }, title: { value: 'A Galactic Journey', language: 'en', basis: 'fallback' } });
     const batch = await readNextMainOutboxBatch(stack.fuseki, saved.sourcePosition.dataEpoch,
@@ -77,7 +81,7 @@ test('Work metadata: native writes, disclosure, editions, relevance, concurrent 
     expect((await put(edition(before.revision))).status).toBe(409);
     const pageQueries = stack.fuseki.queries;
     const page = await json<Page<MetadataEditionState & { revision: string }>>(await get(`${root}/editions?limit=1`));
-    expect(stack.fuseki.queries - pageQueries).toBe(7);
+    expect(stack.fuseki.queries - pageQueries).toBe(9);
     expect(page.items.length).toBe(1);
     expect(page.count).toEqual({ value: 1, kind: 'exact-page', total: null });
     expect(page.nextCursor).toBeString();

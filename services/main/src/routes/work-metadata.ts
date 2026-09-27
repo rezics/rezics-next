@@ -45,6 +45,7 @@ export function workMetadataRoutes(work: MainWorkDependencies) {
       query: t.Object(readQuery, { additionalProperties: false }),
       response: { 200: t.Object({ work: readId, revision: t.Nullable(readId),
         originalTitle: metadataHeaderState.properties.originalTitle,
+        completionStatus: t.Nullable(metadataHeaderState.properties.completionStatus),
         localized: metadataHeaderState.properties.localized, sourcePosition: readPosition }), ...workReadProblems },
     }, async ({ request, params: path, query: options }) => {
       try { return Response.json(await workRead(work, request, options,

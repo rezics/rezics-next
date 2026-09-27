@@ -22,7 +22,12 @@ export const scopeQuery = { scope: t.Optional(t.Union([t.Literal('global'), t.Li
 export const readScope = t.Object({ kind: t.Union([t.Literal('global'), t.Literal('realm'), t.Literal('mine')]),
   realm: t.Nullable(readId) });
 export const workCard = t.Object({ id: readId, revision: readId, mainVersion: readId,
-  title: readName, cover: readAvatar, types: t.Array(t.String(), { maxItems: 8 }) });
+  title: readName, cover: readAvatar, types: t.Array(t.String(), { maxItems: 8 }),
+  tagline: t.Nullable(readName),
+  completionStatus: t.Nullable(t.Union([t.Literal('ongoing'), t.Literal('completed'), t.Literal('hiatus')])),
+  chapterCount: t.Nullable(t.Integer({ minimum: 0 })),
+  wordCount: t.Nullable(t.Integer({ minimum: 0 })),
+  lastUpdatedAt: t.Nullable(t.String({ format: 'date-time' })) });
 export const workHeader = t.Object({ profile: t.Literal('work-read-v1'), ...workCard.properties,
   disclosure: t.Union([t.Literal('public'), t.Literal('restricted')]),
   originalTitle: t.Nullable(t.Object({ ...recordedText.properties,

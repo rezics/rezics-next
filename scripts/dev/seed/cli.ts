@@ -122,6 +122,13 @@ async function run(options: Options): Promise<boolean> {
       profile: 'metadata-only-v1', title: work.title, semanticTypes: semanticTypes(work.type),
       actingSubject: owner.actingSubject }, ownerToken, seedKey('work', work.id));
     created.set(work.id, receipt);
+    if (work.tagline) await optional('Work serial summary', () => api.put(
+      `/v1/works/${receipt.work.slice(-36)}/metadata`, {
+        profile: 'work-metadata-details-v1', expectedHead: null,
+        state: { kind: 'header', originalTitle: null, completionStatus: work.completionStatus ?? null,
+          localized: [{ language: work.language, title: null, description: null,
+            mainVersionLabel: null, tagline: work.tagline }] },
+        actingSubject: owner.actingSubject }, ownerToken, seedKey('serial-metadata', work.id)));
     console.log(`Work ${created.size}/${works.length}: ${work.title}${receipt.replayed ? ' (replayed)' : ''}`);
   }
   const createdRealms: Array<{ id: string; receipt: SpaceReceipt }> = [];

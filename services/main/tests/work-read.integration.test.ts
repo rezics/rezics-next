@@ -57,10 +57,10 @@ test('Work reads: native public/private/erased disclosure, fallback, scoped rati
     };
     const before = stack.fuseki.queries;
     const header = await json<{ id: string; revision: string; title: { value: string; language: string; basis: string };
-      originalTitle: null; mainVersion: string; selectedLanguage: string }>(await get(`${root}?language=fr`));
+      originalTitle: null; mainVersion: string; selectedLanguage: string | null }>(await get(`${root}?language=fr`));
     expect(header).toMatchObject({ id: first.work, mainVersion: first.mainVersion,
-      title: { value: first.title, language: 'en', basis: 'fallback' }, originalTitle: null, selectedLanguage: 'en' });
-    expect(stack.fuseki.queries - before).toBe(5);
+      title: { value: first.title, language: 'en', basis: 'fallback' }, originalTitle: null, selectedLanguage: null });
+    expect(stack.fuseki.queries - before).toBe(6);
     expect((await get(`/v1/works/${short(restricted.work)}`)).status).toBe(404);
     expect((await get(`/v1/works/${short(unreviewed.work)}`)).status).toBe(404);
     expect((await get(`/v1/works/${randomUUID()}`)).status).toBe(404);
