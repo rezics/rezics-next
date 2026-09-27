@@ -19,7 +19,7 @@ export interface AdminClient {
   download(blob: Blob, filename: string): void;
 }
 
-export const browserAdminClient: AdminClient = {
+const browserAdminClient: AdminClient = {
   api: browserAdminApi,
   navigate: url => window.location.assign(url),
   replaceUrl: (url, push = false) => window.history[push ? 'pushState' : 'replaceState'](window.history.state, '', url),

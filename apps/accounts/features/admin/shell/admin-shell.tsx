@@ -23,7 +23,7 @@ import { ShortcutsDialog } from './shortcuts-dialog.tsx';
 import { useTranslation } from '../../../i18n/client.ts';
 
 export type AdminSection = 'overview' | 'users' | 'staff' | 'clients' | 'audit';
-export const adminPaths: Record<AdminSection, string> = { overview: '/admin', users: '/admin/users', staff: '/admin/staff',
+const adminPaths: Record<AdminSection, string> = { overview: '/admin', users: '/admin/users', staff: '/admin/staff',
   clients: '/admin/clients', audit: '/admin/audit' };
 const sections = [
   { id: 'overview', icon: LayoutDashboardIcon },

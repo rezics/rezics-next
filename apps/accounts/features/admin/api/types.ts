@@ -23,7 +23,6 @@ export type AuditPage = Ok<Admin['audit']['get']>;
 export type AuditEntry = AuditPage['items'][number];
 export type AuditParams = NonNullable<Admin['audit']['get']['query']>;
 export type Job = Ok<Admin['bulk-actions'][':jobId']['get']>;
-export type JobSummary = Overview['jobs'][number];
 export type Operators = Ok<Admin['operators']['get']>;
 export type OperatorEntry = Operators['items'][number];
 export type Preferences = Ok<Admin['preferences']['get']>;

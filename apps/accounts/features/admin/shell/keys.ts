@@ -10,7 +10,7 @@ export function isEditable(target: EventTarget | null): boolean {
 
 /** A key pressed on the page itself: not while an IME composes, not with a
  * modifier, not in a text field and not while a dialog is open. */
-export function isPageKey(event: KeyboardEvent): boolean {
+function isPageKey(event: KeyboardEvent): boolean {
   return !event.isComposing && !event.defaultPrevented && !event.metaKey && !event.ctrlKey && !event.altKey
     && !isEditable(event.target) && !document.querySelector('[role="dialog"][data-state="open"], [role="alertdialog"][data-state="open"]');
 }

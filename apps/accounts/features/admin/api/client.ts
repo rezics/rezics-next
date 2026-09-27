@@ -36,7 +36,7 @@ async function call<T>(path: string, body?: unknown, signal?: AbortSignal): Prom
   return { ok: true, data: data as T };
 }
 
-export interface AuditExport { blob: Blob; rows: number; truncated: boolean }
+interface AuditExport { blob: Blob; rows: number; truncated: boolean }
 
 export interface AdminApi {
   me(): Promise<AdminResult<AdminMe>>;

@@ -4,12 +4,12 @@ import type { DirectoryParams, OperatorRole, UserStatus } from '../api/types.ts'
 // leading `-` to negate. Parsed the same way on the server (first render) and
 // in the browser (search as you type); the raw text is the `q` URL parameter.
 
-export const filterKeys = ['email', 'name', 'id', 'status', 'role', 'verified', '2fa', 'created'] as const;
+const filterKeys = ['email', 'name', 'id', 'status', 'role', 'verified', '2fa', 'created'] as const;
 export type FilterKey = typeof filterKeys[number];
-export const statusValues = { active: 'active', suspended: 'suspended', reset: 'password-reset-required' } as const satisfies
+const statusValues = { active: 'active', suspended: 'suspended', reset: 'password-reset-required' } as const satisfies
   Record<string, UserStatus>;
-export type StatusValue = keyof typeof statusValues;
-export const roleValues = ['owner', 'admin', 'support', 'none'] as const;
+type StatusValue = keyof typeof statusValues;
+const roleValues = ['owner', 'admin', 'support', 'none'] as const;
 type RoleValue = OperatorRole | 'none';
 
 export interface QueryToken {
@@ -21,7 +21,7 @@ export interface QueryToken {
 export type QueryProblem = { kind: 'unknown-filter'; key: string } | { kind: 'no-handle' }
   | { kind: 'bad-value'; key: FilterKey; value: string } | { kind: 'no-negation'; key: FilterKey | 'text' }
   | { kind: 'contradiction'; key: 'status' | 'role' };
-export type DirectoryFilters = Pick<DirectoryParams, 'q' | 'email' | 'name' | 'status' | 'role' | 'verified' | 'hasTwoFactor'
+type DirectoryFilters = Pick<DirectoryParams, 'q' | 'email' | 'name' | 'status' | 'role' | 'verified' | 'hasTwoFactor'
   | 'createdFrom' | 'createdTo'>;
 export interface ParsedQuery { filters: DirectoryFilters; tokens: QueryToken[]; problems: QueryProblem[] }
 

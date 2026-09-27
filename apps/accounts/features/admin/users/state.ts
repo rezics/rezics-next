@@ -13,7 +13,7 @@ export const columnOrder: readonly DirectoryColumn[] = ['name', 'email', 'status
 export const defaultColumns: readonly DirectoryColumn[] = ['name', 'email', 'status', 'role', 'created', 'lastSignIn'];
 /** Columns the service can sort by, and the parameter it takes. */
 export const sortable: Partial<Record<DirectoryColumn, SortKey>> = { name: 'name', email: 'email', created: 'createdAt' };
-export const pageSize = 25;
+const pageSize = 25;
 
 const sorts: readonly SortKey[] = ['createdAt', 'email', 'name'];
 const urlSort: Record<SortKey, string> = { createdAt: 'created', email: 'email', name: 'name' };

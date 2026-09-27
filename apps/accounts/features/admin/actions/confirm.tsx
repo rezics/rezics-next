@@ -34,7 +34,7 @@ export function ErrorAlert({ message }: { message: string | null }) {
   </div>;
 }
 
-export function ReauthFields({ value, onChange, secondFactor, disabled, autoFocus, description }: { value: Reauth;
+function ReauthFields({ value, onChange, secondFactor, disabled, autoFocus, description }: { value: Reauth;
   onChange(value: Reauth): void; secondFactor: boolean; disabled?: boolean; autoFocus?: boolean; description?: string }) {
   const { t } = useTranslation('admin');
   return <>

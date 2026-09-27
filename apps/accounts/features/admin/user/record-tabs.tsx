@@ -15,7 +15,7 @@ import { Empty, Panel, usePages } from './parts.tsx';
 import { useLocale, useTranslation } from '../../../i18n/client.ts';
 
 /** One audit record as a timeline entry: who, what, why, when. */
-export function EntryItem({ entry, showOutcome = false }: { entry: AuditEntry; showOutcome?: boolean }) {
+function EntryItem({ entry, showOutcome = false }: { entry: AuditEntry; showOutcome?: boolean }) {
   const { t } = useTranslation('admin');
   const after = entry.after as { suspendedUntil?: string | null } | null;
   return <li className="flex flex-col gap-1 px-5 py-3 text-sm group-data-[density=compact]/admin:py-2">
@@ -35,7 +35,7 @@ export function EntryItem({ entry, showOutcome = false }: { entry: AuditEntry; s
   </li>;
 }
 
-export function EntryList({ initial, next, empty, showOutcome }: { initial: AuditPage;
+function EntryList({ initial, next, empty, showOutcome }: { initial: AuditPage;
   next(cursor: string): ReturnType<ReturnType<typeof useAdminClient>['api']['audit']>; empty: string; showOutcome?: boolean }) {
   const pages = usePages(initial, next);
   return <>{pages.items.length ? <ol className="divide-y divide-border/60 border-t border-border/60">

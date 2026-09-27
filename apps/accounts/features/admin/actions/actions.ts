@@ -33,7 +33,7 @@ export function availableActions(target: ActionTarget, me: Pick<AdminMe, 'role' 
   return relevant.filter(action => me.permissions.includes(actionPermission[action]));
 }
 
-export const durations = { day: 1, week: 7, month: 30, quarter: 90 } as const;
+const durations = { day: 1, week: 7, month: 30, quarter: 90 } as const;
 export type Duration = keyof typeof durations | 'indefinite' | 'custom';
 
 /** When a suspension of this duration ends, or undefined for “until lifted”. */
