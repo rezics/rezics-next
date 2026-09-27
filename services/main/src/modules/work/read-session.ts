@@ -2,6 +2,9 @@ import { createCipheriv, createDecipheriv, createHash, randomBytes } from 'node:
 import { fusekiReadBudget, FusekiQueryResponseTooLarge, FusekiReadBudgetExceeded,
   type SparqlResult } from '../../infrastructure/fuseki.ts';
 import type { MainWorkDependencies } from '../../routes/dependencies.ts';
+// `deps.media` is declared by module augmentation in the media routes; import it
+// so programs that reach this file without the route module still see it.
+import type {} from '../../routes/media.ts';
 import { AccountAssertionDenied } from '../account/verify-assertion.ts';
 import type { VerifiedPrincipal } from '../access/admission.ts';
 import { readResourceSummaries, type ResourceSummary } from '../media/summary.ts';
