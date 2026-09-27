@@ -65,3 +65,15 @@ from the bounded pinned chain. They return `ambiguous` with exact relation,
 definition and entry revision when no generic entry settles the target; overflow
 returns `unavailable`. A Statement write always has an exact predicate and never
 uses an ambiguous preview as admission.
+
+`rule.ts` binds an admitted semantic rule to one exact Context revision and Realm.
+`POST/GET /v1/context-rules` use the Context graph command, a guarded rule head,
+an immutable manifest and a derived generation head. `POST /v1/context-rule-plans`
+checks readable Contexts and exact rule heads before invoking the semantic
+closure; conflicting outputs reject the plan before derivation. Projections pin
+input DefinitionRefs, rule revisions, model generation, exact input facts and the
+authenticated disclosure domain. `POST/GET /v1/context-rule-dependencies`
+registers at most 64 targets per command and pages at most 64 stale targets per
+read, fenced to one generation. A rule edit changes one head and does not rewrite
+those target records. Copy `rule.ts`, the route's admission/receipt pattern and
+`context-rule-cases.test.ts` when adding another guarded derived family.

@@ -32,3 +32,15 @@ The route's reference availability work grows with the number of distinct
 resource references in the bounded state. Integration tests inspect the native
 graph terms and retained history; engine work and recovery remain separate QA
 evidence.
+
+`finite-rule.ts` admits one range-restricted positive conjunctive rule per
+immutable rule revision. Body predicates are declared, the output is restricted
+to `https://rezics.com/derived/`, and no identity or owner-authority output is
+executable. The model generation keeps `NoEntailment` for automatic RDF/OWL
+inference; the explicit rule closure checks that exact generation and refuses
+identity-producing input. A partial closure has no exact count or authority.
+The cost contract caps 16 selected rules, 10,000 facts, four body atoms, eight
+rounds, 2,048 inferences and 50,000 pair inspections. To add a new rule form,
+extend the checked profile and closure in this file, its graph profile in
+`model/definitions/semantic-rule-v1.ts`, and the Context rule API tests; do not
+interpret prose or arbitrary RDF as executable rules.

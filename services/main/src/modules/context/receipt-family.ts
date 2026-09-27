@@ -7,4 +7,6 @@ export const receiptFamilies = {
   'context.preference': 'context-preference-v1',
   'context.equivalence.review': 'context-definition-equivalence-v1',
   'context.select': 'context-realm-selection-v1',
+  'context.rule.change': 'context-rule-v1',
+  'context.rule.depend': 'context-rule-dependency-v1',
 } as const;

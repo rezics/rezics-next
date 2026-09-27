@@ -19,6 +19,11 @@ import { CONTEXT_EQUIVALENCE_FAMILY, compareStatementMeanings, equivalenceReques
 import { CONTEXT_PREFERENCE_FAMILY, contextPreferencesRequest, contextSkos,
   readContextPreferences, setContextPreferences } from '../modules/context/preferences.ts';
 import { InvalidContextSchemaInput, type ContextSelectionScope } from '../modules/context/schema.ts';
+import { CONTEXT_RULE_DEPENDENCY_FAMILY, CONTEXT_RULE_FAMILY, changeContextRule,
+  contextRuleRequest, dependencyRequest, planContextRules, readContextRule,
+  registerRuleDependencies, ruleContextBasis, staleRuleDependencies } from '../modules/context/rule.ts';
+import { FiniteRuleRejected } from '../modules/semantic/finite-rule.ts';
+import { ReasoningInputRejected, ReasoningProfileRejected } from '../modules/semantic/reasoning.ts';
 import { recordStatement, recordStatementRequest, setStatementDecision, statementDecisionRequest,
   withdrawStatement, withdrawStatementRequest,
   statementInterpretation, STATEMENT_FAMILIES, type RecordStatementInput } from '../modules/statement/graph.ts';
@@ -44,6 +49,9 @@ export const openApiOperations = {
   '/v1/realms/{realm}/context-selections': { post: { bearer: true, idempotencyKey: true } },
   '/v1/me/context-selections': { put: { bearer: true, idempotencyKey: true }, get: { bearer: true } },
   '/v1/context-interpretations': { post: { bearer: true } },
+  '/v1/context-rules': { post: { bearer: true, idempotencyKey: true }, get: { bearer: true } },
+  '/v1/context-rule-plans': { post: { bearer: true } },
+  '/v1/context-rule-dependencies': { post: { bearer: true, idempotencyKey: true }, get: { bearer: true } },
   '/v1/statements': { post: { bearer: true, idempotencyKey: true } },
   '/v1/statements/{id}': { get: {} },
   '/v1/statements/{id}/withdrawals': { post: { bearer: true, idempotencyKey: true } },
@@ -159,6 +167,46 @@ const interpretationResponse = t.Union([
     state: t.Union([t.Literal('unresolved'), t.Literal('disabled')]), basis,
     context: ref, semanticRevision: ref, entryRevision: ref, selectionRevision: nullableRef }),
 ]);
+const ruleAtom = t.Object({ subject: t.String(), predicate: reference, object: t.String() },
+{ additionalProperties: false });
+const finiteRule = t.Object({ profile: t.Literal('finite-positive-rule-v1'),
+  inputPredicates: t.Array(reference, { minItems: 1, maxItems: 4 }), outputPredicate: reference,
+  body: t.Array(ruleAtom, { minItems: 1, maxItems: 4 }),
+  head: t.Object({ subject: t.String(), object: t.String() }, { additionalProperties: false }),
+  budget: t.Object({ rounds: t.Integer({ minimum: 1, maximum: 8 }),
+    inferences: t.Integer({ minimum: 1, maximum: 2048 }),
+    inspections: t.Integer({ minimum: 1, maximum: 50_000 }) }, { additionalProperties: false }),
+}, { additionalProperties: false });
+const ruleWriteResponse = t.Object({ profile: t.Literal('context-rule-v1'), slot: ref,
+  generation: ref, ...writtenFields });
+const ruleReadResponse = t.Object({ profile: t.Literal('context-rule-v1'), slot: ref,
+  revision: ref, predecessor: nullableRef, context: ref, semanticRevision: ref, realm: ref,
+  generation: ref, modelGeneration: ref, currentHead: ref, rule: finiteRule });
+const ruleSelection = t.Object({ slot: ref, revision: native, context: contextId,
+  semanticRevision: native, realm: native }, { additionalProperties: false });
+const ruleFact = t.Object({ id: t.String({ minLength: 1, maxLength: 512 }),
+  subject: reference, predicate: reference, object: reference, definition: reference,
+  context: contextId, contextRevision: native, realm: native }, { additionalProperties: false });
+const derivedFact = t.Object({ subject: ref, predicate: ref, object: ref, context: ref,
+  contextRevision: ref, realm: ref, ruleRevision: ref, inputIds: t.Array(ref),
+  definitions: t.Array(ref) });
+const rulePlanResponse = t.Union([
+  t.Object({ profile: t.Literal('context-rule-plan-v1'), state: t.Literal('rejected'),
+    reason: t.Literal('conflicting-rules'), conflictingRevisions: t.Array(ref),
+    inferences: t.Array(derivedFact, { maxItems: 0 }), accepted: t.Literal(false),
+    authorizes: t.Literal(false) }),
+  t.Object({ profile: t.Literal('context-rule-plan-v1'),
+    state: t.Union([t.Literal('complete'), t.Literal('partial')]),
+    inferences: t.Array(derivedFact), exactCount: t.Nullable(t.Integer()),
+    accepted: t.Literal(false), authorizes: t.Literal(false), modelGeneration: ref,
+    inspected: t.Integer(), generations: t.Array(ref), projectionKey: ref }),
+]);
+const dependencyWriteResponse = t.Object({ profile: t.Literal('context-rule-dependency-v1'),
+  slot: ref, generation: ref, ...writtenFields });
+const invalidationResponse = t.Object({ profile: t.Literal('context-rule-invalidation-v1'),
+  slot: ref, currentGeneration: ref,
+  items: t.Array(t.Object({ dependency: ref, target: ref, previousGeneration: ref })),
+  next: nullableRef });
 const meaningBasis = t.Union([t.Object({ state: t.Literal('none') }),
   t.Object({ state: t.Literal('unavailable') }),
   t.Object({ state: t.Literal('readable'), context: ref, semanticRevision: ref,
@@ -204,6 +252,10 @@ const interpretationProblem = t.Object({ type: ref, status: t.Literal(409),
       context: ref, semanticRevision: ref, entryRevision: ref, selectionRevision: nullableRef })]) });
 
 function contextError(error: unknown): Response {
+  if (error instanceof FiniteRuleRejected || error instanceof ReasoningInputRejected
+    || error instanceof ReasoningProfileRejected) {
+    return problem(422, 'rule_profile_rejected', 'Selected rule or fact is outside the admitted profile');
+  }
   if (error instanceof InvalidContextCommand || error instanceof InvalidContextSchemaInput
     || error instanceof InvalidStatementSchemaInput || error instanceof PrivateSelectionInvalid) {
     return problem(400, 'invalid_request', 'Request fields are invalid');
@@ -269,6 +321,94 @@ export function contextRoutes(fuseki: FusekiClient, work: MainWorkDependencies) 
     ? { state: 'unavailable' } : interpretation;
 
   return new Elysia()
+    .post('/v1/context-rules', {
+      body: t.Object({ profile: t.Literal('context-rule-v1'), context: contextId,
+        semanticRevision: native, realm: native, expectedHead: t.Nullable(native),
+        rule: finiteRule, actingSubject: native }, { additionalProperties: false }),
+      response: { 200: ruleWriteResponse, 201: ruleWriteResponse, ...graphWriteResponses,
+        422: problemResult(422) },
+    }, async ({ request, body }) => {
+      const key = idempotencyKey(request);
+      if (key instanceof Response) return key;
+      try {
+        const input = { context: body.context, semanticRevision: body.semanticRevision,
+          realm: body.realm, expectedHead: body.expectedHead, rule: body.rule,
+          actingSubject: body.actingSubject };
+        const plan = contextRuleRequest(input);
+        const receipt = await runAdmittedCommand(env, work.account, work.access, request, {
+          family: CONTEXT_RULE_FAMILY, oauthScope: 'context:write', scope: plan.scope,
+          action: plan.action, actingSubject: body.actingSubject, digest: plan.digest,
+          input, idempotencyKey: key, execute: admission => changeContextRule(env, admission, input) });
+        const rule = await readContextRule(env, plan.slot, receipt.revision!);
+        return written(receipt, { profile: 'context-rule-v1', slot: plan.slot, generation: rule.generation });
+      } catch (error) { return contextError(error); }
+    })
+    .get('/v1/context-rules', {
+      query: t.Object({ slot: ref, revision: t.Optional(native), actingSubject: native },
+        { additionalProperties: false }),
+      response: { 200: ruleReadResponse, ...graphReadResponses },
+    }, async ({ request, query }) => {
+      try {
+        await work.account.verify(request, ['context:read']);
+        const basis = await ruleContextBasis(env, query.slot);
+        await readContextRevision(env, basis.context, basis.semanticRevision,
+          await reader(request, query.actingSubject));
+        const rule = await readContextRule(env, query.slot, query.revision ?? null);
+        return Response.json({ profile: 'context-rule-v1', ...rule }, { headers: noStore });
+      } catch (error) { return readError(error); }
+    })
+    .post('/v1/context-rule-plans', {
+      body: t.Object({ profile: t.Literal('context-rule-plan-v1'),
+        selections: t.Array(ruleSelection, { minItems: 1, maxItems: 16 }),
+        facts: t.Array(ruleFact, { maxItems: 10_000 }), actingSubject: native },
+      { additionalProperties: false }),
+      response: { 200: rulePlanResponse, ...graphReadResponses, 422: problemResult(422) },
+    }, async ({ request, body }) => {
+      try {
+        const principal = await work.account.verify(request, ['context:read']);
+        const facts = body.facts.map(fact => ({ ...fact,
+          scope: { kind: 'realm' as const, id: fact.realm } }));
+        const plan = await planContextRules(env, body.selections, facts,
+          await reader(request, body.actingSubject), `${principal.issuer}:${principal.subject}`);
+        return Response.json({ profile: 'context-rule-plan-v1', ...plan }, { headers: noStore });
+      } catch (error) { return readError(error); }
+    })
+    .post('/v1/context-rule-dependencies', {
+      body: t.Object({ profile: t.Literal('context-rule-dependency-v1'), slot: ref,
+        expectedGeneration: ref, targets: t.Array(native, { minItems: 1, maxItems: 64 }),
+        actingSubject: native }, { additionalProperties: false }),
+      response: { 200: dependencyWriteResponse, 201: dependencyWriteResponse,
+        ...graphWriteResponses },
+    }, async ({ request, body }) => {
+      const key = idempotencyKey(request);
+      if (key instanceof Response) return key;
+      try {
+        const input = { slot: body.slot, expectedGeneration: body.expectedGeneration,
+          targets: body.targets, actingSubject: body.actingSubject };
+        const plan = dependencyRequest(input);
+        const receipt = await runAdmittedCommand(env, work.account, work.access, request, {
+          family: CONTEXT_RULE_DEPENDENCY_FAMILY, oauthScope: 'context:write', scope: plan.scope,
+          action: plan.action, actingSubject: body.actingSubject, digest: plan.digest,
+          input, idempotencyKey: key,
+          execute: admission => registerRuleDependencies(env, admission, input) });
+        return written(receipt, { profile: 'context-rule-dependency-v1', slot: input.slot,
+          generation: input.expectedGeneration });
+      } catch (error) { return contextError(error); }
+    })
+    .get('/v1/context-rule-dependencies', {
+      query: t.Object({ slot: ref, expectedGeneration: ref, after: t.Optional(ref), limit: t.Optional(t.Integer()),
+        actingSubject: native }, { additionalProperties: false }),
+      response: { 200: invalidationResponse, ...graphReadResponses },
+    }, async ({ request, query }) => {
+      try {
+        await work.account.verify(request, ['context:read']);
+        const basis = await ruleContextBasis(env, query.slot);
+        await readContextRevision(env, basis.context, basis.semanticRevision,
+          await reader(request, query.actingSubject));
+        return Response.json(await staleRuleDependencies(env, query.slot, query.expectedGeneration,
+          query.after ?? null, query.limit ?? 32), { headers: noStore });
+      } catch (error) { return readError(error); }
+    })
     .post('/v1/contexts', {
       body: t.Object({ profile: t.Literal('context-v1'), role: t.Union([t.Literal('global'), t.Literal('shared')]),
         disclosure: t.Union([t.Literal('public'), t.Literal('private')]), base: t.Nullable(native),
