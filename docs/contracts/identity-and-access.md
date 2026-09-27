@@ -10,9 +10,34 @@ account. Multiple principals may represent an Agent and one principal may repres
 several Agents. Do not publicly reverse-map them into an account directory.
 
 Distinguish authenticated principal, selected authority subject, public attribution
-and client application. A private main-Agent/default preference selects convenience,
-not rights; request/tab context is explicit and prepared commands/consents cannot
-be retargeted by changing a default. Workload principals need no public persona.
+and client application. Selection preferences choose convenience, not rights;
+request/tab context is explicit and prepared commands/consents cannot be
+retargeted by changing a default. Workload principals need no public persona.
+
+### Acting identity layers
+
+A signed-in client session has one session Agent: the identity the site or app
+shows as signed in and uses for ordinary actions. Users switch it like an account
+switcher among the principal's eligible Agents. The account's private main-Agent
+preference only initializes a new session; switching the session Agent does not
+change that preference, other sessions, open workspaces or prepared operations.
+
+A workspace may hold its own acting Agent. Studio carries its selected Agent in
+its route, starts from the session Agent on entry and switches without changing
+the session Agent, so managing a writer Agent's Works does not change who is
+signed in elsewhere. Every Studio read and command supplies that Agent as
+`actingSubject`; leaving Studio resumes the unchanged session Agent.
+
+A task default proposes the Agent for a new operation of one task and optional
+content profile, such as creating a native Book Work. Resolve the proposed Agent
+in this order: explicit selection on the request or prepared form, the enclosing
+workspace Agent, the exact task-and-profile default, the task-only default, then
+the session Agent. A layer applies only while its Agent is an eligible context
+for that task; otherwise resolution moves to the next layer and the client shows
+the resulting Agent before submission, never a silent substitute. No layer grants
+authority: the command carries the resolved `actingSubject` and admission
+rechecks it. Changing any layer never retargets an existing tab, workspace,
+prepared operation or command.
 
 ## Subjects, scopes and groups
 
@@ -612,8 +637,9 @@ epoch before claim. Claims in either mode reject a saved
 scope authority epoch after closure or reopening;
 direct principal authority cannot satisfy an explicit represented-Agent selection, and an
 Agent grant cannot supply missing direct principal authority. The existing
-web-wide identity cookie still requires a tab-local client flow in W1, so this
-API slice does not complete IAM01 or general task discovery.
+web-wide identity cookie is the session Agent only; workspace and tab-local
+selection still need a client flow, so this API slice does not complete IAM01 or
+general task discovery.
 
 For this `work.create` profile, let `N` be Access authority rows, `d_r` the
 principal's represented Agent rows, `d_a` its direct attribution rows, and `k`
@@ -812,6 +838,19 @@ revision for CAS, and identifies the preferred Agent only while it remains in th
 eligible context list. Changing the saved choice never retargets an existing tab,
 prepared operation or command. The caller still supplies and rechecks the selected
 Agent for each operation.
+
+The planned profile form, P `PUT /v1/me/acting-context-preferences/{task}/{profile}`,
+saves one task-and-content-profile default under the same revision, idempotency,
+eligibility and non-retargeting rules. The first profile is `native-book` for
+`work.create`: a native Work typed as a Book, not a translation, contribution or
+catalog import. Profiles are registered per task and an unknown profile is
+rejected rather than stored. Discovery returns the exact profile preference and
+the task-only preference so the client can apply the
+[layer order](#acting-identity-layers). The planned session-Agent operations, P
+`GET /v1/me/session-agent` and P `PUT /v1/me/session-agent`, read and switch
+the current session's Agent after the same eligibility check. They store no
+authority and change neither the account main-Agent preference nor other
+sessions.
 
 Access uses PostgreSQL for authoritative private/control state with selective
 subject/target/scope indexes and local transactional invariants. Derived evaluation

@@ -44,6 +44,18 @@ boundaries, source snapshots and positive/denied/partial outcomes.
 | IAM36 | Parent/child groups have different grants | Child membership receives the admitted parent grant; parent membership does not receive the child's extra grant. |
 | IAM37 | A Realm editor may edit an organization's catalog description | Apply the content owner's editing policy; the edit permission does not establish organizational control. |
 
+Planned [acting identity layer](../contracts/identity-and-access.md#acting-identity-layers)
+scenarios are not yet inventoried; admitting them as case rows needs a reviewed
+backend-scope fingerprint in the next Goal:
+
+- Switch the session Agent while a Studio workspace, another session and a prepared
+  command exist: none of them is retargeted.
+- Switch the Studio Agent and act on its Works: the session Agent and account
+  main-Agent preference are unchanged, and commands carry the Studio Agent.
+- Save a `native-book` default, then revoke its eligibility: resolution uses the
+  task-only default or session Agent in order, reports that Agent and never
+  admits the stale default; an unknown profile is rejected.
+
 The IAM01 backend owner fixture registers two distinct native OAuth product
 clients with separate redirect URIs, obtains authorization-code/PKCE tokens for
 the same Account, and checks explicit Agent selection through Main and Access in

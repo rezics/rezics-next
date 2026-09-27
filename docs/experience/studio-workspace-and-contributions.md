@@ -6,6 +6,13 @@ Studio shows the selected Agent's admitted work, drafts, contributions, review
 requests and publication selections. Visiting Studio does not confer creator or
 owner authority. Search and navigation use bounded owner/context queries.
 
+Studio's selected Agent is a [workspace layer](../contracts/identity-and-access.md#acting-identity-layers)
+kept in its route. It starts from the session Agent, and switching it, for example
+to manage a writer Agent's Works, leaves the signed-in session Agent unchanged.
+Studio reads and commands act as the Studio Agent, including publishing, which
+takes precedence over task publishing defaults. Another tab may open Studio for
+a different Agent without interfering.
+
 ## Editing and adoption
 
 Keep the Work/Main Version, independent contribution and currently selected
@@ -23,5 +30,6 @@ Restoring a structure explains that referenced content is not recursively restor
 ## Acceptance
 
 Qualify create/publish/read, multi-language contribution, stale draft, denied
-adoption, failed media processing, exact historical comment and interrupted import.
+adoption, failed media processing, exact historical comment, interrupted import
+and switching the Studio Agent without changing the session Agent.
 Ordinary UI edits must preserve advanced relation/Filter/selection state.

@@ -7,6 +7,14 @@ current task. Use an eligible default, allow explicit switching per tab/request
 and retain prepared action/consent context. A cataloged Person/Org can exist without
 a controller; claiming/control admission requires proof, not a matching name.
 
+An account switcher lists the Agents the user may act as and switches the session
+Agent shown as signed in across the site or app. Studio has its own Agent switcher
+that never changes the session Agent. Settings manage publishing defaults per task
+and content profile, such as the Agent for new original Books. Publishing forms
+prefill the Agent chosen by the [layer order](../contracts/identity-and-access.md#acting-identity-layers),
+show it before submission and allow changing it for that operation only. When a
+saved default is no longer eligible, say which Agent is used instead.
+
 ## Administration
 
 Present members, groups, roles, bindings and representation as different concepts.
