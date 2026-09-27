@@ -1,0 +1,169 @@
+import { describe, expect, test } from 'bun:test';
+import { DraftAutosave, type SaveOutcome } from '../features/studio/autosave.ts';
+import { diffParagraphs } from '../features/studio/diff.ts';
+import { type DraftStorage, localDraftKey, readLocalDraft, restoreDecision, writeLocalDraft }
+  from '../features/studio/local-draft.ts';
+
+const head = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
+const tick = () => new Promise(resolve => setTimeout(resolve, 0));
+
+/** An autosave with a scripted Main: each save takes the next outcome and records what was sent. */
+function harness(outcomes: SaveOutcome[], start: { head: string | null; body: string } = { head: head(1), body: 'One' }) {
+  const sent: Array<{ body: string; head: string | null; key: string }> = [];
+  const kept: Array<{ body: string; base: string | null } | null> = [];
+  let keys = 0;
+  const autosave = new DraftAutosave({ ...start, delay: 5,
+    save: async (body, expectedHead, key) => { sent.push({ body, head: expectedHead, key }); return outcomes.shift()!; },
+    keep: (body, base) => kept.push({ body, base }), release: () => kept.push(null),
+    newKey: () => `key-${++keys}`, now: () => new Date('2026-09-28T12:00:00Z') });
+  return { autosave, sent, kept };
+}
+
+describe('Studio autosave', () => {
+  test('typing is kept on the device at once and saved on the current head after a pause', async () => {
+    const { autosave, sent, kept } = harness([{ kind: 'saved', head: head(2) }]);
+    autosave.edit('One\nTwo');
+    expect(autosave.snapshot.state).toBe('unsaved');
+    expect(kept).toEqual([{ body: 'One\nTwo', base: head(1) }]);
+    await autosave.flush();
+    expect(sent).toEqual([{ body: 'One\nTwo', head: head(1), key: 'key-1' }]);
+    expect(autosave.snapshot).toMatchObject({ state: 'saved', head: head(2), saved: 'One\nTwo' });
+    expect(kept.at(-1)).toBeNull();
+    autosave.dispose();
+  });
+
+  test('offline keeps the text and replays the unanswered save before sending newer text', async () => {
+    const { autosave, sent } = harness([{ kind: 'offline' }, { kind: 'offline' }, { kind: 'saved', head: head(2) },
+      { kind: 'saved', head: head(3) }]);
+    autosave.edit('One\nTwo');
+    await autosave.flush();
+    expect(autosave.snapshot.state).toBe('offline');
+    await autosave.flush();
+    autosave.edit('One\nTwo\nThree');
+    expect(autosave.snapshot.state).toBe('offline');
+    await autosave.flush();
+    // The lost save may have landed: its replay (same key) answers with its head before the new text goes.
+    expect(sent).toEqual([1, 2, 3].map(() => ({ body: 'One\nTwo', head: head(1), key: 'key-1' })));
+    expect(autosave.snapshot).toMatchObject({ state: 'unsaved', head: head(2), saved: 'One\nTwo' });
+    await new Promise(resolve => setTimeout(resolve, 20));
+    expect(sent.at(-1)).toEqual({ body: 'One\nTwo\nThree', head: head(2), key: 'key-2' });
+    expect(autosave.snapshot).toMatchObject({ state: 'saved', head: head(3) });
+    autosave.dispose();
+  });
+
+  test('a pending answer (202) is retried with the same text and key', async () => {
+    const { autosave, sent } = harness([{ kind: 'failed', retryable: true }, { kind: 'saved', head: head(2) }]);
+    autosave.edit('Two');
+    await autosave.flush();
+    expect(autosave.snapshot.state).toBe('error');
+    autosave.edit('Two, then three');
+    await autosave.flush();
+    expect(sent.map(item => [item.body, item.key])).toEqual([['Two', 'key-1'], ['Two', 'key-1']]);
+    autosave.dispose();
+  });
+
+  test('a moved head stops autosave until the writer keeps theirs or mine', async () => {
+    const { autosave, sent } = harness([{ kind: 'conflict' }, { kind: 'saved', head: head(4) }]);
+    autosave.edit('Mine');
+    await autosave.flush();
+    expect(autosave.snapshot.state).toBe('conflict');
+    autosave.edit('Mine, edited');
+    await autosave.flush();
+    expect(sent).toHaveLength(1);
+    autosave.keepMine(head(3));
+    await tick();
+    expect(sent.at(-1)).toEqual({ body: 'Mine, edited', head: head(3), key: 'key-2' });
+    expect(autosave.snapshot).toMatchObject({ state: 'saved', head: head(4) });
+    autosave.dispose();
+  });
+
+  test('taking theirs replaces the editor text and drops the device copy', async () => {
+    const { autosave, kept } = harness([{ kind: 'conflict' }]);
+    autosave.edit('Mine');
+    await autosave.flush();
+    autosave.takeTheirs(head(3), 'Theirs');
+    expect(autosave.text).toBe('Theirs');
+    expect(autosave.snapshot).toMatchObject({ state: 'saved', head: head(3), saved: 'Theirs' });
+    expect(kept.at(-1)).toBeNull();
+    autosave.dispose();
+  });
+
+  test('a denied Agent is not retried', async () => {
+    const { autosave, sent } = harness([{ kind: 'denied' }]);
+    autosave.edit('Two');
+    await autosave.flush();
+    autosave.edit('Three');
+    await autosave.flush();
+    expect(sent).toHaveLength(1);
+    expect(autosave.snapshot).toMatchObject({ state: 'error', denied: true });
+    autosave.dispose();
+  });
+
+  test('text typed during a save is saved next on the new head', async () => {
+    let release!: (outcome: SaveOutcome) => void;
+    const sent: Array<{ body: string; head: string | null }> = [];
+    const autosave = new DraftAutosave({ head: null, body: '', delay: 1,
+      save: (body, expectedHead) => { sent.push({ body, head: expectedHead });
+        return sent.length === 1 ? new Promise(resolve => { release = resolve; })
+          : Promise.resolve({ kind: 'saved', head: head(9) }); },
+      keep: () => undefined, release: () => undefined });
+    const first = autosave.flush();
+    autosave.edit('A');
+    const saving = autosave.flush();
+    autosave.edit('AB');
+    await tick();
+    release({ kind: 'saved', head: head(8) });
+    await Promise.all([first, saving]);
+    expect(autosave.snapshot).toMatchObject({ state: 'unsaved', head: head(8), saved: 'A' });
+    await new Promise(resolve => setTimeout(resolve, 10));
+    expect(sent).toEqual([{ body: 'A', head: null }, { body: 'AB', head: head(8) }]);
+    expect(autosave.snapshot.state).toBe('saved');
+    autosave.dispose();
+  });
+});
+
+describe('Studio device drafts', () => {
+  const memory = (): DraftStorage => {
+    const values = new Map<string, string>();
+    return { getItem: key => values.get(key) ?? null, setItem: (key, value) => { values.set(key, value); },
+      removeItem: key => { values.delete(key); } };
+  };
+
+  test('each Agent and text has its own key, and malformed copies are ignored', () => {
+    const storage = memory();
+    const agent = `https://rezics.com/id/${head(1)}`;
+    const key = localDraftKey(agent, `https://rezics.com/id/${head(2)}`, `urn:rezics:variant:${head(3)}`);
+    expect(key).not.toBe(localDraftKey(`https://rezics.com/id/${head(4)}`, `https://rezics.com/id/${head(2)}`,
+      `urn:rezics:variant:${head(3)}`));
+    expect(writeLocalDraft(storage, key, { body: 'Text', base: head(5), changedAt: '2026-09-28T12:00:00Z' })).toBe(true);
+    expect(readLocalDraft(storage, key)).toEqual({ body: 'Text', base: head(5), changedAt: '2026-09-28T12:00:00Z' });
+    storage.setItem(key, '{"body":1}');
+    expect(readLocalDraft(storage, key)).toBeNull();
+    expect(writeLocalDraft(null, key, { body: 'Text', base: null, changedAt: '' })).toBe(false);
+  });
+
+  test('a device copy on the same head is restored; on a moved head it is a conflict', () => {
+    const local = { body: 'Mine', base: head(1), changedAt: '2026-09-28T12:00:00Z' };
+    expect(restoreDecision({ head: head(1), body: 'Saved' }, null)).toEqual({ kind: 'server' });
+    expect(restoreDecision({ head: head(1), body: 'Mine' }, local)).toEqual({ kind: 'server' });
+    expect(restoreDecision({ head: head(1), body: 'Saved' }, local)).toEqual({ kind: 'restore', body: 'Mine' });
+    expect(restoreDecision({ head: head(2), body: 'Theirs' }, local)).toEqual({ kind: 'conflict', mine: 'Mine' });
+  });
+});
+
+describe('Studio paragraph comparison', () => {
+  test('keeps shared paragraphs and marks each side', () => {
+    expect(diffParagraphs('A\nB\nC', 'A\nX\nC')).toEqual([{ kind: 'both', lines: ['A'] },
+      { kind: 'mine', lines: ['B'] }, { kind: 'theirs', lines: ['X'] }, { kind: 'both', lines: ['C'] }]);
+    expect(diffParagraphs('A\nB', 'A\nB')).toEqual([{ kind: 'both', lines: ['A', 'B'] }]);
+    expect(diffParagraphs('第一段\n第二段', '第一段\n新的一段\n第二段')).toEqual([{ kind: 'both', lines: ['第一段'] },
+      { kind: 'theirs', lines: ['新的一段'] }, { kind: 'both', lines: ['第二段'] }]);
+  });
+
+  test('an oversized middle is shown as one replaced block', () => {
+    const mine = Array.from({ length: 2100 }, (_, index) => `m${index}`).join('\n');
+    const theirs = Array.from({ length: 2100 }, (_, index) => `t${index}`).join('\n');
+    const runs = diffParagraphs(`same\n${mine}`, `same\n${theirs}`);
+    expect(runs.map(run => [run.kind, run.lines.length])).toEqual([['both', 1], ['mine', 2100], ['theirs', 2100]]);
+  });
+});
