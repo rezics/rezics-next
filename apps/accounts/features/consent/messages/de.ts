@@ -1,1 +1,32 @@
-export default {} satisfies Partial<typeof import('./en.ts').default>;
+import { insert } from 'native-i18n';
+
+export default {
+  title: insert('{{app}} möchte auf Ihren REZICS Account zugreifen', { app: String }),
+  unknownApp: 'Eine App',
+  signedInAs: 'Angemeldet als',
+  switchAccount: 'Sind Sie das nicht? Konto wechseln',
+  allowIntro: insert('Dadurch kann {{app}} Folgendes:', { app: String }),
+  groupIdentity: 'Ihre Identität erkennen',
+  groupWorks: 'Mit Ihren Werken arbeiten',
+  groupOffline: 'Zugriff beibehalten',
+  groupOther: 'Sonstiger Zugriff',
+  scopeOpenid: 'Verbindung zu Ihrem REZICS Account herstellen',
+  scopeProfile: 'Ihren Namen und Ihr Profilbild sehen',
+  scopeEmail: 'Ihre E-Mail-Adresse sehen',
+  scopeOfflineAccess: 'Verbunden bleiben, wenn Sie die App nicht verwenden',
+  scopeWorkRead: 'Werke sehen, auch solche, die Sie privat sehen können',
+  scopeWorkCreate: 'In Ihrem Namen Werke erstellen',
+  scopeWorkEdit: 'In Ihrem Namen Werke bearbeiten',
+  scopeOtherPrefix: 'Verwenden',
+  trust: insert('Vergewissern Sie sich, dass Sie {{app}} vertrauen. Sie können den Zugriff jederzeit in Ihrem REZICS Account entfernen.', { app: String }),
+  appPolicy: 'Datenschutzerklärung',
+  appTerms: 'Nutzungsbedingungen',
+  allow: 'Zulassen',
+  deny: 'Abbrechen',
+  working: 'Wird verarbeitet…',
+  expired: 'Diese Anfrage ist abgelaufen. Kehren Sie zur App zurück und versuchen Sie es noch einmal.',
+  unavailable: 'Wir konnten diese Anfrage nicht abschließen. Versuchen Sie es gleich noch einmal.',
+  invalidTitle: 'Diese Anfrage ist ungültig',
+  invalidBody: 'Der Link ist unvollständig oder abgelaufen. Kehren Sie zur App zurück und starten Sie den Vorgang neu.',
+  signedOutBody: 'Ihre Sitzung ist abgelaufen, bevor Sie geantwortet haben. Melden Sie sich noch einmal an, um diese Anfrage zu prüfen.',
+} satisfies Partial<typeof import('./en.ts').default>;

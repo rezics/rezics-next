@@ -1,1 +1,32 @@
-export default {} satisfies Partial<typeof import('./en.ts').default>;
+import { insert } from 'native-i18n';
+
+export default {
+  title: insert('{{app}}에서 내 REZICS Account에 액세스하려고 합니다', { app: String }),
+  unknownApp: '앱',
+  signedInAs: '로그인한 계정',
+  switchAccount: '본인이 아닌가요? 계정 전환',
+  allowIntro: insert('허용하면 {{app}}에서 다음 작업을 할 수 있습니다:', { app: String }),
+  groupIdentity: '내 정보 확인',
+  groupWorks: '내 작품 사용',
+  groupOffline: '액세스 유지',
+  groupOther: '기타 액세스',
+  scopeOpenid: '내 REZICS Account에 연결',
+  scopeProfile: '내 이름과 프로필 사진 확인',
+  scopeEmail: '내 이메일 주소 확인',
+  scopeOfflineAccess: '앱을 사용하지 않을 때도 연결 유지',
+  scopeWorkRead: '비공개로 볼 수 있는 작품을 포함해 작품 확인',
+  scopeWorkCreate: '내 계정으로 작품 만들기',
+  scopeWorkEdit: '내 계정으로 작품 수정',
+  scopeOtherPrefix: '사용',
+  trust: insert('{{app}}에 대한 신뢰 여부를 확인하세요. REZICS Account에서 언제든지 액세스 권한을 삭제할 수 있습니다.', { app: String }),
+  appPolicy: '개인정보처리방침',
+  appTerms: '서비스 약관',
+  allow: '허용',
+  deny: '취소',
+  working: '처리 중…',
+  expired: '요청이 만료되었습니다. 앱으로 돌아가 다시 시도하세요.',
+  unavailable: '요청을 완료할 수 없습니다. 잠시 후 다시 시도하세요.',
+  invalidTitle: '유효하지 않은 요청입니다',
+  invalidBody: '링크가 불완전하거나 만료되었습니다. 앱으로 돌아가 처음부터 다시 시작하세요.',
+  signedOutBody: '응답하기 전에 세션이 종료되었습니다. 다시 로그인한 후 이 요청을 확인하세요.',
+} satisfies Partial<typeof import('./en.ts').default>;
