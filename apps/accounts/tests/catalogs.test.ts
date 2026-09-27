@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { i18n } from '../i18n/locale.ts';
 import { resources } from '../i18n/resources.ts';
 
-const namespaces = ['common', 'auth', 'consent', 'account'] as const;
+const namespaces = ['common', 'auth', 'consent', 'account', 'admin'] as const;
 
 function keys(value: unknown, prefix = ''): string[] {
   if (typeof value !== 'object' || value === null || Array.isArray(value) || '$nativeI18n' in value) return [prefix];
