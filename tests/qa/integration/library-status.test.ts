@@ -1,0 +1,265 @@
+import { expect, test } from 'bun:test';
+import { randomUUID } from 'node:crypto';
+import { startMediaStack } from './media-support.ts';
+import { createMainApp } from '../../../services/main/src/app.ts';
+import { ProfilesAccess } from '../../../services/main/src/modules/profiles/access.ts';
+import { AgentProvisioning } from '../../../services/main/src/modules/agent/provision.ts';
+import { ReaderLibraryRatings } from '../../../services/main/src/modules/library/ratings.ts';
+import { GLOBAL_CONTEXT_SCOPE } from '../../../services/main/src/modules/rating/global.ts';
+import { StructureProgressStore } from '../../../services/main/src/modules/progress/store.ts';
+import { GRAPHS, RV, iri } from '../../../services/main/src/modules/work/activate.ts';
+import { activateMetadataWork, metadataWorkRequestDigest }
+  from '../../../services/main/src/modules/work/activate.ts';
+import { selectMainDefault, mainSelectionDigest }
+  from '../../../services/main/src/modules/work/select-main.ts';
+import { InvalidLibraryStatus, LibraryStatusConflict, ReaderLibraryStatusStore,
+  StaleLibraryStatus } from '../../../services/main/src/modules/library/status.ts';
+
+const id = () => `https://rezics.com/id/${randomUUID()}`;
+
+test('G285: status set, clear, retry, stale and concurrent commands preserve one shelf per Work', async () => {
+  const stack = await startMediaStack('reader-library');
+  try {
+    const status = new ReaderLibraryStatusStore(stack.contentPool);
+    const agent = id();
+    const work = id();
+    const other = id();
+    expect(await status.batch(agent, [work])).toEqual([{ work, status: null,
+      startedOn: null, finishedOn: null, version: 0, changedAt: null }]);
+    const input = { agent, work, status: 'want-to-read' as const, startedOn: null,
+      finishedOn: null, expectedVersion: 0, idempotencyKey: randomUUID() };
+    const first = await status.write(input);
+    expect(first).toMatchObject({ work, status: 'want-to-read', version: 1, replayed: false });
+    expect(await new ReaderLibraryStatusStore(stack.contentPool).write(input))
+      .toEqual({ ...first, replayed: true });
+    await expect(status.write({ ...input, status: 'reading' })).rejects.toBeInstanceOf(LibraryStatusConflict);
+    await expect(status.write({ ...input, idempotencyKey: randomUUID() }))
+      .rejects.toBeInstanceOf(StaleLibraryStatus);
+    const read = await status.write({ ...input, status: 'read', startedOn: '2026-01-01',
+      finishedOn: '2026-01-10', expectedVersion: 1, idempotencyKey: randomUUID() });
+    expect(read).toMatchObject({ status: 'read', startedOn: '2026-01-01',
+      finishedOn: '2026-01-10', version: 2 });
+    const clear = await status.write({ ...input, status: null, expectedVersion: 2,
+      idempotencyKey: randomUUID() });
+    expect(clear).toMatchObject({ status: null, version: 3 });
+    expect(await status.counts(agent)).toEqual({ 'want-to-read': 0, reading: 0, read: 0 });
+    expect((await status.shelves(agent)).map(shelf => shelf.count)).toEqual([0, 0, 0]);
+    await expect(status.write({ ...input, status: 'read', startedOn: '2026-02-30',
+      finishedOn: null, expectedVersion: 3, idempotencyKey: randomUUID() }))
+      .rejects.toBeInstanceOf(InvalidLibraryStatus);
+    const two = await Promise.allSettled([
+      status.write({ ...input, work: other, expectedVersion: 0, idempotencyKey: randomUUID() }),
+      status.write({ ...input, work: other, status: 'reading', expectedVersion: 0,
+        idempotencyKey: randomUUID() }),
+    ]);
+    expect(two.filter(result => result.status === 'fulfilled')).toHaveLength(1);
+    expect(two.filter(result => result.status === 'rejected')).toHaveLength(1);
+    expect((two.find(result => result.status === 'rejected') as PromiseRejectedResult).reason)
+      .toBeInstanceOf(StaleLibraryStatus);
+    const states = await status.batch(agent, [work, other]);
+    expect(states[0]).toMatchObject({ status: null, version: 3 });
+    expect(states[1]).toMatchObject({ version: 1 });
+
+    const a = await stack.member('reader-a');
+    const b = await stack.member('reader-b');
+    const tokens = new Map([[a.token, { ...a.principal, emailVerified: true }],
+      [b.token, { ...b.principal, emailVerified: true }]]);
+    const structureObjects = stack.objects('reader-library/structure/');
+    await structureObjects.initialize();
+    const app = createMainApp(stack.fuseki, { environment: stack.env, access: stack.access,
+      account: { verify: async request => {
+        const principal = tokens.get(request.headers.get('authorization')?.replace('Bearer ', '') ?? '');
+        if (!principal) throw new Error('unknown bearer');
+        return principal;
+      } }, libraryStatus: status, libraryRatings: new ReaderLibraryRatings(stack.accessPool),
+      profiles: new ProfilesAccess(stack.accessPool),
+      agentProvisioning: new AgentProvisioning(stack.accessPool, stack.env),
+      media: stack.media, mediaAccess: stack.mediaAccess, structureObjects });
+    const signedOut = await app.handle(new Request(`http://main.local/v1/works/${work.slice(-36)}/reader-state`));
+    expect(signedOut.status).toBe(200);
+    expect(signedOut.headers.get('cache-control')).toContain('public');
+    expect(await signedOut.json()).toMatchObject({ profile: 'reader-work-state-v1',
+      status: { status: null, version: 0 }, rating: { global: null, realm: null } });
+    const denied = await app.handle(new Request(`http://main.local/v1/me/shelves?actingSubject=${encodeURIComponent(a.actor)}`,
+      { headers: { authorization: `Bearer ${b.token}` } }));
+    expect(denied.status).toBe(403);
+
+    const provision = await app.handle(new Request('http://main.local/v1/agents', { method: 'POST',
+      headers: { authorization: `Bearer ${a.token}`, 'content-type': 'application/json',
+        'idempotency-key': randomUUID() },
+      body: JSON.stringify({ profile: 'agent-provision-v1', displayName: 'Library reader', kind: 'person' }) }));
+    expect(provision.status).toBe(201);
+    const person = await provision.json() as { agent: string };
+    const publicWork = await stack.publicWork(person.agent, ['en'], 'Library Work');
+    const route = `/v1/works/${publicWork.work.slice(-36)}`;
+    const actingSubject = encodeURIComponent(person.agent);
+    const view = async () => app.handle(new Request(
+      `http://main.local${route}/reader-state?actingSubject=${actingSubject}`,
+      { headers: { authorization: `Bearer ${a.token}` } }));
+    const initial = await view();
+    expect(initial.status).toBe(200);
+    expect(await initial.json()).toMatchObject({ work: publicWork.work,
+      status: { status: null, version: 0 }, customShelves: [],
+      rating: { global: null, realm: null }, progress: null });
+    const saved = await app.handle(new Request(`http://main.local${route}/reader-status`, { method: 'PUT',
+      headers: { authorization: `Bearer ${a.token}`, 'content-type': 'application/json',
+        'idempotency-key': randomUUID() },
+      body: JSON.stringify({ actingSubject: person.agent, expectedVersion: 0,
+        status: 'reading', startedOn: null, finishedOn: null }) }));
+    expect(saved.status).toBe(200);
+    expect(await saved.json()).toMatchObject({ status: 'reading', version: 1 });
+    const after = await view();
+    expect(after.status).toBe(200);
+    expect(await after.json()).toMatchObject({ status: { status: 'reading', version: 1 } });
+
+    const collection = id();
+    const olderCollection = id();
+    const grant = async (scope: string, action: string) => {
+      await stack.accessPool.query('INSERT INTO access.scope_gate(id) VALUES ($1) ON CONFLICT DO NOTHING', [scope]);
+      await stack.accessPool.query(`INSERT INTO access.representation
+        (id, principal_id, subject_id, action, valid_until)
+        VALUES ($1,$2,$3,$4,now() + interval '1 hour')`,
+      [randomUUID(), a.principalId, person.agent, action]);
+      await stack.accessPool.query(`INSERT INTO access.permission_grant
+        (id, issuer_subject, recipient_subject, scope_id, action, valid_until)
+        VALUES ($1,$2,$2,$3,$4,now() + interval '1 hour')`,
+      [randomUUID(), person.agent, scope, action]);
+    };
+    await grant(`collection:edit:${collection}`, 'collection.edit');
+    await grant(`collection:edit:${olderCollection}`, 'collection.edit');
+    await grant(`work:read:${publicWork.work}`, 'work.read');
+    const olderResponse = await app.handle(new Request('http://main.local/v1/collections', { method: 'POST',
+      headers: { authorization: `Bearer ${a.token}`, 'content-type': 'application/json',
+        'idempotency-key': randomUUID() },
+      body: JSON.stringify({ collection: olderCollection, name: 'Public shelf', disclosure: 'public',
+        actingSubject: person.agent }) }));
+    expect(olderResponse.status).toBe(201);
+    const createCollection = await app.handle(new Request('http://main.local/v1/collections', { method: 'POST',
+      headers: { authorization: `Bearer ${a.token}`, 'content-type': 'application/json',
+        'idempotency-key': randomUUID() },
+      body: JSON.stringify({ collection, name: 'Private favorites', disclosure: 'private',
+        actingSubject: person.agent }) }));
+    expect(createCollection.status).toBe(201);
+    const createdCollection = await createCollection.json() as { structure: string; revision: string };
+    const change = await app.handle(new Request(`http://main.local/v1/collections/${collection.slice(-36)}/changes`, { method: 'POST',
+      headers: { authorization: `Bearer ${a.token}`, 'content-type': 'application/json',
+        'idempotency-key': randomUUID() },
+      body: JSON.stringify({ actingSubject: person.agent, expectedHead: createdCollection.revision,
+        operations: [{ op: 'insert', parent: createdCollection.structure, position: 'last',
+          role: 'member', target: publicWork.work, selection: { mode: 'follow-context' } }] }) }));
+    expect(change.status).toBe(200);
+    const withCollection = await view();
+    expect(withCollection.status).toBe(200);
+    expect(await withCollection.json()).toMatchObject({ customShelves: [
+      { id: collection, name: 'Private favorites', disclosure: 'private' }] });
+
+    await grant(GLOBAL_CONTEXT_SCOPE, 'rating.context.create');
+    const contextResponse = await app.handle(new Request('http://main.local/v1/global-rating-contexts', {
+      method: 'POST', headers: { authorization: `Bearer ${a.token}`, 'content-type': 'application/json',
+        'idempotency-key': randomUUID() },
+      body: JSON.stringify({ profile: 'global-rating-standing-context-v1', question: 'Quality',
+        actingSubject: person.agent }) }));
+    expect(contextResponse.status).toBe(201);
+    const context = await contextResponse.json() as { context: string };
+    await grant(`rating:observe:${context.context}`, 'rating.observation.set');
+    await grant(`rating:read:${context.context}`, 'rating.observation.read');
+    const observation = await app.handle(new Request('http://main.local/v1/global-rating-observations', {
+      method: 'POST', headers: { authorization: `Bearer ${a.token}`, 'content-type': 'application/json',
+        'idempotency-key': randomUUID() },
+      body: JSON.stringify({ profile: 'global-rating-standing-observation-v1',
+        context: context.context, work: publicWork.work, mainVersion: publicWork.mainVersion,
+        expectedRevisionHead: null, value: 5, actingSubject: person.agent }) }));
+    expect(observation.status).toBe(201);
+    const observed = await observation.json() as { observation: string; observationRevision: string };
+    const withRating = await view();
+    expect(withRating.status).toBe(200);
+    expect(await withRating.json()).toMatchObject({ rating: { global: { value: 5,
+      availability: 'available' } } });
+    await stack.fuseki.update(`PREFIX rv: <${RV}> DELETE DATA { GRAPH ${iri(GRAPHS.current)} {
+      ${iri(observed.observation)} rv:observationHead ${iri(observed.observationRevision)} } }`);
+    expect((await view()).status).toBe(503);
+    await stack.fuseki.update(`PREFIX rv: <${RV}> INSERT DATA { GRAPH ${iri(GRAPHS.current)} {
+      ${iri(observed.observation)} rv:observationHead ${iri(observed.observationRevision)} } }`);
+
+    const bookTitle = `Library book ${randomUUID()}`;
+    const book = await activateMetadataWork(stack.env, { title: bookTitle,
+      semanticTypes: ['https://schema.org/Book'],
+      admission: stack.admission(person.agent, 'work:create:root', 'work.create',
+        metadataWorkRequestDigest(bookTitle, ['https://schema.org/Book'])) });
+    if (!book.work || !book.mainVersion) throw new Error('Book was not created');
+    const text = await stack.contribution(book.work, person.agent, 'en', 'Book text');
+    const selection = { context: { kind: 'main-version-default' as const, id: book.mainVersion },
+      work: book.work, contribution: text.contribution, publicationDecision: text.decision,
+      expectedSelectionHead: null, selectionBasis: 'main-maintainer' as const, actingSubject: person.agent };
+    await selectMainDefault(stack.env, stack.admission(person.agent,
+      `publication:select:${book.mainVersion}`, 'publication.select', mainSelectionDigest(selection)), selection);
+    await grant(`work:edit:${book.work}`, 'work.edit');
+    await grant(`work:read:${book.work}`, 'work.read');
+    const compositionResponse = await app.handle(new Request('http://main.local/v1/compositions', {
+      method: 'POST', headers: { authorization: `Bearer ${a.token}`, 'content-type': 'application/json',
+        'idempotency-key': randomUUID() },
+      body: JSON.stringify({ profile: 'book-composition', work: book.work,
+        mainVersion: book.mainVersion, actingSubject: person.agent }) }));
+    expect(compositionResponse.status).toBe(201);
+    const composition = await compositionResponse.json() as { structure: string };
+    const occurrence = id();
+    await new StructureProgressStore(stack.contentPool).write({ principal: a.principal,
+      structure: composition.structure, occurrence, completed: false, position: 'paragraph-4',
+      expectedVersion: 0, idempotencyKey: randomUUID() });
+    const withProgress = await app.handle(new Request(
+      `http://main.local/v1/works/${book.work.slice(-36)}/reader-state?actingSubject=${actingSubject}`,
+      { headers: { authorization: `Bearer ${a.token}` } }));
+    expect(withProgress.status).toBe(200);
+    expect(await withProgress.json()).toMatchObject({ progress: { structure: composition.structure,
+      occurrence, position: 'paragraph-4', completed: false, version: 1 } });
+    const setBookStatus = (current: number, next: 'reading' | 'read') => app.handle(new Request(
+      `http://main.local/v1/works/${book.work.slice(-36)}/reader-status`, { method: 'PUT',
+        headers: { authorization: `Bearer ${a.token}`, 'content-type': 'application/json',
+          'idempotency-key': randomUUID() },
+        body: JSON.stringify({ actingSubject: person.agent, expectedVersion: current,
+          status: next, startedOn: null, finishedOn: null }) }));
+    expect((await setBookStatus(0, 'reading')).status).toBe(200);
+    const batchResponse = await app.handle(new Request(
+      `http://main.local/v1/me/work-states?works=${encodeURIComponent(`${publicWork.work},${book.work}`)}`
+        + `&actingSubject=${actingSubject}`,
+      { headers: { authorization: `Bearer ${a.token}` } }));
+    expect(batchResponse.status).toBe(200);
+    expect(await batchResponse.json()).toMatchObject({ items: [
+      { work: publicWork.work, rating: { global: { value: 5 } },
+        customShelves: [{ id: collection }] },
+      { work: book.work, progress: { occurrence } },
+    ] });
+    const shelfWorksPath = `/v1/me/shelves/status/reading/works?actingSubject=${actingSubject}&limit=1`;
+    const firstShelfPage = await app.handle(new Request(`http://main.local${shelfWorksPath}`,
+      { headers: { authorization: `Bearer ${a.token}` } }));
+    expect(firstShelfPage.status).toBe(200);
+    const page = await firstShelfPage.json() as { items: { work: string }[]; nextCursor: string };
+    expect(page.items).toHaveLength(1);
+    expect(page.nextCursor).toBeTruthy();
+    const nextShelfPage = await app.handle(new Request(
+      `http://main.local${shelfWorksPath}&cursor=${encodeURIComponent(page.nextCursor)}`,
+      { headers: { authorization: `Bearer ${a.token}` } }));
+    expect(nextShelfPage.status).toBe(200);
+    expect((await nextShelfPage.json() as { items: { work: string }[] }).items).toHaveLength(1);
+    expect((await setBookStatus(1, 'read')).status).toBe(200);
+    const staleShelfPage = await app.handle(new Request(
+      `http://main.local${shelfWorksPath}&cursor=${encodeURIComponent(page.nextCursor)}`,
+      { headers: { authorization: `Bearer ${a.token}` } }));
+    expect(staleShelfPage.status).toBe(409);
+    const shelfPage = await app.handle(new Request(`http://main.local/v1/me/shelves?actingSubject=${actingSubject}&limit=1`,
+      { headers: { authorization: `Bearer ${a.token}` } }));
+    expect(shelfPage.status).toBe(200);
+    const listed = await shelfPage.json() as { nextCursor: string; items: { id: string }[];
+      statusShelves: { status: string; count: number }[] };
+    expect(listed).toMatchObject({ statusShelves: expect.arrayContaining([
+      expect.objectContaining({ status: 'reading', count: 1 })]),
+      items: [expect.objectContaining({ id: collection, disclosure: 'private' })] });
+    expect(listed.nextCursor).toBeTruthy();
+    const olderPage = await app.handle(new Request(`http://main.local/v1/me/shelves?actingSubject=${actingSubject}`
+      + `&limit=1&cursor=${encodeURIComponent(listed.nextCursor)}`,
+    { headers: { authorization: `Bearer ${a.token}` } }));
+    expect(olderPage.status).toBe(200);
+    expect(await olderPage.json()).toMatchObject({ items: [{ id: olderCollection, disclosure: 'public' }],
+      nextCursor: null });
+  } finally { await stack.stop(); }
+});

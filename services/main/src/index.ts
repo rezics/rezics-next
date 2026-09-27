@@ -19,6 +19,8 @@ import { AccessDownloadLeases } from './modules/access/download-leases.ts';
 import { AgentProvisioning } from './modules/agent/provision.ts';
 import { AgentVanityHandles } from './modules/agent/vanity.ts';
 import { ProfilesAccess } from './modules/profiles/access.ts';
+import { ReaderLibraryStatusStore } from './modules/library/status.ts';
+import { ReaderLibraryRatings } from './modules/library/ratings.ts';
 import { ProtectionAdmissionSigner } from './modules/access/protection-admission.ts';
 import { ErasureService } from './modules/erasure/request.ts';
 import { ContentProtectionStore } from './modules/protection/content-store.ts';
@@ -263,6 +265,8 @@ const app = createMainApp(fuseki, {
   discovery: new DiscoveryProjection(pool),
   profiles: new ProfilesAccess(pool),
   agentHandles: new AgentVanityHandles(pool),
+  libraryStatus: new ReaderLibraryStatusStore(contentPool),
+  libraryRatings: new ReaderLibraryRatings(pool),
   agentProvisioning: new AgentProvisioning(pool,
     { ...environment, ...(workObjects ? { workObjects } : {}) }),
   environment: {

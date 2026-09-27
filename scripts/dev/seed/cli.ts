@@ -188,6 +188,22 @@ async function run(options: Options): Promise<boolean> {
     disclosure: 'public', actingSubject: person.actingSubject },
   person.token, seedKey('collection', person.id)));
 
+  for (const [index, person] of sessions.entries()) {
+    const shelf = [
+      { id: 'pride', status: 'read', startedOn: '2026-01-02', finishedOn: '2026-01-12' },
+      { id: 'alice', status: 'reading', startedOn: null, finishedOn: null },
+      { id: 'jane-eyre', status: 'want-to-read', startedOn: null, finishedOn: null },
+    ] as const;
+    const choice = shelf[index % shelf.length]!;
+    const target = created.get(choice.id);
+    if (!target) continue;
+    await optional('Reading status', () => api.put(
+      `/v1/works/${target.work.slice(-36)}/reader-status`,
+      { actingSubject: person.actingSubject, expectedVersion: 0, status: choice.status,
+        startedOn: choice.startedOn, finishedOn: choice.finishedOn },
+      person.token, seedKey('reading-status', `${person.id}:${choice.id}`)));
+  }
+
   const search = await optional('Public search', () => fetch(`${endpoints.main}/v1/queries`, { method: 'POST',
     headers: { 'content-type': 'application/json' }, body: JSON.stringify({
       profile: 'public-main-phrase-v1', phrase: 'Pride and Prejudice', language: null }) }));

@@ -88,11 +88,15 @@ import type { ConnectedAppStore } from '../modules/connected-apps/store.ts';
 import type { ThemeStore } from '../modules/theme/store.ts';
 import type { PrivateContextSelections } from '../modules/context/private-selection.ts';
 import type { ProfilesAccess } from '../modules/profiles/access.ts';
+import type { ReaderLibraryStatusStore } from '../modules/library/status.ts';
+import type { ReaderLibraryRatings } from '../modules/library/ratings.ts';
 
 export interface MainWorkDependencies {
   maintainers?: import('../modules/work/maintainers.ts').WorkMaintainers;
   discovery?: import('../modules/discovery/store.ts').DiscoveryProjection;
   profiles?: ProfilesAccess;
+  libraryStatus?: ReaderLibraryStatusStore;
+  libraryRatings?: ReaderLibraryRatings;
   agentProvisioning?: AgentProvisioning;
   agentHandles?: AgentVanityHandles;
   governance?: { store: GovernanceStore; rules?: GovernanceRules };

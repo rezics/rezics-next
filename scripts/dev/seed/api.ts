@@ -124,4 +124,11 @@ export class SeedApi {
     if (response.status === 202) throw new Error(`Main ${path}: pending; rerun with the same key`);
     return result;
   }
+
+  async put<T>(path: string, body: unknown, token: string, key: string): Promise<T> {
+    const response = await fetch(`${this.endpoints.main}${path}`, { method: 'PUT',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${token}`,
+        'idempotency-key': key }, body: JSON.stringify(body) });
+    return payload<T>(response, `Main ${path}`);
+  }
 }
