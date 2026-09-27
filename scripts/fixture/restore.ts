@@ -87,13 +87,16 @@ export async function restoreFixture(id: string, target: string): Promise<Fixtur
       throw new Error(`Restore target ${target} already exists`);
     }
     created = true;
-    await phase('configure', async () => {
-      mkdirSync(targetDir, { recursive: true, mode: 0o700 });
-      // Owner credentials and graph lineage are baked into the volumes; only ports are run-local.
+    // Owner credentials and graph lineage are baked into the volumes; only ports are run-local.
+    const configurePorts = async () => {
       const saved = { ...readEnv(join(fixtureDirectory(id), 'compose.env')), ...await freshPorts(),
         REZICS_STACK_STORAGE: 'persistent', REZICS_STACK_RAW_UPDATE: '0' };
       savePrivate(join(targetDir, 'compose.env'), saved);
       savePrivate(join(targetDir, 'apps.env'), appEnvironment(saved, targetDir));
+    };
+    await phase('configure', async () => {
+      mkdirSync(targetDir, { recursive: true, mode: 0o700 });
+      await configurePorts();
     });
     evidence.copyMs = {};
     await phase('copy', () => Promise.all(VOLUME_KINDS.map(async (kind, index) => {
@@ -101,11 +104,21 @@ export async function restoreFixture(id: string, target: string): Promise<Fixtur
       await copyVolume(`${project}_${kind}`, targetVolumes[index]!, docker);
       evidence.copyMs![kind] = Math.round(performance.now() - at);
     })));
-    await phase('start', () => {
-      const up = spawnSync('corepack', ['yarn', 'stack:up', '--profile', 'qa', '--run-id', target, '--persistent'],
-        { cwd: root, env: docker, encoding: 'utf8', timeout: remaining() });
-      writeFileSync(join(artifacts, 'stack-up.log'), [up.stdout, up.stderr, up.error?.message].filter(Boolean).join('\n'));
-      if (up.error || up.status !== 0) throw new Error('Restored stack did not start; see stack-up.log');
+    await phase('start', async () => {
+      // Concurrent restores choose free ports before Compose binds them, so another
+      // stack can take one first; a bind collision gets fresh ports, not a new copy.
+      for (let attempt = 1; ; attempt++) {
+        const up = spawnSync('corepack', ['yarn', 'stack:up', '--profile', 'qa', '--run-id', target, '--persistent'],
+          { cwd: root, env: docker, encoding: 'utf8', timeout: remaining() });
+        const log = [up.stdout, up.stderr, up.error?.message].filter(Boolean).join('\n');
+        writeFileSync(join(artifacts, attempt === 1 ? 'stack-up.log' : `stack-up-${attempt}.log`), log);
+        if (!up.error && up.status === 0) return;
+        const collision = /port is already allocated|address already in use|programming external connectivity/i.test(log);
+        if (!collision || attempt >= 3) throw new Error('Restored stack did not start; see stack-up.log');
+        spawnSync('corepack', ['yarn', 'stack:down', '--profile', 'qa', '--run-id', target, '--persistent'],
+          { cwd: root, env: docker, encoding: 'utf8', timeout: Math.min(remaining(), 120_000) });
+        await configurePorts();
+      }
     });
     const apps = readEnv(join(targetDir, 'apps.env'));
     evidence.appliedMigrations = await phase('migrate', () => migrateFixtureOwners(apps));
