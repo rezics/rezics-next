@@ -83,9 +83,9 @@ const phraseMatch = t.Object({
   matchUnit: t.String(), work: t.String(), mainVersion: t.String(),
   contribution: t.String(), revision: t.String(), selection: t.String(),
   language: t.String(), score: t.Number(), types: t.Array(t.String(), { maxItems: 3 }),
-  chapterCount: t.Nullable(t.Integer({ minimum: 0 })),
-  wordCount: t.Nullable(t.Integer({ minimum: 0 })),
-  lastUpdatedAt: t.Nullable(t.String({ format: 'date-time' })),
+  chapterCount: t.Optional(t.Nullable(t.Integer({ minimum: 0 }))),
+  wordCount: t.Optional(t.Nullable(t.Integer({ minimum: 0 }))),
+  lastUpdatedAt: t.Optional(t.Nullable(t.String({ format: 'date-time' }))),
 });
 const facetValues = t.Array(t.Object({ value: t.String(), count: t.Integer({ minimum: 0 }) }));
 const phraseFacets = t.Object({ populationBasis: t.Literal('all-filters'), resultGrain: t.Literal('work'),
