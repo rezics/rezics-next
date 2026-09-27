@@ -64,7 +64,10 @@ recovery meaning when selecting physical indexes.
 ## D08. Documents and assets
 
 Body/asset revision anchors, immutable payloads, representations, contextual uses
-and selectors; a resolved image-or-fallback avatar on every resource summary.
+and selectors; a resolved emoji/icon/image/fallback avatar on every resource
+summary; independent optional portrait/landscape covers and banner; ordered Post
+attachments and an independent auto/selected/none preview policy. These visual
+extensions are adopted design; the media owner records implementation status.
 
 Owner: [Documents and assets](media.md). Preserve exact identity, authority, lifecycle, query and
 recovery meaning when selecting physical indexes.

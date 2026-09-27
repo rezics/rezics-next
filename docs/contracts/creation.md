@@ -7,6 +7,12 @@ composition occurrences and publication contexts. A Post can be a standalone
 utterance, a chapter contribution or a discussion target without copying its body.
 Pure image/poll/link publications need no empty text document.
 
+[Post media](media.md#post-attachments-and-preview-selection) defines ordered
+attachments with their original aspect ratios and independent card-preview
+selection. Optional portrait/landscape covers and banners do not become required
+fields on an ordinary Post. These 2026-09-27 visual extensions are adopted design
+awaiting implementation.
+
 ## Work authoring and multilingual adoption
 
 Create metadata-only or content-bearing Works, draft contributions, edit bodies,

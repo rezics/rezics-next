@@ -22,7 +22,9 @@ is backend behavior independent of rendered QA. Refine VIEW07/VIEW08 and the
 corresponding resource/model owners with these required cases:
 
 - Work, character, concept, Context, role and relation-definition summaries each return a
-  stable reference, selected name and non-null image-or-fallback avatar.
+  stable reference, selected name and non-null emoji/icon/image/fallback avatar
+  under the adopted target contract. The existing implementation only provides
+  image/fallback; the additional choices require new implementation evidence.
 - No upload, explicit removal, unavailable rendition, revoked access and erased
   media produce an admitted safe result without a hidden asset ID or URL.
 - Different context/language selections report their actual readable basis;
@@ -34,5 +36,37 @@ corresponding resource/model owners with these required cases:
 - Bounded batch reads hydrate names and avatars without one owner round trip per
   result, preserve partial/unavailable semantics and obey the parent query budget.
 
-These requirements introduce no new inventory IDs or backend passes. UI rendering
-and human usability acceptance remain outside the active backend Goal.
+## Visual selection extension acceptance
+
+These prospective checks cover the design adopted on 2026-09-27; none is a new
+recorded pass. They introduce no new acceptance inventory IDs. Implementation
+and frontend work are deferred by the maintainer's documentation-only direction.
+
+- Emoji sequences, admitted icon IDs/background tokens and image Uses round-trip
+  as authored choices. Removal resolves a stable fallback; unknown/retired icons
+  safely fall back without discarding the saved choice.
+- Avatar crops are 1:1 in oriented source-image pixels. A rectangular source with
+  equal normalized crop width/height is not accepted as square solely on that
+  basis. Mask changes do not rewrite the crop or original bytes.
+- Portrait and landscape cover slots coexist and change independently; Banner
+  is a third independent selection. Reusing an asset never shares mutable crop,
+  focal point or fit settings between its Uses.
+- Omitted update fields preserve selections; explicit null clears only its slot.
+  Requested-context clearing is not mistaken for absent configuration where
+  context inheritance is admitted. Missing covers/banners resolve without hidden
+  references or implicit persisted substitutions.
+- New selections obey current authority, expected revision and idempotency.
+  Concurrent writers cannot lose an accepted change; stale cached descriptors
+  cannot deliver private, suppressed or erased images.
+- Post attachment order, original dimensions and exact identity survive edits.
+  Preview `auto`, `selected` and `none` remain distinct; a selected attachment is
+  referenced by identity rather than index. Reordering does not retarget it;
+  removal resolves the authored reference, and revoked media cannot leak through
+  previews. A separate preview image leaves the body unchanged.
+
+Future rendered review must inspect circular avatar previews against the saved
+square, title-bearing and square covers in contain/crop modes, simultaneous
+portrait/landscape selections, and 3:1 desktop/mobile banners with actual overlays.
+Missing banners must leave no empty banner region. Long/wide single-image Posts
+and multi-image layouts must preserve full-image access and authored order.
+API checks alone do not establish rendered or human-usability acceptance.

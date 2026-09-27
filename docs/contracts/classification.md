@@ -182,7 +182,7 @@ Object summaries share [names and avatar resolution](presentation.md#resource-su
 | Decide/revise/withdraw acceptance | Exact qualified fact/statement slot, context/policy revision, evidence basis, current authority and expected decision head. |
 | Resolve/read statements | Requested grain/context and current disclosure; accepted, rejected, absent and unavailable remain distinct. |
 | Query/group/inverse-read | Admitted typed filters, correlated occurrences, count grain, bounded support hydration and truthful completion. |
-| Select an avatar | Existing Media Use/selection command, current resource authority and expected selection revision. |
+| Select an avatar | Typed emoji/icon/image choice under the [media selection contract](media.md#universal-avatar-selection), current resource authority and expected selection revision; image choices reuse Media Uses. |
 
 These are owning capabilities; concrete routes/profiles are specified with their
 schemas before implementation. Shared statement syntax never authorizes arbitrary

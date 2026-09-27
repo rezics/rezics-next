@@ -12,7 +12,7 @@ contract. `skos:Concept` remains a semantic type; no Tag identity or mandatory
 Scheme/Path/Expression/Sense bundle surrounds an object. The adopted
 [Statement contract](classification.md) describes typed claims and acceptance.
 All resource summaries expose a resolved name and
-[image-or-fallback avatar](presentation.md#resource-summaries); this does not
+[typed avatar or stable fallback](presentation.md#resource-summaries); this does not
 require a universal parent table or an uploaded image for every object.
 
 | Reference | Meaning |

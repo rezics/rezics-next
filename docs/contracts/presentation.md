@@ -15,12 +15,13 @@ display name and non-null `avatar` descriptor. This applies to works,
 characters, concepts, Contexts, roles, relation definitions and other admitted resource
 types. It is a shared read contract, not a mandatory universal database record.
 
-`ResourceSummary.avatar` is a discriminated image-or-fallback value. An image
-identifies the selected currently disclosable Media Use and bounded rendition;
-a fallback identifies a stable admitted default keyed by readable resource/type
-and display policy. A resource without uploaded media still has a renderable
-avatar. A hidden image must produce a safe fallback without revealing the hidden
-asset's identity or the reason it was suppressed. The Media owner supplies
+The target `ResourceSummary.avatar` is a discriminated emoji/icon/image/fallback
+value. Emoji and icon identify authored choices; an image identifies the selected
+currently disclosable Media Use and bounded rendition. A fallback identifies a
+stable admitted default keyed by readable resource/type and display policy.
+A resource without uploaded media still has a renderable avatar. A hidden image
+must produce a safe fallback without revealing the hidden asset's identity or
+the reason it was suppressed. The Media owner supplies
 [selection and lifecycle rules](media.md#universal-avatar-selection).
 
 The resource itself must first pass the normal readable/available-state checks.
@@ -65,6 +66,27 @@ meaning stays unavailable instead of being replaced by Global.
 
 ## Rendering
 
+The [media presentation profiles](media.md#covers-banners-and-aspect-ratios)
+define square avatars, independent portrait/landscape covers and optional banners.
+Avatar editing preserves a square crop and previews the circular mask so the
+author can see which corners will be hidden. Circle or rounded-square rendering
+does not rewrite the saved crop. Emoji/icon choices use the same display canvas.
+
+Cover frames share their profile ratio while preserving the selected use's
+full-image or crop-to-fill setting. Do not distort the source to fit. A missing
+cover may use an admitted placeholder or full-image display fallback without
+creating an authored selection. A missing banner uses the page layout without
+a banner: no reserved empty image region and no automatic cover substitution.
+The banner editor previews actual title/avatar/control overlays where present;
+resource names and controls remain interface content rather than baked-in image
+requirements. The initial banner frame remains 3:1 on desktop and mobile.
+
+[Post media](media.md#post-attachments-and-preview-selection) keeps body media
+and card preview selection independent. Prefer the original ratio for one image;
+bound extremely tall feed previews and provide access to the full image. Multiple
+images may use a grid or carousel while preserving authored order and original
+media. A constrained viewport never rewrites the original or assigns a new cover.
+
 Validate new writes strictly. Isolate malformed historical presentation nodes in
 bounded render-safe fallbacks without rewriting authoritative content or allowing
 executable HTML/URLs. Render only selected, currently readable dependencies.
@@ -90,7 +112,9 @@ Use shared React renderers and typed locale resources for product UI; content
 languages remain independent. SDK/API editors preserve unknown-to-editor advanced
 fields. Qualify exact selection, malformed nodes, private embeds, query budget
 composition, responsive/accessibility behavior and exported representation fidelity.
-The universal summary/avatar and grouped-statement response shapes are adopted
-contracts pending owner implementation. Their API acceptance belongs to the
-backend Goal; frontend implementation and rendered acceptance remain outside its
-current scope.
+The existing backend has image/fallback summary descriptors. The 2026-09-27
+emoji/icon avatar, cover/banner and Post preview extensions above are adopted
+designs awaiting implementation; this documentation update adds no API behavior
+or rendered acceptance. Grouped-statement response shapes retain their own owner
+implementation status. Future implementation must verify the owner APIs before
+their frontend consumers and record rendered evidence separately.
