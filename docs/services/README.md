@@ -1,8 +1,9 @@
 # Service implementation designs
 
-[Account](account.md), [Access](../contracts/identity-and-access.md), [Main](main.md),
-[package runtime](package-runtime.md) and [workers](workers.md) have explicit
-ownership boundaries. Access initially runs inside Main through an in-process
+[Account](account.md), [Access](../contracts/identity-and-access.md), [Main](main.md)
+and [workers](workers.md) have explicit ownership boundaries. Package resolution
+and [controlled installation](../../services/main/src/modules/package/install.ts)
+run in Main. Access initially runs inside Main through an in-process
 interface. [Architecture](../architecture/services.md) owns these authority and
 placement relationships; sharing an executable does not merge private data ownership.
 

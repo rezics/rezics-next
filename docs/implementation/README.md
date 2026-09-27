@@ -9,7 +9,7 @@ They describe the selected target, not deployed endpoints or passing prototypes.
 - [Authorization bridge](authorization-bridge.md): Main admission around Fuseki queries and publication/revocation fences.
 - [Access storage decision](../research/access-storage-and-policy.md): PostgreSQL authority and coherent ordered decisions; the current rules live in the Access module.
 - [Vertical workflows](vertical-workflows.md): end-to-end creation, context, source and recovery sequences.
-- [Package plans](package-plans.md): constraints, instances, locks and journaled installation.
+- [Controlled installation](../../services/main/src/modules/package/install.ts): exact locks and journaled generations.
 - [Interaction graph and cache bootstrap](interactions-and-cache.md): Main-owned TDB2 likes/favorites, Jena acceptance cases and later Redis read caching.
 
 Implementation must qualify these shapes against the selected engine/profile.

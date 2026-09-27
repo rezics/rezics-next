@@ -91,7 +91,11 @@ function ownerKey(key: string, owner: 'npm' | 'cargo' | 'lock'): string {
   return `${key.slice(0, 105)}-${hash(key).slice(0, 16)}-${owner}`;
 }
 
-/** Resolve one exact Main Version recommendation set, then lock only solved concrete artifacts. */
+/**
+ * Main's request orchestration ends at a resolution-backed exact lock. It
+ * neither runs package code nor creates an installation generation; the
+ * controlled installer owns those effects under a separate authority check.
+ */
 export async function resolveMainVersionInstallRequest(work: MainWorkDependencies,
   principalId: string, key: string, input: PackageInstallRequestInput): Promise<PackageInstallRequestResult> {
   if (!nativeId.test(input.mainVersion) || !nativeId.test(input.recommendationRevision)

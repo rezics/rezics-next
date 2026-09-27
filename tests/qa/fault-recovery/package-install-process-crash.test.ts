@@ -9,6 +9,8 @@ import { migrateContent } from '../../../services/content/src/migrate.ts';
 import { S3ImmutableObjects } from '../../../services/main/src/infrastructure/immutable-objects.ts';
 import { PackageInstallationStore, type GenerationRequest, type InstallFault }
   from '../../../services/main/src/modules/package/install.ts';
+import type { GenerationState, InstallationJournalRow, InstallationStepRow }
+  from '../../../services/main/src/modules/package/install-schema.ts';
 import { PackageArtifactStore } from '../../../services/main/src/modules/package/lock-artifacts.ts';
 import { PackageLockStore } from '../../../services/main/src/modules/package/lock.ts';
 import { NpmResolutionStore } from '../../../services/main/src/modules/package/npm-resolution.ts';
@@ -17,6 +19,20 @@ import { archiveNpmFetcher, type ArchiveRegistry } from '../integration/package-
 
 const root = resolve(import.meta.dir, '../../..');
 const childScript = join(import.meta.dir, 'package-install-crash-child.ts');
+type JournalEffect = Pick<InstallationJournalRow, 'event' | 'effect'>;
+const crashJournal = {
+  'after-unpack-intent': { state: 'verified', action: 'unpack',
+    afterCrash: { event: 'intent', effect: 'none' },
+    afterRecovery: { event: 'completed', effect: 'complete' } },
+  'before-activation-commit': { state: 'activating', action: 'switch',
+    afterCrash: { event: 'completed', effect: 'complete' },
+    afterRecovery: { event: 'completed', effect: 'complete' } },
+  'mid-remove': { state: 'activating', action: 'remove',
+    afterCrash: { event: 'intent', effect: 'none' },
+    afterRecovery: { event: 'completed', effect: 'complete' } },
+} as const satisfies Partial<Record<InstallFault, { state: GenerationState;
+  action: InstallationStepRow['action']; afterCrash: JournalEffect; afterRecovery: JournalEffect }>>;
+type CrashPoint = keyof typeof crashJournal;
 
 test('PKG16: killed installer processes resume install, update and removal without losing user data', async () => {
   for (const name of ['REZICS_QA_RUN_ID', 'CONTENT_DATABASE_URL', 'MAIN_S3_ENDPOINT',
@@ -67,20 +83,31 @@ test('PKG16: killed installer processes resume install, update and removal witho
       expect(result.generation.state).toBe('planned');
       return result.generation.generation;
     };
-    const killed = async (generation: string, point: InstallFault) => {
+    const journalAt = async (generation: string, point: CrashPoint, phase: 'afterCrash' | 'afterRecovery') => {
+      const result = await pool.query<JournalEffect>(`SELECT j.event, j.effect
+        FROM pkg.installation_journal j JOIN pkg.installation_step s
+          ON s.generation_id = j.generation_id AND s.ordinal = j.step_ordinal
+        WHERE j.generation_id = $1 AND s.action = $2 ORDER BY j.sequence DESC LIMIT 1`,
+      [generation, crashJournal[point].action]);
+      expect(result.rows[0]).toEqual(crashJournal[point][phase]);
+    };
+    const killed = async (generation: string, point: CrashPoint) => {
       const input = join(rootDirectory, `child-${randomUUID()}.json`);
       await writeFile(input, JSON.stringify({ rootDirectory, principal, installation, generation, point }));
       const child = spawn(process.execPath, [childScript, input], { stdio: 'ignore', env: process.env });
       const [code, signal] = await once(child, 'exit') as [number | null, NodeJS.Signals | null];
       expect({ code, signal }).toEqual({ code: null, signal: 'SIGKILL' });
+      expect((await store.readGeneration(principal, installation, generation))?.state)
+        .toBe(crashJournal[point].state);
+      await journalAt(generation, point, 'afterCrash');
     };
     const userData = [{ path: 'config/settings.json', kind: 'file' as const }];
     const firstLock = await lockOf({ x: '1.0.0', y: '1.0.0' });
     const first = await plan({ operation: 'install', lock: firstLock, rollbackOf: null,
       expectedGeneration: null, userData, approveHooks: [] });
     await killed(first, 'after-unpack-intent');
-    expect((await store.readGeneration(principal, installation, first))?.state).toBe('verified');
     expect((await store.apply(principal, installation, first, async () => true)).generation.state).toBe('active');
+    await journalAt(first, 'after-unpack-intent', 'afterRecovery');
     await mkdir(join(rootOf, 'config'), { recursive: true });
     await writeFile(join(rootOf, 'config/settings.json'), '{"theme":"user"}');
 
@@ -88,16 +115,16 @@ test('PKG16: killed installer processes resume install, update and removal witho
     const second = await plan({ operation: 'update', lock: secondLock, rollbackOf: null,
       expectedGeneration: first, userData, approveHooks: [] });
     await killed(second, 'before-activation-commit');
-    expect((await store.readGeneration(principal, installation, second))?.state).toBe('activating');
     expect((await store.apply(principal, installation, second, async () => true)).generation.state).toBe('active');
+    await journalAt(second, 'before-activation-commit', 'afterRecovery');
     expect(await readFile(join(rootOf, 'node_modules/x/index.js'), 'utf8')).toContain('x@2.0.0');
     expect(await readFile(join(rootOf, 'config/settings.json'), 'utf8')).toBe('{"theme":"user"}');
 
     const removal = await plan({ operation: 'remove', lock: null, rollbackOf: null,
       expectedGeneration: second, userData: [], approveHooks: [] });
     await killed(removal, 'mid-remove');
-    expect((await store.readGeneration(principal, installation, removal))?.state).toBe('activating');
     expect((await store.apply(principal, installation, removal, async () => true)).generation.state).toBe('active');
+    await journalAt(removal, 'mid-remove', 'afterRecovery');
     expect((await store.read(principal, installation))?.state).toBe('removed');
     expect(await readFile(join(rootOf, 'config/settings.json'), 'utf8')).toBe('{"theme":"user"}');
     await expect(readlink(join(rootOf, 'node_modules/x'))).rejects.toThrow();
