@@ -5,6 +5,7 @@ import { join, resolve } from 'node:path';
 import { mainSpec, relayInitSpec, relaySpec } from '../../services/main/src/config.ts';
 import { accountSpec } from '../../services/account/src/config.ts';
 import { webSpec } from '../../apps/web/features/config/env.ts';
+import { accountsSpec } from '../../apps/accounts/features/config/env.ts';
 
 interface Spec { desc?: string; example?: string; default?: unknown }
 interface Section { title: string; spec: Record<string, Spec> }
@@ -48,6 +49,9 @@ const files: Record<string, string> = {
   ]),
   'apps/web/.env.example': render('apps/web/features/config/env.ts', [
     { title: 'Web Worker', spec: webSpec },
+  ]),
+  'apps/accounts/.env.example': render('apps/accounts/features/config/env.ts', [
+    { title: 'Accounts Worker', spec: accountsSpec },
   ]),
 };
 

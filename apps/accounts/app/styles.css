@@ -1,0 +1,5 @@
+@import "@rezics/ui/styles.css";
+@source "../../../packages/ui/src";
+
+:root { color-scheme: light; }
+.dark { color-scheme: dark; }

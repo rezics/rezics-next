@@ -1,7 +1,7 @@
 import { afterEach, expect, test } from 'bun:test';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { appEnvironment, assertSavedStackRawUpdate, assertSavedStackStorage,
+import { ACCOUNTS_PORT, appEnvironment, assertSavedStackRawUpdate, assertSavedStackStorage,
   composeProcessEnvironment, ensureSecrets,
   parseOptions, projectName, stackDirectory } from './config.ts';
 
@@ -56,7 +56,7 @@ test('P0.1 stack credentials and lineage persist across starts and remain privat
   expect(apps.FUSEKI_TITLE_ADMISSION_KEY).toBe(first.FUSEKI_TITLE_ADMISSION_KEY);
   expect(apps.MAIN_DATA_EPOCH).toBe(first.MAIN_DATA_EPOCH);
   expect(apps.MAIN_ORIGIN).toBe('http://127.0.0.1:3001');
-  expect(apps.ACCOUNT_ORIGIN).toBe('http://127.0.0.1:3002');
+  expect(apps.ACCOUNT_ORIGIN).toBe(`http://127.0.0.1:${ACCOUNTS_PORT}`);
   expect(apps.MAIN_RESOURCE).toBe(apps.ACCOUNT_MAIN_RESOURCE);
   const composePath = join(dir, 'compose.env');
   writeFileSync(composePath, readFileSync(composePath, 'utf8')
@@ -83,6 +83,10 @@ test('P0.1 QA projects keep independent credentials and endpoints', () => {
   expect(appEnvironment(a, root).FUSEKI_URL).toContain(':13001/');
   expect(appEnvironment(b, root).FUSEKI_URL).toContain(':13002/');
   expect(appEnvironment(a, root).MAIN_ORIGIN).toContain(`:${a.MAIN_PORT}`);
+  // QA tiers run the Account service alone; it stays the public origin there.
+  expect(a.ACCOUNTS_PORT).toBeUndefined();
+  expect(appEnvironment(a, root).ACCOUNT_BASE_URL).toBe(`http://127.0.0.1:${a.ACCOUNT_PORT}`);
+  expect(appEnvironment(a, root).ACCOUNT_ORIGIN).toBe(`http://127.0.0.1:${a.ACCOUNT_PORT}`);
   const nested = composeProcessEnvironment({ ...a, DOCKER_HOST: 'unix:///run/docker.sock' }, b);
   expect(nested.FUSEKI_MAINTENANCE_TOKEN).toBe(b.FUSEKI_MAINTENANCE_TOKEN);
   expect(nested.FUSEKI_COMMAND_TOKEN).toBe(b.FUSEKI_COMMAND_TOKEN);
@@ -133,4 +137,37 @@ test('SEARCH17 isolated QA project cannot change its raw-update profile', () => 
   expect(ordinary.REZICS_STACK_RAW_UPDATE).toBe('0');
   expect(() => assertSavedStackRawUpdate(raw, ordinary))
     .toThrow('Saved stack raw-update mode differs');
+});
+
+test('the Accounts app is the public Account origin only where task dev serves it', () => {
+  const root = mkdtempSync('.temp/accounts-origin-config-'); roots.push(root);
+  const dev = ensureSecrets(root, { profile: 'dev' });
+  expect(dev.ACCOUNTS_PORT).toBe(String(ACCOUNTS_PORT));
+  const apps = appEnvironment(dev, root);
+  expect(apps.ACCOUNT_BASE_URL).toBe('http://127.0.0.1:3004');
+  expect(apps.ACCOUNT_ISSUER).toBe('http://127.0.0.1:3004/api/auth');
+  expect(apps.ACCOUNT_ORIGIN).toBe('http://127.0.0.1:3004');
+  expect(apps.ACCOUNTS_PORT).toBe('3004');
+  // Main verifies tokens against the service itself, not through the app.
+  expect(apps.ACCOUNT_JWKS_URL).toBe('http://127.0.0.1:3002/api/auth/jwks');
+  expect(apps.ACCOUNT_INTROSPECT_URL).toBe('http://127.0.0.1:3002/api/auth/oauth2/introspect');
+
+  // A dev stack from before the Accounts app gains its port on the next start.
+  const devPath = join(stackDirectory(root, { profile: 'dev' }), 'compose.env');
+  writeFileSync(devPath, readFileSync(devPath, 'utf8').replace(/^ACCOUNTS_PORT=.*\n/m, ''), { mode: 0o600 });
+  expect(ensureSecrets(root, { profile: 'dev' }).ACCOUNTS_PORT).toBe('3004');
+
+  // A worktree backend gets its own port; the stack keeps it afterwards, since
+  // Access principals are bound to the issuer that port implies.
+  const backend = { profile: 'qa' as const, runId: 'wt-accounts', accountsApp: true };
+  const created = ensureSecrets(root, backend, { ACCOUNT_PORT: 14102, ACCOUNTS_PORT: 14104 });
+  expect(appEnvironment(created, root).ACCOUNT_ISSUER).toBe('http://127.0.0.1:14104/api/auth');
+  expect(appEnvironment(created, root).ACCOUNT_JWKS_URL).toBe('http://127.0.0.1:14102/api/auth/jwks');
+  expect(ensureSecrets(root, { profile: 'qa', runId: 'wt-accounts' }).ACCOUNTS_PORT).toBe('14104');
+
+  // An existing QA stack first served by task dev is upgraded with the port given.
+  ensureSecrets(root, { profile: 'qa', runId: 'tier' }, { ACCOUNT_PORT: 14112 });
+  expect(ensureSecrets(root, { profile: 'qa', runId: 'tier' }).ACCOUNTS_PORT).toBeUndefined();
+  expect(ensureSecrets(root, { profile: 'qa', runId: 'tier', accountsApp: true }, { ACCOUNTS_PORT: 14114 })
+    .ACCOUNTS_PORT).toBe('14114');
 });

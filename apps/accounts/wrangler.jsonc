@@ -1,0 +1,10 @@
+{
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  "name": "rezics-accounts",
+  "main": "./worker/index.ts",
+  "compatibility_date": "2026-09-24",
+  "compatibility_flags": ["nodejs_compat"],
+  "assets": { "directory": "dist/client", "binding": "ASSETS", "not_found_handling": "none" },
+  "vars": { "ACCOUNT_SERVICE_ORIGIN": "http://127.0.0.1:3002", "ACCOUNT_BASE_URL": "http://127.0.0.1:3004",
+    "WEB_ORIGIN": "http://127.0.0.1:3000" }
+}

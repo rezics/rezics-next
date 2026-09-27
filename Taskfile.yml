@@ -34,7 +34,7 @@ tasks:
   # Local development
 
   dev:
-    desc: 'Start the dev environment under Aspire. Main checkout: shared backend and frontend on ports 3002, 3001, 3000, 6006. Worktree: web and Storybook on random ports against it, or -- --backend for its own isolated stack.'
+    desc: 'Start the dev environment under Aspire. Main checkout: shared backend and frontend on ports 3002 (Account), 3001 (Main), 3004 (Accounts app), 3000 (web), 6006 (Storybook). Worktree: Accounts app, web and Storybook on random ports against it, or -- --backend for its own isolated stack.'
     deps: [aspire:restore]
     cmds:
       - bun scripts/dev/cli.ts dev {{.CLI_ARGS}}
@@ -158,6 +158,43 @@ tasks:
     dir: apps/web
     cmds:
       - ../../node_modules/.bin/vitest run --project storybook {{.CLI_ARGS}}
+
+  # Accounts site (apps/accounts): the public Account origin
+
+  accounts:dev:
+    desc: Run the Accounts app alone with vinext, without Aspire, against the shared Account service (defaults in apps/accounts/.env.example; pass -- --port <n>).
+    dir: apps/accounts
+    cmds:
+      - ../../node_modules/.bin/vinext dev --hostname 127.0.0.1 {{.CLI_ARGS}}
+
+  accounts:build:
+    desc: Build the Accounts vinext Workers application.
+    dir: apps/accounts
+    cmds:
+      - ../../node_modules/.bin/vinext build
+
+  accounts:typecheck:
+    desc: Type-check the Accounts workspace.
+    dir: apps/accounts
+    cmds:
+      - ../../node_modules/.bin/tsc --noEmit -p tsconfig.json
+
+  accounts:storybook:
+    desc: Run the Accounts Storybook on port 6007.
+    dir: apps/accounts
+    cmds:
+      - ../../node_modules/.bin/storybook dev -p 6007 --host 127.0.0.1 --no-open {{.CLI_ARGS}}
+
+  accounts:storybook:test:
+    desc: Run the Accounts stories as Vitest browser tests with accessibility checks.
+    dir: apps/accounts
+    cmds:
+      - ../../node_modules/.bin/vitest run --project storybook {{.CLI_ARGS}}
+
+  accounts:e2e:
+    desc: Run the Accounts Playwright journeys against a running Accounts app (ACCOUNTS_URL, default http://127.0.0.1:3004).
+    cmds:
+      - node_modules/.bin/playwright test --config apps/accounts/playwright.config.ts {{.CLI_ARGS}}
 
   ui:typecheck:
     desc: Type-check Rezics UI.

@@ -1,5 +1,5 @@
 import { spawnSync } from 'node:child_process';
-import { cpSync, existsSync, mkdirSync, readFileSync, rmSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import { basename, join, resolve } from 'node:path';
 import { parseEnv } from 'node:util';
@@ -8,7 +8,7 @@ import { Client } from 'pg';
 import { FusekiClient } from '../../services/main/src/infrastructure/fuseki.ts';
 import { initializeFreshGraph, GRAPHS, DATASET, RV } from '../../services/main/src/modules/work/activate.ts';
 import { appEnvironment, assertSavedStackRawUpdate, assertSavedStackStorage,
-  composeProcessEnvironment, devPorts, ensureSecrets, parseOptions, projectName,
+  composeProcessEnvironment, devPorts, ensureSecrets, hostsAccountsApp, parseOptions, projectName,
   readEnv, replacePrivate, savePrivate, stackDirectory, type StackOptions } from './config.ts';
 import { bootstrapWebAuth, upgradeWebClient } from './web-auth-bootstrap.ts';
 import { compatibleLoadStorage, loadCompatibility,
@@ -220,14 +220,16 @@ async function stackConfig(options: StackOptions): Promise<{ composeEnv: Record<
   const dir = stackDirectory(root, options);
   const portNames = Object.keys(devPorts());
   const ports: Record<string, number> = options.profile === 'dev' ? devPorts() : {};
-  if (options.profile === 'qa' && !existsSync(join(dir, 'compose.env'))) {
-    const selected = new Set<number>();
-    for (const name of portNames) {
-      let port: number;
-      do { port = await availablePort(); } while (selected.has(port));
-      selected.add(port);
-      ports[name] = port;
-    }
+  const saved = existsSync(join(dir, 'compose.env')) ? readEnv(join(dir, 'compose.env')) : undefined;
+  // A worktree backend also serves the Accounts app on a port of its own.
+  const needed = options.profile === 'qa' ? [...saved ? [] : portNames,
+    ...hostsAccountsApp(options) && !saved?.ACCOUNTS_PORT ? ['ACCOUNTS_PORT'] : []] : [];
+  const selected = new Set<number>();
+  for (const name of needed) {
+    let port: number;
+    do { port = await availablePort(); } while (selected.has(port));
+    selected.add(port);
+    ports[name] = port;
   }
   const composeEnv = ensureSecrets(root, options, ports);
   // apps.env is derived from compose.env; regenerate it when an older layout
@@ -246,6 +248,7 @@ function printEndpoints(options: StackOptions, env: Record<string, string>, dir:
   console.log(`${projectName(options)} ready`);
   console.log(`  Main:    http://127.0.0.1:${env.MAIN_PORT}/health/ready (after task dev)`);
   console.log(`  Account: http://127.0.0.1:${env.ACCOUNT_PORT}/health/ready (after task dev)`);
+  if (env.ACCOUNTS_PORT) console.log(`  Accounts app: http://127.0.0.1:${env.ACCOUNTS_PORT}/ (after task dev)`);
   console.log(`  Fuseki:  http://127.0.0.1:${env.FUSEKI_PORT}/rezics/`);
   console.log(`  RustFS:  http://127.0.0.1:${env.RUSTFS_PORT}/`);
   console.log(`  Mailpit: http://127.0.0.1:${env.MAILPIT_HTTP_PORT}/`);
@@ -365,6 +368,12 @@ async function prepareDev(options: StackOptions): Promise<Record<string, string>
   const authDir = join(stackDirectory(root, options), 'web-auth');
   const runtimePath = join(authDir, 'runtime.env');
   const publicPath = join(authDir, 'public.json');
+  if (existsSync(publicPath) && (JSON.parse(readFileSync(publicPath, 'utf8')) as { issuer?: string })
+    .issuer !== `${apps.ACCOUNT_BASE_URL}/api/auth`) {
+    // The public Account origin moved (to the Accounts app); the fixture's
+    // Access grant names the old issuer, so keep it aside and register anew.
+    renameSync(authDir, `${authDir}.retired-${Date.now()}`);
+  }
   if (!existsSync(runtimePath) || !existsSync(publicPath)) {
     // Account matches loopback callbacks without their port (RFC 8252), so these
     // two cover the web app on any localhost or 127.0.0.1 port.
@@ -412,7 +421,7 @@ function devTarget(args: string[]): { mode: DevMode; options?: StackOptions } {
   const rest = args.filter(arg => arg !== '--backend');
   if (!checkout().worktree) {
     if (backend) throw new Error('--backend is for worktrees; the main checkout always runs the shared backend');
-    const options = parseOptions(rest);
+    const options = { ...parseOptions(rest), accountsApp: true };
     return { mode: options.profile === 'qa' ? 'backend' : 'main', options };
   }
   if (!backend) {
@@ -420,7 +429,8 @@ function devTarget(args: string[]): { mode: DevMode; options?: StackOptions } {
     return { mode: 'frontend' };
   }
   const runId = `wt-${basename(root).toLowerCase().replace(/[^a-z0-9-]/g, '-')}`.slice(0, 31);
-  const options = parseOptions(rest.length ? rest : ['--profile', 'qa', '--run-id', runId]);
+  const options = { ...parseOptions(rest.length ? rest : ['--profile', 'qa', '--run-id', runId]),
+    accountsApp: true };
   if (options.profile !== 'qa') throw new Error('A worktree backend runs an isolated QA stack');
   return { mode: 'backend', options };
 }
@@ -466,7 +476,7 @@ async function devStart(args: string[]): Promise<void> {
     { ...process.env, REZICS_DEV_ENV: envFile, REZICS_DEV_MODE: mode });
   console.log(`${mode === 'main' ? 'Shared backend and frontend' : mode === 'frontend'
     ? 'Frontend against the shared backend' : 'Isolated backend and frontend'}:`);
-  for (const resource of ['account', 'main', 'web', 'storybook']) {
+  for (const resource of ['account', 'main', 'accounts', 'web', 'storybook']) {
     try { aspireCli(['wait', resource, '--timeout', '180'], process.env, true); }
     catch { /* frontend mode has no account/main executables; a failure shows in the table */ }
   }

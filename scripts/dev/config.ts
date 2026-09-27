@@ -4,7 +4,9 @@ import { join } from 'node:path';
 
 export type Profile = 'dev' | 'qa';
 export interface StackOptions { profile: Profile; runId?: string; persistent?: boolean;
-  rawUpdate?: boolean }
+  rawUpdate?: boolean;
+  /** `task dev` serves the Accounts app for this stack (set by the dev CLI, not a flag). */
+  accountsApp?: boolean }
 
 export function stackStorage(options: StackOptions): 'persistent' | 'tmpfs' {
   return options.profile === 'dev' || options.persistent ? 'persistent' : 'tmpfs';
@@ -21,6 +23,17 @@ export function assertSavedStackRawUpdate(options: StackOptions, saved: Record<s
   if (actual !== (options.rawUpdate ? '1' : '0')) {
     throw new Error('Saved stack raw-update mode differs; use a new QA run-id');
   }
+}
+
+/** The Accounts app (apps/accounts) is the public Account origin wherever `task
+ * dev` serves it: on this fixed port for the shared dev stack and on a random
+ * one for a worktree backend. QA tier stacks never run it, so their public
+ * Account origin stays the service itself. Once a stack has an Accounts port it
+ * keeps it, because Access principals are bound to the issuer it implies. */
+export const ACCOUNTS_PORT = 3004;
+
+export function hostsAccountsApp(options: StackOptions): boolean {
+  return options.profile === 'dev' || options.accountsApp === true;
 }
 
 const DEV_PORTS = {
@@ -127,7 +140,10 @@ export function ensureSecrets(root: string, options: StackOptions,
   mkdirSync(dir, { recursive: true, mode: 0o700 });
   chmodSync(dir, 0o700);
   const path = join(dir, 'compose.env');
+  const accountsPort = hostsAccountsApp(options)
+    ? ports.ACCOUNTS_PORT ?? (options.profile === 'dev' ? ACCOUNTS_PORT : undefined) : undefined;
   if (!existsSync(path)) savePrivate(path, { ...createSecrets(), ...ports,
+    ...(accountsPort ? { ACCOUNTS_PORT: accountsPort } : {}),
     REZICS_STACK_STORAGE: stackStorage(options),
     REZICS_STACK_RAW_UPDATE: options.rawUpdate ? '1' : '0' });
   const values = readEnv(path);
@@ -135,6 +151,7 @@ export function ensureSecrets(root: string, options: StackOptions,
   assertSavedStackRawUpdate(options, values);
   let upgraded = false;
   if (!values.REZICS_STACK_STORAGE) { values.REZICS_STACK_STORAGE = stackStorage(options); upgraded = true; }
+  if (accountsPort && !values.ACCOUNTS_PORT) { values.ACCOUNTS_PORT = String(accountsPort); upgraded = true; }
   for (const name of ['FUSEKI_MAINTENANCE_TOKEN', 'FUSEKI_COMMAND_TOKEN', 'FUSEKI_TITLE_ADMISSION_KEY']) {
     if (!values[name]) { values[name] = secret(); upgraded = true; }
   }
@@ -149,7 +166,10 @@ function pgUrl(role: string, password: string, port: string): string {
 }
 
 export function appEnvironment(compose: Record<string, string>, dir: string): Record<string, string> {
-  const account = `http://127.0.0.1:${compose.ACCOUNT_PORT}`;
+  const service = `http://127.0.0.1:${compose.ACCOUNT_PORT}`;
+  // Browsers, products and the OAuth issuer use the public Account origin;
+  // Main still reads JWKS and introspection from the service directly.
+  const account = compose.ACCOUNTS_PORT ? `http://127.0.0.1:${compose.ACCOUNTS_PORT}` : service;
   return {
     FUSEKI_URL: `http://127.0.0.1:${compose.FUSEKI_PORT}/rezics/`,
     FUSEKI_MAINTENANCE_TOKEN: compose.FUSEKI_MAINTENANCE_TOKEN,
@@ -161,9 +181,10 @@ export function appEnvironment(compose: Record<string, string>, dir: string): Re
     ACCOUNT_ACCESS_DATABASE_URL: pgUrl('access', compose.REZICS_ACCESS_PASSWORD, compose.POSTGRES_PORT),
     ACCOUNT_RELAY_DATABASE_URL: pgUrl('relay', compose.REZICS_RELAY_PASSWORD, compose.POSTGRES_PORT),
     ACCOUNT_BASE_URL: account, ACCOUNT_PORT: compose.ACCOUNT_PORT,
+    ...(compose.ACCOUNTS_PORT ? { ACCOUNTS_PORT: compose.ACCOUNTS_PORT } : {}),
     ACCOUNT_ISSUER: `${account}/api/auth`,
-    ACCOUNT_JWKS_URL: `${account}/api/auth/jwks`,
-    ACCOUNT_INTROSPECT_URL: `${account}/api/auth/oauth2/introspect`,
+    ACCOUNT_JWKS_URL: `${service}/api/auth/jwks`,
+    ACCOUNT_INTROSPECT_URL: `${service}/api/auth/oauth2/introspect`,
     ACCOUNT_MAIN_RESOURCE: 'https://main.rezics.test',
     MAIN_RESOURCE: 'https://main.rezics.test',
     MAIN_ORIGIN: `http://127.0.0.1:${compose.MAIN_PORT}`,

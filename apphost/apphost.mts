@@ -1,10 +1,15 @@
 // Rezics development AppHost, started by `task dev` (scripts/dev/cli.ts).
 //
-// - main:     the main checkout; shared Account, Main, web and Storybook on the
-//             fixed ports 3002, 3001, 3000 and 6006 through Aspire's proxy.
-// - frontend: a worktree; web and Storybook on random ports against the shared
-//             backend, which appears here as external services.
-// - backend:  a worktree with --backend; its own isolated stack and services.
+// - main:     the main checkout; shared Account, Main, Accounts app, web and
+//             Storybook on the fixed ports 3002, 3001, 3004, 3000 and 6006
+//             through Aspire's proxy.
+// - frontend: a worktree; the Accounts app, web and Storybook on random ports
+//             against the shared backend, which appears here as external services.
+// - backend:  a worktree with --backend; its own isolated stack and services. Its
+//             Accounts app binds the stack's ACCOUNTS_PORT, the issuer origin.
+//
+// The Accounts app is the public Account origin: web reaches Account through it,
+// and it proxies the Account service, so the session cookie stays on its origin.
 //
 // scripts/dev owns storage and writes the environment file this reads. Each
 // process receives only the variables its envalid spec declares; secrets are
@@ -15,10 +20,12 @@ import { resolve } from 'node:path';
 import { mainSpec } from '../services/main/src/config.ts';
 import { accountSpec } from '../services/account/src/config.ts';
 import { webSpec } from '../apps/web/features/config/env.ts';
+import { accountsSpec } from '../apps/accounts/features/config/env.ts';
 import { createBuilder } from './.aspire/modules/aspire.mjs';
 
 const root = resolve(import.meta.dirname, '..');
 const web = resolve(root, 'apps/web');
+const accountsApp = resolve(root, 'apps/accounts');
 const mode = process.env.REZICS_DEV_MODE ?? 'main';
 if (!['main', 'frontend', 'backend'].includes(mode)) throw new Error(`Unknown REZICS_DEV_MODE: ${mode}`);
 const envFile = process.env.REZICS_DEV_ENV;
@@ -83,15 +90,28 @@ if (mode === 'frontend') {
 }
 
 const frontendEndpoint = (port: number) => mode === 'main' ? { port, env: 'PORT' } : { env: 'PORT' };
-configure(builder.addExecutable('web', 'sh', web,
+// A worktree backend's issuer is built from its ACCOUNTS_PORT, so it binds that
+// port directly; a worktree frontend's app proxies to the shared service.
+const accountsEndpoint = mode === 'backend' && env.ACCOUNTS_PORT
+  ? { port: Number(env.ACCOUNTS_PORT), isProxied: false, env: 'PORT' } : frontendEndpoint(3004);
+const accounts = configure(builder.addExecutable('accounts', 'sh', accountsApp,
+  ['-c', 'exec ../../node_modules/.bin/vinext dev --hostname 127.0.0.1 --port "$PORT"']),
+accountsSpec, ['ACCOUNT_SERVICE_ORIGIN', 'WEB_ORIGIN'])
+  .withEnvironment('ACCOUNT_SERVICE_ORIGIN', accountUrl)
+  .withHttpEndpoint(accountsEndpoint)
+  .waitFor(backend);
+const accountsUrl = accounts.getEndpoint('http');
+
+const webApp = configure(builder.addExecutable('web', 'sh', web,
   ['-c', 'exec ../../node_modules/.bin/vinext dev --host 127.0.0.1 --port "$PORT"']),
 webSpec, ['MAIN_ORIGIN', 'ACCOUNT_ORIGIN'])
   .withEnvironment('MAIN_ORIGIN', mainUrl)
-  // Account accepts browser-originated writes (sign-in, sign-out) only from its
-  // own base URL; Aspire's endpoint says localhost where that URL says 127.0.0.1.
-  .withEnvironment('ACCOUNT_ORIGIN', env.ACCOUNT_BASE_URL ?? accountUrl)
+  // Account accepts browser-originated writes only from its public base URL (the
+  // Accounts app); Aspire's endpoint says localhost where that URL says 127.0.0.1.
+  .withEnvironment('ACCOUNT_ORIGIN', env.ACCOUNT_BASE_URL ?? accountsUrl)
   .withHttpEndpoint(frontendEndpoint(3000))
   .waitFor(backend);
+accounts.withEnvironment('WEB_ORIGIN', webApp.getEndpoint('http'));
 
 builder.addExecutable('storybook', 'sh', web,
   ['-c', 'exec ../../node_modules/.bin/storybook dev --host 127.0.0.1 --no-open -p "$PORT"'])
