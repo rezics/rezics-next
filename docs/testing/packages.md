@@ -28,6 +28,25 @@ activated features and instance topology; equal lockfile bytes are not required.
 | PKG19 | Large candidate universe with selective requirements | Lazy bounded loading, cancellation and truthful budget outcome. |
 | PKG20 | Refresh next live run | New upstream versions admitted without changing semantic test intent. |
 
+G-138's selected live mod capture run `20260927t000455-3a198f` used exact
+keyless response bytes once per run and retained their digest, HTTP status,
+response metadata and acquisition time in ignored `.temp/goal/` evidence. The
+real Account/Access/Main/Content API preserved a Modrinth version's qualified
+embedded project/version dependency in its immutable request and omitted its
+captured embedded child from independent downloads. CurseForge returned an
+unauthenticated access gap; `REZICS_CURSEFORGE_API_KEY` was absent, so PKG09
+remains partial until a live authenticated file with dependencies passes the
+same receipt path. Nexus public v2 GraphQL returned game IDs, while its
+unauthenticated v3 file-version range returned denial. The receipt records both
+surfaces and `incomplete-source-data` without assuming an empty range; this
+closes the bounded PKG10 scenario. Steam's keyless Collection endpoint returned
+member IDs, which stayed `collection` relations with zero hard comparisons.
+Its public item-details response omitted children despite an item with Workshop
+required items, so the soft dependency remained an inaccessible surface, with
+no invented mandatory edge. PKG11 remains partial until a live item child
+relation is captured through a permitted surface. The selected API run is not
+full backend qualification.
+
 Controlled installation/plan tests need not compile every upstream project.
 Do not claim runtime/build success from a resolver-only pass. Preserve rejected
 states, dependency explanations, installation inventory and exact run profiles.

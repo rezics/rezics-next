@@ -364,6 +364,8 @@ function modrinth(doc: Record<string, unknown>, source: string): NativeNode {
     ? doc.version_number : null, relations };
 }
 function curseforge(doc: Record<string, unknown>, source: string): NativeNode {
+  // The single-file REST endpoint encloses the exact file record in `data`.
+  if (doc.data !== undefined) doc = obj(doc.data);
   if (typeof doc.id !== 'number' || !Number.isSafeInteger(doc.id)
     || doc.id < 1 || doc.id > 0xffffffff) invalid('invalid CurseForge file ID');
   const id = String(doc.id);
@@ -391,6 +393,24 @@ function curseforge(doc: Record<string, unknown>, source: string): NativeNode {
   return { id, project, version: null, relations };
 }
 function steam(doc: Record<string, unknown>, source: string, surface: string): NativeNode {
+  if (surface === 'collection-details') {
+    const response = obj(doc.response);
+    const details = array(response.collectiondetails, 'Steam collection details');
+    if (details.length !== 1) throw new Unsupported('Steam collection detail count');
+    const item = obj(details[0]);
+    if (item.result !== 1 || item.publishedfileid !== source) {
+      throw new Unsupported('Steam collection detail unavailable');
+    }
+    const children = array(item.children, 'Steam collection children');
+    const ids = children.map(value => {
+      const child = string(obj(value).publishedfileid, 'Steam collection child ID');
+      if (!/^\d{1,20}$/.test(child)) invalid('invalid Steam collection child ID');
+      return child;
+    });
+    if (new Set(ids).size !== ids.length) invalid('duplicate Steam collection child');
+    return { id: source, project: source, version: null,
+      relations: ids.map(child => relation(source, child, 'collection-member', 'collection')) };
+  }
   if (surface === 'details-public') {
     const response = obj(doc.response);
     const details = array(response.publishedfiledetails, 'Steam public details');
@@ -513,7 +533,9 @@ export function solveModCaptures(request: ModRequest): ModOutcome {
         request.ecosystem === 'steam' ? 'ugc-children' :
         request.ecosystem === 'modrinth' ? 'version' :
         request.ecosystem === 'curseforge' ? 'file' : 'manifest')
-        && !(request.ecosystem === 'steam' && capture.surface === 'details-public')) {
+        && !(request.ecosystem === 'steam'
+          && ['details-public', 'collection-details'].includes(capture.surface))
+        && !(request.ecosystem === 'nexus' && capture.surface === 'graphql-public')) {
         throw new Unsupported('unknown native surface');
       }
       if (typeof capture.bytesBase64 === 'string') {
@@ -521,6 +543,15 @@ export function solveModCaptures(request: ModRequest): ModOutcome {
       }
       const doc = parse(capture, request.ecosystem);
       if (request.ecosystem === 'fabric') fabricManifests.set(capture.identity, decodeBytes(capture));
+      if (request.ecosystem === 'nexus' && capture.surface === 'graphql-public') {
+        const data = obj(doc.data);
+        const games = array(obj(data.games).nodes, 'Nexus public games');
+        if (data.__typename !== 'Query' || games.length === 0
+          || games.some(game => !Number.isSafeInteger(obj(game).id))) {
+          throw new Unsupported('Nexus public GraphQL response');
+        }
+        continue;
+      }
       if (request.ecosystem === 'nexus') throw new Unsupported('experimental Nexus range payload');
       const node = request.ecosystem === 'fabric' ? fabric(doc, capture.identity)
         : request.ecosystem === 'forge' || request.ecosystem === 'neoforge'
@@ -548,7 +579,8 @@ export function solveModCaptures(request: ModRequest): ModOutcome {
     return failed('unsupported-semantics',
       [{ source: request.root, target: null, kind: 'loader-runtime-unbound' }]);
   }
-  if (request.ecosystem === 'steam' && !seen.has(`${request.root}:ugc-children`)) {
+  if (request.ecosystem === 'steam' && !seen.has(`${request.root}:ugc-children`)
+    && !seen.has(`${request.root}:collection-details`)) {
     return failed('incomplete-source-data',
       [{ source: request.root, target: null, kind: 'Steam-children-unobserved' }]);
   }

@@ -12,6 +12,7 @@ import { AccountAssertionVerifier } from '../../../services/main/src/modules/acc
 import { ModResolutionStore } from '../../../services/main/src/modules/package/mod-resolution.ts';
 import type { ModCapture, ModRequest } from '../../../services/main/src/modules/package/mod-profile.ts';
 import { fixtureJar } from '../fixtures/mod-native-oracle/zip.ts';
+import { acquireLiveModProviders } from '../fixtures/mod-provider-live.ts';
 
 async function freePort(): Promise<number> {
   return new Promise((resolvePort, reject) => {
@@ -144,6 +145,10 @@ test('PKG07/PKG08/PKG09/PKG10/PKG11/IAM10: real Account, Access, Main and Conten
     const read = (token: string, id: string) => app.handle(new Request(
       `http://main.local/v1/package-resolutions/mods/${id}`,
       { headers: { authorization: `Bearer ${token}` } }));
+    const live = await acquireLiveModProviders();
+    const semantic = (item: ModCapture): ModCapture => ({ identity: item.identity,
+      surface: item.surface, status: item.status, bytesBase64: item.bytesBase64,
+      sha256: item.sha256, sourceUrl: item.sourceUrl, httpStatus: item.httpStatus });
     const nestedParent = capture('parent', 'manifest', { schemaVersion: 1, id: 'parent',
       version: '1.0.0', jars: [{ file: 'META-INF/jars/child.jar' }],
       depends: { child: '*' } });
@@ -164,24 +169,19 @@ test('PKG07/PKG08/PKG09/PKG10/PKG11/IAM10: real Account, Access, Main and Conten
         capture('root', 'manifest', 'modLoader="javafml"\nloaderVersion="[4,)"\nlicense="MIT"\n[[mods]]\nmodId="root"\nversion="1.0.0"\n[features.root]\nopenGLVersion="[3.2,)"\n[[mixins]]\nconfig="root.mixins.json"\nrequiredMods=["other"]')]),
         runtime: { loaderVersion: '4', gameVersion: '1.21.1',
           features: { openGLVersion: '3.2' } } }, selection: 'valid' },
-      { id: 'PKG09', request: modRequest('modrinth', 'V1', [
-        capture('V1', 'version', { id: 'V1', project_id: 'P1', dependencies: [
-          { project_id: 'P2', version_id: 'V2', dependency_type: 'embedded' }] }),
-        capture('V2', 'version', { id: 'V2', project_id: 'P2', dependencies: [] })]),
-        selection: 'valid' },
+      { id: 'PKG09', request: modRequest('modrinth', 'p3OA9KJx',
+        live.captures.modrinth.map(semantic)), selection: 'valid' },
       { id: 'PKG09-curseforge', request: modRequest('curseforge', '0', [
         { identity: '0', surface: 'file', status: 'inaccessible',
           bytesBase64: null, sha256: null,
           sourceUrl: 'https://api.curseforge.com/v1/mods/238222/files/0', httpStatus: 403 }]),
         selection: 'incomplete-source-data' },
-      { id: 'PKG10', request: modRequest('nexus', 'game/mod/file', [
-        { identity: 'game/mod/file', surface: 'file-version-range', status: 'inaccessible',
-          bytesBase64: null, sha256: null,
-          sourceUrl: 'https://api.nexusmods.com/v3/mod-file-versions/1/dependencies/ranges',
-          httpStatus: 401 }]), selection: 'incomplete-source-data' },
-      { id: 'PKG11', request: modRequest('steam', '123', [
-        capture('123', 'ugc-children', { publishedfileid: '123', file_type: 0,
-          num_children: 1, children: [{ publishedfileid: '456' }] })]), selection: 'valid' },
+      { id: 'PKG10', request: modRequest('nexus', '1', live.captures.nexus.map(semantic)),
+        selection: 'incomplete-source-data' },
+      { id: 'PKG11-collection', request: modRequest('steam', '1175117161',
+        live.captures.steamCollection.map(semantic)), selection: 'valid' },
+      { id: 'PKG11-soft-gap', request: modRequest('steam', '2370295313',
+        live.captures.steamItem.map(semantic)), selection: 'incomplete-source-data' },
     ];
     const first = cases[0]!;
     const key = `mod-${randomUUID()}`;
@@ -200,6 +200,39 @@ test('PKG07/PKG08/PKG09/PKG10/PKG11/IAM10: real Account, Access, Main and Conten
       expect(response.status).toBe(201);
       const result = await response.json() as { resolution: { outcome: { selection: string } } };
       expect(result.resolution.outcome.selection).toBe(entry.selection);
+      if (entry.id === 'PKG09') {
+        const retained = result.resolution as unknown as { request: ModRequest };
+        const retainedRoot = JSON.parse(Buffer.from(
+          retained.request.captures[0]!.bytesBase64!, 'base64').toString('utf8')) as {
+          dependencies: Array<{ version_id: string | null; project_id: string | null }> };
+        expect(retainedRoot.dependencies.some(dep => dep.version_id === live.embedded.version_id
+          && dep.project_id === live.embedded.project_id)).toBe(true);
+        const outcome = result.resolution.outcome as { relations: Array<{ to: string; kind: string;
+          strength: string }>; independentDownloads: string[]; coverage: Array<{ status: string }> };
+        expect(outcome.relations.some(edge => edge.to === live.embedded.version_id
+          && edge.kind === 'embedded' && edge.strength === 'embedded')).toBe(true);
+        expect(outcome.independentDownloads).not.toContain(live.embedded.version_id);
+        expect(outcome.coverage.map(item => item.status)).toEqual(['observed', 'observed']);
+      }
+      if (entry.id === 'PKG10') {
+        const outcome = result.resolution.outcome as { relations: unknown[];
+          coverage: Array<{ surface: string; status: string; httpStatus?: number }> };
+        expect(outcome.relations).toEqual([]);
+        expect(outcome.coverage.map(item => [item.surface, item.status]))
+          .toEqual([['graphql-public', 'observed'], ['file-version-range', 'inaccessible']]);
+      }
+      if (entry.id === 'PKG11-collection') {
+        const outcome = result.resolution.outcome as { relations: Array<{ kind: string;
+          strength: string }>; cost: { comparisons: number } };
+        expect(outcome.relations.length).toBeGreaterThan(0);
+        expect(outcome.relations.every(edge => edge.kind === 'collection-member'
+          && edge.strength === 'collection')).toBe(true);
+        expect(outcome.cost.comparisons).toBe(0);
+      }
+      if (entry.id === 'PKG11-soft-gap') {
+        const outcome = result.resolution.outcome as { relations: unknown[] };
+        expect(outcome.relations).toEqual([]);
+      }
     }
     const bad = { ...first.request, captures: [{ ...first.request.captures[0]!, sha256: '0'.repeat(64) }] };
     const beforeBad = Number((await contentPool.query('SELECT count(*) FROM pkg.mod_resolution')).rows[0].count);
@@ -238,4 +271,4 @@ test('PKG07/PKG08/PKG09/PKG10/PKG11/IAM10: real Account, Access, Main and Conten
     await server.stop();
     await Promise.all([accountPool.end(), accessPool.end(), contentPool.end()]);
   }
-});
+}, 30_000);

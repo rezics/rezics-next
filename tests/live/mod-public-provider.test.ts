@@ -89,7 +89,7 @@ test('PKG09/PKG10: keyless CurseForge and Nexus metadata surfaces are inaccessib
 });
 
 const curseForgeKey = Bun.env.REZICS_CURSEFORGE_API_KEY;
-(curseForgeKey ? test : test.skip)('PKG09: authenticated CurseForge file dependencies are captured from the provider', async () => {
+(curseForgeKey ? test : test.skip)(`PKG09: authenticated CurseForge file dependencies are captured from the provider${curseForgeKey ? '' : ' (skipped: REZICS_CURSEFORGE_API_KEY absent)'}`, async () => {
   const url = 'https://api.curseforge.com/v1/mods/238222/files';
   const response = await fetch(url, { headers: { 'x-api-key': curseForgeKey!, Accept: 'application/json' },
     signal: AbortSignal.timeout(10_000) });
@@ -97,21 +97,27 @@ const curseForgeKey = Bun.env.REZICS_CURSEFORGE_API_KEY;
   const body = await response.json() as { data: Array<{ id: number; modId: number;
     dependencies: Array<{ modId: number; relationType: number }> }> };
   expect(Array.isArray(body.data)).toBe(true);
-  const file = body.data.find(item => Array.isArray(item.dependencies));
+  const file = body.data.find(item => Array.isArray(item.dependencies)
+    && item.dependencies.length > 0);
   expect(file).toBeDefined();
-  const bytes = Buffer.from(JSON.stringify(file));
+  const fileUrl = `https://api.curseforge.com/v1/mods/${file!.modId}/files/${file!.id}`;
+  const fileResponse = await fetch(fileUrl, { headers: { 'x-api-key': curseForgeKey!,
+    Accept: 'application/json' }, signal: AbortSignal.timeout(10_000) });
+  expect(fileResponse.status).toBe(200);
+  const bytes = Buffer.from(await fileResponse.arrayBuffer());
+  expect(bytes.length).toBeLessThanOrEqual(65_536);
   const result = solveModCaptures({ profile: 'mod-native-capture-v1',
     ecosystem: 'curseforge', side: 'CLIENT', root: String(file!.id),
     captures: [{ identity: String(file!.id), surface: 'file', status: 'observed',
       bytesBase64: bytes.toString('base64'),
-      sha256: createHash('sha256').update(bytes).digest('hex'), sourceUrl: url,
-      httpStatus: response.status }] });
+      sha256: createHash('sha256').update(bytes).digest('hex'), sourceUrl: fileUrl,
+      httpStatus: fileResponse.status }] });
   expect(result.coverage[0]?.status).toBe('observed');
   expect(result.relations.length).toBe(file!.dependencies.length);
 });
 
 const nexusKey = Bun.env.REZICS_NEXUS_API_KEY;
-(nexusKey ? test : test.skip)('PKG10: authenticated Nexus experimental range surface is observed', async () => {
+(nexusKey ? test : test.skip)(`PKG10: authenticated Nexus experimental range surface is observed${nexusKey ? '' : ' (skipped: REZICS_NEXUS_API_KEY absent)'}`, async () => {
   const base = 'https://api.nexusmods.com/v3';
   const get = async (path: string): Promise<unknown> => {
     const response = await fetch(`${base}${path}`, {
@@ -136,7 +142,7 @@ const nexusKey = Bun.env.REZICS_NEXUS_API_KEY;
 });
 
 const steamKey = Bun.env.REZICS_STEAM_WEB_API_KEY;
-(steamKey ? test : test.skip)('PKG11: authenticated Steam QueryFiles returns a complete Collection children surface', async () => {
+(steamKey ? test : test.skip)(`PKG11: authenticated Steam QueryFiles returns a complete Collection children surface${steamKey ? '' : ' (skipped: REZICS_STEAM_WEB_API_KEY absent)'}`, async () => {
   const url = 'https://api.steampowered.com/IPublishedFileService/QueryFiles/v1/';
   const input = new URLSearchParams({ input_json: JSON.stringify({ query_type: 0,
     cursor: '*', numperpage: 5, appid: 255710, filetype: 1, return_children: true }) });

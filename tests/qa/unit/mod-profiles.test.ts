@@ -234,12 +234,14 @@ describe('mod native capture profiles', () => {
 
   test('PKG10: inaccessible Nexus range is recorded as incomplete, never empty', () => {
     const outcome = solveModCaptures(request('nexus', 'game/mod/file', [
+      observed('game/mod/file', 'graphql-public', { data: { __typename: 'Query',
+        games: { nodes: [{ id: 10325 }] } } }),
       { identity: 'game/mod/file', surface: 'file-version-range', status: 'inaccessible',
         bytesBase64: null, sha256: null },
     ]));
     expect(outcome.selection).toBe('incomplete-source-data');
-    expect(outcome.coverage).toEqual([{ identity: 'game/mod/file',
-      surface: 'file-version-range', status: 'inaccessible', sha256: null }]);
+    expect(outcome.coverage.map(item => [item.surface, item.status]))
+      .toEqual([['graphql-public', 'observed'], ['file-version-range', 'inaccessible']]);
     expect(outcome.relations).toEqual([]);
   });
 
@@ -256,6 +258,51 @@ describe('mod native capture profiles', () => {
     expect(solveModCaptures(request('steam', '123', [observed('123', 'ugc-children',
       { publishedfileid: '123', file_type: 0, num_children: 2,
         children: [{ publishedfileid: '456' }] })])).selection).toBe('unsupported-semantics');
+  });
+
+  test('PKG11: native Collection response creates membership without a hard install edge', () => {
+    const collection = solveModCaptures(request('steam', '123', [
+      observed('123', 'collection-details', { response: { collectiondetails: [{
+        publishedfileid: '123', result: 1, children: [
+          { publishedfileid: '456', sortorder: 0, filetype: 0 },
+          { publishedfileid: '789', sortorder: 1, filetype: 0 },
+        ] }] } }),
+    ]));
+    expect(collection.selection).toBe('valid');
+    expect(collection.relations.map(edge => [edge.to, edge.kind, edge.strength]))
+      .toEqual([['456', 'collection-member', 'collection'],
+        ['789', 'collection-member', 'collection']]);
+    expect(collection.cost.comparisons).toBe(0);
+    expect(collection.independentDownloads).toEqual(['123']);
+    const missingChildren = solveModCaptures(request('steam', '123', [
+      observed('123', 'details-public', { response: { publishedfiledetails: [
+        { publishedfileid: '123', result: 1 }] } }),
+    ]));
+    expect(missingChildren.selection).toBe('incomplete-source-data');
+    expect(missingChildren.relations).toEqual([]);
+  });
+
+  test('PKG10/PKG11: provider coverage and Collection work stay bounded by captures and children', () => {
+    for (const count of [1, 4, 16]) {
+      const response = { response: { collectiondetails: [{ publishedfileid: '123', result: 1,
+        children: Array.from({ length: count }, (_, index) => ({
+          publishedfileid: String(1000 + index), sortorder: index, filetype: 0 })) }] } };
+      const outcome = solveModCaptures(request('steam', '123', [
+        observed('123', 'collection-details', response)]));
+      expect(outcome.selection).toBe('valid');
+      expect(outcome.cost.captures).toBe(1);
+      expect(outcome.cost.relations).toBe(count);
+      expect(outcome.cost.comparisons).toBe(0);
+    }
+    const nexus = solveModCaptures(request('nexus', '1', [
+      observed('1', 'graphql-public', { data: { __typename: 'Query',
+        games: { nodes: [{ id: 10325 }] } } }),
+      { identity: '1', surface: 'file-version-range', status: 'inaccessible',
+        bytesBase64: null, sha256: null },
+    ]));
+    expect(nexus.cost.captures).toBe(2);
+    expect(nexus.cost.relations).toBe(0);
+    expect(nexus.cost.comparisons).toBe(0);
   });
 
   test('PKG09/PKG10: unsupported provider clauses do not become empty dependencies', () => {
