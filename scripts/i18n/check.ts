@@ -10,8 +10,8 @@ type Catalog = Map<string, Message>;
 type CatalogSpec = { app: 'web' | 'accounts'; namespace: string; english: string; inline?: boolean;
   localeFiles?: Partial<Record<Locale, string>> };
 
-const webFeatures = ['auth', 'discover', 'feed', 'home', 'manage', 'realm', 'search', 'shell', 'studio', 'work',
-  'work-page', 'zones'] as const;
+const webFeatures = ['auth', 'catalogue', 'discover', 'feed', 'home', 'manage', 'onboarding', 'realm', 'search', 'settings',
+  'shell', 'studio', 'work', 'work-page', 'zones'] as const;
 const accountsFeatures = ['shell', 'auth', 'consent', 'account', 'admin'] as const;
 const specs: CatalogSpec[] = [
   ...webFeatures.map(feature => {
@@ -234,7 +234,8 @@ function readCatalog(spec: CatalogSpec, locale: Locale): Catalog {
   const path = locale === 'en' ? spec.english : spec.localeFiles?.[locale];
   const tokens = path ? readFile(path) : undefined;
   if (!tokens) return new Map();
-  const open = locale === 'en' && spec.app === 'web' ? variableObject(tokens, 'messages') : defaultObject(tokens);
+  const open = locale === 'en' && spec.app === 'web'
+    ? variableObject(tokens, 'en') ?? variableObject(tokens, 'messages') : defaultObject(tokens);
   return open === undefined ? new Map() : flatten(tokens, open);
 }
 
