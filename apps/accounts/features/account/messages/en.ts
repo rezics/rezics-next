@@ -219,6 +219,8 @@ export default {
   activityEmailChanged: 'Email address changed',
   activityAppConnected: 'An app was given access',
   activityAppRemoved: 'An app’s access was removed',
+  activityAppConnectedNamed: insert('{{app}} was given access', { app: String }),
+  activityAppRemovedNamed: insert('{{app}}’s access was removed', { app: String }),
   activityAdministrator: 'A REZICS administrator changed your account',
 
   secureAccount: 'Secure your account',
@@ -241,7 +243,7 @@ export default {
   appsIntro: 'Apps you have allowed to use your REZICS Account.',
   appsEmptyTitle: 'No apps have access',
   appsEmptyBody: 'When you let an app use your REZICS Account, it shows up here so you can review or remove it.',
-  hasAccessTo: 'Can',
+  hasAccessTo: insert('{{app}} can:', { app: String }),
   accessSince: insert('Access given {{date}}', { date: String }),
   appLastUsed: insert('Last used {{time}}', { time: String }),
   appNotUsed: 'Not used yet',

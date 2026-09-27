@@ -85,7 +85,7 @@ export function ConnectedApps({ apps }: { apps: ConnectedAppView[] }) {
               </div>
               <p className="text-sm text-muted-foreground">{t.accessSince({ date: app.granted })} · {app.lastUsed
                 ? t.appLastUsed({ time: app.lastUsed }) : t.appNotUsed}</p>
-              <p className="mt-3 text-sm font-medium">{t.hasAccessTo}</p>
+              <p className="mt-3 text-sm font-medium">{t.hasAccessTo({ app: app.name })}</p>
               <ul className="mt-1.5 flex flex-col gap-1 text-sm">
                 {app.permissions.map(permission => <li key={permission} className="flex gap-2">
                   <CheckIcon className="mt-0.5 size-4 shrink-0 text-primary" aria-hidden="true" />{permission}</li>)}

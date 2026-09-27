@@ -22,7 +22,9 @@ export const SECURE_ACCOUNT_PATH = '/security/secure-account';
 
 /** Security events, newest first; the ones someone else could have caused
  * offer "Wasn't you?". */
-export function ActivityList({ entries }: { entries: ActivityView[] }) {
+export function ActivityList({ entries, apps = {} }: { entries: ActivityView[];
+  /** Names of connected Apps by client ID; an App no longer connected stays unnamed. */
+  apps?: Record<string, string> }) {
   const { t } = useTranslation('account');
   const deviceName = useDeviceName();
   const title = (entry: ActivityView): string => {
@@ -31,6 +33,11 @@ export function ActivityList({ entries }: { entries: ActivityView[] }) {
         : t.activitySignedIn;
       case 'sign-in-failed': return t.activitySignInFailed(entry.count);
       case 'device-signed-out': return t.activityDevicesSignedOut(entry.count);
+      case 'app-connected': case 'app-removed': {
+        const app = entry.clientId ? apps[entry.clientId] : undefined;
+        if (app) return entry.kind === 'app-connected' ? t.activityAppConnectedNamed({ app }) : t.activityAppRemovedNamed({ app });
+        return t[titles[entry.kind]];
+      }
       default: return t[titles[entry.kind]];
     }
   };

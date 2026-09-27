@@ -215,6 +215,8 @@ export default {
   activityEmailChanged: '电子邮箱地址已更改',
   activityAppConnected: '已授予某个应用访问权限',
   activityAppRemoved: '已撤销某个应用的访问权限',
+  activityAppConnectedNamed: insert('已授予 {{app}} 访问权限', { app: String }),
+  activityAppRemovedNamed: insert('已撤销 {{app}} 的访问权限', { app: String }),
   activityAdministrator: 'REZICS 管理员更改了您的账号',
 
   secureAccount: '保护您的账号',
@@ -237,7 +239,7 @@ export default {
   appsIntro: '您已允许使用您 REZICS 账号的应用。',
   appsEmptyTitle: '没有应用拥有访问权限',
   appsEmptyBody: '当您允许某个应用使用您的 REZICS 账号后，它会显示在这里，方便您查看或撤销。',
-  hasAccessTo: '可以',
+  hasAccessTo: insert('{{app}} 可以：', { app: String }),
   accessSince: insert('授权时间：{{date}}', { date: String }),
   appLastUsed: insert('上次使用：{{time}}', { time: String }),
   appNotUsed: '尚未使用',

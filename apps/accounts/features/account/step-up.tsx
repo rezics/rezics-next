@@ -5,6 +5,7 @@ import { Button } from '@rezics/ui/button';
 import { Dialog, DialogBody, DialogContent, DialogFooter, DialogHeader } from '@rezics/ui/dialog';
 import { FingerprintIcon } from 'lucide-react';
 import { createContext, type FormEvent, type ReactNode, useCallback, useContext, useRef, useState } from 'react';
+import { dialogForm } from './dialog-form.ts';
 import { useAccountClient } from '../api/account-client.tsx';
 import type { Result } from '../api/errors.ts';
 import { autofocus, CodeField, PasswordField } from '../auth/fields.tsx';
@@ -93,7 +94,7 @@ export function StepUpProvider({ methods, children }: { methods: StepUpMethods; 
     <Dialog open={open} onOpenChange={({ open: next }) => { if (!next && !busy) settle(false); }}>
       <DialogContent size="sm">
         <DialogHeader title={t.stepUpTitle} description={t.stepUpBody} />
-        <form noValidate onSubmit={event => void withPassword(event)}>
+        <form noValidate onSubmit={event => void withPassword(event)} className={dialogForm}>
           <DialogBody className="flex flex-col gap-5">
             {error ? <Alert role="alert" variant="destructive"><AlertDescription>{error}</AlertDescription></Alert> : null}
             {methods.passkey ? <Button type="button" variant={methods.password ? 'outline' : 'default'} size="lg"

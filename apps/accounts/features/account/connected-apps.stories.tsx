@@ -31,6 +31,7 @@ export const Apps: Story = {
     const canvas = within(canvasElement);
     await expect(await canvas.findByRole('heading', { level: 2, name: 'Reader' })).toBeVisible();
     await expect(canvas.getByText('Access given Sep 27, 2026 · Last used 3 hours ago')).toBeVisible();
+    await expect(canvas.getByText('Reader can:')).toBeVisible();
     await expect(canvas.getByText('Keep access while you are signed out, until you revoke it')).toBeVisible();
     await expect(canvas.getByText('REZICS app')).toBeVisible();
     await expect(canvas.getByText(/REZICS apps don’t ask first/)).toBeVisible();

@@ -10,6 +10,7 @@ import { Input } from '@rezics/ui/input';
 import { CloudIcon, FingerprintIcon, PlusIcon, SmartphoneIcon } from 'lucide-react';
 import { type FormEvent, useEffect, useState } from 'react';
 import { SectionHeading, SettingsCard } from './account-shell.tsx';
+import { dialogForm } from './dialog-form.ts';
 import { failureText } from './failure-text.ts';
 import { useStepUp } from './step-up.tsx';
 import { useAccountClient } from '../api/account-client.tsx';
@@ -130,7 +131,7 @@ export function Passkeys({ passkeys, hasPassword }: { passkeys: PasskeyView[]; h
     <Dialog open={dialog === 'rename'} onOpenChange={({ open }) => { if (!open && !busy) setDialog(undefined); }}>
       <DialogContent size="sm">
         <DialogHeader title={t.renamePasskeyTitle} />
-        <form noValidate onSubmit={event => void rename(event)}>
+        <form noValidate onSubmit={event => void rename(event)} className={dialogForm}>
           <DialogBody>
             <Field invalid={!!nameError} disabled={busy}>
               <FieldLabel>{t.passkeyName}</FieldLabel>

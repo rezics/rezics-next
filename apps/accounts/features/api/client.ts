@@ -95,13 +95,14 @@ const callbackPaths = { resetPassword: '/reset-password', verifyEmail: '/verify-
 async function assertPasskey(conditional = false, signal?: AbortSignal): Promise<Result<Body>> {
   if (!passkeysSupported()) return failed('cancelled');
   const options = await auth<Body>('/passkey/generate-authenticate-options');
-  if (!options.ok) return options;
+  if (!options.ok) return conditional ? failed('cancelled') : options;
   try {
     const credential = await navigator.credentials.get({ publicKey: requestOptions(options.data), signal,
       ...(conditional ? { mediation: 'conditional' } : {}) }) as PublicKeyCredential | null;
     return credential ? { ok: true, data: credentialJson(credential) } : failed('cancelled');
   } catch (error) {
-    return failed(isCancelled(error) ? 'cancelled' : 'failed');
+    // An autofill request the browser refuses was never the person's choice.
+    return failed(conditional || isCancelled(error) ? 'cancelled' : 'failed');
   }
 }
 

@@ -10,6 +10,7 @@ import { ReadStatePanel } from '../shell/state-panel.tsx';
 import { useTranslation } from '../../i18n/client.ts';
 
 export type ActivityPageView = { status: 'ok'; entries: ActivityView[]; failed: { count: number; capped: boolean };
+  apps?: Record<string, string>;
   /** The next page's cursor while older events inside the 90-day window may exist. */
   older: string | null; paged: boolean } | { status: 'unavailable' | 'signed-out' | 'stale' | 'missing' };
 
@@ -30,7 +31,7 @@ export function SecurityActivityPage({ activity }: { activity: ActivityPageView 
         <AlertAction><Button variant="outline" size="sm" asChild><a href={SECURE_ACCOUNT_PATH}>{t.secureAccount}</a></Button></AlertAction>
       </Alert> : null}
       <SettingsCard title={activity.paged ? t.olderActivity : t.recentActivity}>
-        <ActivityList entries={activity.entries} />
+        <ActivityList entries={activity.entries} apps={activity.apps} />
         <div className="flex flex-wrap gap-3 border-t border-border/60 px-5 py-3 sm:px-6">
           {activity.paged ? <Button variant="link" className="px-0" asChild><a href="/security/activity">{t.newestActivity}</a></Button> : null}
           {activity.older ? <Button variant="link" className="px-0" asChild>

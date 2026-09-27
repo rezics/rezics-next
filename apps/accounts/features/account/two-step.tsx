@@ -9,6 +9,7 @@ import { QrCode, QrCodeFrame } from '@rezics/ui/qr-code';
 import { CheckIcon, CopyIcon, DownloadIcon, KeyRoundIcon, ShieldCheckIcon, SmartphoneIcon } from 'lucide-react';
 import { type FormEvent, type ReactNode, useState } from 'react';
 import { SectionHeading, SettingsCard, SettingsRow } from './account-shell.tsx';
+import { dialogForm } from './dialog-form.ts';
 import { failureText } from './failure-text.ts';
 import { useStepUp } from './step-up.tsx';
 import { useAccountClient } from '../api/account-client.tsx';
@@ -100,7 +101,7 @@ function TotpSetup({ hasPassword, onClose }: { hasPassword: boolean; onClose(don
     {error ? <Alert role="alert" variant="destructive"><AlertDescription>{error}</AlertDescription></Alert> : null}
     {content}</DialogBody>;
   return <DialogContent size="md">
-    {step === 'password' ? <form noValidate onSubmit={event => void start(event)}>
+    {step === 'password' ? <form noValidate onSubmit={event => void start(event)} className={dialogForm}>
       <DialogHeader title={t.twoStepSetupTitle} description={t.twoStepSetupBody} />
       {body(hasPassword ? <ConfirmPassword hasPassword value={password} disabled={busy}
         onChange={value => { setPassword(value); setError(''); }} /> : <p className="text-muted-foreground">{t.twoStepSetupPasskey}</p>)}
@@ -108,7 +109,7 @@ function TotpSetup({ hasPassword, onClose }: { hasPassword: boolean; onClose(don
         <Button type="button" variant="outline" disabled={busy} onClick={() => onClose(false)}>{t.cancel}</Button>
         <Button type="submit" isLoading={busy}>{t.next}</Button>
       </DialogFooter>
-    </form> : step === 'scan' && enrollment ? <form noValidate onSubmit={event => void verify(event)}>
+    </form> : step === 'scan' && enrollment ? <form noValidate onSubmit={event => void verify(event)} className={dialogForm}>
       <DialogHeader title={t.scanTitle} description={t.scanBody} />
       {body(<>
         <div className="flex flex-col items-center gap-4 sm:flex-row sm:items-start">
@@ -118,7 +119,7 @@ function TotpSetup({ hasPassword, onClose }: { hasPassword: boolean; onClose(don
           <div className="min-w-0 flex-1 text-sm">
             <p className="font-medium">{t.cantScan}</p>
             <p className="mt-1 text-muted-foreground">{t.enterKey}</p>
-            <p className="mt-2 rounded-xl bg-muted/60 px-3 py-2 font-mono text-base break-all select-all tabular-nums">
+            <p className="mt-2 rounded-xl bg-muted/60 px-3 py-2 font-mono text-base break-normal select-all tabular-nums">
               {manualKey(enrollment.totpURI)}</p>
           </div>
         </div>
@@ -227,7 +228,7 @@ export function TwoStepVerification({ totp, hasPassword }: { totp: { name: strin
           <DialogHeader title={t.newCodesTitle} description={t.backupCodesBody} />
           <DialogBody><BackupCodes codes={codes} /></DialogBody>
           <DialogFooter><Button onClick={() => setDialog(undefined)}>{t.done}</Button></DialogFooter>
-        </> : <form noValidate onSubmit={event => void regenerate(event)}>
+        </> : <form noValidate onSubmit={event => void regenerate(event)} className={dialogForm}>
           <DialogHeader title={t.newCodesTitle} description={t.newCodesBody} />
           <DialogBody className="flex flex-col gap-5">{failure}
             <ConfirmPassword hasPassword={hasPassword} value={password} disabled={busy}
@@ -241,7 +242,7 @@ export function TwoStepVerification({ totp, hasPassword }: { totp: { name: strin
     </Dialog>
     <Dialog open={dialog === 'rename'} onOpenChange={({ open: next }) => { if (!next) close(); }}>
       <DialogContent size="sm">
-        <form noValidate onSubmit={event => void rename(event)}>
+        <form noValidate onSubmit={event => void rename(event)} className={dialogForm}>
           <DialogHeader title={t.renameAuthenticatorTitle} />
           <DialogBody className="flex flex-col gap-5">{failure}
             <Field disabled={busy}>
@@ -260,7 +261,7 @@ export function TwoStepVerification({ totp, hasPassword }: { totp: { name: strin
     </Dialog>
     <Dialog open={dialog === 'off'} onOpenChange={({ open: next }) => { if (!next) close(); }}>
       <DialogContent size="sm">
-        <form noValidate onSubmit={event => void turnOff(event)}>
+        <form noValidate onSubmit={event => void turnOff(event)} className={dialogForm}>
           <DialogHeader title={t.turnOffTitle} description={t.turnOffBody} />
           <DialogBody className="flex flex-col gap-5">{failure}
             <ConfirmPassword hasPassword={hasPassword} value={password} disabled={busy}

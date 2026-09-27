@@ -26,7 +26,8 @@ export interface SignInSummary {
   twoStep: boolean;
 }
 
-export type ActivitySummary = { status: 'ok'; entries: ActivityView[] } | { status: 'unavailable' };
+export type ActivitySummary = { status: 'ok'; entries: ActivityView[]; apps?: Record<string, string> }
+  | { status: 'unavailable' };
 
 function PasswordForm({ onDone, onCancel }: { onDone(): void; onCancel(): void }) {
   const { t } = useTranslation('account');
@@ -137,13 +138,13 @@ function PasswordRow({ summary }: { summary: SignInSummary | null }) {
   const action = summary?.password ? <Button variant="ghost" onClick={() => { setChanging(true); setChanged(false); }}>
     {t.changePassword}</Button>
     : summary ? <Button variant="ghost" asChild><a href="/forgot-password">{t.setPassword}</a></Button> : null;
-  return <div id="password"><SettingsRow label={t.password} action={action}>
+  return <div id="password"><SettingsRow label={t.password} action={action}
+    icon={<LockKeyholeIcon className="size-4" aria-hidden="true" />}>
     {!summary ? <span className="text-muted-foreground">{common.unavailableTitle}</span>
-      : summary.password ? <span className="inline-flex flex-wrap items-center gap-x-2 font-medium">
-        <LockKeyholeIcon className="size-4 text-muted-foreground" aria-hidden="true" />
+      : summary.password ? <span className="font-medium">
         {summary.passwordChanged ? t.passwordLastChanged({ date: summary.passwordChanged }) : t.methodOn}</span>
         : <span className="text-muted-foreground">{t.passwordNotSet}</span>}
-    {summary?.password && summary.passkeys > 0 ? <RemovePassword /> : null}
+    {summary?.password && summary.passkeys > 0 ? <div><RemovePassword /></div> : null}
     {changed ? <Alert role="status" variant="success" className="mt-3">
       <AlertDescription>{t.passwordChanged}</AlertDescription></Alert> : null}
   </SettingsRow></div>;
@@ -182,7 +183,7 @@ export function SecurityOverview({ signIn, issues, failedSignIns, devices, activ
       </SettingsCard>
       <SettingsCard title={t.devices} description={t.devicesIntro}><Devices devices={devices} /></SettingsCard>
       <SettingsCard title={t.activity} description={t.activityIntro}>
-        {activity.status === 'ok' ? <ActivityList entries={activity.entries} />
+        {activity.status === 'ok' ? <ActivityList entries={activity.entries} apps={activity.apps} />
           : <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-4 sm:px-6">
             <p className="text-muted-foreground">{common.unavailableBody}</p>
             <Button variant="outline" onClick={refresh}>{common.retry}</Button></div>}

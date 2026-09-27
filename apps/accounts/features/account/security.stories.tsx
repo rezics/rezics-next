@@ -15,7 +15,7 @@ const devices: DeviceView[] = [
     lastActive: '2 weeks ago' },
 ];
 const entry = (id: string, kind: ActivityView['kind'], when: string, extra: Partial<ActivityView> = {}): ActivityView =>
-  ({ id, kind, when, occurredAt: '2026-09-27T09:00:00Z', count: 1, method: null, browser: null, platform: null,
+  ({ id, kind, when, occurredAt: '2026-09-27T09:00:00Z', count: 1, method: null, clientId: null, browser: null, platform: null,
     network: null, ...extra });
 const activity: ActivityView[] = [
   entry('a1', 'signed-in', '3 hours ago', { method: 'passkey', browser: 'Chrome', platform: 'macOS', network: '192.0.2.0/24' }),

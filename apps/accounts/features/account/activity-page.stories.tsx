@@ -7,7 +7,7 @@ import { AccountFrame } from '../../.storybook/account-frame.tsx';
 import { chinese, dark, phone } from '../../.storybook/variants.ts';
 
 const entry = (id: string, kind: ActivityView['kind'], when: string, extra: Partial<ActivityView> = {}): ActivityView =>
-  ({ id, kind, when, occurredAt: '2026-09-27T09:00:00Z', count: 1, method: null, browser: null, platform: null,
+  ({ id, kind, when, occurredAt: '2026-09-27T09:00:00Z', count: 1, method: null, clientId: null, browser: null, platform: null,
     network: null, ...extra });
 const entries: ActivityView[] = [
   entry('a1', 'sign-in-failed', '5 minutes ago', { count: 4 }),
@@ -15,13 +15,14 @@ const entries: ActivityView[] = [
     network: '203.0.113.0/24' }),
   entry('a3', 'device-signed-out', 'yesterday', { count: 2 }),
   entry('a4', 'email-changed', '2 days ago'),
-  entry('a5', 'app-removed', '1 week ago'),
+  entry('a5', 'app-removed', '1 week ago', { clientId: 'reader' }),
   entry('a6', 'administrator', '1 month ago'),
 ];
 
 const meta = {
   title: 'Accounts/Account centre/Security activity', component: SecurityActivityPage,
-  args: { activity: { status: 'ok', entries, failed: { count: 4, capped: false }, older: 'cursor-2', paged: false } },
+  args: { activity: { status: 'ok', entries, failed: { count: 4, capped: false }, older: 'cursor-2', paged: false,
+    apps: { reader: 'Reader' } } },
   decorators: [Story => <AccountFrame section="security"><Story /></AccountFrame>],
 } satisfies Meta<typeof SecurityActivityPage>;
 export default meta;
@@ -37,6 +38,7 @@ export const Activity: Story = {
     await expect(canvas.getByText(/Firefox on Linux/)).toHaveTextContent('3 hours ago · Firefox on Linux · Network 203.0.113.0/24');
     await expect(canvas.getByText('2 devices were signed out')).toBeVisible();
     await expect(canvas.getByText('A REZICS administrator changed your account')).toBeVisible();
+    await expect(canvas.getByText('Reader’s access was removed')).toBeVisible();
     // Only changes someone else could have made offer "Wasn't you?".
     await expect(canvas.getAllByRole('link', { name: 'Wasn’t you?' })).toHaveLength(3);
     await expect(canvas.getByRole('link', { name: 'Show earlier activity' }))

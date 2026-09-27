@@ -84,6 +84,8 @@ export const TurnOffConfirmsWithCode: Story = {
     await expect(reauthenticated).toHaveBeenCalledWith({ password: 'correct horse battery', totpCode: '123456' });
     await waitFor(() => expect(disabled).toHaveBeenCalledTimes(2));
     await expect(await canvas.findByText('2-Step Verification is off.')).toBeVisible();
+    // Accessibility checks run after the story: let both dialogs finish closing.
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
   },
 };
 

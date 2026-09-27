@@ -33,6 +33,11 @@ export function activityPage(activity: SecurityActivity, now: Date, locale: Acco
   return { entries: activityViews(entries, now, locale), older: complete ? null : activity.nextCursor };
 }
 
+/** Connected Apps' names by client ID, for naming them in security activity. */
+export function appNames(apps: { status: string; data?: { items: ConnectedApp[] } }): Record<string, string> {
+  return Object.fromEntries(apps.status === 'ok' ? apps.data!.items.map(app => [app.clientId, app.name]) : []);
+}
+
 export function connectedAppViews(apps: ConnectedApp[], now: Date, locale: AccountLocale): ConnectedAppView[] {
   return apps.map(app => ({ clientId: app.clientId, name: app.name, uri: app.uri, icon: app.icon,
     trusted: app.trusted, withdrawn: app.withdrawn,

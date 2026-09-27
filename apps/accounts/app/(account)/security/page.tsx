@@ -2,15 +2,15 @@ import { securityCheckup } from '../../../features/account/activity.ts';
 import { renderAccountPage } from '../../../features/account/account-page.tsx';
 import { calendarDate } from '../../../features/account/format.ts';
 import { SecurityOverview } from '../../../features/account/security.tsx';
-import { activityPage, deviceViews } from '../../../features/account/views.ts';
-import { readSecurityActivity, readSessions } from '../../../features/api/server.ts';
+import { activityPage, appNames, deviceViews } from '../../../features/account/views.ts';
+import { readConnectedApps, readSecurityActivity, readSessions } from '../../../features/api/server.ts';
 
 /** How many recent events the overview shows before "Review security activity". */
 const RECENT = 4;
 
 export default async function SecurityPage() {
   return renderAccountPage('security', async ({ session, methods, locale, now }) => {
-    const [sessions, activity] = await Promise.all([readSessions(), readSecurityActivity()]);
+    const [sessions, activity, apps] = await Promise.all([readSessions(), readSecurityActivity(), readConnectedApps()]);
     const known = methods.status === 'ok' ? methods.data : null;
     const failed = activity.status === 'ok' ? activity.data.failedLast24Hours.count : null;
     return <SecurityOverview failedSignIns={failed ?? 0}
@@ -19,7 +19,7 @@ export default async function SecurityPage() {
         passwordChanged: known.passwordChangedAt ? calendarDate(known.passwordChangedAt, locale) : null } : null}
       devices={sessions.status === 'ok' ? { status: 'ok', items: deviceViews(sessions.data.items, now, locale) }
         : { status: 'unavailable' }}
-      activity={activity.status === 'ok' ? { status: 'ok',
+      activity={activity.status === 'ok' ? { status: 'ok', apps: appNames(apps),
         entries: activityPage(activity.data, now, locale).entries.slice(0, RECENT) } : { status: 'unavailable' }} />;
   });
 }

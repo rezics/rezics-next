@@ -124,11 +124,11 @@ export function SettingsCard({ title, description, children, className }: { titl
 
 /** One row of a settings card: label, value and an optional action. Phones put
  * the label and action on the first line and the value below them. */
-export function SettingsRow({ label, children, action }: { label: string; children?: ReactNode;
-  action?: ReactNode }) {
+export function SettingsRow({ label, icon, children, action }: { label: string; icon?: ReactNode;
+  children?: ReactNode; action?: ReactNode }) {
   return <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-6 gap-y-1.5 px-5 py-4
     sm:grid-cols-[10rem_minmax(0,1fr)_auto] sm:px-6">
-    <div className="text-sm font-medium text-muted-foreground">{label}</div>
+    <div className="flex items-center gap-3 text-sm font-medium text-muted-foreground">{icon}{label}</div>
     {children ? <div className="col-span-2 row-start-2 min-w-0 sm:col-span-1 sm:col-start-2 sm:row-start-1">
       {children}</div> : null}
     {action ? <div className="col-start-2 row-start-1 justify-self-end sm:col-start-3">{action}</div> : null}
@@ -138,7 +138,7 @@ export function SettingsRow({ label, children, action }: { label: string; childr
 /** A settings row that opens a focused page: the whole row is the link. */
 export function SettingsLinkRow({ label, href, icon, children }: { label: string; href: string;
   icon?: ReactNode; children?: ReactNode }) {
-  return <a href={href} className="group grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-1 px-5 py-4 outline-none
+  return <a href={href} className="group grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-6 gap-y-1 px-5 py-4 outline-none
     transition-colors hover:bg-accent/40 focus-visible:bg-accent/40 focus-visible:ring-[3px] focus-visible:ring-ring/32
     focus-visible:ring-inset sm:grid-cols-[10rem_minmax(0,1fr)_auto] sm:px-6">
     <span className="flex items-center gap-3 text-sm font-medium text-muted-foreground">{icon}{label}</span>

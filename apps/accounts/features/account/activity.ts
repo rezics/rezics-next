@@ -32,6 +32,8 @@ export interface ActivityEntry {
   /** How many like events this one stands for (repeated failures, a batch of sign-outs). */
   count: number;
   method: SignInMethod | null;
+  /** The App an app event concerns. */
+  clientId: string | null;
   browser: string | null;
   platform: string | null;
   network: string | null;
@@ -74,7 +76,7 @@ export function presentActivity(events: readonly SecurityEvent[], now: Date, mor
       continue;
     }
     entries.push({ id: event.id, kind, occurredAt: event.occurredAt, count: 1,
-      method: event.method ? methods[event.method] ?? null : null,
+      method: event.method ? methods[event.method] ?? null : null, clientId: event.clientId,
       browser: event.browser, platform: event.platform, network: event.network });
   }
   return { entries, complete: !more || recent.length < events.length };
