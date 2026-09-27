@@ -8,6 +8,7 @@ import { ContentProjectionWorker } from './content-projection-worker.ts';
 import { DiscoveryProjection } from './modules/discovery/store.ts';
 import { FollowsStore } from './modules/follows/store.ts';
 import { FeedStore } from './modules/feed/store.ts';
+import { ReaderReviews } from './modules/review/store.ts';
 import { FeedViewerStateReader } from './modules/feed/viewer-state.ts';
 import { HomePersonalStore } from './modules/feed/personal.ts';
 import { RankingHomeTrendingReader } from './modules/feed/trending.ts';
@@ -291,6 +292,7 @@ const actingContextDiscovery = new AccessActingContexts(pool, environment);
 const app = createMainApp(fuseki, {
   follows: new FollowsStore(pool),
   feed: new FeedStore(pool),
+  reviews: new ReaderReviews(pool),
   serialStats,
   readRankings,
   feedViewerState: new FeedViewerStateReader(),

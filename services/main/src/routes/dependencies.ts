@@ -99,6 +99,7 @@ export interface MainWorkDependencies {
   media?: import('../modules/media/commands.ts').MediaDependencies;
   follows?: import('../modules/follows/store.ts').FollowsStore;
   feed?: import('../modules/feed/store.ts').FeedStore;
+  reviews?: import('../modules/review/store.ts').ReaderReviews;
   homePersonal?: import('../modules/feed/personal.ts').HomePersonalStore;
   homeTrending?: import('../modules/feed/trending.ts').HomeTrendingReader;
   feedViewerState?: FeedViewerStateReader;
