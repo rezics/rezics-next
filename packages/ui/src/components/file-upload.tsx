@@ -47,10 +47,13 @@ export const FileUploadDropzone = (props: React.ComponentProps<typeof ArkFileUpl
         'p-(--space)',
         'flex flex-col items-center justify-center gap-2',
         'text-center',
-        'rounded-3xl border-2 border-input border-dashed',
-        'cursor-pointer',
+        // A container, so the card radius; tinted like Aura fields.
+        'rounded-2xl border-2 border-border border-dashed bg-primary/5',
+        'cursor-pointer transition-colors hover:border-primary/40 hover:bg-accent/30',
+        'outline-none focus-visible:border-ring/50 focus-visible:ring-2 focus-visible:ring-ring/20',
         'data-cover:absolute data-cover:inset-0 data-cover:flex data-cover:items-center data-cover:justify-center',
         'data-dragging:border-primary data-dragging:bg-primary/10',
+        'data-disabled:pointer-events-none data-disabled:opacity-64',
         'data-invalid:border-destructive dark:data-invalid:border-destructive-foreground',
         className,
       )}
@@ -67,7 +70,7 @@ export const FileUploadDropzoneIcon = (props: React.ComponentProps<typeof ark.di
     <ark.div
       className={cn(
         'p-3',
-        'bg-muted/48',
+        'bg-card',
         'text-muted-foreground',
         'rounded-full border',
         'group-data-dragging/file-upload:border-primary/24 group-data-dragging/file-upload:bg-primary/5 group-data-dragging/file-upload:text-primary',
@@ -99,8 +102,8 @@ export const FileUploadDescription = (props: React.ComponentProps<typeof ark.div
 
   return (
     <ark.div
-      className={cn('font-medium text-muted-foreground text-sm', className)}
-      data-slot="file-upload-title"
+      className={cn('text-muted-foreground text-sm', className)}
+      data-slot="file-upload-description"
       {...rest}
     />
   );
@@ -217,7 +220,7 @@ export const FileUploadItemPreview = (
     <ArkFileUpload.ItemPreview
       className={cn(
         'flex shrink-0 items-center justify-center',
-        'font-semibold text-[0.5rem] text-primary',
+        'font-semibold text-[0.625rem] text-primary',
         'bg-primary/10',
         'select-none',
         'rounded-full',
