@@ -26,15 +26,18 @@ export function ReasonDialog({ action, count, onDecide, onClose, locale, message
   const [note, setNote] = useState('');
   const [error, setError] = useState<string | null>(null);
   const reasonRef = useRef<HTMLTextAreaElement>(null);
-  const escalating = action === 'escalate';
-  const title = action === 'reject' ? t.reasonRejectTitle(count)
-    : action === 'request-changes' ? t.reasonChangesTitle(count) : t.reasonEscalateTitle(count);
+  // The dialog animates out after `action` clears; keep its words until it is gone.
+  const [shown, setShown] = useState(action ?? 'reject');
+  if (action && action !== shown) setShown(action);
+  const escalating = shown === 'escalate';
+  const title = shown === 'reject' ? t.reasonRejectTitle(count)
+    : shown === 'request-changes' ? t.reasonChangesTitle(count) : t.reasonEscalateTitle(count);
   const close = () => { setReason(''); setNote(''); setError(null); onClose(); };
   const submit = () => {
     const text = reason.trim();
     if (!text) { setError(t.reasonRequired); return; }
     if (text.length > REASON_LIMIT || note.length > 4000) { setError(t.reasonTooLong); return; }
-    onDecide({ action: action!, reason: text, note: escalating ? null : note.trim() || null });
+    onDecide({ action: shown, reason: text, note: escalating ? null : note.trim() || null });
     setReason(''); setNote(''); setError(null);
   };
   return <Dialog open={action !== null} onOpenChange={details => { if (!details.open) close(); }}
@@ -64,8 +67,7 @@ export function ReasonDialog({ action, count, onDecide, onClose, locale, message
         </DialogBody>
         <DialogFooter>
           <Button type="button" variant="outline" onClick={close}>{t.cancel}</Button>
-          <Button type="submit" variant={action === 'reject' ? 'destructive' : 'default'}>
-            {action ? actionLabel(action, t) : null}</Button>
+          <Button type="submit" variant={shown === 'reject' ? 'destructive' : 'default'}>{actionLabel(shown, t)}</Button>
         </DialogFooter>
       </form>
     </DialogContent>

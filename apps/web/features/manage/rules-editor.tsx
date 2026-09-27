@@ -82,13 +82,12 @@ export function RulesEditor({ drafts, published, problems, onChange, locale, mes
               const titleError = error('title');
               const bodyError = error('body');
               return <fieldset key={language} className="grid content-start gap-3 rounded-xl bg-muted/30 p-3.5">
-                <legend className="sr-only">{name}</legend>
+                <legend className="sr-only">{badge ? `${name}, ${t[badge]}` : name}</legend>
                 <div aria-hidden="true" className="flex items-center justify-between gap-2">
                   <span className="font-medium text-sm">{name}</span>
                   {badge ? <Badge variant={badge === 'statusMissing' ? 'destructive' : badge === 'statusCheck' ? 'warning'
                     : 'secondary'}>{t[badge]}</Badge> : null}
                 </div>
-                {badge ? <span className="sr-only">{t[badge]}</span> : null}
                 <Field invalid={titleError !== undefined}>
                   <FieldLabel>{t.ruleTitleLabel({ language: name })}</FieldLabel>
                   <Input lang={ruleLanguageTag[language]} value={draft.rule.title[language]} maxLength={RULE_LIMITS.title + 20}

@@ -70,7 +70,7 @@ export type TriageEvent =
   | { type: 'toggle'; id: string }
   | { type: 'select-all' }
   | { type: 'clear-selection' }
-  | { type: 'decide'; key: string; ids: readonly string[]; decision: Decision; now: number }
+  | { type: 'decide'; key: string; ids: readonly string[]; decision: Decision; now: number; window?: number }
   | { type: 'undo'; key?: string }
   | { type: 'commit'; key: string }
   | { type: 'settle'; id: string; outcome: Settled }
@@ -171,7 +171,7 @@ export function triage(state: TriageState, event: TriageEvent): TriageState {
       for (const id of ids) delete settled[id];
       const next: TriageState = { ...state, settled,
         pending: [...state.pending, { key: event.key, ids, decision: event.decision,
-          deadline: event.now + UNDO_WINDOW_MS }],
+          deadline: event.now + (event.window ?? UNDO_WINDOW_MS) }],
         selected: state.selected.filter(id => !removed.has(id)) };
       return { ...next, current: nextCurrent(next, removed, state.current && removed.has(state.current)
         ? state.current : ids.at(-1) ?? state.current) };

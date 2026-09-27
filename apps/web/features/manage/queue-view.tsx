@@ -19,7 +19,7 @@ import { Pill, Thumb } from './parts.tsx';
 import { bffQueueApi, type QueueApi } from './queue-api.ts';
 import { QueueDetail } from './queue-detail.tsx';
 import { actionsFor, commonActions, type Decision, initialTriage, needsReason, type PendingDecision,
-  type QueueAction, type Settled, targetIds, triage, visibleIds } from './queue-state.ts';
+  type QueueAction, type Settled, targetIds, triage, UNDO_WINDOW_MS, visibleIds } from './queue-state.ts';
 import { ReasonDialog } from './reason-dialog.tsx';
 import { type QueueView as View, queueHref } from './routes.ts';
 import type { AgentSummary, Loaded, ModerationItem, ModerationKind, ModerationPage, WorkSummary } from './types.ts';
@@ -37,6 +37,8 @@ export interface QueueViewProps {
   messages: ManageMessages;
   /** Main through the BFF by default; stories pass a stand-in. */
   api?: QueueApi;
+  /** How long a decision can be undone before it is sent. */
+  undoWindowMs?: number;
 }
 
 const filters: ReadonlyArray<[ModerationKind | null, 'filterAll' | 'filterReports' | 'filterRights'
@@ -62,7 +64,7 @@ const typing = (target: EventTarget | null) => target instanceof HTMLElement && 
  * decisions and an undo window before anything reaches Main.
  */
 export function QueueView({ realm, actingSubject, view, initial, agents: initialAgents, works: initialWorks, now,
-  locale, messages, api: givenApi }: QueueViewProps) {
+  locale, messages, api: givenApi, undoWindowMs = UNDO_WINDOW_MS }: QueueViewProps) {
   const t = useMemo(() => materializeData(messages, { locale }), [messages, locale]);
   const api = useMemo(() => givenApi ?? bffQueueApi(realm, actingSubject, locale),
     [givenApi, realm, actingSubject, locale]);
@@ -161,9 +163,9 @@ export function QueueView({ realm, actingSubject, view, initial, agents: initial
   const decide = useCallback((ids: readonly string[], decision: Decision) => {
     focusCurrent.current = true;
     setFlash(null);
-    dispatch({ type: 'decide', key: crypto.randomUUID(), ids, decision, now: Date.now() });
+    dispatch({ type: 'decide', key: crypto.randomUUID(), ids, decision, now: Date.now(), window: undoWindowMs });
     setClock(Date.now());
-  }, []);
+  }, [undoWindowMs]);
 
   const act = useCallback((action: QueueAction) => {
     const snapshot = latest.current;

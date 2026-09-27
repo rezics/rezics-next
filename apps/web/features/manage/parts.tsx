@@ -11,11 +11,11 @@ import { initials } from './format.ts';
 import type { ManageMessages } from './messages.ts';
 import type { Avatar, LocalizedName, ReadFailure } from './types.ts';
 
-// Tints for images that are missing. Text-safe tones only: the logo red never
-// sits behind text (docs/development/design-system.md).
-const tints = ['bg-primary/10 text-primary', 'bg-info/10 text-info-foreground',
-  'bg-success/10 text-success-foreground', 'bg-warning/10 text-warning-foreground',
-  'bg-secondary text-secondary-foreground'] as const;
+// Tints for images that are missing. They sit on highlighted rows too, so only
+// tones that keep 4.5:1 there; the logo red never sits behind text
+// (docs/development/design-system.md).
+const tints = ['bg-primary/10 text-primary', 'bg-secondary text-secondary-foreground', 'bg-muted text-foreground',
+  'bg-accent text-accent-foreground'] as const;
 
 export function tintOf(key: string): string {
   let hash = 0;
