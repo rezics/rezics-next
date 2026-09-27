@@ -106,6 +106,7 @@ export const Global: Story = {
     await expect(within(canvas.getByRole('region', { name: 'Communities' })).getByRole('link', { name: /Tidewater Readers/ }))
       .toHaveAttribute('href', `/en/w/${fixture.workRef}?scope=realm&realm=${fixture.realms[0]!.id}`);
     const author = canvas.getByRole('region', { name: 'About the author' });
+    await expect(within(author).getByRole('link', { name: /Maren Osei/ })).toHaveAttribute('href', '/en/@maren');
     const more = within(author).getByRole('region', { name: 'More by Maren Osei' });
     // The Work itself is not offered again.
     await expect(within(more).getAllByRole('article')).toHaveLength(3);
