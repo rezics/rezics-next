@@ -41,7 +41,7 @@ page, version compatibility or product runtime behavior.
 | Vite | [Index](https://vite.dev/llms.txt) | Build configuration and plugins; [web organization](web-features.md). | Match the compatible Vite/vinext/plugin set in the workspace manifest. |
 | Next.js | [Index](https://nextjs.org/docs/llms.txt) | API semantics for the Next-compatible web client; [frontend](../plan/frontend.md). | Match the relevant API generation and independently check vinext support. |
 | Cloudflare Workers | [Product index](https://developers.cloudflare.com/workers/llms.txt) | Rendering runtime, bindings and deployment; [frontend](../plan/frontend.md). | Record compatibility date/flags and Wrangler/adapter versions with the implemented deployment. |
-| Cloudflare R2 | [Product index](https://developers.cloudflare.com/r2/llms.txt) | R2-specific object adapter behavior when selected; [object storage](../storage/objects.md). | Check exact S3/API behavior; this entry does not select R2 for every object owner. |
+| Cloudflare R2 | [Product index](https://developers.cloudflare.com/r2/llms.txt) | R2-specific object adapter behavior when selected; [immutable-object adapter](../../services/main/src/infrastructure/immutable-objects.ts). | Check exact S3/API behavior; this entry does not select R2 for every object owner. |
 | Cloudflare Turnstile | [Product index](https://developers.cloudflare.com/turnstile/llms.txt) | Client challenge and server verification; [integration notes](../turnstile.md). | Check current validation semantics and the implemented integration. |
 
 ## Storage, tooling and normative sources

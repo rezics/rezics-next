@@ -2,128 +2,29 @@
 
 ## Authority map
 
-Main's semantic module owns native resource facts, names/titles, multilingual
-predicate definitions/labels, relations and qualifiers, contextual assertions,
-Main Versions, semantic revision metadata, publication selections and catalog
-metadata in TDB2. Main's Content module owns JSON bodies, drafts and immutable
-Content revisions in PostgreSQL. Content language/provenance metadata follows
-those revisions; the graph holds exact immutable references for semantic joins.
-Account, Access, preferences and operations use separately owned PostgreSQL state.
-Object storage holds media/artifacts, large payload pages and sealed semantic
-revision payloads/manifests. The [common history resolver](../implementation/graph-records.md#revision-anchor-resolver)
-dispatches by logical owner.
+Each authoritative component has one writer. Main owns semantic facts in Jena
+and Content revisions in PostgreSQL; Account and Access own separate private
+state. Exact cross-owner references and outboxes coordinate distinct commits,
+without making those stores one transaction. Search and convenience projections
+are rebuildable. The [service boundary](../architecture/services.md) explains
+the ownership decision; owner schemas and [recovery coverage](../../tests/qa/unit/recovery-coverage.test.ts)
+carry the current state inventory.
 
-Shared semantic [Contexts](../contracts/context.md), their exact definition/base
-references, separately versioned preference components and public Realm scoped
-adoption links are semantic resources in TDB2. Private principal-to-Context
-selection pointers and personal convenience preferences remain Access-owned in
-PostgreSQL. Do not duplicate Context definitions per consumer or expose those
-private pointers as graph membership. A privately visible Context still uses
-the semantic owner's disclosure contract; private ownership does not imply a
-Realm parent or a second definition database.
+The initial graph is one `product` dataset in one Fuseki JVM. Splitting it before
+measured writer or lifecycle pressure would add cross-dataset coordination to
+ordinary changes. A second host does not provide a live TDB2 replica. Stable
+UUIDs and IRIs do not encode a host or shard; a locator is neither an existence
+proof nor permission authority.
 
-Index actual scoped selections and pinned dependency references. A Context
-publication and another owner's personal selection are separate guarded commits;
-each retains its own receipts and recovery basis. Statements pin their applied
-definitions and semantic revisions, so consumer-default changes cannot rewrite
-history. Preference generations affect their projections without becoming
-semantic identity. Recovery must restore exact definitions, Realm adoptions,
-private selections and authority fences without treating absent state as Global.
+## Movement procedure
 
-jena-text/Lucene indexes derived RDF MatchUnits, including extracted PostgreSQL
-body text. These copies are reconstructable and have no editorial authority.
-Avoid Resource-by-Realm duplication: exact variant/field/chunk units join sparse
-Realm decisions. Deployment needs no additional search service or SQL text
-extension. See [body projection](../contracts/search.md#postgresql-body-projection).
+To move an owner, stage the target and retained objects, stop admission, drain
+the old writer, verify the final source frontier, then activate routing with a
+new data epoch. Retain the old copy for a recovery window and verify exact old
+revision resolution, receipts, consumer progress, authority and erasure fences
+before collection. Never admit both copies as writers. This procedure requires
+a maintenance window; it promises no live replication or zero downtime.
 
-Ordinary durable likes/favorites initially remain native interaction facts in
-TDB2. Redis is deferred beyond the first release; when introduced, it holds
-reconstructable counts or bounded read results.
-[Interaction/cache bootstrap](../implementation/interactions-and-cache.md)
-defines the graph representation, growth steps and measured-decision gates.
-
-Every authoritative component names exactly one owner/writer and its command.
-Read models declare source, freshness, disclosure and reconstruction. Do not
-independently write the same accepted fact into PostgreSQL and TDB2. A second
-store can hold distinct workflow state without pretending both commits are atomic.
-
-[Editorial protection](../contracts/editorial-protection.md) and control heads
-follow the mutable content/selection head they constrain. Access retains effective
-grants, reviewer independence and revocation fences; it does not become a second
-editable owner of component protection. Protecting a Jena adoption does not forbid
-an independent PostgreSQL draft. Quality summaries are derived from exact
-assessment/evidence dependencies and have no power to change protection or adoption.
-No separate lock authority or transparency-log service is selected for this feature.
-
-## Projections and durable delivery
-
-PostgreSQL and Jena are authoritative for different facts. Their coexistence does
-not require a general bidirectional synchronization queue. Cross-owner references
-name exact revisions; they do not create a second writer for the referenced fact.
-
-Distinguish the existing delivery paths:
-
-| Path | Purpose and authority |
-| --- | --- |
-| PostgreSQL Content events to RDF MatchUnits and embedded Lucene | Search projection of owner-held bodies. Content remains authoritative; indexed copies are reconstructable. |
-| Jena command outbox to PostgreSQL relay delivery records/checkpoints | Durable event delivery and recovery reconciliation. Graph receipts remain authoritative for the graph command; relay records are not a second editable semantic database. |
-
-Each retained outbox/consumer must identify its producer, actual consumer, payload,
-delivery/idempotency contract, retention/replay boundary and cost bound. Keep it
-only for a required downstream effect, projection or recovery obligation. An
-outbox makes committed intent durable; it does not make two stores commit atomically.
-Do not add generic database mirroring, a broker or full-history replay merely
-because there are two engines.
-
-Audit existing consumers before simplifying delivery. Removing unused copies or
-replacing a projection path requires preserving its freshness, authority and
-crash/recovery cases. This strategy does not by itself remove the current outboxes
-or select synchronous cross-store indexing. Bulk rebuilding a derived current
-view can use a verified source snapshot plus a bounded tail; it need not recreate
-every historical online event. See [data preparation](workload-budgets.md#data-preparation-and-import).
-
-## Initial placement
-
-Start with one logical `product` TDB2 dataset (the `/rezics` quickstart service)
-in one Fuseki JVM, with explicit named graphs
-for current facts, source observations, revisions, control records and projections.
-Keep bulk source ingestion budgeted and its graphs excluded from ordinary search.
-Do not allocate a dataset per Realm, Context, individual, resource, revision, semantic class or month.
-Add a separate source dataset only when measured load or a required lifecycle
-boundary justifies the extra ownership, query and recovery coordination.
-
-Co-locate bounded aggregates: identity/header, current selection and tightly owned
-facts that ordinary commands mutate together. Growing comments, observations,
-votes and messages have independent ownership so they need not change a popular
-target's head. TDB2 still serializes write transactions within the dataset; more
-API processes do not create more storage writers. Use admission and short bounded
-writes before proposing a new physical boundary.
-
-Only the owning Fuseki JVM accesses its TDB2 directory and Lucene index. Workers,
-other application processes and the second host use its private endpoints. The
-second host is not a live graph replica, and a shared disk is not a replication
-protocol. Keep private credentials outside the semantic graph and its history.
-
-## Routing and later movement
-
-Stable UUID/IRI never embeds physical host or shard. A locator is not existence
-or permission authority. The owner validates the routing epoch separately from
-the [dataset epoch/sequence](jena.md#application-source-positions). Bootstrap needs
-one configured owner location; automatic global placement is deferred.
-
-If later movement is required: stage a target -> copy retained current/revision
-state and objects -> stop admission and drain the old writer -> verify the final
-source frontier -> activate routing and a new data epoch -> retain a recovery
-window -> collect old storage. Include receipts, outbox/consumer progress, source
-correspondence, retention and erasure fences. Verify old exact revision IDs still
-resolve. Never bring both copies online as writable instances of the same owner.
-This maintenance procedure does not promise live replication or zero downtime.
-
-## Growth decisions
-
-Use measured writer occupancy, query budgets, storage headroom, backup/rebuild time
-and source-ingest interference to decide whether a separate dataset is worthwhile.
-If divided later, partition bounded owner aggregates rather than random triples;
-one command cannot atomically mutate independent datasets. Cross-dataset reads
-need explicit dependency manifests and authorization. Automatic sharding, read
-replicas and consensus clusters are outside the launch architecture.
+The [partition relocation test](../../tests/qa/fault-recovery/partition-relocation.test.ts)
+exercises the routing fence. Storage and object provider changes need separate
+qualification of their conditional writes, restore and disclosure behavior.

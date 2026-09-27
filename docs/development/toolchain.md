@@ -284,8 +284,10 @@ conditional create, so the documented fallback, `aws4fetch` 1.0.20 signed
 `fetch`, is selected for this gate's writes and reads. Its read path also avoids
 the [Bun S3Client local proxy issue](https://github.com/oven-sh/bun/issues/32045)
 observed on this host. Verify conditional creation and read-back against RustFS
-before accepting the adapter. Choosing the production object backend remains
-under [object storage](../storage/objects.md).
+before accepting the adapter. The [immutable-object adapter](../../services/main/src/infrastructure/immutable-objects.ts)
+defines the selected conditional-write contract. A different S3-compatible
+backend still needs its own conditional-create, checksum, concurrent-write,
+cleanup and restore qualification.
 
 ### Fuseki image and command module
 

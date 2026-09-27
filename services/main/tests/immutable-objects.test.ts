@@ -55,10 +55,11 @@ function fakeS3() {
     return new Response(null, { status: 405 });
   } });
   servers.push(server);
-  const store = new S3ImmutableObjects({ endpoint: `http://127.0.0.1:${server.port}`,
+  const storeFor = (prefix: string) => new S3ImmutableObjects({ endpoint: `http://127.0.0.1:${server.port}`,
     bucket: 'rezics-semantic', accessKeyId: 'local-test-key', secretAccessKey: 'local-test-secret',
-    prefix: 'semantic/work/' });
-  return { store, data, puts, get bucketCreates() { return bucketCreates; } };
+    prefix });
+  return { store: storeFor('semantic/work/'), storeFor, data, puts,
+    get bucketCreates() { return bucketCreates; } };
 }
 
 test('P0.5 signed conditional create verifies bytes before publishing a Work manifest', async () => {
@@ -93,11 +94,24 @@ test('P0.5 concurrent same-key writers converge and corrupt read-back fails clos
   expect(Buffer.from(await store.get(expected))).toEqual(bytes);
   data.set(`semantic/work/sha256/${expected}`, Buffer.from('tampered'));
   await expect(store.get(expected)).rejects.toBeInstanceOf(ObjectIntegrityError);
+  await expect(store.put(bytes)).rejects.toBeInstanceOf(ObjectIntegrityError);
   const env: WorkActivationEnvironment = { workObjects: store, objectDirectory: '/nonexistent',
     fuseki: null as unknown as FusekiClient,
     lineage: { dataEpoch: 'test', routingEpoch: 'test' } };
   await expect(readWorkComponentState(env, `urn:rezics:sha256:${expected}`, 'work'))
     .rejects.toBeInstanceOf(RevisionCorrupt);
+});
+
+test('P0.5 equal bytes in different retention namespaces remain separate objects', async () => {
+  const { store, storeFor, data } = fakeS3();
+  await store.initialize();
+  const privateStore = storeFor('semantic/private/');
+  const bytes = Buffer.from('same bytes, distinct retention and disclosure');
+  const expected = digest(bytes);
+  expect(await store.put(bytes)).toBe(expected);
+  expect(await privateStore.put(bytes)).toBe(expected);
+  expect([...data.keys()].sort()).toEqual([
+    `semantic/private/sha256/${expected}`, `semantic/work/sha256/${expected}`]);
 });
 
 test('P0.5 exact legacy Work references read verified local bytes during migration', async () => {

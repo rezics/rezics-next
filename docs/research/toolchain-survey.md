@@ -251,7 +251,7 @@ Owners: [package management](../contracts/package-management.md),
 | Documentation | lychee 0.24 (anchors), markdownlint-cli2 | Keep the Python checker for reachability and REZICS roles; autocorrect spike for CJK spacing |
 | Local orchestration | Docker Compose for databases and third-party services; host Bun/Node processes | Aspire not used |
 
-Owners: [objects](../storage/objects.md), [recovery](../operations/recovery.md),
+Owners: [immutable objects](../../services/main/src/infrastructure/immutable-objects.ts), [recovery](../operations/recovery.md),
 [observability](../operations/observability.md), [deployment](../operations/deployment.md),
 [development](../development/README.md).
 
