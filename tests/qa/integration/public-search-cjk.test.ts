@@ -144,7 +144,8 @@ test('SEARCH06: versioned CJK Main and Realm phrases bind exact selected bodies 
     if (space.outcome !== 'succeeded' || !space.realm) throw new Error('CJK Realm creation failed');
 
     // The zh-tagged Realm body deliberately contains Japanese and Korean text;
-    // the Main body also matches Galaxy42 so adoption must shadow a real hit.
+    // the English Main body also matches Galaxy42. Since G-277, a Chinese
+    // adoption overrides only Chinese; English still uses Main fallback.
     const alternateBody = '中文检索验证，東京図書館で한국어 자료を探す。Galaxy42 混合标识。';
     const book = 'https://schema.org/Book';
     const recipe = 'https://schema.org/Recipe';
@@ -191,7 +192,7 @@ test('SEARCH06: versioned CJK Main and Realm phrases bind exact selected bodies 
     expectRows(await query('public-main-phrase-v1', 'Galaxy42', 'en'),
       [english], generation);
     expectRows(await query('public-realm-phrase-v1', 'Galaxy42', 'en', space.realm),
-      [], generation);
+      [english], generation, 'main-fallback');
     expectRows(await query('public-main-phrase-v1', 'Galaxy42', 'ja'),
       [japanese], generation);
     expectRows(await query('public-main-phrase-v1', 'Galaxy42', 'ko'),
@@ -233,8 +234,17 @@ test('SEARCH06: versioned CJK Main and Realm phrases bind exact selected bodies 
     expect(realmMixed.complete).toBe(true);
     expect(realmMixed.indexGeneration).toBe(generation);
     expect(realmMixed.total).toBe(3);
-    expect(new Set(realmMixed.results.map(row => row.matchUnit)))
-      .toEqual(new Set([chinese.matchUnit, japanese.matchUnit, korean.matchUnit]));
+    expect(new Set(realmMixed.results.map(row => row.mainVersion)))
+      .toEqual(new Set([english.mainVersion, japanese.mainVersion, korean.mainVersion]));
+    // Language-unfiltered search keeps the strongest text match per Main
+    // Version; a Realm adoption has no cross-language ranking privilege.
+    const bilingual = realmMixed.results.find(row => row.work === english.work)!;
+    const winner = bilingual.language === 'en' ? english : chinese;
+    const { body: _body, ...expectedWinner } = winner;
+    expect(bilingual).toMatchObject({ ...expectedWinner,
+      reason: bilingual.language === 'en' ? 'main-fallback' : 'realm-adoption' });
+    expect(realmMixed.results.find(row => row.work === japanese.work)?.matchUnit).toBe(japanese.matchUnit);
+    expect(realmMixed.results.find(row => row.work === korean.work)?.matchUnit).toBe(korean.matchUnit);
     expectRows(await query('public-realm-phrase-v1', '図書館', 'zh', space.realm),
       [chinese], generation, 'realm-adoption');
     expectRows(await query('public-realm-phrase-v1', '한국어', 'zh', space.realm),
@@ -281,6 +291,22 @@ test('SEARCH06: versioned CJK Main and Realm phrases bind exact selected bodies 
       literal: expect.objectContaining({ value: alternateBody, 'xml:lang': 'zh' }),
       graph: expect.objectContaining({ value: publicGraph }),
     })]);
+
+    // A same-language adoption must still suppress the matching Main body,
+    // even when the replacement itself does not match the phrase.
+    const localEnglish = await published(english.work, 'en', 'Realm English Galaxy42 alternative.');
+    const replaceInput = { ...adoptInput, contribution: localEnglish.contribution,
+      publicationDecision: localEnglish.publicationDecision, expectedSelectionHead: adopted.selection };
+    const replaced = await selectRealmLocal(env,
+      admission(`publication:adopt:${space.realm}`, 'publication.adopt',
+        realmSelectionDigest(replaceInput)), replaceInput);
+    expect(replaced.outcome).toBe('succeeded');
+    expectRows(await query('public-main-phrase-v1', 'English main edition', 'en'), [english], generation);
+    expectRows(await query('public-realm-phrase-v1', 'English main edition', 'en', space.realm), [], generation);
+    expectRows(await query('public-realm-phrase-v1', 'Galaxy42', 'en', space.realm), [{
+      ...english, contribution: localEnglish.contribution, revision: localEnglish.revision,
+      body: localEnglish.body, selection: replaced.selection!, matchUnit: replaced.matchUnit!,
+    }], generation, 'realm-adoption');
   } finally {
     await accessPool.end();
     rmSync(state, { recursive: true, force: true });
