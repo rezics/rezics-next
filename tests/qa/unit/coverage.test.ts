@@ -179,9 +179,9 @@ test('QA08: IAM25 needs the exact selected-set API and restored authority episod
   expect(acceptanceStatuses(cases, results, true, coverage).IAM25.status).toBe('passed');
 });
 
-test('QA08: SEARCH03 public Content phrase remains partial without statement disclosure aggregation', () => {
+test('QA08: SEARCH03 public Content phrase alone stays partial beside its declared disclosure tests', () => {
   const coverage = declaredCaseCoverage(cases, 'backend');
-  expect(coverage.has('SEARCH03')).toBe(false);
+  expect(coverage.has('SEARCH03')).toBe(true);
   const tier = 'integration';
   const file = 'tests/qa/integration/content-publication-native.test.ts';
   const name = 'WORK09/WORK10/SEARCH03/SEARCH19: Content CAS, private drafts and exact public search';
@@ -226,13 +226,13 @@ test('QA08: SEARCH02 requires real relation and bounded candidate evidence', () 
   }
 });
 
-test('QA08: SEARCH01/04 rated phrase evidence remains partial without Statement aggregation', () => {
+test('QA08: SEARCH01/04 rated phrase evidence alone stays partial beside the declared grouped Statement tests', () => {
   const coverage = declaredCaseCoverage(cases, 'backend');
   const result = { tier: 'integration', file: 'tests/qa/integration/public-search-scale.test.ts',
     name: 'SEARCH01/SEARCH02/SEARCH04/SEARCH07/SEARCH08/SEARCH16/SEARCH18: rated Realm join, bounded paging and author switch',
     failed: false, skipped: false } as TestResult;
   for (const id of ['SEARCH01', 'SEARCH04'] as const) {
-    expect(coverage.has(id)).toBe(false);
+    expect(coverage.has(id)).toBe(true);
     expect(acceptanceStatuses(cases, [result], true, coverage)[id].status).toBe('partial-pass');
   }
 });
