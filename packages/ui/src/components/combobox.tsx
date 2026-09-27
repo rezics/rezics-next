@@ -19,10 +19,19 @@ export const useCombobox = useArkComboboxContext;
 export const ComboboxContext = ArkCombobox.Context;
 
 export const Combobox: ArkCombobox.RootComponent = (props) => {
-  const { openOnClick = true, lazyMount = true, unmountOnExit = true, ...rest } = props;
+  // Not composite: the popup is a dialog and ComboboxList is the listbox, so the list
+  // wrapper and the empty message sit in valid places for assistive technology.
+  const {
+    composite = false,
+    openOnClick = true,
+    lazyMount = true,
+    unmountOnExit = true,
+    ...rest
+  } = props;
 
   return (
     <ArkCombobox.Root
+      composite={composite}
       data-slot="combobox"
       lazyMount={lazyMount}
       openOnClick={openOnClick}
@@ -156,12 +165,12 @@ export const ComboboxContent = (props: React.ComponentProps<typeof ArkCombobox.C
         <ArkCombobox.Content
           className={cn(
             'relative z-50',
-            'max-h-96 min-w-48',
+            'max-h-96 min-w-(--reference-width)',
             'origin-(--transform-origin)',
-            'p-1',
+            'p-1.5',
             'bg-popover',
             'text-popover-foreground',
-            'rounded-2xl border shadow-lg/5',
+            'rounded-2xl border border-border/60 shadow-(--aura-shadow-float)',
             'overflow-y-auto',
             'outline-none',
             'data-[state=closed]:animate-out data-[state=open]:animate-in',
@@ -210,7 +219,7 @@ export const ComboboxGroupLabel = (
 
   return (
     <ArkCombobox.ItemGroupLabel
-      className={cn('px-2 py-1.5 font-semibold text-muted-foreground text-xs', className)}
+      className={cn('px-3 py-1.5 font-semibold text-muted-foreground text-xs', className)}
       data-slot="combobox-group-label"
       {...rest}
     />
@@ -220,22 +229,22 @@ export const ComboboxGroupLabel = (
 export const comboboxItemVariants = tv({
   base: [
     'relative',
-    'py-1.5 ps-2',
+    'py-2 ps-3',
     'text-sm',
     'flex w-full items-center gap-2',
-    'rounded-2xl',
+    'rounded-xl',
     'select-none',
     'cursor-default',
     'outline-hidden',
-    'data-[=checked]:bg-accent data-[state=checked]:text-accent-foreground',
+    'data-[state=checked]:font-medium data-[state=checked]:text-primary',
     'data-highlighted:bg-accent data-highlighted:text-accent-foreground',
     'data-disabled:pointer-events-none data-disabled:opacity-64',
     "[&_svg:not([class*='size-'])]:size-4 [&_svg:not([class*='text-'])]:text-muted-foreground [&_svg]:pointer-events-none [&_svg]:shrink-0",
   ],
   variants: {
     showIndicator: {
-      true: 'pe-8',
-      false: 'pe-2',
+      true: 'pe-9',
+      false: 'pe-3',
     },
   },
   defaultVariants: {
@@ -260,9 +269,9 @@ export const ComboboxItem = (props: ComboboxItemProps) => {
       {children}
 
       {showIndicator ? (
-        <span className="absolute inset-e-2 flex size-3.5 items-center justify-center">
+        <span className="absolute inset-e-3 flex size-4 items-center justify-center">
           <ArkCombobox.ItemIndicator data-slot="combobox-item-indicator">
-            <CheckIcon />
+            <CheckIcon className="text-current" />
           </ArkCombobox.ItemIndicator>
         </span>
       ) : null}
@@ -275,7 +284,7 @@ export const ComboboxEmpty = (props: React.ComponentProps<typeof ArkCombobox.Emp
 
   return (
     <ArkCombobox.Empty
-      className={cn('px-2 py-1.5', 'text-center text-muted-foreground text-sm', className)}
+      className={cn('px-3 py-2', 'text-center text-muted-foreground text-sm', className)}
       data-slot="combobox-empty"
       {...rest}
     >
