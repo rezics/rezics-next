@@ -8,7 +8,8 @@ import { useTranslation } from '../../i18n/client.ts';
 /** The single-column card that hosts sign-in, sign-up, recovery and consent. */
 export function AuthFrame({ children }: { children: ReactNode }) {
   const { t } = useTranslation('common');
-  return <main className="aura-canvas flex min-h-dvh flex-col items-center px-4 py-6 sm:justify-center sm:py-12">
+  // Phones drop the card and the canvas grid, as a single column reads better there.
+  return <main className="aura-canvas flex min-h-dvh flex-col items-center px-4 py-6 max-sm:bg-none sm:justify-center sm:py-12">
     <div className="w-full max-w-[28rem]">
       <section className="rounded-3xl border border-border/60 bg-card px-6 pt-9 pb-8 shadow-(--aura-shadow-card)
         max-sm:border-0 max-sm:bg-transparent max-sm:px-1 max-sm:pt-4 max-sm:shadow-none sm:px-10">

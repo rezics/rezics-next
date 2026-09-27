@@ -16,7 +16,7 @@ export function Brand({ label, product, href = '/' }: { label: string; product: 
     className="inline-flex items-center gap-2.5 rounded-xl outline-none focus-visible:ring-[3px] focus-visible:ring-ring/32">
     <BrandMark />
     <span className="text-[17px] leading-none tracking-tight" aria-hidden="true">
-      <span className="font-bold tracking-[0.18em]">{name}</span>{' '}
+      <span className="font-bold tracking-[0.12em]">{name}</span>{' '}
       <span className="text-muted-foreground">{rest.join(' ')}</span></span>
   </a>;
 }

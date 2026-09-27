@@ -5,7 +5,7 @@ import { Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger } from '@rezics
 import { cn } from '@rezics/ui/utils';
 import { AppWindowIcon, ArrowUpRightIcon, HouseIcon, LogOutIcon, ShieldIcon, SlidersHorizontalIcon,
   UserRoundIcon } from 'lucide-react';
-import { type ReactNode, useId, useState } from 'react';
+import { type ReactNode, useEffect, useId, useRef, useState } from 'react';
 import { useAccountClient } from '../api/account-client.tsx';
 import { Brand } from '../shell/brand.tsx';
 import { type AvatarUser, UserAvatar } from '../shell/user-avatar.tsx';
@@ -56,6 +56,11 @@ export function AccountShell({ section, user, webOrigin, children }: { section?:
   user?: AvatarUser; webOrigin: string; children: ReactNode }) {
   const common = useTranslation('common').t;
   const { t } = useTranslation('account');
+  const tabs = useRef<HTMLElement>(null);
+  // Phone tabs scroll sideways; keep the current one in view.
+  useEffect(() => {
+    tabs.current?.querySelector('[aria-current="page"]')?.scrollIntoView({ block: 'nearest', inline: 'center' });
+  }, []);
   const link = (item: (typeof sections)[number], tab: boolean) => {
     const current = item.id === section;
     const Icon = item.icon;
@@ -79,7 +84,7 @@ export function AccountShell({ section, user, webOrigin, children }: { section?:
           : <Button asChild><a href={`/sign-in?next=${encodeURIComponent(sectionPaths[section ?? 'home'])}`}>
             {common.signIn}</a></Button>}
       </div>
-      <nav aria-label={t.sections} className="flex overflow-x-auto px-2 md:hidden [scrollbar-width:none]">
+      <nav ref={tabs} aria-label={t.sections} className="flex overflow-x-auto px-2 md:hidden [scrollbar-width:none]">
         {sections.map(item => link(item, true))}</nav>
     </header>
     <div className="mx-auto grid max-w-6xl gap-8 px-4 py-6 sm:px-6 md:grid-cols-[15rem_minmax(0,1fr)] md:py-10">
@@ -111,12 +116,15 @@ export function SettingsCard({ title, description, children, className }: { titl
   </section>;
 }
 
-/** One row of a settings card: label, value and an optional action. */
+/** One row of a settings card: label, value and an optional action. Phones put
+ * the label and action on the first line and the value below them. */
 export function SettingsRow({ label, children, action }: { label: string; children?: ReactNode;
   action?: ReactNode }) {
-  return <div className="flex flex-wrap items-center gap-x-6 gap-y-2 px-5 py-4 sm:flex-nowrap sm:px-6">
-    <div className="w-full shrink-0 text-sm font-medium text-muted-foreground sm:w-40">{label}</div>
-    <div className="min-w-0 flex-1">{children}</div>
-    {action ? <div className="shrink-0">{action}</div> : null}
+  return <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-6 gap-y-1.5 px-5 py-4
+    sm:grid-cols-[10rem_minmax(0,1fr)_auto] sm:px-6">
+    <div className="text-sm font-medium text-muted-foreground">{label}</div>
+    {children ? <div className="col-span-2 row-start-2 min-w-0 sm:col-span-1 sm:col-start-2 sm:row-start-1">
+      {children}</div> : null}
+    {action ? <div className="col-start-2 row-start-1 justify-self-end sm:col-start-3">{action}</div> : null}
   </div>;
 }
