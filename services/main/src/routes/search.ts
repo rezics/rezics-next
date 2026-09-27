@@ -10,6 +10,8 @@ import { InvalidSearchContinuation, pageCompletePublicRelation, SearchContinuati
   from '../modules/work/search-continuation.ts';
 import { queryPublicRealmClassifiedRatedPhrase } from '../modules/work/search-joined.ts';
 import { queryPublicMainTitleBody } from '../modules/work/search-multifield.ts';
+import { queryPublicDisclosedFields } from '../modules/work/search-disclosed-fields.ts';
+import { DEFAULT_MEDIA_CONTEXT } from '../modules/media/store.ts';
 import { withStableSearchSnapshot, SearchIndexUnavailable, type SearchAttemptDiagnostic }
   from '../modules/work/search-readiness.ts';
 import { SearchSnapshotMoved } from '../modules/work/search-readiness.ts';
@@ -49,9 +51,9 @@ function unsupportedSearchSelection(body: { sourcePolicy?: unknown; asOf?: unkno
 
 /** Badge checks use the exact supporting Statement and its decision population.
  * The bounded relation and the request deadline also bound Access hydration. */
-export async function protectClassifiedResults<T extends { results: Array<{ classification: {
+export async function protectClassifiedResults<T extends { total: number; results: Array<{ classification: {
   meaningKey?: string; concept?: string; supportingStatements?: string[];
-  source: string } }> }>(work: SearchRouteDependencies, relation: T,
+  supportingStatementCount?: number; source: string } }> }>(work: SearchRouteDependencies, relation: T,
   realm?: string) {
   const targets = new Map<string, { support: string; concept: string;
     context: { kind: 'global' } | { kind: 'realm'; realm: string } }>();
@@ -93,17 +95,21 @@ export async function protectClassifiedResults<T extends { results: Array<{ clas
       }
     }));
   }
-  return { ...relation, results: relation.results.map(match => {
+  const visible = relation.results.flatMap(match => {
     const classification = match.classification;
-    if (!classification.meaningKey) return match;
+    if (!classification.meaningKey) return [match];
     const contextKey = classification.source === 'local' && realm ? realm : 'global';
-    return { ...match, classification: { ...classification,
-      protectionChecks: classification.supportingStatements!.map(support => {
+    const protectionChecks = classification.supportingStatements!.map(support => {
         const badge = checked.get(`${support}\0${contextKey}\0${classification.concept}`);
         if (!badge) throw new PublicQueryUnavailable('judgment protection check is incomplete');
         return badge;
-      }) } };
-  }) };
+      }).filter(badge => badge.protection === 'show-all');
+    if (!protectionChecks.length) return [];
+    return [{ ...match, classification: { ...classification,
+      supportingStatements: protectionChecks.map(check => check.statement),
+      supportingStatementCount: protectionChecks.length, protectionChecks } }];
+  });
+  return { ...relation, total: visible.length, results: visible };
 }
 
 /** Private delivery owners. A replica without them keeps the profile closed. */
@@ -185,7 +191,23 @@ export function searchRoutes(fuseki: FusekiClient, work: SearchRouteDependencies
       },
     })
     .post('/v1/queries', {
-      body: t.Union([t.Object({ profile: t.Literal('public-content-phrase-v1'),
+      body: t.Union([t.Object({ profile: t.Literal('public-disclosed-fields-phrase-v1'),
+        ...unsupportedPublicSearchSelectors,
+        phrase: t.String({ minLength: 2, maxLength: 80 }),
+        contexts: t.Array(t.String({ pattern: '^(https://rezics\\.com/id/[0-9a-f-]{36}|urn:rezics:semantic-context:global)$' }),
+          { maxItems: 8 }),
+        statements: t.Array(t.Object({ statement: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
+          acceptance: t.Union([t.Object({ kind: t.Literal('global') }, { additionalProperties: false }),
+            t.Object({ kind: t.Literal('realm'), realm: t.String({
+              pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }) }, { additionalProperties: false })]),
+        }, { additionalProperties: false }), { maxItems: 16 }),
+        resources: t.Array(t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
+          { maxItems: 32 }),
+        mediaContext: t.Union([t.Literal(DEFAULT_MEDIA_CONTEXT),
+          t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' })]),
+        language: t.Union([t.String({ pattern: '^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$',
+          maxLength: 35 }), t.Null()]),
+      }, { additionalProperties: false }), t.Object({ profile: t.Literal('public-content-phrase-v1'),
         ...unsupportedPublicSearchSelectors,
         phrase: t.String({ minLength: 2, maxLength: 80 }),
         language: t.Union([
@@ -269,6 +291,16 @@ export function searchRoutes(fuseki: FusekiClient, work: SearchRouteDependencies
           return problem(503, 'content_projection_unavailable', 'Public Content projection is unavailable');
         }
         const result = await withStableSearchSnapshot(fuseki, async () => {
+          if (body.profile === 'public-disclosed-fields-phrase-v1') {
+            if ((body.resources.length || body.statements.length)
+              && (!work.media?.store || !work.governance?.store)) {
+              throw new PublicQueryUnavailable('public resource disclosure owner is unavailable');
+            }
+            return queryPublicDisclosedFields(work.environment, work.media?.store, work.judgments,
+              body, work.governance?.store
+                ? (heads, context) => work.governance!.store.restrictedTitles(heads, context)
+                : undefined);
+          }
           if (body.profile === 'public-content-phrase-v1') {
             return queryPublicContentPhrase(work.environment, work.contentProjection!.content,
               work.contentProjection!.cursor, work.contentProjection!.consumer, body);

@@ -115,8 +115,31 @@ const contentPosition = t.Object({ owner: t.Literal('content'), dataEpoch: t.Str
 const contentPhraseMatch = t.Object({ matchUnit: t.String(), resource: t.String(),
   variant: t.String(), revision: t.String(), publicationDecision: t.String(),
   language: t.String(), score: t.Number() });
+const publicSearchAvatar = t.Union([
+  t.Object({ kind: t.Literal('image'), selection: t.String(), url: t.String(),
+    mediaType: t.String(), width: t.Number(), height: t.Number(), crop: t.Nullable(t.String()),
+    basis: t.Object({ policy: t.String(), context: t.String() }) }, { additionalProperties: false }),
+  t.Object({ kind: t.Literal('fallback'), policy: t.String(), key: t.String(),
+    resourceType: t.Union([t.Literal('work'), t.Literal('main-version'), t.Literal('space'),
+      t.Literal('realm'), t.Literal('concept')]) }, { additionalProperties: false }),
+]);
+const publicDisclosedFieldMatch = t.Union([
+  t.Object({ kind: t.Literal('context-label'), owner: t.String(), target: t.String(),
+    text: t.String(), language: t.String(), score: t.Literal(1) }, { additionalProperties: false }),
+  t.Object({ kind: t.Literal('statement-value'), owner: t.String(), subject: t.String(),
+    text: t.String(), language: t.Nullable(t.String()), score: t.Literal(1) }, { additionalProperties: false }),
+  t.Object({ kind: t.Literal('resource-name'), owner: t.String(), text: t.String(),
+    language: t.String(), avatar: publicSearchAvatar, score: t.Literal(1) }, { additionalProperties: false }),
+]);
 
 export const publicQueryResult = t.Union([
+  t.Object({ contractVersion: t.Literal('1'), profile: t.Literal('public-disclosed-fields-phrase-v1'),
+    resultGrain: t.Literal('field'), complete: t.Literal(true),
+    countPrecision: t.Literal('exact'), facetPrecision: t.Literal('exact'),
+    total: t.Integer({ minimum: 0 }), results: t.Array(publicDisclosedFieldMatch),
+    facets: t.Object({ contexts: t.Integer({ minimum: 0 }),
+      statements: t.Integer({ minimum: 0 }), names: t.Integer({ minimum: 0 }) },
+    { additionalProperties: false }), sourcePosition }, { additionalProperties: false }),
   t.Object({ contractVersion: t.Literal('1'), profile: t.Literal('public-content-phrase-v1'),
     resultGrain: t.Literal('content-variant'), complete: t.Literal(true),
     population: t.Number(), total: t.Number(), results: t.Array(contentPhraseMatch),

@@ -86,6 +86,16 @@ with Access before their role/text match, in addition to the anchor and at most
 occurrences still precedes their Access proof; the bounded frontier must not be
 presented as an exact complete count.
 
+The public disclosed-field phrase profile accepts at most eight Contexts, 16
+Statements and 32 Resources. Its owner permits at most 64 summary targets, 32
+judgment checks, two media batches and one MiB of admitted field output. The
+route composes those bounds with the shared public search limit of 72 Fuseki
+calls, 8 MiB read bytes and 1,500 ms; an over-budget owner read is unavailable,
+not an exact empty relation. Matching and the three facet counts scan only the
+admitted field list once. The public route integration checks that adding a
+Private Context changes none of the hit, score or facet values; native owner
+tests cover protected Statements, restricted names, avatars and recovery.
+
 ### IAM07 media download stream
 
 `GET /v1/media/assets/{asset}/bytes` is bounded to one current avatar-slot basis,

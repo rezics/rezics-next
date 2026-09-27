@@ -101,12 +101,10 @@ small growing-decoy fixture check the latter bound. Native engine work and
 whole-request Account/Access latency have no complete measured bound yet.
 
 SEARCH12 has real socket, two-replica closure, changed-head, lost-replica and
-upgrade evidence for this native Contribution profile. SEARCH11 remains partial:
-the Content-owned private body search projection and Access bridge do not yet
-exist, nor do searchable hidden Context definitions, statements, names or
-avatars with their owner-specific disclosure rules. Their leakage clauses cannot
-be certified by the Contribution body fixture. Multi-field and
-multi-Contribution private queries remain unsupported.
+upgrade evidence for this native Contribution profile. The public-field owner
+now covers Context labels, accepted Statements, names and avatars through
+their separate disclosure rules. Multi-field and multi-Contribution private
+queries retain their own admission and delivery contracts.
 
 The installed Main default and Realm-effective phrase lanes project exact public
 selected-body MatchUnits in the same guarded transaction as their respective
@@ -133,6 +131,22 @@ with no local choice uses its Main Version default; a local
 choice shadows that default in the requested Realm. An explicit local rejection
 also shadows the default and contributes no text hit. These lanes do not qualify
 broader typed filters or private full-text required below.
+
+The `public-disclosed-fields-phrase-v1` profile searches an explicit bounded
+set of Context, Statement and Resource IDs. It asks each owner for currently
+public fields before phrase matching. The request admits at most eight Contexts,
+16 distinct Statements and 32 Resources; Statement entries name their Global or
+Realm acceptance scope. A required Statement judgment owner, Resource summary,
+media or restricted-title owner that is unavailable makes the request unavailable.
+The accepted field set is fenced by one graph position. Matching is a normalized,
+case-insensitive substring over those fields only, with score `1` per field and
+no snippets. It returns exact total and exact Context, Statement and name facet
+counts over the complete admitted fields, without a page or text-index cursor.
+Private Context labels, unaccepted or spoiler-protected Statements, restricted
+names and avatars cannot become match candidates or influence these values. A
+hidden ID and an absent ID produce the same empty field contribution. The
+request uses the public search read deadline and Fuseki call/byte budget; an
+incomplete owner read cannot yield a complete empty result.
 
 Main and Realm phrase requests, including their classified and rated variants,
 may constrain `author` to one exact native identity. The author is the immutable
@@ -495,8 +509,11 @@ is a typed budget result. Each returned support is checked against the current
 Access judgment population of the effective decision: Realm-local decisions use
 the Realm population, and Global or inherited decisions use Global. Protection,
 aggregate generation, concept-hint generation, policy generation and source
-event remain attached to each exact support. An unavailable Access check makes
-the classified result unavailable. The broader Context-selected grouped relation
+event remain attached to each exact support. Only `show-all` supports are exposed
+in the public classified result. A fact with no visible support is removed before
+the returned total and page are formed; its text score and rating aggregate are
+not exposed. An unavailable Access check makes the classified result unavailable.
+The broader Context-selected grouped relation
 and its count grains remain a separate requirement below.
 
 A query names the result grain, exact relation/term and interpretation definitions,
