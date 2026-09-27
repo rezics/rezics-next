@@ -22,4 +22,5 @@ export const integrationGateFiles = [
   'services/main/tests/management-read.integration.test.ts',
   'services/content/tests/core.integration.test.ts',
   'services/main/tests/profiles.integration.test.ts',
+  'services/main/tests/work-metadata.integration.test.ts',
 ] as const;

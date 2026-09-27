@@ -1,4 +1,5 @@
 import { t } from 'elysia';
+import { recordedText, recordedRelevance } from './metadata-schema.ts';
 
 export const readId = t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' });
 export const readUuid = t.String({ pattern: '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' });
@@ -24,10 +25,13 @@ export const workCard = t.Object({ id: readId, revision: readId, mainVersion: re
   title: readName, cover: readAvatar, types: t.Array(t.String(), { maxItems: 8 }) });
 export const workHeader = t.Object({ profile: t.Literal('work-read-v1'), ...workCard.properties,
   disclosure: t.Union([t.Literal('public'), t.Literal('restricted')]),
-  originalTitle: t.Null(), mainVersionRevision: readId, mainVersionLabel: t.Nullable(readName),
+  originalTitle: t.Nullable(t.Object({ ...recordedText.properties,
+    direction: t.Union([t.Literal('ltr'), t.Literal('rtl')]) })),
+  metadataRevision: t.Nullable(readId), description: t.Nullable(readName),
+  mainVersionRevision: readId, mainVersionLabel: t.Nullable(readName),
   selectedLanguage: t.Nullable(t.String()), sourcePosition: readPosition,
   links: t.Object({ versions: t.String(), classifications: t.String(), adoptions: t.String(),
-    ratings: t.String(), history: t.String(), credits: t.String() }) });
+    ratings: t.String(), history: t.String(), credits: t.String(), metadata: t.String(), editions: t.String() }) });
 export const pageFields = { nextCursor: t.Nullable(t.String()), sourcePosition: readPosition,
   count: t.Object({ value: t.Integer({ minimum: 0 }), kind: t.Literal('exact-page'), total: t.Null() }) };
 export const versionItem = t.Object({ id: readId,
@@ -39,7 +43,9 @@ export const creditItem = t.Object({ id: readId, role: t.Literal('author'),
   participantKind: t.Literal('external-reference'), provider: t.Literal('open-library'),
   key: t.String(), ordinal: t.Integer(), agent: t.Null(), displayName: t.Null(), handle: t.Null() });
 export const classificationItem = t.Object({ sense: readId, concept: readId, name: readName,
-  relevance: t.Null(), source: t.Union([t.Literal('local'), t.Literal('global')]),
+  relevanceRevision: t.Nullable(readId),
+  relevanceStatus: t.Union([t.Literal('unrecorded'), t.Literal('recorded'), t.Literal('stale'), t.Literal('withdrawn')]),
+  relevance: t.Nullable(recordedRelevance), source: t.Union([t.Literal('local'), t.Literal('global')]),
   decision: t.String() });
 export const ratingRead = t.Object({ profile: t.Literal('work-rating-read-v1'), work: readId,
   mainVersion: readId, scope: readScope, context: t.Nullable(readId),

@@ -8,10 +8,11 @@ import { GRAPHS, iri, lit } from './activate.ts';
 import { classificationItem } from './read-contract.ts';
 import { readSearchDecisionSupports } from './search-supports.ts';
 import { readWorkBasis, fenceWorkBasis } from './read-header.ts';
+import { readMetadataRelevance } from './metadata-read.ts';
 import { decodeReadCursor, encodeReadCursor, pageResult, WorkReadInvalid,
   WorkReadUnavailable, type WorkReadSession } from './read-session.ts';
 
-/** Curated classification vocabulary; relevance has no numeric owner yet. */
+/** Curated acceptance and separately recorded editor relevance retain distinct authority. */
 export async function readWorkClassifications(session: WorkReadSession, work: string) {
   const basis = await readWorkBasis(session, work);
   const scope = await session.scope();
@@ -79,7 +80,15 @@ export async function readWorkClassifications(session: WorkReadSession, work: st
     }
     const name = names[index];
     if (name?.status === 'available') items.push({ sense: item.sense, concept: item.concept,
-      name: name.name, relevance: null, source: item.source, decision: item.decision });
+      name: name.name, relevance: null, relevanceRevision: null, relevanceStatus: 'unrecorded',
+      source: item.source, decision: item.decision });
+  }
+  const relevance = await readMetadataRelevance(session, work, scope, items);
+  for (const item of items) {
+    const assessment = relevance.get(item.sense);
+    item.relevance = assessment?.value ?? null;
+    item.relevanceRevision = assessment?.revision ?? null;
+    item.relevanceStatus = assessment?.status ?? 'unrecorded';
   }
   await fenceWorkBasis(session, basis);
   return { ...pageResult(session, items, rows.length > limit
