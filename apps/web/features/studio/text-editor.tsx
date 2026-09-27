@@ -204,7 +204,7 @@ export function TextEditor({ agent, work, language, text: initialText, initial, 
           className="inline-flex min-w-0 items-center gap-2 rounded-lg px-2 py-1 text-sm hover:bg-accent/60"
           aria-label={t.backToWork}>
           <ArrowLeftIcon aria-hidden="true" className="size-4 shrink-0" />
-          <span lang={work.title.language} className="truncate">{work.title.value}</span>
+          <span lang={work.title.language} className="min-w-0 truncate">{work.title.value}</span>
         </Link>
         <AutosaveStatus className="ms-auto" state={state} savedAt={snapshot.savedAt} locale={locale}
           onRetry={() => void autosave.flush()} labels={{ idle: t.autosaveIdle, unsaved: t.autosaveUnsaved,

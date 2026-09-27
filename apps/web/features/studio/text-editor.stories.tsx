@@ -234,6 +234,16 @@ export const Phone: Story = {
   },
 };
 
+/** A long unbroken title truncates in the toolbar and wraps in the heading instead of widening the page. */
+export const PhoneLongTitle: Story = {
+  args: { ...page({}, false), language: 'en',
+    work: { ...work, title: { value: 'Browser Work 1790539651855 — Notes on a City of Rivers and Its Bridges', language: 'en' } } },
+  globals: { viewport: { value: 'phone' } },
+  async play() {
+    await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
+  },
+};
+
 export const RightToLeft: Story = {
   args: { ...page({}, false), language: 'ar' },
   async play({ canvasElement }) {
