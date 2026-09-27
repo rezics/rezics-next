@@ -36,6 +36,13 @@ export function NoPermission() {
   return <StatePanel icon="stale" headingLevel={1} title={t.noPermissionTitle} body={t.noPermissionBody} />;
 }
 
+/** Inside the panel: the user in the link doesn't exist (any more). */
+export function NotFound() {
+  const { t } = useTranslation('admin');
+  return <StatePanel icon="notFound" headingLevel={1} title={t.notFoundTitle} body={t.notFoundBody}
+    action={<Button asChild variant="outline" size="lg"><a href="/admin/users">{t.backToUsers}</a></Button>} />;
+}
+
 /** Inside the panel: a read failed. */
 export function Unavailable({ headingLevel = 1 }: { headingLevel?: 1 | 2 }) {
   const common = useTranslation('common').t;

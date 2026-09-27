@@ -37,7 +37,7 @@ export function ReauthFields({ value, onChange, secondFactor, disabled, autoFocu
   return <>
     <Field disabled={disabled}>
       <FieldLabel>{t.yourPassword}</FieldLabel>
-      <PasswordInput autoComplete="current-password" translations={{ visibilityTrigger: () => t.yourPassword }}>
+      <PasswordInput autoComplete="current-password" translations={{ visibilityTrigger: () => t.showPassword }}>
         <PasswordInputGroup>
           <PasswordInputInput name="password" autoFocus={autoFocus} maxLength={128} value={value.password}
             onChange={event => onChange({ ...value, password: event.currentTarget.value })} />

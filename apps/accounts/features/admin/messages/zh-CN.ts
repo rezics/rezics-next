@@ -215,6 +215,7 @@ export default {
     auditEmpty: '没有针对此账号的管理操作。',
     messageToUser: '发送给用户的消息',
     by: insert('操作人：{{name}}', { name: String }),
+    actorPrefix: '操作人：',
   },
 
   actions: {
@@ -272,6 +273,7 @@ export default {
   typeToConfirm: insert('输入 {{value}} 以确认', { value: String }),
   typeMismatch: '输入内容不一致。',
   yourPassword: '您的密码',
+  showPassword: '显示密码',
   totpCode: '身份验证器代码',
   reauthHelp: '确认是您本人。执行此更改前会验证您的密码。',
   stepUpTitle: '确认是您本人',
@@ -376,6 +378,7 @@ export default {
     revoke: '此应用将无法为任何人获取令牌。本次安装的撤销是永久的；重新安装会创建新的安装。',
     install: '此应用会按声明的权限范围重新安装。之前授权过的人需要重新授权。',
   },
+  clientConfirm: { disable: '停用', enable: '启用', revoke: '撤销安装', install: '重新安装' },
   clientDone: {
     disable: insert('已停用 {{name}}', { name: String }), enable: insert('已启用 {{name}}', { name: String }),
     revoke: insert('{{name}} 已不再安装', { name: String }), install: insert('已安装 {{name}}', { name: String }),

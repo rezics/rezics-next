@@ -216,6 +216,7 @@ export default {
     auditEmpty: 'No admin actions on this account.',
     messageToUser: 'Message sent to the user',
     by: insert('by {{name}}', { name: String }),
+    actorPrefix: 'By',
   },
 
   actions: {
@@ -273,6 +274,7 @@ export default {
   typeToConfirm: insert('Type {{value}} to confirm', { value: String }),
   typeMismatch: 'That doesn’t match.',
   yourPassword: 'Your password',
+  showPassword: 'Show password',
   totpCode: 'Authenticator code',
   reauthHelp: 'Confirm it’s you. We check your password before this change.',
   stepUpTitle: 'Confirm it’s you',
@@ -377,6 +379,7 @@ export default {
     revoke: 'The app stops getting tokens for everyone. This is permanent for this installation; reinstalling creates a new one.',
     install: 'The app is installed again at its declared scopes. People who allowed it before must allow it again.',
   },
+  clientConfirm: { disable: 'Disable', enable: 'Enable', revoke: 'Revoke installation', install: 'Reinstall' },
   clientDone: {
     disable: insert('{{name}} is disabled', { name: String }), enable: insert('{{name}} is enabled', { name: String }),
     revoke: insert('{{name}} is no longer installed', { name: String }), install: insert('{{name}} is installed', { name: String }),

@@ -26,6 +26,12 @@ export function Time({ iso, className }: { iso: string; className?: string }) {
     {relativeTime(iso, Date.now(), locale)}</time>;
 }
 
+/** The exact local date and time, as the browser's time zone shows it. */
+export function ExactTime({ iso }: { iso: string }) {
+  const locale = useLocale().current;
+  return <time dateTime={iso} suppressHydrationWarning>{exactTime(iso, locale)}</time>;
+}
+
 /** A date without time of day, as UTC so server and browser agree. */
 export function DateOnly({ iso }: { iso: string }) {
   const locale = useLocale().current;

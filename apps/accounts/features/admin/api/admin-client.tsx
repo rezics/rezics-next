@@ -1,6 +1,7 @@
 'use client';
 
-import { createContext, useContext, type ReactNode } from 'react';
+import { createContext, useContext, useMemo, type ReactNode } from 'react';
+import { useAccountClient } from '../../api/account-client.tsx';
 import { type AdminApi, browserAdminApi } from './client.ts';
 
 /** What operator panel components may do beyond rendering. The app provides
@@ -37,6 +38,10 @@ export function AdminClientProvider({ value, children }: { value: AdminClient; c
   return <Context.Provider value={value}>{children}</Context.Provider>;
 }
 
+/** The provided client, or the browser's with the app's own navigation and
+ * in-place refresh (so a confirmation toast survives the re-read). */
 export function useAdminClient(): AdminClient {
-  return useContext(Context) ?? browserAdminClient;
+  const provided = useContext(Context);
+  const { navigate, refresh } = useAccountClient();
+  return useMemo(() => provided ?? { ...browserAdminClient, navigate, refresh }, [provided, navigate, refresh]);
 }

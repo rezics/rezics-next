@@ -23,6 +23,8 @@ function chipLabel(token: QueryToken, t: AdminText): string {
     if (key === 'verified' || key === '2fa') return ['yes', 'true', 'on', '1'].includes(lower) ? t.filters.yes : t.filters.no;
     return value;
   }).join(', ');
+  // -role:none reads better as what it keeps.
+  if (key === 'role' && token.negated && token.value.toLowerCase() === 'none') return `${t.filters.role}: ${t.filters.staff}`;
   return `${t.filters[key]}: ${token.negated ? t.filters.not({ value: values }) : values}`;
 }
 

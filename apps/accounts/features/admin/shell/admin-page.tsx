@@ -16,8 +16,9 @@ export async function renderAdminPage(section: AdminSection | undefined, next: s
   render: (context: AdminPageContext) => Promise<ReactNode> | ReactNode,
   permission?: AdminMe['permissions'][number]): Promise<ReactNode> {
   const locale = await requestLocale();
-  const { snapshot } = await getTranslation('admin', [locale]);
-  const translated = (node: ReactNode) => <TranslationProvider initial={snapshot} tags={[locale]}>{node}</TranslationProvider>;
+  // A nested provider starts its own cache: seed every namespace the panel reads.
+  const { snapshot } = await getTranslation(['admin', 'common'], [locale]);
+  const translated = (node: ReactNode) => <TranslationProvider initial={snapshot}>{node}</TranslationProvider>;
   const session = await readSession();
   if (session.status !== 'ok') {
     return translated(<AdminGate status={session.status === 'signed-out' || session.status === 'stale' ? 'signed-out' : 'unavailable'}
