@@ -6,6 +6,17 @@ Before pinning, it requires the reviewed `content-publication-v1` variant and
 decision shapes in both generated model artifacts and Fuseki command health.
 This fail-closed gate prevents an unvalidated graph write.
 
+Text drafts may carry at most 16 exact Content revision embed IDs. Before a
+new publication preparation pins its revision, the embed resolver reads the
+immutable transitive closure, at most 64 revisions, eight edges deep and 4 MiB
+of serialized bytes. It counts revisions, edges, depth, bytes and public checks;
+the work is O(revisions + edges) plus one bounded public disclosure query. Every
+dependency must have a current public search eligibility decision for that
+exact published revision. The graph activation command repeats those exact
+eligibility-head predicates, so a disclosure change between planning and the
+head switch cannot activate a private embed. A malformed, missing or over-budget
+dependency fails closed. An ordinary denial happens before a new Content pin.
+
 The guarded graph command records the exact Content revision, digest, preparation
 ID and Content owner position with the variant publication head, graph receipt and
 outbox in one Jena transaction. No SQL or body fetch runs inside that transaction.

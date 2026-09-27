@@ -321,6 +321,8 @@ test('WORK09/WORK10/SEARCH03/SEARCH19: Content CAS, private drafts and exact pub
     expect(privateFrame).not.toContain(privateTerm);
     expect(await privateSession.receipt({ type: 'private-content-receipt-v1',
       leaseId: privateOffer.leaseId, receiptChallenge: privateOffer.receiptChallenge })).toBe(true);
+    const graphAfterPrivateSearch = await graphSequence();
+    expect(BigInt(graphAfterPrivateSearch)).toBe(BigInt(graphBeforeDraftEdits) + 1n);
     const readRevision = (revisionId: string) => app.handle(new Request(
       `http://main.local/v1/content-revisions/${revisionId}?actingSubject=${encodeURIComponent(actor)}`,
       { headers: { authorization: 'Bearer qa' } }));
@@ -407,7 +409,7 @@ test('WORK09/WORK10/SEARCH03/SEARCH19: Content CAS, private drafts and exact pub
       'SELECT revision_id FROM content.receipt WHERE operation_id = $1',
       [`content-draft:${recoveredAdmission.rows[0]!.id}`]);
     expect(recoveredReceipt.rows).toEqual([{ revision_id: recoveredBody.revisionId }]);
-    expect(await graphSequence()).toBe(graphBeforeDraftEdits);
+    expect(await graphSequence()).toBe(graphAfterPrivateSearch);
 
     const replacementInput: PublishPinnedContentInput = {
       ...input, preparationId: `publish-${randomUUID()}`,

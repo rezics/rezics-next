@@ -3,6 +3,8 @@ import { profileRegistry } from '../../../../../packages/model/src/generated/pro
 import type { CommandValidation } from '../../infrastructure/fuseki.ts';
 import type { RegisteredAdmission } from '../access/admission.ts';
 import { DATASET, GRAPHS, RV, hash, iri, lit, type WorkActivationEnvironment } from '../work/activate.ts';
+import { assertPublicContentEmbeds, publicContentEmbedGuards }
+  from './embed-closure.ts';
 
 const NONE = 'urn:rezics:none';
 const REVISION_IRI_PREFIX = 'urn:rezics:content:revision:';
@@ -110,7 +112,8 @@ function receiptFields(env: WorkActivationEnvironment, admission: RegisteredAdmi
 }
 
 export function buildPinnedContentPublicationUpdate(env: WorkActivationEnvironment, admission: RegisteredAdmission,
-  input: PublishPinnedContentInput, preparation: PublicationPreparation): string {
+  input: PublishPinnedContentInput, preparation: PublicationPreparation,
+  embedded: readonly ExactContentReference[] = []): string {
   const receipt = contentPublicationReceiptIri(admission.id);
   const decision = contentPublicationDecisionIri(admission.id);
   const operation = `urn:rezics:operation:${hash(`${admission.id}\0content-publication`)}`;
@@ -168,6 +171,7 @@ export function buildPinnedContentPublicationUpdate(env: WorkActivationEnvironme
       }
       FILTER(!BOUND(?registeredResource) || ?registeredResource = ${iri(input.resourceId)})
       FILTER(COALESCE(?prior, ${iri(NONE)}) = ${expectedHeadTerm(input)})
+      ${publicContentEmbedGuards(embedded)}
       FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:restoreHold true } }
       FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} ?p ?o } }
       FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.revisions)} { ${iri(decision)} ?p ?o } }
@@ -362,6 +366,10 @@ export async function publishPinnedContent(env: WorkActivationEnvironment, conte
   // product writes. Do not create a pin until both reviewed shape bindings exist.
   const validations = await candidateValidations(env, admission.id, input.variantId);
   const receipt = contentPublicationReceiptIri(admission.id);
+  // A fresh preparation must not pin an exact revision whose dependency closure
+  // is already undisclosed. A replay first checks its durable graph receipt.
+  const existing = await content.readPublicationPreparation(input.preparationId);
+  let embeds = existing ? null : await assertPublicContentEmbeds(env, content, input.revisionId);
   const preparation = await content.preparePublication(input.preparationId, input.revisionId,
     input.expectedDigest, true, input.expectedContentEpoch);
   checkedPreparation(preparation, input);
@@ -371,13 +379,15 @@ export async function publishPinnedContent(env: WorkActivationEnvironment, conte
   }
   const prior = await reconcile(env, content, admission, input, preparation);
   if (prior) return { ...prior, replayed: true };
+  embeds ??= await assertPublicContentEmbeds(env, content, input.revisionId);
   if (preparation.status !== 'pending' || !preparation.pinActive) {
     throw new ContentPublicationConflict('settled Content preparation has no matching graph receipt');
   }
   if (Date.parse(admission.expiresAt) <= Date.now()) {
     return pending(receipt, preparation.replayed);
   }
-  const envelope = { receipt, digest, update: buildPinnedContentPublicationUpdate(env, admission, input, preparation),
+  const envelope = { receipt, digest, update: buildPinnedContentPublicationUpdate(env, admission,
+    input, preparation, embeds.dependencies),
     validations, deadlineMs: 10_000 };
   let guardUnmatched = false;
   try {
@@ -391,6 +401,7 @@ export async function publishPinnedContent(env: WorkActivationEnvironment, conte
   let terminal = await reconcile(env, content, admission, input, preparation);
   if (terminal) return terminal;
   if (guardUnmatched) {
+    await assertPublicContentEmbeds(env, content, input.revisionId);
     try {
       await env.fuseki.commandWithReceipt({ receipt, digest,
         update: staleUpdate(env, admission, input, preparation), validations: [], deadlineMs: 10_000 });

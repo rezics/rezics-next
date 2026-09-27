@@ -3,6 +3,7 @@ import { eq, sql } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/node-postgres';
 import type { Pool, PoolClient } from 'pg';
 import { outbox, ownerControl, receipt } from './typed-schema.ts';
+import { ContentEmbedInvalid, directContentEmbeds } from './embed.ts';
 
 export class ContentConflict extends Error {}
 export class ContentUnavailable extends Error {}
@@ -410,6 +411,13 @@ export class ContentCore {
     try { body = JSON.parse(command.serializedJson); }
     catch { throw new ContentConflict('body is not JSON'); }
     if (!body || Array.isArray(body) || typeof body !== 'object') throw new ContentConflict('body must be a JSON object');
+    if (command.model === 'content-shape-v1') {
+      try { directContentEmbeds(body.embeds); }
+      catch (error) {
+        if (error instanceof ContentEmbedInvalid) throw new ContentConflict(error.message);
+        throw error;
+      }
+    }
     const bytes = Buffer.from(command.serializedJson, 'utf8');
     if (bytes.toString('utf8') !== command.serializedJson) throw new ContentConflict('body contains ill-formed Unicode');
     if (bytes.length < 1 || bytes.length > MAX_BODY_BYTES) throw new ContentLimitExceeded('body exceeds 1 MiB');

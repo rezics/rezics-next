@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { ContentConflict, contentDraftIntentDigest, type ContentCore,
   type SaveDraftCommand, type SaveDraftResult, type VariantIdentity } from '../../../../content/src/core.ts';
+import { directContentEmbeds } from '../../../../content/src/embed.ts';
 import type { AccountAssertionVerifier } from '../account/verify-assertion.ts';
 import { AdmissionDenied, AdmissionExpired, type AccessAdmissionRegistry,
   type GraphTerminalProof, type RegisteredAdmission } from '../access/admission.ts';
@@ -16,6 +17,7 @@ export interface AuthoredContentDraftInput {
   variant: VariantIdentity;
   expectedHead: string | null;
   body: string;
+  embeds?: string[];
   actingSubject: string;
   idempotencyKey: string;
 }
@@ -73,7 +75,9 @@ export async function saveAdmittedContentDraft(env: WorkActivationEnvironment,
     || !input.body || input.body.length > 65_536) {
     throw new ContentConflict('invalid authored Content draft');
   }
-  const serializedJson = JSON.stringify({ body: input.body });
+  const embeds = directContentEmbeds(input.embeds);
+  const serializedJson = JSON.stringify({ body: input.body,
+    ...(embeds.length ? { embeds } : {}) });
   const command: SaveDraftCommand = { operationId: '', variant: input.variant,
     expectedHead: input.expectedHead,
     model: input.targetProfile === 'catalog-description' ? 'catalog-description-v1' : 'content-shape-v1',

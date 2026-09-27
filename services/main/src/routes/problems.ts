@@ -1,6 +1,7 @@
 import { InvalidRatingCalendar } from '../modules/rating/calendar.ts';
 import { ContentConflict, ContentLimitExceeded, ContentUnavailable }
   from '../../../content/src/core.ts';
+import { ContentEmbedInvalid } from '../../../content/src/embed.ts';
 import { ContentCommentCursorStale, ContentCommentInvalid, ContentCommentMissing }
   from '../../../content/src/comments.ts';
 import { CommandRejected, FusekiQueryResponseTooLarge, FusekiReadBudgetExceeded }
@@ -100,6 +101,8 @@ import { ContentCommentDenied, ContentCommentWorkUnavailable }
 import { ContentPublicationConflict, ContentPublicationProfileUnavailable,
   InvalidContentPublication, StaleContentOwnerEpoch }
   from '../modules/content-publication/publish.ts';
+import { ContentEmbedDenied, ContentEmbedUnavailable }
+  from '../modules/content-publication/embed-closure.ts';
 import { ContentEligibilityConflict, ContentEligibilityDenied, ContentEligibilityPending,
   ContentEligibilityProfileUnavailable, ContentEligibilityStale, ContentEligibilityUnavailable,
   InvalidContentEligibility } from '../modules/content-publication/eligibility.ts';
@@ -305,6 +308,15 @@ export function commandError(error: unknown): Response {
   if (error instanceof ContentCommentMissing) return problem(404, 'comment_unavailable', 'Comment source is unavailable');
   if (error instanceof ContentCommentWorkUnavailable) return problem(503, 'content_unavailable', 'Current Work is unavailable');
   if (error instanceof ContentDraftStale) return problem(409, 'stale_head', 'Expected Content draft head is stale');
+  if (error instanceof ContentEmbedInvalid) {
+    return problem(400, 'invalid_content_embeds', 'Content embed set is invalid');
+  }
+  if (error instanceof ContentEmbedDenied) {
+    return problem(403, 'embed_not_public', 'An embedded Content revision is not publicly disclosed');
+  }
+  if (error instanceof ContentEmbedUnavailable) {
+    return problem(503, 'embed_unavailable', 'An embedded Content revision is unavailable');
+  }
   if (error instanceof InvalidContentPublication || error instanceof InvalidContentEligibility) {
     return problem(400, 'invalid_request', 'Content publication request is invalid');
   }

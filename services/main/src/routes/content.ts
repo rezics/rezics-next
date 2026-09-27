@@ -29,6 +29,9 @@ export function contentRoutes(fuseki: FusekiClient, work: MainWorkDependencies) 
         direction: t.Union([t.Literal('ltr'), t.Literal('rtl'), t.Literal('none')]),
         expectedHead: t.Union([t.String({ pattern: '^[0-9a-f-]{36}$' }), t.Null()]),
         body: t.String({ minLength: 1, maxLength: 65536 }),
+        embeds: t.Optional(t.Array(t.String({
+          pattern: '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$',
+        }), { maxItems: 16 })),
         actingSubject: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
       }, { additionalProperties: false }),
       response: { 200: contentDraftWriteResult, 201: contentDraftWriteResult,
@@ -46,6 +49,7 @@ export function contentRoutes(fuseki: FusekiClient, work: MainWorkDependencies) 
             variant: { id: body.variantId, resourceId: body.resourceId,
               language: body.language, direction: body.direction },
             expectedHead: body.expectedHead, body: body.body,
+            embeds: body.embeds,
             actingSubject: body.actingSubject, idempotencyKey });
         return Response.json({ resourceId: body.resourceId, variantId: body.variantId,
           revisionId: saved.revisionId, predecessor: saved.predecessor,
