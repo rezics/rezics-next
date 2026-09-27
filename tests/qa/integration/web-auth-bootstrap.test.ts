@@ -170,7 +170,7 @@ test('IAM01/WORK01: authenticated metadata-only Work has an empty Main Version',
     const selection = await main.handle(new Request(
       `http://localhost/v1/main-versions/${created.mainVersion.split('/').at(-1)}/selection`));
     expect(selection.status).toBe(404);
-    expect((await selection.json() as { code: string }).code).toBe('selection_unavailable');
+    expect((await selection.json() as { code: string }).code).toBe('variant_unavailable');
     const read = () => main.handle(new Request(
       `http://localhost/v1/revisions/${created.workRevision.split('/').at(-1)}?actingSubject=${encodeURIComponent(result.actingSubject)}`,
       { headers: { authorization: `Bearer ${token}` } }));

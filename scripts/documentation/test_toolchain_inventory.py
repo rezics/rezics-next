@@ -20,6 +20,7 @@ class ToolchainInventoryTest(unittest.TestCase):
         self.assertIn("rezics/fuseki:", rendered)
 
     def test_manifest_pins_reject_conflicts(self):
+        (ROOT / ".temp").mkdir(exist_ok=True)
         with tempfile.TemporaryDirectory(dir=ROOT / ".temp") as directory:
             root = Path(directory)
             (root / "package.json").write_text('{"workspaces":["app"],"dependencies":{"example":"1.0.0"}}')
