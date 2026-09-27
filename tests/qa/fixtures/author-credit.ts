@@ -17,6 +17,7 @@ import { ProviderIdentityStore } from '../../../services/main/src/modules/source
 import { SourceFieldWithdrawalStore } from '../../../services/main/src/modules/source/withdrawal.ts';
 import { SourceFieldAttachmentStore } from '../../../services/main/src/modules/source/support-attach.ts';
 import { SourceFieldApplicationStore } from '../../../services/main/src/modules/source/field-application.ts';
+import { SourceNativeChildStore } from '../../../services/main/src/modules/source/child-native-support.ts';
 import { sourceChildOccurrence } from '../../../services/main/src/modules/source/child-correspondence.ts';
 import { ratingAccount } from '../support/rating-account.ts';
 import { migrateContent } from '../../../services/content/src/migrate.ts';
@@ -39,6 +40,8 @@ export async function authorCreditFixture(apps: Record<string, string>, objectDi
   let loseRetirementResponse = false;
   let loseFieldResponse = false;
   let loseFieldCertificate = false;
+  let loseChildResponse = false;
+  let loseChildCertificate = false;
   const creditCommands: Array<{ bytes: number; focuses: number }> = [];
   const fieldCommands: Array<{ bytes: number; focuses: number }> = [];
   const fuseki = new Proxy(nativeFuseki, { get(target, property) {
@@ -46,6 +49,7 @@ export async function authorCreditFixture(apps: Record<string, string>, objectDi
       const credit = envelope.update.includes('AuthorCreditAdoptedEvent');
       const retirement = envelope.update.includes('AuthorCreditRetiredEvent');
       const field = envelope.update.includes('EditorialFieldControlEvent');
+      const child = envelope.update.includes('NativeChildAdoptedEvent');
       const changed = credit && mutate ? mutate(envelope) : envelope;
       if (credit) mutate = undefined;
       if (credit) creditCommands.push({ bytes: Buffer.byteLength(JSON.stringify(changed)),
@@ -60,6 +64,9 @@ export async function authorCreditFixture(apps: Record<string, string>, objectDi
       if (field && loseFieldResponse) {
         loseFieldResponse = false; throw new Error('lost field acknowledgement');
       }
+      if (child && loseChildResponse) {
+        loseChildResponse = false; throw new Error('lost child acknowledgement');
+      }
       return result;
     };
     const value = Reflect.get(target, property, target);
@@ -72,6 +79,9 @@ export async function authorCreditFixture(apps: Record<string, string>, objectDi
       }
       if (loseFieldCertificate && query.startsWith('INSERT INTO source.field_support_outcome')) {
         loseFieldCertificate = false; throw new Error('interrupted before field certificate');
+      }
+      if (loseChildCertificate && query.startsWith('INSERT INTO source.native_child_application')) {
+        loseChildCertificate = false; throw new Error('interrupted before child certificate');
       }
       return target.query(query, params);
     };
@@ -86,6 +96,8 @@ export async function authorCreditFixture(apps: Record<string, string>, objectDi
   const correspondences = new SourceChildCorrespondenceStore(pool, conversions);
   const adoptions = new SourceNativeWorkAdoptionStore(pool, proposals, env, account.verifier, access);
   const credits = new SourceAuthorCreditStore(faultPool, proposals, conversions, correspondences, env, account.verifier, access);
+  const nativeChildren = new SourceNativeChildStore(faultPool, proposals, conversions,
+    correspondences, env, account.verifier, access);
   const principalId = randomUUID(), otherPrincipal = randomUUID(), actor = nativeId();
   await accessPool.query(`INSERT INTO access.principal (id,account_issuer,account_subject) VALUES ($1,$2,$3),($4,$2,$5)`,
     [principalId, account.issuer, account.a.id, otherPrincipal, account.b.id]);
@@ -106,6 +118,7 @@ export async function authorCreditFixture(apps: Record<string, string>, objectDi
     protectionSigner: new ProtectionAdmissionSigner(accessPool, apps.FUSEKI_TITLE_ADMISSION_KEY),
     sourceIntake: intake, sourceConversions: conversions, sourceGraph: graph, sourceProposals: proposals,
     sourceCorrespondences: correspondences, sourceAdoptions: adoptions, sourceAuthorCredits: credits,
+    sourceNativeChildren: nativeChildren,
     sourceProviderIdentity: new ProviderIdentityStore(pool),
     sourceFieldWithdrawals: fieldWithdrawals,
     sourceFieldApplications: new SourceFieldApplicationStore(faultPool, env, account.verifier,
@@ -124,10 +137,11 @@ export async function authorCreditFixture(apps: Record<string, string>, objectDi
     return result as T;
   };
   const propose = async (workId: string, authors: unknown, title = 'Author credit Work',
-    description?: string) => {
+    description?: string, subjects?: string[]) => {
     source = { key: `/works/${workId}`, type: { key: '/type/work' }, title,
       ...(authors === undefined ? {} : { authors }),
-      ...(description === undefined ? {} : { description }) };
+      ...(description === undefined ? {} : { description }),
+      ...(subjects === undefined ? {} : { subjects }) };
     const capture = await json<{ observation: { observation: string } }>(await call('POST',
       '/v1/sources/acquisitions/open-library/works', { profile: 'open-library-work-acquisition-v1', workId }), 201);
     const converted = await json<{ conversion: { conversion: string; observation: string } }>(await call('POST',
@@ -150,12 +164,15 @@ export async function authorCreditFixture(apps: Record<string, string>, objectDi
     occurrence: sourceChildOccurrence(proposal.observation, 'authors', sourceOrdinal),
     confirmedSourceKey: key, confirmedRoleKey: '/type/author_role',
     baseSupport: null, correspondence: null, confirmedUse: 'factual-reference-only' });
-  return { account, pool, accessPool, env, access, intake, conversions, graph, proposals, credits, principalId, actor,
+  return { account, pool, accessPool, env, access, intake, conversions, graph, proposals,
+    credits, nativeChildren, principalId, actor,
     call, json, grant, propose, adoptWork, input, nativeFuseki, creditCommands, fieldCommands,
     failCertificate: () => { loseCertificate = true; }, loseGraph: () => { loseGraphResponse = true; },
     loseRetirementGraph: () => { loseRetirementResponse = true; },
     loseFieldGraph: () => { loseFieldResponse = true; },
     failFieldCertificate: () => { loseFieldCertificate = true; },
+    loseChildGraph: () => { loseChildResponse = true; },
+    failChildCertificate: () => { loseChildCertificate = true; },
     mutateCredit: (fn: (envelope: CommandEnvelope) => CommandEnvelope) => { mutate = fn; },
     close: async () => { await account.close(); await Promise.all([pool.end(), accessPool.end()]); } };
 }

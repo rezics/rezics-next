@@ -238,6 +238,9 @@ final class CommandService extends ActionService {
             if (erasure != null) return invalid(erasure);
             String authorCredit = AuthorCreditPolicy.preflight(dataset, plan);
             if (authorCredit != null) return invalid(authorCredit);
+            String nativeChild = NativeChildPolicy.preflight(dataset, plan, receipt, digest,
+                update, titleAdmission, titleAdmissionKey);
+            if (nativeChild != null) return invalid(nativeChild);
             CommandInvariant.Control before = plan.bootstrap() ? null : CommandInvariant.readControl(dataset);
             HeadCasPolicy.Snapshot heads = HeadCasPolicy.capture(dataset, plan, receipt);
             ProtectionPolicy.Snapshot protection = ProtectionPolicy.capture(dataset, plan, receipt, digest,
@@ -257,6 +260,8 @@ final class CommandService extends ActionService {
             if (invariant != null) return invalid(invariant);
             String creditInvariant = AuthorCreditPolicy.check(dataset, plan);
             if (creditInvariant != null) return invalid(creditInvariant);
+            String childInvariant = NativeChildPolicy.check(dataset, plan);
+            if (childInvariant != null) return invalid(childInvariant);
             String headInvariant = HeadCasPolicy.check(dataset, receipt, heads);
             if (headInvariant != null) return invalid(headInvariant);
             String titleInvariant = TitleControlPolicy.check(dataset, receipt, title);
@@ -397,7 +402,7 @@ final class CommandService extends ActionService {
             for (String type : List.of("PublicationDecision", "ContentPublicationDecision",
                 "ContentSearchEligibilityDecision", "ContentProjection", "PublicationSelection",
                 "RealmPublicationRejection", "ClassificationDecision", "RatingObservationRevision",
-                "TranslationLink", "WorkDerivation", "AuthorCreditRevision",
+                "TranslationLink", "WorkDerivation", "AuthorCreditRevision", "NativeChildRevision",
                 "EditorialFieldRevision", "EditorialFieldControlRevision", "EditorialControlRevision")) {
                 if (dataset.contains(revisionGraph, node,
                     org.apache.jena.vocabulary.RDF.type.asNode(), NodeFactory.createURI(RV + type))

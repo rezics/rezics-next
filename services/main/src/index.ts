@@ -74,6 +74,7 @@ import { SourceAuthorCreditStore } from './modules/source/author-credit.ts';
 import { SourceFieldWithdrawalStore } from './modules/source/withdrawal.ts';
 import { SourceFieldAttachmentStore } from './modules/source/support-attach.ts';
 import { SourceFieldApplicationStore } from './modules/source/field-application.ts';
+import { SourceNativeChildStore } from './modules/source/child-native-support.ts';
 import { ProviderIdentityStore } from './modules/source/provider-identity.ts';
 import { SourceScoreStore } from './modules/source/score.ts';
 import { AccountAssertionVerifier } from './modules/account/verify-assertion.ts';
@@ -314,6 +315,8 @@ const app = createMainApp(fuseki, {
   sourceFieldWithdrawals,
   sourceFieldApplications: new SourceFieldApplicationStore(contentPool, environment,
     account, access, sourceConversions, sourceAdoptions, sourceFieldWithdrawals),
+  sourceNativeChildren: new SourceNativeChildStore(contentPool, sourceProposals, sourceConversions,
+    sourceCorrespondences, environment, account, access),
   sourceFieldAttachments: new SourceFieldAttachmentStore(contentPool, environment, access),
   sourceProviderIdentity: new ProviderIdentityStore(contentPool),
   sourceScores: new SourceScoreStore(contentPool),

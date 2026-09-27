@@ -176,7 +176,7 @@ final class EditorialFieldPolicy {
         return !data.contains(CURRENT, slot, rv("fieldHead"), Node.ANY);
     }
 
-    private static boolean admitted(UpdateModify modify, String receipt, String digest,
+    static boolean admitted(UpdateModify modify, String receipt, String digest,
                                     String update, JsonValue proof, byte[] key, Node work) throws Exception {
         if (proof == null || !proof.isObject()) return false;
         JsonObject object = proof.getAsObject();

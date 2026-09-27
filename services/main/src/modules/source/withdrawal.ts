@@ -57,13 +57,15 @@ const readSql = `SELECT s.*, h.settled_step_id, h.pending_step_id, st.conversion
   LEFT JOIN source.field_support_withdrawal w ON w.support_id = s.id
   WHERE s.id = $1 AND s.principal_id = $2`;
 
-/** Three indexed native-family identity probes; no target or history enumeration. */
+/** Four indexed native-family identity probes; no target or history enumeration. */
 export const nativeSupportLookupSql = `
   SELECT 'title' AS kind, b.work FROM source.native_work_binding b
     WHERE b.id = $1 AND b.principal_id = $2
   UNION ALL SELECT 'title' AS kind, a.work FROM source.native_work_support_attachment a
     WHERE a.id = $1 AND a.principal_id = $2
   UNION ALL SELECT 'author-credit' AS kind, c.work FROM source.author_credit_intent c
+    WHERE c.id = $1 AND c.principal_id = $2
+  UNION ALL SELECT 'native-child' AS kind, c.work FROM source.native_child_intent c
     WHERE c.id = $1 AND c.principal_id = $2
   LIMIT 2`;
 
@@ -96,11 +98,11 @@ export class SourceFieldWithdrawalStore {
 
   /** Locate legacy native supports by their immutable owner key, never by a provider alias. */
   async locateNative(principalId: string, support: string): Promise<{
-    kind: 'title' | 'author-credit'; work: string;
+    kind: 'title' | 'author-credit' | 'native-child'; work: string;
   } | null> {
     const supportId = id(support);
     if (!UUID.test(principalId) || !supportId) throw new FieldWithdrawalInvalid('invalid support identity');
-    const rows = (await this.pool.query<{ kind: 'title' | 'author-credit'; work: string }>(
+    const rows = (await this.pool.query<{ kind: 'title' | 'author-credit' | 'native-child'; work: string }>(
       nativeSupportLookupSql, [supportId, principalId])).rows;
     if (rows.length > 1) throw new FieldWithdrawalUnavailable('support identity is ambiguous');
     return rows[0] ?? null;
@@ -133,13 +135,15 @@ export class SourceFieldWithdrawalStore {
       try {
         const checked = checkedFieldEvidence(retained, {
           slot: row.slot, grain: row.grain, sourceField: row.source_field,
-          sourcePointer: row.receipt.sourcePointer, sourceOccurrence: row.source_occurrence });
+          sourcePointer: row.receipt.sourcePointer, sourceOccurrence: row.source_occurrence,
+          occurrence: row.occurrence });
         if (checked.digest !== row.value_digest || checked.digest !== row.receipt.valueDigest
           || checked.mapping !== row.mapping_revision) {
           throw new FieldWithdrawalUnavailable('field attachment value differs from certificate');
         }
         await checkedFieldNativeValue(this.env, { target: row.target, slot: row.slot,
-          expectedHead: row.expected_head }, checked.digest);
+          expectedHead: row.expected_head, occurrence: row.occurrence,
+          context: row.context }, checked.digest);
       } catch { throw new FieldWithdrawalUnavailable('field attachment evidence is unavailable'); }
     }
     if (row.receipt?.profile === 'source-field-native-certificate-v1') {

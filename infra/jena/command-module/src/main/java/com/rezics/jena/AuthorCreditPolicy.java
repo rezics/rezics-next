@@ -71,7 +71,8 @@ final class AuthorCreditPolicy {
         Node current = uri(CommandPolicy.CURRENT), revisions = uri(CommandPolicy.REVISIONS);
         if (plan.request().getOperations().getFirst() instanceof UpdateModify modify) {
             boolean retirement = modify.getInsertQuads().stream().anyMatch(quad ->
-                current.equals(quad.getGraph()) && rv("retiredBy").equals(quad.getPredicate()));
+                current.equals(quad.getGraph()) && rv("retiredBy").equals(quad.getPredicate())
+                && data.contains(current, quad.getSubject(), RDF.type.asNode(), rv("AuthorCredit")));
             if (retirement) return retirement(data, plan, modify);
         }
         for (String subject : plan.current()) if (data.contains(current, uri(subject), RDF.type.asNode(), rv("AuthorCredit")))

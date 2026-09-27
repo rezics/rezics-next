@@ -9,6 +9,9 @@ import { changeNativeFieldControl, readNativeFieldControl, NativeFieldConflict,
   NativeFieldInvalid, NativeFieldUnavailable } from '../modules/source/field-control-native.ts';
 import { FieldWithdrawalConflict, FieldWithdrawalInvalid, FieldWithdrawalPending,
   FieldWithdrawalUnavailable } from '../modules/source/withdrawal.ts';
+import { NativeChildConflict, NativeChildInvalid, NativeChildUnavailable,
+  readNativeChild } from '../modules/source/child-native.ts';
+import { readNativeChildRetirement, retireNativeChild } from '../modules/source/child-retirement.ts';
 import { assertGraphAdmissionOpen } from '../modules/work/restore-lineage.ts';
 import { pendingOperation, problemResult } from '../api-contract.ts';
 import { authorizedReadProblems, writeProblems } from '../api-responses.ts';
@@ -25,7 +28,47 @@ export const openApiOperations = {
   '/v1/sources/withdrawals': { post: { bearer: true, idempotencyKey: true } },
   '/v1/works/{id}/fields/synopsis/control': { get: { bearer: true },
     post: { bearer: true, idempotencyKey: true } },
+  '/v1/works/{id}/source-children': { post: { bearer: true, idempotencyKey: true } },
+  '/v1/sources/native-child-supports/{support}': { get: { bearer: true } },
+  '/v1/sources/native-child-supports/{support}/withdrawals': { post: { bearer: true, idempotencyKey: true } },
+  '/v1/works/{id}/native-children/{child}/revisions/{revision}': { get: { bearer: true } },
+  '/v1/works/{id}/native-children/{child}/retirements': { post: { bearer: true, idempotencyKey: true },
+    get: { bearer: true } },
 };
+
+const nativeChildBody = t.Object({ profile: t.Literal('source-native-child-adoption-v1'),
+  field: t.Literal('subjects'), proposal: groupAgent,
+  conversion: groupAgent, occurrence: t.String(), sourceOrdinal: t.Integer({ minimum: 0, maximum: 127 }),
+  confirmedSourceKey: t.String({ minLength: 1, maxLength: 200 }),
+  nativeOrdinal: t.Integer({ minimum: 0, maximum: 127 }), expectedHead: groupAgent,
+  actingSubject: groupAgent, baseSupport: t.Nullable(groupAgent), correspondence: t.Nullable(groupAgent),
+  confirmedUse: t.Literal('factual-reference-only') }, { additionalProperties: false });
+const nativeChildResult = t.Object({ profile: t.String(), state: t.String(), work: groupAgent,
+  child: groupAgent, revision: groupAgent, field: t.Literal('subjects'),
+  sourceKey: t.String(), nativeOrdinal: t.Integer(), expectedHead: groupAgent,
+  actingSubject: groupAgent, dataEpoch: t.String(), sequence: t.String(),
+  retiredBy: t.Nullable(t.String()) });
+const nativeChildSupport = t.Object({ profile: t.String(), state: t.String(), support: groupAgent,
+  work: groupAgent, field: t.Literal('subjects'), child: nativeChildResult,
+  proposal: groupAgent, conversion: groupAgent, record: groupAgent,
+  observation: groupAgent, sourceOccurrence: t.String(), sourceOrdinal: t.Integer(),
+  sourceKey: t.String(), correspondence: t.Nullable(groupAgent), baseSupport: t.Nullable(groupAgent),
+  nativeReceipt: t.String(), headGuarantee: t.String(), rightsStatus: t.String(),
+  withdrawal: t.Nullable(t.Object({ withdrawal: groupAgent, reason: t.String(), createdAt: t.String() })),
+  createdAt: t.String() });
+const nativeChildWrite = t.Object({ support: nativeChildSupport, replayed: t.Boolean() });
+const nativeChildRetirement = t.Object({ profile: t.String(), state: t.Literal('retired'),
+  retirement: t.String(), work: groupAgent, child: groupAgent, revision: groupAgent,
+  workHead: groupAgent, reason: t.String(), admissionId: t.String(), requestDigest: t.String(),
+  sourcePosition: t.Object({ datasetId: t.Literal('product'), dataEpoch: t.String(), sequence: t.String() }) });
+const nativeChildRetirementWrite = t.Object({ retirement: nativeChildRetirement, replayed: t.Boolean() });
+
+function childError(error: unknown): Response {
+  if (error instanceof NativeChildInvalid) return problem(400, 'invalid_native_child', 'Native child request is invalid');
+  if (error instanceof NativeChildConflict) return problem(409, 'native_child_changed', 'Native child or source support changed');
+  if (error instanceof NativeChildUnavailable) return problem(503, 'native_child_unavailable', 'Native child evidence is unavailable');
+  return commandError(error);
+}
 
 const synopsisBasis = t.Object({ contentHead: t.Nullable(groupAgent),
   head: t.Nullable(groupAgent), epoch: t.String({ pattern: '^(0|[1-9][0-9]{0,18})$' }),
@@ -66,6 +109,8 @@ const creditRetirement = t.Object({ profile: t.Literal('work-author-credit-retir
     dataEpoch: t.String(), sequence: t.String() }) });
 
 function fieldError(error: unknown): Response {
+  if (error instanceof NativeChildInvalid || error instanceof NativeChildConflict
+    || error instanceof NativeChildUnavailable) return childError(error);
   if (error instanceof FieldWithdrawalInvalid) return problem(400, 'invalid_source_withdrawal', 'Field withdrawal is invalid');
   if (error instanceof FieldWithdrawalPending) return problem(409, 'source_support_pending', 'Field support needs reconciliation');
   if (error instanceof FieldWithdrawalConflict) return problem(409, 'source_support_changed', 'Field support changed');
@@ -162,7 +207,8 @@ const sourceSupportEntryResult = t.Union([
 ]);
 
 const anySupportResult = t.Union([fieldSupport, sourceSupportEntryResult,
-  t.Object({ kind: t.Literal('author-credit'), support: authorCreditSupportResult })]);
+  t.Object({ kind: t.Literal('author-credit'), support: authorCreditSupportResult }),
+  t.Object({ kind: t.Literal('native-child'), support: nativeChildSupport })]);
 
 async function readAnySupport(work: MainWorkDependencies, principalId: string, support: string) {
   if (!work.sourceFieldWithdrawals) return null;
@@ -173,6 +219,10 @@ async function readAnySupport(work: MainWorkDependencies, principalId: string, s
   if (native.kind === 'author-credit') {
     const credit = await work.sourceAuthorCredits?.read(principalId, support.split('/').at(-1)!);
     return credit ? { kind: 'author-credit' as const, support: credit } : null;
+  }
+  if (native.kind === 'native-child') {
+    const child = await work.sourceNativeChildren?.read(principalId, support.split('/').at(-1)!);
+    return child ? { kind: 'native-child' as const, support: child } : null;
   }
   const binding = support.startsWith('https://') ? support : `https://rezics.com/id/${support}`;
   return work.sourceAttachments?.readBinding(principalId, native.work, binding) ?? null;
@@ -385,6 +435,12 @@ export function sourceSupportRoutes(fuseki: FusekiClient, work: MainWorkDependen
             body.support.split('/').at(-1)!, key, body.reason);
           result = withdrawn ? { support: { kind: 'author-credit', support: withdrawn.support },
             replayed: withdrawn.replayed } : null;
+        } else if (current.kind === 'native-child') {
+          if (body.expectedSupport !== body.support) throw new FieldWithdrawalConflict('child support changed');
+          const withdrawn = await work.sourceNativeChildren?.withdraw(principalId, key,
+            body.support.split('/').at(-1)!, body.reason);
+          result = withdrawn?.support ? { support: { kind: 'native-child', support: withdrawn.support },
+            replayed: withdrawn.replayed } : null;
         } else {
           const native = current.kind === 'adoption' ? current.support.work : current.support.attachment.work;
           const withdrawn = await work.sourceAttachments?.withdraw(principalId, native,
@@ -444,6 +500,118 @@ export function sourceSupportRoutes(fuseki: FusekiClient, work: MainWorkDependen
         if (!result) return problem(404, 'author_credit_unavailable', 'Source credit support is unavailable');
         return Response.json(result, { status: result.replayed ? 200 : 201, headers: { 'cache-control': 'no-store' } });
       } catch (error) { return commandError(error); }
+    })
+    .post('/v1/works/:id/source-children', {
+      params: t.Object({ id: groupUuid }), body: nativeChildBody,
+      response: { 200: nativeChildWrite, 201: nativeChildWrite, 202: pendingOperation,
+        ...writeProblems, 404: problemResult(404) },
+    }, async ({ request, params, body }) => {
+      try {
+        if (!work.sourceNativeChildren) return problem(503, 'native_child_unavailable', 'Native child owner is unavailable');
+        const key = request.headers.get('idempotency-key');
+        if (!key) return problem(400, 'invalid_idempotency_key', 'Idempotency-Key is required');
+        const principal = await work.account.verify(request, ['source:adopt', 'work:edit']);
+        const principalId = await work.access.activePrincipalId(principal);
+        if (!principalId) return problem(403, 'authority_denied', 'Source principal is inactive');
+        const result = await work.sourceNativeChildren.adopt(principal, principalId, request,
+          `https://rezics.com/id/${params.id}`, key, body);
+        if (!result) return problem(404, 'source_proposal_unavailable', 'Source proposal is unavailable');
+        return Response.json(result, { status: result.replayed ? 200 : 201,
+          headers: { 'cache-control': 'no-store' } });
+      } catch (error) { return childError(error); }
+    })
+    .get('/v1/sources/native-child-supports/:support', {
+      params: t.Object({ support: groupUuid }),
+      response: { 200: nativeChildSupport, ...authorizedReadProblems },
+    }, async ({ request, params }) => {
+      try {
+        if (!work.sourceNativeChildren) return problem(503, 'native_child_unavailable', 'Native child owner is unavailable');
+        const principal = await work.account.verify(request, ['source:read']);
+        const principalId = await work.access.activePrincipalId(principal);
+        if (!principalId) return problem(403, 'authority_denied', 'Source principal is inactive');
+        const result = await work.sourceNativeChildren.read(principalId, params.support);
+        if (!result) return problem(404, 'native_child_unavailable', 'Source child support is unavailable');
+        return Response.json(result, { headers: { 'cache-control': 'no-store' } });
+      } catch (error) { return childError(error); }
+    })
+    .post('/v1/sources/native-child-supports/:support/withdrawals', {
+      params: t.Object({ support: groupUuid }),
+      body: t.Object({ reason: t.String({ minLength: 1, maxLength: 500 }) }, { additionalProperties: false }),
+      response: { 200: nativeChildWrite, 201: nativeChildWrite,
+        ...writeProblems, 404: problemResult(404) },
+    }, async ({ request, params, body }) => {
+      try {
+        if (!work.sourceNativeChildren) return problem(503, 'native_child_unavailable', 'Native child owner is unavailable');
+        const key = request.headers.get('idempotency-key');
+        if (!key) return problem(400, 'invalid_idempotency_key', 'Idempotency-Key is required');
+        const principal = await work.account.verify(request, ['source:adopt']);
+        const principalId = await work.access.activePrincipalId(principal);
+        if (!principalId) return problem(403, 'authority_denied', 'Source principal is inactive');
+        const result = await work.sourceNativeChildren.withdraw(principalId, key, params.support, body.reason);
+        if (!result || !result.support) return problem(404, 'native_child_unavailable', 'Source child support is unavailable');
+        return Response.json(result, { status: result.replayed ? 200 : 201,
+          headers: { 'cache-control': 'no-store' } });
+      } catch (error) { return childError(error); }
+    })
+    .get('/v1/works/:id/native-children/:child/revisions/:revision', {
+      params: t.Object({ id: groupUuid, child: groupUuid, revision: groupUuid }),
+      query: t.Object({ actingSubject: groupAgent }),
+      response: { 200: nativeChildResult, ...authorizedReadProblems },
+    }, async ({ request, params, query }) => {
+      try {
+        const principal = await work.account.verify(request, ['work:read']);
+        const resource = `https://rezics.com/id/${params.id}`;
+        if (!await work.access.canReadWork(principal, query.actingSubject, resource)) {
+          return problem(404, 'native_child_unavailable', 'Native child is unavailable');
+        }
+        const result = await readNativeChild(work.environment, `https://rezics.com/id/${params.child}`,
+          `https://rezics.com/id/${params.revision}`);
+        if (!result || result.work !== resource) return problem(404, 'native_child_unavailable', 'Native child is unavailable');
+        return Response.json(result, { headers: { 'cache-control': 'no-store' } });
+      } catch (error) { return childError(error); }
+    })
+    .post('/v1/works/:id/native-children/:child/retirements', {
+      params: t.Object({ id: groupUuid, child: groupUuid }),
+      body: t.Object({ profile: t.Literal('work-native-child-retirement-v1'),
+        revision: groupAgent, expectedHead: groupAgent,
+        actingSubject: groupAgent, reason: t.String({ minLength: 1, maxLength: 500 }) },
+      { additionalProperties: false }),
+      response: { 200: nativeChildRetirementWrite, 201: nativeChildRetirementWrite,
+        202: pendingOperation, ...writeProblems, 404: problemResult(404) },
+    }, async ({ request, params, body }) => {
+      try {
+        const key = request.headers.get('idempotency-key');
+        if (!key) return problem(400, 'invalid_idempotency_key', 'Idempotency-Key is required');
+        if (!work.access.issueTitleAdmission) {
+          return problem(503, 'native_child_unavailable', 'Native child admission is unavailable');
+        }
+        const result = await retireNativeChild(work.environment, work.account,
+          { register: work.access.register.bind(work.access), claim: work.access.claim.bind(work.access),
+            recordGraphOutcome: work.access.recordGraphOutcome.bind(work.access),
+            issueTitleAdmission: work.access.issueTitleAdmission.bind(work.access) }, request, {
+          work: `https://rezics.com/id/${params.id}`, child: `https://rezics.com/id/${params.child}`,
+          revision: body.revision, expectedHead: body.expectedHead, actingSubject: body.actingSubject,
+          reason: body.reason, idempotencyKey: key });
+        return Response.json(result, { status: result.replayed ? 200 : 201,
+          headers: { 'cache-control': 'no-store' } });
+      } catch (error) { return childError(error); }
+    })
+    .get('/v1/works/:id/native-children/:child/retirements', {
+      params: t.Object({ id: groupUuid, child: groupUuid }),
+      query: t.Object({ actingSubject: groupAgent }),
+      response: { 200: nativeChildRetirement, ...authorizedReadProblems },
+    }, async ({ request, params, query }) => {
+      try {
+        const principal = await work.account.verify(request, ['work:read']);
+        const resource = `https://rezics.com/id/${params.id}`;
+        if (!await work.access.canReadWork(principal, query.actingSubject, resource)) {
+          return problem(404, 'native_child_unavailable', 'Native child is unavailable');
+        }
+        const result = await readNativeChildRetirement(work.environment,
+          `https://rezics.com/id/${params.child}`);
+        if (!result || result.work !== resource) return problem(404, 'native_child_unavailable', 'Native child is unavailable');
+        return Response.json(result, { headers: { 'cache-control': 'no-store' } });
+      } catch (error) { return childError(error); }
     })
     .get('/v1/works/:id/author-credits/:credit/revisions/:revision', {
       params: t.Object({ id: groupUuid, credit: groupUuid, revision: groupUuid }),

@@ -218,9 +218,12 @@ export class SourceIntakeStore {
     const { bytes, digest: byteDigest } = checkedInput(input);
     if (capture && (capture.profile !== 'open-library-work-acquisition-v1'
       || capture.status !== 200
-      || !/^https:\/\/openlibrary\.org\/works\/OL[1-9][0-9]{0,11}W\.json$/.test(capture.url)
+      || !/^https:\/\/openlibrary\.org\/works\/OL[1-9][0-9]{0,11}W\.json(?:\?v=[1-9][0-9]{0,8})?$/.test(capture.url)
       || input.provider !== 'open-library' || input.namespace !== 'work'
-      || capture.url !== `https://openlibrary.org/works/${input.externalId}.json`
+      || ![ `https://openlibrary.org/works/${input.externalId}.json`,
+        ...(input.sourceRevision?.startsWith('open-library-revision:')
+          ? [`https://openlibrary.org/works/${input.externalId}.json?v=${input.sourceRevision.slice(22)}`]
+          : []) ].includes(capture.url)
       || input.retention !== 'retained'
       || !Number.isFinite(Date.parse(capture.fetchedAt))
       || [capture.etag, capture.lastModified].some(value => value !== null

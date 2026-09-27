@@ -5,6 +5,8 @@ import type { WorkEditAuthorityProof } from '../access/work-edit-authority.ts';
 import type { WorkActivationEnvironment } from '../work/activate.ts';
 import { GRAPHS, RV } from '../work/activate.ts';
 import { readExactWorkRevision, type ExactWorkRevision } from '../work/history.ts';
+import { readCompositionHeader } from '../structure/graph.ts';
+import { readCompositionPage } from '../structure/read.ts';
 import { assertGraphAdmissionOpen } from '../work/restore-lineage.ts';
 import { FieldWithdrawalConflict, FieldWithdrawalInvalid, FieldWithdrawalUnavailable } from './withdrawal.ts';
 
@@ -23,7 +25,7 @@ export interface AttachFieldSupportInput {
 }
 
 interface EvidenceRow {
-  record_id: string; provider: string; namespace: string; mapping_provider: string;
+  observation_id: string; record_id: string; provider: string; namespace: string; mapping_provider: string;
   mapping_namespace: string; mapping_grain: string; mapping_revision: string;
   source_digest: string; field_inventory: unknown; byte_digest: string | null;
   raw_bytes: Buffer | null; retention: string; coverage: { complete?: boolean };
@@ -31,7 +33,7 @@ interface EvidenceRow {
 }
 
 export const fieldAttachmentEvidenceSql = `SELECT c.mapping_revision, c.source_digest, c.field_inventory,
-  o.raw_bytes, o.byte_digest, o.retention, o.coverage, o.media_type, o.record_id,
+  o.id AS observation_id, o.raw_bytes, o.byte_digest, o.retention, o.coverage, o.media_type, o.record_id,
   r.provider, r.namespace, m.provider AS mapping_provider, m.namespace AS mapping_namespace,
   m.root_grain AS mapping_grain, d.disposition, d.native_target
   FROM source.conversion c JOIN source.observation o ON o.id = c.observation_id
@@ -49,11 +51,16 @@ const nativeSlotValue: Record<string, (revision: ExactWorkRevision) => unknown> 
 };
 
 export function fieldValueAtPointer(bytes: Buffer, path: string): unknown {
-  if (path.length > 200 || !path.startsWith('/') || path.split('/').length > 9
-    || /~(?![01])/.test(path)) throw new FieldWithdrawalInvalid('invalid source field pointer');
   let value: unknown;
   try { value = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes)); }
   catch { throw new FieldWithdrawalInvalid('source field observation is not JSON'); }
+  return valueAtPointer(value, path);
+}
+
+function valueAtPointer(root: unknown, path: string): unknown {
+  if (path.length > 200 || !path.startsWith('/') || path.split('/').length > 9
+    || /~(?![01])/.test(path)) throw new FieldWithdrawalInvalid('invalid source field pointer');
+  let value = root;
   for (const token of path.slice(1).split('/').map(part => part.replaceAll('~1', '/').replaceAll('~0', '~'))) {
     if (Array.isArray(value)) {
       if (!/^(0|[1-9][0-9]{0,5})$/.test(token)) throw new FieldWithdrawalInvalid('invalid source array index');
@@ -65,8 +72,18 @@ export function fieldValueAtPointer(bytes: Buffer, path: string): unknown {
   return value;
 }
 
+/** Observation and JSON position identify source evidence; they never identify a native child. */
+export function sourceFieldOccurrence(observation: string, grain: string,
+  field: string, pointer: string): string {
+  if (!IRI.test(observation) || !grain || !field || !pointer.startsWith('/')) {
+    throw new FieldWithdrawalInvalid('invalid source child occurrence basis');
+  }
+  return `urn:rezics:source-occurrence:${hash(JSON.stringify({ observation, grain, field, pointer }))}`;
+}
+
 export function checkedFieldEvidence(row: EvidenceRow | undefined, input: Pick<AttachFieldSupportInput,
-  'slot' | 'grain' | 'sourceField' | 'sourcePointer' | 'sourceOccurrence'>): { digest: string; mapping: string } {
+  'slot' | 'grain' | 'sourceField' | 'sourcePointer' | 'sourceOccurrence' | 'occurrence'>):
+  { digest: string; mapping: string } {
   if (!row || row.retention !== 'retained' || !row.raw_bytes || !row.byte_digest
     || !row.coverage.complete || !/^application\/json(?:;|$)/i.test(row.media_type)
     || hash(row.raw_bytes) !== row.byte_digest || row.source_digest !== row.byte_digest
@@ -81,8 +98,11 @@ export function checkedFieldEvidence(row: EvidenceRow | undefined, input: Pick<A
     && (item as Record<string, unknown>).disposition === row.disposition)) {
     throw new FieldWithdrawalUnavailable('source field is absent from conversion inventory');
   }
-  // An occurrence-qualified child cannot be verified by the scalar Work adapters.
-  if (input.sourceOccurrence !== null) throw new FieldWithdrawalInvalid('native child slot needs its owner adapter');
+  if (input.occurrence === null ? input.sourceOccurrence !== null
+    : input.sourceOccurrence !== sourceFieldOccurrence(iri(row.observation_id),
+      input.grain, input.sourceField, input.sourcePointer)) {
+    throw new FieldWithdrawalConflict('source child occurrence differs from retained position');
+  }
   const value = fieldValueAtPointer(row.raw_bytes, input.sourcePointer);
   if (value === undefined || JSON.stringify(value) === undefined) {
     throw new FieldWithdrawalInvalid('source field has no retained value');
@@ -91,7 +111,31 @@ export function checkedFieldEvidence(row: EvidenceRow | undefined, input: Pick<A
 }
 
 export async function checkedFieldNativeValue(env: WorkActivationEnvironment, input: Pick<AttachFieldSupportInput,
-  'target' | 'slot' | 'expectedHead'>, valueDigest: string): Promise<void> {
+  'target' | 'slot' | 'expectedHead' | 'occurrence' | 'context'>, valueDigest: string,
+  requireCurrent = false): Promise<void> {
+  if (input.occurrence !== null) {
+    // The Structure owner resolves one exact occurrence through its indexed
+    // record tree. The path depth is capped at six; no child list is scanned.
+    const path = /^structure-occurrence-v1#([A-Za-z][A-Za-z0-9_.-]{0,99})$/.exec(input.slot)?.[1];
+    if (!path || input.context === 'global' || !IRI.test(input.context)
+      || !IRI.test(input.occurrence) || path.split('.').length > 6) {
+      throw new FieldWithdrawalInvalid('native child slot has no verified adapter');
+    }
+    const header = await readCompositionHeader(env, input.context);
+    if (!header || header.work !== input.target || requireCurrent && header.head !== input.expectedHead) {
+      throw new FieldWithdrawalConflict('native child owner or head changed');
+    }
+    const page = await readCompositionPage(env, { structure: input.context,
+      revision: input.expectedHead, occurrence: input.occurrence, limit: 1,
+      canReadTarget: async () => true });
+    const record = page.occurrences[0];
+    const native = record && valueAtPointer(record, `/${path.replaceAll('.', '/')}`);
+    if (!record || record.state !== 'active' || record.occurrence !== input.occurrence
+      || native === undefined || hash(JSON.stringify(native)) !== valueDigest) {
+      throw new FieldWithdrawalConflict('source value differs from exact native child revision');
+    }
+    return;
+  }
   const adapter = nativeSlotValue[input.slot];
   if (!adapter) throw new FieldWithdrawalInvalid('native field slot has no verified adapter');
   const revision = await readExactWorkRevision(env, input.expectedHead, async owner => owner === input.target);
@@ -113,8 +157,12 @@ export class SourceFieldAttachmentStore {
     if (input.profile !== 'source-field-support-attachment-v1' || !UUID.test(principalId)
       || !KEY.test(key) || !record || !conversion || !IRI.test(input.target)
       || !IRI.test(input.expectedHead) || !IRI.test(input.actingSubject)
-      || input.context !== 'global' || input.occurrence !== null || input.sourceOccurrence !== null
-      || !nativeSlotValue[input.slot] || !/^[a-z0-9][a-z0-9-]{0,63}$/.test(input.grain)
+      || (input.occurrence === null
+        ? input.context !== 'global' || input.sourceOccurrence !== null || !nativeSlotValue[input.slot]
+        : !IRI.test(input.occurrence) || !IRI.test(input.context)
+          || !/^urn:rezics:source-occurrence:[0-9a-f]{64}$/.test(input.sourceOccurrence ?? '')
+          || !/^structure-occurrence-v1#[A-Za-z][A-Za-z0-9_.-]{0,99}$/.test(input.slot))
+      || !/^[a-z0-9][a-z0-9-]{0,63}$/.test(input.grain)
       || !/^[A-Za-z0-9@$_][A-Za-z0-9@$_.:/#-]{0,199}$/.test(input.sourceField)) {
       throw new FieldWithdrawalInvalid('invalid field support attachment');
     }
@@ -122,13 +170,15 @@ export class SourceFieldAttachmentStore {
       [conversion, principalId, record, input.grain, input.sourceField])).rows[0];
     const checked = checkedFieldEvidence(evidence, input);
     await assertGraphAdmissionOpen(this.env.fuseki, this.env.lineage);
-    const head = await this.env.fuseki.query(`SELECT ?head WHERE { GRAPH <${GRAPHS.current}> {
-      <${input.target}> <${RV}head> ?head } } LIMIT 2`);
-    const heads = head.results?.bindings ?? [];
-    if (heads.length !== 1 || heads[0]?.head?.value !== input.expectedHead) {
-      throw new FieldWithdrawalConflict('Work head changed before source attachment');
+    if (input.occurrence === null) {
+      const head = await this.env.fuseki.query(`SELECT ?head WHERE { GRAPH <${GRAPHS.current}> {
+        <${input.target}> <${RV}head> ?head } } LIMIT 2`);
+      const heads = head.results?.bindings ?? [];
+      if (heads.length !== 1 || heads[0]?.head?.value !== input.expectedHead) {
+        throw new FieldWithdrawalConflict('Work head changed before source attachment');
+      }
     }
-    await checkedFieldNativeValue(this.env, input, checked.digest);
+    await checkedFieldNativeValue(this.env, input, checked.digest, true);
     const requestDigest = hash(JSON.stringify([principalId, input, checked.digest, checked.mapping]));
     const client = await this.pool.connect();
     try {
@@ -150,12 +200,12 @@ export class SourceFieldAttachmentStore {
             const supportId = Bun.randomUUIDv7(), stepId = Bun.randomUUIDv7();
             await client.query(`INSERT INTO source.field_support
               (id, principal_id, target, slot, occurrence, context, record_id)
-              VALUES ($1,$2,$3,$4,NULL,'global',$5) ON CONFLICT DO NOTHING`,
-            [supportId, principalId, input.target, input.slot, record]);
+              VALUES ($1,$2,$3,$4,$5,$6,$7) ON CONFLICT DO NOTHING`,
+            [supportId, principalId, input.target, input.slot, input.occurrence, input.context, record]);
             const support = (await client.query<{ id: string }>(`SELECT id FROM source.field_support
               WHERE principal_id = $1 AND target = $2 AND slot = $3
-                AND occurrence IS NULL AND context = 'global' AND record_id = $4 FOR SHARE`,
-            [principalId, input.target, input.slot, record])).rows[0];
+                AND occurrence IS NOT DISTINCT FROM $4 AND context = $5 AND record_id = $6 FOR SHARE`,
+            [principalId, input.target, input.slot, input.occurrence, input.context, record])).rows[0];
             if (!support) throw new FieldWithdrawalUnavailable('field support row is unavailable');
             const state = (await client.query<{ step_count: number; pending_step_id: string | null }>(
               'SELECT step_count, pending_step_id FROM source.field_support_head WHERE support_id = $1 FOR UPDATE',
@@ -178,9 +228,9 @@ export class SourceFieldAttachmentStore {
                grain, source_field, source_occurrence, value_digest, expected_head,
                control_intent, acting_subject, authority_proof, native_idempotency_key,
                idempotency_key, request_digest)
-              VALUES ($1,$2,1,$3,'attach',$4,$5,$6,$7,NULL,$8,$9,NULL,$10,$11,NULL,$12,$13)`,
+              VALUES ($1,$2,1,$3,'attach',$4,$5,$6,$7,$8,$9,$10,NULL,$11,$12,NULL,$13,$14)`,
             [stepId, support.id, principalId, conversion, checked.mapping, input.grain,
-              input.sourceField, checked.digest, input.expectedHead, input.actingSubject,
+              input.sourceField, input.sourceOccurrence, checked.digest, input.expectedHead, input.actingSubject,
               JSON.stringify(proof), key, requestDigest]);
             await client.query(`INSERT INTO source.field_support_outcome
               (step_id, outcome, native_revision, graph_receipt, admission_id, data_epoch,
