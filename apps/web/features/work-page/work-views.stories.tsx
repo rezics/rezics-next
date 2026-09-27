@@ -169,7 +169,7 @@ export const Contents: Story = {
     await expect(within(region).getByRole('link', { name: /Untitled chapter/ })).toBeVisible();
     // A chapter with no publication in this language is listed, not linked.
     await expect(within(region).queryByRole('link', { name: /Neap Tide/ })).toBeNull();
-    await expect(region).toHaveTextContent('Not available in this language');
+    await expect(region).toHaveTextContent('Not available to read yet');
   },
 };
 

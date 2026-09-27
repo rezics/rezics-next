@@ -1,12 +1,22 @@
 // Seeds one public Work for the Work page e2e into the isolated QA stack the
 // e2e harness started: English and Japanese versions, a Realm that adopted it,
-// Global and Realm classification, an Open Library credit and Global and Realm
-// ratings. It writes through the same owner commands and Main routes as
-// `services/main/tests/work-read.integration.test.ts`, and prints the IDs.
-import { randomUUID } from 'node:crypto';
+// Global and Realm classification with relevance, an original title and
+// description, an Open Library and a native Agent credit, Global and Realm
+// ratings, a table of contents with published chapters and a reviewed reply.
+// It writes through the owner commands and Main routes the Main integration
+// tests use (work-read, work-metadata, work-contents, work-activity, profiles)
+// and prints the IDs.
+import { createHash, randomUUID } from 'node:crypto';
 import { startMediaStack } from '../../../tests/qa/integration/media-support.ts';
+import { createMainApp } from '../../../services/main/src/app.ts';
+import { AgentProvisioning } from '../../../services/main/src/modules/agent/provision.ts';
+import { ProfilesAccess } from '../../../services/main/src/modules/profiles/access.ts';
+import { RealmReplyContentStore } from '../../../services/main/src/modules/realm-reply/content-store.ts';
+import { RealmReplyStore } from '../../../services/main/src/modules/realm-reply/store.ts';
 import { GLOBAL_CONTEXT_SCOPE } from '../../../services/main/src/modules/rating/global.ts';
-import { GRAPHS, RV, iri } from '../../../services/main/src/modules/work/activate.ts';
+import { activateMetadataWork, GRAPHS, iri, metadataWorkRequestDigest, RV }
+  from '../../../services/main/src/modules/work/activate.ts';
+import { mainSelectionDigest, selectMainDefault } from '../../../services/main/src/modules/work/select-main.ts';
 import { authorCreditTriples } from '../../../services/main/src/modules/work/author-credit.ts';
 
 if (!/^[a-z0-9][a-z0-9-]{0,30}$/.test(process.env.REZICS_QA_RUN_ID ?? '')) {
@@ -15,19 +25,36 @@ if (!/^[a-z0-9][a-z0-9-]{0,30}$/.test(process.env.REZICS_QA_RUN_ID ?? '')) {
 const objectDirectory = process.env.MAIN_OBJECT_DIRECTORY;
 if (!objectDirectory) throw new Error('MAIN_OBJECT_DIRECTORY must name the running Main’s object directory');
 
-async function created<T>(response: Response): Promise<T> {
+async function created<T>(response: Response, status = 201): Promise<T> {
   const text = await response.text();
-  if (response.status !== 201) throw new Error(`Seed step failed with ${response.status}: ${text}`);
+  if (response.status !== status) throw new Error(`Seed step failed with ${response.status}: ${text}`);
   return JSON.parse(text) as T;
 }
 
 const stack = await startMediaStack('work-page-e2e');
-// Owner commands keep revision bytes beside the graph; the running Main verifies ratings against them.
-stack.env.objectDirectory = objectDirectory;
+// Owner commands keep revision bytes beside the graph and in the object store; point them where the running
+// Main reads them, as services/main/src/index.ts configures it.
+const workObjects = stack.objects('semantic/work/');
+const structureObjects = stack.objects('semantic/structure/');
+await Promise.all([workObjects.initialize(), structureObjects.initialize()]);
+Object.assign(stack.env, { objectDirectory, workObjects, structureObjects });
 try {
   const [a, b, c] = await Promise.all(['reader-a', 'reader-b', 'reader-c'].map(name => stack.member(name)));
   const title = `The Cartographer of Tides ${randomUUID().slice(0, 8)}`;
-  const work = await stack.publicWork(a!.actor, ['en', 'ja'], title);
+  // A Book, so its Main Version can own a table of contents; English is its selected text, Japanese a variant.
+  const types = ['https://schema.org/Book'];
+  const book = await activateMetadataWork(stack.env, { title, semanticTypes: types, admission: stack.admission(
+    a!.actor, 'work:create:root', 'work.create', metadataWorkRequestDigest(title, types)) });
+  if (!book.work || !book.mainVersion) throw new Error('Book was not created');
+  const variants = [await stack.contribution(book.work, a!.actor, 'en', `${title} in English`),
+    await stack.contribution(book.work, a!.actor, 'ja', `${title} 日本語`)];
+  const selection = { context: { kind: 'main-version-default' as const, id: book.mainVersion }, work: book.work,
+    contribution: variants[0]!.contribution, publicationDecision: variants[0]!.decision, expectedSelectionHead: null,
+    selectionBasis: 'main-maintainer' as const, actingSubject: a!.actor };
+  const selected = await selectMainDefault(stack.env, stack.admission(a!.actor, `publication:select:${book.mainVersion}`,
+    'publication.select', mainSelectionDigest(selection)), selection);
+  if (selected.outcome !== 'succeeded') throw new Error('Main selection failed');
+  const work = { work: book.work, mainVersion: book.mainVersion, variants };
   const header = await stack.call('GET', `/v1/works/${work.work.slice(-36)}`);
   const { revision } = await header.json() as { revision: string };
 
@@ -49,12 +76,22 @@ try {
   const decide = async (label: string, context: { kind: 'global' } | { kind: 'realm-classification'; id: string }) => {
     const proposition = await created<{ sense: string }>(await a!.send('POST', '/v1/classification-propositions',
       { profile: 'classification-proposition-v1', label, actingSubject: a!.actor }));
-    await created(await a!.send('POST', '/v1/classification-decisions', { profile: 'classification-direct-decision-v1',
-      work: work.work, mainVersion: work.mainVersion, sense: proposition.sense, expectedDecisionHead: null,
-      context, outcome: 'accepted', actingSubject: a!.actor }));
+    const decision = await created<{ decision: string }>(await a!.send('POST', '/v1/classification-decisions', {
+      profile: 'classification-direct-decision-v1', work: work.work, mainVersion: work.mainVersion,
+      sense: proposition.sense, expectedDecisionHead: null, context, outcome: 'accepted', actingSubject: a!.actor }));
+    return { sense: proposition.sense, decision: decision.decision, context };
   };
-  await decide('Adventure', { kind: 'global' });
+  const adventure = await decide('Adventure', { kind: 'global' });
   await decide('Estuary cycle', { kind: 'realm-classification', id: realm.realm });
+
+  // Recorded metadata: the original title, localized descriptions and a relevance level.
+  await a!.grant(`work:edit:${work.work}`, 'work.edit');
+  const metadata = (state: unknown) => a!.send('PUT', `/v1/works/${work.work.slice(-36)}/metadata`,
+    { profile: 'work-metadata-details-v1', expectedHead: null, state, actingSubject: a!.actor });
+  await created(await metadata({ kind: 'header', originalTitle: { value: 'La Cartographe des marées', language: 'fr' },
+    localized: [{ language: 'en', title: null, mainVersionLabel: null,
+      description: 'A surveyor maps a delta that redraws itself with every tide.' }] }), 200);
+  await created(await metadata({ kind: 'relevance', ...adventure, level: 'central' }), 200);
 
   // Credits arrive through source adoption, which has no route of its own; write the confirmed triples.
   const credit = authorCreditTriples({ work: work.work, credit: `https://rezics.com/id/${randomUUID()}`,
@@ -82,7 +119,105 @@ try {
       profile: 'realm-standing-rating-observation-v1', context: local.context, work: work.work,
       mainVersion: work.mainVersion, expectedRevisionHead: null, value: realmValue, actingSubject: member.actor }));
   }
-  console.log(JSON.stringify({ work: work.work, realm: realm.realm, title }));
+
+  // One app with the owners the default QA app leaves out: Agent profiles and Realm replies.
+  const app = createMainApp(stack.fuseki, { environment: stack.env, access: stack.access, content: stack.content,
+    media: stack.media, structureObjects, profiles: new ProfilesAccess(stack.accessPool),
+    agentProvisioning: new AgentProvisioning(stack.accessPool, stack.env),
+    realmReplies: new RealmReplyStore(new RealmReplyContentStore(stack.contentPool), stack.content, stack.access,
+      stack.env), account: { verify: async () => a!.principal } });
+  const send = (method: string, path: string, body: unknown) => app.handle(new Request(`http://main.local${path}`, {
+    method, headers: { authorization: `Bearer ${a!.token}`, 'content-type': 'application/json',
+      'idempotency-key': randomUUID() }, body: JSON.stringify(body) }));
+  const grantAs = async (actor: string, scope: string, action: string) => {
+    await stack.accessPool.query('INSERT INTO access.scope_gate(id) VALUES ($1) ON CONFLICT DO NOTHING', [scope]);
+    await stack.accessPool.query(`INSERT INTO access.representation(id, principal_id, subject_id, action, valid_until)
+      VALUES ($1,$2,$3,$4,now() + interval '1 hour')`, [randomUUID(), a!.principalId, actor, action]);
+    await stack.accessPool.query(`INSERT INTO access.permission_grant(id,issuer_subject,recipient_subject,scope_id,
+      action,valid_until) VALUES ($1,$2,$2,$3,$4,now() + interval '1 hour')`, [randomUUID(), actor, scope, action]);
+  };
+  const head = async () => (await (await stack.call('GET', `/v1/works/${work.work.slice(-36)}`)).json() as
+    { revision: string }).revision;
+
+  // A native credit: a public pen-name Agent credited as author.
+  const author = await created<{ agent: string }>(await send('POST', '/v1/agents',
+    { profile: 'agent-provision-v1', displayName: 'Maren Osei', kind: 'person' }));
+  await grantAs(author.agent, `work:edit:${work.work}`, 'work.edit');
+  await created(await send('POST', `/v1/works/${work.work.slice(-36)}/agent-credits`, {
+    profile: 'native-agent-credit-v1', credit: `https://rezics.com/id/${randomUUID()}`, agent: author.agent,
+    role: 'author', expectedWorkHead: await head(), actingSubject: author.agent }));
+
+  // A table of contents for the Main Version: two published chapters and one with no publication.
+  const chapterWork = async (label: string, body: string | null) => {
+    const target = await stack.privateWork(a!.actor, label);
+    // The composition editor must be able to read every chapter target, published or not.
+    await a!.grant(`work:read:${target.work}`, 'work.read');
+    if (body === null) return target.work;
+    await a!.grant(`content:draft:${target.work}`, 'content.draft');
+    const variant = `urn:rezics:variant:${randomUUID()}`;
+    await a!.grant(`content:publish:${variant}`, 'content.publish');
+    await a!.grant(`content:search-eligibility:${variant}`, 'content.search-eligibility');
+    const saved = await created<{ revisionId: string; sourcePosition: { dataEpoch: string } }>(await a!.send('POST',
+      '/v1/content-drafts', { profile: 'content-text-v1', resourceId: target.work, variantId: variant,
+        language: { kind: 'tag', tag: 'en', originalTag: 'en' }, direction: 'ltr', expectedHead: null, body,
+        actingSubject: a!.actor }));
+    const exact = (await stack.content.readExactBatch([saved.revisionId], async ids => new Set(ids)))[0];
+    if (exact?.status !== 'available') throw new Error('Chapter draft was not saved');
+    const published = await created<{ decision: string }>(await a!.send('POST', '/v1/content-publications', {
+      profile: 'content-publication-v1', preparationId: `work-page-${randomUUID()}`, revisionId: saved.revisionId,
+      expectedDigest: exact.reference.byteDigest, expectedContentEpoch: saved.sourcePosition.dataEpoch,
+      resourceId: target.work, variantId: variant, expectedPublicationHead: null, actingSubject: a!.actor }));
+    await created(await a!.send('POST', '/v1/content-search-eligibility', { profile: 'content-search-eligibility-v1',
+      resourceId: target.work, variantId: variant, publicationDecision: published.decision,
+      expectedEligibilityHead: null, actingSubject: a!.actor, rightsBasis: 'original-contribution',
+      disclosure: 'public' }));
+    return target.work;
+  };
+  const low = await chapterWork('Low Water', ['The tide went out at four and took the eastern bank with it.',
+    'Maren had learned not to trust anything the river left behind.'].join('\n'));
+  const chain = await chapterWork('The Surveyor’s Chain', ['She set the chain across the mud and counted the links aloud.',
+    'By evening the ledger disagreed with the city again.'].join('\n'));
+  const neap = await chapterWork('Neap Tide', null);
+  const composition = await created<{ structure: string; revision: string }>(await a!.send('POST', '/v1/compositions',
+    { profile: 'book-composition', work: work.work, mainVersion: work.mainVersion, actingSubject: a!.actor }));
+  const arranged = await created<{ occurrences: string[] }>(await a!.send('POST',
+    `/v1/compositions/${composition.structure.slice(-36)}/changes`, { profile: 'book-composition',
+      expectedHead: composition.revision, actingSubject: a!.actor, operations: [
+        { op: 'insert', parent: composition.structure, position: 'last', role: 'chapter', target: low,
+          label: { value: 'Low Water', language: 'en' } },
+        { op: 'insert', parent: composition.structure, position: 'last', role: 'chapter', target: chain,
+          label: { value: 'The Surveyor’s Chain', language: 'en' } },
+        { op: 'insert', parent: composition.structure, position: 'last', role: 'chapter', target: neap,
+          label: { value: 'Neap Tide', language: 'en' } },
+      ] }), 200);
+
+  // A reply reviewed and placed in the Realm, so Discussion and History have one.
+  const reply = `https://rezics.com/id/${randomUUID()}`;
+  const replyVariant = `urn:rezics:variant:${randomUUID()}`;
+  const replyText = 'The chapter where the map floods is the best thing I have read this year.';
+  const saved = await stack.content.saveDraft({ operationId: randomUUID(), variant: { id: replyVariant,
+    resourceId: reply, language: { kind: 'tag', tag: 'en', originalTag: 'en' }, direction: 'ltr' },
+  expectedHead: null, model: 'content-text-v1', sourceRevision: null, provenance: { kind: 'work-page-e2e' },
+  serializedJson: JSON.stringify({ body: replyText }) });
+  const digest = (await stack.contentPool.query<{ byte_digest: string }>(
+    'SELECT byte_digest FROM content.revision WHERE id = $1', [saved.revisionId])).rows[0]!.byte_digest;
+  await a!.grant(`reply:create:${work.work}`, 'reply.create');
+  await a!.grant(`review:decide:${realm.realm}`, 'review.decide');
+  await a!.grant(`reply:place:${realm.realm}`, 'reply.place');
+  await created(await send('POST', '/v1/realm-replies', { profile: 'realm-reply-identity-v1', reply,
+    variantId: replyVariant, revisionId: saved.revisionId, author: a!.actor, rootTarget: work.work,
+    rootRevision: work.mainVersion, parentReply: null, parentRevision: null, contextRevision: null }));
+  const review = await created<{ decisionId: string }>(await send('POST', '/v1/realm-reply-reviews', {
+    profile: 'realm-reply-review-v1', realm: realm.realm, reply, revisionId: saved.revisionId, revisionDigest: digest,
+    expectedGeneration: '0', supersedes: null, outcome: 'approved', method: 'human', methodRevision: 'realm-manager-v1',
+    dependencyDigest: createHash('sha256').update(work.work).digest('hex'), reasonReference: null,
+    actingSubject: a!.actor }));
+  await created(await send('POST', '/v1/realm-reply-placements', { profile: 'realm-reply-placement-v1',
+    realm: realm.realm, reply, revisionId: saved.revisionId, revisionDigest: digest,
+    reviewDecisionId: review.decisionId, expectedHead: null, actingSubject: a!.actor }));
+
+  console.log(JSON.stringify({ work: work.work, realm: realm.realm, title, reply: replyText,
+    chapters: arranged.occurrences, targets: [low, chain] }));
 } finally {
   await stack.stop();
 }

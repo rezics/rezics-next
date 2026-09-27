@@ -57,7 +57,9 @@ export function ContentsRegion({ contents, workRef, query, locale, messages }: {
       {items.map(item => {
         const id = idOf(item.occurrence);
         const group = item.role === 'group';
-        const label = item.label?.value ?? (group ? t.untitledPart : t.untitledChapter);
+        // Main withholds the label of a chapter the reader cannot read; that is not an untitled chapter.
+        const label = item.label?.value ?? (group ? t.untitledPart
+          : item.availability === 'unavailable' ? t.unavailableChapter : t.untitledChapter);
         const Icon = group ? FolderIcon : FileTextIcon;
         const body = <>
           <Icon aria-hidden="true" className="size-4 shrink-0 text-muted-foreground" />

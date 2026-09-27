@@ -117,7 +117,7 @@ export const messages = defineMessages({
     contentsIn: insert('Contents in {{language}}', { language: String }),
     startReading: 'Start reading', backToContents: 'Back to all contents',
     untitledChapter: 'Untitled chapter', untitledPart: 'Untitled part', part: 'Part',
-    chapterNotInLanguage: 'Not available in this language',
+    chapterNotInLanguage: 'Not available to read yet', unavailableChapter: 'Unavailable chapter',
 
     workLink: 'Work', chapterNavigation: 'Chapters', previousChapter: 'Previous chapter',
     nextChapter: 'Next chapter', firstChapter: 'This is the first chapter', lastChapter: 'This is the last chapter',
@@ -248,7 +248,7 @@ export const messages = defineMessages({
     contentsIn: insert('{{language}}目录', { language: String }),
     startReading: '开始阅读', backToContents: '返回完整目录',
     untitledChapter: '未命名章节', untitledPart: '未命名部分', part: '部分',
-    chapterNotInLanguage: '此语言暂无此章',
+    chapterNotInLanguage: '暂时无法阅读', unavailableChapter: '不可用的章节',
 
     workLink: '作品', chapterNavigation: '章节', previousChapter: '上一章',
     nextChapter: '下一章', firstChapter: '这是第一章', lastChapter: '这是最后一章',

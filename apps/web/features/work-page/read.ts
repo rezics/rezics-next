@@ -46,9 +46,15 @@ export function failureOf(status: number): ReadFailure {
 
 type Answer<T> = { data: T | null; error: { status: number } | null };
 
-async function settle<T>(call: () => Promise<Answer<T>>): Promise<Loaded<T>> {
+/**
+ * One Main read as a `Loaded` result. Main answers 409 when the graph moved
+ * during the read; a read that is not continuing a cursor simply starts
+ * again, once, as Main asks. A moved cursor is the reader's to restart.
+ */
+async function settle<T>(call: () => Promise<Answer<T>>, cursor?: string): Promise<Loaded<T>> {
   try {
-    const { data, error } = await call();
+    let { data, error } = await call();
+    if (error?.status === 409 && !cursor) ({ data, error } = await call());
     if (error) return { ok: false, failure: failureOf(error.status) };
     return data === null ? { ok: false, failure: 'unavailable' } : { ok: true, data };
   } catch {
@@ -168,14 +174,14 @@ export const readRatings = cache(async (id: string, scope: WorkScope, contextId:
 export async function readVersions(id: string, locale: UiLocale, filter: VersionQuery): Promise<Loaded<VersionPage>> {
   const { main, actingSubject } = await reader();
   return settle(() => main.v1.works({ id }).versions.get({ query: { language: locale, actingSubject,
-    kind: filter.kind, contentLanguage: filter.language, cursor: filter.cursor } }));
+    kind: filter.kind, contentLanguage: filter.language, cursor: filter.cursor } }), filter.cursor);
 }
 
 /** The Work's public activity, newest first: metadata revisions, publications and placed replies. */
 export async function readHistory(id: string, kind: HistoryKind | undefined, cursor: string | undefined):
   Promise<Loaded<HistoryPage>> {
   const { main, actingSubject } = await reader();
-  return settle(() => main.v1.works({ id }).history.get({ query: { actingSubject, kind, cursor } }));
+  return settle(() => main.v1.works({ id }).history.get({ query: { actingSubject, kind, cursor } }), cursor);
 }
 
 /** Reviewed replies placed in public Realms, newest first; one Realm when the scope names it. */
@@ -183,7 +189,7 @@ export async function readDiscussion(id: string, realm: string | undefined, curs
   Promise<Loaded<DiscussionPage>> {
   const { main, actingSubject } = await reader();
   return settle(() => main.v1.works({ id }).discussion.get({ query: { actingSubject,
-    realm: realm ? iriOf(realm) : undefined, cursor } }));
+    realm: realm ? iriOf(realm) : undefined, cursor } }), cursor);
 }
 
 export const readAgentCredits = cache(async (id: string): Promise<Loaded<AgentCreditPage>> => {
@@ -195,7 +201,8 @@ export const readAgentCredits = cache(async (id: string): Promise<Loaded<AgentCr
 export async function readContents(id: string, query: ContentsQuery): Promise<Loaded<ContentsPage>> {
   const { main, actingSubject } = await reader();
   return settle(() => main.v1.works({ id }).contents.get({ query: { actingSubject,
-    parent: query.parent ? iriOf(query.parent) : undefined, language: query.language, cursor: query.cursor } }));
+    parent: query.parent ? iriOf(query.parent) : undefined, language: query.language, cursor: query.cursor } }),
+  query.cursor);
 }
 
 /** One chapter's exact body with its neighbours, in the Work's selected language unless one is named. */
