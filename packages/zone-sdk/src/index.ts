@@ -7,7 +7,7 @@ import type { ComponentType, ReactNode } from 'react';
  * first-party code in `apps/web/zones/official/<slug>/`) enhances the page.
  *
  * A package receives data the platform already fetched and renders into
- * slots; it fetches nothing, reads no cookies or credentials and never hides
+ * slots; it fetches nothing, reads no cookies, storage or credentials and never hides
  * platform chrome (the account menu, the Zone menu, "Why here?" links, report
  * and age gates stay outside the slots). Every slot also receives `fallback`,
  * the platform's own rendering, which a package may wrap or replace.
@@ -176,8 +176,6 @@ export interface ZoneSlots {
   modules?: { [Type in ZoneModuleType]?: ComponentType<ModuleSlotProps<Type>> };
 }
 
-export type ZoneSlotName = Exclude<keyof ZoneSlots, 'modules'> | `module:${ZoneModuleType}`;
-
 export interface ZonePackage {
   /** The official Zone's route segment (`fiction` for `/r/fiction`). */
   slug: string;
@@ -195,11 +193,6 @@ export function defineZonePackage<const Package extends ZonePackage>(pkg: Packag
 
 /** Gzipped size limits per package (docs/plan/frontend.md, "Zones"). */
 export const ZONE_PACKAGE_BUDGET = { cssGzipBytes: 40 * 1024, jsGzipBytes: 50 * 1024 } as const;
-
-/** A package's local storage, namespaced so it cannot read the platform's or another Zone's keys. */
-export function zoneStorageKey(slug: string, key: string): string {
-  return `zone:${slug}:${key}`;
-}
 
 const hex = (bytes: ArrayBuffer) => [...new Uint8Array(bytes)].map(byte => byte.toString(16).padStart(2, '0')).join('');
 
