@@ -59,6 +59,20 @@ export interface CargoResolution { profile: 'cargo-index-exact-resolution-v1'
   resolution: string; requestDigest: string; request: CargoRequest;
   outcome: CargoOutcome; createdAt: string }
 
+// Cargo resolver 2 and index metadata: https://doc.rust-lang.org/cargo/reference/resolver.html
+// https://doc.rust-lang.org/cargo/reference/registry-index.html#json-schema
+// Versioning freezes earlier receipts: v1 rejects links/yanked, v2 admits links,
+// and v3 alone admits a caller lock for exact yanked eligibility and checksums.
+const CARGO_PROFILES = {
+  'cargo-index-exact-resolver2-v1': { nativeLinks: false, callerLock: false,
+    receipt: 'cargo-index-exact-resolution-v1' },
+  'cargo-index-exact-resolver2-v2': { nativeLinks: true, callerLock: false,
+    receipt: 'cargo-index-exact-resolution-v2' },
+  'cargo-index-exact-resolver2-v3': { nativeLinks: true, callerLock: true,
+    receipt: 'cargo-index-exact-resolution-v3' },
+} as const satisfies Record<CargoRequest['profile'], {
+  nativeLinks: boolean; callerLock: boolean; receipt: CargoResolution['profile'] }>;
+
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const KEY = /^[A-Za-z0-9:_./-]{1,128}$/;
 const NAME = /^[A-Za-z][A-Za-z0-9_-]{0,63}$/;
@@ -404,8 +418,7 @@ function solveSnapshot(input: CargoRequest, admittedLock: AdmittedLock | null): 
   }
   let root: Release;
   let releases: Map<string, Release>;
-  const linksProfile = input.profile !== 'cargo-index-exact-resolver2-v1';
-  const lockProfile = input.profile === 'cargo-index-exact-resolver2-v3';
+  const { nativeLinks: linksProfile, callerLock: lockProfile } = CARGO_PROFILES[input.profile];
   try {
     root = parseManifest(decode(input.manifestBase64, input.manifestSha256));
     releases = parseIndex(input.indexFiles, linksProfile, lockProfile);
@@ -616,9 +629,7 @@ export class CargoResolutionStore {
       || stable(row.outcome) !== stable(solveCargoSnapshot(row.request))) {
       throw new CargoResolutionUnavailable('stored Cargo resolution differs from its snapshot');
     }
-    return { profile: row.request.profile === 'cargo-index-exact-resolver2-v3'
-      ? 'cargo-index-exact-resolution-v3' : row.request.profile === 'cargo-index-exact-resolver2-v2'
-      ? 'cargo-index-exact-resolution-v2' : 'cargo-index-exact-resolution-v1',
+    return { profile: CARGO_PROFILES[row.request.profile].receipt,
       resolution: `https://rezics.com/id/${row.id}`, requestDigest: row.request_digest,
       request: row.request, outcome: row.outcome, createdAt: row.created_at.toISOString() };
   }
