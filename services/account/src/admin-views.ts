@@ -1,4 +1,5 @@
 import { t } from 'elysia';
+import { literalUnion } from './http.ts';
 import { activityView, auditView, clientView, connectedAppView, methodsView, noteView, operatorRoleView,
   pageView, profileView, sessionView } from './views.ts';
 
@@ -45,7 +46,7 @@ export const operatorsView = t.Object({ items: t.Array(operatorEntryView),
   permissions: t.Object({ owner: t.Array(t.String()), admin: t.Array(t.String()), support: t.Array(t.String()) }) });
 export const savedView = t.Object({ id: t.String({ pattern: '^[a-z0-9-]{1,40}$' }),
   name: t.String({ minLength: 1, maxLength: 60 }), query: t.String({ maxLength: 1000 }) });
-export const directoryColumn = t.Union(directoryColumns.map(column => t.Literal(column)));
+export const directoryColumn = literalUnion(directoryColumns);
 export const preferencesView = t.Object({ density: t.Union([t.Literal('comfortable'), t.Literal('compact')]),
   columns: t.Nullable(t.Array(directoryColumn)), views: t.Array(savedView) });
 export const adminClientView = t.Object({ ...clientView.properties, type: t.Union([t.Literal('public'), t.Literal('confidential')]),

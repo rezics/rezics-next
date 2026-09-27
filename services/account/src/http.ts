@@ -1,11 +1,17 @@
 import { t } from 'elysia';
+import type { TLiteral, TUnion } from 'typebox';
 import type { createAccountAuth } from './auth.ts';
+
+/** A union of literal schemas whose static type keeps every literal; a bare
+ * `t.Union(values.map(t.Literal))` reaches typed clients as `never`. */
+export const literalUnion = <const T extends readonly string[]>(values: T): TUnion<{ -readonly [K in keyof T]: TLiteral<T[K]> }> =>
+  t.Union(values.map(value => t.Literal(value))) as never;
 
 export const accountErrorCodes = ['unauthenticated', 'forbidden', 'invalid_origin', 'invalid_request',
   'not_found', 'conflict', 'stale_request', 'step_up_required', 'last_sign_in_method',
   'rate_limited', 'temporarily_unavailable', 'account_suspended', 'password_reset_required'] as const;
 export type AccountErrorCode = typeof accountErrorCodes[number];
-export const accountErrorSchema = t.Object({ error: t.Union(accountErrorCodes.map(code => t.Literal(code))) });
+export const accountErrorSchema = t.Object({ error: literalUnion(accountErrorCodes) });
 
 export class AccountProblem extends Error {
   constructor(readonly code: AccountErrorCode, readonly status: number) { super(code); }

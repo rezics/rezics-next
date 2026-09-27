@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { Elysia, t } from 'elysia';
 import type { Pool, PoolClient } from 'pg';
-import { accountFailure, accountJson, AccountProblem, accountSession, type AccountAuth } from './http.ts';
+import { accountFailure, accountJson, AccountProblem, accountSession, literalUnion, type AccountAuth } from './http.ts';
 import { decodeCursor, encodeCursor, pageQuery } from './pagination.ts';
 import { operatorPermissions, operatorRole, requireOperator, rolePermits, writeAudit,
   type OperatorRole } from './operators.ts';
@@ -120,9 +120,9 @@ const noteRow = (row: { id: string; authorId: string; body: string; createdAt: D
 export function adminApi(auth: AccountAuth, pool: Pool) {
   const secret = String(auth.options.secret);
   const userParams = t.Object({ userId: t.String({ minLength: 1, maxLength: 128 }) });
-  const reasonCode = t.Union(reasonCodes.map(code => t.Literal(code)));
+  const reasonCode = literalUnion(reasonCodes);
   const auditQuery = { actorId: t.Optional(t.String({ maxLength: 128 })), targetId: t.Optional(t.String({ maxLength: 256 })),
-    action: t.Optional(t.String({ maxLength: 128 })), outcome: t.Optional(t.Union(auditOutcomes.map(value => t.Literal(value)))),
+    action: t.Optional(t.String({ maxLength: 128 })), outcome: t.Optional(literalUnion(auditOutcomes)),
     from: t.Optional(t.String({ format: 'date-time' })), to: t.Optional(t.String({ format: 'date-time' })) };
   // A process runs each job at most once at a time; a job whose runner died
   // with its process resumes when anyone reads it.
@@ -248,7 +248,7 @@ export function adminApi(auth: AccountAuth, pool: Pool) {
       } catch (error) { return accountFailure(error); }
     })
     .post('/api/account/admin/users/:userId/actions', { response: accountResponses(commandView), params: userParams,
-      body: t.Object({ action: t.Union(adminActions.map(action => t.Literal(action))),
+      body: t.Object({ action: literalUnion(adminActions),
         reason: t.String({ minLength: 3, maxLength: 1000 }), commandId: t.String({ format: 'uuid' }),
         reasonCode: t.Optional(reasonCode), userMessage: t.Optional(t.String({ minLength: 1, maxLength: 2000 })),
         expiresAt: t.Optional(t.String({ format: 'date-time' })), note: t.Optional(t.String({ minLength: 1, maxLength: 4000 })),
@@ -257,7 +257,7 @@ export function adminApi(auth: AccountAuth, pool: Pool) {
       catch (error) { return accountFailure(error); }
     })
     .post('/api/account/admin/bulk-actions', { response: accountResponses(t.Object({ jobId: t.String() })),
-      body: t.Object({ action: t.Union(bulkActions.map(action => t.Literal(action))),
+      body: t.Object({ action: literalUnion(bulkActions),
         userIds: t.Array(t.String({ minLength: 1, maxLength: 128 }), { minItems: 1, maxItems: bulkLimit }),
         reason: t.String({ minLength: 3, maxLength: 1000 }), reasonCode, commandId: t.String({ format: 'uuid' }),
         userMessage: t.Optional(t.String({ minLength: 1, maxLength: 2000 })), expiresAt: t.Optional(t.String({ format: 'date-time' })),
