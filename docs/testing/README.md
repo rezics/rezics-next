@@ -1,7 +1,8 @@
 # Acceptance design
 
-All cases in this directory are prospective requirements for the selected
-architecture. They are not reports of current implementation or past passes.
+Acceptance cases are declared under `scripts/qa/cases/`. The declarations state
+required behavior, while [recorded qualification](../plan/qualification.md)
+reports past passes.
 Use [the plan](../plan/README.md#acceptance-gates) for gate definitions and
 [system invariants](../contracts/system-invariants.md) for shared correctness.
 
@@ -12,10 +13,10 @@ Use [the plan](../plan/README.md#acceptance-gates) for gate definitions and
 | [Model](model-contracts.md) | Identity, values, types, definitions and exact references. |
 | [Identity/access](identity-and-access.md) | SSO, representation, roles/groups, privacy, revocation and recovery. |
 | [Classification](classification.md) | Space/context, SKOS/native meaning, fallback and inference. |
-| [Work](native-work.md), [Book](book-and-creation.md), [composition](content-composition.md) | Main Version, contributions, occurrences, history and publication. |
+| [Work](native-work.md), [Book](book-and-creation.md), [composition](../../scripts/qa/cases/content-composition.ts) | Main Version, contributions, occurrences, history and publication. |
 | [Search](search.md), [graphs](relationship-graph.md), [ratings/time](ratings-and-event-time.md) | Combined query semantics, populations, exactness and budgets. |
 | [Sources](source-conformance.md), [packages](packages.md), [Hub](ai-hub.md), [recipes](recipes.md) | Current inputs, native conversion and domain-specific operations. |
-| [Wiki](wiki-composition.md), [recommendations](recommendations.md) | Composed views and bounded derived generations. |
+| [Wiki](../../scripts/qa/cases/wiki-composition.ts), [recommendations](recommendations.md) | Composed views and bounded derived generations. |
 | [Integration](backend-integration.md), [Subscribe](subscriptions-and-pro.md), [verification](information-verification.md) | Cross-owner effects and activated product applications. |
 | [Editorial protection](editorial-protection.md) | Prospective subcases of existing MODEL/LIVE/FACT/GOV/SYS/OPS coverage: atomic protection, independent review, source control, bypass rejection and recovery. |
 | [Operations](operations.md) | Installation, failures, upgrades, restore and practical load. |

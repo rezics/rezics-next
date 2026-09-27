@@ -1,5 +1,6 @@
 import { defineCases } from './types.ts';
 
+// Keep the former page path as the frozen acceptance-inventory identity.
 export const cases = defineCases('docs/testing/wiki-composition.md', [
   {
     id: 'WIKI01',

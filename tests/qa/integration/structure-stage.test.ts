@@ -77,30 +77,37 @@ test('COMP03/COMP04: staged pages checkpoint under a lease and activation rechec
       .toMatchObject({ status: 'sealed', placementCount: 64 });
     const originalStageFuseki = f.env.fuseki;
     let projected = 0;
+    const projectedRecordCounts: number[] = [];
     f.env.fuseki = new Proxy(originalStageFuseki, { get(target, property) {
       if (property === 'commandWithReceipt') return async (envelope: CommandEnvelope) => {
-        if (envelope.update.includes('structure.project') && ++projected === 2) {
-          throw new Error('simulated interruption after the first projection checkpoint');
+        if (envelope.update.includes('structure.project')) {
+          projectedRecordCounts.push(envelope.update.match(
+            /rv:occurrence <https:\/\/rezics\.com\/id\/[0-9a-f-]{36}>/g)?.length ?? 0);
+          if (++projected === 2) {
+            throw new Error('simulated interruption after the first projection checkpoint');
+          }
         }
         return target.commandWithReceipt(envelope);
       };
       const value = Reflect.get(target, property, target);
       return typeof value === 'function' ? value.bind(target) : value;
     } });
+    let activatedLarge: StructureStage & { cost: { placementsWritten: number } };
     try {
       const interruptedActivation = await call('POST', `${stages}/${interrupted.id}/activate`,
         { actingSubject: f.actor });
       if (interruptedActivation.status !== 202) {
         throw new Error(`interrupted activation returned ${interruptedActivation.status}: ${await interruptedActivation.text()}`);
       }
+      const projectionCheckpoint = await json<StructureStage>(await call('GET',
+        `${stages}/${interrupted.id}?actingSubject=${encodeURIComponent(f.actor)}`), 200);
+      expect(projectionCheckpoint).toMatchObject({ status: 'sealed', graphStarted: true,
+        projectionBatches: 1 });
+      expect((await read())).toMatchObject({ revision: created.revision, occurrences: [] });
+      activatedLarge = await json<StructureStage & { cost: { placementsWritten: number } }>(
+        await call('POST', `${stages}/${interrupted.id}/activate`, { actingSubject: f.actor }), 200);
     } finally { f.env.fuseki = originalStageFuseki; }
-    const projectionCheckpoint = await json<StructureStage>(await call('GET',
-      `${stages}/${interrupted.id}?actingSubject=${encodeURIComponent(f.actor)}`), 200);
-    expect(projectionCheckpoint).toMatchObject({ status: 'sealed', graphStarted: true,
-      projectionBatches: 1 });
-    expect((await read())).toMatchObject({ revision: created.revision, occurrences: [] });
-    const activatedLarge = await json<StructureStage & { cost: { placementsWritten: number } }>(
-      await call('POST', `${stages}/${interrupted.id}/activate`, { actingSubject: f.actor }), 200);
+    expect(projectedRecordCounts).toEqual([30, 30, 30, 4]);
     expect(activatedLarge).toMatchObject({ status: 'activated', projectionBatches: 3 });
     expect(activatedLarge.cost.placementsWritten).toBe(64);
     activeHead = activatedLarge.revision;

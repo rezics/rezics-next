@@ -1,54 +1,24 @@
-# Content composition and import
+# Content composition
 
-## Explicit local composition
+A Structure represents uses of resources, not ownership of their content. Each
+occurrence has its own identity so repeated targets, reorder, progress and source
+correspondence remain distinct. Membership, navigation, consumption order and
+semantic part-of have different meanings; a container reference does not expand
+its descendants. The shared Structure format, owner profiles and commands carry
+these rules in `services/main/src/modules/structure/`.
 
-A Structure owns identified occurrences with parent, order and target reference.
-An occurrence is one use, so the same target can appear repeatedly. Profiles admit
-specific roles for chapters, tracks, ingredients, wiki navigation or other ordered
-parts. A reference to a container does not implicitly expand all its descendants.
+The authoring choice is contextual: an ordinary chapter may follow eligible
+published content, while reviewed adoption and a fixed release select exact
+revisions. A sealed manifest captures selected dependencies rather than a global
+database snapshot. [Structure history](structure-history.md) explains the
+revision choice; `scripts/qa/cases/content-composition.ts` names the acceptance
+scenarios.
 
-Membership, navigation, consumption order and semantic part-of are different
-relations. Reordering preserves occurrence identity and progress. Reparenting
-validates same-structure ownership and cycle rules under a concurrency-safe
-generation. Fractional order keys have byte budgets and bounded rebalance work;
-large sibling sets can use paged order segments without changing identity.
+## Remaining design work
 
-## Authoring and published versions
-
-Ordinary chapters reuse a Post and follow context-eligible published content.
-Reviewed adoption and fixed releases pin exact revisions. Structure history
-uses immutable component manifests with [revision anchors](structure-history.md). Sealing a manifest
-captures exact selected dependencies, not an implicit global database snapshot.
-
-## Import and refresh commands
-
-`plan -> stage -> validate -> activate`. Capture source structure/revision,
-destination expected head, base correspondence, mapping policy and authority.
-Assign stable destination occurrence IDs and record source-to-destination mapping.
-Refresh performs a three-way source/base/local comparison. Human changes,
-same-value confirmations, reordered items and unknown child correspondence remain
-explicit; conflicts do not become last-writer-wins overwrites.
-
-Stage bounded pages with leases and durable checkpoints. Catch up eligible
-concurrent changes before a fenced activation, or return a conflict. Cancellation
-leaves the active structure intact. Source withdrawal removes only its support;
-it cannot erase independent adoption or contribution ownership.
-
-## Disclosure, history and progress
-
-Authorize target and selected content independently of the containing Structure.
-A visible collection does not disclose a private member's title/count. Progress
-keys stable occurrences, plus the relevant selected revision where precision is
-required. Removed occurrences remain resolvable as tombstones/history. Restoring
-a structure does not restore or overwrite each referenced resource recursively.
-
-## Measurements and read models
-
-Declare whether a metric summarizes direct children, selected leaves or another
-coverage. Avoid summing both container totals and descendants or all alternative
-languages. Cache by structure/selection/rule generation with source provenance.
-Page children by parent/order/occurrence and expose pending metrics rather than
-requiring full-tree loads on every read or write.
-
-Acceptance covers repeated targets, huge sibling skew, concurrent reparent,
-source refresh with local edits, publication changes and non-recursive restore.
+Source withdrawal must remove only the source's support, preserving independent
+adoption and contribution ownership. Structure metrics still need explicit
+coverage rules (direct children versus selected leaves), provenance and a
+pending state; aggregating both a container and its descendants or alternative
+languages would double-count. These rules need owner operations and tests before
+this page can be retired.

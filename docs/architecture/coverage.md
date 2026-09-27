@@ -7,8 +7,8 @@ and qualification status.
 | Capability | Meaning and realization | Acceptance |
 | --- | --- | --- |
 | Account/Agent control | [Identity](../contracts/identity-and-access.md), [Account](../services/account.md), [authorization bridge](../implementation/authorization-bridge.md) | [IAM](../testing/identity-and-access.md) |
-| Space and perspectives | [Space](../contracts/space.md), [Context](../contracts/context.md), [vertical workflow](../implementation/vertical-workflows.md) | [CTX](../testing/classification.md), [WIKI](../testing/wiki-composition.md) |
-| Main Version/history | [Main Version](../contracts/main-version.md), [graph records](../implementation/graph-records.md), [composition](../contracts/composition.md) | [WORK](../testing/native-work.md), [BOOK](../testing/book-and-creation.md), [COMP](../testing/content-composition.md) |
+| Space and perspectives | [Space](../contracts/space.md), [Context](../contracts/context.md), [vertical workflow](../implementation/vertical-workflows.md) | [CTX](../testing/classification.md), [WIKI](../../scripts/qa/cases/wiki-composition.ts) |
+| Main Version/history | [Main Version](../contracts/main-version.md), [graph records](../implementation/graph-records.md), [composition](../contracts/composition.md) | [WORK](../testing/native-work.md), [BOOK](../testing/book-and-creation.md), [COMP](../../scripts/qa/cases/content-composition.ts) |
 | Five indexing domains | [Catalog](../contracts/catalog.md), [recipes](../contracts/recipes.md), [Skills](../contracts/skills-and-prompts.md), [source lifecycle](../contracts/source-lifecycle.md) | [LIVE](../testing/source-conformance.md), [RECIPE](../testing/recipes.md), [HUB](../testing/ai-hub.md) |
 | Packages | [Management](../contracts/package-management.md), [profiles](../contracts/package-profiles.md), [plans](../implementation/package-plans.md) | [PKG](../testing/packages.md) |
 | Graph/text/context queries | [Search](../contracts/search.md), [relationships](../contracts/relationship-graph.md), [filters](../contracts/filter-documents.md) | [SEARCH](../testing/search.md), [GRAPH](../testing/relationship-graph.md) |
