@@ -93,6 +93,7 @@ Exact direct pins from root and workspace manifests; `yarn.lock` resolves transi
 | @js-temporal/polyfill | 0.5.1 | services/main |
 | @microsoft/aspire-cli | 13.5.4 | apphost |
 | @playwright/test | 1.63.0 | . |
+| @rezics/account | workspace:* | apps/accounts |
 | @rezics/main | workspace:* | apps/web |
 | @rezics/ui | workspace:* | apps/accounts, apps/web |
 | @scalar/types | 0.18.3 | services/account, services/main |
