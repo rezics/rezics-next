@@ -4,8 +4,14 @@ import { resolve } from 'node:path';
 import { authorCreditFixture, nativeId, shortId } from '../fixtures/author-credit.ts';
 import { S3ImmutableObjects, type ImmutableObjects }
   from '../../../services/main/src/infrastructure/immutable-objects.ts';
+import { moveCollectionDisplayGroup }
+  from '../../../services/main/src/modules/collection/display-group.ts';
+import { GraphLayouts } from '../../../services/main/src/modules/graph-layout/store.ts';
+import { ContentCore } from '../../../services/content/src/core.ts';
+import { collectionRoutes } from '../../../services/main/src/routes/collections.ts';
+import { hash } from '../../../services/main/src/modules/work/activate.ts';
 
-test('WIKI03/WIKI06: a Collection keeps repeated occurrence history and hides private members', async () => {
+test('WIKI03/WIKI06/CTX08: a Collection keeps repeated occurrence history and hides private members', async () => {
   if (!Bun.env.REZICS_QA_RUN_ID) throw new Error('Run through the isolated integration tier');
   const f = await authorCreditFixture(Bun.env as Record<string, string>,
     resolve('.temp', `collection-wiki-${randomUUID()}`),
@@ -73,8 +79,83 @@ test('WIKI03/WIKI06: a Collection keeps repeated occurrence history and hides pr
     expect(JSON.stringify(disclosed)).not.toContain(privateWork.work);
     expect(JSON.stringify(disclosed)).not.toContain('Private member');
     expect(JSON.stringify(disclosed)).not.toContain(inserted.occurrences[2]!);
+    expect(JSON.stringify(disclosed)).not.toContain('authorizationChecks');
+    expect(JSON.stringify(disclosed)).not.toContain('pagesRead');
     expect(disclosed.next).toBeNull();
+    const firstVisible = await f.json<{ occurrences: Array<{ occurrence: string }>;
+      next: string | null }>(await f.call('GET', `${path}?${query}&limit=1`), 200);
+    expect(firstVisible.occurrences).toHaveLength(1);
+    expect(firstVisible.next).toBeTruthy();
+    const lastVisible = await f.json<{ occurrences: Array<{ occurrence: string }>;
+      next: string | null }>(await f.call('GET', `${path}?${query}&limit=1`
+      + `&after=${encodeURIComponent(firstVisible.next!)}`), 200);
+    expect(lastVisible.occurrences).toHaveLength(1);
+    expect(lastVisible.next).toBeNull();
+    expect([firstVisible.occurrences[0]?.occurrence, lastVisible.occurrences[0]?.occurrence])
+      .toEqual([inserted.occurrences[1], inserted.occurrences[0]]);
     expect((await f.call('POST', `${path}/changes`, move, `collection-${randomUUID()}`)).status).toBe(409);
+    // CTX08 display groups are view state; moving one creates no Jena fact or Statement.
+    const statements = async () => (await f.env.fuseki.query(`PREFIX rv: <https://rezics.com/vocab/>
+      SELECT ?statement WHERE { GRAPH <urn:rezics:graph:current> {
+        ?statement a rv:Statement . } } ORDER BY ?statement`)).results?.bindings
+      ?.map(row => row.statement?.value) ?? [];
+    const beforeGroups = await statements();
+    const graphSnapshot = 'SELECT ?g ?s ?p ?o WHERE { GRAPH ?g { ?s ?p ?o } } ORDER BY ?g ?s ?p ?o';
+    const beforeGraph = await f.env.fuseki.query(graphSnapshot);
+    const layout = { view: { profile: 'https://rezics.com/definition/relationship-view-v1',
+      anchor: collection, context: null }, nodes: [{ resource: visibleWork.work,
+        x: 10, y: 20, group: 'appearance', pinned: true }],
+      groups: [{ id: 'appearance', label: 'Appearance', x: 0, y: 0, collapsed: false }] };
+    const relocated = moveCollectionDisplayGroup(layout, 'appearance',
+      { x: 100, y: 200, collapsed: true });
+    expect(relocated.groups[0]).toMatchObject({ id: 'appearance', x: 100, y: 200,
+      collapsed: true });
+    expect(relocated.nodes).toEqual(layout.nodes);
+    await f.grant('graph-layout:write', 'graph.layout.write');
+    const layouts = new GraphLayouts(f.accessPool, f.pool, new ContentCore(f.pool));
+    const actor = { principal: await f.account.verifier.verify(new Request('http://main.local', {
+      headers: { authorization: `Bearer ${f.account.tokenA}` },
+    }), ['work:edit']), actingSubject: f.actor };
+    const saved = await layouts.save(actor, null, null, layout,
+      { idempotencyKey: `collection-layout-${randomUUID()}`,
+        requestDigest: hash(JSON.stringify(layout)) });
+    const collectionApp = collectionRoutes(f.env.fuseki, { environment: f.env,
+      account: f.account.verifier, access: f.access, structureObjects: objects,
+      graphLayouts: layouts } as Parameters<typeof collectionRoutes>[1]);
+    const movePath = `/v1/collections/${shortId(collection)}/display-groups/appearance/moves`;
+    const moveBody = { layout: saved.layout, expectedHead: saved.revision,
+      actingSubject: f.actor, placement: { x: 100, y: 200, collapsed: true } };
+    const moveKey = `display-move-${randomUUID()}`;
+    const moveRequest = (body: object, key: string, token = f.account.tokenA) =>
+      collectionApp.handle(new Request(`http://main.local${movePath}`, { method: 'POST',
+        headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json',
+          'idempotency-key': key }, body: JSON.stringify(body) }));
+    const savedMove = await f.json<{ revision: string; replayed: boolean }>(await moveRequest(
+      moveBody, moveKey), 200);
+    expect((await layouts.read(actor, saved.layout)).body).toEqual(relocated);
+    expect((await layouts.read(actor, saved.layout, saved.revision)).body).toEqual(layout);
+    expect((await f.json<{ revision: string; replayed: boolean }>(await moveRequest(
+      moveBody, moveKey), 200))).toMatchObject({ revision: savedMove.revision, replayed: true });
+    expect((await moveRequest({ ...moveBody, placement: { x: 101, y: 200, collapsed: true } },
+      moveKey)).status).toBe(409);
+    expect((await moveRequest({ ...moveBody, expectedHead: saved.revision },
+      `display-stale-${randomUUID()}`)).status).toBe(409);
+    expect((await moveRequest(moveBody, `display-denied-${randomUUID()}`,
+      f.account.tokenB)).status).toBe(403);
+    expect(await f.env.fuseki.query(graphSnapshot)).toEqual(beforeGraph);
+    const afterGroups = await statements();
+    expect(afterGroups).toEqual(beforeGroups);
+    const concurrent = await Promise.all([
+      f.call('POST', `${path}/changes`, { expectedHead: moved.revision,
+        actingSubject: f.actor, operations: [{ op: 'move', occurrence: inserted.occurrences[0],
+          parent: created.structure, position: 'last' }] }),
+      f.call('POST', `${path}/changes`, { expectedHead: moved.revision,
+        actingSubject: f.actor, operations: [{ op: 'move', occurrence: inserted.occurrences[1],
+          parent: created.structure, position: 'last' }] }),
+    ]);
+    expect(concurrent.map(result => result.status).sort()).toEqual([200, 409]);
+    expect((await f.json<{ occurrences: Array<{ occurrence: string }> }>(await f.call('GET',
+      `${path}?${query}`), 200)).occurrences).toHaveLength(2);
     expect((await f.call('GET', `${path}?${query}`, undefined, randomUUID(), f.account.tokenB)).status)
       .toBe(404);
   } finally { await f.close(); }

@@ -6,10 +6,20 @@ import { CompositionConflict, InvalidCompositionChange, StaleCompositionHead }
   from '../modules/structure/change.ts';
 import { CompositionCorrupt, CompositionUnavailable, readCompositionHeader }
   from '../modules/structure/graph.ts';
-import { readCompositionPage } from '../modules/structure/read.ts';
+import { readVisibleCompositionPage } from '../modules/collection/visible-page.ts';
 import { canReadStructureTarget, structureProfileFor } from '../modules/structure/profiles.ts';
 import { StructureObjectCorrupt, StructureObjectUnavailable } from '../modules/structure/tree.ts';
 import { createAdmittedOwner } from '../modules/zone/owner-create.ts';
+import { changeZoneConfiguration, readZoneConfiguration,
+  ZoneStale, ZoneUnavailable } from '../modules/zone/configuration.ts';
+import { InvalidZoneConfiguration } from '../modules/zone/config-format.ts';
+import { runZoneQueryBlocks, ZoneQueryBudgetExceeded } from '../modules/zone/query-budget.ts';
+import { readDynamicDefinition, executeDynamicDefinition, DynamicCollectionUnavailable }
+  from '../modules/collection/dynamic.ts';
+import { PublicQueryBudgetExceeded, PublicQueryUnavailable }
+  from '../modules/work/search-public.ts';
+import { MAX_SEARCH_REQUEST_MS, SearchIndexUnavailable, withStableSearchSnapshot }
+  from '../modules/work/search-readiness.ts';
 import { assertGraphAdmissionOpen } from '../modules/work/restore-lineage.ts';
 import { GRAPHS, hash, iri } from '../modules/work/activate.ts';
 import { problemResult, pendingOperation } from '../api-contract.ts';
@@ -28,7 +38,6 @@ const write = t.Object({ zone: ref, navigation: ref, revision: ref, receipt: t.S
   sourcePosition: t.Optional(sourcePosition) });
 const read = t.Object({ zone: ref, navigation: ref, revision: ref,
   predecessor: t.Nullable(ref), mounts: t.Array(t.Any()), next: t.Nullable(t.String()),
-  cost: t.Object({ pagesRead: t.Integer(), pagesWritten: t.Integer(), authorizationChecks: t.Integer() }),
   sourcePosition });
 const errors = { 400: problemResult(400), 401: problemResult(401), 403: problemResult(403),
   404: problemResult(404), 409: problemResult(409), 500: problemResult(500),
@@ -40,6 +49,10 @@ export const openApiOperations = {
   '/v1/zones/{id}/mounts/{occurrence}': { delete: { bearer: true, idempotencyKey: true } },
   '/v1/zones/{id}': { get: { bearer: true } },
   '/v1/zones/{id}/revisions/{revision}': { get: { bearer: true } },
+  '/v1/zones/{id}/configuration': { get: { bearer: true }, put: { bearer: true, idempotencyKey: true } },
+  '/v1/zones/{id}/query-blocks': { get: { bearer: true } },
+  '/v1/zones/{id}/retirements': { post: { bearer: true, idempotencyKey: true } },
+  '/v1/zones/{id}/recoveries': { post: { bearer: true, idempotencyKey: true } },
 } as const;
 
 function key(request: Request) {
@@ -48,6 +61,17 @@ function key(request: Request) {
 }
 
 function routeError(error: unknown): Response {
+  if (error instanceof InvalidZoneConfiguration) return problem(400, 'invalid_zone_configuration', error.message);
+  if (error instanceof ZoneQueryBudgetExceeded) return problem(503, 'zone_query_budget', error.message);
+  if (error instanceof PublicQueryBudgetExceeded) return problem(503, 'zone_query_budget',
+    'Zone query exceeds its candidate budget');
+  if (error instanceof PublicQueryUnavailable || error instanceof SearchIndexUnavailable) {
+    return problem(503, 'zone_query_unavailable', 'Zone query is unavailable');
+  }
+  if (error instanceof DynamicCollectionUnavailable) return problem(404, 'zone_query_unavailable',
+    'Zone query definition is unavailable');
+  if (error instanceof ZoneStale) return problem(409, 'stale_zone_head', error.message);
+  if (error instanceof ZoneUnavailable) return problem(404, 'zone_unavailable', 'Zone is unavailable');
   if (error instanceof InvalidCompositionChange) return problem(400, 'invalid_zone_change', error.message);
   if (error instanceof StaleCompositionHead || error instanceof CompositionConflict) {
     return problem(409, 'zone_conflict', error.message);
@@ -59,6 +83,14 @@ function routeError(error: unknown): Response {
   }
   return commandError(error);
 }
+
+const queryBlock = t.Object({ block: t.String({ pattern: '^[a-z0-9]+(-[a-z0-9]+)*$', maxLength: 64 }),
+  definition: ref, parent: t.Optional(t.String({ pattern: '^[a-z0-9]+(-[a-z0-9]+)*$', maxLength: 64 })),
+  maxRows: t.Integer({ minimum: 1, maximum: 1000 }) }, { additionalProperties: false });
+const configRead = t.Object({ zone: ref, revision: ref, configuration: t.Any(),
+  cost: t.Object({ graphReads: t.Integer(), objectReads: t.Integer() }) });
+const revisionWrite = t.Object({ zone: ref, revision: ref, receipt: t.String(),
+  replayed: t.Boolean(), sourcePosition });
 
 async function navigation(fuseki: FusekiClient, zone: string): Promise<string | null> {
   const result = await fuseki.query(`PREFIX rv: <https://rezics.com/vocab/> SELECT ?navigation WHERE {
@@ -81,21 +113,17 @@ async function zonePage(fuseki: FusekiClient, work: MainWorkDependencies, reques
   if (!header || header.profile !== 'zone-navigation' || header.owner !== zone) {
     throw new CompositionUnavailable('Zone is unavailable');
   }
-  let authorizationChecks = 0;
-  const result = await readCompositionPage(work.environment, { structure,
+  const result = await readVisibleCompositionPage(work.environment, { structure,
     ...(input.revision ? { revision: input.revision } : {}),
     ...(input.after ? { after: input.after } : {}), limit: input.limit ?? 50,
+    visible: item => item.role === 'mount' && !!item.target,
     canReadTarget: async target => {
-      authorizationChecks++;
       return canReadStructureTarget(structureProfileFor(header.profile), {
         access: work.access, principal, actingSubject: input.actingSubject, target });
     } });
-  const hidden = result.occurrences.some(item => item.role === 'mount' && !item.target);
   return { zone, navigation: structure, revision: result.revision,
     predecessor: result.predecessor,
-    mounts: result.occurrences.filter(item => item.role === 'mount' && item.target),
-    next: hidden ? null : result.next, sourcePosition: result.sourcePosition,
-    cost: { ...result.cost, authorizationChecks } };
+    mounts: result.occurrences, next: result.next, sourcePosition: result.sourcePosition };
 }
 
 export function zoneRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
@@ -191,5 +219,108 @@ export function zoneRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
           revision: `https://rezics.com/id/${params.revision}` }),
       { headers: { 'cache-control': 'no-store' } }); }
       catch (error) { return routeError(error); }
+    })
+    .get('/v1/zones/:id/configuration', { params: t.Object({ id: groupUuid }),
+      query: t.Object({ actingSubject: ref }, { additionalProperties: false }),
+      response: { 200: configRead, ...authorizedReadProblems } },
+    async ({ request, params, query }) => {
+      try {
+        const zone = `https://rezics.com/id/${params.id}`;
+        const principal = await work.account.verify(request, ['semantic:read']);
+        if (!await work.access.canReadSemanticResource?.(principal, query.actingSubject, zone)) {
+          throw new ZoneUnavailable('Zone is unavailable');
+        }
+        const state = await readZoneConfiguration(work.environment, zone);
+        return Response.json({ zone, revision: state.revision, configuration: state.configuration,
+          cost: state.cost }, { headers: { 'cache-control': 'no-store' } });
+      } catch (error) { return routeError(error); }
+    })
+    .get('/v1/zones/:id/query-blocks', { params: t.Object({ id: groupUuid }),
+      query: t.Object({ actingSubject: ref }, { additionalProperties: false }),
+      response: { 200: t.Any(), ...authorizedReadProblems } },
+    async ({ request, params, query }: { request: Request; params: { id: string };
+      query: { actingSubject: string } }) => {
+      try {
+        const zone = `https://rezics.com/id/${params.id}`;
+        const principal = await work.account.verify(request, ['semantic:read']);
+        if (!await work.access.canReadSemanticResource?.(principal, query.actingSubject, zone)) {
+          throw new ZoneUnavailable('Zone is unavailable');
+        }
+        const current = await readZoneConfiguration(work.environment, zone);
+        const result = await withStableSearchSnapshot(fuseki, () => runZoneQueryBlocks(
+          current.configuration, async definition => {
+          if (!await work.access.canReadSemanticResource?.(principal, query.actingSubject, definition)) {
+            throw new DynamicCollectionUnavailable('Dynamic Collection is unavailable');
+          }
+          const saved = await readDynamicDefinition(work.environment, definition);
+          return executeDynamicDefinition(work.environment, saved);
+          }), Math.min(current.configuration.budget.timeMs, MAX_SEARCH_REQUEST_MS));
+        return Response.json({ zone, revision: current.revision, ...result },
+          { headers: { 'cache-control': 'no-store' } });
+      } catch (error) { return routeError(error); }
+    })
+    .put('/v1/zones/:id/configuration', { params: t.Object({ id: groupUuid }),
+      body: t.Object({ expectedHead: ref, actingSubject: ref,
+        defaultRealm: t.Optional(t.Union([ref, t.Null()])),
+        defaultContext: t.Optional(t.Union([t.Object({ context: ref, semanticRevision: ref },
+          { additionalProperties: false }), t.Null()])),
+        presentation: t.Optional(t.Union([t.String({ format: 'uri' }), t.Null()])),
+        budget: t.Optional(t.Object({ timeMs: t.Integer({ minimum: 1, maximum: 2000 }),
+          rows: t.Integer({ minimum: 1, maximum: 1000 }) }, { additionalProperties: false })),
+        queryBlocks: t.Optional(t.Array(queryBlock, { maxItems: 32 })),
+        advancedBase64: t.Optional(t.Union([t.String({ maxLength: 349528 }), t.Null()])),
+      }, { additionalProperties: false }), response: { 200: revisionWrite, 202: pendingOperation, ...errors } },
+    async ({ request, params, body }) => {
+      const idempotencyKey = key(request);
+      if (!idempotencyKey) return problem(400, 'invalid_idempotency_key', 'A valid Idempotency-Key is required');
+      try {
+        const result = await changeZoneConfiguration(work.environment, work.account, work.access,
+          request, { zone: `https://rezics.com/id/${params.id}`,
+            expectedHead: body.expectedHead, actingSubject: body.actingSubject,
+            idempotencyKey, operation: 'configure', patch: {
+              ...(body.defaultRealm !== undefined ? { defaultRealm: body.defaultRealm } : {}),
+              ...(body.defaultContext !== undefined ? { defaultContext: body.defaultContext } : {}),
+              ...(body.presentation !== undefined ? { presentation: body.presentation } : {}),
+              ...(body.budget ? { budget: body.budget } : {}),
+              ...(body.queryBlocks ? { queryBlocks: body.queryBlocks } : {}),
+              ...(body.advancedBase64 !== undefined ? { advancedBase64: body.advancedBase64 } : {}),
+            } });
+        return Response.json({ zone: result.zone, revision: result.revision,
+          receipt: result.receipt, replayed: result.replayed,
+          sourcePosition: { datasetId: 'product', dataEpoch: result.dataEpoch,
+            sequence: result.sequence } }, { headers: { 'cache-control': 'no-store' } });
+      } catch (error) { return routeError(error); }
+    })
+    .post('/v1/zones/:id/retirements', { params: t.Object({ id: groupUuid }),
+      body: t.Object({ expectedHead: ref, actingSubject: ref }, { additionalProperties: false }),
+      response: { 200: revisionWrite, 202: pendingOperation, ...errors } },
+    async ({ request, params, body }) => {
+      const idempotencyKey = key(request);
+      if (!idempotencyKey) return problem(400, 'invalid_idempotency_key', 'A valid Idempotency-Key is required');
+      try {
+        const result = await changeZoneConfiguration(work.environment, work.account, work.access,
+          request, { zone: `https://rezics.com/id/${params.id}`, expectedHead: body.expectedHead,
+            actingSubject: body.actingSubject, idempotencyKey, operation: 'retire' });
+        return Response.json({ zone: result.zone, revision: result.revision,
+          receipt: result.receipt, replayed: result.replayed,
+          sourcePosition: { datasetId: 'product', dataEpoch: result.dataEpoch,
+            sequence: result.sequence } }, { headers: { 'cache-control': 'no-store' } });
+      } catch (error) { return routeError(error); }
+    })
+    .post('/v1/zones/:id/recoveries', { params: t.Object({ id: groupUuid }),
+      body: t.Object({ expectedHead: ref, actingSubject: ref }, { additionalProperties: false }),
+      response: { 200: revisionWrite, 202: pendingOperation, ...errors } },
+    async ({ request, params, body }) => {
+      const idempotencyKey = key(request);
+      if (!idempotencyKey) return problem(400, 'invalid_idempotency_key', 'A valid Idempotency-Key is required');
+      try {
+        const result = await changeZoneConfiguration(work.environment, work.account, work.access,
+          request, { zone: `https://rezics.com/id/${params.id}`, expectedHead: body.expectedHead,
+            actingSubject: body.actingSubject, idempotencyKey, operation: 'recover' });
+        return Response.json({ zone: result.zone, revision: result.revision,
+          receipt: result.receipt, replayed: result.replayed,
+          sourcePosition: { datasetId: 'product', dataEpoch: result.dataEpoch,
+            sequence: result.sequence } }, { headers: { 'cache-control': 'no-store' } });
+      } catch (error) { return routeError(error); }
     });
 }

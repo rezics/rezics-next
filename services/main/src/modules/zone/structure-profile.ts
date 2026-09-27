@@ -54,7 +54,7 @@ export const structureProfiles: readonly StructureProfileRegistration[] = [{
   componentType: `${RV}Zone`,
   structurePredicate: `${RV}navigation`,
   ownerValidation: { profile: 'zone-capability-v1',
-    shape: 'https://rezics.com/definition/zone-capability-v1/zone-shape' },
+    shape: 'https://rezics.com/definition/zone-capability-v1/navigation-link-shape' },
   editScopePrefix: 'zone:edit:',
   editPermission: 'zone:edit',
   targetReadPermission: 'semantic:read',

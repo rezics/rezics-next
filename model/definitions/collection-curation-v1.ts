@@ -30,6 +30,13 @@ export const collectionCurationProfile = {
   layout: 'compact',
   shapes: [
     {
+      iri: 'https://rezics.com/definition/collection-curation-v1/structure-link-shape',
+      properties: [
+        { path: 'rdf:type', hasValue: 'rv:Collection', maxCount: 1 },
+        { path: 'rv:structure', minCount: 1, maxCount: 1, class: 'rv:Structure' },
+      ],
+    },
+    {
       iri: 'https://rezics.com/definition/collection-curation-v1/collection-shape',
       canonical: { types: ['rv:Collection'] },
       properties: [

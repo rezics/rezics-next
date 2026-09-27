@@ -14,6 +14,9 @@ const definitions = {
     revisionType: 'ZoneRevision', head: 'zoneHead', operation: 'ZoneCreate' },
   collection: { profile: 'collection-curation-v1', action: 'collection.edit', type: 'Collection',
     revisionType: 'CollectionRevision', head: 'collectionHead', operation: 'CollectionCreate' },
+  definition: { profile: 'collection-curation-v1', action: 'collection.edit', type: 'DynamicCollection',
+    revisionType: 'DynamicCollectionRevision', head: 'definitionHead',
+    operation: 'DynamicCollectionCreate' },
 } as const;
 
 export interface OwnerCreateInput {
@@ -25,6 +28,12 @@ export interface OwnerCreateInput {
   space?: string;
   disclosure: 'public' | 'private';
   name?: string;
+  capture?: { from: string; coverage: 'complete' | 'partial';
+    members: { work: string; selection: string }[];
+    sourcePosition: { datasetId: 'product'; dataEpoch: string; sequence: string } };
+  query?: { phrase: string; language: string | null;
+    context?: { kind: 'realm-local'; id: string } };
+  resultBudget?: number;
 }
 
 /** One receipt-proven owner half of the recoverable Structure bootstrap. */
@@ -34,9 +43,10 @@ export async function createAdmittedOwner(env: WorkActivationEnvironment,
   request: Request, input: OwnerCreateInput) {
   const def = definitions[input.kind];
   const profile = `https://rezics.com/definition/${def.profile}`;
-  const scope = `${input.kind}:edit:${input.owner}`;
+  const namespace = input.kind === 'definition' ? 'collection' : input.kind;
+  const scope = `${namespace}:edit:${input.owner}`;
   await assertGraphAdmissionOpen(env.fuseki, env.lineage);
-  const principal = await account.verify(request, [`${input.kind}:edit`]);
+  const principal = await account.verify(request, [`${namespace}:edit`]);
   const registered = await access.register({ principal, actingSubject: input.actingSubject,
     scope, action: def.action, idempotencyKey: input.idempotencyKey,
     requestDigest: input.requestDigest });
@@ -56,7 +66,8 @@ export async function createAdmittedOwner(env: WorkActivationEnvironment,
       const operation = `https://rezics.com/id/${Bun.randomUUIDv7()}`;
       const manifest = prepareComponent(env.objectDirectory, input.owner, {
         kind: input.kind, owner: input.owner, actingSubject: input.actingSubject,
-        space: input.space, disclosure: input.disclosure, name: input.name }, profile);
+        space: input.space, disclosure: input.disclosure, name: input.name,
+        capture: input.capture, query: input.query, resultBudget: input.resultBudget }, profile);
       const receipt = compositionReceiptIri(admission.id, def.action);
       const batch = `urn:rezics:outbox:${hash(receipt)}`;
       const event = `urn:rezics:event:${hash(operation)}`;
@@ -65,10 +76,16 @@ export async function createAdmittedOwner(env: WorkActivationEnvironment,
         ? `${iri(input.owner)} a rv:Zone ; rv:space ${iri(input.space!)} ; rv:zoneState rv:Active ;
           rv:zoneHead ${iri(revision)} ; rv:disclosure rv:${disclosure} .
           ${iri(input.space!)} rv:zoneCapability ${iri(input.owner)} .`
+        : input.kind === 'definition'
+        ? `${iri(input.owner)} a rv:DynamicCollection ; rv:curator ${iri(input.actingSubject)} ;
+          rv:disclosure rv:${disclosure} ; rv:collectionState rv:Active ;
+          rv:definitionHead ${iri(revision)} ; <https://schema.org/name> ${lit(input.name!)}@en .`
         : `${iri(input.owner)} a rv:Collection ; rv:curator ${iri(input.actingSubject)} ;
           rv:disclosure rv:${disclosure} ; rv:collectionState rv:Active ;
-          rv:collectionKind rv:StaticCollection ; rv:collectionHead ${iri(revision)} ;
-          <https://schema.org/name> ${lit(input.name!)}@en .`;
+          rv:collectionKind rv:${input.capture ? 'CapturedCollection' : 'StaticCollection'} ;
+          rv:collectionHead ${iri(revision)} ; <https://schema.org/name> ${lit(input.name!)}@en .
+          ${input.capture ? `${iri(input.owner)} rv:capturedFrom ${iri(input.capture.from)} ;
+            rv:captureCoverage rv:${input.capture.coverage === 'complete' ? 'Complete' : 'Partial'} .` : ''}`;
       const prerequisite = input.kind === 'zone'
         ? `GRAPH ${iri(GRAPHS.current)} { ${iri(input.space!)} a rv:Space ;
             rv:owner ${iri(input.actingSubject)} ; rv:realmCapability ?realm .
@@ -84,7 +101,11 @@ export async function createAdmittedOwner(env: WorkActivationEnvironment,
           GRAPH ${iri(GRAPHS.revisions)} {
             ${iri(revision)} a rv:${def.revisionType}, rv:RevisionAnchor ;
               rv:component ${iri(input.owner)} ; rv:operation ${iri(operation)} ;
-              rv:${input.kind}Operation rv:${def.operation} ;
+              rv:${input.kind === 'definition' ? 'definition' : input.kind}Operation rv:${def.operation} ;
+              ${input.kind === 'definition' ? `rv:queryProfile ${iri(input.query?.context
+                ? 'https://rezics.com/definition/public-realm-phrase-v1'
+                : 'https://rezics.com/definition/public-main-phrase-v1')} ;
+                rv:resultBudget ${input.resultBudget ?? 16} ;` : ''}
               rv:manifest ${iri(`urn:rezics:sha256:${manifest}`)} ;
               rv:modelRevision ${iri(profile)} ; rv:shapeRevision ${iri(profile)} ;
               rv:datasetId ${iri(DATASET)} ; rv:dataEpoch ${lit(env.lineage.dataEpoch)} ;
@@ -95,6 +116,7 @@ export async function createAdmittedOwner(env: WorkActivationEnvironment,
               rv:requestDigest ${lit(input.requestDigest)} ; rv:admissionId ${lit(admission.id)} ;
               rv:authorityEpoch ${lit(admission.authorityEpoch)} ; rv:admittedScope ${lit(scope)} ;
               rv:outcome rv:Succeeded ; rv:structureOwner ${iri(input.owner)} ;
+              rv:structureRevision ${iri(revision)} ;
               rv:datasetId ${iri(DATASET)} ; rv:dataEpoch ${lit(env.lineage.dataEpoch)} ;
               rv:sequence ?next .
           }
@@ -116,9 +138,17 @@ export async function createAdmittedOwner(env: WorkActivationEnvironment,
           BIND(?n + 1 AS ?next)
         }`;
       const validations = await profileValidations(env.fuseki, def.profile, [{
-        shape: `${profile}/revision-shape`, focus: [revision],
+        shape: `${profile}/${input.kind === 'definition' ? 'definition-revision-shape' : 'revision-shape'}`,
+        focus: [revision],
         graphs: [GRAPHS.current, GRAPHS.revisions],
       }]);
+      if (input.kind !== 'zone') validations.push(...await profileValidations(env.fuseki,
+        def.profile, [{ shape: `${profile}/${input.kind === 'definition'
+          ? 'definition-shape' : 'collection-shape'}`, focus: [input.owner],
+          graphs: [GRAPHS.current, GRAPHS.revisions] }]));
+      if (input.kind === 'zone') validations.push(...await profileValidations(env.fuseki,
+        'space-realm-v1', [{ shape: 'https://rezics.com/definition/space-realm-v1/space-shape',
+          focus: [input.space!], graphs: [GRAPHS.current] }]));
       try { await validatedCommand(env, { receipt, digest: input.requestDigest,
         update, validations, deadlineMs: 10_000 }, admission); }
       catch { /* A lost graph response is resolved by the durable receipt below. */ }
@@ -132,5 +162,7 @@ export async function createAdmittedOwner(env: WorkActivationEnvironment,
     throw new IdempotencyConflict(`${input.kind} owner receipt differs from its bootstrap request`);
   }
   return { owner: input.owner, receipt: terminal.receipt,
+    revision: terminal.revision,
+    replayed: registered.replayed,
     requestDigest: input.requestDigest, outcome: 'succeeded' as const };
 }

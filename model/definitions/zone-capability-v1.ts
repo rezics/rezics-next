@@ -20,6 +20,13 @@ export const zoneCapabilityProfile = {
   layout: 'compact',
   shapes: [
     {
+      iri: 'https://rezics.com/definition/zone-capability-v1/navigation-link-shape',
+      properties: [
+        { path: 'rdf:type', hasValue: 'rv:Zone', maxCount: 1 },
+        { path: 'rv:navigation', minCount: 1, maxCount: 1, class: 'rv:Structure' },
+      ],
+    },
+    {
       iri: 'https://rezics.com/definition/zone-capability-v1/zone-shape',
       canonical: { types: ['rv:Zone'] },
       properties: [
@@ -31,6 +38,8 @@ export const zoneCapabilityProfile = {
         { path: 'rv:navigation', maxCount: 1, class: 'rv:Structure' },
         { path: 'rv:disclosure', minCount: 1, maxCount: 1, in: ['rv:Public', 'rv:Private'] },
         { path: 'rv:defaultRealm', maxCount: 1, class: 'rv:Realm' },
+        { path: 'rv:defaultContext', maxCount: 1, class: 'rv:SemanticContext' },
+        { path: 'rv:defaultContextRevision', maxCount: 1, class: 'rv:ContextSemanticRevision' },
         { path: 'rv:presentation', maxCount: 1, nodeKind: 'sh:IRI' },
       ],
     },

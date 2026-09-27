@@ -30,6 +30,9 @@ export const ZoneConfiguration = Type.Object({
   state: Type.Union([Type.Literal('active'), Type.Literal('retired')]),
   disclosure: Type.Union([Type.Literal('public'), Type.Literal('private')]),
   defaultRealm: Type.Optional(nativeId),
+  /** An exact, shared semantic Context selection for this Zone's presentation. */
+  defaultContext: Type.Optional(Type.Object({ context: nativeId, semanticRevision: nativeId },
+    { additionalProperties: false })),
   presentation: Type.Optional(reference),
   budget: Type.Object({
     timeMs: Type.Integer({ minimum: 1, maximum: ZONE_LIMITS.queryBudgetMs }),
