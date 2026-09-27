@@ -13,8 +13,9 @@ import { AccessAdmissionRegistry, type RegisteredAdmission }
   from '../../../services/main/src/modules/access/admission.ts';
 import { RealmReplyContentStore } from '../../../services/main/src/modules/realm-reply/content-store.ts';
 import { RealmReplyStore } from '../../../services/main/src/modules/realm-reply/store.ts';
+import { readMainOutboxEnvelope } from '../../../services/main/src/modules/outbox/relay.ts';
 import { createRealmSpace, spaceCreationDigest } from '../../../services/main/src/modules/space/create.ts';
-import { activateMetadataWork, ID, metadataWorkRequestDigest }
+import { activateMetadataWork, GRAPHS, ID, iri, metadataWorkRequestDigest, RV }
   from '../../../services/main/src/modules/work/activate.ts';
 import { captureContentRecoveryCoverage, graphContentReferences }
   from '../../../services/main/src/modules/work/content-recovery-coverage.ts';
@@ -175,6 +176,23 @@ test('SUB05/SUB06: exact reviewed revisions place independently in two Realms an
     const placementKey = randomUUID();
     const placedOne = await post('/v1/realm-reply-placements', placementOne, placementKey);
     expect(placedOne.status, JSON.stringify(placedOne.body)).toBe(201);
+    async function placementEvent(placement: string) {
+      const rows = (await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?receipt ?event ?batch ?sequence WHERE {
+        GRAPH ${iri(GRAPHS.receipts)} { ?receipt rv:placement ${iri(placement)} ; rv:sequence ?sequence }
+        GRAPH ${iri(GRAPHS.outbox)} { ?event a rv:RealmReplyPlacedEvent ; rv:receipt ?receipt .
+          ?batch a rv:OutboxBatch ; rv:event ?event }
+      } LIMIT 2`)).results?.bindings ?? [];
+      expect(rows).toHaveLength(1);
+      const row = rows[0]!;
+      return readMainOutboxEnvelope(env.fuseki, { batchId: row.batch!.value,
+        dataEpoch: env.lineage.dataEpoch, routingEpoch: env.lineage.routingEpoch,
+        sequence: row.sequence!.value, eventIds: [row.event!.value] }, row.event!.value);
+    }
+    const firstEvent = await placementEvent(placedOne.body.placement);
+    expect(firstEvent.type).toBe('com.rezics.realm.reply-placed.v1');
+    expect(firstEvent.data.receipt).toMatchObject({ realm: realmOne, reply,
+      placement: placedOne.body.placement, contentRevision: `urn:rezics:content:revision:${first.revisionId}`,
+      byteDigest: first.revisionDigest, reviewDecision: `urn:rezics:realm-review:${approvedOne.body.decisionId}` });
     expect((await post('/v1/realm-reply-placements', placementOne, placementKey)).body.placement)
       .toBe(placedOne.body.placement);
     const staleHead = await post('/v1/realm-reply-placements', placementOne);
@@ -206,6 +224,12 @@ test('SUB05/SUB06: exact reviewed revisions place independently in two Realms an
       && ref.object === `urn:rezics:content:revision:${second.revisionId}`).length).toBeGreaterThan(0);
     const contentCut = await captureContentRecoveryCoverage(contentPool, graphReferences);
     expect(Number(contentCut.graphReferencesCount)).toBeGreaterThanOrEqual(4);
+    const replacement = await post('/v1/realm-reply-placements', {
+      ...placementOne, expectedHead: placedOne.body.placement });
+    expect(replacement.status, JSON.stringify(replacement.body)).toBe(201);
+    expect((await placementEvent(replacement.body.placement)).data.receipt)
+      .toMatchObject({ expectedHead: placedOne.body.placement });
+    expect(await placementEvent(placedOne.body.placement)).toEqual(firstEvent);
     const revoked = await post('/v1/realm-reply-reviews', { ...reviewOne,
       expectedGeneration: '1', supersedes: approvedOne.body.decisionId,
       outcome: 'revoked', reasonReference: 'manager-revocation' });
@@ -216,6 +240,7 @@ test('SUB05/SUB06: exact reviewed revisions place independently in two Realms an
     expect((await read(realmTwo)).body.revisionId).toBe(second.revisionId);
     expect((await count(realmOne)).body).toMatchObject({ count: 0, complete: true });
     expect((await count(realmTwo)).body).toMatchObject({ count: 1, complete: true });
+    expect(await placementEvent(placedOne.body.placement)).toEqual(firstEvent);
   } finally {
     await contentPool.end();
     await accessPool.end();
