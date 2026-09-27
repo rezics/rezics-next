@@ -108,7 +108,7 @@ export function ShelfMark({ work, title, locale }: { work: string; title: string
       <BookmarkPlusIcon aria-hidden="true" className="size-4.5" /></Link>;
   }
   const label = status ? `${t.shelve({ title })} · ${statusLabel(status, t)}` : t.shelve({ title });
-  return <Menu onSelect={selectStatus(choose)}>
+  return <Menu onSelect={selectStatus(next => void choose(next))}>
     <MenuTrigger aria-label={label} title={label} data-shelved={status ? '' : undefined}
       aria-busy={state === 'saving' || undefined} className={markClass}>
       {status ? <BookmarkCheckIcon aria-hidden="true" className="size-4.5" />
@@ -139,7 +139,7 @@ export function ShelfButton({ work, title, locale, size = 'lg', variant = 'defau
     ? <p role="status" className="text-destructive-foreground text-xs">{t.saveFailed}</p> : null;
   if (status) {
     return <div className={cn('grid gap-1.5', className)}>
-      <Menu onSelect={selectStatus(choose)}>
+      <Menu onSelect={selectStatus(next => void choose(next))}>
         <MenuTrigger className={cn(buttonVariants({ size, variant: 'outline', pill: true }), 'w-full')}
           aria-label={`${statusLabel(status, t)} — ${t.shelve({ title })}`} aria-busy={state === 'saving' || undefined}>
           <CheckIcon aria-hidden="true" className="text-primary" />{statusLabel(status, t)}
@@ -155,7 +155,7 @@ export function ShelfButton({ work, title, locale, size = 'lg', variant = 'defau
       <Button size={size} variant={variant} className="flex-1 rounded-s-full" isLoading={state === 'saving'}
         onClick={() => void choose('want-to-read')}>
         <BookmarkPlusIcon aria-hidden="true" />{t.wantToRead}</Button>
-      <Menu onSelect={selectStatus(choose)}>
+      <Menu onSelect={selectStatus(next => void choose(next))}>
         <MenuTrigger aria-label={t.shelfOptions}
           className={cn(buttonVariants({ variant, size: size === 'lg' ? 'icon-lg' : size === 'md' ? 'icon-md' : 'icon-sm' }),
             'w-11 flex-none rounded-e-full', variant === 'default' && 'border-s border-s-primary-foreground/25')}>
@@ -184,15 +184,16 @@ export function RateWork({ work, locale, className }: { work: string; locale: Ui
     </Link>;
   }
   const rate = actions.rate!;
+  async function save(next: number) {
+    const before = value;
+    setValue(next);
+    setFailed(false);
+    const saved = await rate(work, next).catch(() => false);
+    if (!saved) { setValue(before); setFailed(true); }
+  }
   return <div className={cn('grid justify-items-center gap-1', className)}>
     <Rating size="lg" count={actions.ratingMax === 10 ? 10 : 5} value={value ?? 0} className="items-center"
-      onValueChange={async ({ value: next }) => {
-        const before = value;
-        setValue(next);
-        setFailed(false);
-        const saved = await rate(work, next).catch(() => false);
-        if (!saved) { setValue(before); setFailed(true); }
-      }}>
+      onValueChange={({ value: next }) => void save(next)}>
       <RatingLabel className="order-last font-normal text-muted-foreground text-sm">
         {value ? t.yourRating : t.rateThis}</RatingLabel>
     </Rating>

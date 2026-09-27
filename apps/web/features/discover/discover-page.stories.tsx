@@ -116,6 +116,13 @@ export const Community: Story = {
   },
 };
 
+export const NothingPublishedYet: Story = {
+  args: { shelves: shelves(global, () => ok(page([]))) },
+  async play({ canvasElement }) {
+    await expect(within(canvasElement).getByRole('heading', { level: 2, name: 'Nothing here yet' })).toBeVisible();
+  },
+};
+
 export const Preparing: Story = {
   args: { shelves: shelves(global, key => key === 'recent-recipe' ? overviewPages(key) : failed('unbuilt')) },
   async play({ canvasElement }) {

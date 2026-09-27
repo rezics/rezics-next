@@ -14,15 +14,19 @@ test('search keeps phrase, scope and filters in the URL and states what it searc
   await form(page).getByRole('searchbox', { name: 'Search phrase' }).fill('  river  ');
   await form(page).getByRole('button', { name: 'Search', exact: true }).click();
   await expect(page).toHaveURL(/\/en\/search\?q=river$/);
-  await expect(page.getByText('Results for “river” in Global')).toBeVisible();
-  await expect(results(page)).toContainText('No works in Global match “river”');
+  await expect(page.getByText('Results for “river”', { exact: true })).toBeVisible();
+  await expect(results(page)).toContainText('Nothing matches “river”');
   const completeness = page.getByTestId('search-completeness');
-  await expect(completeness).toContainText(/Exactly 0 works match · searched [0-9]+ published texts? in Global/);
-  await expect(completeness).toContainText(/index current as of change [0-9]+/);
+  await expect(completeness).toContainText('0 works');
+  // What was searched is one click away rather than in the way.
+  await completeness.getByText('About these results').click();
+  await expect(completeness).toContainText(/Searched [0-9]+ published texts? in All of REZICS/);
+  await expect(completeness).toContainText(/Search index as of change [0-9]+/);
 
   await page.getByRole('link', { name: /^English\b/ }).click();
   await expect(page).toHaveURL(/\/en\/search\?q=river&lang=en$/);
-  await expect(completeness).toContainText('only English text');
+  await completeness.getByText('About these results').click();
+  await expect(completeness).toContainText('Only English text');
   await expect(results(page).getByRole('link', { name: 'Search any language' }))
     .toHaveAttribute('href', '/en/search?q=river');
   await page.reload();
@@ -30,12 +34,12 @@ test('search keeps phrase, scope and filters in the URL and states what it searc
   await expect(page.getByRole('link', { name: /^English\b/ })).toHaveAttribute('aria-current', 'true');
 });
 
-test('a Realm scope is named and never falls back to Global; Mine is not searchable', async ({ page }) => {
+test('a community scope is named and never falls back to everyone; Mine is not searchable', async ({ page }) => {
   const realm = randomUUID();
   await page.goto(`/en/search?q=river&scope=realm&realm=${realm}`);
   await expect(form(page).getByRole('combobox', { name: 'Search in' })).toHaveValue('realm');
-  await expect(results(page)).toContainText('This Realm is not public or does not exist');
-  await expect(results(page).getByRole('link', { name: 'Search Global' })).toHaveAttribute('href', '/en/search?q=river');
+  await expect(results(page)).toContainText('This community isn’t public or doesn’t exist');
+  await expect(results(page).getByRole('link', { name: 'Search all of REZICS' })).toHaveAttribute('href', '/en/search?q=river');
 
   await page.goto('/en/search?q=river&scope=mine');
   await expect(page.getByRole('heading', { name: 'Your ratings cannot be searched' })).toBeVisible();

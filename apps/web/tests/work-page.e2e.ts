@@ -61,33 +61,40 @@ test('a public Work page reads by scope and tab, and names missing and invalid s
   await expect(page.getByRole('heading', { level: 1, name: seed.title })).toHaveAttribute('lang', 'en');
   await expect(page.getByRole('link', { name: /Open Library author OL2162284A/ }))
     .toHaveAttribute('href', 'https://openlibrary.org/authors/OL2162284A');
-  await expect(page.getByText('Main Version in English')).toBeVisible();
-  await expect(page.getByText('Maren Osei')).toBeVisible();
-  await expect(page.getByText('La Cartographe des marées')).toHaveAttribute('lang', 'fr');
+  await expect(page.getByText(/· English$/)).toBeVisible();
+  await expect(page.getByText('Maren Osei').first()).toBeVisible();
+  await expect(page.getByText('La Cartographe des marées').first()).toHaveAttribute('lang', 'fr');
   await expect(page.getByRole('region', { name: 'About this Work' })).toContainText('A surveyor maps a delta');
+  // The summary under the title leads to the full ratings.
+  await expect(page.getByRole('link', { name: '3 ratings' })).toHaveAttribute('href', '#work-ratings');
 
-  const scope = page.getByRole('navigation', { name: 'Scope' });
-  await expect(scope.getByRole('link', { name: 'Global' })).toHaveAttribute('aria-current', 'true');
   const ratings = page.getByRole('region', { name: 'Ratings' });
-  await expect(ratings).toContainText('How good is this Work overall?');
+  const scope = ratings.getByRole('navigation', { name: 'Community' });
+  await expect(scope.getByRole('link', { name: 'Everyone' })).toHaveAttribute('aria-current', 'true');
   await expect(ratings).toContainText('3 ratings');
   await expect(ratings).toContainText('4.67');
   await expect(ratings.getByRole('list', { name: 'Rating distribution' }).getByRole('listitem')).toHaveCount(5);
-  await expect(page.getByRole('region', { name: 'Classification' }).getByRole('listitem'))
+  await expect(page.getByRole('region', { name: 'Genres' }).getByRole('listitem'))
     .toHaveText(['AdventureRelevance: Central']);
-  await expect(page.getByRole('region', { name: 'Realm adoption' })).toContainText('Adopted the English version');
+  await expect(page.getByRole('region', { name: 'Genres' }).getByRole('link', { name: 'Adventure' }))
+    .toHaveAttribute('href', /^\/en\/discover\?term=[0-9a-f-]{36}$/);
+  await expect(page.getByRole('region', { name: 'Communities' })).toContainText('Reads the English version');
+  // Identifiers are folded into Details until asked for.
+  await expect(page.getByText(seed.work, { exact: true })).toBeHidden();
+  await page.getByText('Details and identifiers').click();
+  await expect(page.getByText(seed.work, { exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Copy citation' })).toBeVisible();
 
-  // A Realm scope comes from the URL and re-scopes ratings and classification; nothing falls back to Global.
-  await scope.getByRole('link', { name: 'Realm: Tidewater Readers' }).click();
+  // A community comes from the URL and re-scopes ratings and genres; nothing falls back to everyone's view.
+  await scope.getByRole('link', { name: 'Community: Tidewater Readers' }).click();
   await expect(page).toHaveURL(`/en/w/${id}?scope=realm&realm=${realm}`);
-  await expect(scope.getByRole('link', { name: 'Realm: Tidewater Readers' })).toHaveAttribute('aria-current', 'true');
-  await expect(ratings).toContainText('How well does it fit Tidewater Readers?');
+  await expect(scope.getByRole('link', { name: 'Community: Tidewater Readers' })).toHaveAttribute('aria-current', 'true');
   await expect(ratings).toContainText('2 ratings');
   await expect(ratings.getByRole('list', { name: 'Rating distribution' }).getByRole('listitem')).toHaveCount(10);
-  const classification = page.getByRole('region', { name: 'Classification' });
-  await expect(classification.getByRole('list', { name: 'Decided in Tidewater Readers' })).toHaveText(['Estuary cycle']);
-  await expect(classification.getByRole('list', { name: 'From Global' })).toHaveText([/^Adventure/]);
-  await expect(page.getByRole('region', { name: 'Realm adoption' })).toContainText('In scope');
+  const classification = page.getByRole('region', { name: 'Genres' });
+  await expect(classification.getByRole('list', { name: 'Chosen in Tidewater Readers' })).toHaveText(['Estuary cycle']);
+  await expect(classification.getByRole('list', { name: 'Chosen by everyone' })).toHaveText([/^Adventure/]);
+  await expect(page.getByRole('region', { name: 'Communities' })).toContainText('Showing');
 
   // Tabs are links that keep the scope; each view has its own URL.
   await page.getByRole('navigation', { name: 'Work sections' }).getByRole('link', { name: 'Versions' }).click();
@@ -109,7 +116,7 @@ test('a public Work page reads by scope and tab, and names missing and invalid s
   await sections.getByRole('link', { name: 'History' }).click();
   await expect(page).toHaveURL(`/en/w/${id}/history`);
   const history = page.getByRole('region', { name: 'History' });
-  await expect(history.getByRole('listitem').first()).toContainText('Reply placed in a Realm');
+  await expect(history.getByRole('listitem').first()).toContainText('Reply placed in a community');
   await expect(history).toContainText('Version published');
   await expect(history).toContainText('Metadata revised');
   await history.getByRole('link', { name: 'Replies' }).click();
@@ -123,7 +130,7 @@ test('a public Work page reads by scope and tab, and names missing and invalid s
   await expect(discussion.getByRole('article')).toContainText(seed.reply);
   await discussion.getByRole('link', { name: 'In Tidewater Readers' }).click();
   await expect(page).toHaveURL(`/en/w/${id}/discussion?scope=realm&realm=${realm}`);
-  await expect(page.getByRole('navigation', { name: 'Scope' })).toContainText('Showing replies reviewed in Tidewater Readers.');
+  await expect(page.getByRole('navigation', { name: 'Community' })).toContainText('Showing replies reviewed in Tidewater Readers.');
   await expect(discussion.getByRole('article')).toContainText(seed.reply);
 
   // Contents lists the chapters; one without a publication is shown, unlinked and unnamed, since Main withholds it.
@@ -174,9 +181,9 @@ test('a public Work page reads by scope and tab, and names missing and invalid s
   await page.goto(`/en/w/${id}?scope=mine`);
   await expect(ratings.getByRole('link', { name: 'Sign in' }))
     .toHaveAttribute('href', `/auth/start?next=${encodeURIComponent(`/en/w/${id}?scope=mine`)}`);
-  await expect(page.getByRole('region', { name: 'Classification' })).toContainText('Classification isn’t personal');
+  await expect(page.getByRole('region', { name: 'Genres' })).toContainText('Genres aren’t personal');
   await page.goto(`/en/w/${id}?scope=everyone`);
-  await expect(page.getByRole('alert')).toContainText('This scope isn’t available');
+  await expect(page.getByRole('alert')).toContainText('This view isn’t available');
   await expect(page.getByRole('region', { name: 'Ratings' })).toHaveCount(0);
 
   // The root loading boundary streams the shell first, so vinext (like Next) answers a view's notFound()
@@ -198,7 +205,8 @@ test('a public Work page reads by scope and tab, and names missing and invalid s
   await expect(page.locator('link[rel="alternate"][hreflang="en"]'))
     .toHaveAttribute('href', `${origin}/en/w/${id}`);
   await expect(page.getByRole('region', { name: '评分' })).toContainText('3 个评分');
-  await expect(page.getByRole('navigation', { name: '范围' })).toContainText('显示 REZICS 全体用户的评分和分类。');
+  await expect(page.getByRole('region', { name: '评分' }).getByRole('navigation', { name: '社区' })
+    .getByRole('link', { name: '所有人' })).toHaveAttribute('aria-current', 'true');
   await shoot(page, context, `/zh-Hans/w/${id}`, 'overview-zh-Hans', info);
   await shoot(page, context, `/zh-Hans/w/${id}/versions`, 'versions-zh-Hans', info);
   await shoot(page, context, `/zh-Hans/w/${id}/contents`, 'contents-zh-Hans', info);
@@ -228,8 +236,8 @@ test('a signed-in reader sees their own rating in Mine and keeps reading progres
   await signInAtAccounts(page, next, member);
   const ratings = page.getByRole('region', { name: 'Ratings' });
   await expect(ratings).toContainText('You haven’t rated this Work yet');
-  await expect(ratings.getByRole('link', { name: 'See Global' })).toHaveAttribute('href', `/en/w/${id}`);
-  await expect(page.getByRole('navigation', { name: 'Scope' }).getByRole('link', { name: 'Mine' }))
+  await expect(ratings.getByRole('link', { name: 'See everyone' })).toHaveAttribute('href', `/en/w/${id}`);
+  await expect(ratings.getByRole('navigation', { name: 'Community' }).getByRole('link', { name: 'You' }))
     .toHaveAttribute('aria-current', 'true');
 
   // Main keeps progress only where the reader holds work.read on the Work and the chapter's target.

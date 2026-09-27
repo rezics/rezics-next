@@ -1,6 +1,6 @@
 import { buttonVariants } from '@rezics/ui/button';
 import { cn } from '@rezics/ui/utils';
-import { CircleSlashIcon, LinkIcon, StarIcon, XIcon } from 'lucide-react';
+import { CircleSlashIcon, LibraryBigIcon, LinkIcon, StarIcon, XIcon } from 'lucide-react';
 import { type ContractOf, materializeData } from 'native-i18n';
 import type { UiLocale } from '../../i18n/define.ts';
 import { type ReaderActions, ReaderActionsProvider } from '../catalogue/reader-actions.tsx';
@@ -144,7 +144,13 @@ export function DiscoverView({ state, realm, realmMissing, shelves, signedIn, si
       {realmMissing ? <Notice icon={CircleSlashIcon} headingLevel={2} title={t.realmMissingTitle}>
         <Link href={hrefIn(state, { kind: 'global' })} className={buttonVariants({ size: 'sm' })}>{t.browseEverything}</Link>
       </Notice> : !shelves.length ? <Notice icon={StarIcon} headingLevel={2} title={t.noRatingsYet}
-        description={t.noRatingsHelp} /> : shelves.map(shelf => <DiscoverShelf key={shelf.spec.key}
+        description={t.noRatingsHelp} /> : overview && shelves.every(shelf => shelf.initial.ok
+          && !shelf.initial.data.items.length)
+        // Empty rows hide themselves; when all are empty, say so rather than show a bare page.
+        ? <Notice icon={LibraryBigIcon} headingLevel={2} title={t.empty} description={t.emptyHelp}>
+          {neighbour ? <Link href={neighbour.href} className={buttonVariants({ size: 'sm', variant: 'outline' })}>
+            {neighbour.label}</Link> : null}
+        </Notice> : shelves.map(shelf => <DiscoverShelf key={shelf.spec.key}
         heading={{ title: shelfTitle(shelf, t), seeAll: seeAll(shelf) }}
         mode={overview ? 'row' : 'grid'} scope={scope} query={shelf.query} initial={shelf.initial} load={load}
         neighbour={neighbour} signInHref={signInHref} avatarQuery={avatarQuery} locale={locale} messages={messages} />)}
