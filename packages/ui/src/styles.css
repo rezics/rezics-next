@@ -1,8 +1,479 @@
+/* Rezics UI: a maintained fork of SharkUI d43c3c2 (MIT) styled as Rezics Aura. */
 @import "tailwindcss";
+@import "tw-animate-css";
+@import "./hitbox.css";
+@import "./prose.css";
+
+@source "./";
+
+@custom-variant dark (&:is(.dark *));
 
 @theme inline {
-  --color-ink: #172138;
-  --color-muted: #54617a;
-  --color-line: #d7dfeb;
-  --color-action: #1c56bd;
+  --font-sans: "Manrope", ui-sans-serif, system-ui, sans-serif;
+  --font-heading: "Iowan Old Style", "Source Serif 4", Georgia, serif;
+  --font-mono: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+
+  --color-info: var(--info);
+  --color-info-foreground: var(--info-foreground);
+
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
+
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+
+  --color-brand: var(--brand);
+  --color-rating: var(--rating);
+  --color-vote-down: var(--vote-down);
+
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  --color-code: var(--code);
+  --color-code-foreground: var(--code-foreground);
+  --color-code-highlight: var(--code-highlight);
+
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+
+  /* Aura radius scale (arca-ui/aura, --radius: 1rem): controls xl, containers 2xl, dialogs 3xl. */
+  --radius-xs: calc(var(--radius) - 8px);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --radius-2xl: calc(var(--radius) + 8px);
+  --radius-3xl: calc(var(--radius) + 14px);
+  --radius-4xl: calc(var(--radius) + 20px);
+
+  --animate-slide-up: slideUp 0.2s ease-out;
+  --animate-slide-down: slideDown 0.2s ease-out;
+
+  --animate-marquee-x: marqueeX var(--marquee-duration) linear infinite var(--marquee-delay);
+  --animate-marquee-y: marqueeY var(--marquee-duration) linear infinite var(--marquee-delay);
+  --animate-indeterminate: indeterminate 1.5s ease-in-out infinite;
+
+  --animate-expand: expand 0.2s ease-out;
+  --animate-collapse: collapse 0.2s ease-out;
+
+  --animate-flip-in: flip-in 0.2s ease-out;
+  --animate-flip-out: flip-out 0.2s ease-out;
+
+  --animate-drawer-slide-in-bottom: drawer-slide-in-bottom 0.5s cubic-bezier(0.32, 0.72, 0, 1);
+  --animate-drawer-slide-out-bottom: drawer-slide-out-bottom 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  --animate-drawer-slide-in-top: drawer-slide-in-top 0.5s cubic-bezier(0.32, 0.72, 0, 1);
+  --animate-drawer-slide-out-top: drawer-slide-out-top 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  --animate-drawer-slide-in-left: drawer-slide-in-left 0.5s cubic-bezier(0.32, 0.72, 0, 1);
+  --animate-drawer-slide-out-left: drawer-slide-out-left 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  --animate-drawer-slide-in-right: drawer-slide-in-right 0.5s cubic-bezier(0.32, 0.72, 0, 1);
+  --animate-drawer-slide-out-right: drawer-slide-out-right 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+
+  @keyframes slideUp {
+    from {
+      height: var(--height);
+    }
+    to {
+      height: 0;
+    }
+  }
+
+  @keyframes slideDown {
+    from {
+      height: 0;
+    }
+    to {
+      height: var(--height);
+    }
+  }
+
+  @keyframes marqueeX {
+    from {
+      transform: translateX(0);
+    }
+    to {
+      transform: translateX(var(--marquee-translate));
+    }
+  }
+
+  @keyframes marqueeY {
+    from {
+      transform: translateY(0);
+    }
+    to {
+      transform: translateY(var(--marquee-translate));
+    }
+  }
+
+  @keyframes expand {
+    from {
+      height: var(--collapsed-height, 0);
+    }
+    to {
+      height: var(--height);
+    }
+  }
+
+  @keyframes collapse {
+    from {
+      height: var(--height);
+    }
+    to {
+      height: var(--collapsed-height, 0);
+    }
+  }
+
+  @keyframes indeterminate {
+    0% {
+      transform: translateX(-100%);
+    }
+    100% {
+      transform: translateX(400%);
+    }
+  }
+
+  @keyframes flip-in {
+    from {
+      transform: rotateY(180deg);
+    }
+    to {
+      transform: rotateY(0deg);
+    }
+  }
+
+  @keyframes flip-out {
+    from {
+      transform: rotateY(0deg);
+    }
+    to {
+      transform: rotateY(180deg);
+    }
+  }
+
+  @keyframes drawer-slide-in-bottom {
+    from {
+      transform: translate3d(0, 100%, 0);
+    }
+    to {
+      transform: translate3d(var(--drawer-translate-x, 0), var(--drawer-translate-y, 0), 0);
+    }
+  }
+
+  @keyframes drawer-slide-out-bottom {
+    from {
+      transform: translate3d(var(--drawer-translate-x, 0), var(--drawer-translate-y, 0), 0);
+    }
+    to {
+      transform: translate3d(0, 100%, 0);
+    }
+  }
+
+  @keyframes drawer-slide-in-top {
+    from {
+      transform: translate3d(0, -100%, 0);
+    }
+    to {
+      transform: translate3d(var(--drawer-translate-x, 0), var(--drawer-translate-y, 0), 0);
+    }
+  }
+
+  @keyframes drawer-slide-out-top {
+    from {
+      transform: translate3d(var(--drawer-translate-x, 0), var(--drawer-translate-y, 0), 0);
+    }
+    to {
+      transform: translate3d(0, -100%, 0);
+    }
+  }
+
+  @keyframes drawer-slide-in-left {
+    from {
+      transform: translate3d(-100%, 0, 0);
+    }
+    to {
+      transform: translate3d(var(--drawer-translate-x, 0), var(--drawer-translate-y, 0), 0);
+    }
+  }
+
+  @keyframes drawer-slide-out-left {
+    from {
+      transform: translate3d(var(--drawer-translate-x, 0), var(--drawer-translate-y, 0), 0);
+    }
+    to {
+      transform: translate3d(-100%, 0, 0);
+    }
+  }
+
+  @keyframes drawer-slide-in-right {
+    from {
+      transform: translate3d(100%, 0, 0);
+    }
+    to {
+      transform: translate3d(var(--drawer-translate-x, 0), var(--drawer-translate-y, 0), 0);
+    }
+  }
+
+  @keyframes drawer-slide-out-right {
+    from {
+      transform: translate3d(var(--drawer-translate-x, 0), var(--drawer-translate-y, 0), 0);
+    }
+    to {
+      transform: translate3d(100%, 0, 0);
+    }
+  }
+}
+
+/*
+ * Rezics Aura. Structure follows arca-ui/aura; colors are Rezics.
+ * --brand is the logo red. It fails small-text contrast, so use it only for
+ * non-text marks: logo, active vote arrow, unread dots, chart marks.
+ * Colored text and filled buttons use --primary (ink blue).
+ * SharkUI convention: --X-foreground is the text-safe tone of semantic color X.
+ */
+:root {
+  --radius: 1rem;
+
+  --background: #f9f6f2;
+  --foreground: #2b343d;
+  --card: #fefcf9;
+  --card-foreground: #2b343d;
+  --popover: #fefcf9;
+  --popover-foreground: #2b343d;
+
+  --primary: #2f63ad;
+  --primary-foreground: #ffffff;
+  --secondary: #efece7;
+  --secondary-foreground: #2b343d;
+  --muted: #efece7;
+  --muted-foreground: #5d646c;
+  --accent: #e4ecf7;
+  --accent-foreground: #1f4a85;
+
+  --brand: #df3d35;
+  --rating: #bf7a0e;
+  --vote-down: #6a5bb5;
+
+  --destructive: #c42840;
+  --destructive-foreground: #b0233a;
+  --info: #65bae1;
+  --info-foreground: #1f6f93;
+  --success: #4aa651;
+  --success-foreground: #2c7a33;
+  --warning: #e6b55d;
+  --warning-foreground: #8a5a00;
+
+  --border: #dad7d0;
+  --input: #dad7d0;
+  --ring: #2f63ad;
+
+  --sidebar: #f7f5f1;
+  --sidebar-foreground: #2b343d;
+  --sidebar-primary: #2f63ad;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #e4ecf7;
+  --sidebar-accent-foreground: #1f4a85;
+  --sidebar-border: #e4e1da;
+  --sidebar-ring: #2f63ad;
+
+  --chart-1: #2f63ad;
+  --chart-2: #1d8a7a;
+  --chart-3: #bf7a0e;
+  --chart-4: #df3d35;
+  --chart-5: #6a5bb5;
+
+  --code: var(--card);
+  --code-foreground: var(--foreground);
+  --code-highlight: color-mix(in oklab, var(--foreground) 5%, var(--code));
+
+  --aura-grid: color-mix(in oklab, var(--foreground) 7%, transparent);
+  --aura-grid-strong: color-mix(in oklab, var(--foreground) 10%, transparent);
+  --aura-glow-1: color-mix(in oklab, var(--primary) 14%, transparent);
+  --aura-glow-2: color-mix(in oklab, var(--accent) 18%, transparent);
+  --aura-glow-3: color-mix(in oklab, var(--brand) 8%, transparent);
+  --aura-shadow-card:
+    0 1px 0 0 color-mix(in oklab, var(--foreground) 7%, transparent),
+    0 22px 48px -36px color-mix(in oklab, var(--foreground) 40%, transparent);
+  --aura-shadow-card-hover:
+    0 1px 0 0 color-mix(in oklab, var(--foreground) 8%, transparent),
+    0 30px 72px -44px color-mix(in oklab, var(--foreground) 45%, transparent);
+  --aura-shadow-float:
+    0 2px 4px -1px color-mix(in oklab, var(--foreground) 8%, transparent),
+    0 12px 24px -4px color-mix(in oklab, var(--foreground) 12%, transparent),
+    0 32px 64px -12px color-mix(in oklab, var(--foreground) 16%, transparent);
+}
+
+.dark {
+  --background: #0d1218;
+  --foreground: #e7e4df;
+  --card: #151b21;
+  --card-foreground: #e7e4df;
+  --popover: #151b21;
+  --popover-foreground: #e7e4df;
+
+  --primary: #86aee8;
+  --primary-foreground: #0b1626;
+  --secondary: #232a30;
+  --secondary-foreground: #e7e4df;
+  --muted: #232a30;
+  --muted-foreground: #928f88;
+  --accent: #1b2a3f;
+  --accent-foreground: #c9dbf5;
+
+  --brand: #f0524c;
+  --rating: #e9a93a;
+  --vote-down: #a99cf0;
+
+  --destructive: #d63a50;
+  --destructive-foreground: #f0617a;
+  --info: #3bacda;
+  --info-foreground: #8fd0ee;
+  --success: #3a9742;
+  --success-foreground: #7fcf86;
+  --warning: #dca331;
+  --warning-foreground: #f0c46a;
+
+  --border: #2a2e33;
+  --input: #2a2e33;
+  --ring: #86aee8;
+
+  --sidebar: #11171d;
+  --sidebar-foreground: #e7e4df;
+  --sidebar-primary: #86aee8;
+  --sidebar-primary-foreground: #0b1626;
+  --sidebar-accent: #1b2a3f;
+  --sidebar-accent-foreground: #c9dbf5;
+  --sidebar-border: #2a2e33;
+  --sidebar-ring: #86aee8;
+
+  --chart-1: #86aee8;
+  --chart-2: #4fc1ad;
+  --chart-3: #e9a93a;
+  --chart-4: #f0524c;
+  --chart-5: #a99cf0;
+}
+
+@layer base {
+  ::selection {
+    @apply bg-primary/80 text-primary-foreground;
+  }
+
+  * {
+    @apply border-border outline-ring/50 ring-ring;
+  }
+
+  html {
+    @apply antialiased;
+  }
+
+  body {
+    @apply bg-background text-foreground font-sans;
+    font-feature-settings:
+      "rlig" 1,
+      "calt" 1;
+  }
+
+  button:not(:disabled),
+  [role="button"]:not(:disabled) {
+    cursor: pointer;
+  }
+}
+
+/* SharkUI command and scroll-area use these; defined here without a plugin. */
+@utility scrollbar-none {
+  scrollbar-width: none;
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+@utility scrollbar-thin {
+  scrollbar-width: thin;
+}
+
+@utility scrollbar-track-transparent {
+  --scrollbar-track: transparent;
+}
+
+@utility scrollbar-thumb-* {
+  --scrollbar-thumb: --value(--color-*, [color]);
+  --scrollbar-thumb: --alpha(--value(--color-*, [color]) / calc(--modifier(integer) * 1%));
+  scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track, transparent);
+}
+
+/* Aura canvas: glows plus a 120px and 24px grid. Use on page grounds, not inside cards. */
+@utility aura-canvas {
+  background-color: var(--background);
+  background-image:
+    radial-gradient(1100px circle at 18% 10%, var(--aura-glow-2) 0%, transparent 58%),
+    radial-gradient(1200px circle at 86% 18%, var(--aura-glow-1) 0%, transparent 55%),
+    radial-gradient(900px circle at 50% 110%, var(--aura-glow-3) 0%, transparent 55%),
+    linear-gradient(to right, var(--aura-grid-strong) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--aura-grid-strong) 1px, transparent 1px),
+    linear-gradient(to right, var(--aura-grid) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--aura-grid) 1px, transparent 1px);
+  background-size:
+    auto,
+    auto,
+    auto,
+    120px 120px,
+    120px 120px,
+    24px 24px,
+    24px 24px;
+}
+
+/* Aura gradient surface for feature cards such as a Realm header. */
+@utility aura-surface {
+  background-color: var(--card);
+  background-image:
+    radial-gradient(
+      120% 90% at 12% 18%,
+      color-mix(in oklab, var(--brand) 12%, transparent) 0%,
+      transparent 60%
+    ),
+    radial-gradient(
+      100% 90% at 88% 18%,
+      color-mix(in oklab, var(--primary) 16%, transparent) 0%,
+      transparent 62%
+    ),
+    linear-gradient(
+      135deg,
+      color-mix(in oklab, var(--foreground) 5%, transparent) 0%,
+      transparent 65%
+    );
 }

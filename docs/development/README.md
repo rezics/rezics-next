@@ -15,8 +15,9 @@ the full suite.
 The [repository organization](repository-structure.md) maps executable owners,
 workspaces and generated artifacts. The [graph quickstart](../operations/installation.md)
 is the first independently usable infrastructure recipe, not a complete backend.
-[Web organization](web-features.md) and [component review](storybook.md) specify
-frontend boundaries for subsequent implementation.
+[Web organization](web-features.md), the [design system](design-system.md) and
+[component review](storybook.md) specify frontend boundaries, the Rezics UI
+component library and its theme.
 The [disposable local web authorization fixture](local-web-auth.md) supplies a
 QA-only PKCE client and acting identity for the first Work browser journey.
 

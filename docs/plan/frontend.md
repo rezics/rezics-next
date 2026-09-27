@@ -7,6 +7,8 @@ block backend completion.
 
 Implement shared React surfaces over qualified domain APIs through the Eden
 client and the data-fetching rules in [web organization](../development/web-features.md#data-fetching).
+Build them from [Rezics UI](../development/design-system.md) and its Rezics Aura
+theme, including its color, radius and layout conventions.
 Account login, per-task Agent context, Main Version reading/creation, Space
 management, contextual classification/ratings, graph/text discovery and package
 planning must preserve the same backend semantics. Client state is not authority.

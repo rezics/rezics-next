@@ -363,8 +363,10 @@ validation. Use only the documented CLI flags.
 | `@cloudflare/vite-plugin`, wrangler | 1.58.0, 4.137.0 | Adopted | Workers build and local `wrangler dev` (workerd) for end-to-end tests. |
 | `@tanstack/react-query` | 5.103.2 | Adopted | Client components only; see [web organization](web-features.md#data-fetching). |
 | Tailwind CSS, `@tailwindcss/vite` | 4.3.3 | Adopted | Styling. |
-| SharkUI registry on Ark UI | `@ark-ui/react` 5.39.2 | Adopted | Components come from the SharkUI registry (`https://shark.vini.one/r/{name}.json`) into `packages/ui`, following the old repository's `libraries/ui` conventions. |
-| `tailwind-variants`, `tailwind-merge`, `clsx`, `lucide-react` | 3.3.1, 3.7.0, 2.1.1, 1.47.0 | Adopted | UI utilities used by the SharkUI components. |
+| Rezics UI on Ark UI | `@ark-ui/react` 5.39.2; SharkUI snapshot [`d43c3c2`](https://github.com/sharkui-inc/shark-ui/tree/d43c3c2c7a5e683d46930c2ce8eb22eca2f8a0a0) (MIT) | Adopted | `packages/ui` (`@rezics/ui`) holds all 95 SharkUI components and its hook as a project-maintained fork, styled with the [Rezics Aura theme](design-system.md). It is no longer synced from the registry; change components in place. |
+| `tailwind-variants`, `tailwind-merge`, `clsx`, `lucide-react` | 3.3.1, 3.7.0, 2.1.1, 1.47.0 | Adopted | Utilities used by Rezics UI components. |
+| `tw-animate-css` | 1.4.0 | Adopted | Enter/exit animation utilities (`animate-in`, `fade-in-0`, `zoom-in-95`, `slide-in-from-*`) used by 20 Rezics UI overlays. Imported once from `packages/ui/src/styles.css`. |
+| Recharts, `react-is` | 3.10.1, 19.3.0 | Adopted | The Rezics UI `chart` component; `react-is` satisfies Recharts' peer dependency at the pinned React version. |
 | `native-i18n` | 0.2.0 | Adopted | UI messages, as in the old repository. Lingui and Paraglide are not used. |
 | `nuqs` | 2.10.1 | Adopted | URL search-parameter state for discovery and filters. |
 | Tiptap 3 | — | Stage C | Wiki/block editing. |

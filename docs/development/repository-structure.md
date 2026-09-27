@@ -64,7 +64,7 @@ rezics-next/
 │   ├── model/                   # Generated semantic types and validation bindings
 │   ├── api-client/              # Generated public/product HTTP clients
 │   ├── service-clients/         # Internal clients; server-only exports
-│   ├── ui/                     # Shared UI/SharkUI integration
+│   ├── ui/                     # Rezics UI: maintained SharkUI fork, Aura theme
 │   └── i18n/                   # Locale infrastructure and shared messages
 ├── model/                       # Authored semantic definitions and their compiler
 │   ├── schema/                  # Definition meta-schema and IR structure
@@ -293,7 +293,7 @@ fixes the concrete homes that Phase 0 creates:
   `command-module/` Maven project.
 - `model/definitions/*.ts` and `model/compiler/`, generating into `generated/model/`
   and `packages/model/src/generated/`.
-- `apps/web`, with `packages/ui` for SharkUI components and `native-i18n` messages.
+- `apps/web`, with `packages/ui` for [Rezics UI](design-system.md) components and `native-i18n` messages.
 - `tests/qa/` (harness), `tests/oracle/`, `tests/support/`, `tests/load/` and
   `tests/fixtures/`, with the fixture cache in ignored `.cache/`.
 
