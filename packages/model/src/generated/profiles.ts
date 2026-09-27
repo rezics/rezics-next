@@ -976,6 +976,20 @@ export const profileRegistry = {
       "derivation"
     ]
   },
+  "work-editorial-field-v1": {
+    "sha256": "61a93b0c3f403a3450545c063cabfb8d12299586df48dbd4c9574d8831b30999",
+    "file": "shapes/work-editorial-field-v1.ttl",
+    "shapes": [
+      "https://rezics.com/definition/work-editorial-field-v1/slot-shape",
+      "https://rezics.com/definition/work-editorial-field-v1/value-shape",
+      "https://rezics.com/definition/work-editorial-field-v1/control-shape"
+    ],
+    "focusRoles": [
+      "slot",
+      "value",
+      "control"
+    ]
+  },
   "work-metadata-v1": {
     "sha256": "ac918cf0458150520bf03f9683e6a363ad702376ebc50eaa729f98d84b3b8760",
     "file": "shapes/work-metadata-v1.ttl",
@@ -986,6 +1000,18 @@ export const profileRegistry = {
     "focusRoles": [
       "work",
       "main-version"
+    ]
+  },
+  "work-native-child-v1": {
+    "sha256": "1c9e1ed2ab97a4211095848ddce43f361082b5b80c042000d384658ad029d5d5",
+    "file": "shapes/work-native-child-v1.ttl",
+    "shapes": [
+      "https://rezics.com/definition/work-native-child-v1/child-shape",
+      "https://rezics.com/definition/work-native-child-v1/revision-shape"
+    ],
+    "focusRoles": [
+      "child",
+      "revision"
     ]
   },
   "work-title-control-v1": {

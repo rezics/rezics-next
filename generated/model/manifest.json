@@ -756,9 +756,19 @@
       }
     },
     {
+      "id": "work-editorial-field-v1",
+      "sha256": "61a93b0c3f403a3450545c063cabfb8d12299586df48dbd4c9574d8831b30999",
+      "file": "shapes/work-editorial-field-v1.ttl"
+    },
+    {
       "id": "work-metadata-v1",
       "sha256": "ac918cf0458150520bf03f9683e6a363ad702376ebc50eaa729f98d84b3b8760",
       "file": "shapes/work-metadata-v1.ttl"
+    },
+    {
+      "id": "work-native-child-v1",
+      "sha256": "1c9e1ed2ab97a4211095848ddce43f361082b5b80c042000d384658ad029d5d5",
+      "file": "shapes/work-native-child-v1.ttl"
     },
     {
       "id": "work-title-control-v1",
@@ -1587,6 +1597,16 @@
       ]
     },
     {
+      "type": "https://rezics.com/vocab/EditorialFieldSlot",
+      "routes": [
+        {
+          "profile": "work-editorial-field-v1",
+          "shape": "https://rezics.com/definition/work-editorial-field-v1/slot-shape",
+          "when": []
+        }
+      ]
+    },
+    {
       "type": "https://rezics.com/vocab/ElectorateCharterRevision",
       "routes": [
         {
@@ -1722,6 +1742,16 @@
         {
           "profile": "semantic-model-generation-v1",
           "shape": "https://rezics.com/definition/semantic-model-generation-v1/generation-shape",
+          "when": []
+        }
+      ]
+    },
+    {
+      "type": "https://rezics.com/vocab/NativeChild",
+      "routes": [
+        {
+          "profile": "work-native-child-v1",
+          "shape": "https://rezics.com/definition/work-native-child-v1/child-shape",
           "when": []
         }
       ]
@@ -2457,7 +2487,9 @@
     "contexts/work-author-credit-v1.jsonld": "84ef3a88ba73622354e03a513db785bf4c78a520fa71e6d61f1e88a441a3891d",
     "contexts/work-derivation-unresolved-v1.jsonld": "d1fdd26fc0e2b347d986df2ecb6c7bc5e4ca3cc9b49864f855cf5f03857bf3d5",
     "contexts/work-derivation-v1.jsonld": "1361b50b75a374f9d6cd7e290a8ae5c4f440476ce19bbc79222935c4b2b1be30",
+    "contexts/work-editorial-field-v1.jsonld": "f8e8f3277c99887f1b684590b8930b2376384b5537c9acf1ac2de61167292a25",
     "contexts/work-metadata-v1.jsonld": "982bdcde025ba5281c75255aa3a891d034b27f45175f114998801167bcb78a8d",
+    "contexts/work-native-child-v1.jsonld": "6f5a3d023edc2048a18af848f10cacb6264a55d486e703d5909ec7ca4e9828ba",
     "contexts/work-title-control-v1.jsonld": "6d41cee07d63c6609e3c8ba36f45043ab1ff4ef888869d859520680125bb9b29",
     "contexts/zone-capability-v1.jsonld": "cea800513f8218d5553718067f7139f7f9da6c020c2f5b8a4176e79b3b4dfa91",
     "shapes/agent-provision-v1.ttl": "5523f932edd5ec848047fe7e968d63a0f509870bc2735fe02d38d13d041cae4c",
@@ -2533,12 +2565,14 @@
     "shapes/work-author-credit-v1.ttl": "369b1c406b627053c612fff0c97fe18353e633df2b8128746cb4463273369281",
     "shapes/work-derivation-unresolved-v1.ttl": "6c703f04dde8586aa0d5fbb5601fc532c0d572c2097eb18e927e4b601f8f71d2",
     "shapes/work-derivation-v1.ttl": "b86e60ef69cf6a20088119dbb582154c7f27cbf30f1a8334869603e49b0dea1b",
+    "shapes/work-editorial-field-v1.ttl": "61a93b0c3f403a3450545c063cabfb8d12299586df48dbd4c9574d8831b30999",
     "shapes/work-metadata-v1.ttl": "ac918cf0458150520bf03f9683e6a363ad702376ebc50eaa729f98d84b3b8760",
+    "shapes/work-native-child-v1.ttl": "1c9e1ed2ab97a4211095848ddce43f361082b5b80c042000d384658ad029d5d5",
     "shapes/work-title-control-v1.ttl": "100dddad43cac4fd47c3090e987ef9dc9aa272d189fc4240cc08302340c5d42d",
     "shapes/zone-capability-v1.ttl": "b0374ad8d4506ef6a3337f784e77d97470a3df881f211c74a3281d2430365015",
-    "packages/model/src/generated/arbitraries.ts": "ec199cf900e3549ee267d622915067096f9cbe61605ff817c2f5412de65192e9",
-    "packages/model/src/generated/profiles.ts": "3839ed61d5eb7d38d0ce37a157db3c0b494183888d6c60896fd37b2861bbe40c",
-    "packages/model/src/generated/schemas.ts": "5b7e13812a602b24388024fe6d54f6e8644d8842279e09a3bebd575b9be4ef9a",
-    "packages/model/src/generated/vocabulary.ts": "4da76cdf668e21c0f7b8fc4419cb945f88960e6d8ca1d4d0a2a498fe9636d9f8"
+    "packages/model/src/generated/arbitraries.ts": "b4cec14bfe0ad63a546c59531637f666489db0a5e5895295fb5f10d4e2afe9d2",
+    "packages/model/src/generated/profiles.ts": "9e12ae16523d07d13e7326c9e84f595566fe4777601082518fed4af64eea9f0c",
+    "packages/model/src/generated/schemas.ts": "94ddc0f13f5f4248252fe6d16f091a8f934973771bcd3b3d08ed92550b178777",
+    "packages/model/src/generated/vocabulary.ts": "1c7361c406c3f0fe05268698bb00613284a3fe6687775479b8dfeb07a1c52ca8"
   }
 }
