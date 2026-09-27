@@ -98686,11 +98686,12 @@
                   "decision",
                   "discussion",
                   "reply",
-                  "collection"
+                  "collection",
+                  "review"
                 ],
                 "type": "string"
               },
-              "maxItems": 7,
+              "maxItems": 8,
               "minItems": 1,
               "type": "array",
               "uniqueItems": true
@@ -99056,6 +99057,56 @@
                                   "kind"
                                 ],
                                 "type": "object"
+                              },
+                              {
+                                "properties": {
+                                  "helpfulCount": {
+                                    "minimum": 0,
+                                    "type": "integer"
+                                  },
+                                  "kind": {
+                                    "const": "review",
+                                    "type": "string"
+                                  },
+                                  "opening": {
+                                    "~elyTyp": 7,
+                                    "maxLength": 400,
+                                    "nullable": true,
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ]
+                                  },
+                                  "rating": {
+                                    "maximum": 10,
+                                    "minimum": 1,
+                                    "type": "integer"
+                                  },
+                                  "review": {
+                                    "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                    "type": "string"
+                                  },
+                                  "scale": {
+                                    "enum": [
+                                      5,
+                                      10
+                                    ],
+                                    "type": "string"
+                                  },
+                                  "spoiler": {
+                                    "type": "boolean"
+                                  }
+                                },
+                                "required": [
+                                  "kind",
+                                  "review",
+                                  "rating",
+                                  "scale",
+                                  "spoiler",
+                                  "helpfulCount",
+                                  "opening"
+                                ],
+                                "type": "object"
                               }
                             ]
                           },
@@ -99154,7 +99205,8 @@
                               "decision",
                               "discussion",
                               "reply",
-                              "collection"
+                              "collection",
+                              "review"
                             ],
                             "type": "string"
                           },
@@ -99341,6 +99393,27 @@
                                 },
                                 "required": [
                                   "kind",
+                                  "href"
+                                ],
+                                "type": "object"
+                              },
+                              {
+                                "properties": {
+                                  "href": {
+                                    "type": "string"
+                                  },
+                                  "kind": {
+                                    "const": "read-review",
+                                    "type": "string"
+                                  },
+                                  "review": {
+                                    "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "kind",
+                                  "review",
                                   "href"
                                 ],
                                 "type": "object"
@@ -99944,6 +100017,9 @@
                     },
                     "projection": {
                       "properties": {
+                        "reviewSequence": {
+                          "type": "string"
+                        },
                         "sequence": {
                           "type": "string"
                         },
@@ -99957,6 +100033,7 @@
                       },
                       "required": [
                         "sequence",
+                        "reviewSequence",
                         "status"
                       ],
                       "type": "object"
@@ -100920,6 +100997,15 @@
           },
           {
             "in": "query",
+            "name": "afterReview",
+            "required": false,
+            "schema": {
+              "pattern": "^\\d{1,30}$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
             "name": "scope",
             "required": false,
             "schema": {
@@ -100975,12 +101061,16 @@
                         "dataEpoch": {
                           "type": "string"
                         },
+                        "reviewSequence": {
+                          "type": "string"
+                        },
                         "sequence": {
                           "type": "string"
                         }
                       },
                       "required": [
                         "sequence",
+                        "reviewSequence",
                         "dataEpoch"
                       ],
                       "type": "object"
