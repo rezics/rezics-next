@@ -84,10 +84,10 @@ test('SEARCH06: versioned CJK Main and Realm phrases bind exact selected bodies 
       revision: draft.draftRevision, language, body };
   }
 
-  async function mainWork(language: string, body: string) {
+  async function mainWork(language: string, body: string, semanticTypes: string[] = []) {
     const title = `CJK search ${randomUUID()}`;
-    const created = await activateMetadataWork(env, { title,
-      admission: admission('work:create:root', 'work.create', metadataWorkRequestDigest(title)) });
+    const created = await activateMetadataWork(env, { title, semanticTypes,
+      admission: admission('work:create:root', 'work.create', metadataWorkRequestDigest(title, semanticTypes)) });
     const source = await published(created.work, language, body);
     const input = { context: { kind: 'main-version-default' as const, id: created.mainVersion },
       work: created.work, contribution: source.contribution,
@@ -106,17 +106,20 @@ test('SEARCH06: versioned CJK Main and Realm phrases bind exact selected bodies 
   }
 
   async function query(profile: 'public-main-phrase-v1' | 'public-realm-phrase-v1',
-    phrase: string, language: string | null, realm?: string) {
+    phrase: string, language: string | null, realm?: string,
+    filters?: { includeTypes?: string[]; excludeTypes?: string[] }) {
     const response = await app.handle(new Request('http://main.local/v1/queries', {
       method: 'POST', headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ profile, phrase, language,
+      body: JSON.stringify({ profile, phrase, language, ...filters,
         ...(realm ? { context: { kind: 'realm-local', id: realm } } : {}) }),
     }));
     if (response.status !== 200) {
       throw new Error(`CJK public query returned ${response.status}: ${await response.text()}`);
     }
     return response.json() as Promise<{ complete: boolean; indexGeneration: string;
-      total: number; results: Array<Omit<SelectedText, 'body'> & { reason?: string; score: number }> }>;
+      total: number; facets: { languages: { precision: string; values: Array<{ value: string; count: number }> };
+        terms: { precision: string }; types: { precision: string; values: Array<{ value: string; count: number }> } };
+      results: Array<Omit<SelectedText, 'body'> & { reason?: string; score: number; types: string[] }> }>;
   }
 
   function expectRows(result: Awaited<ReturnType<typeof query>>, expected: SelectedText[],
@@ -143,8 +146,10 @@ test('SEARCH06: versioned CJK Main and Realm phrases bind exact selected bodies 
     // The zh-tagged Realm body deliberately contains Japanese and Korean text;
     // the Main body also matches Galaxy42 so adoption must shadow a real hit.
     const alternateBody = '中文检索验证，東京図書館で한국어 자료を探す。Galaxy42 混合标识。';
-    const english = await mainWork('en', `English main edition Galaxy42 ${randomUUID()}`);
-    const japanese = await mainWork('ja', '東京図書館の案内。Galaxy42 銀河号。');
+    const book = 'https://schema.org/Book';
+    const recipe = 'https://schema.org/Recipe';
+    const english = await mainWork('en', `English main edition Galaxy42 ${randomUUID()}`, [book]);
+    const japanese = await mainWork('ja', '東京図書館の案内。Galaxy42 銀河号。', [recipe]);
     const korean = await mainWork('ko', '한국어 자료 안내. Galaxy42 별빛호.');
     const alternate = await published(english.work, 'zh', alternateBody);
 
@@ -202,6 +207,28 @@ test('SEARCH06: versioned CJK Main and Realm phrases bind exact selected bodies 
     expect(mainMixed.total).toBe(3);
     expect(new Set(mainMixed.results.map(row => row.matchUnit)))
       .toEqual(new Set([english.matchUnit, japanese.matchUnit, korean.matchUnit]));
+    expect(mainMixed.facets.languages).toEqual({ precision: 'exact', values: [
+      { value: 'en', count: 1 }, { value: 'ja', count: 1 }, { value: 'ko', count: 1 }] });
+    expect(mainMixed.facets.terms.precision).toBe('lower-bound');
+    expect(mainMixed.facets.types.values).toEqual(expect.arrayContaining([
+      { value: book, count: 1 }, { value: recipe, count: 1 }]));
+    expect(mainMixed.results.find(row => row.work === english.work)?.types).toEqual([book]);
+    expect((await query('public-main-phrase-v1', 'Galaxy42', null, undefined,
+      { includeTypes: [book], excludeTypes: [recipe] })).results.map(row => row.work)).toEqual([english.work]);
+    expect((await query('public-main-phrase-v1', 'Galaxy42', null, undefined,
+      { excludeTypes: [book, recipe] })).results.map(row => row.work)).toEqual([korean.work]);
+    const pageResponse = await app.handle(new Request('http://main.local/v1/queries/page', {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ profile: 'public-main-phrase-page-v1', phrase: 'Galaxy42',
+        language: null, pageSize: 2, includeTypes: [book, recipe] }),
+    }));
+    expect(pageResponse.status).toBe(200);
+    const page = await pageResponse.json() as { total: number; facets: typeof mainMixed.facets;
+      results: Array<{ work: string; types: string[] }>; next: unknown };
+    expect(page.total).toBe(2);
+    expect(page.results).toHaveLength(2);
+    expect(page.facets.types.values).toEqual(expect.arrayContaining([
+      { value: book, count: 1 }, { value: recipe, count: 1 }]));
     const realmMixed = await query('public-realm-phrase-v1', 'Galaxy42', null, space.realm);
     expect(realmMixed.complete).toBe(true);
     expect(realmMixed.indexGeneration).toBe(generation);

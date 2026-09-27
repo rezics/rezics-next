@@ -19,6 +19,8 @@ export interface SearchContinuation {
 interface BasePublicPhrasePageRequest {
   language: string | null;
   author?: string;
+  includeTypes?: string[];
+  excludeTypes?: string[];
   pageSize: number;
   continuation?: SearchContinuation;
 }
@@ -58,6 +60,7 @@ function requestDigest(input: PublicPhrasePageRequest): string {
     'sense' in input ? input.sense : null,
     'ratingContext' in input ? input.ratingContext : null,
     'minimumMeanTimes10' in input ? input.minimumMeanTimes10 : null,
+    input.includeTypes ?? [], input.excludeTypes ?? [],
     input.pageSize]);
 }
 

@@ -81,8 +81,22 @@ export function problemResult<const Status extends number>(status: Status) {
 const phraseMatch = t.Object({
   matchUnit: t.String(), work: t.String(), mainVersion: t.String(),
   contribution: t.String(), revision: t.String(), selection: t.String(),
-  language: t.String(), score: t.Number(),
+  language: t.String(), score: t.Number(), types: t.Array(t.String(), { maxItems: 3 }),
 });
+const facetValues = t.Array(t.Object({ value: t.String(), count: t.Integer({ minimum: 0 }) }));
+const phraseFacets = t.Object({ populationBasis: t.Literal('all-filters'), resultGrain: t.Literal('work'),
+  languages: t.Object({ precision: t.Literal('exact'), values: facetValues }),
+  terms: t.Object({ precision: t.Literal('lower-bound'), values: facetValues }),
+  types: t.Object({ precision: t.Literal('exact'), values: facetValues }),
+});
+export const workTypeFilters = {
+  includeTypes: t.Optional(t.Array(t.Union([
+    t.Literal('https://schema.org/Book'), t.Literal('https://schema.org/DigitalDocument'),
+    t.Literal('https://schema.org/Recipe')]), { maxItems: 3, uniqueItems: true })),
+  excludeTypes: t.Optional(t.Array(t.Union([
+    t.Literal('https://schema.org/Book'), t.Literal('https://schema.org/DigitalDocument'),
+    t.Literal('https://schema.org/Recipe')]), { maxItems: 3, uniqueItems: true })),
+};
 const realmPhraseMatch = t.Object({ ...phraseMatch.properties, reason: t.String() });
 const classification = t.Object({ sense: t.String(), decision: t.String(),
   application: t.Nullable(t.String()), meaningKey: t.Optional(t.String()),
@@ -108,7 +122,7 @@ const ratedRealmMatch = t.Object({ ...classifiedRealmMatch.properties,
       numerator: t.Number(), denominator: t.Number() }) }) });
 const baseQuery = { contractVersion: t.Literal('1'), resultGrain: t.Literal('mainVersion'),
   complete: t.Literal(true), population: t.Number(), indexGeneration: t.String(),
-  total: t.Number(), sourcePosition };
+  total: t.Number(), sourcePosition, facets: phraseFacets };
 const realmContext = t.Object({ kind: t.Literal('realm-local'), id: t.String() });
 const contentPosition = t.Object({ owner: t.Literal('content'), dataEpoch: t.String(),
   sequence: t.String({ pattern: '^[0-9]+$' }) });
@@ -214,6 +228,7 @@ const contentPageContinuation = t.Object({
 }, { additionalProperties: false });
 const pageRequest = {
   ...unsupportedPublicSearchSelectors,
+  ...workTypeFilters,
   phrase: t.String({ minLength: 2, maxLength: 80 }),
   language: t.Union([t.String({ minLength: 2, maxLength: 35,
     pattern: '^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$' }), t.Null()]),
@@ -223,6 +238,7 @@ const pageRequest = {
 };
 const titleBodyPageRequest = {
   ...unsupportedPublicSearchSelectors,
+  ...workTypeFilters,
   titleTerm: t.String({ minLength: 2, maxLength: 80 }),
   bodyTerm: t.String({ minLength: 2, maxLength: 80 }),
   language: pageRequest.language, author: pageRequest.author,
@@ -256,7 +272,7 @@ export const publicPhrasePageRequest = t.Union([
     minimumMeanTimes10: t.Integer({ minimum: 10, maximum: 100 }) },
   { additionalProperties: false }),
 ]);
-const pageResult = { resultGrain: t.Literal('mainVersion'),
+const pageResult = { resultGrain: t.Literal('mainVersion'), facets: phraseFacets,
   relationComplete: t.Literal(true), population: t.Integer(), total: t.Integer(),
   sourcePosition, indexGeneration: t.String(), next: t.Nullable(pageContinuation) };
 export const publicPhrasePageResult = t.Union([

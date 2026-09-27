@@ -64,6 +64,8 @@ export function SearchForm({ state, realm, locale, messages }: {
     {realm && scope === 'realm' ? <input type="hidden" name="realm" value={realm.id} /> : null}
     {state.language ? <input type="hidden" name="lang" value={state.language} /> : null}
     {state.term ? <input type="hidden" name="term" value={state.term} /> : null}
+    {state.includeTypes?.length ? <input type="hidden" name="include" value={state.includeTypes.join(',')} /> : null}
+    {state.excludeTypes?.length ? <input type="hidden" name="exclude" value={state.excludeTypes.join(',')} /> : null}
     <div className="relative flex-1">
       <SearchIcon aria-hidden="true" className="pointer-events-none absolute start-4 top-1/2 size-5 -translate-y-1/2
         text-muted-foreground" />

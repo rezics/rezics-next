@@ -29,6 +29,7 @@ export interface SearchHit {
   mainVersion: string;
   title: WorkName | null;
   cover: WorkCover | null;
+  types: string[];
   reasons: MatchReasons;
 }
 
@@ -40,6 +41,7 @@ export interface SearchResultPage {
   indexGeneration: string;
   next: SearchContinuation | null;
   hits: SearchHit[];
+  facets?: SearchPage['facets'];
   /** False when Main answered but could not name the results; hits then show IDs. */
   titles: boolean;
 }

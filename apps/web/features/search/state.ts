@@ -1,4 +1,5 @@
 import { isUuid, type SearchParams, single, withQuery } from '../discover/scope.ts';
+import { workTypes, type WorkTypeKey } from '../discover/state.ts';
 
 // `/search?q&scope&realm&lang&term` as the URL gives it. Pure functions shared
 // by the route, its components and tests.
@@ -16,6 +17,9 @@ export interface SearchState {
   language: string | null;
   /** A classification Sense: only Works classified under it match. */
   term: string | null;
+  /** Any included type may match; excluded types never match. */
+  includeTypes?: WorkTypeKey[];
+  excludeTypes?: WorkTypeKey[];
 }
 
 export type ParsedSearch = { ok: true; state: SearchState }
@@ -49,24 +53,35 @@ export function parseSearchState(params: SearchParams): ParsedSearch {
   const realm = single(params.realm);
   const rawLanguage = single(params.lang);
   const term = single(params.term) ?? null;
+  const parseTypes = (raw: string | undefined): WorkTypeKey[] | null => {
+    if (raw === undefined) return [];
+    const keys = raw.split(',');
+    return keys.length <= workTypes.length && keys.every(key => workTypes.some(type => type.key === key))
+      && new Set(keys).size === keys.length ? keys as WorkTypeKey[] : null;
+  };
+  const includeTypes = parseTypes(single(params.include));
+  const excludeTypes = parseTypes(single(params.exclude));
   if (scope === 'mine') return { ok: false, reason: 'mine', phrase };
   const language = rawLanguage === undefined || rawLanguage === '' ? null : normalizeLanguage(rawLanguage);
   const parsedScope: SearchScope | null = (scope === undefined || scope === 'global') && realm === undefined
     ? { kind: 'global' } : scope === 'realm' && isUuid(realm) ? { kind: 'realm', realm } : null;
-  const repeated = [params.q, params.scope, params.realm, params.lang, params.term].some(Array.isArray);
-  if (repeated || !parsedScope || (rawLanguage && !language) || (term !== null && !isUuid(term))) {
+  const repeated = [params.q, params.scope, params.realm, params.lang, params.term,
+    params.include, params.exclude].some(Array.isArray);
+  if (repeated || !parsedScope || (rawLanguage && !language) || (term !== null && !isUuid(term))
+    || !includeTypes || !excludeTypes || includeTypes.some(type => excludeTypes.includes(type))) {
     return { ok: false, reason: 'malformed', phrase };
   }
-  return { ok: true, state: { phrase, scope: parsedScope, language, term } };
+  return { ok: true, state: { phrase, scope: parsedScope, language, term,
+    ...(includeTypes.length ? { includeTypes } : {}), ...(excludeTypes.length ? { excludeTypes } : {}) } };
 }
 
 export function searchHref(state: SearchState): string {
   return withQuery('/search', { q: state.phrase, ...(state.scope.kind === 'realm'
-    ? { scope: 'realm', realm: state.scope.realm } : {}), lang: state.language, term: state.term });
+    ? { scope: 'realm', realm: state.scope.realm } : {}), lang: state.language, term: state.term,
+    include: state.includeTypes?.join(','), exclude: state.excludeTypes?.join(',') });
 }
 
 /**
- * Content languages the filter offers. Main has no language facet counts yet,
- * so these are the languages REZICS publishes most, named in the reader's locale.
+ * Languages initially offered when no search has supplied facet counts.
  */
 export const searchLanguages = ['en', 'zh-Hans', 'zh-Hant', 'ja', 'ko', 'es', 'fr', 'de'] as const;

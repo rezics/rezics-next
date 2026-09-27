@@ -18,13 +18,19 @@ describe('search URL state', () => {
     expect(href).toBe(`/search?${new URLSearchParams({ q: '《西游记》 取经' })}&scope=realm&realm=${realm}&lang=zh-Hans&term=${term}`);
     expect(parseSearchState(Object.fromEntries(new URL(href, 'http://x').searchParams))).toEqual(parsed);
     expect(searchHref(global)).toBe('/search?q=Pride');
+    const selected = { ...global, includeTypes: ['book', 'recipe'] as Array<'book' | 'recipe'>,
+      excludeTypes: ['document'] as Array<'document'> };
+    const selectedHref = searchHref(selected);
+    expect(parseSearchState(Object.fromEntries(new URL(selectedHref, 'http://x').searchParams)))
+      .toEqual({ ok: true, state: selected });
   });
 
   test('Mine and malformed selections are named, never searched as Global', () => {
     expect(parseSearchState({ q: 'Pride', scope: 'mine' })).toEqual({ ok: false, reason: 'mine', phrase: 'Pride' });
     for (const params of [{ scope: 'realm' }, { scope: 'global', realm }, { lang: 'english!' }, { term: 'fantasy' },
       { q: ['a', 'b'] }, { lang: ['en', 'ja'] },
-      { scope: ['global', 'realm'], realm }]) {
+      { scope: ['global', 'realm'], realm }, { include: 'book,book' },
+      { include: 'book', exclude: 'book' }, { exclude: 'unknown' }]) {
       expect(parseSearchState({ q: 'Pride', ...params }).ok).toBe(false);
     }
     expect(normalizeLanguage('EN')).toBe('en');
@@ -52,6 +58,8 @@ describe('search requests', () => {
       profile: 'public-realm-phrase-page-v1', context });
     expect(searchRequest({ ...global, scope: { kind: 'realm', realm }, term })).toMatchObject({
       profile: 'public-realm-classified-phrase-page-v1', context, sense: iri(term) });
+    expect(searchRequest({ ...global, includeTypes: ['book'], excludeTypes: ['recipe'] })).toMatchObject({
+      includeTypes: ['https://schema.org/Book'], excludeTypes: ['https://schema.org/Recipe'] });
   });
 
   test('expired or moved continuations restart; over-budget phrases are named', () => {
@@ -69,8 +77,12 @@ describe('search result hydration', () => {
   const page = { profile: 'public-realm-classified-phrase-page-v1', resultGrain: 'mainVersion', relationComplete: true,
     population: 42, total: 1, sourcePosition: { datasetId: 'product', dataEpoch: 'e', sequence: '47' },
     indexGeneration: 'g', next: null, context: { kind: 'realm-local', id: iri(realm) }, classificationSense: iri(term),
+    facets: { populationBasis: 'all-filters', resultGrain: 'work',
+      languages: { precision: 'exact', values: [{ value: 'zh-Hans', count: 1 }] },
+      terms: { precision: 'lower-bound', values: [{ value: iri(term), count: 1 }] },
+      types: { precision: 'exact', values: [{ value: 'https://schema.org/Book', count: 1 }] } },
     results: [{ matchUnit: 'm', work, mainVersion: 'v', contribution: 'c', revision: 'r', selection: 's',
-      language: 'zh-Hans', score: 1, reason: 'realm-adoption', classification: { sense: iri(term), decision: 'd',
+      language: 'zh-Hans', score: 1, types: ['https://schema.org/Book'], reason: 'realm-adoption', classification: { sense: iri(term), decision: 'd',
         application: null, concept, source: 'local', sourceContext: 'x' } }] };
   const name = (value: string) => ({ value, language: 'zh-Hans', direction: 'ltr', basis: 'requested' });
   const fallback = { kind: 'fallback', policy: 'avatar-fallback-v1', key: 'k', resourceType: 'work' };
@@ -81,7 +93,7 @@ describe('search result hydration', () => {
           : { data: { summaries }, error: null }; } } } } } as unknown as MainClient;
   }
 
-  test('one summary batch names the Works and concepts; each summary is checked before use', async () => {
+  test('one typed summary batch names Works and concepts; external media URLs are ignored', async () => {
     const seen: unknown[] = [];
     const main = client([{ reference: work, status: 'available', name: name('西游记'), avatar: fallback },
       { reference: concept, status: 'available', name: name('神魔小说'), avatar: { ...fallback, resourceType: 'concept' } }],
@@ -90,6 +102,7 @@ describe('search result hydration', () => {
       { language: 'zh-CN' });
     expect(seen).toEqual([{ profile: 'resource-summary-batch-v1', resources: [work, concept], language: 'zh-CN' }]);
     expect(read.ok && read.page.titles).toBe(true);
+    expect(read.ok && read.page.facets?.terms.precision).toBe('lower-bound');
     expect(read.ok && read.page.hits[0]).toMatchObject({ title: { value: '西游记' }, reasons: { language: 'zh-Hans',
       realm: 'realm-adoption', classification: { source: 'local', conceptName: { value: '神魔小说' } } } });
     const forged = await readSummaries(client([{ reference: work, status: 'available', name: name('x'),

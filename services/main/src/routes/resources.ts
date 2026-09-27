@@ -10,6 +10,7 @@ import { DATASET, GRAPHS, RV, iri, lit } from '../modules/work/activate.ts';
 import { assertGraphAdmissionOpen } from '../modules/work/restore-lineage.ts';
 import type { MainWorkDependencies } from './dependencies.ts';
 import { mediaError, mediaRoutes } from './media.ts';
+import { resourceSummaryBatch } from '../modules/search/summary-contract.ts';
 import { problem } from './problems.ts';
 
 const ID = 'https://rezics.com/id/';
@@ -87,7 +88,7 @@ export function resourceRoutes(fuseki: FusekiClient, work: MainWorkDependencies)
         resources: t.Array(nativeId, { minItems: 1, maxItems: MAX_SUMMARY_BATCH }),
         actingSubject: t.Optional(nativeId), context: t.Optional(context), language: t.Optional(language) },
       { additionalProperties: false }),
-      response: { 200: t.Object({}, { additionalProperties: true }), ...authorizedReadProblems },
+      response: { 200: resourceSummaryBatch, ...authorizedReadProblems },
     }, async ({ request, body }) => {
       try {
         const { profile: _profile, ...input } = body;

@@ -13,6 +13,7 @@ const realm = '3f0e1c2d-4b5a-4c6d-8e7f-9a0b1c2d3e4f';
 
 function hit(n: number, title: string | null, language: string, reasons: Partial<SearchHit['reasons']> = {}): SearchHit {
   return { matchUnit: id(n + 500), work: id(n), mainVersion: id(n + 100),
+    types: ['https://schema.org/Book'],
     title: title === null ? null : { value: title, language, direction: 'ltr', basis: 'requested' },
     cover: { kind: 'fallback', policy: 'avatar-fallback-v1', key: `work-${n}`, resourceType: 'work' },
     reasons: { language, realm: null, classification: null, ...reasons } };
@@ -62,6 +63,26 @@ export const Populated: Story = {
     await userEvent.click(canvas.getByRole('button', { name: 'Show more' }));
     await waitFor(() => expect(canvas.getByRole('link', { name: 'Pride and Prejudice — Chapter 3' })).toHaveFocus());
     await expect(canvas.getByRole('link', { name: 'Work 00000005' })).toBeVisible();
+  },
+};
+
+export const FacetedTypes: Story = {
+  args: { parsed: state('Pride', { includeTypes: ['book'] }), initial: results(pride, {
+    facets: { populationBasis: 'all-filters', resultGrain: 'work',
+      languages: { precision: 'exact', values: [{ value: 'en', count: 2 },
+        { value: 'zh-Hans', count: 1 }] },
+      terms: { precision: 'lower-bound', values: [] },
+      types: { precision: 'exact', values: [
+        { value: 'https://schema.org/Book', count: 3 },
+        { value: 'https://schema.org/DigitalDocument', count: 0 },
+        { value: 'https://schema.org/Recipe', count: 0 }] } },
+  }) },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByRole('link', { name: 'Include Book' })).toHaveAttribute('aria-current', 'true');
+    await expect(canvas.getByRole('link', { name: 'Exclude Recipe' })).toHaveAttribute('href',
+      '/search?q=Pride&include=book&exclude=recipe');
+    await expect(canvas.getByRole('link', { name: 'Pride and Prejudice' })).toBeVisible();
   },
 };
 

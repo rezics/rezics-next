@@ -152,7 +152,7 @@ function Pages({ first, props, t }: { first: SearchResultPage; props: SearchResu
     </Alert> : null}
     <ol ref={list} className="grid gap-3">
       {hits.map(hit => <li key={hit.matchUnit}>
-        <WorkCard layout="row" headingLevel={2} work={hit.work} title={hit.title} cover={hit.cover} types={[]}
+        <WorkCard layout="row" headingLevel={2} work={hit.work} title={hit.title} cover={hit.cover} types={hit.types}
           href={workHref(hit.work, state.scope)} scopeLabel={scopeLabel} avatarQuery={avatarQuery} locale={locale}
           messages={discoverMessages}>
           <Reasons hit={hit} scopeLabel={scopeLabel} locale={locale} t={t} />

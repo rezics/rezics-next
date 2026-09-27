@@ -202,7 +202,8 @@ test('IAM18/SEARCH01/SEARCH02/SEARCH04/SEARCH07/SEARCH08/SEARCH16/SEARCH18: rate
     expect(late.total).toBe(1);
     expect(late.results[0]?.work).toBe(lateWork);
     expect(fuseki.inventories).toBe(1);
-    expect(fuseki.queryCalls - coldStart.queries).toBe(4);
+    // The route adds one position-fenced Work-type batch to the phrase read.
+    expect(fuseki.queryCalls - coldStart.queries).toBe(5);
     expect(fuseki.healthCalls - coldStart.health).toBe(3);
     const warmStart = { queries: fuseki.queryCalls, health: fuseki.healthCalls };
     const all = await query(null);
@@ -211,7 +212,7 @@ test('IAM18/SEARCH01/SEARCH02/SEARCH04/SEARCH07/SEARCH08/SEARCH16/SEARCH18: rate
     expect(all.total).toBe(102);
     expect(new Set(all.results.map(row => row.work))).toEqual(new Set([...works, lateWork]));
     expect(fuseki.inventories).toBe(1);
-    expect(fuseki.queryCalls - warmStart.queries).toBe(3);
+    expect(fuseki.queryCalls - warmStart.queries).toBe(4);
     expect(fuseki.healthCalls - warmStart.health).toBe(3);
     const pageStart = { queries: fuseki.queryCalls, inventories: fuseki.inventories,
       phrases: fuseki.phraseQueries };
@@ -232,7 +233,7 @@ test('IAM18/SEARCH01/SEARCH02/SEARCH04/SEARCH07/SEARCH08/SEARCH16/SEARCH18: rate
       .map(row => row.work)).toEqual(all.results.map(row => row.work));
     expect(fuseki.phraseQueries - pageStart.phrases).toBe(3);
     expect(fuseki.inventories).toBe(pageStart.inventories);
-    expect(fuseki.queryCalls - pageStart.queries).toBeLessThanOrEqual(12);
+    expect(fuseki.queryCalls - pageStart.queries).toBeLessThanOrEqual(15);
     const nextWork = await addWork(102, 'en');
     const stalePage = await page(firstPage.next!);
     expect(stalePage.status).toBe(409);
@@ -290,13 +291,13 @@ test('IAM18/SEARCH01/SEARCH02/SEARCH04/SEARCH07/SEARCH08/SEARCH16/SEARCH18: rate
     const firstAuthor = await query('en', actor);
     expect(firstAuthor.complete).toBe(true);
     expect(firstAuthor.results.map(row => row.work)).toEqual([nextWork]);
-    expect(fuseki.queryCalls - authorStart.queries).toBe(3);
+    expect(fuseki.queryCalls - authorStart.queries).toBe(4);
     expect(fuseki.healthCalls - authorStart.health).toBe(3);
     const secondAuthorStart = { queries: fuseki.queryCalls, health: fuseki.healthCalls };
     const secondAuthor = await query('en', otherAuthor);
     expect(secondAuthor.complete).toBe(true);
     expect(secondAuthor.results.map(row => row.work)).toEqual([lateWork]);
-    expect(fuseki.queryCalls - secondAuthorStart.queries).toBe(3);
+    expect(fuseki.queryCalls - secondAuthorStart.queries).toBe(4);
     expect(fuseki.healthCalls - secondAuthorStart.health).toBe(3);
     expect(fuseki.inventories).toBe(3);
 

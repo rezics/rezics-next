@@ -7,13 +7,14 @@ import Link from 'next/link';
 import type { UiLocale } from '../../i18n/define.ts';
 import type { DiscoverMessages } from '../discover/messages.ts';
 import { Notice } from '../discover/notice.tsx';
+import { workTypes } from '../discover/state.ts';
 import { PageContainer } from '../shell/page.tsx';
 import type { SearchMessages } from './messages.ts';
 import type { SearchLoader } from './query.ts';
 import { type RealmOption, SearchForm } from './search-form.tsx';
 import { SearchResults } from './search-results.tsx';
 import { type ParsedSearch, phraseStatus, type SearchState, searchHref, searchLanguages } from './state.ts';
-import type { SearchLoaded } from './types.ts';
+import type { SearchLoaded, SearchResultPage } from './types.ts';
 
 type Text = ContractOf<SearchMessages>;
 
@@ -35,10 +36,12 @@ function languageName(tag: string, locale: UiLocale): string {
   try { return new Intl.DisplayNames([locale], { type: 'language' }).of(tag) ?? tag; } catch { return tag; }
 }
 
-/** Include filters Main supports: one content language, one classification term. Each is a URL. */
-function Filters({ state, idPrefix, locale, t }: { state: SearchState; idPrefix: string; locale: UiLocale; t: Text }) {
-  const languages = [null, ...searchLanguages, ...(state.language
-    && !(searchLanguages as readonly string[]).includes(state.language) ? [state.language] : [])];
+/** The complete relation supplies Work-grain counts for its current filter basis. */
+function Filters({ state, facets, idPrefix, locale, t }: { state: SearchState;
+  facets?: SearchResultPage['facets']; idPrefix: string; locale: UiLocale; t: Text }) {
+  const offered = [...new Set([...searchLanguages, ...(facets?.languages.values.map(item => item.value) ?? [])])];
+  const languages = [null, ...offered, ...(state.language && !offered.includes(state.language)
+    ? [state.language] : [])];
   return <div className="grid gap-5">
     <nav aria-labelledby={`${idPrefix}-language`} className="grid gap-1">
       <h2 id={`${idPrefix}-language`} className="mb-1 font-semibold text-sm">{t.language}</h2>
@@ -52,17 +55,55 @@ function Filters({ state, idPrefix, locale, t }: { state: SearchState; idPrefix:
             <span aria-hidden="true" className="grid size-4 shrink-0 place-items-center rounded-full border border-border
               group-aria-[current=true]/lang:border-primary">
               <span className="hidden size-2 rounded-full bg-primary group-aria-[current=true]/lang:block" /></span>
-            <span lang={language ?? undefined}>{language ? languageName(language, locale) : t.anyLanguage}</span>
+            <span lang={language ?? undefined} className="min-w-0 flex-1">{language
+              ? languageName(language, locale) : t.anyLanguage}</span>
+            {language && facets ? <span className="text-muted-foreground tabular-nums">
+              {facets.languages.values.find(item => item.value === language)?.count ?? 0}</span> : null}
           </Link>
         </li>)}
       </ul>
       <p className="mt-1 px-2 text-muted-foreground text-xs">{t.languageHelp}</p>
     </nav>
+    <section aria-labelledby={`${idPrefix}-type`} className="grid gap-2">
+      <h2 id={`${idPrefix}-type`} className="font-semibold text-sm">{t.workType}</h2>
+      <ul className="grid gap-2">
+        {workTypes.map(type => {
+          const included = state.includeTypes?.includes(type.key) ?? false;
+          const excluded = state.excludeTypes?.includes(type.key) ?? false;
+          const label = t[`${type.key}Type`];
+          const count = facets?.types.values.find(item => item.value === type.iri)?.count;
+          return <li key={type.key} className="grid gap-1 rounded-xl border border-border/60 p-2 text-sm">
+            <span>{label}{count !== undefined ? <span className="ms-2 text-muted-foreground tabular-nums">
+              {count}</span> : null}</span>
+            <div className="flex gap-2">
+              <Link aria-current={included ? 'true' : undefined}
+                href={searchHref({ ...state,
+                  includeTypes: included ? state.includeTypes?.filter(key => key !== type.key)
+                    : [...(state.includeTypes ?? []), type.key],
+                  excludeTypes: state.excludeTypes?.filter(key => key !== type.key) })}
+                className="rounded-md px-2 py-1 text-muted-foreground outline-none hover:bg-accent
+                  focus-visible:ring-2 focus-visible:ring-ring aria-[current=true]:bg-primary/10
+                  aria-[current=true]:text-primary" aria-label={t.includeType({ type: label })}>{t.include}</Link>
+              <Link aria-current={excluded ? 'true' : undefined}
+                href={searchHref({ ...state,
+                  includeTypes: state.includeTypes?.filter(key => key !== type.key),
+                  excludeTypes: excluded ? state.excludeTypes?.filter(key => key !== type.key)
+                    : [...(state.excludeTypes ?? []), type.key] })}
+                className="rounded-md px-2 py-1 text-muted-foreground outline-none hover:bg-accent
+                  focus-visible:ring-2 focus-visible:ring-ring aria-[current=true]:bg-primary/10
+                  aria-[current=true]:text-primary" aria-label={t.excludeType({ type: label })}>{t.exclude}</Link>
+            </div>
+          </li>;
+        })}
+      </ul>
+      <p className="px-2 text-muted-foreground text-xs">{t.typeHelp}</p>
+    </section>
     <section aria-labelledby={`${idPrefix}-term`} className="grid gap-2">
       <h2 id={`${idPrefix}-term`} className="font-semibold text-sm">{t.classification}</h2>
       {state.term ? <p className="inline-flex h-8 w-fit items-center gap-1 rounded-full bg-secondary ps-3.5 pe-1
         text-sm">
-        {t.classificationActive}
+        {t.classificationActive}{facets?.terms.values[0]
+          ? <span className="tabular-nums">{t.atLeast({ count: String(facets.terms.values[0].count) })}</span> : null}
         <Link href={searchHref({ ...state, term: null })} aria-label={t.removeFilter({ filter: t.classificationActive })}
           className="grid size-6 place-items-center rounded-full outline-none hover:bg-background/70
             focus-visible:ring-2 focus-visible:ring-ring"><XIcon aria-hidden="true" className="size-3.5" /></Link>
@@ -101,7 +142,8 @@ export function SearchPage({ parsed, realm, initial, signedIn, actingSubject, av
       : <div className="grid gap-6 lg:grid-cols-[15rem_minmax(0,1fr)] lg:items-start">
         <aside aria-label={t.filters}>
           <Card className="hidden px-4 py-4 lg:block">
-            <Filters state={state} idPrefix="filters-wide" locale={locale} t={t} />
+            <Filters state={state} facets={initial?.ok ? initial.page.facets : undefined}
+              idPrefix="filters-wide" locale={locale} t={t} />
           </Card>
           <details className="group rounded-2xl border border-border/60 bg-card shadow-(--aura-shadow-card) lg:hidden">
             <summary className={cn('flex cursor-pointer list-none items-center gap-2 rounded-2xl px-4 py-3 font-medium',
@@ -112,7 +154,8 @@ export function SearchPage({ parsed, realm, initial, signedIn, actingSubject, av
                 group-open:rotate-180" />
             </summary>
             <div className="border-border/60 border-t px-4 py-4">
-              <Filters state={state} idPrefix="filters-narrow" locale={locale} t={t} />
+              <Filters state={state} facets={initial?.ok ? initial.page.facets : undefined}
+                idPrefix="filters-narrow" locale={locale} t={t} />
             </div>
           </details>
         </aside>

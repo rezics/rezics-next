@@ -24,8 +24,9 @@ import { queryPublicContentPhrase } from '../modules/content-publication/search.
 import { pageCompleteContentRelation } from '../modules/content-publication/search-continuation.ts';
 import { checkJudgmentProtection } from '../modules/judgment/protection.ts';
 import { PublicQueryBudgetExceeded, PublicQueryUnavailable } from '../modules/work/search-budget.ts';
+import { decoratePhraseRelation } from '../modules/work/search-facets.ts';
 import { problemResult, publicPhrasePageRequest, publicPhrasePageResult, publicQueryResult,
-  unsupportedPublicSearchSelectors } from '../api-contract.ts';
+  unsupportedPublicSearchSelectors, workTypeFilters } from '../api-contract.ts';
 import type { MainWorkDependencies } from './dependencies.ts';
 import { commandError, problem } from './problems.ts';
 
@@ -243,6 +244,7 @@ export function searchRoutes(fuseki: FusekiClient, work: SearchRouteDependencies
             pattern: '^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$' }), t.Null(),
         ]) }, { additionalProperties: false }), t.Object({ profile: t.Literal('public-main-title-body-v1'),
         ...unsupportedPublicSearchSelectors,
+        ...workTypeFilters,
         titleTerm: t.String({ minLength: 2, maxLength: 80 }),
         bodyTerm: t.String({ minLength: 2, maxLength: 80 }),
         language: t.Union([t.String({ minLength: 2, maxLength: 35,
@@ -250,6 +252,7 @@ export function searchRoutes(fuseki: FusekiClient, work: SearchRouteDependencies
         author: t.Optional(t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' })),
       }, { additionalProperties: false }), t.Object({ profile: t.Literal('public-main-phrase-v1'),
         ...unsupportedPublicSearchSelectors,
+        ...workTypeFilters,
         phrase: t.String({ minLength: 2, maxLength: 80 }),
         language: t.Union([
           t.String({ minLength: 2, maxLength: 35,
@@ -259,6 +262,7 @@ export function searchRoutes(fuseki: FusekiClient, work: SearchRouteDependencies
         })) }, { additionalProperties: false }), t.Object({
         profile: t.Literal('public-realm-phrase-v1'),
         ...unsupportedPublicSearchSelectors,
+        ...workTypeFilters,
         context: t.Object({ kind: t.Literal('realm-local'),
           id: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }) },
         { additionalProperties: false }),
@@ -271,6 +275,7 @@ export function searchRoutes(fuseki: FusekiClient, work: SearchRouteDependencies
         })) }, { additionalProperties: false }), t.Object({
         profile: t.Literal('public-main-classified-phrase-v1'),
         ...unsupportedPublicSearchSelectors,
+        ...workTypeFilters,
         phrase: t.String({ minLength: 2, maxLength: 80 }),
         language: t.Union([
           t.String({ minLength: 2, maxLength: 35,
@@ -281,6 +286,7 @@ export function searchRoutes(fuseki: FusekiClient, work: SearchRouteDependencies
       }, { additionalProperties: false }), t.Object({
         profile: t.Literal('public-realm-classified-phrase-v1'),
         ...unsupportedPublicSearchSelectors,
+        ...workTypeFilters,
         context: t.Object({ kind: t.Literal('realm-local'),
           id: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }) },
         { additionalProperties: false }),
@@ -294,6 +300,7 @@ export function searchRoutes(fuseki: FusekiClient, work: SearchRouteDependencies
       }, { additionalProperties: false }), t.Object({
         profile: t.Literal('public-realm-classified-rated-phrase-v1'),
         ...unsupportedPublicSearchSelectors,
+        ...workTypeFilters,
         context: t.Object({ kind: t.Literal('realm-local'),
           id: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }) },
         { additionalProperties: false }),
@@ -358,7 +365,7 @@ export function searchRoutes(fuseki: FusekiClient, work: SearchRouteDependencies
                   await queryPublicRealmClassifiedPhrase(work.environment, body), body.context.id)
                 : await protectClassifiedResults(work,
                   await queryPublicMainClassifiedPhrase(work.environment, body));
-          return present(selection, relation);
+          return decoratePhraseRelation(work.environment, await present(selection, relation), body);
         }, undefined, diagnostics);
         return Response.json(result, {
           headers: { 'cache-control': 'no-store' },
@@ -390,33 +397,42 @@ export function searchRoutes(fuseki: FusekiClient, work: SearchRouteDependencies
           }
           const selection = await presentationSelection(request);
           if (body.profile === 'public-main-phrase-page-v1') {
-            const relation = await present(selection, await queryPublicMainPhrase(work.environment, body));
-            return pageCompletePublicRelation(body, relation, Date.now(), selection?.generation);
+            const relation = await decoratePhraseRelation(work.environment,
+              await present(selection, await queryPublicMainPhrase(work.environment, body)), body);
+            return { ...pageCompletePublicRelation(body, relation, Date.now(), selection?.generation),
+              facets: relation.facets };
           }
           if (body.profile === 'public-main-title-body-page-v1') {
-            const relation = await present(selection, await queryPublicMainTitleBody(work.environment, body));
-            return pageCompletePublicRelation(body, relation, Date.now(), selection?.generation);
+            const relation = await decoratePhraseRelation(work.environment,
+              await present(selection, await queryPublicMainTitleBody(work.environment, body)), body);
+            return { ...pageCompletePublicRelation(body, relation, Date.now(), selection?.generation),
+              facets: relation.facets };
           }
           if (body.profile === 'public-realm-phrase-page-v1') {
-            const relation = await present(selection, await queryPublicRealmPhrase(work.environment, body));
-            return pageCompletePublicRelation(body, relation, Date.now(), selection?.generation);
+            const relation = await decoratePhraseRelation(work.environment,
+              await present(selection, await queryPublicRealmPhrase(work.environment, body)), body);
+            return { ...pageCompletePublicRelation(body, relation, Date.now(), selection?.generation),
+              facets: relation.facets };
           }
           if (body.profile === 'public-main-classified-phrase-page-v1') {
-            const relation = await present(selection, await protectClassifiedResults(work,
-              await queryPublicMainClassifiedPhrase(work.environment, body)));
+            const relation = await decoratePhraseRelation(work.environment,
+              await present(selection, await protectClassifiedResults(work,
+                await queryPublicMainClassifiedPhrase(work.environment, body))), body);
             return { ...pageCompletePublicRelation(body, relation, Date.now(), selection?.generation),
-              classificationSense: relation.classificationSense };
+              classificationSense: relation.classificationSense, facets: relation.facets };
           }
           if (body.profile === 'public-realm-classified-phrase-page-v1') {
-            const relation = await present(selection, await protectClassifiedResults(work,
-              await queryPublicRealmClassifiedPhrase(work.environment, body), body.context.id));
+            const relation = await decoratePhraseRelation(work.environment,
+              await present(selection, await protectClassifiedResults(work,
+                await queryPublicRealmClassifiedPhrase(work.environment, body), body.context.id)), body);
             return { ...pageCompletePublicRelation(body, relation, Date.now(), selection?.generation),
-              classificationSense: relation.classificationSense };
+              classificationSense: relation.classificationSense, facets: relation.facets };
           }
-          const relation = await present(selection, await protectClassifiedResults(work,
-            await queryPublicRealmClassifiedRatedPhrase(work.environment, body), body.context.id));
+          const relation = await decoratePhraseRelation(work.environment,
+            await present(selection, await protectClassifiedResults(work,
+              await queryPublicRealmClassifiedRatedPhrase(work.environment, body), body.context.id)), body);
           return { ...pageCompletePublicRelation(body, relation, Date.now(), selection?.generation),
-            classificationSense: relation.classificationSense,
+            classificationSense: relation.classificationSense, facets: relation.facets,
             ratingCriterion: relation.ratingCriterion,
             ratingPopulation: relation.ratingPopulation };
         }, undefined, diagnostics);

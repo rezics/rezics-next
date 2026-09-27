@@ -130,24 +130,27 @@ describe('Main typed route contracts', () => {
       direction: 'ltr', sourceRevision: null, predecessor: null,
       provenance: { author: 'test' },
     }, serializedJson: '{"body":"ok"}', body: { body: 'ok' } })).toBe(true);
+    const facets = { populationBasis: 'all-filters', resultGrain: 'work',
+      languages: { precision: 'exact', values: [] }, terms: { precision: 'lower-bound', values: [] },
+      types: { precision: 'exact', values: [] } };
     expect(Value.Check(publicQueryResult, { contractVersion: '1', resultGrain: 'mainVersion',
       context: 'main-version-default', complete: true, population: 0,
-      indexGeneration: 'index', total: 0, results: [], sourcePosition: position })).toBe(true);
+      indexGeneration: 'index', total: 0, results: [], facets, sourcePosition: position })).toBe(true);
     expect(Value.Check(publicPhrasePageResult, {
       profile: 'public-main-phrase-page-v1', resultGrain: 'mainVersion',
       context: 'main-version-default', relationComplete: true, population: 0,
-      indexGeneration: 'index', total: 0, results: [], sourcePosition: position,
+      indexGeneration: 'index', total: 0, results: [], facets, sourcePosition: position,
       next: null,
     })).toBe(true);
     const realm = { kind: 'realm-local', id } as const;
     const query = { contractVersion: '1', resultGrain: 'mainVersion',
       complete: true, population: 0, indexGeneration: 'index',
-      total: 0, results: [], sourcePosition: position };
+      total: 0, results: [], facets, sourcePosition: position };
     expect(Value.Check(publicQueryResult, { ...query, context: realm })).toBe(true);
     expect(Value.Check(publicPhrasePageResult, {
       profile: 'public-realm-phrase-page-v1', resultGrain: 'mainVersion',
       context: realm, relationComplete: true, population: 0,
-      indexGeneration: 'index', total: 0, results: [], sourcePosition: position,
+      indexGeneration: 'index', total: 0, results: [], facets, sourcePosition: position,
       next: null,
     })).toBe(true);
     expect(Value.Check(publicPhrasePageResult, {
@@ -156,7 +159,7 @@ describe('Main typed route contracts', () => {
       classificationSense: id, ratingCriterion: { context: id,
         minimumMeanTimes10: 80, policy: 'latest-per-rater-mean' },
       ratingPopulation: 0, population: 0, indexGeneration: 'index', total: 0,
-      results: [], sourcePosition: position, next: null,
+      results: [], facets, sourcePosition: position, next: null,
     })).toBe(true);
     expect(Value.Check(publicQueryResult, { contractVersion: '1',
       profile: 'public-content-phrase-v1', resultGrain: 'content-variant', complete: true,
@@ -182,7 +185,7 @@ describe('Main typed route contracts', () => {
       ratingCriterion: { context: id, minimumMeanTimes10: 70,
         policy: 'latest-per-rater-mean' },
       results: [{ matchUnit: id, work: id, mainVersion: id,
-        contribution: id, revision: id, selection: id, language: 'en',
+        contribution: id, revision: id, selection: id, language: 'en', types: [],
         reason: 'realm-adoption', score: 1,
         classification: { sense: id, decision: id, application: id,
           source: 'local', sourceContext: id },
