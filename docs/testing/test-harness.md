@@ -157,7 +157,7 @@ logs are kept alongside.
 | model | Reviewed shape generation, seeded node-local arbitraries, native Jena command fixtures and the strict 66-case matrix; broader command sequences pending | own QA Compose project, isolated from product integration data | 3 min test budget |
 | fault/recovery | Toxiproxy faults, `docker kill -s KILL`, pause, stopped-state backup, isolated restore, mixed-cut replay | own Compose project | 6 min |
 | e2e | Playwright Chromium journeys against the built Worker on `wrangler dev`, host Main/Account and the stack | own QA Compose project | 3 min browser budget, after startup |
-| load | k6 2.3.0 bounded skewed Main/Realm/Content phrase mix with thresholds and exact response snapshot checks, plus the phase D OPS05/SEARCH18/REC02 probes on isolated fixture copies | own Compose project | 4 min test budget |
+| load | k6 2.3.0 bounded skewed Main/Realm/Content phrase mix with thresholds and exact response snapshot checks, plus the phase D OPS05/SEARCH18/REC02 probes on isolated fixture copies | own Compose project | 5 min test budget |
 
 Tiers run in parallel where their resources are disjoint. When a tier exceeds its
 budget, the run fails and reports its slowest tests. Fix slow tests instead of
@@ -378,7 +378,7 @@ snapshot, the expected population and exact result identity, including Realm
 fallback/adoption and rejected-candidate absence. Zero HTTP failures and 5xx,
 all checks passing, global p95 below 2,500 ms, Main/Realm p95 below 1,500 ms
 and Content p95 below 2,500 ms are enforced by k6 thresholds.
-The 4-minute test budget includes Main startup and k6 execution; Compose startup,
+The 5-minute test budget includes Main startup and k6 execution; Compose startup,
 bootstrap, fixture restores (their own 600-second preparation limit) and cleanup
 are recorded separately by the shared harness. The budget was 3 minutes until
 2026-09-27: the phase D OPS05 named host mix measures latency, relay lag, memory
@@ -386,7 +386,11 @@ and storage recovery on a restored 100,000-Work copy (about 110 s by itself), an
 with it the tier measured 162.9 s, 174.7 s and then over 180 s on a quiet host
 (QA `20260927t035602-33bffd`, `20260927t054833-96d374`,
 `20260927t062836-cc4371`). Running the case probes concurrently would load the
-host during their latency measurements, so the probes stay sequential.
+host during their latency measurements, so the probes stay sequential. It rose
+to 5 minutes the same day when G-146 made OPS05 a fixed-arrival measurement with
+at least 20 samples per write kind: three consecutive passing tiers took 214.4 s,
+220.1 s and 236.7 s (QA `20260927t081313-6acb60`, `20260927t082537-290a9f`,
+`20260927t083748-b28663`), too close to 4 minutes for a stable gate.
 
 `.artifacts/qa/<run-id>/load/k6-summary.json` contains k6's reproducible
 request, latency and check metrics; `load-cases.json` records the generated
