@@ -109,8 +109,16 @@ and 1,500 ms, with typed budget/deadline outcomes. After hydration, grouping is
 at most 20 rows; two facet passes compare at most 2 × 20² rows and return at
 most 20 values per facet. The native fixture verifies one owner batch, exact
 Work/fact/support counts, default and self-filter facets, qualification changes
-and the 21st-row budget. Independent corpus, affected-set and degree variation
-and native engine work measurements remain SEARCH07 qualification work.
+and the 21st-row budget. With an exact standing-rating selector, one core
+ARQ/jena-text read joins the selected body, current rating aggregate and direct
+Statement candidates. It probes at most 513 raw text hits, audits at most 101
+rating slots, and returns at most 21 rows before admitting up to 20; the extra
+row returns a typed budget outcome. The core response is capped at one MiB and
+shares the route's 72-call, 8 MiB and 1,500 ms limits. The native fixture checks
+one joined request, two rating paths versus one, exact scores and counts,
+Context-definition separation and overlapping occurrence paths. Independent
+corpus, affected-set and degree variation and native engine work measurements
+remain SEARCH07 qualification work.
 
 ### IAM07 media download stream
 

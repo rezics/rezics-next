@@ -50,6 +50,9 @@ const groupedStatementRequest = t.Object({
   countGrain: t.Union([t.Literal('work'), t.Literal('participant'), t.Literal('occurrence'),
     t.Literal('qualifiedFact'), t.Literal('supportingStatement')]),
   facetMode: t.Optional(t.Union([t.Literal('fully-filtered'), t.Literal('self-filter-excluding')])),
+  rating: t.Optional(t.Object({ context: groupedNative,
+    minimumMeanTimes10: t.Integer({ minimum: 10, maximum: 100 }) },
+  { additionalProperties: false })),
 }, { additionalProperties: false });
 
 function logLoadSearchFailure(profile: string, error: unknown,

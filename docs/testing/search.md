@@ -61,8 +61,12 @@ The shared [Context selection](../contracts/context.md) also refines:
   as consumer count and inherited depth grow. Ambiguity or incomplete semantic
   basis cannot become a complete zero or exact facet count.
 
-These are pending owner requirements, not extensions certified by the recorded
-v1 phrase-lane fixtures below.
+The bounded direct grouped and rated profile now exercises SEARCH01 and SEARCH04
+through the real Context, Statement, Access, rating, Main selection and
+jena-text owners. It counts overlapping active occurrence paths distinctly at
+occurrence grain and deduplicates their qualified facts and Work totals. Broader
+inference and display-group descriptors remain unsupported by this profile;
+they cannot be treated as asserted direct facts.
 
 The `public-search-unsupported` API fixture submits declared multi-dataset
 `sourcePolicy` and historical `asOf` selectors to all six public phrase profiles

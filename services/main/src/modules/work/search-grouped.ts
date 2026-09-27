@@ -8,12 +8,15 @@ import { readPublicStatementsAt, resolveStatementAcceptance, StatementBatchBudge
   StatementBatchUnavailable,
   type PublicStatementBatchRow } from '../statement/read.ts';
 import { DATASET, GRAPHS, RV, iri, lit, type WorkActivationEnvironment } from './activate.ts';
+import { MAX_GROUPED_ROWS, queryPublicGroupedRatedCore,
+  type GroupedRating, type GroupedRatingInput }
+  from './search-grouped-rated.ts';
 import { InvalidPublicQuery, queryPublicRealmPhrase } from './search-public.ts';
 import { PublicQueryBudgetExceeded, PublicQueryUnavailable } from './search-budget.ts';
 import { SearchSnapshotMoved } from './search-readiness.ts';
 
 export const GROUPED_SEARCH_COST = {
-  maxRelationRows: 20, maxStatements: 20, maxConditions: 2,
+  maxRelationRows: MAX_GROUPED_ROWS, maxStatements: 20, maxConditions: 2,
   maxFacetBuckets: 20, maxHydratedSupports: 20,
   maxOwnerAdmissions: 40, maxAcceptanceReads: 20, maxBadgeChecks: 20,
 } as const;
@@ -42,6 +45,7 @@ export interface AdmittedGroupRow {
   applicability: readonly string[];
   statement: PublicStatementBatchRow;
   acceptanceContext: string;
+  rating?: GroupedRating;
 }
 
 interface QualifiedGroup {
@@ -53,6 +57,7 @@ interface QualifiedGroup {
   participant: string;
   facts: Array<{ meaningKey: string; acceptanceContext: string; predicate: string;
     value: string; supportingStatements: string[] }>;
+  rating?: GroupedRating;
 }
 
 const sorted = (values: readonly string[]) => [...new Set(values)].sort();
@@ -63,7 +68,6 @@ function matches(row: AdmittedGroupRow, condition: GroupedStatementCondition): b
     && fact.relationDefinition === condition.relationDefinition
     && fact.value.kind === 'resource' && fact.value.iri === condition.value
     && fact.meaningBasis.state === 'readable'
-    && fact.meaningBasis.semanticRevision === condition.semanticRevision
     && fact.meaningBasis.interpretationDefinitions.includes(condition.interpretationDefinition)
     && JSON.stringify(sorted(fact.applicability)) === JSON.stringify(sorted(condition.applicability))
     && JSON.stringify(sorted(row.applicability)) === JSON.stringify(sorted(condition.applicability));
@@ -118,7 +122,8 @@ function qualify(rows: readonly AdmittedGroupRow[], conditions: readonly Grouped
       participant: first.participant,
       facts: [...facts.values()].map(fact => ({ ...fact,
         supportingStatements: sorted(fact.supportingStatements) }))
-        .sort((a, b) => a.meaningKey.localeCompare(b.meaningKey)) });
+        .sort((a, b) => a.meaningKey.localeCompare(b.meaningKey)),
+      ...(first.rating ? { rating: first.rating } : {}) });
   }
   return groups.sort((a, b) => b.score - a.score || a.work.localeCompare(b.work)
     || a.participant.localeCompare(b.participant) || a.occurrence.localeCompare(b.occurrence));
@@ -155,7 +160,6 @@ export function groupAdmittedStatements(rows: readonly AdmittedGroupRow[],
         && row.statement.predicate === condition.predicate
         && row.statement.relationDefinition === condition.relationDefinition
         && row.statement.meaningBasis.state === 'readable'
-        && row.statement.meaningBasis.semanticRevision === condition.semanticRevision
         && (facetMode === 'self-filter-excluding'
           || row.statement.meaningBasis.interpretationDefinitions.includes(condition.interpretationDefinition))
         && row.statement.value.kind === 'resource'
@@ -197,6 +201,7 @@ export interface PublicGroupedStatementPhraseQuery {
     context: string; semanticRevision: string; applicability: string[] }>;
   countGrain: GroupCountGrain;
   facetMode?: GroupFacetMode;
+  rating?: GroupedRatingInput;
 }
 
 interface CandidateBinding { epoch?: { value: string }; sequence?: { value: string };
@@ -219,6 +224,9 @@ function checkedGroupedInput(input: PublicGroupedStatementPhraseQuery): void {
     || !['work', 'participant', 'occurrence', 'qualifiedFact', 'supportingStatement'].includes(input.countGrain)
     || (input.facetMode !== undefined
       && !['fully-filtered', 'self-filter-excluding'].includes(input.facetMode))
+    || (input.rating !== undefined && (!native.test(input.rating.context)
+      || !Number.isInteger(input.rating.minimumMeanTimes10)
+      || input.rating.minimumMeanTimes10 < 10 || input.rating.minimumMeanTimes10 > 100))
     || input.language.length < 2) {
     throw new InvalidPublicQuery('invalid grouped Statement query');
   }
@@ -286,7 +294,13 @@ export async function queryPublicGroupedStatementPhrase(env: WorkActivationEnvir
       value: condition.value, interpretationDefinition: interpretation.definition,
       semanticRevision: condition.semanticRevision, applicability: sorted(condition.applicability) });
   }
-  const phraseRelation = await queryPublicRealmPhrase(env, { context: input.context,
+  const rated = input.rating ? await queryPublicGroupedRatedCore(env, {
+    realm: input.context.id, phrase: input.phrase, language: input.language,
+    rating: input.rating, relationDefinition: input.relation.definition,
+    workRole: role(input.relation.workRole), participantRole: role(input.relation.participantRole),
+    predicates: sorted(resolved.map(condition => condition.predicate)),
+  }) : null;
+  const phraseRelation = rated?.phrase ?? await queryPublicRealmPhrase(env, { context: input.context,
     phrase: input.phrase, language: input.language });
   const phrase = admitPhrase ? await admitPhrase(phraseRelation) : phraseRelation;
   if (interpretations.some(item => item.sourcePosition.dataEpoch !== phrase.sourcePosition.dataEpoch
@@ -299,12 +313,22 @@ export async function queryPublicGroupedStatementPhrase(env: WorkActivationEnvir
     return { contractVersion: '1' as const, profile: input.profile, ...empty, results: groups,
       sourcePosition: phrase.sourcePosition, interpretations,
       indexGeneration: phrase.indexGeneration,
+      ...(rated ? { ratingCriterion: { context: input.rating!.context,
+        minimumMeanTimes10: input.rating!.minimumMeanTimes10,
+        policy: 'latest-per-rater-mean' as const }, ratingPopulation: rated.ratingPopulation } : {}),
       groupGeneration: createHash('sha256').update(JSON.stringify([resolved,
         interpretations.map(({ sourcePosition: _, ...basis }) => basis)])).digest('hex') };
   }
-  const pairs = phrase.results.map(result => `(${iri(result.work)} ${iri(result.mainVersion)})`).join(' ');
-  const predicates = sorted(resolved.map(condition => condition.predicate)).map(term).join(' ');
-  const result = await env.fuseki.query(`PREFIX rv: <${RV}>
+  let bindings: CandidateBinding[];
+  if (rated) {
+    const admittedPairs = new Set(phrase.results.map(result =>
+      JSON.stringify([result.work, result.mainVersion])));
+    bindings = rated.bindings.filter(row => !row.statement || admittedPairs.has(
+      JSON.stringify([row.work?.value, row.main?.value])));
+  } else {
+    const pairs = phrase.results.map(result => `(${iri(result.work)} ${iri(result.mainVersion)})`).join(' ');
+    const predicates = sorted(resolved.map(condition => condition.predicate)).map(term).join(' ');
+    const result = await env.fuseki.query(`PREFIX rv: <${RV}>
     PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
     SELECT ?epoch ?sequence ?work ?main ?occurrence ?participant ?statement
       (GROUP_CONCAT(DISTINCT STR(?app); separator="|") AS ?applicability) WHERE {
@@ -334,8 +358,9 @@ export async function queryPublicGroupedStatementPhrase(env: WorkActivationEnvir
         OPTIONAL { GRAPH ${iri(GRAPHS.current)} { ?occurrence rv:applicability ?app } }
       }
     } GROUP BY ?epoch ?sequence ?work ?main ?occurrence ?participant ?statement`,
-  1_048_576);
-  const bindings = (result.results?.bindings ?? []) as CandidateBinding[];
+    1_048_576);
+    bindings = (result.results?.bindings ?? []) as CandidateBinding[];
+  }
   if (!bindings.length || bindings.some(row => row.epoch?.value !== phrase.sourcePosition.dataEpoch
     || row.sequence?.value !== phrase.sourcePosition.sequence)) {
     throw new SearchSnapshotMoved('grouped discovery moved or is unavailable');
@@ -405,6 +430,7 @@ export async function queryPublicGroupedStatementPhrase(env: WorkActivationEnvir
         badge.generation, badge.conceptHintGeneration]) });
   }
   const textByMain = new Map(phrase.results.map(row => [row.mainVersion, row]));
+  const ratingByMain = new Map(rated?.phrase.results.map(row => [row.mainVersion, row.rating]) ?? []);
   const groupRows: AdmittedGroupRow[] = admitted.flatMap(row => {
     const read = statements.get(row.statement), badge = visible.get(row.statement);
     const text = textByMain.get(row.main);
@@ -412,7 +438,8 @@ export async function queryPublicGroupedStatementPhrase(env: WorkActivationEnvir
     return [{ work: row.work, mainVersion: row.main, matchUnit: text.matchUnit,
       score: text.score, occurrence: row.occurrence, participant: row.participant,
       applicability: row.applicability, statement: read,
-      acceptanceContext: badge.acceptanceContext }];
+      acceptanceContext: badge.acceptanceContext,
+      ...(ratingByMain.has(row.main) ? { rating: ratingByMain.get(row.main)! } : {}) }];
   });
   const grouped = groupAdmittedStatements(groupRows, resolved, input.countGrain, facetMode);
   const { groups, ...summary } = grouped;
@@ -424,5 +451,8 @@ export async function queryPublicGroupedStatementPhrase(env: WorkActivationEnvir
       visible.get(row.statement.statement)?.generation])).sort()])).digest('hex');
   return { contractVersion: '1' as const, profile: input.profile, ...summary, results: groups,
     sourcePosition: phrase.sourcePosition, interpretations,
+    ...(rated ? { ratingCriterion: { context: input.rating!.context,
+      minimumMeanTimes10: input.rating!.minimumMeanTimes10,
+      policy: 'latest-per-rater-mean' as const }, ratingPopulation: rated.ratingPopulation } : {}),
     indexGeneration: phrase.indexGeneration, groupGeneration: generation };
 }

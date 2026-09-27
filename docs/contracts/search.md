@@ -522,8 +522,11 @@ one exact relation DefinitionRef with Work and participant roles, and one or two
 explicit Context-pinned resource-value conditions. Each condition resolves its
 actual interpretation DefinitionRef and returns that basis. The graph discovery
 binds every candidate Statement subject to the participant of the same active
-relation occurrence. A condition matches only the exact predicate, relation
-definition, interpreted value and semantic revision. This first slice treats
+relation occurrence. A condition pins a Context semantic revision to resolve its
+exact interpretation DefinitionRef. A Statement authored under another public
+Context revision can match that definition; its own acceptance and Access
+protection remain independent. A different definition for the same value does
+not match or pool its support. This first slice treats
 release, canon and valid-time applicability as an exact set of native references
 shared by the occurrence and every condition; interval overlap or broader canon
 inference is unsupported. Direct Statement-target decisions resolve at the
@@ -547,8 +550,19 @@ exact count. The graph position fences the read; a group generation digest of
 selected text, pinned Context bases, admitted groups, decisions and protection
 generations changes with their relevant inputs. A new Context head leaves an
 old explicit pin's group generation stable; changed support decisions move it.
-This slice has no continuation and does not claim the single-ARQ text/rating/group plan or
-general inference and display grouping required below.
+
+When `rating` supplies an exact Realm standing-rating Context and a minimum mean
+in tenths, one bounded ARQ/jena-text core request joins the Realm-selected
+public body, active direct relation/Statement candidates and current-slot
+rating aggregate. A 513th raw text hit, 101st rating slot or 21st returned text
+unit/occurrence/Statement row is a typed budget outcome. Current rating heads
+are audited before exact results are returned. Each occurrence group carries
+the same exact rational count and sum for its Main Version; multiple rating
+paths or overlapping relation occurrences never multiply the selected
+MatchUnit's text score or the declared Work/participant/fact totals. The
+unrated form retains its bounded text and structural discovery reads. This
+slice has no continuation; inferred navigation ancestors and general display
+grouping remain unsupported rather than becoming asserted facts.
 
 A query names the result grain, exact relation/term and interpretation definitions,
 selected Context semantic revision, canon and applicability, separate acceptance

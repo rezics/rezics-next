@@ -17,7 +17,8 @@ const condition = (predicate: string, relationDefinition: string, value: string)
 const conditions = [condition(gender, genderDefinition, female), condition(hair, hairDefinition, red)];
 function row(work: number, participant: number, occurrence: number, statement: number,
   predicate: string, relationDefinition: string, value: string,
-  options: { qualifiers?: string[]; semanticRevision?: string; meaningKey?: string } = {}): AdmittedGroupRow {
+  options: { qualifiers?: string[]; semanticRevision?: string; meaningKey?: string;
+    interpretationDefinition?: string } = {}): AdmittedGroupRow {
   const app = options.qualifiers ?? qualifiers;
   return { work: id(work), mainVersion: id(work + 1000), matchUnit: id(work + 2000), score: 2.5,
     occurrence: id(occurrence), participant: id(participant), applicability: app,
@@ -28,7 +29,7 @@ function row(work: number, participant: number, occurrence: number, statement: n
       revision: id(statement + 5000), applicability: app,
       meaningBasis: { state: 'readable', context: id(5000),
         semanticRevision: options.semanticRevision ?? semanticRevision,
-        interpretationDefinitions: [id(99)] },
+        interpretationDefinitions: [options.interpretationDefinition ?? id(99)] },
       sourcePosition: { datasetId: 'product', dataEpoch: 'epoch', sequence: '7' },
     } };
 }
@@ -42,10 +43,10 @@ test('SEARCH01: two conditions bind the same participant, occurrence, release, c
     // A female in a different Work cannot combine with that red character.
     row(2, 12, 22, 33, gender, genderDefinition, female),
     row(2, 12, 22, 34, hair, hairDefinition, blue),
-    // Equal labels and concepts under another Context revision do not qualify.
+    // The same visible value with a different interpretation criterion does not qualify.
     row(3, 13, 23, 35, gender, genderDefinition, female),
     row(3, 13, 23, 36, hair, hairDefinition, red,
-      { semanticRevision: alternateRevision }),
+      { semanticRevision: alternateRevision, interpretationDefinition: id(100) }),
     // A release/canon/time mismatch is not silently broadened.
     row(4, 14, 24, 37, gender, genderDefinition, female),
     row(4, 14, 24, 38, hair, hairDefinition, red,
@@ -57,7 +58,29 @@ test('SEARCH01: two conditions bind the same participant, occurrence, release, c
     .toEqual([[id(1), id(10), id(20)]]);
   expect(result.facets[1]?.values).toEqual([{ value: red, count: 1 }]);
   expect(groupAdmittedStatements(facts, conditions, 'work', 'self-filter-excluding').facets[1]?.values)
-    .toEqual([{ value: red, count: 1 }, { value: blue, count: 1 }]);
+    .toEqual([{ value: red, count: 2 }, { value: blue, count: 1 }]);
+});
+
+test('SEARCH04: exact definitions shared by Context revisions group meaning without pooling supports', () => {
+  const sharedKey = 'urn:rezics:meaning:shared';
+  const facts = [
+    row(1, 10, 20, 30, gender, genderDefinition, female),
+    row(1, 10, 20, 31, hair, hairDefinition, red, { meaningKey: sharedKey }),
+    row(1, 10, 20, 32, hair, hairDefinition, red,
+      { semanticRevision: alternateRevision, meaningKey: sharedKey }),
+    row(1, 10, 20, 33, hair, hairDefinition, red,
+      { semanticRevision: alternateRevision, interpretationDefinition: id(100) }),
+  ];
+  const result = groupAdmittedStatements(facts, conditions, 'qualifiedFact', 'fully-filtered');
+  expect(result.total).toBe(2);
+  expect(result.groups[0]?.facts.find(fact => fact.predicate === hair)?.supportingStatements)
+    .toEqual([id(31), id(32)]);
+  const alternate = [conditions[0]!, { ...conditions[1]!, interpretationDefinition: id(100),
+    semanticRevision: alternateRevision }];
+  const separate = groupAdmittedStatements(facts, alternate, 'qualifiedFact', 'fully-filtered');
+  expect(separate.total).toBe(2);
+  expect(separate.groups[0]?.facts.find(fact => fact.predicate === hair)?.supportingStatements)
+    .toEqual([id(33)]);
 });
 
 test('SEARCH04: overlapping occurrences deduplicate Work, participant and qualified-fact counts', () => {
