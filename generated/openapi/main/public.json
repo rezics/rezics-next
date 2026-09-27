@@ -191957,6 +191957,25 @@
                         "const": "public-grouped-statement-phrase-v1",
                         "type": "string"
                       },
+                      "rating": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "context": {
+                            "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                            "type": "string"
+                          },
+                          "minimumMeanTimes10": {
+                            "maximum": 100,
+                            "minimum": 10,
+                            "type": "integer"
+                          }
+                        },
+                        "required": [
+                          "context",
+                          "minimumMeanTimes10"
+                        ],
+                        "type": "object"
+                      },
                       "relation": {
                         "additionalProperties": false,
                         "properties": {
@@ -192937,6 +192956,25 @@
                         "const": "public-grouped-statement-phrase-v1",
                         "type": "string"
                       },
+                      "rating": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "context": {
+                            "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                            "type": "string"
+                          },
+                          "minimumMeanTimes10": {
+                            "maximum": 100,
+                            "minimum": 10,
+                            "type": "integer"
+                          }
+                        },
+                        "required": [
+                          "context",
+                          "minimumMeanTimes10"
+                        ],
+                        "type": "object"
+                      },
                       "relation": {
                         "additionalProperties": false,
                         "properties": {
@@ -193916,6 +193954,25 @@
                       "profile": {
                         "const": "public-grouped-statement-phrase-v1",
                         "type": "string"
+                      },
+                      "rating": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "context": {
+                            "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                            "type": "string"
+                          },
+                          "minimumMeanTimes10": {
+                            "maximum": 100,
+                            "minimum": 10,
+                            "type": "integer"
+                          }
+                        },
+                        "required": [
+                          "context",
+                          "minimumMeanTimes10"
+                        ],
+                        "type": "object"
                       },
                       "relation": {
                         "additionalProperties": false,
@@ -194923,6 +194980,31 @@
                           "const": "public-grouped-statement-phrase-v1",
                           "type": "string"
                         },
+                        "ratingCriterion": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "context": {
+                              "type": "string"
+                            },
+                            "minimumMeanTimes10": {
+                              "type": "integer"
+                            },
+                            "policy": {
+                              "const": "latest-per-rater-mean",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "context",
+                            "minimumMeanTimes10",
+                            "policy"
+                          ],
+                          "type": "object"
+                        },
+                        "ratingPopulation": {
+                          "minimum": 0,
+                          "type": "integer"
+                        },
                         "resultGrain": {
                           "enum": [
                             "work",
@@ -194982,6 +195064,55 @@
                               },
                               "participant": {
                                 "type": "string"
+                              },
+                              "rating": {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "context": {
+                                    "type": "string"
+                                  },
+                                  "count": {
+                                    "minimum": 1,
+                                    "type": "integer"
+                                  },
+                                  "mean": {
+                                    "type": "number"
+                                  },
+                                  "precision": {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "denominator": {
+                                        "minimum": 1,
+                                        "type": "integer"
+                                      },
+                                      "kind": {
+                                        "const": "exact-rational",
+                                        "type": "string"
+                                      },
+                                      "numerator": {
+                                        "type": "integer"
+                                      }
+                                    },
+                                    "required": [
+                                      "kind",
+                                      "numerator",
+                                      "denominator"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  "sum": {
+                                    "minimum": 1,
+                                    "type": "integer"
+                                  }
+                                },
+                                "required": [
+                                  "context",
+                                  "count",
+                                  "sum",
+                                  "mean",
+                                  "precision"
+                                ],
+                                "type": "object"
                               },
                               "score": {
                                 "type": "number"
