@@ -99,7 +99,7 @@ export async function retireAuthorCredit(env: WorkActivationEnvironment,
   }
   let admission = registered;
   if (registered.state !== 'sealed' && registered.dispatchEligible) {
-    try { admission = await access.claim(registered.id, digest); }
+    try { admission = await access.claim(registered.id, digest, principal); }
     catch (error) { if (!(error instanceof AdmissionDenied || error instanceof AdmissionExpired)) throw error; }
   }
   if (admission.state !== 'sealed') {

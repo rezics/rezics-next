@@ -60,7 +60,7 @@ test('IAM07 partial: PostgreSQL admission, claim and scope closures', async () =
     await pool.query(`INSERT INTO access.principal (id, account_issuer, account_subject)
       VALUES ($1, $2, $3)`, [principalId, issuer, accountSubject]);
     await pool.query(`INSERT INTO access.authority_subject (id, kind) VALUES ($1, 'agent')`, [actingSubject]);
-    await pool.query(`INSERT INTO access.scope_gate (id) VALUES ($1)`, [scope]);
+    await pool.query(`INSERT INTO access.scope_gate (id) VALUES ($1) ON CONFLICT DO NOTHING`, [scope]);
     await pool.query(`INSERT INTO access.representation
       (id, principal_id, subject_id, action, valid_until)
       VALUES ($1, $2, $3, $4, now() + interval '1 hour')`,

@@ -88,7 +88,7 @@ function admissionMatches(admission: RegisteredAdmission, input: ContentSearchEl
   digest: string): void {
   if (!UUID.test(admission.id) || !DECIMAL.test(admission.authorityEpoch)
     || admission.action !== 'content.search-eligibility'
-    || admission.scope !== `content:search-eligibility:${input.variantId}`
+    || ![input.resourceId, input.variantId].some(target => admission.scope === `content:search-eligibility:${target}`)
     || admission.actingSubject !== input.actingSubject
     || admission.requestDigest !== digest) {
     throw new ContentEligibilityDenied('eligibility admission does not match exact reviewer intent');

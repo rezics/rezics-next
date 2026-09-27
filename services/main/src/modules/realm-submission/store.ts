@@ -51,7 +51,7 @@ export class RealmSubmissionStore {
   }
 
   private async admission(principal: VerifiedPrincipal, actingSubject: string, action: string,
-    scope: string, key: string, digest: string): Promise<RegisteredAdmission> {
+    scope: string, key: string, digest: string, contribution?: string): Promise<RegisteredAdmission> {
     // A durable operation can settle after the original permission is revoked.
     // This lookup permits only its original principal, exact actor and intent.
     const saved = (await this.pool.query<{ admission: RegisteredAdmission }>(`SELECT jsonb_build_object(
@@ -70,21 +70,21 @@ export class RealmSubmissionStore {
       return saved;
     }
     const registered = await this.access.register({ principal, actingSubject, action, scope,
-      idempotencyKey: key, requestDigest: digest });
+      idempotencyKey: key, requestDigest: digest, baselineContribution: contribution });
     if (registered.state === 'sealed' || !registered.dispatchEligible) {
       throw new SubmissionStale('Submission admission is no longer dispatchable');
     }
-    return this.access.claim(registered.id, digest);
+    return this.access.claim(registered.id, digest, principal);
   }
 
   private async command(principal: VerifiedPrincipal, actor: string, action: string, scope: string,
     key: string, intent: unknown,
-    prepare: (client: PoolClient, admission: RegisteredAdmission) => Promise<Operation>) {
+    prepare: (client: PoolClient, admission: RegisteredAdmission) => Promise<Operation>, contribution?: string) {
     return fusekiReadBudget.run({ signal: AbortSignal.timeout(SUBMISSION_COST.deadlineMs),
       callsLeft: SUBMISSION_COST.commandGraphCalls, bytesLeft: SUBMISSION_COST.commandGraphBytes }, async () => {
       await assertGraphAdmissionOpen(this.env.fuseki, this.env.lineage);
       const admission = await this.admission(principal, actor, action, scope, key,
-        hash(stable({ family: 'realm-submission-v1', action, scope, intent })));
+        hash(stable({ family: 'realm-submission-v1', action, scope, intent })), contribution);
       let operation: Operation;
       try {
         operation = await this.transaction(async client => {
@@ -162,7 +162,7 @@ export class RealmSubmissionStore {
           SET state = 'deciding',decision_operation = $2,revision = $3,generation = generation + 1
           WHERE id = $1 RETURNING *`, [row.id,admission.id,randomUUID()])).rows[0]!;
         return this.save(client, admission, deciding, { admission, input: selection });
-      });
+      }, input.contribution);
   }
 
   private async lockSubmission(client: PoolClient, realm: string, id: string, expectedRevision: string) {

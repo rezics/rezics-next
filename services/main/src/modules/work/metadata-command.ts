@@ -186,7 +186,7 @@ export async function setWorkMetadata(deps: MainWorkDependencies, request: Reque
     try {
       let admission = registered;
       if (registered.state !== 'sealed' && registered.dispatchEligible) {
-        try { admission = await deps.access.claim(registered.id, digest); }
+        try { admission = await deps.access.claim(registered.id, digest, principal); }
         catch (error) { if (!(error instanceof AdmissionDenied || error instanceof AdmissionExpired)) throw error; }
       }
       let committed = false, failure: unknown;

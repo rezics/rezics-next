@@ -305,7 +305,7 @@ async function reconcile(env: WorkActivationEnvironment, content: ContentCore,
 function checkedAdmission(admission: RegisteredAdmission, input: PublishPinnedContentInput): string {
   const digest = contentPublicationDigest(input);
   if (admission.action !== 'content.publish'
-    || admission.scope !== `content:publish:${input.variantId}`
+    || ![input.resourceId, input.variantId].some(target => admission.scope === `content:publish:${target}`)
     || admission.requestDigest !== digest
     || !/^(0|[1-9][0-9]*)$/.test(admission.authorityEpoch)) {
     throw new ContentPublicationConflict('Content publication admission differs');

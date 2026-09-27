@@ -302,7 +302,7 @@ export async function changeTitleControl(env: WorkActivationEnvironment,
   const wasTerminal = !!terminal;
   if (!terminal && registered.state !== 'sealed') {
     let admission = registered;
-    try { if (admission.dispatchEligible) admission = await access.claim(admission.id, digest); }
+    try { if (admission.dispatchEligible) admission = await access.claim(admission.id, digest, principal); }
     catch (error) { if (!(error instanceof AdmissionDenied || error instanceof AdmissionExpired)) throw error; }
     if (admission.state === 'claimed' && admission.dispatchEligible) {
       const command = await titleControlCommand(env, admission, intent);

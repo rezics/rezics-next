@@ -70,6 +70,8 @@ test('IAM01/IAM10/IAM21/MODEL01/MODEL08/WORK01/WORK05/WORK09/BOOK04/CTX01/CTX02/
     };
     const operator = await signUp('operator');
     operators.add(operator.id);
+    await accountPool.query(`INSERT INTO rezics_account_operator (user_id, role)
+      VALUES ($1, 'owner') ON CONFLICT DO NOTHING`, [operator.id]);
     const adminHeaders = new Headers({ cookie: operator.cookie, origin: base });
     const mainClient = await auth.api.adminCreateOAuthClient({ headers: adminHeaders,
       body: { client_name: 'S2 Main verifier', scope: 'work:create',
@@ -496,11 +498,11 @@ test('IAM01/IAM10/IAM21/MODEL01/MODEL08/WORK01/WORK05/WORK09/BOOK04/CTX01/CTX02/
       expectedContentEpoch: first.sourcePosition.dataEpoch, resourceId: work.work,
       variantId, expectedPublicationHead: null, actingSubject: actor };
     await accessPool.query('INSERT INTO access.scope_gate (id) VALUES ($1)',
-      [`content:publish:${variantId}`]);
+      [`content:publish:${work.work}`]);
     const deniedPublication = await send('/v1/content-publications', publicationInput);
     expect(deniedPublication.status).toBe(403);
     expect((await content.readPublicationPreparation(publicationInput.preparationId))).toBeNull();
-    await grant(`content:publish:${variantId}`, 'content.publish');
+    await grant(`content:publish:${work.work}`, 'content.publish');
     const publicationKey = `s2-publication-${randomUUID()}`;
     const publication = await post<{ status: string; decision: string }>('/v1/content-publications',
       publicationInput, true, publicationKey);
@@ -510,7 +512,7 @@ test('IAM01/IAM10/IAM21/MODEL01/MODEL08/WORK01/WORK05/WORK09/BOOK04/CTX01/CTX02/
     expect(replayedPublication.status).toBe(200);
     expect(await replayedPublication.json()).toMatchObject({ status: 'active', replayed: true,
       decision: publication.decision });
-    await grant(`content:search-eligibility:${variantId}`, 'content.search-eligibility');
+    await grant(`content:search-eligibility:${work.work}`, 'content.search-eligibility');
     const eligibility = await post<{ decision: string }>('/v1/content-search-eligibility', {
       profile: 'content-search-eligibility-v1', resourceId: work.work, variantId,
       publicationDecision: publication.decision, expectedEligibilityHead: null,

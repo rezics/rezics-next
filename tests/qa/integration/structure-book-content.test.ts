@@ -41,8 +41,8 @@ test('BOOK01/BOOK03/BOOK08: native Book follows published Post while a fixed rel
     await f.grant(`work:read:${post.work}`, 'work.read');
     await f.grant(`content:draft:${post.work}`, 'content.draft');
     const variantId = `urn:rezics:variant:${randomUUID()}`;
-    await f.grant(`content:publish:${variantId}`, 'content.publish');
-    await f.grant(`content:search-eligibility:${variantId}`, 'content.search-eligibility');
+    await f.grant(`content:publish:${post.work}`, 'content.publish');
+    await f.grant(`content:search-eligibility:${post.work}`, 'content.search-eligibility');
     const save = async (body: string, expectedHead: string | null) => json<{
       revisionId: string; sourcePosition: { dataEpoch: string } }>(await call('POST',
       '/v1/content-drafts', { profile: 'content-text-v1', resourceId: post.work, variantId,

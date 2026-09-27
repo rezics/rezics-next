@@ -1,5 +1,6 @@
 import type { Pool, PoolClient } from 'pg';
 import type { VerifiedPrincipal } from '../access/admission.ts';
+import { baselineMemberProof } from '../access/baseline.ts';
 import { decodeReadCursor, encodeReadCursor, WorkReadInvalid } from '../work/read-session.ts';
 import { SUBMISSION_COST, SubmissionMissing, SubmissionUnavailable, viewSubmission,
   type SubmissionRow, type SubmissionView } from './schema.ts';
@@ -25,6 +26,12 @@ export class RealmSubmissionReads {
 
   private async authority(client: PoolClient, principal: VerifiedPrincipal, actor: string,
     realm?: string) {
+    if (!realm && principal.emailVerified === true) {
+      const identity = (await client.query<{ id: string }>(`SELECT id FROM access.principal
+        WHERE account_issuer = $1 AND account_subject = $2 AND active FOR SHARE`,
+      [principal.issuer, principal.subject])).rows[0];
+      if (identity && await baselineMemberProof(client, identity.id, actor)) return;
+    }
     const row = (await client.query(`SELECT 1 FROM access.principal p
       JOIN access.representation r ON r.principal_id = p.id AND r.subject_id = $3
         AND r.active AND r.valid_until > clock_timestamp()

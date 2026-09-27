@@ -93,7 +93,10 @@ export class SourceNativeWorkAttachmentStore {
     if (!proposal || proposal.record !== url(row.record_id) || proposal.candidateTitle !== row.title
       || url(row.binding_id) !== originalBinding || proof.principalId !== row.principal_id
       || proof.actingSubject !== row.acting_subject || proof.scope !== `work:edit:${row.work}`
-      || proof.action !== 'work.edit' || !UUID.test(proof.grantId)
+      || proof.action !== 'work.edit' || !(UUID.test(proof.grantId ?? '')
+        || proof.grantId === null && proof.grantGeneration === null
+          && proof.baseline?.kind === 'author-baseline-v1' && UUID.test(proof.baseline.provisionId)
+          && /^\d+$/.test(proof.baseline.policyGeneration) && /^\d+$/.test(proof.baseline.workGeneration))
       || !UUID.test(proof.representationId)) {
       throw new SourceAdoptionUnavailable('attachment differs from retained evidence');
     }

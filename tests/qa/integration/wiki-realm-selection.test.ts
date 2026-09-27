@@ -86,7 +86,7 @@ test('WIKI05: Realm media serves its accepted exact set after the source publish
     await author.grant(`publication:adopt:${space.realm}`, 'publication.adopt');
     await author.grant(`content:draft:${work.work}`, 'content.draft');
     const variantId = `urn:rezics:variant:${randomUUID()}`;
-    await author.grant(`content:publish:${variantId}`, 'content.publish');
+    await author.grant(`content:publish:${work.work}`, 'content.publish');
     const oldBytes = png(32, 24);
     const nextBytes = png(40, 30);
     const oldAsset = await author.upload(oldBytes);

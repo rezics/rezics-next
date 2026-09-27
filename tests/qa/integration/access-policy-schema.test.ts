@@ -105,7 +105,7 @@ async function seedHead(pool: Pool): Promise<Head> {
   }
   await q("INSERT INTO access.authority_subject (id, kind) VALUES ($1, 'institution')", [h.realm]);
   for (const scope of [h.wiki, 'work:create:root', `contribution:read:${contribution}`]) {
-    await q('INSERT INTO access.scope_gate (id) VALUES ($1)', [scope]);
+    await q('INSERT INTO access.scope_gate (id) VALUES ($1) ON CONFLICT DO NOTHING', [scope]);
   }
   const mandate = `INSERT INTO access.representation (id, principal_id, subject_id, action, valid_until)
     VALUES ($1, $2, $3, $4, now() + interval '1 day')`;
@@ -294,14 +294,17 @@ test('Access G-046 schema: empty install equals a pre-040 upgrade through curren
     '043_access_revocation.sql']);
   await applyFiles(upgrade, headFiles);
   const existing = await seedHead(upgrade);
-  const count = async (table: string) => (await upgrade.query<{ n: string }>(
-    `SELECT count(*) AS n FROM access.${table}`)).rows[0]!.n;
+  const identities = async (table: string) => (await upgrade.query<{ id: string }>(
+    `SELECT id FROM access.${table} ORDER BY id`)).rows.map(row => row.id);
   const tables = ['principal', 'authority_subject', 'representation', 'permission_grant',
     'membership', 'private_membership', 'admission', 'search_read_lease'];
-  const before = await Promise.all(tables.map(count));
+  const before = await Promise.all(tables.map(identities));
   await applyFiles(upgrade, ownFiles);
   await applyFiles(upgrade, laterFiles);
-  expect(await Promise.all(tables.map(count))).toEqual(before);
+  // Later migrations may seed system principals; every legacy identity must survive.
+  for (const [index, table] of tables.entries()) {
+    expect(await identities(table)).toEqual(expect.arrayContaining(before[index]!));
+  }
   expect(await schemaSignature(upgrade)).toEqual(await schemaSignature(empty));
 
   // The new records bind to rows that existed before the upgrade.

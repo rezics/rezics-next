@@ -98,7 +98,7 @@ export async function saveAdmittedContentDraft(env: WorkActivationEnvironment,
     scope, requestDigest: digest, expectedHead: input.expectedHead,
     rightsBasis: 'original-contribution' };
   if (registered.state !== 'sealed') {
-    try { await access.claim(registered.id, digest); }
+    try { await access.claim(registered.id, digest, principal); }
     catch (error) {
       if (!(error instanceof AdmissionDenied || error instanceof AdmissionExpired)) throw error;
       if (!await content.readDraftReceipt(command.operationId)) {

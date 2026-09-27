@@ -22,10 +22,10 @@ export async function selectAdmittedPublicContentSearch(
   await assertGraphAdmissionOpen(env.fuseki, env.lineage);
   const principal = await account.verify(request, ['work:edit']);
   const registered = await access.register({ principal, actingSubject: eligibility.actingSubject,
-    scope: `content:search-eligibility:${eligibility.variantId}`,
+    scope: `content:search-eligibility:${eligibility.resourceId}`,
     action: 'content.search-eligibility', idempotencyKey, requestDigest: digest });
   const admission = registered.state === 'sealed' ? registered
-    : await access.claim(registered.id, digest);
+    : await access.claim(registered.id, digest, principal);
   const result = await selectPublicContentSearch(env, content, access, admission, eligibility);
   const proof: GraphTerminalProof = {
     outcome: result.outcome === 'succeeded' ? 'succeeded' : 'cancelled',

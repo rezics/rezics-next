@@ -42,8 +42,8 @@ test('Reader: public and private composition pages, current Content, cursor and 
     await a.grant(`work:read:${hiddenTarget.work}`, 'work.read');
     await a.grant(`content:draft:${chapterTarget.work}`, 'content.draft');
     const variant = `urn:rezics:variant:${randomUUID()}`;
-    await a.grant(`content:publish:${variant}`, 'content.publish');
-    await a.grant(`content:search-eligibility:${variant}`, 'content.search-eligibility');
+    await a.grant(`content:publish:${chapterTarget.work}`, 'content.publish');
+    await a.grant(`content:search-eligibility:${chapterTarget.work}`, 'content.search-eligibility');
     const store = stack.objects('semantic/structure/');
     await store.initialize();
     (stack.env as typeof stack.env & { structureObjects: typeof store }).structureObjects = store;

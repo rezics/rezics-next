@@ -5,6 +5,7 @@ import { fusekiReadBudget } from '../../infrastructure/fuseki.ts';
 import { GLOBAL_RATING_POPULATION_OWNER } from '../rating/global.ts';
 import { WorkReadUnavailable } from '../work/read-session.ts';
 import { AgentLibraryVisibilityStore } from './visibility.ts';
+import { baselineMemberProof } from '../access/baseline.ts';
 
 export interface OwnRatingHead { id: string; revision: string; work: string; mainVersion: string;
   context: string; slot: string; principalId: string; admission: string; digest: string;
@@ -66,13 +67,17 @@ export class ProfilesAccess {
     action: 'contribution.read' | 'rating.observation.read') {
     return this.transaction(async client => {
       const actor = await requirePrincipal(client, principal);
-      const mandate = await requireMandate(client, actor.id, agent, action);
+      const baseline = action === 'contribution.read' && principal.emailVerified === true
+        ? await baselineMemberProof(client, actor.id, agent) : null;
+      const mandate = baseline ? { id: baseline.representation_id, generation: baseline.representation_generation }
+        : await requireMandate(client, actor.id, agent, action);
       const row = (await client.query<{ generation: string; recovery: string }>(`SELECT s.generation,
         f.generation AS recovery FROM access.authority_subject s CROSS JOIN access.recovery_fence f
         WHERE s.id = $1 AND s.active AND f.id = true`, [agent])).rows[0];
       if (!row) throw new WorkReadUnavailable('Library authority is unavailable');
       return { principalId: actor.id, stamp: JSON.stringify([actor.id, actor.epoch, mandate.id,
-        mandate.generation, row.generation, row.recovery]) };
+        mandate.generation, row.generation, row.recovery, baseline?.policy_generation ?? null,
+        baseline?.provision_id ?? null]) };
     });
   }
 

@@ -32,13 +32,13 @@ export function resourceRoutes(fuseki: FusekiClient, work: MainWorkDependencies)
   const governanceReader = work.governance?.store
     ? { restrictedTitles: (heads: readonly { work: string; revision: string }[], context: string) =>
       work.governance!.store.restrictedTitles(heads, context) } : {};
-  const readerFor = async (request: Request, actingSubject: string | undefined): Promise<SummaryReader> => {
+  const readerFor = async (request: Request, actingSubject: string | undefined, batch = true): Promise<SummaryReader> => {
     if (!request.headers.get('authorization')) return governanceReader;
     if (!actingSubject) throw new MediaInvalid('actingSubject is required for an authenticated read');
     let verifiedWork: ReturnType<typeof work.account.verify> | undefined;
     const workPrincipal = () => verifiedWork ??= work.account.verify(request, ['work:read']);
     const contextPrincipal = () => work.account.verify(request, ['context:read']);
-    return { ...governanceReader, canReadWorks: work.mediaAccess
+    return { ...governanceReader, canReadWorks: batch && work.mediaAccess
       ? async resources => work.mediaAccess!.canReadWorks(await workPrincipal(), actingSubject, resources) : undefined,
     canReadWork: async resource => work.access.canReadWork(await workPrincipal(), actingSubject, resource),
     canReadSemantic: async resource => !!work.access.canReadSemanticResource
@@ -53,10 +53,10 @@ export function resourceRoutes(fuseki: FusekiClient, work: MainWorkDependencies)
       : undefined };
   };
   const summarize = async (request: Request, input: { resources: string[]; actingSubject?: string;
-    context?: string; language?: string }) => {
+    context?: string; language?: string }, batch = true) => {
     await assertGraphAdmissionOpen(fuseki, work.environment.lineage);
     return readResourceSummaries(work.environment, work.media?.store,
-      await readerFor(request, input.actingSubject), { resources: input.resources,
+      await readerFor(request, input.actingSubject, batch), { resources: input.resources,
         context: input.context ?? DEFAULT_MEDIA_CONTEXT, language: input.language ?? null });
   };
   // Summaries and previews revalidate on every use: generation-bound, never stale-served.
@@ -168,7 +168,9 @@ export function resourceRoutes(fuseki: FusekiClient, work: MainWorkDependencies)
       try {
         const target = `${ID}${params.resource}`;
         // The actor must be able to read the target before Access admits the change.
-        const current = await summarize(request, { resources: [target], actingSubject: body.actingSubject });
+        // One target: use the full Access read proof, including sealed creator
+        // authority, before admitting the independent avatar write.
+        const current = await summarize(request, { resources: [target], actingSubject: body.actingSubject }, false);
         if (current.summaries[0]?.status !== 'available') {
           const agent = (await fuseki.query(`PREFIX rv: <${RV}>
             PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>

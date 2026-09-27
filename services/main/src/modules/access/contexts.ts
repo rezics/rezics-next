@@ -10,7 +10,8 @@ import { directWorkCreateProof } from './direct-principal.ts';
 import { groupWorkCreateProof, groupWorkCreateSubjects, GroupUnavailable } from './groups.ts';
 import { RoleUnavailable } from './roles.ts';
 import { roleWorkCreateProof, roleWorkCreateSubjects } from './role-proof.ts';
-import { baselineMemberProof } from './baseline.ts';
+import { baselineMemberProof, newBaselineProof } from './baseline.ts';
+import { ensureBaselineScopeGate } from './scope-gates.ts';
 
 export class ActingContextDenied extends Error {}
 export class ActingContextInvalid extends Error {}
@@ -361,6 +362,7 @@ export class AccessActingContexts {
       const recovery = await client.query<{ open: boolean }>(
         'SELECT open FROM access.recovery_fence WHERE id = true FOR SHARE');
       if (recovery.rows[0]?.open !== true) throw new ActingContextUnavailable('Access is held for recovery');
+      await ensureBaselineScopeGate(client, scope);
       const gate = (await client.query<{ authority_epoch: string; open: boolean; dispatch_open: boolean }>(
         'SELECT authority_epoch, open, dispatch_open FROM access.scope_gate WHERE id = $1 FOR SHARE',
       [scope])).rows[0];
@@ -371,6 +373,10 @@ export class AccessActingContexts {
       if (!gate.open || !gate.dispatch_open) throw new ActingContextDenied('Content draft scope is closed');
       const principalId = await activePrincipal(client, principal);
       if (!principalId) throw new ActingContextDenied('principal is not admitted');
+      const baseline = await newBaselineProof(client, this.environment?.fuseki, {
+        principal, actingSubject, action: 'content.draft', scope,
+        idempotencyKey: 'preflight', requestDigest: '0'.repeat(64),
+      }, principalId);
       const eligible = await client.query(`SELECT 1
         FROM access.authority_subject s
         JOIN access.representation r ON r.subject_id = s.id AND r.principal_id = $1
@@ -379,7 +385,7 @@ export class AccessActingContexts {
           AND g.action = 'content.draft' AND g.active AND g.valid_until > clock_timestamp()
         WHERE s.id = $3 AND s.kind = 'agent' AND s.active LIMIT 1`,
       [principalId, scope, actingSubject]);
-      if (eligible.rowCount !== 1) throw new ActingContextDenied('selected context has no Content draft permission');
+      if (!baseline && eligible.rowCount !== 1) throw new ActingContextDenied('selected context has no Content draft permission');
       return { profile: 'content-draft-acting-context-check-v1', task: 'content.draft',
         scope, resource, actingSubject, authorityEpoch: gate.authority_epoch,
         decision: 'eligible-now', reusable: false };

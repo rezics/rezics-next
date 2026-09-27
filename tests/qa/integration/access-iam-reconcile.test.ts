@@ -206,7 +206,7 @@ test('IAM04: authority moved mid-selection cannot pool direct principal and repr
     const before = await (await owners.discover()).json() as {
       contexts: Array<{ actingSubject: string }>; directContexts: Array<{ actingSubject: string }> };
     expect(before.contexts).toEqual([]);
-    expect(before.directContexts).toEqual([{ actingSubject: subject }]);
+    expect(before.directContexts).toEqual([{ actingSubject: subject, displayName: null, handle: null, kind: null }]);
     const request = (authorityPath: 'represented-agent' | 'direct-principal'): AdmissionRequest => ({
       principal, actingSubject: subject, scope: 'work:create:root', action: 'work.create',
       authorityPath, idempotencyKey: randomUUID(), requestDigest: digest('IAM04') });
@@ -464,7 +464,7 @@ test('IAM34: diamond group paths keep distinct bounded support when one edge is 
     expect((await check(subject)).status).toBe(200);
     const listed = async () => ((await (await owners.discover()).json()) as {
       contexts: Array<{ actingSubject: string }> }).contexts.filter(item => item.actingSubject === subject);
-    expect(await listed()).toEqual([{ actingSubject: subject }]);
+    expect(await listed()).toEqual([{ actingSubject: subject, displayName: null, handle: null, kind: null }]);
     const request = (): AdmissionRequest => ({ principal, actingSubject: subject,
       scope: 'work:create:root', action: 'work.create', idempotencyKey: randomUUID(),
       requestDigest: digest('IAM34') });
@@ -475,7 +475,7 @@ test('IAM34: diamond group paths keep distinct bounded support when one edge is 
     // Removing one supporting edge leaves the independent 32-edge support.
     groupGeneration = await groups.revokeMember(mutation(), shallowMember, '0');
     expect((await check(subject)).status).toBe(200);
-    expect(await listed()).toEqual([{ actingSubject: subject }]);
+    expect(await listed()).toEqual([{ actingSubject: subject, displayName: null, handle: null, kind: null }]);
     // The saved proof over the removed edge is not rescued by the other path.
     await expect(access.claim(viaShallow.id, viaShallow.requestDigest)).rejects.toBeInstanceOf(AdmissionDenied);
     const viaDeep = await access.register(request());

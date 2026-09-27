@@ -20,10 +20,10 @@ export async function publishAdmittedContent(
   await assertGraphAdmissionOpen(env.fuseki, env.lineage);
   const principal = await account.verify(request, ['work:edit']);
   const registered = await access.register({ principal, actingSubject,
-    scope: `content:publish:${publication.variantId}`, action: 'content.publish',
+    scope: `content:publish:${publication.resourceId}`, action: 'content.publish',
     idempotencyKey, requestDigest: digest });
   const admission = registered.state === 'sealed' ? registered
-    : await access.claim(registered.id, digest);
+    : await access.claim(registered.id, digest, principal);
   const result = admission.state === 'sealed'
     ? await reconcilePinnedContentPublication(env, content, admission, publication)
     : await publishPinnedContent(env, content, admission, publication);

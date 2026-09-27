@@ -512,7 +512,8 @@ final class CommandService extends ActionService {
             return "Content search eligibility rights/disclosure mismatch: " + subject;
         Node scope = exactlyOne(dataset, revisions, decision, "admittedScope");
         if (scope == null || !scope.isLiteral()
-            || !scope.getLiteralLexicalForm().equals("content:search-eligibility:" + variant.getURI()))
+            || !(scope.getLiteralLexicalForm().equals("content:search-eligibility:" + resource.getURI())
+                || scope.getLiteralLexicalForm().equals("content:search-eligibility:" + variant.getURI())))
             return "Content search eligibility admission scope mismatch: " + subject;
         if (!fresh) return null;
         Node product = NodeFactory.createURI("urn:rezics:dataset:product");

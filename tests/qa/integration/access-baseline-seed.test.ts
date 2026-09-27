@@ -12,6 +12,7 @@ import { S3ImmutableObjects } from '../../../services/main/src/infrastructure/im
 import { AccessAdmissionRegistry } from '../../../services/main/src/modules/access/admission.ts';
 import { AccountAssertionVerifier } from '../../../services/main/src/modules/account/verify-assertion.ts';
 import { AgentProvisioning } from '../../../services/main/src/modules/agent/provision.ts';
+import { AgentVanityHandles } from '../../../services/main/src/modules/agent/vanity.ts';
 import { cloneQaAccountAccessDatabases } from '../support/databases.ts';
 import { agentProvisionHarness } from './agent-provision-support.ts';
 
@@ -56,6 +57,7 @@ test('baseline demo seed: verified signups, Works, contributions, Spaces and per
     prefix: 'semantic/structure/' });
   await objects.initialize();
   const app = createMainApp(h.fuseki, { environment: h.env, account, access,
+    agentHandles: new AgentVanityHandles(h.accessPool),
     agentProvisioning: new AgentProvisioning(h.accessPool, h.env), structureObjects: objects });
   const main = Bun.serve({ hostname: '127.0.0.1', port: 0, fetch: request => app.handle(request) });
   writeFileSync(join(directory, 'dev.env'), `ACCOUNT_BASE_URL=${accountBase}\nMAIN_ORIGIN=http://127.0.0.1:${main.port}\nMAILPIT_HTTP_PORT=${compose.MAILPIT_HTTP_PORT}\n`);
@@ -68,11 +70,11 @@ test('baseline demo seed: verified signups, Works, contributions, Spaces and per
       const [output, error, code] = await Promise.all([
         new Response(child.stdout).text(), new Response(child.stderr).text(), child.exited]);
       writeFileSync(join(directory, `attempt-${attempt}.log`), output + error, { mode: 0o600 });
-      // Main selection is a separate curator capability; baseline must not
-      // silently grant it to make this public-discovery demonstration pass.
-      expect(code).toBe(2);
+      // This deliberately small owner fixture reports optional API gaps;
+      // provisioning and the author's baseline operations must still finish.
+      expect(code, error).toBe(2);
       expect(error).toBe('');
-      const summary = `Seeded ${works.length} Works, ${realms.length} Realms, ${people.length} Account users, 9 Agents, 8 published contributions.`;
+      const summary = `Seeded ${works.length} Works, ${realms.length} Realms, ${people.length} Account users, 9 Agents, 8 published contributions,`;
       if (!output.includes(summary)) console.log(output.split('\n').filter(line =>
         /Seeded|HTTP|API gaps/.test(line)).join('\n'));
       expect(output).toContain(summary);

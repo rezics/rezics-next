@@ -46,6 +46,8 @@ export interface AdmissionRequest {
   baselineRelatedWork?: string;
   /** Owner-bound quoted Content revision; a public Work does not disclose drafts. */
   baselineSourceRevision?: string;
+  /** Exact public contribution offered by the submission owner. */
+  baselineContribution?: string;
 }
 
 export interface RegisteredAdmission {
@@ -299,7 +301,7 @@ export class AccessAdmissionRegistry {
 
   async withWorkEditAuthority<T>(principal: VerifiedPrincipal, actingSubject: string,
     work: string, commit: (proof: WorkEditAuthorityProof) => Promise<T>): Promise<T> {
-    return withWorkEditAuthority(this.pool, principal, actingSubject, work, commit);
+    return withWorkEditAuthority(this.pool, principal, actingSubject, work, commit, this.baselineGraph);
   }
 
   /** Read the independent Access ledger for a Content revision's immutable author proof. */
@@ -787,7 +789,8 @@ export class AccessAdmissionRegistry {
           || existing.authority_path !== authorityPath || existing.scope_id !== request.scope
           || savedBaseline.collection_create !== (request.baselineCollectionCreate === true)
           || savedBaseline.related_work !== (request.baselineRelatedWork ?? null)
-          || savedBaseline.source_revision !== (request.baselineSourceRevision ?? null)) {
+          || savedBaseline.source_revision !== (request.baselineSourceRevision ?? null)
+          || (savedBaseline.submission_contribution ?? null) !== (request.baselineContribution ?? null)) {
           throw new AdmissionConflict('idempotency key belongs to a different intent');
         }
         const dispatchEligible = request.principal.emailVerified === true

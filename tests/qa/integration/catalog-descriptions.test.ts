@@ -36,7 +36,7 @@ test('IAM37: a Realm content editor publishes an Organization description withou
     [randomUUID(), organization, realm, scope, action]);
   };
   const draftScope = `content:draft:${organization}`;
-  const publishScope = `content:publish:${variantId}`;
+  const publishScope = `content:publish:${organization}`;
   await issueContentGrant(publishScope, 'content.publish');
   const assignmentAction = 'access.grant.assign.content.draft';
   const assignmentIssuer = `https://rezics.com/id/${randomUUID()}`;

@@ -105,6 +105,11 @@ export class WorkMaintainers {
         AND action = 'publication.select' AND state = 'claimed' LIMIT 1`, [scope])).rowCount) {
         throw new AdmissionConflict('a claimed selection must settle before maintainership changes');
       }
+      if ((await client.query(`SELECT a.id FROM access.baseline_admission b
+        JOIN access.admission a ON a.id = b.admission_id
+        WHERE b.author_work = $1 AND a.state = 'claimed' LIMIT 1`, [input.work])).rowCount) {
+        throw new AdmissionConflict('a claimed author command must settle before maintainership changes');
+      }
       if (input.action === 'add' && !members.includes(input.target) && members.length >= MAINTAINER_COST.maxMaintainers) {
         throw new AdmissionConflict('Work has 32 maintainers');
       }

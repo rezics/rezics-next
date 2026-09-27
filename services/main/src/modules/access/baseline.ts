@@ -7,6 +7,7 @@ import { globalContextPattern } from '../rating/global.ts';
 import type { AdmissionRequest } from './admission.ts';
 import { maintainerControllerProof, maintainerGeneration } from '../work/maintainer-proof.ts';
 import { publicReplyRoot } from '../realm-reply/root.ts';
+import { authorSubmissionProof, authorWorkGeneration } from './author-baseline.ts';
 
 export const BASELINE_MEMBER_POLICY = 'baseline-member-v1';
 const native = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
@@ -31,11 +32,14 @@ export interface BaselineProof {
   source_revision: string | null;
   maintainer_generation: string | null;
   realm_membership?: string | null;
+  author_generation?: string | null;
+  author_work?: string | null;
+  submission_contribution?: string | null;
 }
 
 export type BaselineTarget = { kind: 'root' }
   | { kind: 'work' | 'collection' | 'contribution' | 'rating' | 'personal' | 'comment'
-    | 'maintainer' | 'reply' | 'reply-draft' | 'realm-reply'; id: string };
+    | 'maintainer' | 'reply' | 'reply-draft' | 'realm-reply' | 'author-work' | 'submission'; id: string };
 
 /** Closed permission vocabulary. In particular, a public Realm does not gain
  * a baseline policy, and translation authorization is not translation proposal. */
@@ -43,6 +47,12 @@ export function baselineTarget(action: string, scope: string): BaselineTarget | 
   if ((action === 'work.create' && scope === 'work:create:root')
     || (action === 'space.create' && scope === 'space:create:root')) return { kind: 'root' };
   const prefixes: Record<string, { prefix: string; kind: Exclude<BaselineTarget['kind'], 'root'> }> = {
+    'work.edit': { prefix: 'work:edit:', kind: 'author-work' },
+    'content.publish': { prefix: 'content:publish:', kind: 'author-work' },
+    'content.search-eligibility': { prefix: 'content:search-eligibility:', kind: 'author-work' },
+    'media.upload': { prefix: 'media:owner:', kind: 'personal' },
+    'media.avatar': { prefix: 'media:avatar:', kind: 'author-work' },
+    'submission.submit': { prefix: 'submission:submit:', kind: 'submission' },
     'contribution.create': { prefix: 'contribution:create:', kind: 'work' },
     'translation.link': { prefix: 'translation:link:', kind: 'work' },
     'content.comment': { prefix: 'content:comment:', kind: 'comment' },
@@ -86,16 +96,22 @@ export async function baselineMemberProof(client: PoolClient, principalId: strin
   return result.rows[0] ?? null;
 }
 
-/** Each target read is bounded to one ASK, plus at most two Work creation
- * receipts and one indexed admission lookup for a member's unpublished Work.
+/** Each ordinary target read is bounded to one ASK; the author fallback adds
+ * one indexed sealed-creation lookup and one receipt ASK (author-baseline.ts).
  * Nothing enumerates a member's Works, Collections, history or peer accounts. */
 export async function baselineTargetAllowed(client: PoolClient, graph: Pick<FusekiClient, 'query'> | undefined,
   principalId: string, actingSubject: string, target: BaselineTarget,
   collectionCreate: boolean, relatedWork: string | null = null,
-  sourceRevision: string | null = null): Promise<boolean> {
+  sourceRevision: string | null = null, contribution: string | null = null): Promise<boolean> {
   if (target.kind === 'root') return true;
   if (target.kind === 'personal') return target.id === actingSubject;
   if (!graph) return false;
+  if (target.kind === 'author-work' || target.kind === 'reply-draft' && !relatedWork) {
+    return await authorWorkGeneration(client, graph, principalId, actingSubject, target.id) !== null;
+  }
+  if (target.kind === 'submission') {
+    return await authorSubmissionProof(client, graph, principalId, actingSubject, target.id, contribution) !== null;
+  }
   if (target.kind === 'realm-reply') {
     const member = !!await realmApprovedProof(client, target.id, principalId, actingSubject);
     return (await graph.query(`PREFIX rv: <https://rezics.com/vocab/> ASK {
@@ -150,22 +166,7 @@ export async function baselineTargetAllowed(client: PoolClient, graph: Pick<Fuse
     PREFIX schema: <https://schema.org/> ASK { ${pattern} }`, 1024);
   if (allowed.boolean === true) return true;
   if (target.kind !== 'work') return false;
-  // Creation authority covers an account's own still-unpublished Work. This
-  // avoids a circular prerequisite (a contribution is needed to publish it).
-  // The graph receipt identifies the Access admission; attribution alone does
-  // not establish ownership, and no client-supplied receipt is accepted.
-  const receipts = (await graph.query(`PREFIX rv: <https://rezics.com/vocab/>
-    PREFIX schema: <https://schema.org/> SELECT ?admission WHERE {
-      GRAPH ${current} { ${resource} a schema:CreativeWork ; rv:head ?head }
-      ${unerased(resource)}
-      GRAPH ${iri(GRAPHS.receipts)} { ?receipt rv:work ${resource} ;
-        rv:workRevision ?revision ; rv:admittedScope "work:create:root" ;
-        rv:outcome rv:Succeeded ; rv:admissionId ?admission }
-    } LIMIT 2`, 2048)).results?.bindings ?? [];
-  const id = receipts.length === 1 ? receipts[0]?.admission?.value : null;
-  if (!id || !/^[0-9a-f-]{36}$/.test(id)) return false;
-  return (await client.query(`SELECT id FROM access.admission WHERE id = $1 AND principal_id = $2
-    AND action = 'work.create' AND state = 'sealed' AND graph_outcome = 'succeeded'`, [id, principalId])).rowCount === 1;
+  return await authorWorkGeneration(client, graph, principalId, actingSubject, target.id) !== null;
 }
 
 export async function newBaselineProof(client: PoolClient, graph: Pick<FusekiClient, 'query'> | undefined,
@@ -181,13 +182,24 @@ export async function newBaselineProof(client: PoolClient, graph: Pick<FusekiCli
   // overrides it, including when that resource happens to be publicly readable.
   if ((await client.query('SELECT id FROM access.policy WHERE scope_id = $1', [request.scope])).rowCount) return null;
   const proof = await (target.kind === 'maintainer' ? maintainerControllerProof : baselineMemberProof)(client, principalId, request.actingSubject);
-  if (!proof || !await baselineTargetAllowed(client, graph, principalId, request.actingSubject,
+  if (!proof) return null;
+  const authorWork = target.kind === 'author-work' || target.kind === 'reply-draft' && !request.baselineRelatedWork
+    ? target.id : null;
+  const authorGeneration = authorWork
+    ? await authorWorkGeneration(client, graph, principalId, request.actingSubject, authorWork) : null;
+  const submission = target.kind === 'submission' ? await authorSubmissionProof(client, graph, principalId,
+    request.actingSubject, target.id, request.baselineContribution ?? null) : null;
+  if (authorWork ? authorGeneration === null : target.kind === 'submission' ? !submission
+    : !await baselineTargetAllowed(client, graph, principalId, request.actingSubject,
     target, request.baselineCollectionCreate === true, request.baselineRelatedWork ?? null,
-    request.baselineSourceRevision ?? null)) return null;
+    request.baselineSourceRevision ?? null, request.baselineContribution ?? null)) return null;
   return { ...proof, realm_membership: target.kind === 'realm-reply'
     ? await realmApprovedProof(client, target.id, principalId, request.actingSubject) ?? 'open' : null,
     collection_create: request.baselineCollectionCreate === true,
     related_work: request.baselineRelatedWork ?? null, source_revision: request.baselineSourceRevision ?? null,
+    submission_contribution: request.baselineContribution ?? null,
+    author_work: authorWork ?? submission?.work ?? null,
+    author_generation: authorGeneration ?? submission?.generation ?? null,
     maintainer_generation: target.kind === 'maintainer'
       ? await maintainerGeneration(client, target.id, request.baselineRelatedWork!, request.actingSubject) : null };
 }
@@ -215,16 +227,28 @@ export async function baselineProofCurrent(client: PoolClient, graph: Pick<Fusek
   if (target.kind === 'realm-reply' && saved.realm_membership !== 'open' && (!saved.realm_membership
     || saved.realm_membership !== await realmApprovedProof(client, target.id, admission.principal_id,
       admission.acting_subject))) return false;
+  if (target.kind === 'author-work' || target.kind === 'reply-draft' && !saved.related_work) {
+    return saved.author_work === target.id && saved.author_generation != null
+      && saved.author_generation === await authorWorkGeneration(client,
+        graph, admission.principal_id, admission.acting_subject, target.id);
+  }
+  if (target.kind === 'submission') {
+    const current = await authorSubmissionProof(client, graph, admission.principal_id,
+      admission.acting_subject, target.id, saved.submission_contribution ?? null);
+    return !!current && current.work === saved.author_work && current.generation === saved.author_generation;
+  }
   return baselineTargetAllowed(client, graph, admission.principal_id, admission.acting_subject,
-    target, saved.collection_create, saved.related_work, saved.source_revision);
+    target, saved.collection_create, saved.related_work, saved.source_revision, saved.submission_contribution ?? null);
 }
 
 export async function saveBaselineProof(client: PoolClient, admissionId: string, proof: BaselineProof) {
   await client.query(`INSERT INTO access.baseline_admission (admission_id, policy_id, policy_generation,
     provision_id, representation_id, representation_generation, subject_generation, principal_epoch,
-    collection_create, related_work, source_revision, maintainer_generation, realm_membership)
-    VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`, [admissionId, BASELINE_MEMBER_POLICY,
+    collection_create, related_work, source_revision, maintainer_generation, realm_membership,
+    author_generation, submission_contribution, author_work)
+    VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)`, [admissionId, BASELINE_MEMBER_POLICY,
     proof.policy_generation, proof.provision_id, proof.representation_id, proof.representation_generation,
     proof.subject_generation, proof.principal_epoch, proof.collection_create, proof.related_work,
-    proof.source_revision, proof.maintainer_generation, proof.realm_membership ?? null]);
+    proof.source_revision, proof.maintainer_generation, proof.realm_membership ?? null,
+    proof.author_generation ?? null, proof.submission_contribution ?? null, proof.author_work ?? null]);
 }

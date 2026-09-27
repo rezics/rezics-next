@@ -74,7 +74,7 @@ async function admitted<T extends { position: CommandOutcome['position']; replay
   }
   if (registered.requestDigest !== args.digest) throw new MediaConflict('media operation key binds another intent');
   if (registered.state !== 'sealed') {
-    try { await access.claim(registered.id, args.digest); }
+    try { await access.claim(registered.id, args.digest, principal); }
     catch (error) {
       if (!(error instanceof AdmissionDenied || error instanceof AdmissionExpired)) throw error;
       if (!await store.readOutcome(args.operation(registered.id))) {
@@ -252,7 +252,7 @@ export async function saveAdmittedMediaSet(env: WorkActivationEnvironment, media
     admissionId: registered.id, authorityEpoch: registered.authorityEpoch, scope,
     requestDigest: digest, expectedHead: input.expectedHead, rightsBasis: 'original-contribution' };
   if (registered.state !== 'sealed') {
-    try { await access.claim(registered.id, digest); }
+    try { await access.claim(registered.id, digest, principal); }
     catch (error) {
       if (!(error instanceof AdmissionDenied || error instanceof AdmissionExpired)) throw error;
       if (!await media.content.readDraftReceipt(command.operationId)) {
@@ -274,4 +274,3 @@ export async function saveAdmittedMediaSet(env: WorkActivationEnvironment, media
     predecessor: saved.predecessor, byteDigest: sha256(serializedJson), body,
     sourcePosition: saved.position, replayed: registered.replayed || saved.replayed };
 }
-

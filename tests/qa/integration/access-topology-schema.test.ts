@@ -214,7 +214,7 @@ describe('Access topology owner schema (G-047: IAM05 IAM08 IAM12 IAM13 IAM14 IAM
     }
     [empty, upgrade] = pools as [Pool, Pool];
     await migrate(empty, migrations);
-    await empty.query('INSERT INTO access.scope_gate (id) VALUES ($1)', [SCOPE]);
+    await empty.query('INSERT INTO access.scope_gate (id) VALUES ($1) ON CONFLICT DO NOTHING', [SCOPE]);
   }, 60_000);
 
   afterAll(async () => {
@@ -234,7 +234,8 @@ describe('Access topology owner schema (G-047: IAM05 IAM08 IAM12 IAM13 IAM14 IAM
     await migrate(upgrade, migrations.filter(file => !owned.includes(file)));
     const legacy = owner(upgrade);
     await legacy.q(`INSERT INTO access.scope_gate (id, authority_epoch, group_generation)
-      VALUES ($1, 3, 0)`, [SCOPE]);
+      VALUES ($1, 3, 0) ON CONFLICT (id) DO UPDATE
+        SET authority_epoch = EXCLUDED.authority_epoch, group_generation = EXCLUDED.group_generation`, [SCOPE]);
     const [issuer, agent] = [await legacy.subject(), await legacy.subject()];
     const operator = await legacy.principal();
     // Head-shaped writer: it names none of the 050-059 columns.

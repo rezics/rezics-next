@@ -158,7 +158,7 @@ test('VIEW07: erasing a published Content revision suppresses public metadata an
   expect(saved.status).toBe(201);
   const publication = await saved.json() as { revisionId: string; byteDigest: string;
     sourcePosition: { dataEpoch: string }; body: { items: Array<{ use: string }> } };
-  await owner.grant(`content:publish:${variantId}`, 'content.publish');
+  await owner.grant(`content:publish:${work.work}`, 'content.publish');
   const activated = await owner.send('POST', '/v1/content-publications', {
     profile: 'content-publication-v1', preparationId: `view07-${randomUUID()}`,
     revisionId: publication.revisionId, expectedDigest: publication.byteDigest,

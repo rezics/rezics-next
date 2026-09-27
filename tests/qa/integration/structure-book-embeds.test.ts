@@ -39,8 +39,8 @@ test('BOOK06: publication rejects a private transitive Content embed before acti
         actingSubject: f.actor }), 201);
       await f.grant(`content:draft:${work.work}`, 'content.draft');
       const variant = `urn:rezics:variant:${randomUUID()}`;
-      await f.grant(`content:publish:${variant}`, 'content.publish');
-      await f.grant(`content:search-eligibility:${variant}`, 'content.search-eligibility');
+      await f.grant(`content:publish:${work.work}`, 'content.publish');
+      await f.grant(`content:search-eligibility:${work.work}`, 'content.search-eligibility');
       return { work: work.work, variant };
     };
     const outer = await makeWork('Outer Book Post');
