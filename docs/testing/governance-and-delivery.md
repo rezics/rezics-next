@@ -13,7 +13,8 @@ The complaint cases do not certify § 512 eligibility; the
 [legal review](../research/source-data-rights.md#complaint-handling-and-section-512)
 records that separate question. GOV02/GOV03/GOV16/GOV23 also motivate future
 editorial-correction tests for exact review, independent human control and
-approved-effect binding. Voting and moderation examples alone do not qualify
-those extensions. Poll counting tests do not substitute for storage concurrency,
+approved-effect binding. The [pending protection subcases](../../scripts/qa/cases/editorial-protection.ts)
+state the additional owner-boundary results; voting and moderation examples alone
+do not qualify them. Poll counting tests do not substitute for storage concurrency,
 current Access admission or [governance workload](../storage/workloads/governance-delivery-capacity.md)
 qualification.

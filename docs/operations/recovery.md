@@ -518,7 +518,7 @@ or mark them stale/pending and rebuild before presenting them as current.
 
 Qualify backup-before-protection, mixed Content/graph cuts, missing application
 receipts, interrupted replay and newer erasure/revocation evidence through
-[the existing OPS/SYS protection subcases](../testing/editorial-protection.md).
+[the pending OPS/SYS protection subcases](../../scripts/qa/cases/editorial-protection.ts).
 An old passing restore fixture does not establish these additional records or
 the completeness of the retained frontier.
 

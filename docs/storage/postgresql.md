@@ -27,6 +27,6 @@ stores its preparation and settlement separately from the Jena adoption.
 
 The [editorial protection contract](../contracts/editorial-protection.md#transaction-and-admission-protocol)
 describes the required owner-local edit/protect lock and immutable correction
-history. Its [acceptance scenarios](../testing/editorial-protection.md) remain
+history. Its [pending acceptance subcases](../../scripts/qa/cases/editorial-protection.ts) remain
 prospective where a profile is not yet qualified. A Content draft and a Jena
 publication selection have separate heads and protection decisions.

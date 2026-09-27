@@ -39,7 +39,7 @@ status or an advanced sequence. [Remote transaction boundary](https://jena.apach
 ## Editorial protection and immutable record enforcement
 
 The [editorial protection contract](../contracts/editorial-protection.md) and
-[prospective acceptance](../testing/editorial-protection.md) state the additional
+[pending acceptance subcases](../../scripts/qa/cases/editorial-protection.ts) state the additional
 owner checks required before a protection profile is qualified. Existing Work
 head checks alone do not qualify every protected target or writer.
 

@@ -17,8 +17,8 @@ Use [the plan](../plan/README.md#acceptance-gates) for gate definitions and
 | [Search](search.md), [graphs](relationship-graph.md), [ratings/time](ratings-and-event-time.md) | Combined query semantics, populations, exactness and budgets. |
 | [Sources](source-conformance.md), [packages](packages.md), [Hub](ai-hub.md), [recipes](recipes.md) | Current inputs, native conversion and domain-specific operations. |
 | [Wiki](../../scripts/qa/cases/wiki-composition.ts), [recommendations](recommendations.md) | Composed views and bounded derived generations. |
-| [Integration](backend-integration.md), [Subscribe](subscriptions-and-pro.md), [verification](information-verification.md) | Cross-owner effects and activated product applications. |
-| [Editorial protection](editorial-protection.md) | Prospective subcases of existing MODEL/LIVE/FACT/GOV/SYS/OPS coverage: atomic protection, independent review, source control, bypass rejection and recovery. |
+| [Integration](backend-integration.md), [Subscribe](subscriptions-and-pro.md), [verification](../../scripts/qa/cases/information-verification.ts) | Cross-owner effects and activated product applications. |
+| [Editorial protection](../../scripts/qa/cases/editorial-protection.ts) | Pending subcases of existing MODEL/LIVE/FACT/GOV/SYS/OPS coverage: atomic protection, independent review, source control, bypass rejection and recovery. |
 | [Operations](operations.md) | Installation, failures, upgrades, restore and practical load. |
 | [Complexity verification](complexity.md) | Path inventory, derived cost contracts, work counters, engine plans and small multi-scale counterexamples across owners. |
 | [Presentation/addressing](presentation-and-addressing.md), [governance/delivery](governance-and-delivery.md) | Route/rendering boundaries, exact reports, rights, notification and erasure cases. |

@@ -67,7 +67,7 @@ The [recorded qualification](../plan/qualification.md) names the executable
 evidence for each ID; the selected-run limits below still apply.
 
 The planned [editorial-protection integration](../contracts/source-lifecycle.md#editorial-protection-and-quality-integration)
-adds the [protection matrix](editorial-protection.md)'s source-control subcases
+adds source-control scenarios from the [pending protection subcases](../../scripts/qa/cases/editorial-protection.ts)
 to LIVE03/LIVE05. Qualify control/protection CAS, trusted source origin, same-value
 takeover and quality invalidation without treating two attachments as independent
 evidence. The existing title-specific evidence below does not qualify that full

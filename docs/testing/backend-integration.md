@@ -25,7 +25,7 @@ Record inputs, operation receipts, exact profiles/builds and failures. A mock-on
 pass cannot qualify storage, cross-service behavior or capacity.
 
 Apply SYS02/SYS10/SYS11/SYS13/SYS14 to
-[protected correction effects](editorial-protection.md): lost responses,
+[protected correction effects](../../scripts/qa/cases/editorial-protection.ts): lost responses,
 zero-match updates, cancellation, old-backup retries and same-key conflicts must
 preserve exact approvals, one-use application and active protection. Saving a
 Content candidate is not successful adoption across the two owners.
