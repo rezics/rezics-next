@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test';
 import type { FusekiClient, SparqlResult } from '../../../services/main/src/infrastructure/fuseki.ts';
 import { resolveInterpretation } from '../../../services/main/src/modules/context/interpretation.ts';
-import { GraphQueryNotFound, queryRelationGraph }
+import { admitRelationCandidatePage, GraphQueryNotFound, queryRelationGraph }
   from '../../../services/main/src/modules/graph-query/query.ts';
 import { readPublicStatementsAt, StatementBatchBudgetExceeded, StatementBatchUnavailable }
   from '../../../services/main/src/modules/statement/read.ts';
@@ -83,4 +83,20 @@ test('SEARCH01/GRAPH04: an unreadable explicit relation participant is rejected 
     roleBindings: [{ role: 'character', participant: id(4) }],
   })).rejects.toBeInstanceOf(GraphQueryNotFound);
   expect(calls).toHaveLength(1);
+});
+
+test('SEARCH10/GRAPH04: bounded discovered candidates are admitted before a count is precise', async () => {
+  const attempts: string[] = [];
+  const rows = Array.from({ length: 65 }, (_, index) => ({
+    occurrence: binding(id(index + 10)), revision: binding(id(index + 100)),
+    from: binding(id(1)), to: binding(id(index + 200)), target: binding(id(index + 200)),
+  }));
+  const admitted = await admitRelationCandidatePage({ canReadResource: async resource => {
+    attempts.push(resource);
+    return resource === id(10) || resource === id(200);
+  } }, rows);
+  expect(admitted.rawBoundReached).toBe(true);
+  expect(admitted.admitted).toHaveLength(1);
+  expect(attempts).toHaveLength(66);
+  expect(admitted.admitted[0]?.occurrence?.value).toBe(id(10));
 });

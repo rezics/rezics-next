@@ -11,6 +11,8 @@ import { InvalidSearchContinuation, pageCompletePublicRelation, SearchContinuati
 import { queryPublicRealmClassifiedRatedPhrase } from '../modules/work/search-joined.ts';
 import { queryPublicMainTitleBody } from '../modules/work/search-multifield.ts';
 import { queryPublicDisclosedFields } from '../modules/work/search-disclosed-fields.ts';
+import { queryPublicGroupedStatementPhrase } from '../modules/work/search-grouped.ts';
+import { referenceReader } from '../modules/semantic/admitted.ts';
 import { DEFAULT_MEDIA_CONTEXT } from '../modules/media/store.ts';
 import { withStableSearchSnapshot, SearchIndexUnavailable, type SearchAttemptDiagnostic }
   from '../modules/work/search-readiness.ts';
@@ -26,6 +28,29 @@ import { problemResult, publicPhrasePageRequest, publicPhrasePageResult, publicQ
   unsupportedPublicSearchSelectors } from '../api-contract.ts';
 import type { MainWorkDependencies } from './dependencies.ts';
 import { commandError, problem } from './problems.ts';
+
+const groupedNative = t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' });
+const groupedReference = t.String({ pattern: '^https?://[^\\s<>"{}|\\\\^`]{1,2040}$' });
+const groupedStatementRequest = t.Object({
+  profile: t.Literal('public-grouped-statement-phrase-v1'),
+  ...unsupportedPublicSearchSelectors,
+  actingSubject: groupedNative,
+  context: t.Object({ kind: t.Literal('realm-local'), id: groupedNative }, { additionalProperties: false }),
+  phrase: t.String({ minLength: 2, maxLength: 80 }),
+  language: t.String({ minLength: 2, maxLength: 35,
+    pattern: '^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$' }),
+  relation: t.Object({ definition: groupedNative,
+    workRole: t.String({ pattern: '^[A-Za-z][A-Za-z0-9_-]{0,31}$' }),
+    participantRole: t.String({ pattern: '^[A-Za-z][A-Za-z0-9_-]{0,31}$' }) },
+  { additionalProperties: false }),
+  conditions: t.Array(t.Object({ predicate: groupedReference, relationDefinition: groupedReference,
+    value: groupedNative, context: groupedNative, semanticRevision: groupedNative,
+    applicability: t.Array(groupedNative, { maxItems: 8 }) }, { additionalProperties: false }),
+  { minItems: 1, maxItems: 2 }),
+  countGrain: t.Union([t.Literal('work'), t.Literal('participant'), t.Literal('occurrence'),
+    t.Literal('qualifiedFact'), t.Literal('supportingStatement')]),
+  facetMode: t.Optional(t.Union([t.Literal('fully-filtered'), t.Literal('self-filter-excluding')])),
+}, { additionalProperties: false });
 
 function logLoadSearchFailure(profile: string, error: unknown,
   diagnostics: SearchAttemptDiagnostic[] | undefined): void {
@@ -191,7 +216,7 @@ export function searchRoutes(fuseki: FusekiClient, work: SearchRouteDependencies
       },
     })
     .post('/v1/queries', {
-      body: t.Union([t.Object({ profile: t.Literal('public-disclosed-fields-phrase-v1'),
+      body: t.Union([groupedStatementRequest, t.Object({ profile: t.Literal('public-disclosed-fields-phrase-v1'),
         ...unsupportedPublicSearchSelectors,
         phrase: t.String({ minLength: 2, maxLength: 80 }),
         contexts: t.Array(t.String({ pattern: '^(https://rezics\\.com/id/[0-9a-f-]{36}|urn:rezics:semantic-context:global)$' }),
@@ -291,6 +316,16 @@ export function searchRoutes(fuseki: FusekiClient, work: SearchRouteDependencies
           return problem(503, 'content_projection_unavailable', 'Public Content projection is unavailable');
         }
         const result = await withStableSearchSnapshot(fuseki, async () => {
+          if (body.profile === 'public-grouped-statement-phrase-v1') {
+            if (!work.judgments || !work.access.canReadSemanticResource) {
+              throw new PublicQueryUnavailable('grouped search admission owner is unavailable');
+            }
+            const selection = await presentationSelection(request);
+            const principal = selection?.principal ?? await work.account.verify(request, ['work:read']);
+            return queryPublicGroupedStatementPhrase(work.environment, work.judgments,
+              referenceReader(work.access, principal, body.actingSubject), body,
+              relation => present(selection, relation));
+          }
           if (body.profile === 'public-disclosed-fields-phrase-v1') {
             if ((body.resources.length || body.statements.length)
               && (!work.media?.store || !work.governance?.store)) {

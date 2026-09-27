@@ -516,6 +516,40 @@ not exposed. An unavailable Access check makes the classified result unavailable
 The broader Context-selected grouped relation
 and its count grains remain a separate requirement below.
 
+The bounded `public-grouped-statement-phrase-v1` profile is the first
+Context-selected slice. It requires a Realm, a selected-body phrase and language,
+one exact relation DefinitionRef with Work and participant roles, and one or two
+explicit Context-pinned resource-value conditions. Each condition resolves its
+actual interpretation DefinitionRef and returns that basis. The graph discovery
+binds every candidate Statement subject to the participant of the same active
+relation occurrence. A condition matches only the exact predicate, relation
+definition, interpreted value and semantic revision. This first slice treats
+release, canon and valid-time applicability as an exact set of native references
+shared by the occurrence and every condition; interval overlap or broader canon
+inference is unsupported. Direct Statement-target decisions resolve at the
+Realm's effective acceptance scope, and public owner reads plus Access protection
+admit each support before any count or facet is computed. A missing/private
+meaning basis or missing owner batch row makes the relation unavailable. Names
+and avatars are absent from this response, so their disclosure is handled by
+the separate field profile.
+
+The profile returns one group per qualified occurrence/participant, with the
+selected MatchUnit's unchanged score. Fact identity is the canonical meaning key
+plus the effective acceptance context; support identity remains each Statement
+ID. `countGrain` selects distinct Work, participant, occurrence, qualified-fact or
+supporting-Statement totals over the complete admitted relation. Facets default
+to the fully filtered relation. Explicit `self-filter-excluding` removes only that
+condition while retaining the Realm, Work, occurrence, other condition and public
+admission; its `populationBasis` names the change. Both modes report exact counts
+only after the entire bounded candidate set and owner batch are proven. The
+21st raw occurrence/Statement pair returns a typed budget outcome without an
+exact count. The graph position fences the read; a group generation digest of
+selected text, pinned Context bases, admitted groups, decisions and protection
+generations changes with their relevant inputs. A new Context head leaves an
+old explicit pin's group generation stable; changed support decisions move it.
+This slice has no continuation and does not claim the single-ARQ text/rating/group plan or
+general inference and display grouping required below.
+
 A query names the result grain, exact relation/term and interpretation definitions,
 selected Context semantic revision, canon and applicability, separate acceptance
 scope, publication selection and display-group

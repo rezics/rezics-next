@@ -84,7 +84,9 @@ batch. Graph relation reads check up to eight explicit participant constraints
 with Access before their role/text match, in addition to the anchor and at most
 65 discovered occurrence/target candidate proofs. Discovery of unknown
 occurrences still precedes their Access proof; the bounded frontier must not be
-presented as an exact complete count.
+presented as an exact complete count. The relation response labels its count
+`lower-bound` whenever a raw candidate page reaches the 65-row probe or more
+visible edges need another page; only an exhausted admitted page is `exact`.
 
 The public disclosed-field phrase profile accepts at most eight Contexts, 16
 Statements and 32 Resources. Its owner permits at most 64 summary targets, 32
@@ -95,6 +97,20 @@ not an exact empty relation. Matching and the three facet counts scan only the
 admitted field list once. The public route integration checks that adding a
 Private Context changes none of the hit, score or facet values; native owner
 tests cover protected Statements, restricted names, avatars and recovery.
+
+The grouped Statement phrase profile accepts at most two Context-resolved
+conditions, 20 discovered occurrence/Statement pairs, 40 occurrence/participant
+Access proofs, 20 distinct direct acceptance reads, 20 protection checks and one
+owner batch of at most 20 public Statements. The 21st raw pair returns 422
+without a count or facet. One full selected-body relation and one bounded
+structural discovery query precede admission; one final graph-position read
+fences the result. The shared route budget is 72 Fuseki calls, 8 MiB read bytes
+and 1,500 ms, with typed budget/deadline outcomes. After hydration, grouping is
+at most 20 rows; two facet passes compare at most 2 × 20² rows and return at
+most 20 values per facet. The native fixture verifies one owner batch, exact
+Work/fact/support counts, default and self-filter facets, qualification changes
+and the 21st-row budget. Independent corpus, affected-set and degree variation
+and native engine work measurements remain SEARCH07 qualification work.
 
 ### IAM07 media download stream
 

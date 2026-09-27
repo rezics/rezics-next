@@ -49,6 +49,7 @@ const edge = t.Object({ occurrence: native, revision: native, definition: native
   ]) }, { additionalProperties: false });
 const response = t.Object({ profile: t.Literal('relation-graph-v1'), complete: t.Boolean(),
   frontier: t.Union([t.Literal('complete'), t.Literal('more'), t.Literal('bounded')]),
+  countPrecision: t.Union([t.Literal('exact'), t.Literal('lower-bound')]),
   total: t.Integer(), edges: t.Array(edge), continuation: t.Union([continuation, t.Null()]),
   sourcePosition: graphPosition
 }, { additionalProperties: false });

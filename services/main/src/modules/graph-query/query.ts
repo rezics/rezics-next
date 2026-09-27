@@ -53,6 +53,34 @@ interface QueryBinding {
   targetExternal?: Binding; applicability?: Binding;
 }
 
+/** Admit one bounded discovered page before deriving a visible count. A full
+ * raw page is only a lower bound: denied rows may hide later visible rows. */
+export async function admitRelationCandidatePage(authority: GraphReadAuthority,
+  rows: readonly QueryBinding[]): Promise<{ admitted: QueryBinding[]; rawBoundReached: boolean }> {
+  if (rows.length > PROBE) throw new GraphQueryBudgetExceeded('relation candidate page exceeds its bound');
+  const admitted: QueryBinding[] = [];
+  const readable = new Map<string, boolean>();
+  const seenEdges = new Set<string>();
+  for (const row of rows) {
+    if (!row.occurrence || !row.revision || !row.from || !row.to || !row.target) {
+      throw new GraphQueryUnavailable('relation edge binding is incomplete');
+    }
+    const occurrence = row.occurrence.value;
+    const target = row.target.value;
+    if (!readable.has(occurrence)) readable.set(occurrence, await authority.canReadResource(occurrence));
+    if (!readable.get(occurrence)) continue;
+    if (row.targetExternal?.value !== 'true') {
+      if (!readable.has(target)) readable.set(target, await authority.canReadResource(target));
+      if (!readable.get(target)) continue;
+    }
+    const key = JSON.stringify([occurrence, row.revision.value, row.from.value, row.to.value]);
+    if (seenEdges.has(key)) continue;
+    seenEdges.add(key);
+    admitted.push(row);
+  }
+  return { admitted, rawBoundReached: rows.length >= PROBE };
+}
+
 function normalizePhrase(value: string): string {
   return value.normalize('NFC').trim().replace(/\s+/gu, ' ');
 }
@@ -202,31 +230,11 @@ export async function queryRelationGraph(env: WorkActivationEnvironment, authori
     if (!Number.isSafeInteger(count)) throw new GraphQueryUnavailable('phrase candidate count is invalid');
     if (count >= PHRASE_HIT_PROBE) throw new GraphQueryBudgetExceeded('phrase seed exceeds the admitted candidate bound');
   }
-  const checked: Array<{ row: QueryBinding; target: string; occurrence: string }> = [];
-  const readable = new Map<string, boolean>();
-  const seenEdges = new Set<string>();
-  for (const row of snapshot.rows) {
-    if (!row.occurrence || !row.revision || !row.from || !row.to || !row.target) {
-      throw new GraphQueryUnavailable('relation edge binding is incomplete');
-    }
-    const occurrence = row.occurrence.value;
-    const target = row.target.value;
-    if (!readable.has(occurrence)) readable.set(occurrence, await authority.canReadResource(occurrence));
-    if (!readable.get(occurrence)) continue;
-    if (row.targetExternal?.value !== 'true') {
-      if (!readable.has(target)) readable.set(target, await authority.canReadResource(target));
-      if (!readable.get(target)) continue;
-    }
-    const key = JSON.stringify([occurrence, row.revision.value, row.from.value, row.to.value]);
-    if (seenEdges.has(key)) continue;
-    seenEdges.add(key);
-    checked.push({ row, target, occurrence });
-  }
-  const page = checked.slice(0, GRAPH_QUERY_LIMITS.edges);
-  const hasVisibleMore = checked.length > GRAPH_QUERY_LIMITS.edges;
-  const candidateBoundReached = snapshot.rows.length >= PROBE;
-  const frontier = hasVisibleMore ? 'more' : candidateBoundReached ? 'bounded' : 'complete';
-  const edges = page.map(({ row }) => ({ occurrence: row.occurrence!.value, revision: row.revision!.value,
+  const admission = await admitRelationCandidatePage(authority, snapshot.rows);
+  const page = admission.admitted.slice(0, GRAPH_QUERY_LIMITS.edges);
+  const hasVisibleMore = admission.admitted.length > GRAPH_QUERY_LIMITS.edges;
+  const frontier = hasVisibleMore ? 'more' : admission.rawBoundReached ? 'bounded' : 'complete';
+  const edges = page.map(row => ({ occurrence: row.occurrence!.value, revision: row.revision!.value,
     definition: input.definition, from: row.from!.value, fromRole: input.fromRole,
     to: row.to!.value, toRole: input.toRole, applicability: parseAggregate(row.applicability?.value),
     matchReason: input.anchor.kind === 'phrase'
@@ -241,6 +249,7 @@ export async function queryRelationGraph(env: WorkActivationEnvironment, authori
     expiresAt: input.continuation?.expiresAt ?? Date.now() + CONTINUATION_TTL_MS,
   } : null;
   return { profile: 'relation-graph-v1' as const, complete: frontier === 'complete', frontier,
+    countPrecision: frontier === 'complete' ? 'exact' as const : 'lower-bound' as const,
     total: edges.length, edges, continuation,
     sourcePosition: { datasetId: 'product' as const, dataEpoch: env.lineage.dataEpoch, sequence: snapshot.sequence } };
   });
