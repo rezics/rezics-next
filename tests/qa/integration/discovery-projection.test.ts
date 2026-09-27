@@ -27,7 +27,7 @@ test('Discovery projection: native scoped reads, durable builds, disclosure, cur
   const stack = await startMediaStack('discovery');
   try {
     const a = await stack.member('a'), b = await stack.member('b'), outsider = await stack.member('outsider');
-    for (const member of [a, b]) await member.grant(MANAGE_SCOPE, MANAGE_ACTION);
+    await a.grant(MANAGE_SCOPE, MANAGE_ACTION);
     const first = await stack.publicWork(a.actor, ['en'], 'Discovery first');
     const second = await stack.publicWork(a.actor, ['en'], 'Discovery second');
     const third = await stack.publicWork(a.actor, ['en'], 'Discovery unrated');
@@ -40,7 +40,7 @@ test('Discovery projection: native scoped reads, durable builds, disclosure, cur
       GRAPH ${iri(GRAPHS.revisions)} { ?head a rv:ErasedRevision }
     } WHERE { GRAPH ${iri(GRAPHS.current)} { ${iri(erased.work)} rv:head ?head } }`);
     await a.grant('space:create:root', 'space.create');
-    const realm = await json<{ realm: string }>(await a.send('POST', '/v1/spaces',
+    const realm = await json<{ realm: string; space: string }>(await a.send('POST', '/v1/spaces',
       { profile: 'space-realm-v1', name: 'Discovery Realm', capabilities: ['realm'], actingSubject: a.actor }), 201);
     await a.grant(GLOBAL_CONTEXT_SCOPE, 'rating.context.create');
     await a.grant(`rating:context:${realm.realm}`, 'rating.context.create');
@@ -65,7 +65,7 @@ test('Discovery projection: native scoped reads, durable builds, disclosure, cur
       [`classification:decide:${realm.realm}`, 'classification.decision.set']] as const) await a.grant(scope, action);
     await json(await a.send('POST', '/v1/classification-contexts',
       { profile: 'classification-context-v1', realm: realm.realm, actingSubject: a.actor }), 201);
-    const term = await json<{ sense: string }>(await a.send('POST', '/v1/classification-propositions',
+    const term = await json<{ sense: string; concept: string }>(await a.send('POST', '/v1/classification-propositions',
       { profile: 'classification-proposition-v1', label: 'Discovery adventure', actingSubject: a.actor }), 201);
     for (const target of [first, second]) await json(await a.send('POST', '/v1/classification-decisions', {
       profile: 'classification-direct-decision-v1', work: target.work, mainVersion: target.mainVersion,
@@ -99,16 +99,17 @@ test('Discovery projection: native scoped reads, durable builds, disclosure, cur
     const activate = (generation: string, expectedHeadRevision: string | null = null, member = a) =>
       call('/v1/discovery/generation-activations', { profile: 'discovery-generation-activation-v1',
         actingSubject: member.actor, generation, expectedHeadRevision }, member);
-    const build = async (basis: DiscoveryBasis, member = a) => {
+    const build = async (basis: DiscoveryBasis, member = a, expected: string | null = null) => {
       let row = await json<Generation>(await register(basis, member));
       for (let steps = 0; !row.complete && steps < 10; steps++) row = await json<Generation>(await advance(row, member));
       expect(row.complete).toBe(true);
       expect(row.state).toBe('ready');
-      await json(await activate(row.generation, null, member));
+      await json(await activate(row.generation, expected, member));
       return row;
     };
     expect((await get()).status).toBe(503);
     expect((await register(base, outsider)).status).toBe(403);
+    expect((await register(base, b)).status).toBe(403);
     const receipt = randomUUID();
     let pending = await json<Generation>(await register(base, a, receipt));
     expect(await json(await register(base, a, receipt))).toMatchObject({ generation: pending.generation, replayed: true });
@@ -119,10 +120,13 @@ test('Discovery projection: native scoped reads, durable builds, disclosure, cur
     pending = await json<Generation>(racers.find(response => response.status === 200)!);
     while (!pending.complete) pending = await json<Generation>(await advance(pending));
     await json(await activate(pending.generation));
+    expect(await json(await call(`/v1/discovery/generations/${pending.generation}?actingSubject=${encodeURIComponent(a.actor)}`)))
+      .toMatchObject({ activeHeadRevision: '1' });
     const globalRank = await build({ ...base, context: global.context });
     await build({ scope: 'realm', realm: realm.realm, context: local.context });
     await build({ scope: 'mine', realm: null, context: global.context });
-    await build({ scope: 'mine', realm: null, context: global.context }, b);
+    const bMine = await build({ scope: 'mine', realm: null, context: global.context }, b);
+    expect((await call(`/v1/discovery/generations/${bMine.generation}?actingSubject=${encodeURIComponent(a.actor)}`)).status).toBe(404);
 
     const page = await json<Page>(await get({ limit: '1' }));
     expect(page.items.map(item => item.id)).toEqual([third.work]);
@@ -172,14 +176,18 @@ test('Discovery projection: native scoped reads, durable builds, disclosure, cur
     await stack.accessPool.query(`INSERT INTO access.discovery_entry
       (generation_id, work, work_type, term, recent_order, rating_count, rating_sum, payload)
       SELECT $1, 'https://rezics.com/id/00000000-0000-4000-8000-' || lpad(i::text,12,'0'),
-        CASE WHEN i % 100 = 0 THEN 'https://schema.org/Book' ELSE '' END,
-        CASE WHEN i % 100 = 0 THEN $2 ELSE '' END, i, 1, 1 + i % 5, '{}'::jsonb
-      FROM generate_series(1,20000) i`, [planBuild.generation, term.sense]);
+        kind, term, i, 1, 1 + i % 5, '{}'::jsonb
+      FROM generate_series(1,20000) i
+      CROSS JOIN LATERAL unnest(ARRAY['', CASE WHEN i % 2 = 0
+        THEN 'https://schema.org/Book' ELSE 'https://schema.org/Recipe' END]) kind
+      CROSS JOIN LATERAL unnest(ARRAY['', CASE WHEN i % 100 = 0 THEN $2 ELSE $3 END]) term`,
+    [planBuild.generation, term.sense, uuid()]);
     await stack.accessPool.query('ANALYZE access.discovery_entry');
-    for (const sort of ['recent', 'top-rated'] as const) {
-      const explained = await stack.accessPool.query(`EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON) ${discoverySeekSql(sort, true)}`,
-        [planBuild.generation, 'https://schema.org/Book', term.sense, 21, sort === 'recent' ? '10000' : '-1',
-          'https://rezics.com/id/00000000-0000-4000-8000-000000010000']);
+    for (const sort of ['recent', 'top-rated'] as const) for (const type of ['', 'https://schema.org/Book']) {
+      for (const filter of ['', term.sense]) for (const continued of [false, true]) {
+      const explained = await stack.accessPool.query(`EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON) ${discoverySeekSql(sort, continued)}`,
+        [planBuild.generation, type, filter, 21, ...(continued ? [sort === 'recent' ? '10000' : '-1',
+          'https://rezics.com/id/00000000-0000-4000-8000-000000010000'] : [])]);
       const plan = explained.rows[0]['QUERY PLAN'][0].Plan;
       const nodes = (node: Record<string, unknown>): Record<string, unknown>[] =>
         [node, ...((node.Plans ?? []) as Record<string, unknown>[]).flatMap(nodes)];
@@ -188,7 +196,10 @@ test('Discovery projection: native scoped reads, durable builds, disclosure, cur
       expect(all.some(node => node['Node Type'] === 'Sort' || node['Node Type'] === 'Seq Scan')).toBe(false);
       expect(Math.max(...all.map(node => Number(node['Actual Rows'] ?? 0)))).toBeLessThanOrEqual(21);
       expect(all.reduce((sum, node) => sum + Number(node['Rows Removed by Filter'] ?? 0), 0)).toBe(0);
-      console.log(`discovery ${sort} seek: ${JSON.stringify(plan)}`);
+      expect(all.filter(node => node['Index Name']).reduce((sum, node) => sum + Number(node['Index Searches'] ?? 0), 0)).toBe(1);
+      console.log(`discovery seek: ${JSON.stringify({ sort, type, filter, continued, rows: plan['Actual Rows'],
+        blocks: plan['Shared Hit Blocks'], ms: plan['Actual Total Time'] })}`);
+      }
     }
     await json(await call(`/v1/discovery/generations/${planBuild.generation}/cancel`, { actingSubject: a.actor }));
     const leaseBuild = await json<Generation>(await register(base));
@@ -210,9 +221,59 @@ test('Discovery projection: native scoped reads, durable builds, disclosure, cur
       await rollback.query('ROLLBACK');
     } finally { rollback.release(); }
     expect((await stack.accessPool.query('SELECT revision FROM access.discovery_source_fence')).rows[0].revision).toBe(fenceBefore);
-    await stack.accessPool.query('UPDATE access.principal SET active = false WHERE id = $1', [outsider.principalId]);
+    // Actual Access invalidation during graph hydration withholds the response.
+    const originalQuery = stack.fuseki.query.bind(stack.fuseki);
+    let invalidated = false;
+    stack.fuseki.query = async (sparql, maxBytes) => {
+      const result = await originalQuery(sparql, maxBytes);
+      if (!invalidated && sparql.includes('SELECT ?epoch ?sequence ?hold ?r')) {
+        invalidated = true;
+        await stack.accessPool.query('UPDATE access.principal SET active = false WHERE id = $1', [outsider.principalId]);
+      }
+      return result;
+    };
+    try { expect((await get()).status).toBe(409); } finally { stack.fuseki.query = originalQuery; }
+    expect(invalidated).toBe(true);
     expect((await get({ cursor: page.nextCursor! })).status).toBe(409);
     expect((await activate(globalRank.generation, '1')).status).toBe(409);
+    await build(base, a, '1');
+    expect((await get()).status).toBe(200);
+    expect((await get({ cursor: page.nextCursor! })).status).toBe(409);
+
+    // Post-cutover Statement classification and spoiler protection use the real
+    // owner. Empty baseline inserts must not churn the discovery source fence.
+    await a.grant('statement:migrate:root', 'statement.migrate');
+    await a.grant('statement:migrate:root', 'statement.cutover');
+    const migration = await json<{ pending: { application: string; decision: string }[] }>(
+      await a.read('/v1/statement-migrations/v1/pending'));
+    for (const item of migration.pending) await json(await a.send('POST',
+      `/v1/statement-migrations/v1/${item.application.slice(-36)}`, { profile: 'statement-migration-v1',
+        expectedDecision: item.decision, actingSubject: a.actor }), 201);
+    await json(await a.send('POST', '/v1/statement-migrations/v1/cutover',
+      { profile: 'statement-cutover-v1', actingSubject: a.actor }), 201);
+    await a.grant('classification:decide:global', 'statement.decide');
+    const hint = (value: string, expectedGeneration: string) => call(`/v1/concepts/${term.concept.slice(-36)}/spoiler-hints`,
+      { profile: 'concept-spoiler-hint-v1', context: { kind: 'global' }, hint: value, expectedGeneration, actingSubject: a.actor });
+    await json(await hint('not-spoiler', '0'), 201);
+    await build(base, a, '2');
+    expect((await json<Page>(await get({ term: term.sense }))).items.length).toBe(2);
+    await json(await hint('major', '1'), 201);
+    expect((await get({ term: term.sense })).status).toBe(409);
+    await build(base, a, '3');
+    expect((await json<Page>(await get({ term: term.sense }))).matches).toEqual({ value: 0, kind: 'exact' });
+    const candidates: Generation[] = [];
+    for (let i = 0; i < 2; i++) {
+      let generation = await json<Generation>(await register(base));
+      while (!generation.complete) generation = await json<Generation>(await advance(generation));
+      candidates.push(generation);
+    }
+    const activationRace = await Promise.all(candidates.map(row => activate(row.generation, '4')));
+    expect(activationRace.map(response => response.status).sort()).toEqual([200, 409]);
+    // Private Realm and absent Realm remain indistinguishable, even to its creator.
+    await stack.fuseki.update(`PREFIX rv: <${RV}> DELETE { GRAPH ${iri(GRAPHS.current)} {
+      ${iri(realm.space)} rv:disclosure rv:Public } } INSERT { GRAPH ${iri(GRAPHS.current)} {
+      ${iri(realm.space)} rv:disclosure rv:Private } } WHERE {}`);
+    expect((await get({ scope: 'realm', realm: realm.realm, context: local.context })).status).toBe(404);
     await stack.fuseki.update(`PREFIX rv: <${RV}> INSERT DATA {
       GRAPH ${iri(GRAPHS.control)} { <urn:rezics:dataset:product> rv:restoreHold true } }`);
     expect((await get()).status).toBe(503);

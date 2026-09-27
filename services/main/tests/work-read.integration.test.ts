@@ -6,6 +6,8 @@ import { GRAPHS, RV, iri, lit } from '../src/modules/work/activate.ts';
 import { GLOBAL_CONTEXT_SCOPE } from '../src/modules/rating/global.ts';
 import { authorCreditTriples } from '../src/modules/work/author-credit.ts';
 import { AccessJudgments } from '../src/modules/judgment/access.ts';
+import { DiscoveryProjection } from '../src/modules/discovery/store.ts';
+import { MANAGE_ACTION, MANAGE_SCOPE } from '../src/modules/recommendation/derived-generation.ts';
 
 const short = (id: string) => id.slice(-36);
 async function json<T>(response: Response, status = 200): Promise<T> {
@@ -29,7 +31,30 @@ test('Work reads: native public/private/erased disclosure, fallback, scoped rati
     const unreviewed = await stack.privateWork(a.actor, 'Unselected publication');
     await stack.contribution(unreviewed.work, a.actor, 'en', 'Published but never selected');
     const root = `/v1/works/${short(first.work)}`;
-    const get = (path: string) => stack.call('GET', path);
+    // Discovery now consumes an explicitly built projection. Keep this template
+    // exercising the integrated route; discovery's owner tests qualify its index.
+    await a.grant(MANAGE_SCOPE, MANAGE_ACTION);
+    const discoveryApp = createMainApp(stack.fuseki, { environment: stack.env, access: stack.access,
+      discovery: new DiscoveryProjection(stack.accessPool), judgments: new AccessJudgments(stack.accessPool),
+      account: { verify: async () => a.principal } });
+    const get = (path: string) => path === '/v1/works' || path.startsWith('/v1/works?')
+      ? discoveryApp.handle(new Request(`http://main.local${path}`)) : stack.call('GET', path);
+    let discoveryHead: string | null = null;
+    const refreshDiscovery = async () => {
+      const post = (path: string, body: object) => discoveryApp.handle(new Request(`http://main.local${path}`, {
+        method: 'POST', headers: { authorization: `Bearer ${a.token}`, 'content-type': 'application/json',
+          'idempotency-key': randomUUID() }, body: JSON.stringify(body) }));
+      let row = await json<{ generation: string; checkpoint: string; complete: boolean }>(await post(
+        '/v1/discovery/generation-builds', { profile: 'discovery-generation-build-v1', actingSubject: a.actor,
+          basis: { scope: 'global', realm: null, context: null } }));
+      for (let step = 0; !row.complete && step < 10; step++) row = await json(await post(
+        `/v1/discovery/generations/${row.generation}/advance`, { actingSubject: a.actor, expectedCheckpoint: row.checkpoint }));
+      expect(row.complete).toBe(true);
+      const active = await json<{ headRevision: string }>(await post('/v1/discovery/generation-activations', {
+        profile: 'discovery-generation-activation-v1', actingSubject: a.actor, generation: row.generation,
+        expectedHeadRevision: discoveryHead }));
+      discoveryHead = active.headRevision;
+    };
     const before = stack.fuseki.queries;
     const header = await json<{ id: string; revision: string; title: { value: string; language: string; basis: string };
       originalTitle: null; mainVersion: string; selectedLanguage: string }>(await get(`${root}?language=fr`));
@@ -44,6 +69,7 @@ test('Work reads: native public/private/erased disclosure, fallback, scoped rati
       .toMatchObject({ disclosure: 'restricted', title: { value: restricted.title } });
     expect((await get(`${root}?actingSubject=${encodeURIComponent(a.actor)}`)).status).toBe(401);
 
+    await refreshDiscovery();
     const discover = await json<Page<{ id: string }>>(await get('/v1/works?limit=1'));
     expect(discover.items.map(item => item.id)).toEqual([second.work]);
     expect(discover.count).toEqual({ value: 1, kind: 'exact-page', total: null });
@@ -204,11 +230,13 @@ test('Work reads: native public/private/erased disclosure, fallback, scoped rati
     for (const suffix of ['', '/versions', '/history', '/ratings', '/classifications', '/adoptions', '/credits']) {
       expect((await get(`${root}${suffix}`)).status).toBe(404);
     }
+    await refreshDiscovery();
     const remaining = await json<Page<{ id: string }>>(await get('/v1/works'));
     expect(remaining.items.map(item => item.id)).toEqual([second.work]);
     // A fresh metadata edit changes the graph position, invalidating an old cursor.
     await stack.privateWork(a.actor, 'Unrelated corpus growth');
     expect((await get(`/v1/works?cursor=${discover.nextCursor}`)).status).toBe(409);
+    await refreshDiscovery();
     await stack.fuseki.update(`PREFIX rv: <${RV}> INSERT DATA { GRAPH ${iri(GRAPHS.control)} {
       <urn:rezics:dataset:product> rv:restoreHold true } }`);
     expect((await get('/v1/works')).status).toBe(503);
@@ -223,6 +251,7 @@ test('Work reads: native public/private/erased disclosure, fallback, scoped rati
         <urn:rezics:restore:read-test> a rv:RestoreCutover ; rv:dataEpoch ${lit(newEpoch)} ; rv:priorDataEpoch ${lit(oldEpoch)} } }
       WHERE { GRAPH ${iri(GRAPHS.control)} { <urn:rezics:dataset:product> rv:dataEpoch ?epoch ; rv:sequence ?sequence } }`);
     stack.env.lineage.dataEpoch = newEpoch;
+    await refreshDiscovery();
     expect((await json<Page<{ id: string }>>(await get('/v1/works'))).items.map(item => item.id)).toEqual([second.work]);
   } finally { await stack.stop(); }
 }, 120_000);

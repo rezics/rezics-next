@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
 import { activateHead, authorizeManager, claimLease, digest, fenceLease, inAccess,
   recordReceipt, replayReceipt, requireRecoveryOpen, RecommendationConflict,
-  RecommendationMissing, RecommendationRestart, RecommendationStale, RecommendationUnavailable,
+  RecommendationDenied, RecommendationMissing, RecommendationRestart, RecommendationStale, RecommendationUnavailable,
   type ManageContext, type ReceiptKey } from '../recommendation/derived-generation.ts';
 import type { ReadPosition } from '../work/read-session.ts';
 import { DISCOVERY_COST, type DiscoveryBasis, type DiscoveryRow, type OwnedDiscoveryBasis,
@@ -12,7 +12,7 @@ export interface DiscoveryGeneration {
   generation_id: string; scope: DiscoveryBasis['scope']; realm: string | null; context: string | null;
   principal_id: string | null; source_epoch: string; source_sequence: string;
   access_revision: string; recovery_generation: string; checkpoint: string; complete: boolean;
-  state: string; work_count: string;
+  state: string; work_count: string; active_head: string | null;
 }
 const basisOf = (row: DiscoveryGeneration): OwnedDiscoveryBasis => ({ scope: row.scope,
   realm: row.realm, context: row.context, owner: row.principal_id });
@@ -47,20 +47,30 @@ async function assertFence(client: PoolClient, row: DiscoveryGeneration) {
   }
 }
 async function generation(client: PoolClient, id: string): Promise<DiscoveryGeneration> {
-  const row = (await client.query<DiscoveryGeneration>(`SELECT d.*, g.state,
+  const row = (await client.query<DiscoveryGeneration>(`SELECT d.*, g.state, h.revision::text AS active_head,
     d.source_sequence::text, d.access_revision::text, d.work_count::text
     FROM access.discovery_generation d JOIN access.derived_generation g ON g.id = d.generation_id
+    LEFT JOIN access.derived_generation_head h ON h.family = 'discovery' AND h.scope_key = g.scope_key
     WHERE d.generation_id = $1`, [id])).rows[0];
   if (!row) throw new RecommendationMissing('Discovery generation is unavailable');
   return row;
 }
-async function manager(client: PoolClient, context: ManageContext, row?: DiscoveryGeneration) {
-  const principal = await authorizeManager(client, context);
-  if (row?.scope === 'mine' && row.principal_id !== principal) {
+async function operatorPrincipal(client: PoolClient, context: ManageContext,
+  scope: DiscoveryBasis['scope'], owner?: string | null) {
+  if (scope !== 'mine') return authorizeManager(client, context);
+  // A person may rebuild only their own private rating population. The acting
+  // Agent cannot select another principal, including for organization personas.
+  const principal = (await client.query<{ id: string }>(`SELECT id FROM access.principal
+    WHERE account_issuer = $1 AND account_subject = $2 AND active FOR SHARE`,
+  [context.principal.issuer, context.principal.subject])).rows[0]?.id;
+  if (!principal) throw new RecommendationDenied('Discovery principal is inactive');
+  if (owner && owner !== principal) {
     throw new RecommendationMissing('Discovery generation is unavailable');
   }
   return principal;
 }
+const manager = (client: PoolClient, context: ManageContext, row: DiscoveryGeneration) =>
+  operatorPrincipal(client, context, row.scope, row.principal_id);
 
 /** Durable generation/checkpoint protocol; no method in the GET path builds or
  * aggregates. Manager-driven advance calls do one Work and release their lease. */
@@ -70,7 +80,7 @@ export class DiscoveryProjection {
   async register(context: ManageContext, basis: DiscoveryBasis, position: ReadPosition, key: ReceiptKey) {
     return inAccess(this.pool, async client => {
       await requireRecoveryOpen(client);
-      const principal = await manager(client, context);
+      const principal = await operatorPrincipal(client, context, basis.scope);
       await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))',
         [`discovery-receipt:${principal}:${key.idempotencyKey}`]);
       const replay = await replayReceipt(client, principal, key, 'build');

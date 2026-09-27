@@ -23,9 +23,10 @@ export function discoveryError(error: unknown): Response {
 }
 const decimal = t.String({ pattern: '^(0|[1-9][0-9]{0,19})$' });
 const viewSchema = t.Object({ generation: readUuid, state: t.String(), checkpoint: t.String(),
-  complete: t.Boolean(), works: decimal, replayed: t.Boolean() });
+  complete: t.Boolean(), works: decimal, activeHeadRevision: t.Nullable(decimal), replayed: t.Boolean() });
 const view = (row: DiscoveryGeneration, replayed = false) => ({ generation: row.generation_id,
-  state: row.state, checkpoint: row.checkpoint, complete: row.complete, works: row.work_count, replayed });
+  state: row.state, checkpoint: row.checkpoint, complete: row.complete, works: row.work_count,
+  activeHeadRevision: row.active_head, replayed });
 const noStore = { headers: { 'cache-control': 'private, no-store' } };
 function key(request: Request, body: unknown) {
   const idempotencyKey = request.headers.get('idempotency-key');
@@ -35,7 +36,9 @@ function key(request: Request, body: unknown) {
   return { idempotencyKey, requestDigest: digest(body) };
 }
 async function operator(work: MainWorkDependencies, request: Request, actingSubject: string): Promise<ManageContext> {
-  return { principal: await work.account.verify(request, ['rating:configure']), actingSubject };
+  // Own rebuilds use the same OAuth read scope as Mine. Shared generations also
+  // require the Access recommendation-management grant in the storage boundary.
+  return { principal: await work.account.verify(request, ['work:read']), actingSubject };
 }
 function sourceRead<T>(work: MainWorkDependencies, request: Request, operator: ManageContext,
   basis: DiscoveryBasis, operation: (session: WorkReadSession) => Promise<T>) {

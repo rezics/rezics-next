@@ -15,8 +15,13 @@ BEGIN
     IF TG_OP = 'UPDATE' AND NEW IS NOT DISTINCT FROM OLD THEN RETURN NULL; END IF;
     -- Protection reads may establish an empty baseline. Absence already has
     -- exactly that meaning; it must not invalidate a build doing the read.
-    IF TG_OP = 'INSERT' AND TG_TABLE_NAME IN ('judgment_aggregate', 'judgment_concept_hint')
-        AND (to_jsonb(NEW)->>'generation')::bigint = 0 THEN RETURN NULL; END IF;
+    IF TG_OP = 'INSERT' AND (to_jsonb(NEW)->>'generation')::bigint = 0 THEN
+        IF TG_TABLE_NAME = 'judgment_concept_hint' AND to_jsonb(NEW)->>'hint' IS NULL THEN RETURN NULL; END IF;
+        IF TG_TABLE_NAME = 'judgment_aggregate'
+            AND (to_jsonb(NEW)->>'fit_negative')::bigint = 0 AND (to_jsonb(NEW)->>'fit_positive')::bigint = 0
+            AND (to_jsonb(NEW)->>'spoiler_none')::bigint = 0 AND (to_jsonb(NEW)->>'spoiler_minor')::bigint = 0
+            AND (to_jsonb(NEW)->>'spoiler_major')::bigint = 0 THEN RETURN NULL; END IF;
+    END IF;
     UPDATE access.discovery_source_fence SET revision = revision + 1 WHERE id;
     RETURN NULL;
 END $$;

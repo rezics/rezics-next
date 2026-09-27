@@ -1,5 +1,5 @@
 import { AccountAssertionDenied } from '../account/verify-assertion.ts';
-import { decodeReadCursor, encodeReadCursor, pageResult, WorkReadInvalid, WorkReadUnavailable,
+import { decodeReadCursor, encodeReadCursor, pageResult, WorkReadInvalid, WorkReadLimit, WorkReadUnavailable,
   type WorkReadSession } from '../work/read-session.ts';
 import type { Static } from 'typebox';
 import { discoveryItem, type DiscoveryQuery, type OwnedDiscoveryBasis } from './contract.ts';
@@ -51,6 +51,7 @@ export async function readDiscovery(session: WorkReadSession, projection: Discov
   });
   await projection.active(basis, session.position, active.generation_id);
   const seen = (after?.seen ?? 0) + items.length;
+  if (!Number.isSafeInteger(seen)) throw new WorkReadLimit('Discovery count exceeds its integer domain');
   const last = page.at(-1);
   const next = rows.length > limit && last ? encodeReadCursor(binding, session.position, last.work,
     JSON.stringify({ generation: active.generation_id, key: last.order_key, seen })) : null;
