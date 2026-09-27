@@ -67,7 +67,8 @@ export const overview: Overview = {
 
 export const detail = (user: AdminUser = radia): UserDetail => ({
   profile: user,
-  methods: { password: true, passkeys: [{ id: 'pk1', name: 'MacBook Touch ID', createdAt: ago(60 * 24 * 30), backedUp: true, deviceType: 'multiDevice' }],
+  methods: { password: true, passkeys: [{ id: 'pk1', name: 'MacBook Touch ID', createdAt: ago(60 * 24 * 30), backedUp: true, deviceType: 'multiDevice',
+      provider: null, lastUsedAt: ago(60 * 24 * 2) }],
     totp: null },
   sessions: { nextCursor: null, items: [{ id: 's1', createdAt: ago(60 * 24), lastActiveAt: ago(30), expiresAt: ahead(6),
     device: { browser: 'Firefox', platform: 'Linux', label: 'Firefox · Linux' }, network: '203.0.113.0/24', thisDevice: false }] },
