@@ -197,3 +197,5 @@ Current-site inputs refresh each live-source run; verified captures reproduce on
 run. The current baseline is 500M business entities/documents; 3B is a future
 scenario. Keep derived complexity, executed growth checks and measured rollout
 capacity separate. No small-data pass certifies that all existing data fits.
+
+[Documentation-to-code audit](docs-audit.md) groups the page inventory into replacement and retirement batches.
