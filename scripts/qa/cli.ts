@@ -419,9 +419,9 @@ try {
     if (options.record && errors.length === 0) {
       const record = JSON.parse(readFileSync(join(directory, 'acceptance.json'), 'utf8')) as QualificationRecord;
       if (record.certifiesFull) {
-        writeFileSync(join(root, 'docs/plan/qualification.md'), renderQualification(record));
+        writeFileSync(join(directory, 'qualification.md'), renderQualification(record));
       } else {
-        console.error('--record did not certify every retained acceptance ID; qualification page unchanged');
+        console.error('--record did not certify every retained acceptance ID; no qualification artifact written');
         process.exitCode = 1;
       }
     }

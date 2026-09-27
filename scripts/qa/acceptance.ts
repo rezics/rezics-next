@@ -1,8 +1,10 @@
-import { existsSync, readFileSync, readdirSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { Tier } from './core.ts';
+import { declaredCases } from './cases/index.ts';
+import type { Case } from './cases/types.ts';
 
-export interface Case { id: string; page: string }
+export type { Case } from './cases/types.ts';
 export interface TestResult {
   name: string;
   file: string;
@@ -13,19 +15,14 @@ export interface TestResult {
   seed?: number;
 }
 
-export function caseInventory(root: string): Case[] {
-  const directory = join(root, 'docs/testing');
-  const found = new Map<string, string>();
-  for (const page of readdirSync(directory).filter(name => name.endsWith('.md')).sort()) {
-    const text = readFileSync(join(directory, page), 'utf8');
-    for (const match of text.matchAll(/^\|\s*([A-Z][A-Z0-9]*\d{2,})\s*\|/gm)) {
-      const id = match[1];
-      if (found.has(id)) throw new Error(`Duplicate acceptance ID ${id}: ${found.get(id)} and ${page}`);
-      found.set(id, `docs/testing/${page}`);
-    }
+export function caseInventory(_root?: string): Case[] {
+  const found = new Set<string>();
+  for (const item of declaredCases) {
+    if (found.has(item.id)) throw new Error(`Duplicate acceptance ID ${item.id}`);
+    found.add(item.id);
   }
-  if (!found.size) throw new Error('No acceptance case rows found in docs/testing');
-  return [...found].map(([id, page]) => ({ id, page })).sort((a, b) => a.id.localeCompare(b.id));
+  if (!found.size) throw new Error('No acceptance cases declared');
+  return declaredCases.map(({ id, page }) => ({ id, page }));
 }
 
 function decode(value: string): string {

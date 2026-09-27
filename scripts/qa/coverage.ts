@@ -77,14 +77,15 @@ export function renderQualification(record: QualificationRecord): string {
     throw new Error('Cannot record an incomplete or dirty QA run');
   }
   const rows = Object.entries(record.ids).sort(([a], [b]) => a.localeCompare(b)).map(([id, item]) => {
-    const page = item.page.replace(/^docs\/testing\//, '../testing/');
+    const source = item.page.replace(/^docs\/testing\//, '../../../scripts/qa/cases/').replace(/\.md$/, '.ts');
     const tests = item.tests.map(identity => `\`${identity.replaceAll('|', '\\|')}\``).join('<br>');
-    return `| [${id}](${page}) | pass | ${tests} |`;
+    return `| [${id}](${source}) | pass | ${tests} |`;
   });
   return [
     '# Recorded qualification', '',
     `Full \`task qa -- ${record.scope === 'backend' ? '--backend ' : ''}--record\` run \`${record.runId}\` passed on clean commit \`${record.source.head}\` `
       + `(source fingerprint \`${record.source.fingerprint}\`).`, '',
+    'Executed results: [acceptance.json](acceptance.json).', '',
     '| Acceptance ID | Status | Executed evidence |', '| --- | --- | --- |',
     ...rows, '',
   ].join('\n');

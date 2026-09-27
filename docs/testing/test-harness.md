@@ -28,7 +28,7 @@ explicit `task test` paths and `task qa -- --backend --tier` remain available fo
 narrower diagnosis. The unscoped command below still includes web.
 
 The backend inventory retains every backend clause of mixed cases under the
-[scope rules](../plan/backend-acceptance.md#backend-only-scope). Unselected tests
+[scope selector](../../scripts/qa/backend-scope.ts). Unselected tests
 are unverified, not passed. Frontend assertions are outside this Goal, not silently
 deleted from historical evidence. Test the selector/recorder so it cannot turn an
 omitted backend test or partial case into completion.
@@ -608,14 +608,14 @@ excluded ID with its reason. It reports retained IDs as passed, partial, failed
 or uncovered under the same full-case oracle as the unscoped harness.
 
 The backend case map and mixed-case assertions are in the
-[backend acceptance scope](../plan/backend-acceptance.md#backend-only-scope).
+[backend scope selector](../../scripts/qa/backend-scope.ts).
 Complete backend declarations may reference only backend test files and tiers.
 For WORK01, the real API integration test is the backend declaration; its
 browser test remains part of the unscoped declaration. A named API smoke test
 does not promote any other ID without a reviewed complete-case declaration.
 `task qa -- --backend --record` requires a clean source, full six-tier pass and
 zero failed, partial or uncovered retained backend IDs. It writes the
-qualification page from that same run only when every gate passes.
+qualification artifact beside `acceptance.json` from that same run only when every gate passes.
 
 `acceptance.json` records the run ID, commit, source fingerprint, dirty flag, host,
 run kind (full or selected), parent run for failure reruns, setup/per-tier timings,

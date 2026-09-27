@@ -1,21 +1,31 @@
 import { expect, test } from 'bun:test';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { acceptanceStatuses, caseInventory, e2eArgs, failedSelection, parseJUnit, testArgs, titleIds } from '../../../scripts/qa/acceptance.ts';
 import { parseArgs, writeSummary, type Tier } from '../../../scripts/qa/core.ts';
 import { inventoryFingerprint, selectBackendCases } from '../../../scripts/qa/backend-scope.ts';
+import { declaredCases } from '../../../scripts/qa/cases/index.ts';
+import { createHash } from 'node:crypto';
 
 const root = resolve(import.meta.dir, '../../..');
 const scratch = join(root, '.temp');
 mkdirSync(scratch, { recursive: true });
 
-test('QA04: every retained case table row is inventoried with its owning page', () => {
+test('QA04: every migrated acceptance scenario and required result retains its ID and owning page', () => {
   const cases = caseInventory(root);
-  expect(cases.length).toBeGreaterThan(250);
+  expect(cases).toHaveLength(277);
   expect(new Set(cases.map(item => item.id)).size).toBe(cases.length);
   expect(cases.find(item => item.id === 'OPS01')?.page).toBe('docs/testing/operations.md');
   expect(cases.find(item => item.id === 'IAM01')?.page).toBe('docs/testing/identity-and-access.md');
   expect(cases.find(item => item.id === 'MODEL27')?.page).toBe('docs/testing/model-contracts.md');
+  expect(caseInventory(join(root, '.temp', 'missing-docs'))).toEqual(cases);
+  for (const item of declaredCases) {
+    expect(existsSync(join(root, item.page.replace('docs/testing/', 'scripts/qa/cases/').replace(/\.md$/, '.ts')))).toBe(true);
+  }
+  const digest = createHash('sha256').update(declaredCases.map(item =>
+    `${item.id}\t${item.page}\t${item.scenario}\t${item.requiredResult}`).join('\n')).digest('hex');
+  // Snapshot of all 277 original table rows before switching the runtime inventory.
+  expect(digest).toBe('e30dd965638383ea27f8ccff59afcc31761f0698b529a5cbd087a43e27de56fa');
 });
 
 test('QA04: backend scope freezes every owner row and excludes only rendered VIEW04', () => {
