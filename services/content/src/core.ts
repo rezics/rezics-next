@@ -203,6 +203,7 @@ async function nextPosition(client: PoolClient): Promise<ContentPosition> {
 async function writeReceiptEvent(client: PoolClient, args: {
   operationId: string; digest: string; action: string; outcome: string; variantId: string | null;
   revisionId: string | null; reason?: string; position: ContentPosition; eventType: string;
+  recipe?: string;
   payload: Record<string, unknown>;
 }): Promise<void> {
   const db = drizzle({ client });
@@ -215,7 +216,7 @@ async function writeReceiptEvent(client: PoolClient, args: {
   await db.insert(outbox).values({
     id: randomUUID(), dataEpoch: args.position.dataEpoch,
     sequence: BigInt(args.position.sequence), operationId: args.operationId,
-    eventType: args.eventType, recipe: RECIPE, revisionId: args.revisionId,
+    eventType: args.eventType, recipe: args.recipe ?? RECIPE, revisionId: args.revisionId,
     payload: args.payload,
   });
 }
@@ -411,6 +412,18 @@ export class ContentCore {
     try { body = JSON.parse(command.serializedJson); }
     catch { throw new ContentConflict('body is not JSON'); }
     if (!body || Array.isArray(body) || typeof body !== 'object') throw new ContentConflict('body must be a JSON object');
+    if (command.model === 'member-reply-v1'
+      && (command.provenance.kind !== 'admitted-original-contribution-v1'
+        || typeof body.rootTarget !== 'string'
+        || !/^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/.test(body.rootTarget)
+        || body.rootRevision !== command.sourceRevision
+        || typeof body.rootRevision !== 'string'
+        || !/^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/.test(body.rootRevision)
+        || typeof body.body !== 'string' || Buffer.byteLength(body.body, 'utf8') > 8192
+        || typeof body.deleted !== 'boolean'
+        || (body.deleted ? body.body !== '' || command.expectedHead === null : body.body.length === 0))) {
+      throw new ContentConflict('invalid author-bound reply draft');
+    }
     if (command.model === 'content-shape-v1') {
       try { directContentEmbeds(body.embeds); }
       catch (error) {
@@ -437,6 +450,16 @@ export class ContentCore {
           revisionId: row.revision_id, predecessor: command.expectedHead,
           position: position(row), replayed: true } as SaveDraftResult;
       }
+      if (command.model === 'member-reply-v1') {
+        await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))',
+          [`reply-author:${command.variant.resourceId}`]);
+        const author = (await client.query(`SELECT * FROM content.reply_author WHERE reply = $1`,
+          [command.variant.resourceId])).rows[0];
+        if (author && (author.variant_id !== command.variant.id
+          || author.author !== command.provenance.author || author.root_target !== body.rootTarget
+          || author.root_revision !== command.sourceRevision)) throw new ContentConflict('reply authorship is immutable');
+        if (!author && command.expectedHead !== null) throw new ContentConflict('reply has no admitted author');
+      }
       if (command.expectedHead === null) {
         await client.query(`INSERT INTO content.variant
           (id, resource_id, language_kind, language_tag, original_language_tag, direction)
@@ -448,6 +471,18 @@ export class ContentCore {
       }
       const variants = await client.query('SELECT * FROM content.variant WHERE id = $1 FOR UPDATE', [command.variant.id]);
       const variant = variants.rows[0];
+      if (variant?.draft_head) {
+        const head = (await client.query(`SELECT model, availability, body, provenance
+          FROM content.revision WHERE id = $1 FOR SHARE`, [variant.draft_head])).rows[0];
+        if (head?.model === 'member-reply-v1' && (command.model !== head.model
+          || head.provenance.author !== command.provenance.author
+          || head.availability !== 'available' || head.body.deleted === true)) {
+          throw new ContentConflict('reply author, availability or deletion prevents editing');
+        }
+        if (command.model === 'member-reply-v1' && head?.model !== command.model) {
+          throw new ContentConflict('reply cannot replace another content model');
+        }
+      }
       if (variant && (variant.resource_id !== command.variant.resourceId
         || variant.language_kind !== command.variant.language.kind
         || variant.language_tag !== (command.variant.language.kind === 'tag' ? command.variant.language.tag : null)
@@ -477,6 +512,13 @@ export class ContentCore {
         outcome: 'succeeded', variantId: command.variant.id, revisionId, position: sourcePosition,
         eventType: 'content.revision.saved', payload: { variantId: command.variant.id, revisionId,
           predecessor: command.expectedHead, byteDigest, byteLength: bytes.length } });
+      if (command.model === 'member-reply-v1') {
+        await client.query(`INSERT INTO content.reply_author
+          (reply, variant_id, author, root_target, root_revision, operation_id)
+          VALUES ($1,$2,$3,$4,$5,$6) ON CONFLICT (reply) DO NOTHING`,
+        [command.variant.resourceId, command.variant.id, command.provenance.author,
+          body.rootTarget, command.sourceRevision, command.operationId]);
+      }
       return { outcome: 'succeeded', revisionId, predecessor: command.expectedHead,
         position: sourcePosition, replayed: false };
     });
@@ -571,6 +613,7 @@ export class ContentCore {
       if (!reference) throw new ContentUnavailable('prepared revision unavailable');
       const sourcePosition = await nextPosition(client);
       await writeReceiptEvent(client, { operationId, digest, action: 'publication.settle',
+        recipe: reference.model === 'member-reply-v1' ? 'realm-reply-v1' : undefined,
         outcome: proof.outcome === 'active' ? 'succeeded' : 'rejected', variantId: reference.variantId,
         revisionId: preparation.revision_id, position: sourcePosition,
         eventType: proof.outcome === 'active' ? 'content.publication.active' : 'content.publication.rejected',

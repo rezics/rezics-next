@@ -3,11 +3,12 @@ import type { ContentCore } from '../../../../content/src/core.ts';
 import type { AccessAdmissionRegistry, RegisteredAdmission, VerifiedPrincipal } from '../access/admission.ts';
 import { assertGraphAdmissionOpen } from '../work/restore-lineage.ts';
 import type { WorkActivationEnvironment } from '../work/activate.ts';
-import { RealmReplyStale, RealmReplyUnavailable, type PlacementInput,
+import { RealmReplyDenied, RealmReplyInvalid, RealmReplyStale, RealmReplyUnavailable, type PlacementInput,
   type ReplyIdentityInput, type ReviewInput, RealmReplyContentStore } from './content-store.ts';
 import { acknowledgeContentDecision, cancelPlacement, placeReply,
   readPlacementHead, readRootPlacementHeads,
   readReplyGraphReceipt } from './graph.ts';
+import { publicReplyRoot } from './root.ts';
 
 function stable(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map(stable).join(',')}]`;
@@ -27,10 +28,10 @@ export class RealmReplyStore {
     private readonly env: WorkActivationEnvironment) {}
 
   private async admission(principal: VerifiedPrincipal, actingSubject: string, action: string,
-    scope: string, key: string, requestDigest: string): Promise<RegisteredAdmission> {
+    scope: string, key: string, requestDigest: string, sourceRevision?: string): Promise<RegisteredAdmission> {
     await assertGraphAdmissionOpen(this.env.fuseki, this.env.lineage);
     const registered = await this.access.register({ principal, actingSubject, action, scope,
-      idempotencyKey: key, requestDigest });
+      idempotencyKey: key, requestDigest, baselineSourceRevision: sourceRevision });
     const contentAction = action === 'reply.place' ? 'publication.prepare' : action;
     const saved = await this.content.hasReceipt(registered.id, contentAction, requestDigest);
     if (registered.state === 'sealed') {
@@ -41,7 +42,7 @@ export class RealmReplyStore {
     if (prior) return registered;
     if (saved && registered.state === 'claimed') return registered;
     if (!registered.dispatchEligible) throw new RealmReplyUnavailable('admission dispatch is fenced');
-    return this.access.claim(registered.id, requestDigest);
+    return this.access.claim(registered.id, requestDigest, principal);
   }
 
   private async seal(admission: RegisteredAdmission): Promise<void> {
@@ -53,8 +54,18 @@ export class RealmReplyStore {
   async create(principal: VerifiedPrincipal, input: ReplyIdentityInput,
     key: string, digest: string) {
     const admission = await this.admission(principal, input.author, 'reply.create',
-      `reply:create:${input.rootTarget}`, key, digest);
-    const result = await this.content.createReply(admission, input);
+      `reply:create:${input.rootTarget}`, key, digest, input.rootRevision);
+    let result;
+    try { result = await this.content.createReply(admission, input); }
+    catch (error) {
+      if (error instanceof RealmReplyDenied || error instanceof RealmReplyInvalid || error instanceof RealmReplyStale) {
+        const succeeded = await this.content.cancelCreate(admission);
+        if (succeeded) await acknowledgeContentDecision(this.env, admission);
+        else await cancelPlacement(this.env, admission);
+        await this.seal(admission);
+      }
+      throw error;
+    }
     await acknowledgeContentDecision(this.env, admission);
     await this.seal(admission);
     return result;
@@ -115,6 +126,21 @@ export class RealmReplyStore {
     if (!await this.content.currentReview(realm, reply, placement.revisionId,
       placement.reviewDecisionId, placement.preparationId)) return null;
     return placement;
+  }
+
+  async readPublic(reply: string) {
+    await assertGraphAdmissionOpen(this.env.fuseki, this.env.lineage);
+    const result = await this.content.readCurrent(reply);
+    if (!result || !await publicReplyRoot(this.env.fuseki, result.rootTarget, result.rootRevision)) return null;
+    return result;
+  }
+
+  async listPublic(rootTarget: string, rootRevision: string, after?: string) {
+    await assertGraphAdmissionOpen(this.env.fuseki, this.env.lineage);
+    if (!await publicReplyRoot(this.env.fuseki, rootTarget, rootRevision)) return null;
+    const page = await this.content.listCurrent(rootTarget, rootRevision, after);
+    if (!await publicReplyRoot(this.env.fuseki, rootTarget, rootRevision)) return null;
+    return page;
   }
 
   async rootCount(realm: string, rootTarget: string) {

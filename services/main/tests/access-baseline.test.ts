@@ -6,7 +6,6 @@ const id = 'https://rezics.com/id/00000000-0000-4000-8000-000000000001';
 test('baseline vocabulary excludes moderation, adoption, Realm management and future actions', () => {
   for (const [action, scope] of [
     ['publication.adopt', `publication:adopt:${id}`],
-    ['publication.select', `publication:select:${id}`],
     ['publication.reject', `publication:reject:${id}`],
     ['translation.authorize', `translation:link:${id}`],
     ['statement.decide', 'classification:decide:global'],
@@ -19,6 +18,12 @@ test('baseline vocabulary excludes moderation, adoption, Realm management and fu
     ['collection.edit', 'collection:edit:https://attacker.example/id'],
     ['constructor', 'constructor'],
   ]) expect(baselineTarget(action!, scope!)).toBeNull();
+});
+
+test('selection and reply drafts have narrow target kinds, not generic public-Work authority', () => {
+  expect(baselineTarget('publication.select', `publication:select:${id}`)).toEqual({ kind: 'maintainer', id });
+  expect(baselineTarget('reply.create', `reply:create:${id}`)).toEqual({ kind: 'reply', id });
+  expect(baselineTarget('content.draft', `content:draft:${id}`)).toEqual({ kind: 'reply-draft', id });
 });
 
 test('personal Statements and global observations use distinct scope families', () => {

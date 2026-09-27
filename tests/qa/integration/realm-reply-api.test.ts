@@ -5,7 +5,7 @@ import { mkdirSync, rmSync } from 'node:fs';
 import { createServer } from 'node:net';
 import { join, resolve } from 'node:path';
 import { Pool } from 'pg';
-import { ContentCore } from '../../../services/content/src/core.ts';
+import { ContentCore, contentDraftIntentDigest, type SaveDraftCommand } from '../../../services/content/src/core.ts';
 import { migrateContent } from '../../../services/content/src/migrate.ts';
 import { createMainApp } from '../../../services/main/src/app.ts';
 import { FusekiClient } from '../../../services/main/src/infrastructure/fuseki.ts';
@@ -85,11 +85,16 @@ test('SUB05/SUB06: exact reviewed revisions place independently in two Realms an
     const reply = ID + randomUUID();
     const variantId = `urn:rezics:variant:${randomUUID()}`;
     async function save(body: string, expectedHead: string | null) {
-      const saved = await content.saveDraft({ operationId: randomUUID(), variant: {
+      const command: SaveDraftCommand = { operationId: randomUUID(), variant: {
         id: variantId, resourceId: reply,
         language: { kind: 'tag', tag: 'en', originalTag: 'en' }, direction: 'ltr',
-      }, expectedHead, model: 'content-text-v1', sourceRevision: null,
-      provenance: { kind: 'qa-realm-reply-fixture' }, serializedJson: JSON.stringify({ body }) });
+      }, expectedHead, model: 'member-reply-v1', sourceRevision: work.mainVersion,
+      provenance: {}, serializedJson: JSON.stringify({ body, deleted: false,
+        rootTarget: work.work, rootRevision: work.mainVersion }) };
+      command.provenance = { kind: 'admitted-original-contribution-v1', author,
+        admissionId: randomUUID(), authorityEpoch: '0', scope: `content:draft:${reply}`,
+        expectedHead, rightsBasis: 'original-contribution', requestDigest: contentDraftIntentDigest(command, author) };
+      const saved = await content.saveDraft(command);
       if (!saved.revisionId) throw new Error('Content revision was not saved');
       const digest = await contentPool.query<{ byte_digest: string }>(
         'SELECT byte_digest FROM content.revision WHERE id = $1', [saved.revisionId]);

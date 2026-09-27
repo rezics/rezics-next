@@ -6,6 +6,8 @@ import type { OwnerColumns } from '../commerce/owner-columns.ts';
 export const realmReplySchema = 'content';
 
 export const realmReplyColumns = {
+  reply_author: { reply: 'text', variant_id: 'text', author: 'text', root_target: 'text',
+    root_revision: 'text', operation_id: 'text' },
   reply: { id: 'text', variant_id: 'text', author: 'text', root_target: 'text',
     root_revision: 'text', parent_reply: 'text?', parent_variant: 'text?',
     parent_revision: 'uuid?', context_revision: 'text?', operation_id: 'text',

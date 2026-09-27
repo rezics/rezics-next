@@ -7,6 +7,7 @@ import { DATASET, GRAPHS, ID, RV, hash, iri, lit,
 import { RealmReplyStale, RealmReplyUnavailable,
   type PlacementPreparation } from './content-store.ts';
 import { receiptFamilies } from './receipt-family.ts';
+import { unerased } from '../work/public-patterns.ts';
 
 const PROFILE = 'https://rezics.com/definition/realm-reply-placement-v1';
 const NONE = 'urn:rezics:none';
@@ -157,8 +158,12 @@ export async function readRootPlacementHeads(env: WorkActivationEnvironment,
     GRAPH ${iri(GRAPHS.revisions)} {
       ?placement a rv:RealmReplyPlacement ; rv:realm ${iri(realm)} ;
         rv:reply ?reply ; rv:rootTarget ${iri(rootTarget)} ;
+        rv:rootRevision ?rootRevision ;
         rv:contentRevision ?revision ; rv:reviewDecision ?review ;
         rv:author ?author ; rv:contentPreparation ?preparation ; rv:placementOutcome rv:Accepted . }
+    BIND(IRI(?rootRevision) AS ?rootAnchor)
+    FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.revisions)} { ?rootAnchor a rv:ErasedRevision } }
+    ${unerased(iri(rootTarget))}
   } ORDER BY ?reply LIMIT 65`);
   const rows = result.results?.bindings;
   if (!rows) throw new RealmReplyUnavailable('Realm root placement query is incomplete');
@@ -186,8 +191,12 @@ export async function readPlacementHead(env: WorkActivationEnvironment,
     GRAPH ${iri(GRAPHS.revisions)} {
       ?placement a rv:RealmReplyPlacement ; rv:realm ${iri(realm)} ;
         rv:reply ${iri(reply)} ; rv:rootTarget ?root ; rv:author ?author ;
+        rv:rootRevision ?rootRevision ;
         rv:contentRevision ?revision ; rv:reviewDecision ?review ; rv:contentPreparation ?preparation ;
         rv:placementOutcome rv:Accepted . }
+    BIND(IRI(?rootRevision) AS ?rootAnchor)
+    FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.revisions)} { ?rootAnchor a rv:ErasedRevision } }
+    ${unerased('?root')}
   }`);
   const rows = result.results?.bindings ?? [];
   if (!rows.length) return null;

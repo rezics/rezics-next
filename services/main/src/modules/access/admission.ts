@@ -16,6 +16,7 @@ import { baselineMemberProof, baselineProofCurrent, baselineTargetAllowed,
 import { reserveBaselineSpace, settleBaselineSpace } from './baseline-quota.ts';
 import { ensureBaselineScopeGate } from './scope-gates.ts';
 import { AccountAssertionDenied } from '../account/verify-assertion.ts';
+import { recordInitialMaintainer } from '../work/maintainer-proof.ts';
 
 /** Populated only by Account assertion verification, never from a request body. */
 export interface VerifiedPrincipal {
@@ -1294,6 +1295,7 @@ export class AccessAdmissionRegistry {
           || row.graph_data_epoch !== proof.dataEpoch || row.graph_sequence !== proof.sequence) {
           throw new AdmissionConflict('admission has a different terminal graph outcome');
         }
+        await recordInitialMaintainer(client, row, proof);
         await client.query('COMMIT');
         return;
       }
@@ -1301,6 +1303,7 @@ export class AccessAdmissionRegistry {
         throw new AdmissionConflict('unclaimed admission cannot succeed');
       }
       await recordRatingAggregateHead(client, row, proof);
+      await recordInitialMaintainer(client, row, proof);
       if (row.action === 'space.create') await settleBaselineSpace(client, admissionId, proof.outcome);
       await client.query(
         `UPDATE access.admission SET state = 'sealed', graph_receipt = $2,

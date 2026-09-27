@@ -44,7 +44,7 @@ export interface PlacementPreparation {
   replayed: boolean;
 }
 
-interface Receipt { action: string; request_digest: string }
+interface Receipt { action: string; request_digest: string; outcome: string }
 
 function assertText(value: string | null, max = 300): void {
   if (value !== null && (!value || value.length > max || value.includes('\0'))) {
@@ -104,12 +104,13 @@ export class RealmReplyContentStore {
   private async prior(client: PoolClient, admission: RegisteredAdmission, action: string): Promise<boolean> {
     await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))',
       [`realm-reply:${admission.id}`]);
-    const receipt = await client.query<Receipt>(`SELECT action, request_digest FROM content.receipt
+    const receipt = await client.query<Receipt>(`SELECT action, request_digest, outcome FROM content.receipt
       WHERE operation_id = $1`, [admission.id]);
     if (!receipt.rows[0]) return false;
     if (receipt.rows[0].action !== action || receipt.rows[0].request_digest !== admission.requestDigest) {
       throw new RealmReplyConflict('operation ID binds another intent');
     }
+    if (receipt.rows[0].outcome === 'rejected') throw new RealmReplyDenied('reply admission was cancelled');
     return true;
   }
 
@@ -126,7 +127,7 @@ export class RealmReplyContentStore {
     [admission.id, admission.requestDigest, action, variantId, revisionId, data_epoch, sequence]);
     await client.query(`INSERT INTO content.outbox (id, data_epoch, sequence, operation_id,
       event_type, recipe, revision_id, payload)
-      VALUES ($1, $2, $3, $4, $5, 'content-body-v1', $6, $7::jsonb)`,
+      VALUES ($1, $2, $3, $4, $5, 'realm-reply-v1', $6, $7::jsonb)`,
     [randomUUID(), data_epoch, sequence, admission.id, eventType, revisionId, JSON.stringify(payload)]);
   }
 
@@ -148,6 +149,32 @@ export class RealmReplyContentStore {
       contextRevision: row.context_revision };
   }
 
+  /** The operation lock orders cancellation against an uncertain identity
+   * insert, so replay cannot publish an identity after Access sealed denial. */
+  async cancelCreate(admission: RegisteredAdmission): Promise<boolean> {
+    if (admission.action !== 'reply.create') throw new RealmReplyDenied('wrong reply action');
+    return this.transaction(async client => {
+      await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [`realm-reply:${admission.id}`]);
+      const prior = (await client.query<Receipt>('SELECT action, request_digest, outcome FROM content.receipt WHERE operation_id = $1', [admission.id])).rows[0];
+      if (prior) {
+        if (prior.action !== 'reply.create' || prior.request_digest !== admission.requestDigest) throw new RealmReplyConflict('reply cancellation differs');
+        return prior.outcome === 'succeeded';
+      }
+      const position = (await client.query<{ data_epoch: string; sequence: string }>(`
+        UPDATE content.owner_control SET sequence = sequence + 1 WHERE singleton
+        RETURNING data_epoch, sequence::text`)).rows[0];
+      if (!position) throw new RealmReplyUnavailable('Content owner position is absent');
+      await client.query(`INSERT INTO content.receipt
+        (operation_id, request_digest, action, outcome, data_epoch, sequence)
+        VALUES ($1,$2,'reply.create','rejected',$3,$4)`, [admission.id, admission.requestDigest, position.data_epoch, position.sequence]);
+      await client.query(`INSERT INTO content.outbox
+        (id, data_epoch, sequence, operation_id, event_type, recipe, payload)
+        VALUES ($1,$2,$3,$4,'content.reply.cancelled','realm-reply-v1','{}')`,
+      [randomUUID(), position.data_epoch, position.sequence, admission.id]);
+      return false;
+    });
+  }
+
   async createReply(admission: RegisteredAdmission, input: ReplyIdentityInput): Promise<ReplyIdentity> {
     assertIdentity(input);
     if (admission.action !== 'reply.create'
@@ -163,12 +190,20 @@ export class RealmReplyContentStore {
         || variant.rows[0]?.draft_head !== input.revisionId) {
         throw new RealmReplyStale('reply body head or identity changed');
       }
+      const author = await client.query(`SELECT 1 FROM content.reply_author
+        WHERE reply = $1 AND variant_id = $2 AND author = $3 AND root_target = $4 AND root_revision = $5`,
+      [input.reply, input.variantId, input.author, input.rootTarget, input.rootRevision]);
+      if (!author.rowCount) throw new RealmReplyDenied('reply has no matching admitted author provenance');
       const revision = await client.query(`SELECT 1 FROM content.revision WHERE variant_id = $1
-        AND id = $2 AND availability = 'available'`, [input.variantId, input.revisionId]);
+        AND id = $2 AND availability = 'available' AND model = 'member-reply-v1'
+        AND provenance->>'author' = $3 AND body->>'deleted' = 'false'`, [input.variantId, input.revisionId, input.author]);
       if (!revision.rowCount) throw new RealmReplyStale('reply revision is unavailable');
       if (input.parentReply) {
         const parent = await client.query<{ root_target: string; root_revision: string }>(`
           SELECT p.root_target, p.root_revision FROM content.reply p
+          JOIN content.variant v ON v.id = p.variant_id
+          JOIN content.revision head ON head.id = v.draft_head AND head.availability = 'available'
+            AND head.body->>'deleted' = 'false'
           JOIN content.revision r ON r.variant_id = p.variant_id
           WHERE p.id = $1 AND r.id = $2 AND r.availability = 'available'`,
         [input.parentReply, input.parentRevision]);
@@ -255,6 +290,9 @@ export class RealmReplyContentStore {
   async currentReview(realm: string, reply: string, revisionId: string,
     reviewDecisionId?: string, preparationId?: string): Promise<boolean> {
     const result = await this.pool.query(`SELECT 1 FROM content.reply p
+      JOIN content.variant v ON v.id = p.variant_id
+      JOIN content.revision head ON head.id = v.draft_head AND head.availability = 'available'
+        AND head.body->>'deleted' = 'false'
       JOIN content.realm_review_decision d ON d.variant_id = p.variant_id
       JOIN content.revision r ON r.variant_id = d.variant_id AND r.id = d.revision_id
       WHERE p.id = $1 AND d.realm = $2 AND d.revision_id = $3 AND d.outcome = 'approved'
@@ -270,6 +308,40 @@ export class RealmReplyContentStore {
           WHERE later.supersedes = d.id) LIMIT 1`, [reply, realm, revisionId, reviewDecisionId ?? null,
       preparationId ?? null]);
     return result.rowCount === 1;
+  }
+
+  /** Live keyset page, at most 32 visible comments and one lookahead row.
+   * Exact-root index bounds traversal to this thread; no per-row owner calls. */
+  async listCurrent(rootTarget: string, rootRevision: string, after?: string) {
+    if (![rootTarget, rootRevision].every(value => native.test(value))
+      || (after && !native.test(after))) throw new RealmReplyInvalid('invalid reply page');
+    const rows = await this.pool.query(`WITH candidates AS (
+      SELECT * FROM content.reply WHERE root_target = $1 AND root_revision = $2 AND id > $3
+      ORDER BY id LIMIT 33
+    ) SELECT p.id AS reply, p.author,
+      p.root_target AS "rootTarget", p.root_revision AS "rootRevision",
+      p.parent_reply AS "parentReply", p.parent_revision AS "parentRevision",
+      p.variant_id AS "variantId", r.id AS "revisionId", r.body->>'body' AS body,
+      r.byte_digest AS "revisionDigest",
+      (r.availability = 'available' AND r.body->>'deleted' = 'false') AS visible
+      FROM candidates p JOIN content.variant v ON v.id = p.variant_id
+      JOIN content.revision r ON r.id = v.draft_head
+      ORDER BY p.id`, [rootTarget, rootRevision, after ?? '']);
+    const candidates = rows.rows.slice(0, 32);
+    const items = candidates.filter(row => row.visible === true).map(({ visible: _visible, ...row }) => row);
+    return { items, next: rows.rows.length > 32 ? candidates.at(-1)!.reply as string : null };
+  }
+
+  async readCurrent(reply: string) {
+    if (!native.test(reply)) throw new RealmReplyInvalid('invalid reply');
+    const row = (await this.pool.query<{ reply: string; author: string; rootTarget: string;
+      rootRevision: string; variantId: string; revisionId: string; body: string; revisionDigest: string }>(`
+      SELECT p.id AS reply, p.author, p.root_target AS "rootTarget", p.root_revision AS "rootRevision",
+        p.variant_id AS "variantId", r.id AS "revisionId", r.body->>'body' AS body, r.byte_digest AS "revisionDigest"
+      FROM content.reply p JOIN content.variant v ON v.id = p.variant_id
+      JOIN content.revision r ON r.id = v.draft_head
+      WHERE p.id = $1 AND r.availability = 'available' AND r.body->>'deleted' = 'false'`, [reply])).rows[0];
+    return row ?? null;
   }
 
   async preparePlacement(admission: RegisteredAdmission,

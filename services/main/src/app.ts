@@ -48,6 +48,8 @@ import { recommendationRoutes } from './routes/recommendations.ts';
 import { recipeRoutes } from './routes/recipes.ts';
 import { ratingRoutes } from './routes/ratings.ts';
 import { realmReplyRoutes } from './routes/realm-replies.ts';
+import { memberReplyRoutes } from './routes/member-replies.ts';
+import { workMaintainerRoutes } from './routes/work-maintainers.ts';
 import { resourceRoutes } from './routes/resources.ts';
 import { globalRatingRoutes } from './routes/rating-global.ts';
 import { searchRoutes, type SearchRouteDependencies } from './routes/search.ts';
@@ -115,6 +117,8 @@ function contentCommunityRoutes(fuseki: FusekiClient, work: SearchRouteDependenc
 
 function domainRoutes(fuseki: FusekiClient, work: SearchRouteDependencies) {
   return new Elysia()
+    .use(memberReplyRoutes(work))
+    .use(workMaintainerRoutes(work))
     .use(workReadRoutes(work))
     .use(realmReadRoutes(work))
     .use(workContentsRoutes(work))

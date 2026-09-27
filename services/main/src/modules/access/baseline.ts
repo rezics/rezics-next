@@ -4,6 +4,8 @@ import { GRAPHS, iri } from '../work/activate.ts';
 import { publicWork, unerased } from '../work/public-patterns.ts';
 import { globalContextPattern } from '../rating/global.ts';
 import type { AdmissionRequest } from './admission.ts';
+import { maintainerControllerProof, maintainerGeneration } from '../work/maintainer-proof.ts';
+import { publicReplyRoot } from '../realm-reply/root.ts';
 
 export const BASELINE_MEMBER_POLICY = 'baseline-member-v1';
 const native = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
@@ -26,10 +28,12 @@ export interface BaselineProof {
   collection_create: boolean;
   related_work: string | null;
   source_revision: string | null;
+  maintainer_generation: string | null;
 }
 
 export type BaselineTarget = { kind: 'root' }
-  | { kind: 'work' | 'collection' | 'contribution' | 'rating' | 'personal' | 'comment'; id: string };
+  | { kind: 'work' | 'collection' | 'contribution' | 'rating' | 'personal' | 'comment'
+    | 'maintainer' | 'reply' | 'reply-draft'; id: string };
 
 /** Closed permission vocabulary. In particular, a public Realm does not gain
  * a baseline policy, and translation authorization is not translation proposal. */
@@ -40,6 +44,9 @@ export function baselineTarget(action: string, scope: string): BaselineTarget | 
     'contribution.create': { prefix: 'contribution:create:', kind: 'work' },
     'translation.link': { prefix: 'translation:link:', kind: 'work' },
     'content.comment': { prefix: 'content:comment:', kind: 'comment' },
+    'publication.select': { prefix: 'publication:select:', kind: 'maintainer' },
+    'reply.create': { prefix: 'reply:create:', kind: 'reply' },
+    'content.draft': { prefix: 'content:draft:', kind: 'reply-draft' },
     'collection.edit': { prefix: 'collection:edit:', kind: 'collection' },
     'contribution.edit': { prefix: 'contribution:edit:', kind: 'contribution' },
     'contribution.publish': { prefix: 'contribution:publish:', kind: 'contribution' },
@@ -61,7 +68,8 @@ export async function baselineMemberProof(client: PoolClient, principalId: strin
   const result = await client.query<BaselineProof>(`SELECT b.generation AS policy_generation,
       a.id AS provision_id, r.id AS representation_id, r.generation AS representation_generation,
       s.generation AS subject_generation, p.enforcement_epoch AS principal_epoch,
-      false AS collection_create, NULL::text AS related_work, NULL::text AS source_revision
+      false AS collection_create, NULL::text AS related_work, NULL::text AS source_revision,
+      NULL::text AS maintainer_generation
     FROM access.agent_provision a
     JOIN access.principal p ON p.id = a.principal_id
     JOIN access.representation r ON r.id = a.representation_id
@@ -85,6 +93,19 @@ export async function baselineTargetAllowed(client: PoolClient, graph: Pick<Fuse
   if (target.kind === 'root') return true;
   if (target.kind === 'personal') return target.id === actingSubject;
   if (!graph) return false;
+  if (target.kind === 'maintainer') {
+    if (!relatedWork || !native.test(relatedWork)
+      || await maintainerGeneration(client, target.id, relatedWork, actingSubject) === null) return false;
+    return (await graph.query(`PREFIX rv: <https://rezics.com/vocab/>
+      PREFIX schema: <https://schema.org/> ASK { GRAPH ${iri(GRAPHS.current)} {
+        ${iri(relatedWork)} a schema:CreativeWork ; rv:mainVersion ${iri(target.id)} .
+        ${iri(target.id)} a rv:MainVersion ; rv:work ${iri(relatedWork)} }
+        ${unerased(iri(relatedWork))} }`, 1024)).boolean === true;
+  }
+  if (target.kind === 'reply' || target.kind === 'reply-draft') {
+    const work = target.kind === 'reply' ? target.id : relatedWork;
+    return !!work && !!sourceRevision && await publicReplyRoot(graph, work, sourceRevision);
+  }
   if (relatedWork && (!native.test(relatedWork)
     || !await baselineTargetAllowed(client, graph, principalId, actingSubject,
       { kind: 'work', id: relatedWork }, false))) return false;
@@ -148,12 +169,14 @@ export async function newBaselineProof(client: PoolClient, graph: Pick<FusekiCli
   // An installed resource policy owns its stricter decision. Baseline never
   // overrides it, including when that resource happens to be publicly readable.
   if ((await client.query('SELECT id FROM access.policy WHERE scope_id = $1', [request.scope])).rowCount) return null;
-  const proof = await baselineMemberProof(client, principalId, request.actingSubject);
+  const proof = await (target.kind === 'maintainer' ? maintainerControllerProof : baselineMemberProof)(client, principalId, request.actingSubject);
   if (!proof || !await baselineTargetAllowed(client, graph, principalId, request.actingSubject,
     target, request.baselineCollectionCreate === true, request.baselineRelatedWork ?? null,
     request.baselineSourceRevision ?? null)) return null;
   return { ...proof, collection_create: request.baselineCollectionCreate === true,
-    related_work: request.baselineRelatedWork ?? null, source_revision: request.baselineSourceRevision ?? null };
+    related_work: request.baselineRelatedWork ?? null, source_revision: request.baselineSourceRevision ?? null,
+    maintainer_generation: target.kind === 'maintainer'
+      ? await maintainerGeneration(client, target.id, request.baselineRelatedWork!, request.actingSubject) : null };
 }
 
 export async function savedBaselineProof(client: PoolClient, admissionId: string): Promise<BaselineProof | null> {
@@ -167,12 +190,15 @@ export async function baselineProofCurrent(client: PoolClient, graph: Pick<Fusek
   const target = baselineTarget(admission.action, admission.scope_id);
   if (!target) return false;
   if ((await client.query('SELECT id FROM access.policy WHERE scope_id = $1', [admission.scope_id])).rowCount) return false;
-  const current = await baselineMemberProof(client, admission.principal_id, admission.acting_subject);
+  const current = await (target.kind === 'maintainer' ? maintainerControllerProof : baselineMemberProof)(client, admission.principal_id, admission.acting_subject);
   if (!current || current.policy_generation !== saved.policy_generation
     || current.provision_id !== saved.provision_id || current.principal_epoch !== saved.principal_epoch
     || current.representation_id !== saved.representation_id
     || current.representation_generation !== saved.representation_generation
     || current.subject_generation !== saved.subject_generation) return false;
+  if (target.kind === 'maintainer' && (!saved.related_work
+    || saved.maintainer_generation !== await maintainerGeneration(client, target.id,
+      saved.related_work, admission.acting_subject))) return false;
   return baselineTargetAllowed(client, graph, admission.principal_id, admission.acting_subject,
     target, saved.collection_create, saved.related_work, saved.source_revision);
 }
@@ -180,7 +206,9 @@ export async function baselineProofCurrent(client: PoolClient, graph: Pick<Fusek
 export async function saveBaselineProof(client: PoolClient, admissionId: string, proof: BaselineProof) {
   await client.query(`INSERT INTO access.baseline_admission (admission_id, policy_id, policy_generation,
     provision_id, representation_id, representation_generation, subject_generation, principal_epoch,
-    collection_create, related_work, source_revision) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`, [admissionId, BASELINE_MEMBER_POLICY,
+    collection_create, related_work, source_revision, maintainer_generation)
+    VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`, [admissionId, BASELINE_MEMBER_POLICY,
     proof.policy_generation, proof.provision_id, proof.representation_id, proof.representation_generation,
-    proof.subject_generation, proof.principal_epoch, proof.collection_create, proof.related_work, proof.source_revision]);
+    proof.subject_generation, proof.principal_epoch, proof.collection_create, proof.related_work,
+    proof.source_revision, proof.maintainer_generation]);
 }

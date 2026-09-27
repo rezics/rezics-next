@@ -346,6 +346,7 @@ const app = createMainApp(fuseki, {
   readerPreferences: new ReaderVariantPreferenceStore(pool),
   realmRecommendations: new RealmVariantRecommendationStore(pool),
   realmReplies: new RealmReplyStore(new RealmReplyContentStore(contentPool), content, access, environment),
+  maintainers: new WorkMaintainers(pool, environment),
   verification: new VerificationStore(contentPool),
   content,
   editorialProtection: new ContentProtectionStore(contentPool),
@@ -386,3 +387,4 @@ async function stop(): Promise<void> {
 }
 process.once('SIGINT', () => { void stop(); });
 process.once('SIGTERM', () => { void stop(); });
+import { WorkMaintainers } from './modules/work/maintainers.ts';

@@ -88,6 +88,7 @@ import type { PrivateContextSelections } from '../modules/context/private-select
 import type { ProfilesAccess } from '../modules/profiles/access.ts';
 
 export interface MainWorkDependencies {
+  maintainers?: import('../modules/work/maintainers.ts').WorkMaintainers;
   discovery?: import('../modules/discovery/store.ts').DiscoveryProjection;
   profiles?: ProfilesAccess;
   agentProvisioning?: AgentProvisioning;

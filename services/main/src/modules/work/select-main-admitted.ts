@@ -20,14 +20,16 @@ export async function selectAdmittedMainDefault(
   await assertGraphAdmissionOpen(env.fuseki, env.lineage);
   const principal = await account.verify(request, ['work:edit']);
   const registered = await access.register({ principal, actingSubject: input.actingSubject,
+    baselineRelatedWork: input.work,
     scope: `publication:select:${input.context.id}`, action: 'publication.select',
     idempotencyKey: input.idempotencyKey, requestDigest: digest });
   try {
     let admission = registered;
     if (registered.state !== 'sealed' && registered.dispatchEligible) {
-      try { admission = await access.claim(registered.id, digest); }
+      try { admission = await access.claim(registered.id, digest, principal); }
       catch (error) {
         if (!(error instanceof AdmissionDenied || error instanceof AdmissionExpired)) throw error;
+        admission = { ...registered, dispatchEligible: false };
       }
     }
     if (admission.state !== 'sealed') {
