@@ -98698,6 +98698,16 @@
           },
           {
             "in": "query",
+            "name": "interests",
+            "required": false,
+            "schema": {
+              "maxLength": 64,
+              "minLength": 2,
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
             "name": "contentLanguages",
             "required": false,
             "schema": {
@@ -368897,8 +368907,20 @@
             "schema": {
               "enum": [
                 "https://schema.org/Book",
+                "https://schema.org/BookSeries",
                 "https://schema.org/DigitalDocument",
-                "https://schema.org/Recipe"
+                "https://schema.org/Recipe",
+                "https://schema.org/SoftwareApplication",
+                "https://schema.org/SoftwareSourceCode",
+                "https://rezics.com/vocab/ModPackage",
+                "https://rezics.com/vocab/SkillPackage",
+                "https://rezics.com/vocab/PromptTemplate",
+                "https://schema.org/Movie",
+                "https://schema.org/TVSeries",
+                "https://schema.org/VideoObject",
+                "https://schema.org/AudioObject",
+                "https://schema.org/MusicRecording",
+                "https://schema.org/MusicAlbum"
               ],
               "type": "string"
             }
@@ -370077,8 +370099,20 @@
                     "items": {
                       "enum": [
                         "https://schema.org/Book",
+                        "https://schema.org/BookSeries",
                         "https://schema.org/DigitalDocument",
-                        "https://schema.org/Recipe"
+                        "https://schema.org/Recipe",
+                        "https://schema.org/SoftwareApplication",
+                        "https://schema.org/SoftwareSourceCode",
+                        "https://rezics.com/vocab/ModPackage",
+                        "https://rezics.com/vocab/SkillPackage",
+                        "https://rezics.com/vocab/PromptTemplate",
+                        "https://schema.org/Movie",
+                        "https://schema.org/TVSeries",
+                        "https://schema.org/VideoObject",
+                        "https://schema.org/AudioObject",
+                        "https://schema.org/MusicRecording",
+                        "https://schema.org/MusicAlbum"
                       ],
                       "type": "string"
                     },
@@ -370170,8 +370204,20 @@
                     "items": {
                       "enum": [
                         "https://schema.org/Book",
+                        "https://schema.org/BookSeries",
                         "https://schema.org/DigitalDocument",
-                        "https://schema.org/Recipe"
+                        "https://schema.org/Recipe",
+                        "https://schema.org/SoftwareApplication",
+                        "https://schema.org/SoftwareSourceCode",
+                        "https://rezics.com/vocab/ModPackage",
+                        "https://rezics.com/vocab/SkillPackage",
+                        "https://rezics.com/vocab/PromptTemplate",
+                        "https://schema.org/Movie",
+                        "https://schema.org/TVSeries",
+                        "https://schema.org/VideoObject",
+                        "https://schema.org/AudioObject",
+                        "https://schema.org/MusicRecording",
+                        "https://schema.org/MusicAlbum"
                       ],
                       "type": "string"
                     },
@@ -370263,8 +370309,20 @@
                     "items": {
                       "enum": [
                         "https://schema.org/Book",
+                        "https://schema.org/BookSeries",
                         "https://schema.org/DigitalDocument",
-                        "https://schema.org/Recipe"
+                        "https://schema.org/Recipe",
+                        "https://schema.org/SoftwareApplication",
+                        "https://schema.org/SoftwareSourceCode",
+                        "https://rezics.com/vocab/ModPackage",
+                        "https://rezics.com/vocab/SkillPackage",
+                        "https://rezics.com/vocab/PromptTemplate",
+                        "https://schema.org/Movie",
+                        "https://schema.org/TVSeries",
+                        "https://schema.org/VideoObject",
+                        "https://schema.org/AudioObject",
+                        "https://schema.org/MusicRecording",
+                        "https://schema.org/MusicAlbum"
                       ],
                       "type": "string"
                     },

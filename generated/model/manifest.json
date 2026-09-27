@@ -791,6 +791,11 @@
       "file": "shapes/work-editorial-field-v1.ttl"
     },
     {
+      "id": "work-kind-v1",
+      "sha256": "d1cfc2074299ba294307ed19b97c2641dd0197b759f06a43eb376584cbe2d1d2",
+      "file": "shapes/work-kind-v1.ttl"
+    },
+    {
       "id": "work-metadata-details-v1",
       "sha256": "905826519ea23297628a4e192c81176ff210b1089cb1ba821a48b10456032a09",
       "file": "shapes/work-metadata-details-v1.ttl"
@@ -2704,6 +2709,7 @@
     "contexts/work-derivation-unresolved-v1.jsonld": "d1fdd26fc0e2b347d986df2ecb6c7bc5e4ca3cc9b49864f855cf5f03857bf3d5",
     "contexts/work-derivation-v1.jsonld": "1361b50b75a374f9d6cd7e290a8ae5c4f440476ce19bbc79222935c4b2b1be30",
     "contexts/work-editorial-field-v1.jsonld": "f8e8f3277c99887f1b684590b8930b2376384b5537c9acf1ac2de61167292a25",
+    "contexts/work-kind-v1.jsonld": "b96f08b46aff848c5b56b15c2390955d3059562bc65282ea6bdc186dc74db802",
     "contexts/work-metadata-details-v1.jsonld": "8e8ef6c96b041efb69387ecee7ef989ee3db98cd2db04891b4896a0f42fc10e3",
     "contexts/work-metadata-v1.jsonld": "982bdcde025ba5281c75255aa3a891d034b27f45175f114998801167bcb78a8d",
     "contexts/work-native-child-v1.jsonld": "6f5a3d023edc2048a18af848f10cacb6264a55d486e703d5909ec7ca4e9828ba",
@@ -2790,15 +2796,16 @@
     "shapes/work-derivation-unresolved-v1.ttl": "6c703f04dde8586aa0d5fbb5601fc532c0d572c2097eb18e927e4b601f8f71d2",
     "shapes/work-derivation-v1.ttl": "b86e60ef69cf6a20088119dbb582154c7f27cbf30f1a8334869603e49b0dea1b",
     "shapes/work-editorial-field-v1.ttl": "61a93b0c3f403a3450545c063cabfb8d12299586df48dbd4c9574d8831b30999",
+    "shapes/work-kind-v1.ttl": "d1cfc2074299ba294307ed19b97c2641dd0197b759f06a43eb376584cbe2d1d2",
     "shapes/work-metadata-details-v1.ttl": "905826519ea23297628a4e192c81176ff210b1089cb1ba821a48b10456032a09",
     "shapes/work-metadata-v1.ttl": "ac918cf0458150520bf03f9683e6a363ad702376ebc50eaa729f98d84b3b8760",
     "shapes/work-native-child-v1.ttl": "1c9e1ed2ab97a4211095848ddce43f361082b5b80c042000d384658ad029d5d5",
     "shapes/work-title-control-v1.ttl": "100dddad43cac4fd47c3090e987ef9dc9aa272d189fc4240cc08302340c5d42d",
     "shapes/zone-capability-v1.ttl": "c518389e8a7777b2358a5ed98f6016e77a803aa8c9336fefc40201fb38df4f65",
     "shapes/zone-presentation-v1.ttl": "3d63c448965591516514a0323e77500e3a8b0d95da0a2c0abdd2af4110e063e2",
-    "packages/model/src/generated/arbitraries.ts": "634a5f28591eab0168f7de3d6ab792830c0ff41d609b75b1b5e802287e6164d8",
-    "packages/model/src/generated/profiles.ts": "57e09f40aaea29e7c41c4fb34375d6e0eb2509899f7ad91a1ecdd7dea8ff166f",
-    "packages/model/src/generated/schemas.ts": "76cf7eca5ee1c8621f2dc55afe16716282f6c3274ae34ace609f6f86b4ec24d9",
-    "packages/model/src/generated/vocabulary.ts": "916fde3cd33a6b71a9eee2eda79299cb67ef33eb8a20591fe1627d52e70b944e"
+    "packages/model/src/generated/arbitraries.ts": "309cca4dc35c3fcbe2f05eb214035fab880230df2c5144d47f88593b56f622f5",
+    "packages/model/src/generated/profiles.ts": "7ab1340abbaf2ec0aab716a1bf9b59a1b29eacfa72a1aef0eec2f3ce74d798bc",
+    "packages/model/src/generated/schemas.ts": "655387e10c22421895f88612b4e7468ae7511fd6ecd5b20d653d33a516e952e0",
+    "packages/model/src/generated/vocabulary.ts": "9d419a78ce409c8f07aab8c337298dc1efe5b5b62006fd20d927a5aa7b90a28c"
   }
 }

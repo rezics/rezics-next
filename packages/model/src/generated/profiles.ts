@@ -1074,6 +1074,16 @@ export const profileRegistry = {
       "control"
     ]
   },
+  "work-kind-v1": {
+    "sha256": "d1cfc2074299ba294307ed19b97c2641dd0197b759f06a43eb376584cbe2d1d2",
+    "file": "shapes/work-kind-v1.ttl",
+    "shapes": [
+      "https://rezics.com/definition/work-kind-v1/work-shape"
+    ],
+    "focusRoles": [
+      "work"
+    ]
+  },
   "work-metadata-details-v1": {
     "sha256": "905826519ea23297628a4e192c81176ff210b1089cb1ba821a48b10456032a09",
     "file": "shapes/work-metadata-details-v1.ttl",
