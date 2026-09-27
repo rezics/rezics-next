@@ -1,38 +1,23 @@
 # Subject associations and contextual reading
 
-## Association meaning
+The [relation occurrence schema](../../services/main/src/modules/relation/schema.ts)
+preserves repeated occurrences and role-specific participants. The
+[Statement schema](../../services/main/src/modules/statement/schema.ts) and
+[read path](../../services/main/src/modules/statement/read.ts) retain exact
+qualified meanings and disclosure checks. Neither owner currently provides a
+complete contextual subject-association read profile.
 
-A subject appearance/association identifies a Resource, related subject, role,
-context and exact evidence. It is independently curated/adopted, not created or
-deleted by popularity voting. Repeated appearances and different roles remain
-separate occurrences. Assertions can point into revision-qualified text/media.
+## Remaining association contract
 
-Use the shared [Statement contract](classification.md) for claims and the domain
-occurrence for participating Work/release, character and role. The concept
-FemaleLead and a particular character are separate resources. A source's
-protagonist role alone does not establish a gender-qualified role. Preserve exact
-source role meaning until a reviewed mapping supplies any narrower meaning.
+An appearance needs the related Resource, role, context and exact evidence,
+independent of popularity voting. A source's protagonist role does not establish
+a gender-qualified role without reviewed mapping. Combined filters must bind
+traits to the same character and appearance under compatible release, canon and
+time. Work projection counts distinct Works and retains the matching occurrence
+and statement IDs; it does not assert a character trait on the Work.
 
-Predicates in a combined filter bind the same character and appearance, with
-compatible release/canon/time. A red-haired supporting character cannot satisfy
-the trait condition of a different female lead. Projecting matching characters
-to Works uses an explicit contains/appearance relation and distinct Work count;
-it does not assert hair color on the Work.
-
-## Reading and spoilers
-
-Display eligible subject associations under current context and spoiler policy.
-Association spoiler judgments do not infer objective existence or copy a target's
-NSFW/content label. Hide protected labels and links consistently in lists, graph
-views, snippets and counts. Revealing one occurrence does not globally rewrite
-the user's spoiler preference or other associations.
-
-## Operations
-
-Propose/adopt/revise/withdraw with source evidence, expected revision and authority.
-Content edits retain old anchors; re-anchoring is explicit and may be unresolved.
-Query by subject or content with bounded inverse reads and preserved occurrence
-identity. Qualify conflicting contexts, exact historical citations and private nodes.
-Grouped results retain match reasons and supporting statement/occurrence IDs under
-[search aggregation](search.md#statement-aggregation). Each returned object uses
-the common name/avatar summary contract.
+Reads must apply current context and spoiler policy to labels, links, snippets
+and counts without copying a target's NSFW label or changing the user's other
+preferences. Re-anchoring after edits is explicit and may remain unresolved.
+Qualify exact historical citations, conflicting contexts and private nodes in
+bounded inverse reads before this page can be retired.
