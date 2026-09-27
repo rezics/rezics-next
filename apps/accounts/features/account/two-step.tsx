@@ -32,7 +32,7 @@ function useFailure() {
 }
 
 /** Backup codes, each usable once when the authenticator app isn't at hand. */
-export function BackupCodes({ codes }: { codes: string[] }) {
+function BackupCodes({ codes }: { codes: string[] }) {
   const { t } = useTranslation('account');
   const [copied, setCopied] = useState(false);
   const text = `${t.backupCodesFileTitle}\n\n${codes.join('\n')}\n`;

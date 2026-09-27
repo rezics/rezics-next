@@ -75,12 +75,14 @@ export const SignOutADevice: Story = {
 
 export const ConfirmWithPasskeyAndCode: Story = {
   parameters: { stepUp: { password: true, passkey: true, totp: true },
-    account: { api: { revokeOtherSessions: async () => ({ ok: false, kind: 'step-up-required', status: 403 }) } } },
+    account: { api: { revokeOtherSessions: async () => ({ ok: false, kind: 'step-up-required', status: 403 }),
+      reauthenticateWithPasskey: async () => ({ ok: false, kind: 'invalid-credentials', status: 403 }) } } },
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     await userEvent.click(await canvas.findByRole('button', { name: 'Sign out of all other devices' }));
     const dialog = await screen.findByRole('dialog', { name: 'Confirm it’s you' });
-    await expect(within(dialog).getByRole('button', { name: 'Use your passkey' })).toBeVisible();
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Use your passkey' }));
+    await expect(await within(dialog).findByRole('alert')).toHaveTextContent('That passkey couldn’t confirm it’s you.');
     await expect(within(dialog).getByRole('textbox', { name: 'Code from your authenticator app' })).toBeVisible();
     await userEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }));
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());

@@ -17,7 +17,7 @@ export interface SecurityEvent { id: string; action: string; occurredAt: string;
   browser: string | null; platform: string | null; network: string | null; clientId: string | null }
 export interface SecurityActivity { items: SecurityEvent[]; nextCursor: string | null;
   failedLast24Hours: { count: number; capped: boolean } }
-export interface ScopeDescription { scope: string; description: Record<AccountLocale, string> }
+interface ScopeDescription { scope: string; description: Record<AccountLocale, string> }
 export interface ConnectedApp { clientId: string; name: string; uri: string | null; icon: string | null;
   trusted: boolean; scopes: ScopeDescription[]; grantedAt: string; lastUsedAt: string | null;
   /** The App was withdrawn from REZICS; its access can still be removed. */

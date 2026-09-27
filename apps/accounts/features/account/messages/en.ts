@@ -105,6 +105,7 @@ export default {
   stepUpOr: 'or enter your password',
   stepUpPasswordRequired: 'Enter your password',
   stepUpWrongWithCode: 'That password or code is incorrect',
+  stepUpPasskeyFailed: 'That passkey couldn’t confirm it’s you. Try again, or use your password.',
   stepUpUnavailable: 'We couldn’t confirm it’s you right now. Try again in a moment.',
   stepUpSignInAgain: 'Sign in again to continue.',
   stepUpSignInInstead: 'Sign in again',

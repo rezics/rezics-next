@@ -63,10 +63,11 @@ export function StepUpProvider({ methods, children }: { methods: StepUpMethods; 
     return confirmed ? action() : { ok: false, kind: 'cancelled', status: 0 };
   }, [api, methods.totp]);
 
-  const fail = (result: Exclude<Result<void>, { ok: true }>) => {
+  const fail = (result: Exclude<Result<void>, { ok: true }>, method: 'password' | 'passkey') => {
     setBusy(undefined);
     if (result.kind === 'cancelled') return;
-    setError(result.kind === 'invalid-credentials' ? methods.totp ? t.stepUpWrongWithCode : t.wrongCurrentPassword
+    setError(result.kind === 'invalid-credentials' ? method === 'passkey' ? t.stepUpPasskeyFailed
+      : methods.totp ? t.stepUpWrongWithCode : t.wrongCurrentPassword
       : result.kind === 'rate-limited' ? auth.tooManyAttempts : t.stepUpUnavailable);
   };
   async function withPassword(event: FormEvent) {
@@ -78,14 +79,14 @@ export function StepUpProvider({ methods, children }: { methods: StepUpMethods; 
     setError('');
     const result = await api.reauthenticate({ password: secret, totpCode: methods.totp ? code : undefined });
     if (result.ok) return settle(true);
-    fail(result);
+    fail(result, 'password');
   }
   async function withPasskey() {
     setBusy('passkey');
     setError('');
     const result = await api.reauthenticateWithPasskey();
     if (result.ok) return settle(true);
-    fail(result);
+    fail(result, 'passkey');
   }
 
   const here = typeof window === 'undefined' ? '/' : `${window.location.pathname}${window.location.search}`;

@@ -101,6 +101,7 @@ export default {
   stepUpOr: '或输入密码',
   stepUpPasswordRequired: '请输入密码',
   stepUpWrongWithCode: '密码或验证码不正确',
+  stepUpPasskeyFailed: '该通行密钥未能确认是您本人。请重试，或改用密码。',
   stepUpUnavailable: '暂时无法确认您的身份，请稍后重试。',
   stepUpSignInAgain: '请重新登录以继续。',
   stepUpSignInInstead: '重新登录',

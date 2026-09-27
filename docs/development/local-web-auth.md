@@ -29,6 +29,12 @@ script refuses partly initialized or already attempted projects; inspect the
 private `web-auth-bootstrap.log` if owner/graph bootstrap fails, then reset the
 QA project. A changed Account issuer retires the old fixture and creates a new one.
 
+WebAuthn refuses IP addresses as relying-party IDs, so a loopback issuer names
+passkeys for `localhost` (`passkeyRelyingParty` in
+`services/account/src/account-settings.ts`): open the Accounts app at
+`http://localhost:<port>` to use passkeys. A stack's Account email, such as
+verification and reset links, goes to that stack's own Mailpit (`task urls`).
+
 Stop the AppHost with `task dev:stop -- --profile qa --run-id web-demo` (add
 `--backend` in a worktree). To discard the project and its credentials, run
 `task stack:reset -- --profile qa --run-id web-demo`, then remove

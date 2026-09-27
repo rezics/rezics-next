@@ -23,7 +23,7 @@ export function deviceViews(sessions: DeviceSession[], now: Date, locale: Accoun
       lastActive: relativeTime(session.lastActiveAt, now, locale) }));
 }
 
-export function activityViews(entries: ActivityEntry[], now: Date, locale: AccountLocale): ActivityView[] {
+function activityViews(entries: ActivityEntry[], now: Date, locale: AccountLocale): ActivityView[] {
   return entries.map(entry => ({ ...entry, when: relativeTime(entry.occurredAt, now, locale) }));
 }
 

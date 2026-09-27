@@ -9,7 +9,7 @@ function toBytes(value: string): Uint8Array<ArrayBuffer> {
   return Uint8Array.from(atob(base64.padEnd(Math.ceil(base64.length / 4) * 4, '=')), char => char.charCodeAt(0));
 }
 
-export function base64url(value: ArrayBuffer | ArrayBufferView | null | undefined): string | undefined {
+function base64url(value: ArrayBuffer | ArrayBufferView | null | undefined): string | undefined {
   if (!value) return undefined;
   const bytes = value instanceof ArrayBuffer ? new Uint8Array(value)
     : new Uint8Array(value.buffer, value.byteOffset, value.byteLength);

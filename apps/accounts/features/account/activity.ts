@@ -6,7 +6,7 @@ export type ActivityKind = 'signed-in' | 'sign-in-failed' | 'signed-out' | 'devi
   | 'password-changed' | 'password-added' | 'password-removed' | 'passkey-added' | 'passkey-removed'
   | 'passkey-renamed' | 'two-step-on' | 'two-step-off' | 'authenticator-renamed' | 'backup-codes-changed'
   | 'email-changed' | 'app-connected' | 'app-removed' | 'administrator';
-export type SignInMethod = 'password' | 'passkey' | 'authenticator' | 'backup-code';
+type SignInMethod = 'password' | 'passkey' | 'authenticator' | 'backup-code';
 
 const kinds: Record<string, ActivityKind> = {
   sign_in: 'signed-in', sign_in_failed: 'sign-in-failed', sign_out: 'signed-out',
@@ -44,7 +44,7 @@ const revokers = new Set(['sign_out', 'password_changed', 'password_added', 'tot
   'admin_action']);
 
 /** The account centre shows 90 days of security activity. */
-export const ACTIVITY_DAYS = 90;
+const ACTIVITY_DAYS = 90;
 const echo = 10_000;
 
 /**
