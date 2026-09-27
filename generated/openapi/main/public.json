@@ -77849,7 +77849,8 @@
                               "sanitized",
                               "expired",
                               "retained",
-                              "blocked"
+                              "blocked",
+                              "unverified"
                             ],
                             "type": "string"
                           },
@@ -77906,7 +77907,9 @@
                               "delivery",
                               "log",
                               "audit",
-                              "export_artifact"
+                              "export_artifact",
+                              "snapshot",
+                              "media"
                             ],
                             "type": "string"
                           },
@@ -78298,7 +78301,8 @@
                               "sanitized",
                               "expired",
                               "retained",
-                              "blocked"
+                              "blocked",
+                              "unverified"
                             ],
                             "type": "string"
                           },
@@ -78355,7 +78359,9 @@
                               "delivery",
                               "log",
                               "audit",
-                              "export_artifact"
+                              "export_artifact",
+                              "snapshot",
+                              "media"
                             ],
                             "type": "string"
                           },
