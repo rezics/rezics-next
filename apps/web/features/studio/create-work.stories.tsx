@@ -56,8 +56,8 @@ export const CreatedLongTitle: Story = {
 };
 
 export const ChineseCreated: Story = {
-  args: { messages: messages['zh-CN'] },
-  globals: { locale: 'zh-CN' },
+  args: { messages: messages['zh-Hans'] },
+  globals: { locale: 'zh-Hans' },
   render: args => <CreateWorkReceipt messages={args.messages} receipt={receipt} title="城市与河流笔记" />,
   async play({ canvasElement }) {
     const canvas = within(canvasElement);

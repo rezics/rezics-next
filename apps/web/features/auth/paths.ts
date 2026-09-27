@@ -8,5 +8,5 @@ export function appCallback(requestUrl: string): string {
 }
 
 export function signInPath(next: string | null | undefined): string {
-  return `/sign-in?next=${encodeURIComponent(safeReturnPath(next))}`;
+  return `/auth/start?next=${encodeURIComponent(safeReturnPath(next))}`;
 }

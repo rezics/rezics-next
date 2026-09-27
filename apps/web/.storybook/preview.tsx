@@ -79,7 +79,7 @@ const preview: Preview = {
         dynamicTitle: true,
         items: [
           { value: 'en', title: 'English' },
-          { value: 'zh-CN', title: '简体中文' },
+          { value: 'zh-Hans', title: '简体中文' },
         ],
       },
     },

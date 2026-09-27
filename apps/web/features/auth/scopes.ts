@@ -54,6 +54,8 @@ export const MAIN_SITE_SCOPES = [
 
 /** Declared scopes no person uses through the site. */
 export const SCOPES_NOT_REQUESTED = [
+  // Realm profile and public-role edits have no site UI yet.
+  'realm:profile', 'realm:public-role',
   // Source pipelines: intake, acquisition, conversion, correspondence, proposals.
   'source:intake', 'source:acquire', 'source:convert', 'source:correspond', 'source:propose',
   // Package tooling: capture, verification and resolution.

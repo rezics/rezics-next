@@ -1,5 +1,7 @@
 import { cn } from '@rezics/ui/utils';
 import Link from 'next/link';
+import { localizedPath } from '../../i18n/locale.ts';
+import type { UiLocale } from '../../i18n/define.ts';
 
 /** The REZICS Z mark in logo red: a non-text mark, so red is allowed here. */
 export function LogoMark({ className }: { className?: string }) {
@@ -10,8 +12,8 @@ export function LogoMark({ className }: { className?: string }) {
 }
 
 /** The home link. The wordmark uses the text color; phones show the mark alone. */
-export function Logo({ label, className }: { label: string; className?: string }) {
-  return <Link href="/" aria-label={label} className={cn('flex h-10 shrink-0 items-center gap-2.5 rounded-xl px-1.5',
+export function Logo({ label, locale, className }: { label: string; locale: UiLocale; className?: string }) {
+  return <Link href={localizedPath('/', locale)} aria-label={label} className={cn('flex h-10 shrink-0 items-center gap-2.5 rounded-xl px-1.5',
     'outline-none focus-visible:ring-2 focus-visible:ring-ring', className)}>
     <LogoMark />
     <span aria-hidden="true" className="hidden font-extrabold text-[15px] text-foreground tracking-[0.28em] sm:inline">

@@ -13,7 +13,7 @@ export const NotFound: Story = {
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     await expect(canvas.getByRole('heading', { level: 1, name: 'Page not found' })).toBeVisible();
-    await expect(canvas.getByRole('link', { name: 'Back to home' })).toHaveAttribute('href', '/');
+    await expect(canvas.getByRole('link', { name: 'Back to home' })).toHaveAttribute('href', '/en');
   },
 };
 
@@ -27,7 +27,7 @@ export const ComingSoon: Story = {
 };
 
 export const ComingSoonChinese: Story = {
-  globals: { locale: 'zh-CN' },
+  globals: { locale: 'zh-Hans' },
   parameters: { route: { pathname: '/inbox' } },
   async play({ canvasElement }) {
     await expect(within(canvasElement).getByRole('heading', { level: 1, name: '收件箱即将推出' })).toBeVisible();
@@ -50,7 +50,7 @@ export const Failed: Story = {
 };
 
 export const FailedChineseDark: Story = {
-  globals: { locale: 'zh-CN', theme: 'dark' },
+  globals: { locale: 'zh-Hans', theme: 'dark' },
   render: () => <RouteError onRetry={() => undefined} />,
 };
 

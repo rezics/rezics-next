@@ -14,7 +14,7 @@ export const messages = defineMessages({
     unavailable: 'Work creation is unavailable.', noResult: 'Work creation returned no result.',
     pending: 'The Work is still being reconciled. Keep your title and try again shortly.',
   },
-  'zh-CN': {
+  'zh-Hans': {
     createHeading: '创建作品',
     createHelp: '先填写标题。创建后可以添加贡献并作出领域决定。',
     workTitle: '作品标题', titleHint: '最多 200 个字符。', creating: '正在创建…', createWork: '创建作品',

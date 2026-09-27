@@ -54,6 +54,12 @@ test('IAM01/WORK01: authenticated metadata-only Work has an empty Main Version',
   }), accountPool).listen({ hostname: '127.0.0.1', port: Number(runtime.ACCOUNT_PORT) });
   try {
     const base = runtime.ACCOUNT_BASE_URL!;
+    const verified = await accountPool.query<{ id: string; emailVerified: boolean }>(
+      'SELECT id, "emailVerified" FROM "user" WHERE id = ANY($1::text[])',
+      [[privateConfig.operator.id, privateConfig.member.id]]);
+    expect(new Map(verified.rows.map(row => [row.id, row.emailVerified]))).toEqual(new Map([
+      [privateConfig.operator.id, true], [privateConfig.member.id, true],
+    ]));
     const signIn = await fetch(`${base}/api/auth/sign-in/email`, {
       method: 'POST', headers: { 'content-type': 'application/json', origin: base },
       body: JSON.stringify({ email: privateConfig.member.email,
@@ -97,6 +103,10 @@ test('IAM01/WORK01: authenticated metadata-only Work has an empty Main Version',
     });
     expect(exchange.status).toBe(200);
     const token = (await exchange.json() as { access_token: string }).access_token;
+    const userInfo = await fetch(`${base}/api/auth/oauth2/userinfo`, {
+      headers: { authorization: `Bearer ${token}` } });
+    expect(userInfo.status).toBe(200);
+    expect(await userInfo.json()).toMatchObject({ sub: privateConfig.member.id });
     const fuseki = new FusekiClient(runtime.FUSEKI_URL!);
     const main = createMainApp(fuseki, {
       environment: { fuseki, lineage: { dataEpoch: runtime.MAIN_DATA_EPOCH!,

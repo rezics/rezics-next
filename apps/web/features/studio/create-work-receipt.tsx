@@ -1,6 +1,7 @@
 import { buttonVariants } from '@rezics/ui/button';
 import { Card, CardContent, CardFooter, CardHeader } from '@rezics/ui/card';
 import { CircleCheckIcon } from 'lucide-react';
+import Link from '../shell/localized-link.tsx';
 import type { StudioMessages } from './messages.ts';
 
 export interface CreatedWork {
@@ -31,7 +32,7 @@ export function CreateWorkReceipt({ title, receipt, messages }: CreatedWork & { 
       </dl>
     </CardContent>
     <CardFooter>
-      <a href="/studio" className={buttonVariants({ variant: 'outline' })}>{messages.createAnother}</a>
+      <Link href="/studio" className={buttonVariants({ variant: 'outline' })}>{messages.createAnother}</Link>
     </CardFooter>
   </section></Card>;
 }

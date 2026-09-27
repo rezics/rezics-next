@@ -109,8 +109,8 @@ describe('search result hydration', () => {
       { reference: concept, status: 'available', name: name('神魔小说'), avatar: { ...fallback, resourceType: 'concept' } }],
     seen);
     const read = await readSearchPage({ search: main, names: main }, { ...global, scope: { kind: 'realm', realm }, term },
-      { language: 'zh-CN' });
-    expect(seen).toEqual([{ profile: 'resource-summary-batch-v1', resources: [work, concept], language: 'zh-CN' }]);
+      { language: 'zh-Hans' });
+    expect(seen).toEqual([{ profile: 'resource-summary-batch-v1', resources: [work, concept], language: 'zh-Hans' }]);
     expect(read.ok && read.page.titles).toBe(true);
     expect(read.ok && read.page.facets?.terms.precision).toBe('lower-bound');
     expect(read.ok && read.page.hits[0]).toMatchObject({ title: { value: '西游记' }, reasons: { language: 'zh-Hans',

@@ -64,9 +64,3 @@ export function rewriteCookieHeader(header: string | null,
   for (const [name, value] of Object.entries(changes)) if (value !== null) kept.push(`${name}=${value}`);
   return kept.join('; ');
 }
-
-/** The browser's cookies minus this site's own, for requests to Account. */
-export function accountCookieHeader(header: string | null): string {
-  return (header ?? '').split(';').map(part => part.trim())
-    .filter(part => part && !part.startsWith('rezics_')).join('; ');
-}

@@ -15,7 +15,7 @@ export const messages = defineMessages({
     revisionDetails: 'Revision details', work: 'Work', operation: 'Operation',
     language: 'Language', sequence: 'Sequence',
   },
-  'zh-CN': {
+  'zh-Hans': {
     unavailableTitle: '无法查看此修订',
     unavailable: '您的访问权限或来源服务可能已发生变化。请稍后重试。',
     notFoundTitle: '找不到此修订',

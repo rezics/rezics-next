@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { isCurrent, navigation } from './navigation.ts';
 import { useShell } from './shell-provider.tsx';
+import { localizedPath } from '../../i18n/locale.ts';
 
 /** The phone navigation: five items with the emphasized action raised in the center. */
 export function BottomNav() {
@@ -14,7 +15,7 @@ export function BottomNav() {
     bg-background/90 pb-[env(safe-area-inset-bottom)] backdrop-blur-md md:hidden">
     <ul className="grid h-16 grid-cols-5">
       {navigation.filter(item => item.bottom).map(item => <li key={item.href} className="min-w-0">
-        <Link href={item.href} aria-current={isCurrent(item, pathname) ? 'page' : undefined}
+        <Link href={localizedPath(item.href, locale)} aria-current={isCurrent(item, pathname) ? 'page' : undefined}
           className={cn('group flex h-full flex-col items-center justify-center gap-1 px-1 outline-none',
             'font-medium text-[11px] text-muted-foreground transition-colors',
             'focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset',

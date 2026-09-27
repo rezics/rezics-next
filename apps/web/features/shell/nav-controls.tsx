@@ -23,7 +23,7 @@ export function NavCollapseToggle() {
   </Button>;
 }
 
-/** Phones: the side navigation and preferences in a drawer. */
+/** Phones: the side navigation in a drawer. */
 export function NavDrawer() {
   const { t } = useShell();
   const pathname = usePathname();

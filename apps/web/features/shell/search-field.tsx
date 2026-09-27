@@ -6,6 +6,7 @@ import { SearchIcon } from 'lucide-react';
 import { usePathname, useSearchParams } from 'next/navigation';
 import { useEffect, useRef } from 'react';
 import { useShell } from './shell-provider.tsx';
+import { localizedPath } from '../../i18n/locale.ts';
 
 function isEditable(target: EventTarget | null): boolean {
   return target instanceof HTMLElement
@@ -14,11 +15,11 @@ function isEditable(target: EventTarget | null): boolean {
 
 /** The global search. `/` (outside text fields) or Cmd/Ctrl-K focuses it. */
 export function SearchField() {
-  const { t } = useShell();
+  const { t, locale } = useShell();
   const input = useRef<HTMLInputElement>(null);
   const pathname = usePathname();
   const phrase = useSearchParams().get('q') ?? '';
-  const current = pathname === '/search' ? phrase : '';
+  const current = pathname === localizedPath('/search', locale) ? phrase : '';
 
   useEffect(() => {
     function focusSearch(event: KeyboardEvent) {
@@ -35,7 +36,7 @@ export function SearchField() {
     return () => window.removeEventListener('keydown', focusSearch);
   }, []);
 
-  return <form role="search" aria-label={t.searchRegion} action="/search" method="get" className="relative w-full">
+  return <form role="search" aria-label={t.searchRegion} action={localizedPath('/search', locale)} method="get" className="relative w-full">
     <Input ref={input} key={current} defaultValue={current} name="q" type="search" size="lg"
       aria-label={t.searchLabel} placeholder={t.searchPlaceholder} minLength={2} maxLength={80}
       autoComplete="off" enterKeyHint="search"

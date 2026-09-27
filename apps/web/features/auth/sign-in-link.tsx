@@ -9,6 +9,6 @@ export function SignInLink({ label }: { label: string }) {
   const pathname = usePathname();
   const search = useSearchParams().toString();
   const here = `${pathname}${search ? `?${search}` : ''}`;
-  return <a href={pathname.startsWith('/sign-in') ? '/sign-in' : signInPath(here)}
+  return <a href={signInPath(here)}
     className={buttonVariants({ size: 'sm', pill: true })}>{label}</a>;
 }

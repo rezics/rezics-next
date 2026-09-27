@@ -57,8 +57,8 @@ describe('discover shelves', () => {
   test('Main queries carry the scope, IRIs and only the Context a population is built for', () => {
     const [recent, top] = shelvesFor({ ...global, scope: { kind: 'realm', realm }, context, term });
     const state = { ...global, scope: { kind: 'realm' as const, realm }, context, term };
-    expect(discoveryQuery(state, recent!, { limit: 6, language: 'zh-CN' })).toEqual({ scope: 'realm', realm: iri(realm),
-      sort: 'recent', limit: 6, language: 'zh-CN', term: iri(term) });
+    expect(discoveryQuery(state, recent!, { limit: 6, language: 'zh-Hans' })).toEqual({ scope: 'realm', realm: iri(realm),
+      sort: 'recent', limit: 6, language: 'zh-Hans', term: iri(term) });
     expect(discoveryQuery(state, top!, { limit: 6, language: 'en', cursor: 'next' })).toEqual({ scope: 'realm',
       realm: iri(realm), sort: 'top-rated', limit: 6, language: 'en', context: iri(context), term: iri(term),
       cursor: 'next' });

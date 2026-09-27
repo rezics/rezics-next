@@ -123,11 +123,30 @@ function configure(fetcher: typeof fetch) {
   globalThis.fetch = fetcher;
 }
 
+test('public paths redirect by cookie then Accept-Language; auth routes stay unprefixed', async () => {
+  delete process.env.WEB_OAUTH_CLIENT_ID;
+  const byHeader = await proxy(new NextRequest('http://web.test/search?q=river', {
+    headers: { 'accept-language': 'zh-Hans,zh;q=0.9,en;q=0.5' } }));
+  expect(byHeader.headers.get('location')).toBe('http://web.test/zh-Hans/search?q=river');
+  const byCookie = await proxy(new NextRequest('http://web.test/w/book', {
+    headers: { cookie: 'rezics_locale=en', 'accept-language': 'zh-Hans' } }));
+  expect(byCookie.headers.get('location')).toBe('http://web.test/en/w/book');
+  const explicit = await proxy(new NextRequest('http://web.test/zh-Hans/w/book', {
+    headers: { cookie: 'rezics_locale=en' } }));
+  expect(explicit.headers.get('location')).toBeNull();
+  expect(explicit.headers.get('x-middleware-request-x-rezics-page-url'))
+    .toBe('http://web.test/zh-Hans/w/book');
+  const auth = await proxy(new NextRequest('http://web.test/auth/start'));
+  expect(auth.headers.get('location')).toBeNull();
+  const other = await proxy(new NextRequest('http://web.test/inbox'));
+  expect(other.headers.get('location')).toBeNull();
+});
+
 test('IAM01: the proxy refreshes before the page and hands the new session to both the page and the browser', async () => {
   const { fetcher, exchanges } = account(() => issued('user-1'));
   configure(fetcher);
   const refreshToken = crypto.randomUUID();
-  const response = await proxy(new NextRequest('http://web.test/studio', { headers: {
+  const response = await proxy(new NextRequest('http://web.test/en/studio', { headers: {
     cookie: `rezics_locale=en; rezics_refresh=${refreshToken}` } }));
   expect(exchanges).toHaveLength(1);
   const set = response.headers.getSetCookie();
@@ -144,7 +163,7 @@ test('IAM01: the proxy refreshes before the page and hands the new session to bo
 test('IAM01: a refresh extends the same Main session Agent key', async () => {
   configure(account(() => issued('user-1')).fetcher);
   const key = crypto.randomUUID();
-  const response = await proxy(new NextRequest('http://web.test/studio', { headers: {
+  const response = await proxy(new NextRequest('http://web.test/en/studio', { headers: {
     cookie: `rezics_refresh=${crypto.randomUUID()}; rezics_session_key=${key}` } }));
   expect(response.headers.getSetCookie().find(line => line.startsWith('rezics_session_key=')))
     .toContain(`rezics_session_key=${key}`);
@@ -153,7 +172,7 @@ test('IAM01: a refresh extends the same Main session Agent key', async () => {
 
 test('IAM01: a refused refresh signs the browser out cleanly instead of failing the page', async () => {
   configure(account(() => Response.json({ error: 'invalid_grant' }, { status: 400 })).fetcher);
-  const response = await proxy(new NextRequest('http://web.test/', { headers: {
+  const response = await proxy(new NextRequest('http://web.test/en', { headers: {
     cookie: `rezics_refresh=${crypto.randomUUID()}; rezics_session=x; rezics_subject=y; rezics_session_key=z` } }));
   const set = response.headers.getSetCookie();
   for (const name of ['rezics_access', 'rezics_refresh', 'rezics_session',
@@ -164,11 +183,11 @@ test('IAM01: a refused refresh signs the browser out cleanly instead of failing 
   // Signed out or current: no Account call and no changes.
   let calls = 0;
   configure((async () => { calls += 1; return issued(); }) as unknown as typeof fetch);
-  const untouched = await proxy(new NextRequest('http://web.test/', { headers: {
+  const untouched = await proxy(new NextRequest('http://web.test/en', { headers: {
     cookie: `rezics_access=a; rezics_session_key=${crypto.randomUUID()}` } }));
   expect(calls).toBe(0);
   expect(untouched.headers.getSetCookie()).toEqual([]);
-  const migrated = await proxy(new NextRequest('http://web.test/', { headers: {
+  const migrated = await proxy(new NextRequest('http://web.test/en', { headers: {
     cookie: 'rezics_access=a; rezics_subject=old' } }));
   expect(migrated.headers.getSetCookie().some(line => line.startsWith('rezics_session_key='))).toBe(true);
   expect(migrated.headers.getSetCookie().find(line => line.startsWith('rezics_subject=')))

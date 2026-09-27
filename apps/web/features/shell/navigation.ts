@@ -1,5 +1,6 @@
 import { Compass, House, Inbox, LibraryBig, Plus, type LucideIcon } from 'lucide-react';
-import type { UiLocale } from '../../i18n/define.ts';
+import { localeText, type UiLocale } from '../../i18n/define.ts';
+import { withoutLocale } from '../../i18n/locale.ts';
 
 export interface NavigationItem {
   href: string;
@@ -16,15 +17,16 @@ export interface NavigationItem {
 // The navigation, in display order. A feature adds its entry as one line; git
 // merges this file with the union driver (see .gitattributes).
 export const navigation: readonly NavigationItem[] = [
-  { href: '/', icon: House, bottom: true, label: { en: 'Home', 'zh-CN': '首页' } },
-  { href: '/discover', icon: Compass, bottom: true, label: { en: 'Discover', 'zh-CN': '发现' } },
-  { href: '/studio', icon: Plus, bottom: true, emphasized: true, label: { en: 'Create', 'zh-CN': '创作' } },
-  { href: '/inbox', icon: Inbox, bottom: true, label: { en: 'Inbox', 'zh-CN': '收件箱' }, planned: { en: 'Notifications, replies and messages from the Realms you follow will arrive here.', 'zh-CN': '来自你关注的领域的通知、回复和消息将显示在这里。' } },
-  { href: '/shelves', icon: LibraryBig, bottom: true, label: { en: 'Shelves', 'zh-CN': '书架' }, planned: { en: 'Keep the works you are reading, want to read and have finished on your shelves.', 'zh-CN': '把正在读、想读和读过的作品放在书架上。' } },
+  { href: '/', icon: House, bottom: true, label: localeText({ en: 'Home', 'zh-Hans': '首页' }) },
+  { href: '/discover', icon: Compass, bottom: true, label: localeText({ en: 'Discover', 'zh-Hans': '发现' }) },
+  { href: '/studio', icon: Plus, bottom: true, emphasized: true, label: localeText({ en: 'Create', 'zh-Hans': '创作' }) },
+  { href: '/inbox', icon: Inbox, bottom: true, label: localeText({ en: 'Inbox', 'zh-Hans': '收件箱' }), planned: localeText({ en: 'Notifications, replies and messages from the Realms you follow will arrive here.', 'zh-Hans': '来自你关注的领域的通知、回复和消息将显示在这里。' }) },
+  { href: '/shelves', icon: LibraryBig, bottom: true, label: localeText({ en: 'Shelves', 'zh-Hans': '书架' }), planned: localeText({ en: 'Keep the works you are reading, want to read and have finished on your shelves.', 'zh-Hans': '把正在读、想读和读过的作品放在书架上。' }) },
 ];
 
 /** Whether `pathname` is at or below the item's route. Home matches only itself. */
 export function isCurrent(item: Pick<NavigationItem, 'href'>, pathname: string): boolean {
+  pathname = withoutLocale(pathname);
   if (item.href === '/') return pathname === '/';
   return pathname === item.href || pathname.startsWith(`${item.href}/`);
 }

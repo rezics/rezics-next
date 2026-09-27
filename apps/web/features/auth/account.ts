@@ -105,31 +105,16 @@ export async function revokeRefreshToken(client: AccountClient, refreshToken: st
 
 export interface AccountUser { id: string; name: string; email: string; image: string | null }
 
-/** The Account session behind the browser's Account cookie, if any. */
-export async function readAccountUser(accountOrigin: string, cookie: string,
-  fetcher: typeof fetch = fetch): Promise<AccountUser | null> {
+/** Display identity from the bearer token, without an Accounts session cookie. */
+export async function readOAuthUser(client: AccountClient, accessToken: string): Promise<AccountUser | null> {
   try {
-    const response = await fetcher(new URL('/api/auth/get-session', accountOrigin), {
-      headers: { cookie }, cache: 'no-store', signal: AbortSignal.timeout(10_000) });
-    const body = await response.json().catch(() => null) as { user?: {
-      id?: unknown; name?: unknown; email?: unknown; image?: unknown } } | null;
-    const user = body?.user;
-    if (!response.ok || typeof user?.id !== 'string' || !user.id) return null;
-    return { id: user.id, name: typeof user.name === 'string' ? user.name : '',
+    const response = await (client.fetch ?? fetch)(new URL('/api/auth/oauth2/userinfo', client.accountOrigin), {
+      headers: { authorization: `Bearer ${accessToken}` }, cache: 'no-store', signal: AbortSignal.timeout(10_000) });
+    const user = await response.json().catch(() => null) as {
+      sub?: unknown; name?: unknown; email?: unknown; picture?: unknown } | null;
+    if (!response.ok || typeof user?.sub !== 'string' || !user.sub) return null;
+    return { id: user.sub, name: typeof user.name === 'string' ? user.name : '',
       email: typeof user.email === 'string' ? user.email : '',
-      image: typeof user.image === 'string' && /^https?:\/\//.test(user.image) ? user.image : null };
+      image: typeof user.picture === 'string' && /^https?:\/\//.test(user.picture) ? user.picture : null };
   } catch { return null; }
-}
-
-/** Ends the Account session behind the browser's Account cookie and returns
- * the `Set-Cookie` headers that clear it. */
-export async function endAccountSession(accountOrigin: string, cookie: string,
-  fetcher: typeof fetch = fetch): Promise<string[]> {
-  try {
-    const response = await fetcher(new URL('/api/auth/sign-out', accountOrigin), {
-      method: 'POST', headers: { cookie, origin: accountOrigin, 'content-type': 'application/json' },
-      body: '{}', cache: 'no-store', signal: AbortSignal.timeout(10_000) });
-    await response.body?.cancel();
-    return response.headers.getSetCookie();
-  } catch { return []; }
 }

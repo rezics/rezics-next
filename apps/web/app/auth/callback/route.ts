@@ -2,11 +2,11 @@ import { cookies } from 'next/headers';
 import { NextResponse } from 'next/server';
 import { mainApiWithToken } from '../../../features/api/main.ts';
 import { serviceOrigin } from '../../../features/api/origins.ts';
-import { exchangeCode, readAccountUser } from '../../../features/auth/account.ts';
+import { exchangeCode, readOAuthUser } from '../../../features/auth/account.ts';
 import { accountClient } from '../../../features/auth/client.ts';
-import { accountCookieHeader, AGENT_COOKIE, clearCookies, OAUTH_COOKIES, OAUTH_NEXT_COOKIE, OAUTH_STATE_COOKIE,
+import { AGENT_COOKIE, clearCookies, OAUTH_COOKIES, OAUTH_NEXT_COOKIE, OAUTH_STATE_COOKIE,
   OAUTH_VERIFIER_COOKIE } from '../../../features/auth/cookies.ts';
-import { appCallback, safeReturnPath, signInPath } from '../../../features/auth/paths.ts';
+import { appCallback, safeReturnPath } from '../../../features/auth/paths.ts';
 import { readMainSessionAgent } from '../../../features/auth/session.ts';
 import { sessionCookies, tokenSubject, writeCookies,
   writeSessionKey } from '../../../features/auth/session-state.ts';
@@ -18,14 +18,15 @@ export async function GET(request: Request) {
   const jar = await cookies();
   const expectedState = jar.get(OAUTH_STATE_COOKIE)?.value;
   const verifier = jar.get(OAUTH_VERIFIER_COOKIE)?.value;
+  if (url.searchParams.get('iss') !== `${serviceOrigin('ACCOUNT_ORIGIN')}/api/auth`) {
+    return new Response('Authorization issuer is invalid', { status: 400 });
+  }
   if (!state || !expectedState || state !== expectedState || !verifier) {
     return new Response('Authorization state is invalid or expired', { status: 400 });
   }
   const next = safeReturnPath(jar.get(OAUTH_NEXT_COOKIE)?.value);
   if (!code) {
-    // Account answered this request without a code: the person declined
-    // consent or Account refused. Nothing was granted; offer sign-in again.
-    const declined = NextResponse.redirect(new URL(`${signInPath(next)}&error=declined`, url.origin));
+    const declined = new NextResponse('Authorization was declined', { status: 400 });
     clearCookies(declined.cookies, request.url, OAUTH_COOKIES);
     return declined;
   }
@@ -36,11 +37,10 @@ export async function GET(request: Request) {
     return new Response('Authorization code is invalid or expired', { status: 400 });
   }
   if (issued.status !== 'issued') return new Response('Account token exchange failed', { status: 503 });
-  // Who is signed in comes from the token; the Account session supplies the
-  // name and email the site shows, and must be the same person.
+  // Account's UserInfo endpoint reads the issued access token. The Accounts
+  // session cookie is private to that origin and never travels through web.
   const subject = tokenSubject(issued.tokens.accessToken);
-  const user = await readAccountUser(serviceOrigin('ACCOUNT_ORIGIN'),
-    accountCookieHeader(request.headers.get('cookie')));
+  const user = await readOAuthUser(client, issued.tokens.accessToken);
   if (!subject || !user || user.id !== subject) {
     return new Response('Account session does not match the issued token', { status: 503 });
   }

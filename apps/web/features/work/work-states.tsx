@@ -3,6 +3,7 @@ import { Skeleton, SkeletonText } from '@rezics/ui/skeleton';
 import { FileQuestionIcon } from 'lucide-react';
 import { EmptyState } from '../shell/empty-state.tsx';
 import { PageContainer } from '../shell/page.tsx';
+import Link from '../shell/localized-link.tsx';
 import type { WorkMessages } from './messages.ts';
 
 /** No revision has this ID (Main answered 404, or the ID is malformed). */
@@ -10,7 +11,7 @@ export function WorkNotFound({ messages }: { messages: WorkMessages }) {
   return <PageContainer>
     <EmptyState icon={FileQuestionIcon} headingLevel={1} title={messages.notFoundTitle}
       description={messages.notFoundBody}>
-      <a href="/search" className={buttonVariants()}>{messages.searchWorks}</a>
+      <Link href="/search" className={buttonVariants()}>{messages.searchWorks}</Link>
     </EmptyState>
   </PageContainer>;
 }

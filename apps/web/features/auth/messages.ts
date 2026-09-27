@@ -38,6 +38,7 @@ const en = {
   accountMenu: 'Account menu', actingAs: 'Acting as', switchAgent: 'Switch Agent',
   chooseAgent: 'Choose an Agent', agentNotEligible: 'Agent no longer available',
   noAgent: 'No Agent yet', agentUnverified: 'Agent not checked', signOut: 'Sign out',
+  manageAccount: 'Manage your REZICS Account',
 };
 
 export type AuthMessages = typeof en;
@@ -74,9 +75,10 @@ const zhCN: AuthMessages = {
   accountMenu: '账户菜单', actingAs: '当前身份', switchAgent: '切换身份',
   chooseAgent: '选择身份', agentNotEligible: '身份已不可用',
   noAgent: '尚无身份', agentUnverified: '身份未经检查', signOut: '退出登录',
+  manageAccount: '管理您的 REZICS 账户',
 };
 
-export const messages = defineMessages({ en, 'zh-CN': zhCN });
+export const messages = defineMessages({ en, 'zh-Hans': zhCN });
 
 export function formatMessage(template: string, values: Readonly<Record<string, string>>): string {
   return template.replace(/\{(\w+)\}/g, (match, name: string) => values[name] ?? match);

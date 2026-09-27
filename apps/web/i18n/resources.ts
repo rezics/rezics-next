@@ -1,6 +1,6 @@
 import { defineResources } from 'native-i18n';
 import { catalogs } from './catalogs.ts';
-import type { UiLocale } from './define.ts';
+import { uiLocales, type UiLocale } from './define.ts';
 
 export type { UiLocale } from './define.ts';
 
@@ -17,5 +17,6 @@ function localeLoaders<Locale extends UiLocale>(locale: Locale): LocaleLoaders<L
 
 export const resources = defineResources({
   fallbackLocale: 'en',
-  loaders: { en: localeLoaders('en'), 'zh-CN': localeLoaders('zh-CN') },
+  loaders: Object.fromEntries(uiLocales.map(locale => [locale, localeLoaders(locale)])) as {
+    [Locale in UiLocale]: LocaleLoaders<Locale> },
 });

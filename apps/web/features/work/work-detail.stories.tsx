@@ -31,8 +31,8 @@ export const LongMultilingualTitle: Story = {
 };
 
 export const Chinese: Story = {
-  args: { locale: 'zh-CN', messages: messages['zh-CN'] },
-  globals: { locale: 'zh-CN' },
+  args: { locale: 'zh-Hans', messages: messages['zh-Hans'] },
+  globals: { locale: 'zh-Hans' },
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     await expect(canvas.getByRole('heading', { name: '修订详情' })).toBeInTheDocument();

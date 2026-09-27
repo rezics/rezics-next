@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from 'next';
 import { cookies } from 'next/headers';
 import type { ReactNode } from 'react';
 import { AccountMenu } from '../features/auth/account-menu.tsx';
+import { serviceOrigin } from '../features/api/origins.ts';
 import { readSession } from '../features/auth/session.ts';
 import { SignInLink } from '../features/auth/sign-in-link.tsx';
 import { AppShell } from '../features/shell/app-shell.tsx';
@@ -25,10 +26,11 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
   const theme = parseTheme(jar.get(THEME_COOKIE)?.value);
   return <html lang={locale} className={themeClass(theme)}>
     <body className="aura-canvas min-h-dvh">
-      <AppShell locale={locale} messages={messages} theme={theme}
+      <AppShell locale={locale} messages={messages} theme={theme} signedIn={Boolean(session)}
         navCollapsed={parseNavCollapsed(jar.get(NAV_COOKIE)?.value)}
         notifications={session ? <NotificationsLink /> : null}
-        account={session ? <AccountMenu session={session} messages={auth} /> : <SignInLink label={auth.signIn} />}>
+        account={session ? <AccountMenu session={session} messages={auth}
+          accountOrigin={serviceOrigin('ACCOUNT_ORIGIN')} /> : <SignInLink label={auth.signIn} />}>
         {children}
       </AppShell>
     </body>

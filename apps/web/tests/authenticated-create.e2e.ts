@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { type BrowserContext, expect, type Page, test } from '@playwright/test';
+import { signInAtAccounts } from './account-sign-in.ts';
 
 interface PublicFixture { actingSubject: string }
 interface PrivateFixture { member: { email: string; password: string } }
@@ -11,14 +12,9 @@ function fixture<T>(name: string): T {
   return JSON.parse(readFileSync(path, 'utf8')) as T;
 }
 
-async function signIn(page: Page, next = '/studio'): Promise<void> {
+async function signIn(page: Page, next = '/en/studio'): Promise<void> {
   const privateFixture = fixture<PrivateFixture>('REZICS_WEB_AUTH_PRIVATE_PATH');
-  await page.goto(next);
-  await expect(page).toHaveURL(`/sign-in?next=${encodeURIComponent(next)}`);
-  await expect(page.getByRole('banner').getByRole('link', { name: 'Sign in' })).toBeVisible();
-  await page.getByRole('textbox', { name: 'Email' }).fill(privateFixture.member.email);
-  await page.getByLabel('Password').fill(privateFixture.member.password);
-  await page.getByRole('button', { name: 'Sign in', exact: true }).click();
+  await signInAtAccounts(page, next, privateFixture.member);
 }
 
 /** Opens the shell's account menu; a click that lands before hydration does nothing, so retry. */
@@ -36,16 +32,20 @@ async function cookie(context: BrowserContext, name: string) {
 }
 
 test('IAM02: invalid OAuth state is rejected at the web callback', async ({ page }) => {
-  const invalidCallback = await page.goto('/auth/callback?code=invalid&state=invalid');
+  const issuer = `${process.env.ACCOUNT_ORIGIN ?? 'http://127.0.0.1:3004'}/api/auth`;
+  const invalidCallback = await page.goto(`/auth/callback?code=invalid&state=invalid&iss=${encodeURIComponent(issuer)}`);
   expect(invalidCallback?.status()).toBe(400);
   await expect(page.getByText('Authorization state is invalid or expired')).toBeVisible();
+  const wrongIssuer = await page.goto('/auth/callback?code=invalid&state=invalid&iss=https://evil.test/api/auth');
+  expect(wrongIssuer?.status()).toBe(400);
+  await expect(page.getByText('Authorization issuer is invalid')).toBeVisible();
 });
 
 test('IAM01: a web session outlives its access token, keeps its Agent and signs out', async ({ page, context }, testInfo) => {
   const publicFixture = fixture<PublicFixture>('REZICS_WEB_AUTH_PUBLIC_PATH');
   await signIn(page);
   // The member may act as exactly one Agent, so the new session starts with it.
-  await expect(page).toHaveURL('/studio');
+  await expect(page).toHaveURL('/en/studio');
   const sessionKey = (await cookie(context, 'rezics_session_key'))?.value;
   expect(sessionKey).toMatch(/^[0-9a-f-]{36}$/);
   expect(await cookie(context, 'rezics_subject')).toBeUndefined();
@@ -63,17 +63,17 @@ test('IAM01: a web session outlives its access token, keeps its Agent and signs 
   const refresh = (await cookie(context, 'rezics_refresh'))?.value;
   await context.clearCookies({ name: 'rezics_access' });
   await page.reload();
-  await expect(page).toHaveURL('/studio');
+  await expect(page).toHaveURL('/en/studio');
   expect(await cookie(context, 'rezics_access')).toBeDefined();
   expect((await cookie(context, 'rezics_refresh'))?.value).not.toBe(refresh);
 
   // Choosing an Agent Main does not list is refused, and the session Agent stays.
   const forged = await page.request.post('/identity/select', { maxRedirects: 0,
-    form: { agent: 'https://rezics.com/id/00000000-0000-4000-8000-000000000001', next: '/studio' } });
-  expect(forged.headers().location).toContain('/identity?error=invalid');
+    form: { agent: 'https://rezics.com/id/00000000-0000-4000-8000-000000000001', next: '/en/studio' } });
+  expect(forged.headers().location).toContain('/en/identity?error=invalid');
   expect((await cookie(context, 'rezics_session_key'))?.value).toBe(sessionKey);
   // The shell's account menu shows the session Agent and switches it explicitly.
-  await page.goto('/studio');
+  await page.goto('/en/studio');
   const account = page.getByRole('banner').getByRole('button', { name: 'Account menu' });
   const discovery = await page.request.get('/api/main/v1/me/acting-contexts?task=work.create');
   expect(discovery.status()).toBe(200);
@@ -87,7 +87,7 @@ test('IAM01: a web session outlives its access token, keeps its Agent and signs 
   await expect(page.getByRole('menu')).toHaveCSS('opacity', '1');
   await page.screenshot({ path: testInfo.outputPath('session-account-menu-desktop.png') });
   await page.getByRole('menuitem', { name: 'Switch Agent' }).click();
-  await expect(page).toHaveURL('/identity?next=%2Fstudio');
+  await expect(page).toHaveURL('/en/identity?next=%2Fen%2Fstudio');
   await expect(page.getByRole('radio', { checked: true })).toHaveValue(publicFixture.actingSubject);
   await page.screenshot({ path: testInfo.outputPath('session-agent-picker-desktop.png') });
   await page.setViewportSize({ width: 390, height: 844 });
@@ -96,7 +96,7 @@ test('IAM01: a web session outlives its access token, keeps its Agent and signs 
   await page.setViewportSize({ width: 1280, height: 720 });
   await page.getByRole('checkbox', { name: /Make this my default/ }).check();
   await page.getByRole('button', { name: 'Use this Agent' }).click();
-  await expect(page).toHaveURL('/studio');
+  await expect(page).toHaveURL('/en/studio');
   const mainAgent = await page.request.get('/api/main/v1/me/main-agent-preference');
   expect(mainAgent.status()).toBe(200);
   expect((await mainAgent.json() as { mainAgent: { actingSubject: string } }).mainAgent.actingSubject)
@@ -111,18 +111,20 @@ test('IAM01: a web session outlives its access token, keeps its Agent and signs 
     headers: { 'x-session-key': sessionKey!, 'idempotency-key': crypto.randomUUID() },
     data: { actingSubject: null, expectedRevision: revision } });
   expect(clear.status()).toBe(200);
-  await page.goto('/studio');
-  await expect(page).toHaveURL('/identity?next=%2Fstudio');
+  await page.goto('/en/studio');
+  await expect(page).toHaveURL('/en/identity?next=%2Fen%2Fstudio');
   await expect(account).toContainText('Choose an Agent');
   await expect(page.getByRole('radio', { checked: true })).toHaveCount(0);
   await page.getByRole('radio', { name: new RegExp(publicFixture.actingSubject) }).check();
   await page.getByRole('button', { name: 'Use this Agent' }).click();
-  await expect(page).toHaveURL('/studio');
+  await expect(page).toHaveURL('/en/studio');
 
-  // Signing out from the menu ends the session and returns to the page, which asks to sign in.
+  // Signing out revokes this product's refresh token and returns to public Home.
   await openAccountMenu(page);
+  await expect(page.getByRole('menuitem', { name: 'Manage your REZICS Account' }))
+    .toHaveAttribute('href', process.env.ACCOUNT_ORIGIN ?? 'http://127.0.0.1:3004');
   await page.getByRole('menuitem', { name: 'Sign out' }).click();
-  await expect(page).toHaveURL('/sign-in?next=%2Fstudio');
+  await expect(page).toHaveURL('/en');
   for (const name of ['rezics_access', 'rezics_refresh', 'rezics_session',
     'rezics_session_key', 'rezics_subject']) {
     expect(await cookie(context, name), name).toBeUndefined();
@@ -133,7 +135,7 @@ test('IAM01: a web session outlives its access token, keeps its Agent and signs 
 test('IAM03: the Agent held by Main is used for Work creation', async ({ page, context }) => {
   const publicFixture = fixture<PublicFixture>('REZICS_WEB_AUTH_PUBLIC_PATH');
   await signIn(page);
-  await expect(page).toHaveURL('/studio');
+  await expect(page).toHaveURL('/en/studio');
   const sessionKey = (await cookie(context, 'rezics_session_key'))?.value;
   expect(sessionKey).toBeDefined();
   const state = await page.request.get('/api/main/v1/me/session-agent', {
@@ -155,7 +157,7 @@ test('WORK01: authenticated member creates a metadata-only Work with an empty Ma
   const browserErrors: string[] = [];
   page.on('pageerror', error => browserErrors.push(error.message));
   await signIn(page);
-  await expect(page).toHaveURL('/studio');
+  await expect(page).toHaveURL('/en/studio');
   const title = `Browser Work ${Date.now()}`;
   await page.getByRole('textbox', { name: 'Work title' }).fill(title);
   await page.getByRole('button', { name: 'Create Work' }).click();
@@ -184,9 +186,9 @@ test('WORK01: authenticated member creates a metadata-only Work with an empty Ma
   expect(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)).toBe(false);
   await page.screenshot({ path: testInfo.outputPath('work-created-mobile.png') });
 
-  await page.request.post('/locale/select', { form: { locale: 'zh-CN' } });
-  await page.goto(`/works/${revision.split('/').at(-1)}`);
-  await expect(page.locator('html')).toHaveAttribute('lang', 'zh-CN');
+  await page.request.post('/locale/select', { form: { locale: 'zh-Hans' } });
+  await page.goto(`/zh-Hans/works/${revision.split('/').at(-1)}`);
+  await expect(page.locator('html')).toHaveAttribute('lang', 'zh-Hans');
   await expect(page.getByRole('heading', { name: title })).toBeVisible();
   await expect(page.getByRole('heading', { name: '修订详情' })).toBeVisible();
   await expect(page.getByText(/此元数据修订的标识为/)).toBeVisible();

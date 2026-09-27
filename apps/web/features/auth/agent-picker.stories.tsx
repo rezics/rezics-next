@@ -14,7 +14,7 @@ const meta = { title: 'Auth/Agent picker', component: AgentPicker,
     path: 'represented-agent' },
     { iri: ada, label: 'Ada Lovelace', handle: 'ada', kind: 'person',
       path: 'direct-principal' }], current: null, preferred: null,
-  preferenceRevision: null, sessionRevision: null, next: '/studio', notice: null,
+  preferenceRevision: null, sessionRevision: null, next: '/en/studio', locale: 'en', notice: null,
   messages: messages.en },
   decorators: [Story => <PageContainer className="max-w-xl sm:py-12"><Card><CardContent><Story /></CardContent></Card></PageContainer>],
 } satisfies Meta<typeof AgentPicker>;
@@ -88,7 +88,7 @@ export const Unavailable: Story = {
 };
 
 export const Chinese: Story = {
-  args: { messages: messages['zh-CN'], current: ada },
+  args: { messages: messages['zh-Hans'], current: ada },
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     await expect(canvas.getByRole('heading', { name: '选择您的操作身份' })).toBeInTheDocument();

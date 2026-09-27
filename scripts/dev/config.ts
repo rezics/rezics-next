@@ -49,6 +49,7 @@ export function parseOptions(args: string[]): StackOptions {
   let runId: string | undefined;
   let persistent = false;
   let rawUpdate = false;
+  let accountsApp = false;
   for (let i = 0; i < args.length; i++) {
     if (args[i] === '--profile' && (args[i + 1] === 'dev' || args[i + 1] === 'qa')) {
       profile = args[++i] as Profile;
@@ -58,6 +59,9 @@ export function parseOptions(args: string[]): StackOptions {
       persistent = true;
     } else if (args[i] === '--raw-update') {
       rawUpdate = true;
+    } else if (args[i] === '--accounts-app') {
+      // This QA project serves the public OAuth issuer on its own port.
+      accountsApp = true;
     } else {
       throw new Error(`Invalid stack option: ${args[i] ?? ''}`);
     }
@@ -67,7 +71,8 @@ export function parseOptions(args: string[]): StackOptions {
   if (rawUpdate && (profile !== 'qa' || !persistent)) {
     throw new Error('--raw-update requires --profile qa --persistent');
   }
-  return { profile, runId, persistent, rawUpdate };
+  if (accountsApp && profile !== 'qa') throw new Error('--accounts-app requires --profile qa');
+  return { profile, runId, persistent, rawUpdate, accountsApp };
 }
 
 export function projectName(options: StackOptions): string {

@@ -24,6 +24,10 @@ export function useShell(): ShellState {
   return state;
 }
 
+export function useOptionalShell(): ShellState | null {
+  return use(ShellContext);
+}
+
 function writeCookie(name: string, value: string) {
   document.cookie = preferenceCookie(name, value, location.protocol === 'https:');
 }

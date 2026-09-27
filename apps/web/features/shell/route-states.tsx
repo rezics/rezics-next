@@ -9,6 +9,7 @@ import { EmptyState } from './empty-state.tsx';
 import { plannedItem } from './navigation.ts';
 import { PageContainer } from './page.tsx';
 import { useShell } from './shell-provider.tsx';
+import { localizedPath } from '../../i18n/locale.ts';
 
 /** app/not-found: a planned navigation route shows what is coming; anything else is missing. */
 export function RouteNotFound() {
@@ -18,26 +19,26 @@ export function RouteNotFound() {
     return <PageContainer>
       <EmptyState icon={planned.icon} headingLevel={1}
         title={t.comingSoonTitle({ feature: planned.label[locale] })} description={planned.planned[locale]}>
-        <Link href="/" className={buttonVariants({ variant: 'outline' })}>{t.backHome}</Link>
+        <Link href={localizedPath('/', locale)} className={buttonVariants({ variant: 'outline' })}>{t.backHome}</Link>
       </EmptyState>
     </PageContainer>;
   }
   return <PageContainer>
     <EmptyState icon={SearchXIcon} headingLevel={1} title={t.notFoundTitle} description={t.notFoundBody}>
-      <Link href="/" className={buttonVariants()}>{t.backHome}</Link>
-      <Link href="/search" className={buttonVariants({ variant: 'outline' })}>{t.searchWorks}</Link>
+      <Link href={localizedPath('/', locale)} className={buttonVariants()}>{t.backHome}</Link>
+      <Link href={localizedPath('/search', locale)} className={buttonVariants({ variant: 'outline' })}>{t.searchWorks}</Link>
     </EmptyState>
   </PageContainer>;
 }
 
 /** app/error: the route failed to render. `digest` identifies the server log entry. */
 export function RouteError({ digest, onRetry }: { digest?: string; onRetry: () => void }) {
-  const { t } = useShell();
+  const { t, locale } = useShell();
   return <PageContainer>
     <EmptyState icon={TriangleAlertIcon} tone="destructive" role="alert" headingLevel={1}
       title={t.errorTitle} description={t.errorBody}>
       <Button onClick={onRetry}><RotateCwIcon aria-hidden="true" />{t.retry}</Button>
-      <Link href="/" className={buttonVariants({ variant: 'outline' })}>{t.backHome}</Link>
+      <Link href={localizedPath('/', locale)} className={buttonVariants({ variant: 'outline' })}>{t.backHome}</Link>
     </EmptyState>
     {digest ? <p className="mt-3 text-center text-muted-foreground text-xs">
       {t.errorReference}: <span className="font-mono">{digest}</span></p> : null}

@@ -36,7 +36,7 @@ test('IAM03: a session Agent that lost eligibility is reported, never silently r
 
 test('IAM03: Agents without a label show a short, stable name', () => {
   expect(agentName({ iri: B, label: null }, messages.en)).toBe('Agent b8df6385');
-  expect(agentName({ iri: B, label: null }, messages['zh-CN'])).toBe('身份 b8df6385');
+  expect(agentName({ iri: B, label: null }, messages['zh-Hans'])).toBe('身份 b8df6385');
   expect(agentName({ iri: B, label: 'Ada Lovelace' }, messages.en)).toBe('Ada Lovelace');
   expect(agentName(agentOptions(discovery([A]))[0]!, messages.en)).toBe('Ada Lovelace');
   expect(isAgentIri(B)).toBe(true);

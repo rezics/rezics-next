@@ -7,6 +7,7 @@ import { CompassIcon, TriangleAlertIcon } from 'lucide-react';
 import { materializeData } from 'native-i18n';
 import type { UiLocale } from '../../i18n/define.ts';
 import { PageContainer } from '../shell/page.tsx';
+import Link from '../shell/localized-link.tsx';
 import type { WorkMessages } from './messages.ts';
 
 export interface WorkRevisionDetail {
@@ -84,7 +85,7 @@ export function WorkUnavailable({ messages }: { messages: WorkMessages }) {
       <AlertTitle>{messages.unavailableTitle}</AlertTitle>
       <AlertDescription>
         <p>{messages.unavailable}</p>
-        <p><a href="/search" className={buttonVariants({ variant: 'outline', size: 'sm' })}>{messages.searchWorks}</a></p>
+        <p><Link href="/search" className={buttonVariants({ variant: 'outline', size: 'sm' })}>{messages.searchWorks}</Link></p>
       </AlertDescription>
     </Alert>
   </PageContainer>;

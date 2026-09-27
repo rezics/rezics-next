@@ -43,7 +43,7 @@ export const SignedOut: Story = {
     const canvas = within(canvasElement);
     const search = canvas.getByRole('searchbox', { name: 'Search works' });
     await expect(canvas.getByRole('link', { name: 'Skip to content' })).toHaveAttribute('href', '#main-content');
-    await expect(canvas.getByRole('link', { name: 'Sign in' })).toHaveAttribute('href', '/sign-in?next=%2F');
+    await expect(canvas.getByRole('link', { name: 'Sign in' })).toHaveAttribute('href', '/auth/start?next=%2F');
     await userEvent.keyboard('/');
     await expect(search).toHaveFocus();
     await userEvent.click(canvas.getByRole('heading', { name: 'Page title' }));
@@ -51,13 +51,14 @@ export const SignedOut: Story = {
     await expect(search).toHaveFocus();
     const navigation = canvas.getByRole('navigation', { name: 'Main navigation' });
     await expect(within(navigation).getByRole('link', { name: 'Home' })).toHaveAttribute('aria-current', 'page');
-    await expect(canvas.getByRole('form', { name: 'Interface language' })).toBeVisible();
+    await expect(canvas.getByRole('combobox', { name: 'Language' })).toHaveValue('en');
+    await expect(canvas.getByRole('button', { name: 'Display mode' })).toBeVisible();
   },
 };
 
 export const SignedIn: Story = {
-  args: { account: <AccountMenu session={signedIn} messages={auth.en} />, notifications: <NotificationsLink /> },
-  parameters: { route: { pathname: '/studio' } },
+  args: { signedIn: true, account: <AccountMenu accountOrigin="https://account.rezics.test" session={signedIn} messages={auth.en} />, notifications: <NotificationsLink /> },
+  parameters: { route: { pathname: '/en/studio' } },
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     await expect(canvas.getByRole('link', { name: 'Notifications' })).toHaveAttribute('href', '/inbox');
@@ -71,8 +72,8 @@ export const SignedIn: Story = {
 };
 
 export const LongNames: Story = {
-  args: { account: <AccountMenu session={longNames} messages={auth.en} />, notifications: <NotificationsLink /> },
-  parameters: { route: { pathname: '/search', search: 'q=A+very+long+search+phrase+about+rivers+and+cities+across+centuries' } },
+  args: { signedIn: true, account: <AccountMenu accountOrigin="https://account.rezics.test" session={longNames} messages={auth.en} />, notifications: <NotificationsLink /> },
+  parameters: { route: { pathname: '/en/search', search: 'q=A+very+long+search+phrase+about+rivers+and+cities+across+centuries' } },
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     await expect(canvas.getByRole('searchbox', { name: 'Search works' }))
@@ -92,63 +93,73 @@ export const CollapsedNavigation: Story = {
     const canvas = within(canvasElement);
     const toggle = canvas.getByRole('button', { name: 'Expand navigation' });
     await expect(toggle).toHaveAttribute('aria-expanded', 'false');
-    await expect(canvas.queryByRole('form', { name: 'Interface language' })).toBeNull();
+    await expect(canvas.getByRole('combobox', { name: 'Language' })).toBeVisible();
     await userEvent.click(toggle);
     await expect(canvas.getByRole('button', { name: 'Collapse navigation' })).toHaveAttribute('aria-expanded', 'true');
-    await expect(canvas.getByRole('form', { name: 'Interface language' })).toBeVisible();
+    await expect(canvas.queryByText('Preferences')).toBeNull();
   },
 };
 
 export const Dark: Story = {
-  args: { theme: 'dark', account: <AccountMenu session={signedIn} messages={auth.en} />, notifications: <NotificationsLink /> },
+  args: { theme: 'dark', signedIn: true, account: <AccountMenu accountOrigin="https://account.rezics.test" session={signedIn} messages={auth.en} />, notifications: <NotificationsLink /> },
   globals: { theme: 'dark' },
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
-    await expect(within(canvas.getByRole('group', { name: 'Theme' })).getByRole('button', { name: 'Dark' }))
-      .toHaveAttribute('aria-pressed', 'true');
+    await userEvent.click(canvas.getByRole('button', { name: 'Account menu' }));
+    const menu = within(await within(document.body).findByRole('menu'));
+    await waitFor(() => expect(menu.getByRole('menuitem', { name: 'Display mode' })).toBeVisible());
+    await userEvent.click(menu.getByRole('menuitem', { name: 'Display mode' }));
+    await waitFor(() => expect(within(document.body).getByRole('menuitemradio', { name: 'Dark' }))
+      .toHaveAttribute('aria-checked', 'true'));
   },
 };
 
 export const ThemeChoice: Story = {
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
-    const theme = within(canvas.getByRole('group', { name: 'Theme' }));
-    await userEvent.click(theme.getByRole('button', { name: 'Dark' }));
+    const trigger = canvas.getByRole('button', { name: 'Display mode' });
+    await userEvent.click(trigger);
+    await userEvent.click(within(document.body).getByRole('menuitemradio', { name: 'Dark' }));
     await expect(document.documentElement).toHaveClass('dark');
     await expect(document.cookie).toContain('rezics_theme=dark');
-    await userEvent.click(theme.getByRole('button', { name: 'Match system' }));
+    await userEvent.click(trigger);
+    await userEvent.click(within(document.body).getByRole('menuitemradio', { name: 'Match system' }));
     await expect(document.documentElement).not.toHaveClass('dark');
     await expect(document.documentElement).not.toHaveClass('light');
-    await userEvent.click(theme.getByRole('button', { name: 'Light' }));
+    await userEvent.click(trigger);
+    await userEvent.click(within(document.body).getByRole('menuitemradio', { name: 'Light' }));
     await expect(document.documentElement).toHaveClass('light');
   },
 };
 
 export const Chinese: Story = {
-  args: { locale: 'zh-CN', messages: messages['zh-CN'], account: <AccountMenu session={signedIn} messages={auth['zh-CN']} />,
+  args: { locale: 'zh-Hans', messages: messages['zh-Hans'], signedIn: true, account: <AccountMenu accountOrigin="https://account.rezics.test" session={signedIn} messages={auth['zh-Hans']} />,
     notifications: <NotificationsLink /> },
-  globals: { locale: 'zh-CN' },
+  globals: { locale: 'zh-Hans' },
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     await expect(canvas.getByRole('navigation', { name: '主导航' })).toBeVisible();
-    await expect(within(canvas.getByRole('form', { name: '界面语言' }))
-      .getByRole('button', { name: '简体中文' })).toHaveAttribute('aria-pressed', 'true');
+    await userEvent.click(canvas.getByRole('button', { name: '账户菜单' }));
+    await waitFor(() => expect(within(document.body).getByRole('menuitem', { name: '语言' })).toBeVisible());
+    await userEvent.click(within(document.body).getByRole('menuitem', { name: '语言' }));
+    await waitFor(() => expect(within(document.body).getByRole('menuitemradio', { name: '简体中文' }))
+      .toHaveAttribute('aria-checked', 'true'));
     await expect(canvas.getByRole('searchbox', { name: '搜索作品' })).toBeVisible();
   },
 };
 
 export const Phone: Story = {
   globals: { viewport: { value: 'phone' } },
-  parameters: { route: { pathname: '/discover' } },
+  parameters: { route: { pathname: '/en/discover' } },
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     const bottom = canvas.getByRole('navigation', { name: 'Main navigation' });
     await expect(within(bottom).getAllByRole('link')).toHaveLength(5);
     await expect(within(bottom).getByRole('link', { name: 'Discover' })).toHaveAttribute('aria-current', 'page');
-    await expect(canvas.queryByRole('form', { name: 'Interface language' })).toBeNull();
+    await expect(canvas.getByRole('combobox', { name: 'Language' })).toBeVisible();
     await userEvent.click(canvas.getByRole('button', { name: 'Open navigation' }));
     const drawer = within(await within(document.body).findByRole('dialog', { name: 'Menu' }));
-    await waitFor(() => expect(drawer.getByRole('form', { name: 'Interface language' })).toBeVisible());
+    await expect(drawer.queryByText('Preferences')).toBeNull();
     await userEvent.click(drawer.getByRole('button', { name: 'Close' }));
     await waitFor(() => expect(within(document.body).queryByRole('dialog')).toBeNull());
     await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
@@ -156,12 +167,15 @@ export const Phone: Story = {
 };
 
 export const PhoneSignedInChinese: Story = {
-  args: { locale: 'zh-CN', messages: messages['zh-CN'], account: <AccountMenu session={longNames} messages={auth['zh-CN']} />,
+  args: { locale: 'zh-Hans', messages: messages['zh-Hans'], signedIn: true, account: <AccountMenu accountOrigin="https://account.rezics.test" session={longNames} messages={auth['zh-Hans']} />,
     notifications: <NotificationsLink /> },
-  globals: { locale: 'zh-CN', viewport: { value: 'phone' } },
+  globals: { locale: 'zh-Hans', viewport: { value: 'phone' } },
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     await expect(canvas.getByRole('button', { name: '账户菜单' })).toBeVisible();
+    await userEvent.click(canvas.getByRole('button', { name: '账户菜单' }));
+    const sheet = await within(document.body).findByRole('dialog', { name: '账户菜单' });
+    await waitFor(() => expect(within(sheet).getByRole('group', { name: '语言' })).toBeVisible());
     await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
   },
 };
@@ -169,5 +183,5 @@ export const PhoneSignedInChinese: Story = {
 export const PhoneDark: Story = {
   args: { theme: 'dark' },
   globals: { theme: 'dark', viewport: { value: 'phone' } },
-  parameters: { route: { pathname: '/studio' } },
+  parameters: { route: { pathname: '/en/studio' } },
 };

@@ -122,6 +122,7 @@ try {
 
   // One app with the owners the default QA app leaves out: Agent profiles and Realm replies.
   const app = createMainApp(stack.fuseki, { environment: stack.env, access: stack.access, content: stack.content,
+    contentAuthoring: stack.content,
     media: stack.media, structureObjects, profiles: new ProfilesAccess(stack.accessPool),
     agentProvisioning: new AgentProvisioning(stack.accessPool, stack.env),
     realmReplies: new RealmReplyStore(new RealmReplyContentStore(stack.contentPool), stack.content, stack.access,
@@ -195,10 +196,15 @@ try {
   const reply = `https://rezics.com/id/${randomUUID()}`;
   const replyVariant = `urn:rezics:variant:${randomUUID()}`;
   const replyText = 'The chapter where the map floods is the best thing I have read this year.';
-  const saved = await stack.content.saveDraft({ operationId: randomUUID(), variant: { id: replyVariant,
-    resourceId: reply, language: { kind: 'tag', tag: 'en', originalTag: 'en' }, direction: 'ltr' },
-  expectedHead: null, model: 'content-text-v1', sourceRevision: null, provenance: { kind: 'work-page-e2e' },
-  serializedJson: JSON.stringify({ body: replyText }) });
+  const rootRevision = (await stack.fuseki.query(`SELECT ?draft WHERE {
+    GRAPH ${iri(GRAPHS.revisions)} { ${iri(work.variants[0]!.decision)} <${RV}selectedDraft> ?draft }
+  }`)).results?.bindings[0]?.draft?.value;
+  if (!rootRevision) throw new Error('Published contribution has no selected draft');
+  stack.access.configureBaseline(stack.fuseki);
+  await a!.grant(`content:draft:${reply}`, 'content.draft');
+  const saved = await created<{ revisionId: string }>(await send('POST', '/v1/member-reply-drafts', {
+    profile: 'member-reply-draft-v1', reply, variantId: replyVariant, rootTarget: work.work, rootRevision,
+    language: 'en', direction: 'ltr', expectedHead: null, body: replyText, actingSubject: a!.actor }));
   const digest = (await stack.contentPool.query<{ byte_digest: string }>(
     'SELECT byte_digest FROM content.revision WHERE id = $1', [saved.revisionId])).rows[0]!.byte_digest;
   await a!.grant(`reply:create:${work.work}`, 'reply.create');
@@ -206,11 +212,11 @@ try {
   await a!.grant(`reply:place:${realm.realm}`, 'reply.place');
   await created(await send('POST', '/v1/realm-replies', { profile: 'realm-reply-identity-v1', reply,
     variantId: replyVariant, revisionId: saved.revisionId, author: a!.actor, rootTarget: work.work,
-    rootRevision: work.mainVersion, parentReply: null, parentRevision: null, contextRevision: null }));
+    rootRevision, parentReply: null, parentRevision: null, contextRevision: null }));
   const review = await created<{ decisionId: string }>(await send('POST', '/v1/realm-reply-reviews', {
     profile: 'realm-reply-review-v1', realm: realm.realm, reply, revisionId: saved.revisionId, revisionDigest: digest,
     expectedGeneration: '0', supersedes: null, outcome: 'approved', method: 'human', methodRevision: 'realm-manager-v1',
-    dependencyDigest: createHash('sha256').update(work.work).digest('hex'), reasonReference: null,
+    dependencyDigest: createHash('sha256').update(rootRevision).digest('hex'), reasonReference: null,
     actingSubject: a!.actor }));
   await created(await send('POST', '/v1/realm-reply-placements', { profile: 'realm-reply-placement-v1',
     realm: realm.realm, reply, revisionId: saved.revisionId, revisionDigest: digest,

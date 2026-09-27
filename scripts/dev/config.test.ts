@@ -23,6 +23,8 @@ test('P0.1 rejects ambiguous or unsafe stack project names', () => {
     .toThrow();
   expect(parseOptions(['--profile', 'qa', '--run-id', 'raw', '--persistent', '--raw-update'])
     .rawUpdate).toBe(true);
+  expect(parseOptions(['--profile', 'qa', '--run-id', 'browser', '--accounts-app']).accountsApp).toBe(true);
+  expect(() => parseOptions(['--accounts-app'])).toThrow('--accounts-app requires --profile qa');
 });
 
 test('P0.1 stack credentials and lineage persist across starts and remain private', () => {

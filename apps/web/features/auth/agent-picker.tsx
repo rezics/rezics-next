@@ -3,6 +3,7 @@ import { Badge } from '@rezics/ui/badge';
 import { Button } from '@rezics/ui/button';
 import { type AgentOption, agentName } from './acting-identity.ts';
 import { type AuthMessages, formatMessage } from './messages.ts';
+import type { UiLocale } from '../../i18n/define.ts';
 
 export type AgentPickerNotice =
   | { kind: 'ineligible'; previous: string }
@@ -19,6 +20,7 @@ export interface AgentPickerProps {
   preferenceRevision: string | null;
   sessionRevision: string | null;
   next: string;
+  locale: UiLocale;
   notice: AgentPickerNotice | null;
   messages: AuthMessages;
 }
@@ -49,7 +51,7 @@ function kindText(kind: AgentOption['kind'], messages: AuthMessages): string | n
 
 /** Explicit choice of the session Agent. The optional account-wide main-Agent
  * preference initializes later sessions; Main admits both choices. */
-export function AgentPicker({ options, current, preferred, preferenceRevision, sessionRevision, next, notice,
+export function AgentPicker({ options, current, preferred, preferenceRevision, sessionRevision, next, locale, notice,
   messages }: AgentPickerProps) {
   const checked = current ?? (sessionRevision === null
     ? preferred ?? (options?.length === 1 ? options[0]!.iri : null) : null);
@@ -63,6 +65,7 @@ export function AgentPicker({ options, current, preferred, preferenceRevision, s
     {options && options.length === 0 ? <p role="status">{messages.noAgents}</p> : null}
     {options?.length ? <form method="post" action="/identity/select" className="flex flex-col gap-4">
       <input type="hidden" name="next" value={next} />
+      <input type="hidden" name="locale" value={locale} />
       <input type="hidden" name="preferenceRevision" value={preferenceRevision ?? ''} />
       <input type="hidden" name="sessionRevision" value={sessionRevision ?? ''} />
       {/* min-w-0: a fieldset is min-content wide by default, and a long IRI would widen the page. */}

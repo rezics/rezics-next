@@ -2,6 +2,8 @@ import { spawn, type ChildProcess } from 'node:child_process';
 import { closeSync, openSync, readFileSync } from 'node:fs';
 import { createServer } from 'node:net';
 import { join, resolve } from 'node:path';
+import { Pool } from 'pg';
+import { initializeRelayCheckpoint } from '../../services/main/src/modules/outbox/relay.ts';
 import { readEnv } from '../dev/config.ts';
 
 const root = resolve(import.meta.dir, '../..');
@@ -20,10 +22,11 @@ const env = { ...process.env, ...apps, ...runtime, WEB_OAUTH_CLIENT_ID: publicCo
 const children: ChildProcess[] = [];
 const launchErrors = new WeakMap<ChildProcess, Error>();
 
-function launch(name: string, program: string, args: string[], extraEnv: NodeJS.ProcessEnv = {}): ChildProcess {
+function launch(name: string, program: string, args: string[], extraEnv: NodeJS.ProcessEnv = {},
+  workdir = root): ChildProcess {
   const log = openSync(join(artifactDir, 'logs', `e2e-${name}.log`), 'w', 0o600);
   try {
-    const child = spawn(program, args, { cwd: root, env: { ...env, ...extraEnv },
+    const child = spawn(program, args, { cwd: workdir, env: { ...env, ...extraEnv },
       detached: true, stdio: ['ignore', log, log] });
     child.on('error', error => launchErrors.set(child, error));
     children.push(child);
@@ -87,8 +90,21 @@ async function completed(child: ChildProcess, timeoutMs: number): Promise<number
 
 try {
   await assertPortAvailable(3003);
+  if (!env.MAIN_RELAY_DATABASE_URL || !env.MAIN_RELAY_CONSUMER || !env.MAIN_DATA_EPOCH) {
+    throw new Error('The e2e stack needs a Main relay checkpoint');
+  }
+  const relay = new Pool({ connectionString: env.MAIN_RELAY_DATABASE_URL });
+  try { await initializeRelayCheckpoint(relay, env.MAIN_RELAY_CONSUMER, env.MAIN_DATA_EPOCH); }
+  finally { await relay.end(); }
   const account = launch('account', 'bun', ['services/account/src/index.ts']);
   await ready('Account', `http://127.0.0.1:${apps.ACCOUNT_PORT}/health/ready`, account, 30_000);
+  if (!apps.ACCOUNTS_PORT) throw new Error('The e2e stack has no public Accounts origin');
+  const accounts = launch('accounts', join(root, 'node_modules/.bin/vinext'),
+    ['dev', '--hostname', '127.0.0.1', '--port', apps.ACCOUNTS_PORT], {
+      ACCOUNT_SERVICE_ORIGIN: `http://127.0.0.1:${apps.ACCOUNT_PORT}`,
+      WEB_ORIGIN: 'http://127.0.0.1:3003',
+    }, join(root, 'apps/accounts'));
+  await ready('Accounts', `http://127.0.0.1:${apps.ACCOUNTS_PORT}/sign-in`, accounts, 90_000);
   const main = launch('main', 'bun', ['services/main/src/index.ts']);
   await ready('Main', `http://127.0.0.1:${apps.MAIN_PORT}/health/ready`, main, 30_000);
   const preview = launch('preview', 'bun', ['scripts/dev/web-preview.ts', '--profile', 'qa', '--run-id', runId]);
@@ -97,7 +113,7 @@ try {
     '--reporter=junit', '--output', join(artifactDir, 'playwright')], {
     PLAYWRIGHT_JUNIT_OUTPUT_FILE: join(artifactDir, 'e2e.xml'),
   });
-  const code = await completed(browser, 180_000);
+  const code = await completed(browser, 300_000);
   if (code !== 0) throw new Error(`Playwright failed (${code}); see logs/e2e-playwright.log`);
   const storybook = launch('storybook', 'node_modules/.bin/vitest', ['run', '--root', 'apps/web', '--project', 'storybook']);
   const storybookCode = await completed(storybook, 180_000);

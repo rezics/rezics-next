@@ -271,7 +271,8 @@ try {
     if (tier === 'e2e') {
       const projectRunId = `${runId}-e`;
       startedProjects.push(projectRunId);
-      const up = command(root, 'bun', ['scripts/dev/cli.ts', 'stack:up', '--profile', 'qa', '--run-id', projectRunId], 180_000);
+      const up = command(root, 'bun', ['scripts/dev/cli.ts', 'stack:up', '--profile', 'qa', '--run-id', projectRunId,
+        '--accounts-app'], 180_000);
       if (!up.ok) {
         errors.push('e2e stack startup failed');
         writeFileSync(join(logs, 'e2e-stack.log'), up.output);

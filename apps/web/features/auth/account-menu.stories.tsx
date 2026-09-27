@@ -3,6 +3,8 @@ import { expect, userEvent, waitFor, within } from 'storybook/test';
 import { AccountMenu } from './account-menu.tsx';
 import { messages } from './messages.ts';
 import type { Session } from './session.ts';
+import { messages as shellMessages } from '../shell/messages.ts';
+import { ShellProvider } from '../shell/shell-provider.tsx';
 
 const ada = 'https://rezics.com/id/b8df6385-cec9-4fa0-8b89-71def5fa82b5';
 const pen = 'https://rezics.com/id/1e1489d5-6994-402c-99f2-50547eeaef4d';
@@ -13,8 +15,12 @@ const session: Session = { user: { id: 'u1', name: 'Ada Lovelace', email: 'ada@e
   agent: { status: 'selected', agent: agents[0]! }, agents, expiresAt: '2026-10-27T00:00:00.000Z' };
 
 const meta = { title: 'Auth/Account menu', component: AccountMenu,
-  args: { session, messages: messages.en },
-  decorators: [Story => <div className="flex justify-end p-4"><Story /></div>],
+  args: { session, messages: messages.en, accountOrigin: 'https://account.rezics.test' },
+  decorators: [(Story, context) => {
+    const locale = context.globals.locale === 'zh-Hans' ? 'zh-Hans' : 'en';
+    return <ShellProvider locale={locale} messages={shellMessages[locale]} initialTheme="system"
+      initialCollapsed={false}><div className="flex justify-end p-4"><Story /></div></ShellProvider>;
+  }],
 } satisfies Meta<typeof AccountMenu>;
 export default meta;
 type Story = StoryObj<typeof meta>;
@@ -32,6 +38,10 @@ export const SignedIn: Story = {
     // The menu opens with a short fade and zoom.
     await waitFor(() => expect(within(menu).getByRole('menuitem', { name: 'Switch Agent' })).toBeVisible());
     await expect(within(menu).getByRole('menuitem', { name: 'Sign out' })).toBeVisible();
+    await expect(within(menu).getByRole('menuitem', { name: 'Manage your REZICS Account' }))
+      .toHaveAttribute('href', 'https://account.rezics.test');
+    await expect(within(menu).getByRole('menuitem', { name: 'Language' })).toBeVisible();
+    await expect(within(menu).getByRole('menuitem', { name: 'Display mode' })).toBeVisible();
   },
 };
 
@@ -65,7 +75,8 @@ export const LongName: Story = {
 };
 
 export const Chinese: Story = {
-  args: { messages: messages['zh-CN'], session: { ...session, agent: { status: 'unselected' } } },
+  args: { messages: messages['zh-Hans'], session: { ...session, agent: { status: 'unselected' } } },
+  globals: { locale: 'zh-Hans' },
   async play({ canvasElement }) {
     const trigger = within(canvasElement).getByRole('button', { name: '账户菜单' });
     await expect(trigger).toHaveTextContent('选择身份');

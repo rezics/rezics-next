@@ -6,6 +6,7 @@ import { agentOptions } from '../../../features/auth/acting-identity.ts';
 import { SESSION_KEY_COOKIE } from '../../../features/auth/cookies.ts';
 import { safeReturnPath, signInPath } from '../../../features/auth/paths.ts';
 import { readSession, sessionAgentState, sessionDiscovery } from '../../../features/auth/session.ts';
+import { localizedPath } from '../../../i18n/locale.ts';
 
 /** Main compare-and-set switches this session; an optional second write saves
  * the account-wide main-Agent preference without retargeting other sessions. */
@@ -13,11 +14,12 @@ export async function POST(request: Request) {
   if (!sameOriginWrite(request)) return new Response('Origin mismatch', { status: 403 });
   const form = await request.formData();
   const agent = String(form.get('agent') ?? '');
-  const next = safeReturnPath(String(form.get('next') ?? ''), '/');
-  const back = (error: string) => new URL(`/identity?error=${error}&next=${encodeURIComponent(next)}`,
+  const locale = form.get('locale') === 'zh-Hans' ? 'zh-Hans' : 'en';
+  const next = safeReturnPath(String(form.get('next') ?? ''), localizedPath('/', locale));
+  const back = (error: string) => new URL(`${localizedPath('/identity', locale)}?error=${error}&next=${encodeURIComponent(next)}`,
     request.url);
   if (!await readSession()) {
-    return NextResponse.redirect(new URL(signInPath(`/identity?next=${encodeURIComponent(next)}`),
+    return NextResponse.redirect(new URL(signInPath(`${localizedPath('/identity', locale)}?next=${encodeURIComponent(next)}`),
       request.url), 303);
   }
   const [discovery, state, jar] = await Promise.all([

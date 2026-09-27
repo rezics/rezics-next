@@ -72,7 +72,7 @@ describe('Work page scope', () => {
     const view = { workRef: work, scope: { kind: 'realm' as const, realm }, realms: [] };
     expect(scopeName(view, messages.en, 'en')).toBe('Realm 9b1d3c2a');
     expect(scopeName({ ...view, realms: [{ id: realm, name: { value: '潮汐', language: 'zh-Hans',
-      direction: 'ltr' as const, basis: 'requested' as const } }] }, messages['zh-CN'], 'zh-CN')).toBe('潮汐');
+      direction: 'ltr' as const, basis: 'requested' as const } }] }, messages['zh-Hans'], 'zh-Hans')).toBe('潮汐');
   });
 });
 
