@@ -39,7 +39,8 @@ export async function createNativeCredit(deps: MainWorkDependencies, request: Re
     scope: `work:edit:${input.work}`, action: 'work.edit', idempotencyKey: key, requestDigest: digest });
   let admission = registered;
   if (registered.state !== 'sealed' && registered.dispatchEligible) {
-    try { admission = await deps.access.claim(registered.id, digest); }
+    // A baseline member's own-Work admission is claimed only with the current Account assertion.
+    try { admission = await deps.access.claim(registered.id, digest, principal); }
     catch (error) { if (!(error instanceof AdmissionDenied || error instanceof AdmissionExpired)) throw error; }
   }
   const receipt = workEditReceiptIri(admission.id);
