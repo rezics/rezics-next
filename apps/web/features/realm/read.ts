@@ -3,9 +3,9 @@ import type { UiLocale } from '../../i18n/define.ts';
 import { mainApiWithToken } from '../api/main.ts';
 import { idOf, parseRealmRef } from './route.ts';
 import { failureOf, type Loaded, type OfficialZone, type RankingMetric, type RankingPage, type RealmDecisionsPage,
-  type RealmDirectoryPage, type RealmHeader,
-  type RealmWorksPage, type ZoneChapterPage, type ZoneDecisionPage, type ZonePresentationRead,
-  type ZoneWorkPage } from './types.ts';
+  type RealmDecisionRead, type RealmDirectoryPage, type RealmHeader, type RealmZoneRead,
+  type RealmWorksPage, type ZoneChapterPage, type ZoneDecisionPage, type ZoneEditorLists,
+  type ZoneGenrePage, type ZonePresentationRead, type ZoneReplyPage, type ZoneWorkPage } from './types.ts';
 
 // Server reads for Realm pages. Every read is public: Main answers Realm,
 // Zone presentation and Zone module reads the same for everyone, so no
@@ -34,8 +34,7 @@ async function settle<T>(call: () => Promise<Answer<T>>, cursor?: string): Promi
 
 export type RealmResolution =
   | { kind: 'realm'; ref: string; realm: string; header: RealmHeader;
-    /** The Realm's Zone when it is an official one; community Realms have no Zone read yet. */
-    zone: { id: string; segment: string } | null }
+    zone: { id: string; segment: string | null } | null }
   | { kind: 'missing' }
   | { kind: 'unavailable' };
 
@@ -45,6 +44,9 @@ const officialZone = cache(async (segment: string): Promise<Loaded<OfficialZone>
 export const readRealmHeader = cache(async (realm: string, locale: UiLocale): Promise<Loaded<RealmHeader>> =>
   settle(() => main().v1.realms({ realm }).get({ query: { language: locale } })));
 
+const readRealmZone = cache(async (realm: string): Promise<Loaded<RealmZoneRead>> =>
+  settle(() => main().v1.realms({ realm }).zone.get({ query: {} })));
+
 /**
  * The Realm behind `/r/{ref}`: a Realm UUID, or an official Zone's route
  * segment resolved to its Realm. Shared by every tab and its metadata.
@@ -53,7 +55,7 @@ export const resolveRealm = cache(async (ref: string, locale: UiLocale): Promise
   const parsed = parseRealmRef(ref);
   if (!parsed) return { kind: 'missing' };
   let realm: string;
-  let zone: { id: string; segment: string } | null = null;
+  let zone: { id: string; segment: string | null } | null = null;
   if (parsed.kind === 'segment') {
     const official = await officialZone(parsed.segment);
     if (!official.ok) return { kind: official.failure === 'missing' ? 'missing' : 'unavailable' };
@@ -65,6 +67,15 @@ export const resolveRealm = cache(async (ref: string, locale: UiLocale): Promise
   } else realm = parsed.id;
   const header = await readRealmHeader(realm, locale);
   if (!header.ok) return { kind: header.failure === 'missing' ? 'missing' : 'unavailable' };
+  const selected = await readRealmZone(realm);
+  if (selected.ok) {
+    const zoneId = idOf(selected.data.zone);
+    if (!zoneId || selected.data.realm !== header.data.id
+      || zone && (zone.id !== zoneId || zone.segment !== selected.data.routeSegment)) {
+      return { kind: 'unavailable' };
+    }
+    zone = { id: zoneId, segment: selected.data.routeSegment };
+  } else if (selected.failure !== 'missing' && !zone) return { kind: 'unavailable' };
   return { kind: 'realm', ref, realm, header: header.data, zone };
 });
 
@@ -77,6 +88,9 @@ export const readRealmWorks = cache(async (realm: string, locale: UiLocale, curs
 
 export const readRealmDecisions = cache(async (realm: string, cursor?: string): Promise<Loaded<RealmDecisionsPage>> =>
   settle(() => main().v1.realms({ realm }).decisions.get({ query: { cursor } }), cursor));
+
+export const readRealmDecision = cache(async (realm: string, decision: string): Promise<Loaded<RealmDecisionRead>> =>
+  settle(() => main().v1.realms({ realm }).decisions({ decision }).get({ query: {} })));
 
 export const readNewAdoptions = cache(async (realm: string, locale: UiLocale): Promise<Loaded<ZoneWorkPage>> =>
   settle(() => main().v1.realms({ realm }).modules['new-adoptions'].get({ query: { language: locale } })));
@@ -99,6 +113,19 @@ export const readRising = cache(async (realm: string, locale: UiLocale): Promise
 
 export const readRecentDecisions = cache(async (realm: string): Promise<Loaded<ZoneDecisionPage>> =>
   settle(() => main().v1.realms({ realm }).modules['recent-decisions'].get({ query: {} })));
+
+export const readZoneQuotes = cache(async (realm: string, locale: UiLocale): Promise<Loaded<ZoneReplyPage>> =>
+  settle(() => main().v1.realms({ realm }).modules['reader-quotes'].get({ query: { language: locale } })));
+
+export const readZoneDiscussions = cache(async (realm: string, locale: UiLocale): Promise<Loaded<ZoneReplyPage>> =>
+  settle(() => main().v1.realms({ realm }).modules.discussions.get({ query: { language: locale } })));
+
+export const readZoneEditorLists = cache(async (realm: string, locale: UiLocale): Promise<Loaded<ZoneEditorLists>> =>
+  settle(() => main().v1.realms({ realm }).modules['editor-lists'].get({ query: { language: locale } })));
+
+export const readZoneGenres = cache(async (realm: string, context: string, locale: UiLocale):
+  Promise<Loaded<ZoneGenrePage>> =>
+  settle(() => main().v1.realms({ realm }).modules.genres({ context }).get({ query: { language: locale } })));
 
 /** A few active public Realms, for "Other communities". */
 export const readRealmDirectory = cache(async (locale: UiLocale): Promise<Loaded<RealmDirectoryPage>> =>

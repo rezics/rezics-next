@@ -163,7 +163,7 @@ export function fictionModules(locale: UiLocale): PlacedModule[] {
         work: byKey('taoist'), href: byKey('taoist').href },
       { id: 'q3', body: text('The delta chapters read like a map you can hear. Slow, strange and worth it.', 'en'),
         reader: 'marginalia', work: byKey('tides'), href: byKey('tides').href }] })),
-    place(module('charts', 'ranking', t.rankings, { more: '/en/r/fiction/works' }), ready<'ranking'>({ metric: 'views',
+    place(module('charts', 'ranking', t.rankings, { more: '/en/r/fiction/works' }), ready<'ranking'>({ metric: 'reads',
       tabs: (['day', 'week', 'month'] as const).map(interval => ({ interval,
         items: rotations[interval].map((key, index) => ({ rank: index + 1, work: byKey(key) })) })) })),
     place(module('lists', 'editorial-list', t.lists, { more: '/en/r/fiction/works' }), ready<'editorial-list'>({ lists: [
@@ -219,4 +219,3 @@ export function communityZone(locale: UiLocale, tokens: ZoneTokens = presetToken
 
 /** A module whose read failed, for the failure story. */
 export const failedRanking = place(module('charts', 'ranking', 'Charts'), { state: 'failed' });
-

@@ -1,4 +1,5 @@
 import { readEpochOrder } from '../discovery/lineage.ts';
+import { primaryDiscoveryCredits } from '../discovery/credits.ts';
 import { readRealmDecisions } from '../realm-reads/public-decision-index.ts';
 import { readRealmBasis } from '../realm-reads/read-realm.ts';
 import { GRAPHS, WORK_SEMANTIC_TYPES, iri, lit } from '../work/activate.ts';
@@ -75,18 +76,20 @@ export async function readZoneWorks(session: WorkReadSession, realm: string, kin
     list.push(row.type.value);
     types.set(row.work.value, list);
   }
-  const items = page.flatMap((row, index) => {
+  const hydrated = await Promise.all(page.map(async (row, index) => {
     const summary = summaries[index], again = fenced[index], facts = serial.get(row.work!.value);
     if (summary?.status !== 'available' || summary.disclosure !== 'public'
-      || again?.status !== 'available' || again.disclosure !== 'public') return [];
+      || again?.status !== 'available' || again.disclosure !== 'public') return null;
     if (!facts || status && facts.completionStatus !== 'completed') {
       throw new WorkReadUnavailable('Zone Work status differs from its metadata head');
     }
-    return [{ id: row.work!.value, revision: row.head!.value, mainVersion: row.main!.value,
+    return { id: row.work!.value, revision: row.head!.value, mainVersion: row.main!.value,
       title: summary.name, cover: summary.avatar, types: (types.get(row.work!.value) ?? []).sort(),
-      ...facts, evidence: row.evidence!.value, dataEpoch: row.revisionEpoch!.value,
-      sequence: row.sequence!.value }];
-  });
+      ...facts, primaryCredits: await primaryDiscoveryCredits(session, row.work!.value),
+      evidence: row.evidence!.value, dataEpoch: row.revisionEpoch!.value,
+      sequence: row.sequence!.value };
+  }));
+  const items = hydrated.filter((item): item is NonNullable<typeof item> => item !== null);
   await readRealmBasis(session, realm);
   const last = page.at(-1);
   return { profile: status ? 'zone-recently-completed-v1' as const : 'zone-new-adoptions-v1' as const,
@@ -169,18 +172,20 @@ export async function readZoneChapters(session: WorkReadSession, realm: string) 
     types.set(row.work.value, [...(types.get(row.work.value) ?? []), row.type.value]);
   }
   const fenced = await session.summaries(ids);
-  const items = page.flatMap(row => {
+  const hydrated = await Promise.all(page.map(async row => {
     const index = ids.indexOf(row.work!.value), summary = summaries[index], again = fenced[index];
     if (summary?.status !== 'available' || summary.disclosure !== 'public'
-      || again?.status !== 'available' || again.disclosure !== 'public') return [];
+      || again?.status !== 'available' || again.disclosure !== 'public') return null;
     const facts = serial.get(row.work!.value);
     if (!facts) throw new WorkReadUnavailable('Zone chapter Work metadata is incomplete');
-    return [{ work: { id: row.work!.value, revision: row.head!.value, mainVersion: row.main!.value,
-      title: summary.name, cover: summary.avatar, types: (types.get(row.work!.value) ?? []).sort(), ...facts },
+    return { work: { id: row.work!.value, revision: row.head!.value, mainVersion: row.main!.value,
+      title: summary.name, cover: summary.avatar, types: (types.get(row.work!.value) ?? []).sort(), ...facts,
+      primaryCredits: await primaryDiscoveryCredits(session, row.work!.value) },
     chapter: row.chapter!.value, publication: row.publication!.value,
     contentRevision: row.contentRevision!.value, language: row.language!.value,
-    dataEpoch: row.revisionEpoch!.value, sequence: row.sequence!.value }];
-  });
+    dataEpoch: row.revisionEpoch!.value, sequence: row.sequence!.value };
+  }));
+  const items = hydrated.filter((item): item is NonNullable<typeof item> => item !== null);
   await readRealmBasis(session, realm);
   const last = page.at(-1);
   return { profile: 'zone-latest-chapters-v1' as const, realm,

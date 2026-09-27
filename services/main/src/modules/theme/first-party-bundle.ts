@@ -12,6 +12,8 @@ const slot = Type.Union([Type.Literal('hero'), Type.Literal('header'),
 export const FirstPartyBundle = Type.Object({
   profile: Type.Literal('first-party-bundle-v1'),
   hostZone: nativeId,
+  /** Source package bytes installed by the web build, separate from emitted asset digests. */
+  packageDigest: Type.Optional(Type.String({ pattern: '^sha256:[0-9a-f]{64}$' })),
   entry: Type.String({ pattern: '^assets/[A-Za-z0-9][A-Za-z0-9._/-]*\\.js$', maxLength: 160 }),
   files: Type.Array(Type.Object({
     path: Type.String({ pattern: '^assets/[A-Za-z0-9][A-Za-z0-9._/-]*\\.(?:js|css|woff2)$',

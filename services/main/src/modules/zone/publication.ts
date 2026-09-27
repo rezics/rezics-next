@@ -1,16 +1,17 @@
 import { GRAPHS, RV, hash, iri, lit, type WorkActivationEnvironment } from '../work/activate.ts';
 import { assertGraphAdmissionOpen } from '../work/restore-lineage.ts';
 import { readZoneConfiguration, ZoneUnavailable } from './configuration.ts';
-import { DEFAULT_ZONE_PRESENTATION } from './presentation-format.ts';
+import { DEFAULT_ZONE_PRESENTATION, ZONE_PUBLIC_READ_SOURCES } from './presentation-format.ts';
 import { readDynamicDefinition, executeDynamicDefinition } from '../collection/dynamic.ts';
 import { withStableSearchSnapshot, MAX_SEARCH_REQUEST_MS } from '../work/search-readiness.ts';
 import { runZoneQueryBlocks, ZoneQueryBudgetExceeded } from './query-budget.ts';
 import type { ZoneConfiguration } from './config-format.ts';
 import { readCompositionPage } from '../structure/read.ts';
 import { PUBLIC_SEARCH_GRAPH } from '../work/select-main.ts';
+import type { MediaStore } from '../media/store.ts';
 
 export const ZONE_PUBLICATION_COST = { graphReads: 1, objectReads: 2,
-  officialPageSize: 50, maxModules: 24, maxBanners: 6,
+  officialPageSize: 50, maxModules: 24, maxBanners: 6, maxBannerMediaReads: 6,
   maxResolvedBlocks: 4, maxResolvedCollections: 2, maxCollectionPlacements: 8,
   maxModuleGraphReads: 64 } as const;
 
@@ -25,6 +26,23 @@ export async function readZonePublication(env: WorkActivationEnvironment, zone: 
     configuration: state.configuration,
     etag: `"${hash(JSON.stringify({ revision: state.revision, presentation }))}"`,
     cost: ZONE_PUBLICATION_COST };
+}
+
+/** A banner is delivered only from an active public Realm publication item.
+ * At most six exact Content lookups; an unusable image leaves the banner's text intact. */
+export async function readZoneBannerMedia(store: Pick<MediaStore, 'itemDelivery'> | undefined,
+  realm: string | null, banners: readonly { id: string; image: string }[]) {
+  return Promise.all(banners.map(async banner => {
+    const use = /^https:\/\/rezics\.com\/id\/([0-9a-f-]{36})$/.exec(banner.image)?.[1];
+    const item = use && store && realm ? await store.itemDelivery(use) : null;
+    return { id: banner.id, image: item && item.target === realm
+      && item.availability === 'available' && item.disclosure === 'public'
+      && item.moderation === 'none' && item.lifecycle === 'active'
+      && Number.isSafeInteger(item.width) && item.width > 0
+      && Number.isSafeInteger(item.height) && item.height > 0
+      ? { url: `/v1/media/uses/${use}`, width: item.width, height: item.height,
+        mediaType: item.mediaType } : null };
+  }));
 }
 
 /** Public module data resolves only disclosed query definitions, within the Zone's shared budget. */
@@ -46,7 +64,8 @@ export async function readZoneModuleData(env: WorkActivationEnvironment,
     ? config.presentation : DEFAULT_ZONE_PRESENTATION;
   const used = new Set(presentation.modules.flatMap(module => [module.source,
     ...(module.tabs ?? []).map(tab => tab.source)]).filter(source => source.kind === 'query-block')
-    .map(source => source.kind === 'query-block' ? source.block : ''));
+    .map(source => source.kind === 'query-block' ? source.block : '')
+    .filter(block => !(ZONE_PUBLIC_READ_SOURCES as readonly string[]).includes(block)));
   const selectedBlocks = [...used].slice(0, ZONE_PUBLICATION_COST.maxResolvedBlocks);
   const query = used.size ? await withStableSearchSnapshot(boundedFuseki,
     () => runZoneQueryBlocks({ ...config, queryBlocks: config.queryBlocks.filter(block =>
@@ -91,7 +110,8 @@ export async function readZoneModuleData(env: WorkActivationEnvironment,
   return presentation.modules.map(module => ({ id: module.id,
     sources: [module.source, ...(module.tabs ?? []).map(tab => tab.source)].map(source =>
       source.kind === 'query-block'
-        ? { source, state: blocks.get(source.block)?.state ?? 'skipped',
+        ? { source, state: (ZONE_PUBLIC_READ_SOURCES as readonly string[]).includes(source.block)
+          ? 'public-read' as const : blocks.get(source.block)?.state ?? 'skipped',
           members: blocks.get(source.block)?.members ?? [] }
         : source.kind === 'collection'
           ? { source, state: collectionData.get(source.collection)?.state ?? 'skipped',

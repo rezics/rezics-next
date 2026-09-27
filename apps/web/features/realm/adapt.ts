@@ -3,7 +3,7 @@ import type { UiLocale } from '../../i18n/define.ts';
 import { BFF_PREFIX } from '../api/browser.ts';
 import { coverKindOf } from '../catalogue/work.ts';
 import type { FallbackReason, MainExecution, PresentationBanner } from '../zones/presentation.ts';
-import { decisionHref, idOf, realmWorkHref } from './route.ts';
+import { decisionHref, realmWorkHref } from './route.ts';
 import type { MainAvatar, MainName, RealmDecision, WorkCard, ZonePresentationRead } from './types.ts';
 
 // Main's read shapes to the Zone SDK's public data. Every module and package
@@ -25,10 +25,11 @@ export function zoneImage(avatar: MainAvatar | null, avatarQuery = ''): ZoneImag
     ? { url: `${BFF_PREFIX}${avatar.url}${avatarQuery}`, width: avatar.width, height: avatar.height } : null;
 }
 
-/** A presentation banner's media resource, delivered through Main's public media use read. */
-export function bannerImage(banner: PresentationBanner): ZoneImage | null {
-  const id = idOf(banner.image);
-  return id ? { url: `${BFF_PREFIX}/v1/media/uses/${id}`, width: 1200, height: 630 } : null;
+/** Main verifies the exact public media Use and supplies its real dimensions. */
+export function bannerImage(banner: PresentationBanner,
+  media: ZonePresentationRead['bannerMedia']): ZoneImage | null {
+  const image = media.find(item => item.id === banner.id)?.image;
+  return image ? { url: `${BFF_PREFIX}${image.url}`, width: image.width, height: image.height } : null;
 }
 
 export interface AdaptContext {
@@ -39,11 +40,14 @@ export interface AdaptContext {
 
 /**
  * A Work card in this Zone. `decision` is the public Decision that placed
- * it here (the adoption's selection); Main's cards carry no author yet.
+ * it here (the adoption's selection).
  */
-export function zoneWork(card: WorkCard, context: AdaptContext, decision: string | null): ZoneWork {
+export function zoneWork(card: WorkCard & { primaryCredits?: { displayName: string | null }[] },
+  context: AdaptContext, decision: string | null): ZoneWork {
+  const author = card.primaryCredits?.find(credit => credit.displayName)?.displayName;
   return { id: card.id, href: realmWorkHref(card.id, context.realm), title: zoneText(card.title),
-    cover: zoneImage(card.cover, context.avatarQuery), kind: coverKindOf(card.types), author: null,
+    cover: zoneImage(card.cover, context.avatarQuery), kind: coverKindOf(card.types),
+    author: author ? { value: author, lang: '', dir: 'ltr' } : null,
     tagline: zoneText(card.tagline),
     status: card.completionStatus, chapters: card.chapterCount, words: card.wordCount,
     updatedAt: card.lastUpdatedAt,
@@ -59,16 +63,18 @@ export function zoneDecision(decision: RealmDecision, context: AdaptContext,
     href: decisionHref(context.locale, context.ref, decision.id) };
 }
 
-const mainReasons: Record<ZonePresentationRead['execution']['reason'], FallbackReason> = {
-  safe_mode: 'safe-mode', viewer_opt_out: 'viewer-opt-out', none_approved: 'none-approved' };
+const mainReasons: Record<Extract<ZonePresentationRead['execution'], { state: 'fallback' }>['reason'], FallbackReason> = {
+  safe_mode: 'safe-mode', viewer_opt_out: 'viewer-opt-out', none_approved: 'none-approved',
+  globally_disabled: 'global-disabled', revoked: 'revoked', expired: 'expired' };
 
 /**
- * Main's execution report. Main does not approve Zone packages yet (the
- * theme lifecycle is G-290's next step), so its state is always `fallback`;
- * when approvals land, the approved digest comes from here.
+ * Main's execution report gates the installed package by its reviewed source digest.
  */
 export function mainExecution(read: ZonePresentationRead): MainExecution {
-  return { approved: null, reason: mainReasons[read.execution.reason] };
+  if (read.execution.state === 'package') return { approved: { digest: read.execution.packageDigest },
+    reason: 'none-approved' };
+  return { approved: null, reason: read.execution.state === 'fallback'
+    ? mainReasons[read.execution.reason] : 'none-approved' };
 }
 
 /** Banners whose schedule includes `now`. */

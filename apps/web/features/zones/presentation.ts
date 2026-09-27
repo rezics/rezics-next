@@ -107,7 +107,7 @@ export function defaultPresentation(titles: DefaultTitles, preset: ZonePreset = 
           { id: 'adopted', label: titles.newlyAdded, source: feed('new-adoptions') },
           { id: 'completed', label: titles.recentlyCompleted, source: feed('recently-completed') }] },
       { id: 'rankings', type: 'ranking', title: titles.rankings, source: { kind: 'query-block', block: 'rankings' },
-        options: { metric: 'views', interval: 'week' } },
+        options: { metric: 'reads', interval: 'week' } },
       { id: 'quotes', type: 'quote-stream', title: titles.quotes,
         source: { kind: 'query-block', block: 'reader-quotes' } },
       { id: 'rising', type: 'rising', title: titles.rising, source: { kind: 'query-block', block: 'rising' },

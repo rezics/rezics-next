@@ -1,7 +1,7 @@
 import { buttonVariants } from '@rezics/ui/button';
 import { LibraryBigIcon } from 'lucide-react';
 import type { Metadata } from 'next';
-import { notFound } from 'next/navigation';
+import { notFound, redirect } from 'next/navigation';
 import type { ReactNode } from 'react';
 import { isUiLocale, type UiLocale } from '../../i18n/define.ts';
 import { getMessages, getTranslation } from '../../i18n/server.ts';
@@ -11,9 +11,9 @@ import { PageContainer } from '../shell/page.tsx';
 import { ZoneHome } from '../zones/zone-home.tsx';
 import { zoneDecision, zoneText, zoneWork } from './adapt.ts';
 import { loadModules } from './modules.ts';
-import { readRealmDecisions, readRealmDirectory, readRealmWorks, resolveRealm } from './read.ts';
+import { readRealmDecision, readRealmDecisions, readRealmDirectory, readRealmWorks, resolveRealm } from './read.ts';
 import { loadRealmView, membersText, RealmFrame, type RealmView } from './realm-page.tsx';
-import { idOf, parseCursor, type RealmTab, realmHref } from './route.ts';
+import { idOf, parseCursor, parseDecision, parseRealmRef, type RealmTab, realmHref } from './route.ts';
 import { RealmUnavailable } from './states.tsx';
 import type { ReadFailure } from './types.ts';
 import { ListFailure, RealmAbout, RealmDecisions, RealmDiscussions, RealmWorks } from './views.tsx';
@@ -43,6 +43,14 @@ type Content = (view: RealmView, locale: UiLocale, search: Search) => Promise<Re
 async function realmRoute({ params, searchParams }: RealmRouteProps, tab: RealmTab, content: Content) {
   const [{ locale, realm }, search] = await Promise.all([params, searchParams]);
   if (!isUiLocale(locale)) notFound();
+  if (parseRealmRef(realm)?.kind === 'id') {
+    const resolved = await resolveRealm(realm, locale);
+    if (resolved.kind === 'realm' && resolved.zone?.segment) {
+      const query = Object.fromEntries(Object.entries(search).filter((entry): entry is [string, string] =>
+        typeof entry[1] === 'string'));
+      redirect(realmHref(locale, resolved.zone.segment, tab, query));
+    }
+  }
   const view = await loadRealmView(realm, locale, search);
   if (view.kind === 'missing') notFound();
   if (view.kind === 'unavailable') return <RealmUnavailable messages={await getMessages('realm', locale)} />;
@@ -64,7 +72,7 @@ function failure(view: RealmView, tab: RealmTab, reason: ReadFailure) {
 
 export function RealmHomeRoute(props: RealmRouteProps) {
   return realmRoute(props, 'home', async view => {
-    const modules = await loadModules(view.presentation, view.context);
+    const modules = await loadModules(view.presentation, view.context, view.bannerMedia);
     return <ZoneHome modules={modules} zone={view.zone} pkg={view.pkg} locale={view.context.locale}
       messages={view.zoneMessages} avatarQuery={view.reader.avatarQuery} empty={<EmptyState icon={LibraryBigIcon} title={view.messages.emptyHomeTitle}
         description={view.messages.emptyHomeBody}>
@@ -87,12 +95,20 @@ export function RealmWorksRoute(props: RealmRouteProps) {
 
 export function RealmDecisionsRoute(props: RealmRouteProps) {
   return realmRoute(props, 'decisions', async (view, locale, search) => {
-    const cursor = parseCursor(search);
-    const [page, works] = await Promise.all([readRealmDecisions(view.context.realm, cursor),
-      readRealmWorks(view.context.realm, locale)]);
-    if (!page.ok) return failure(view, 'decisions', page.failure);
+    const decision = parseDecision(search);
+    const works = await readRealmWorks(view.context.realm, locale);
     const titled = new Map((works.ok ? works.data.items : []).map(item => [item.id,
       zoneWork(item, view.context, null)]));
+    if (decision) {
+      const exact = await readRealmDecision(view.context.realm, decision);
+      if (!exact.ok) return failure(view, 'decisions', exact.failure);
+      return <RealmDecisions locale={locale} messages={view.messages} zoneMessages={view.zoneMessages}
+        first={realmHref(locale, view.context.ref, 'decisions')} next={null}
+        decisions={[zoneDecision(exact.data, view.context, titled)]} />;
+    }
+    const cursor = parseCursor(search);
+    const page = await readRealmDecisions(view.context.realm, cursor);
+    if (!page.ok) return failure(view, 'decisions', page.failure);
     return <RealmDecisions locale={locale} messages={view.messages} zoneMessages={view.zoneMessages}
       {...paging(view, 'decisions', cursor, page.data.nextCursor)}
       decisions={page.data.items.map(item => zoneDecision(item, view.context, titled))} />;

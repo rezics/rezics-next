@@ -59,6 +59,11 @@ tasks:
     cmds:
       - bun scripts/dev/env-example.ts
 
+  zones:digest:
+    desc: Compute the digest of an installed official Zone source package.
+    cmds:
+      - bun scripts/zones/digest.ts {{.CLI_ARGS}}
+
   dev:prepare:
     desc: Start storage, apply migrations and write the application environment without starting processes.
     cmds:

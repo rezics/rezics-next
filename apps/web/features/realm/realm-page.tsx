@@ -20,6 +20,7 @@ import { ExecutionNotice, ZoneFrame, ZoneMasthead } from '../zones/zone-frame.ts
 import { type AdaptContext, mainExecution, zoneImage, zoneText } from './adapt.ts';
 import type { RealmMessages } from './messages.ts';
 import { readPresentation, type RealmResolution, resolveRealm } from './read.ts';
+import type { ZonePresentationRead } from './types.ts';
 import { RealmTabs } from './realm-tabs.tsx';
 import { type RealmTab, realmHref } from './route.ts';
 import type { RealmHeader } from './types.ts';
@@ -39,6 +40,7 @@ export interface RealmView {
   kind: 'view';
   realm: Resolved;
   presentation: ZonePresentation;
+  bannerMedia: ZonePresentationRead['bannerMedia'];
   execution: Execution;
   pkg: ZonePackage | null;
   zone: ZoneContext;
@@ -74,7 +76,10 @@ export async function loadRealmView(ref: string, locale: UiLocale, search: Searc
   if (realm.kind !== 'realm') return realm;
   const read = realm.zone ? await readPresentation(realm.zone.id) : null;
   // A Zone whose presentation cannot be read still renders its Realm with the default layout.
-  const presentation: ZonePresentation = read?.ok ? read.data.presentation : defaultPresentation(zoneMessages);
+  const presentation: ZonePresentation = read?.ok ? { ...read.data.presentation,
+    modules: read.data.presentation.modules.map(module => ({ ...module,
+      title: module.titles?.[locale] ?? module.title })) } : defaultPresentation(zoneMessages);
+  const bannerMedia = read?.ok ? read.data.bannerMedia : [];
   const lookEnabled = zoneLookEnabled(jar.get(ZONE_LOOK_COOKIE)?.value);
   const main = read?.ok ? mainExecution(read.data) : null;
   const slug = realm.zone?.segment ?? null;
@@ -90,7 +95,7 @@ export async function loadRealmView(ref: string, locale: UiLocale, search: Searc
       discussions: realmHref(locale, ref, 'discussions'), decisions: realmHref(locale, ref, 'decisions'),
       about: realmHref(locale, ref, 'about') },
   };
-  return { kind: 'view', realm, presentation, execution, pkg, zone, lookEnabled, messages, zoneMessages,
+  return { kind: 'view', realm, presentation, bannerMedia, execution, pkg, zone, lookEnabled, messages, zoneMessages,
     reader: { signedIn: reader.signedIn, actingSubject: reader.actingSubject ?? null, avatarQuery: reader.avatarQuery },
     context: { locale, ref, realm: realm.realm, avatarQuery: reader.avatarQuery } };
 }

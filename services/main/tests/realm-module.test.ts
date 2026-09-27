@@ -14,10 +14,14 @@ function session(options: { cursor?: string; candidate?: boolean; privateRealm?:
   const calls: string[] = [];
   const read = {
     options: { limit: 1, ...options }, position: { dataEpoch: 'epoch', sequence: '5' },
+    realm: async () => {
+      calls.push('realm basis');
+      if (options.privateRealm) throw new WorkReadMissing('Realm is unavailable');
+      return { space: work, realmRevision: revision, visibility: 'public',
+        reviewMode: 'open', revision: null };
+    },
     query: async (body: string) => {
       calls.push(body);
-      if (body.includes('rv:realmState rv:Active')) return options.privateRealm ? []
-        : [{ space: binding(work), revision: binding(revision) }];
       if (body.includes('rv:RestoreCutover')) return [];
       if (body.includes('SELECT DISTINCT ?work ?head')) return options.candidate ? [{
         work: binding(work), head: binding(revision), main: binding(realm), evidence: binding(revision),

@@ -3,14 +3,18 @@
 ## Review
 
 1. Submit a first-party revision with the exact file manifest, host Zone,
-   declared origins and byte budgets. Retain the built assets by digest.
+   declared origins and byte budgets. For an official Zone, run
+   `task zones:digest -- <slug>` on the reviewed checkout and put its result in
+   `bundle.packageDigest`. Retain the built assets by digest.
 2. Have a different reviewer inspect the source, built bytes, origin access,
    accessibility and failure behavior. Test the declarative fallback. Record
    the decision with a digest of the private review evidence.
 3. Activate that reviewed revision for its host with an expiry. Changed files,
-   slots or origins need a new revision and review. Keep diagnostic evidence
-   private. The backend does not fetch assets; verify their bytes at review and
-   again when the host loads them.
+   slots, origins or Zone source bytes need a new revision and review. Confirm
+   the presentation read reports `execution.state: "package"` and the exact
+   `packageDigest` approved for the web build. Keep diagnostic evidence private.
+   The backend does not fetch assets; verify their bytes at review and again
+   when the host loads them.
 
 ## Incident
 

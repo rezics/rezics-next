@@ -1,6 +1,7 @@
 import { Type, type Static } from 'typebox';
 import { Value } from 'typebox/value';
-import { checkZonePresentation, ZonePresentation } from './presentation-format.ts';
+import { checkZonePresentation, ZonePresentation, ZONE_PUBLIC_READ_SOURCES }
+  from './presentation-format.ts';
 
 // Immutable Zone configuration payload referenced by a zone-capability-v1
 // revision manifest. Typed routes and presentation are validated; the
@@ -67,6 +68,9 @@ export function checkZoneConfiguration(bytes: Uint8Array): ZoneConfiguration {
   }
   const depth = new Map<string, number>();
   for (const block of config.queryBlocks) {
+    if ((ZONE_PUBLIC_READ_SOURCES as readonly string[]).includes(block.block)) {
+      throw new InvalidZoneConfiguration('public Zone read source is reserved');
+    }
     if (depth.has(block.block)) throw new InvalidZoneConfiguration('duplicate Zone query block');
     const parentDepth = block.parent === undefined ? 0 : depth.get(block.parent);
     if (parentDepth === undefined || parentDepth + 1 > ZONE_LIMITS.queryNesting) {

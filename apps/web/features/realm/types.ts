@@ -12,12 +12,17 @@ export type RealmWorksPage = Ok<Realm['works']['get']>;
 export type RealmWork = RealmWorksPage['items'][number];
 export type RealmDecisionsPage = Ok<Realm['decisions']['get']>;
 export type RealmDecision = RealmDecisionsPage['items'][number];
+export type RealmDecisionRead = Ok<ReturnType<Realm['decisions']>['get']>;
 export type ZoneWorkPage = Ok<Realm['modules']['new-adoptions']['get']>;
 export type ZoneChapterPage = Ok<Realm['modules']['latest-chapters']['get']>;
 export type ZoneDecisionPage = Ok<Realm['modules']['recent-decisions']['get']>;
+export type ZoneReplyPage = Ok<Realm['modules']['discussions']['get']>;
+export type ZoneEditorLists = Ok<Realm['modules']['editor-lists']['get']>;
+export type ZoneGenrePage = Ok<ReturnType<Realm['modules']['genres']>['get']>;
 export type RankingPage = Ok<Realm['rankings']['get']>;
 export type RankingMetric = RankingPage['metric'];
 export type ZonePresentationRead = Ok<Zone['presentation']['get']>;
+export type RealmZoneRead = Ok<Realm['zone']['get']>;
 export type RealmDirectoryPage = Ok<MainClient['v1']['realms']['get']>;
 export type OfficialZone = Ok<ReturnType<MainClient['v1']['zones']['by-segment']>['get']>;
 /** The Work card fields every Realm and Zone module read shares. */

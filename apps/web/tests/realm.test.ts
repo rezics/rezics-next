@@ -40,18 +40,17 @@ describe('Realm addresses', () => {
 
   test('"Why here?" links open the Decision on the Decisions tab', () => {
     expect(decisionAnchor(iri(decision))).toBe(`decision-${decision}`);
-    expect(decisionHref('en', 'fiction', iri(decision))).toBe(`/en/r/fiction/decisions#decision-${decision}`);
+    expect(decisionHref('en', 'fiction', iri(decision))).toBe(`/en/r/fiction/decisions?decision=${decision}#decision-${decision}`);
   });
 
   test('a Work opened from a Realm stays in that Realm’s scope', () => {
     expect(realmWorkHref(iri(work), realm)).toBe(`/w/${work}?scope=realm&realm=${realm}`);
   });
 
-  test('a chart of views reads Main’s read rankings; shelved and rated charts wait for a read', () => {
-    expect(chartMetric('views')).toBe('reads');
+  test('chart metrics use Main’s ranking vocabulary', () => {
+    expect(chartMetric('reads')).toBe('reads');
     expect(chartMetric(undefined)).toBe('reads');
-    expect(chartMetric('shelved')).toBeNull();
-    expect(chartMetric('rating')).toBeNull();
+    expect(chartMetric('finished-chapters')).toBe('finished-chapters');
   });
 
   test('cursors come from the URL only when well formed', () => {
@@ -77,7 +76,8 @@ describe('Main reads as Zone data', () => {
       title: { value: 'The Cartographer of Tides', lang: 'en', dir: 'ltr' },
       cover: { url: '/api/main/v1/media/avatars/s', width: 400, height: 600 }, kind: 'book', author: null,
       tagline: { value: 'A delta that redraws itself.', lang: 'en', dir: 'ltr' }, status: 'ongoing', chapters: 41,
-      words: null, updatedAt: '2026-09-27T12:00:00.000Z', decision: `/en/r/fiction/decisions#decision-${decision}` });
+      words: null, updatedAt: '2026-09-27T12:00:00.000Z',
+      decision: `/en/r/fiction/decisions?decision=${decision}#decision-${decision}` });
     expect(zoneWork(card({ tagline: null }), context, null)).toMatchObject({ tagline: null, decision: null });
   });
 
@@ -98,18 +98,21 @@ describe('Main reads as Zone data', () => {
     const item = (overrides: Partial<RealmDecision>): RealmDecision => ({ id: iri(decision), kind: 'adoption',
       dataEpoch: '1', sequence: '9', work: iri(work), subject: iri(work), outcome: null, ...overrides });
     expect(zoneDecision(item({}), context, titled)).toEqual({ id: iri(decision), kind: 'adoption', outcome: null,
-      sequence: '9', href: `/en/r/fiction/decisions#decision-${decision}`,
+      sequence: '9', href: `/en/r/fiction/decisions?decision=${decision}#decision-${decision}`,
       work: { id: iri(work), href: `/w/${work}?scope=realm&realm=${realm}`,
         title: { value: 'The Cartographer of Tides', lang: 'en', dir: 'ltr' } } });
     expect(zoneDecision(item({ work: iri(realm) }), context, titled).work).toBeNull();
   });
 
-  test('Main’s execution report names why the fallback shows; it approves no package yet', () => {
-    const read = (reason: ZonePresentationRead['execution']['reason']) =>
+  test('Main’s execution report carries the approved source digest and fallback reason', () => {
+    const read = (reason: Extract<ZonePresentationRead['execution'], { state: 'fallback' }>['reason']) =>
       ({ execution: { state: 'fallback', reason } }) as ZonePresentationRead;
     expect(mainExecution(read('none_approved'))).toEqual({ approved: null, reason: 'none-approved' });
     expect(mainExecution(read('safe_mode'))).toEqual({ approved: null, reason: 'safe-mode' });
     expect(mainExecution(read('viewer_opt_out'))).toEqual({ approved: null, reason: 'viewer-opt-out' });
+    const approved = { execution: { state: 'package', packageDigest: `sha256:${'a'.repeat(64)}` } } as unknown as ZonePresentationRead;
+    expect(mainExecution(approved)).toEqual({ approved: { digest: `sha256:${'a'.repeat(64)}` },
+      reason: 'none-approved' });
   });
 
   test('banners show inside their schedule, their media through the BFF', () => {
@@ -119,6 +122,8 @@ describe('Main reads as Zone data', () => {
     expect(liveBanners([banner('always'), banner('past', undefined, '2026-09-01T00:00:00.000Z'),
       banner('future', '2026-10-01T00:00:00.000Z'), banner('now', '2026-09-27T00:00:00.000Z', '2026-09-29T00:00:00.000Z')],
     now).map(item => item.id)).toEqual(['always', 'now']);
-    expect(bannerImage(banner('b'))?.url).toBe(`/api/main/v1/media/uses/${work}`);
+    expect(bannerImage(banner('b'), [{ id: 'b', image: {
+      url: `/v1/media/uses/${work}`, width: 1440, height: 540, mediaType: 'image/webp',
+    } }])).toEqual({ url: `/api/main/v1/media/uses/${work}`, width: 1440, height: 540 });
   });
 });

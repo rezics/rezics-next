@@ -1,6 +1,7 @@
 import { t } from 'elysia';
 import { pageFields, readAvatar, readId, readName, readPosition, WORK_READ_COST, workCard }
   from '../work/read-contract.ts';
+import { ZonePresentation } from '../zone/presentation-format.ts';
 
 export const realmHeader = t.Object({ profile: t.Literal('realm-read-v1'), id: readId,
   space: readId, revision: readId, name: readName, icon: readAvatar,
@@ -36,6 +37,11 @@ export const realmDecision = t.Object({ id: readId,
   outcome: t.Nullable(t.Union([t.Literal('accepted'), t.Literal('rejected')])) });
 export const realmDecisionsPage = t.Object({ profile: t.Literal('realm-decisions-v1'),
   items: t.Array(realmDecision), ...pageFields });
+export const realmDecisionRead = t.Object({ profile: t.Literal('realm-decision-v1'),
+  ...realmDecision.properties, sourcePosition: readPosition });
+export const realmZoneRead = t.Object({ profile: t.Literal('realm-zone-v1'), realm: readId,
+  zone: readId, routeSegment: t.Nullable(t.String()), revision: readId,
+  presentation: ZonePresentation, presentationUrl: t.String(), sourcePosition: readPosition });
 
 /** Shares the measured Work envelope. Candidate discovery can still scan/sort the Realm relation. */
 export const REALM_READ_COST = { ...WORK_READ_COST,

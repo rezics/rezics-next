@@ -41,7 +41,12 @@ export function realmHref(locale: UiLocale, ref: string, tab: RealmTab = 'home',
 export const decisionAnchor = (decision: string) => `decision-${idOf(decision) ?? decision.slice(-36)}`;
 
 export function decisionHref(locale: UiLocale, ref: string, decision: string): string {
-  return `${realmHref(locale, ref, 'decisions')}#${decisionAnchor(decision)}`;
+  const id = idOf(decision);
+  return `${realmHref(locale, ref, 'decisions', id ? { decision: id } : {})}#${decisionAnchor(decision)}`;
+}
+
+export function parseDecision(params: SearchParams): string | null {
+  return typeof params.decision === 'string' && uuid.test(params.decision) ? params.decision : null;
 }
 
 /** The tab a pathname shows, for the tab bar's current item. */

@@ -1,22 +1,30 @@
 import type { ZoneBanner, ZoneModuleData, ZoneShelfTab, ZoneWork } from '@rezics/zone-sdk';
 import type { UiLocale } from '../../i18n/define.ts';
+import { discoverHref } from '../discover/state.ts';
 import { feedOf, placedModule, type PresentationModule, type RealmFeed, type ZonePresentation }
   from '../zones/presentation.ts';
 import type { ModuleState, PlacedModule } from '../zones/zone-home.tsx';
-import { type AdaptContext, bannerImage, liveBanners, zoneDecision, zoneWork } from './adapt.ts';
+import { type AdaptContext, bannerImage, liveBanners, zoneDecision, zoneText, zoneWork } from './adapt.ts';
 import { readLatestChapters, readNewAdoptions, readRankings, readRealmWorks, readRecentDecisions,
-  readRecentlyCompleted, readRising } from './read.ts';
-import { idOf, realmHref } from './route.ts';
-import type { Loaded, RankingMetric } from './types.ts';
+  readRecentlyCompleted, readRising, readZoneDiscussions, readZoneEditorLists, readZoneGenres,
+  readZoneQuotes } from './read.ts';
+import { idOf, realmHref, realmWorkHref } from './route.ts';
+import type { Loaded, MainAvatar, MainName, RankingMetric, ZonePresentationRead } from './types.ts';
 
 // Loads each module of a Zone's presentation from Main's Realm module reads.
-// A module whose source has no read yet (reader quotes, Collections, Context
-// chips, shelved or rated charts) is `unsupported` and stays off the page; it
+// A module whose source has no read yet is `unsupported` and stays off the page; it
 // is never assembled from other reads in the browser or here.
 
 const failed = { state: 'failed' } as const;
 const empty = { state: 'empty' } as const;
 const unsupported = { state: 'unsupported' } as const;
+
+function summaryWork(item: { id: string; title: MainName; cover?: MainAvatar }, context: AdaptContext): ZoneWork {
+  return zoneWork({ id: item.id, title: item.title,
+    cover: item.cover ?? { kind: 'fallback', policy: 'zone', key: item.id, resourceType: 'work' },
+    types: [], tagline: null, completionStatus: null, chapterCount: null,
+    wordCount: null, lastUpdatedAt: null }, context, null);
+}
 
 /** Which adoption placed each Work here: the Realm's own list pairs Works with their selection. */
 async function adoptions(context: AdaptContext): Promise<Map<string, string>> {
@@ -49,10 +57,12 @@ async function feedWorks(feed: RealmFeed, context: AdaptContext): Promise<Loaded
   return { ok: false, failure: 'invalid' };
 }
 
-async function hero(module: PresentationModule, presentation: ZonePresentation, context: AdaptContext):
+async function hero(module: PresentationModule, presentation: ZonePresentation, context: AdaptContext,
+  bannerMedia: ZonePresentationRead['bannerMedia']):
   Promise<ModuleState<'hero-carousel'>> {
   const banners: ZoneBanner[] = liveBanners(presentation.banners, Date.now()).map(banner => ({ id: banner.id,
-    title: { value: banner.title, lang: '', dir: 'ltr' }, href: banner.href, image: bannerImage(banner) }));
+    title: { value: banner.title, lang: '', dir: 'ltr' }, href: banner.href,
+    image: bannerImage(banner, bannerMedia) }));
   if (banners.length) return { state: 'ready', data: { banners } };
   // Without art-directed banners the hero shows the newest picks, covers first.
   const feed = feedOf(module.source) ?? 'new-adoptions';
@@ -79,19 +89,15 @@ async function shelf(module: PresentationModule, context: AdaptContext): Promise
   return loaded.some(({ works }) => !works.ok) ? failed : empty;
 }
 
-/**
- * The chart metric Main computes for a presentation's metric. Main ranks by
- * reads and finished chapters; a chart of shelving or ratings has no read yet.
- */
-export function chartMetric(metric: 'views' | 'shelved' | 'rating' = 'views'): RankingMetric | null {
-  return metric === 'views' ? 'reads' : null;
+/** The presentation and ranking read use the same metric vocabulary. */
+export function chartMetric(metric: RankingMetric = 'reads'): RankingMetric {
+  return metric;
 }
 
 const intervals = ['day', 'week', 'month'] as const;
 
 async function rankings(module: PresentationModule, context: AdaptContext): Promise<ModuleState<'ranking'>> {
   const metric = chartMetric(module.options?.metric);
-  if (!metric) return unsupported;
   const [placed, ...pages] = await Promise.all([adoptions(context),
     ...intervals.map(interval => readRankings(context.realm, context.locale, interval, metric))]);
   if (pages.every(page => !page.ok)) return failed;
@@ -100,7 +106,7 @@ async function rankings(module: PresentationModule, context: AdaptContext): Prom
     return page.ok && page.data.items.length ? [{ interval, items: page.data.items.map((item, rank) => ({
       rank: rank + 1, work: zoneWork(item, context, placed.get(item.id) ?? null) })) }] : [];
   });
-  return tabs.length ? { state: 'ready', data: { metric: module.options?.metric ?? 'views', tabs } } : empty;
+  return tabs.length ? { state: 'ready', data: { metric, tabs } } : empty;
 }
 
 async function rising(module: PresentationModule, context: AdaptContext): Promise<ModuleState<'rising'>> {
@@ -120,12 +126,71 @@ async function decisions(module: PresentationModule, context: AdaptContext): Pro
   return items.length ? { state: 'ready', data: { items } } : empty;
 }
 
-async function load(module: PresentationModule, presentation: ZonePresentation, context: AdaptContext):
+async function quotes(module: PresentationModule, context: AdaptContext): Promise<ModuleState<'quote-stream'>> {
+  if (module.source.kind !== 'query-block' || module.source.block !== 'reader-quotes') return unsupported;
+  const page = await readZoneQuotes(context.realm, context.locale);
+  if (!page.ok) return failed;
+  const items = page.data.items.slice(0, module.options?.limit ?? 6).map(item => ({
+    id: item.id, body: { value: item.excerpt, lang: '', dir: 'ltr' as const },
+    reader: item.authorName, work: summaryWork(item.work, context),
+    href: `${realmWorkHref(item.work.id, context.realm)}#work-discussion`,
+  }));
+  return items.length ? { state: 'ready', data: { quotes: items } } : empty;
+}
+
+async function discussions(module: PresentationModule, context: AdaptContext):
+  Promise<ModuleState<'discussion-list'>> {
+  if (module.source.kind !== 'query-block' || module.source.block !== 'discussions') return unsupported;
+  const page = await readZoneDiscussions(context.realm, context.locale);
+  if (!page.ok) return failed;
+  const items = page.data.items.slice(0, module.options?.limit ?? 8).map(item => ({
+    id: item.id, title: { value: item.excerpt, lang: '', dir: 'ltr' as const },
+    href: `${realmWorkHref(item.work.id, context.realm)}#work-discussion`,
+    replies: null, work: summaryWork(item.work, context),
+  }));
+  return items.length ? { state: 'ready', data: { items } } : empty;
+}
+
+async function editorLists(module: PresentationModule, context: AdaptContext):
+  Promise<ModuleState<'editorial-list'>> {
+  const collections = [module.source, ...(module.tabs ?? []).map(tab => tab.source)]
+    .flatMap(source => source.kind === 'collection' ? [source.collection] : []);
+  if (!collections.length) return unsupported;
+  const read = await readZoneEditorLists(context.realm, context.locale);
+  if (!read.ok) return failed;
+  const lists = read.data.lists.filter(list => collections.includes(list.collection))
+    .slice(0, module.options?.limit ?? 2).map(list => ({ id: list.collection,
+      title: zoneText(list.name), blurb: null, href: null,
+      items: list.items.map(item => summaryWork(item, context)) }));
+  return lists.length ? { state: 'ready', data: { lists } } : empty;
+}
+
+async function genres(module: PresentationModule, context: AdaptContext): Promise<ModuleState<'chip-nav'>> {
+  if (module.source.kind !== 'context') return unsupported;
+  const contextId = idOf(module.source.context);
+  if (!contextId) return unsupported;
+  const read = await readZoneGenres(context.realm, contextId, context.locale);
+  if (!read.ok) return failed;
+  const chips = read.data.items.flatMap(item => {
+    const term = idOf(item.id);
+    return term ? [{ id: item.id, label: zoneText(item.name),
+      href: discoverHref({ scope: { kind: 'realm', realm: context.realm },
+        context: contextId, type: null, term }) }] : [];
+  }).slice(0, module.options?.limit ?? 12);
+  return chips.length ? { state: 'ready', data: { chips } } : empty;
+}
+
+async function load(module: PresentationModule, presentation: ZonePresentation, context: AdaptContext,
+  bannerMedia: ZonePresentationRead['bannerMedia']):
   Promise<ModuleState> {
   switch (module.type) {
-    case 'hero-carousel': return hero(module, presentation, context);
+    case 'hero-carousel': return hero(module, presentation, context, bannerMedia);
     case 'shelf': return shelf(module, context);
     case 'decision-log': return decisions(module, context);
+    case 'quote-stream': return quotes(module, context);
+    case 'discussion-list': return discussions(module, context);
+    case 'editorial-list': return editorLists(module, context);
+    case 'chip-nav': return genres(module, context);
     case 'ranking': return rankings(module, context);
     case 'rising': return rising(module, context);
     case 'announcement': return { state: 'ready',
@@ -141,9 +206,10 @@ function moreOf(module: PresentationModule, locale: UiLocale, ref: string): stri
   return null;
 }
 
-export async function loadModules(presentation: ZonePresentation, context: AdaptContext): Promise<PlacedModule[]> {
+export async function loadModules(presentation: ZonePresentation, context: AdaptContext,
+  bannerMedia: ZonePresentationRead['bannerMedia'] = []): Promise<PlacedModule[]> {
   return Promise.all(presentation.modules.map(async module => ({
     module: placedModule(module, moreOf(module, context.locale, context.ref)),
-    state: await load(module, presentation, context),
+    state: await load(module, presentation, context, bannerMedia),
   }) as PlacedModule));
 }

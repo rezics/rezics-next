@@ -43,7 +43,7 @@ export const zoneModuleTypes = ['hero-carousel', 'chip-nav', 'announcement', 'sh
 export type ZoneModuleType = (typeof zoneModuleTypes)[number];
 
 export type RankingInterval = 'day' | 'week' | 'month';
-export type RankingMetric = 'views' | 'shelved' | 'rating';
+export type RankingMetric = 'reads' | 'finished-chapters';
 
 /** Text in the language Main returned it in. */
 export interface ZoneText { value: string; lang: string; dir: 'ltr' | 'rtl' }

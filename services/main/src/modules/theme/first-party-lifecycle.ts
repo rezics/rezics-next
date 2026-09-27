@@ -211,6 +211,16 @@ export function firstPartyExecution(view: FirstPartyView | null, hostZone: strin
     activation: view.activation };
 }
 
+/** The web's package gate consumes the reviewed source digest. Older asset-only
+ * approvals retain their existing active report until they are reviewed again. */
+export function zonePackageExecution(view: FirstPartyView | null, hostZone: string, now = Date.now()) {
+  const execution = firstPartyExecution(view, hostZone, now);
+  return execution.state === 'active' && execution.package.packageDigest
+    ? { state: 'package' as const, packageDigest: execution.package.packageDigest,
+      revision: execution.revision, activation: execution.activation }
+    : execution;
+}
+
 interface Terminal { outcome: 'succeeded' | 'cancelled'; reason: string | null;
   operation: string; receipt: string; requestDigest: string; admissionId: string;
   authorityEpoch: string; scope: string; dataEpoch: string; sequence: string; actor: string;

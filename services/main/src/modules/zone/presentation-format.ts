@@ -7,6 +7,14 @@ const slug = Type.String({ pattern: '^[a-z0-9]+(-[a-z0-9]+)*$', maxLength: 64 })
 const label = Type.String({ minLength: 1, maxLength: 120 });
 const link = Type.String({ pattern: '^/(?!/)[^\\s]{0,255}$' });
 const colour = Type.String({ pattern: '^#[0-9a-fA-F]{6}$' });
+export const ZONE_PUBLIC_READ_SOURCES = [
+  'new-adoptions', 'latest-chapters', 'recently-completed', 'recent-decisions',
+  'rankings', 'rising', 'reader-quotes', 'discussions',
+] as const;
+const publicReadSources = new Set<string>(ZONE_PUBLIC_READ_SOURCES);
+const localizedTitles = Type.Partial(Type.Object({ en: label, 'zh-Hant': label,
+  'zh-Hans': label, ja: label, ko: label, de: label, fr: label, es: label },
+{ additionalProperties: false }));
 
 const moduleSource = Type.Union([
   Type.Object({ kind: Type.Literal('query-block'), block: slug }, { additionalProperties: false }),
@@ -45,6 +53,7 @@ export const ZonePresentation = Type.Object({
       Type.Literal('editorial-list'), Type.Literal('quote-stream'), Type.Literal('people'),
       Type.Literal('rising'), Type.Literal('decision-log'), Type.Literal('discussion-list')]),
     title: label,
+    titles: Type.Optional(localizedTitles),
     source: moduleSource,
     tabs: Type.Optional(Type.Array(moduleTab, { maxItems: 8 })),
     options: Type.Optional(Type.Object({
@@ -52,7 +61,7 @@ export const ZonePresentation = Type.Object({
       shuffle: Type.Optional(Type.Boolean()),
       rail: Type.Optional(Type.Boolean()),
       limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 24 })),
-      metric: Type.Optional(Type.Union([Type.Literal('views'), Type.Literal('shelved'), Type.Literal('rating')])),
+      metric: Type.Optional(Type.Union([Type.Literal('reads'), Type.Literal('finished-chapters')])),
       interval: Type.Optional(Type.Union([Type.Literal('day'), Type.Literal('week'), Type.Literal('month')])),
     }, { additionalProperties: false })),
   }, { additionalProperties: false }), { maxItems: 24 }),
@@ -76,7 +85,8 @@ export function checkZonePresentation(value: unknown, queryBlocks: readonly { bl
       tabs.add(tab.id);
     }
     for (const source of sources) {
-      if (source.kind === 'query-block' && !blockIds.has(source.block)) {
+      if (source.kind === 'query-block' && !blockIds.has(source.block)
+        && !publicReadSources.has(source.block)) {
         throw new Error('Zone module refers to a missing query block');
       }
     }

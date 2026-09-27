@@ -93,8 +93,12 @@ test('Zone modules page public adoptions and completed serials with decision evi
     await stack.fuseki.update(`PREFIX rv: <${RV}> INSERT DATA { GRAPH ${iri(GRAPHS.revisions)} {
       ${iri(contentRevision)} a rv:ErasedRevision . } }`);
     expect((await json<Page<unknown>>(await stack.call('GET', `${base}/latest-chapters`))).items).toEqual([]);
-    const decisions = await json<{ summary: { adoption: number; basis: string } }>(
+    const decisions = await json<{ summary: { adoption: number; basis: string };
+      items: Array<{ id: string; kind: string }> }>(
       await stack.call('GET', `${base}/recent-decisions`));
     expect(decisions.summary).toMatchObject({ adoption: 2, basis: 'exact-page' });
+    const exact = await json<{ id: string; kind: string }>(await stack.call('GET',
+      `/v1/realms/${short(realm.realm)}/decisions/${short(decisions.items[0]!.id)}`));
+    expect(exact).toMatchObject({ id: decisions.items[0]!.id, kind: 'adoption' });
   } finally { await stack.stop(); }
 }, 120_000);

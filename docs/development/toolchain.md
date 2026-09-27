@@ -213,6 +213,7 @@ Pass command arguments after `--`; run `task --list` for the live command menu.
 | `task urls` | Show this checkout's running resources with their URLs and health. |
 | `task env` | Show the application environment this checkout uses, secrets masked, and where it comes from. |
 | `task env:example` | Regenerate each workspace's .env.example from its envalid config specs. |
+| `task zones:digest` | Compute the digest of an installed official Zone source package. |
 | `task dev:prepare` | Start storage, apply migrations and write the application environment without starting processes. |
 | `task dev:seed` | Seed the shared local demo through its public APIs. |
 | `task dev:typecheck` | Type-check the development scripts. |

@@ -15,10 +15,12 @@ import { changeZoneConfiguration, readZoneConfiguration,
 import { InvalidZoneConfiguration } from '../modules/zone/config-format.ts';
 import { DEFAULT_ZONE_PRESENTATION, ZonePresentation, zoneRenderTokens }
   from '../modules/zone/presentation-format.ts';
-import { listOfficialZones, officialZoneBySegment, readZonePublication, readZoneModuleData }
+import { listOfficialZones, officialZoneBySegment, readZonePublication, readZoneModuleData,
+  readZoneBannerMedia }
   from '../modules/zone/publication.ts';
-import { firstPartyExecution, readFirstPartyTheme }
+import { zonePackageExecution, readFirstPartyTheme }
   from '../modules/theme/first-party-lifecycle.ts';
+import { FirstPartyBundle } from '../modules/theme/first-party-bundle.ts';
 import { runZoneQueryBlocks, ZoneQueryBudgetExceeded } from '../modules/zone/query-budget.ts';
 import { readDynamicDefinition, executeDynamicDefinition, DynamicCollectionUnavailable }
   from '../modules/collection/dynamic.ts';
@@ -105,15 +107,28 @@ const officialPage = t.Object({ items: t.Array(officialZone), next: t.Nullable(t
   cost: t.Object({ graphReads: t.Integer(), rows: t.Integer() }) });
 const officialLookup = t.Object({ ...officialZone.properties,
   cost: t.Object({ graphReads: t.Integer(), rows: t.Integer() }) });
+const execution = t.Union([
+  t.Object({ state: t.Literal('fallback'), reason: t.Union([
+    t.Literal('safe_mode'), t.Literal('viewer_opt_out'), t.Literal('none_approved'),
+    t.Literal('globally_disabled'), t.Literal('revoked'), t.Literal('expired')]) }),
+  t.Object({ state: t.Literal('active'), package: FirstPartyBundle,
+    revision: ref, activation: ref }),
+  t.Object({ state: t.Literal('package'), packageDigest: t.String({ pattern: '^sha256:[0-9a-f]{64}$' }),
+    revision: ref, activation: ref }),
+]);
 const publicationRead = t.Object({ profile: t.Literal('zone-presentation-response-v1'),
   zone: ref, realm: t.Nullable(ref), official: t.Nullable(t.String()), revision: ref,
   presentation: ZonePresentation,
+  bannerMedia: t.Array(t.Object({ id: t.String(), image: t.Nullable(t.Object({
+    url: t.String(), width: t.Integer({ minimum: 1 }), height: t.Integer({ minimum: 1 }),
+    mediaType: t.String() })) }), { maxItems: 6 }),
   moduleData: t.Array(t.Any()),
   renderTokens: t.Object({ ...ZonePresentation.properties.tokens.properties,
     textOnAccent: t.String({ pattern: '^#[0-9a-f]{6}$' }) }),
-  execution: t.Any(),
+  execution,
   cost: t.Object({ graphReads: t.Integer(), objectReads: t.Integer(),
     officialPageSize: t.Integer(), maxModules: t.Integer(), maxBanners: t.Integer(),
+    maxBannerMediaReads: t.Integer(),
     maxResolvedBlocks: t.Integer(), maxResolvedCollections: t.Integer(),
     maxCollectionPlacements: t.Integer(), maxModuleGraphReads: t.Integer() }),
 });
@@ -193,22 +208,25 @@ export function zoneRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
           }
         }
         const moduleData = await readZoneModuleData(work.environment, state.configuration);
+        const bannerMedia = await readZoneBannerMedia(work.media?.store, state.realm,
+          state.presentation.banners);
         const theme = state.presentation.official?.theme;
         const forced = query.safeTheme || query['safe-theme']
           ? { state: 'fallback' as const, reason: 'safe_mode' as const }
           : query.viewerOptOut ? { state: 'fallback' as const, reason: 'viewer_opt_out' as const }
             : null;
         const execution = forced ?? (theme && state.disclosure === 'public'
-          ? firstPartyExecution(await readFirstPartyTheme(work.environment, theme.slice(-36)), zone)
+          ? zonePackageExecution(await readFirstPartyTheme(work.environment, theme.slice(-36)), zone)
           : { state: 'fallback' as const, reason: 'none_approved' as const });
-        const etag = `"${hash(JSON.stringify({ revision: state.revision, moduleData, execution }))}"`;
+        const etag = `"${hash(JSON.stringify({ revision: state.revision, moduleData, bannerMedia, execution }))}"`;
         const headers = { etag,
           'cache-control': state.disclosure === 'public' && execution.state === 'fallback'
             && execution.reason === 'none_approved' ? 'public, max-age=30' : 'no-store' };
         if (request.headers.get('if-none-match') === headers.etag) return new Response(null, { status: 304, headers });
         return Response.json({ profile: 'zone-presentation-response-v1', zone, realm: state.realm,
           official: state.official, revision: state.revision, presentation: state.presentation,
-          moduleData, renderTokens: zoneRenderTokens(execution.state === 'active'
+          moduleData, bannerMedia, renderTokens: zoneRenderTokens(execution.state === 'active'
+            || execution.state === 'package'
             || execution.reason === 'none_approved'
             ? state.presentation.tokens : DEFAULT_ZONE_PRESENTATION.tokens),
           execution, cost: state.cost }, { headers });
