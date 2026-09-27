@@ -1,5 +1,6 @@
-import { defineCases } from './types.ts';
+import { defineCases, type PendingSubcase } from './types.ts';
 
+// The retired page path remains the B00 inventory fingerprint until its explicit migration.
 export const cases = defineCases('docs/testing/search.md', [
   {
     id: 'SEARCH01',
@@ -120,3 +121,32 @@ export const cases = defineCases('docs/testing/search.md', [
       'Regenerate approved MatchUnits from exact PostgreSQL revisions plus graph references, then rebuild Lucene. Missing bodies keep affected search unavailable; erased or draft text cannot reappear. Indexer success alone does not prove source completeness.',
   },
 ]);
+
+// Prospective combinations do not inherit the qualified SEARCH01-20 results.
+// Each requires its own owner-backed assertion before entering complete-case coverage.
+export const pendingSearchSubcases = [
+  { caseIds: ['SEARCH01', 'SEARCH04'], scenario: 'Female lead and red-haired supporting character occur in the same Work, or relation participants differ by release, canon or time',
+    requiredResult: 'Only the same participant in the same active occurrence and compatible applicability can satisfy both conditions; return exact occurrence and Statement support.', status: 'pending' },
+  { caseIds: ['SEARCH04', 'SEARCH10'], scenario: 'Overlapping navigation paths and Context groups count the same qualified fact at several grains',
+    requiredResult: 'Deduplicate at the declared Work, participant and qualified-fact grains; retain distinct occurrence and supporting-Statement identities, with bounded hydration and exact count precision.', status: 'pending' },
+  { caseIds: ['SEARCH01', 'SEARCH04'], scenario: 'Two Contexts share a definition but have independent acceptance, or the same label resolves to different definitions',
+    requiredResult: 'Bind interpretation to the actual definition and Context revision; do not pool support or voters. A broader union requires an admitted mapping and distinct-target counting.', status: 'pending' },
+  { caseIds: ['SEARCH05', 'SEARCH09'], scenario: 'A future query requests several datasets or an exact historical source cut',
+    requiredResult: 'Admit a complete source-position vector and current disclosure only after federation or historical MatchUnits are qualified; current-only index data cannot impersonate either capability.', status: 'pending' },
+  { caseIds: ['SEARCH06'], scenario: 'Analyzer profile changes across languages, scripts, phrases or highlight offsets',
+    requiredResult: 'Index and query analysis agree at one versioned generation; retain original text, test recall and offsets, and never treat derived transliteration or script conversion as identity equivalence.', status: 'pending' },
+  { caseIds: ['SEARCH03', 'SEARCH11'], scenario: 'Hidden Context basis, spoiler Statement, restricted name or avatar, or private selection link coexists with a public match',
+    requiredResult: 'Neither hidden value nor its existence changes public hits, score, snippet, bucket, suggestion or count; unavailable required owner state cannot become complete empty.', status: 'pending' },
+  { caseIds: ['SEARCH07', 'SEARCH08', 'SEARCH16'], scenario: 'Source withdrawal, meaning or decision change, group generation change or explicit successor adoption occurs during paging',
+    requiredResult: 'Invalidate only dependent results and continuations; a speaker default or preference alone cannot retarget an authored Statement or saved exact filter.', status: 'pending' },
+  { caseIds: ['SEARCH10', 'SEARCH18'], scenario: 'Facet self-filter exclusion or shared Context, support and avatar hydration grows with consumers and inherited depth',
+    requiredResult: 'Name the count population and precision, retain mandatory scope and sibling filters, and bound all owner work; ambiguity or incomplete meaning cannot yield exact zero.', status: 'pending' },
+  { caseIds: ['SEARCH08', 'SEARCH16'], scenario: 'Private paging or erasure rollback narrows authority after a page is issued',
+    requiredResult: 'Recheck disclosure and all owner positions; restart or withhold stale pages without reusing a prior TDB2 snapshot.', status: 'pending' },
+  { caseIds: ['SEARCH11', 'SEARCH12'], scenario: 'Broader private fields, multiple Contributions or a deployed proxy participate in a private query',
+    requiredResult: 'Prove exact pre-match admission, isolated statistics, bounded owner calls and peer-receipt meaning on the deployed path before offering private results.', status: 'pending' },
+  { caseIds: ['SEARCH18'], scenario: 'Mixed publication and query load grows in corpus, relation degree, rejected hits, languages and payload size',
+    requiredResult: 'Measure native work, all remote attempts and bytes, writer occupancy, lag and P95/P99 including failures; core admitted reads meet elected objectives rather than passing by rejection.', status: 'pending' },
+  { caseIds: ['SEARCH20'], scenario: 'Production erasure and withdrawal frontier changes across Content, graph and index recovery',
+    requiredResult: 'Rebuild only currently eligible exact revisions, retain quarantine for missing bodies, and prove erased or withdrawn text cannot reappear through a restored generation.', status: 'pending' },
+] as const satisfies readonly PendingSubcase[];

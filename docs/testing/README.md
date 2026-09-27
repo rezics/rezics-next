@@ -14,7 +14,7 @@ Use [the plan](../plan/README.md#acceptance-gates) for gate definitions and
 | [Identity/access](identity-and-access.md) | SSO, representation, roles/groups, privacy, revocation and recovery. |
 | [Classification](classification.md) | Space/context, SKOS/native meaning, fallback and inference. |
 | [Work](native-work.md), [Book](book-and-creation.md), [composition](../../scripts/qa/cases/content-composition.ts) | Main Version, contributions, occurrences, history and publication. |
-| [Search](search.md), [graphs](relationship-graph.md), [ratings/time](ratings-and-event-time.md) | Combined query semantics, populations, exactness and budgets. |
+| [Search](../../scripts/qa/cases/search.ts), [graphs](relationship-graph.md), [ratings/time](ratings-and-event-time.md) | Combined query semantics, populations, exactness and budgets. |
 | [Sources](source-conformance.md), [packages](packages.md), [Hub cases](../../scripts/qa/cases/ai-hub.ts), [recipe cases](../../scripts/qa/cases/recipes.ts) | Current inputs, native conversion and domain-specific operations. |
 | [Wiki](../../scripts/qa/cases/wiki-composition.ts), [recommendations](recommendations.md) | Composed views and bounded derived generations. |
 | [Integration](backend-integration.md), [Subscribe](subscriptions-and-pro.md), [verification](../../scripts/qa/cases/information-verification.ts) | Cross-owner effects and activated product applications. |

@@ -1,4 +1,4 @@
-import { defineCases } from './types.ts';
+import { defineCases, type PendingSubcase } from './types.ts';
 
 export const cases = defineCases('docs/testing/relationship-graph.md', [
   {
@@ -33,3 +33,15 @@ export const cases = defineCases('docs/testing/relationship-graph.md', [
     requiredResult: 'Presentation state does not mutate relation truth.',
   },
 ]);
+
+// The current bounded relation-graph profile does not qualify all related-read shapes.
+export const pendingRelatedReadSubcases = [
+  { caseIds: ['GRAPH01', 'GRAPH03'], scenario: 'Credits, releases, chapters, source mappings and mentions mix direction, context and repeated targets',
+    requiredResult: 'Preserve each relation identity and same-occurrence role correlation; report the requested target grain, coverage and stable order without cross-joining participants.', status: 'pending' },
+  { caseIds: ['GRAPH03', 'GRAPH04'], scenario: 'A high-degree inverse list contains sparse private members and requires summary or support hydration',
+    requiredResult: 'Page a bounded admitted relation, batch hydration, and disclose continuation and unavailable members without suppressed titles, existence or exact global count leakage.', status: 'pending' },
+  { caseIds: ['GRAPH03', 'GRAPH05'], scenario: 'A page crosses relation, projection, ranking or historical-manifest generations',
+    requiredResult: 'Bind cursor to every relevant generation or restart; resolve sealed historical components and never assume that a dataset fence reopens a TDB2 transaction.', status: 'pending' },
+  { caseIds: ['GRAPH03'], scenario: 'An owner event rebuild fails after a prior active inverse projection',
+    requiredResult: 'Retain the active generation and exact source revision or epoch until a complete replacement is verified.', status: 'pending' },
+] as const satisfies readonly PendingSubcase[];
