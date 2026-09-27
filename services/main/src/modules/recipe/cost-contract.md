@@ -14,9 +14,16 @@ occurrences through those pages and rejects after 4,096 returned occurrences.
 Its response reports pages, immutable-object page reads and visited occurrences
 for the one pinned revision; tests assert the returned counts and bound.
 Nutrition accepts at most 512 input rows and 64 nutrient values per row; sums
-are exact rationals and incompatible units remain separate buckets. All recipe
-commands preserve the shared Structure's expected-head CAS, receipt replay and
-owner authorization checks.
+are exact rationals and incompatible units remain separate buckets. The measure
+write rejects more than 64 distinct stored measures (including yield and optional
+servings) before admission. It replaces one immutable Structure manifest, reuses
+both occurrence trees, reads and writes one manifest page, and writes no
+placements. The exact-revision measure read fetches one manifest after a bounded
+authorization page. Its response reports the shared page costs; the RECIPE05
+test checks those counts, the measure bound, receipt replay, a stale head,
+concurrent writers and recovery after a missing manifest. All recipe commands
+preserve the shared Structure's expected-head CAS, receipt replay and owner
+authorization checks.
 
 Schema.org export reads one pinned revision through Structure pages of at most
 100 occurrences, visits at most 4,096 occurrences and rejects a representation

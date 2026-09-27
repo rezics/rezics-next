@@ -25,4 +25,6 @@ export const recipeCases: CaseDeclarations = {
   ],
   RECIPE04: [{ tier: 'integration', file: 'tests/qa/integration/recipe-realm-variants.test.ts',
     name: 'RECIPE04: two Realms independently adopt published Recipe variants of one Main Version' }],
+  RECIPE05: [{ tier: 'integration', file: 'tests/qa/integration/recipe-measures.test.ts',
+    name: 'RECIPE05: receipt-backed nutrition and yield retain coverage, basis and exact revisions' }],
 };
