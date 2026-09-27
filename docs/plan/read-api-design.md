@@ -136,7 +136,7 @@ lands; composition-root additions follow the worker protocol.
 | --- | --- | --- |
 | Reader: `routes/work-contents.ts`, `modules/work-contents/**`, `tests/work-contents*.ts` | `GET /works/{id}/contents?version&language&parent&cursor`; `GET /chapters/{id}?revision&language` returns body, selected basis, previous/next and progress identity. The version is the current Main Version; the chapter revision is a stale guard on the current composition head. | ≤20 occurrences per parent; one verified body ≤1 MiB; no recursive flattening; targets admitted individually, Main Version, parent and language bound in cursor. |
 | Discussion/history: `routes/work-activity.ts`, `modules/work-activity/**`, `tests/work-activity*.ts` | `GET /works/{id}/discussion?realm&cursor`, `/history?kind&cursor`; reviewed Realm replies and public revision/decision events. The template metadata-only route is replaced. | ≤20 candidates, ≤4 MiB Content batch and exact active placement/review checks; hidden actors and unreleased bodies excluded. The retained-epoch graph query sorts Work-scoped candidates in O(H log H) native work for H events. An indexed chronological seek remains a separate large-corpus task. |
-| Discovery filters: `routes/discovery.ts`, `modules/discovery/**`, `tests/discovery*.ts` | Extend `/works?sort=recent|top-rated&type&term&scope`; preserve `POST /queries` phrase profiles and exact/lower-bound counts with matched-field/decision reasons. | Indexed eligible read projection with a measured seek+P bound; never synchronously aggregate all Work ratings. Depends on rating selection policy and classification query semantics, not reader/profile tasks. |
+| Discovery filters: `routes/discovery.ts`, `modules/discovery/**`, `tests/discovery*.ts` | Extend `/works?sort=recent|top-rated&type&term&scope`; preserve `POST /queries` phrase profiles and exact/lower-bound counts with matched-field/decision reasons. | Requires the eligible discovery projection described below before the GET extension. G-212 supplies the read envelope, not this dependency. Reserve projection migrations and build/lifecycle ownership; measure seek+P for each admitted filter/order combination. Never synchronously aggregate all Work ratings. |
 | Agent/profile/library: `routes/profiles.ts`, `modules/profiles/**`, `tests/profiles*.ts` plus separately claimed Agent/address owners | `GET /agents/{id}`, `/handles/{handle}`, `/agents/{id}/works`, `/agents/{id}/collections`, `/me/contributions`, `/me/ratings`; public display name/kind/handle, attribution, shelf cards and ratings. Define native credit links, handle allocation and public profile disclosure first. | ≤20 items, batch summaries; public/private collection partition before pagination, Account identity and private contributions require current principal/representation proof. Reuse collections and ratings. |
 | Realm home/log: `routes/realm-reads.ts`, `modules/realm-reads/**`, `tests/realm-read*.ts` | `GET /realms/{realm}`, `/realms/{realm}/works`, `/realms/{realm}/decisions`; public Space name/icon, adopted Works, adoption/classification/semantic-Context-rule revisions. Description, banner, community rules, public moderators and public roster have no published owner yet, so the header reports null or unknown rather than inferring them from Access grants. | ≤20 records and exact page count, unknown membership total. Public graph revisions supply the decision relation without receipts or private actors; the first implementation has an O(D log D) scan/sort bound for D eligible revisions, not a measured seek bound. A materialized public decision index and public community-rule/roster publication need separate write owners before large-scale browsing or those fields become available. Private Realm reads need an Access lease owner. |
 | Management: `routes/management-reads.ts`, `modules/management-reads/**`, `tests/management-read*.ts` | `GET /realms/{realm}/moderation?state&type&cursor` pages Realm-scoped governance report cases; `/realms/{realm}/audit?kind&cursor` pages attributable governance and organization-publication decisions. A Realm governance reader must represent an active Agent with `governance.moderate` on `governance:realm:{realm IRI}`. | ≤20 rows; private, no-store; final Access authority and graph Realm/restore checks. The existing Access indexes seek by scope/state/time (case) or scope/time (decision); kind filtering can scan earlier nonmatches, bounded by the 5-second SQL statement timeout. The cursor binds the graph position and selected Access head identities. Pending contribution and correction queues need their own Realm-keyed owner indexes and admission contract; they are not represented as empty report pages. |
@@ -171,6 +171,33 @@ complete Realm report coverage. The selected Access head identities are a
 conservative cursor fence for current writes; a durable Realm read revision is
 needed for precise continuation across every Access update at scale. G-250 owns
 those follow-up indexes and report-scope enforcement.
+
+The G-237 dependency inspection found no eligible discovery projection. The
+[recent reader](../../services/main/src/modules/discovery/recent.ts) sorts graph
+heads; the [rating owner](../../services/main/src/modules/rating/README.md)
+explicitly leaves materialized rating projections to later implementation.
+The existing [ranking generation](../../services/main/src/modules/recommendation/ranking.ts)
+has a useful resumable build lifecycle and score index, but its score is the sum
+of latest signal weights. Its public population does not select the independent
+Global standing Context, and its signal fold does not partition by rating
+Context, cadence or target grain. Reusing that score as `top-rated` would change
+the meaning of the requested scope. It also has no metadata-recency, Work-type
+or classification-term index, and its delivery omits counts and match reasons.
+
+The prerequisite owner therefore needs an explicit rating Context/selection
+policy, separate Global/Realm/Mine populations, and an eligible projection of
+Work types and effective classification decisions (including local rejection).
+The projection must retain decision reasons and rating basis, track graph and
+Access protection/erasure changes, and fence stale generations and restores.
+Counts must describe admitted matches without exposing suppressed candidates.
+Reserve storage migrations and the bounded build/activation integration before
+redispatching the read extension; G-237's original claim reserves neither.
+Existing generation machinery is a possible lifecycle template, not a compatible
+discovery index. An ordered B-tree can avoid a full sort for a bounded page
+([PostgreSQL ordering guidance](https://www.postgresql.org/docs/18/indexes-ordering.html),
+consulted 2026-09-28); native query plans under selective type/term filters and
+deep continuation must still demonstrate the promised bound. Filtering an
+unrelated score page after selection cannot establish that bound.
 
 `services/main/tests/work-read.integration.test.ts` is registered in the QA
 integration gate and isolated-project lists: its classification cutover and
