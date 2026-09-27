@@ -31,6 +31,7 @@ const commands: string[][] = [
       ]
     : []),
   ['bun', 'node_modules/typescript/bin/tsc', '--project', 'scripts/load/tsconfig.json'],
+  ['bun', 'node_modules/typescript/bin/tsc', '--project', 'scripts/dev/tsconfig.json'],
   ['bun', 'node_modules/typescript/bin/tsc', '--project', 'scripts/goal/tsconfig.json'],
   [
     'bun',

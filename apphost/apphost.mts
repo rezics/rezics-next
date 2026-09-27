@@ -1,6 +1,6 @@
 // Rezics development AppHost, started by `task dev` (scripts/dev/cli.ts).
 //
-// - main:     the main checkout; shared Account, Main, Accounts app, web and
+// - main:     the main checkout; shared Account, Main, Main relay, Accounts app, web and
 //             Storybook on the fixed ports 3002, 3001, 3004, 3000 and 6006
 //             through Aspire's proxy.
 // - frontend: a worktree; the Accounts app, web and Storybook on random ports
@@ -17,7 +17,7 @@
 // references so ports can be fixed or random.
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { mainSpec } from '../services/main/src/config.ts';
+import { mainSpec, relaySpec } from '../services/main/src/config.ts';
 import { accountSpec } from '../services/account/src/config.ts';
 import { webSpec } from '../apps/web/features/config/env.ts';
 import { accountsSpec } from '../apps/accounts/features/config/env.ts';
@@ -84,6 +84,8 @@ if (mode === 'frontend') {
     .withHttpEndpoint(serviceEndpoint(3001, 'MAIN_PORT'))
     .withHttpHealthCheck({ path: '/health/ready' })
     .waitFor(account);
+  await configure(builder.addExecutable('main-relay', 'bun', root,
+    ['services/main/src/relay.ts']), relaySpec).waitFor(main);
   accountUrl = account.getEndpoint('http');
   mainUrl = main.getEndpoint('http');
   backend = main;
@@ -103,7 +105,7 @@ accountsSpec, ['ACCOUNT_SERVICE_ORIGIN', 'WEB_ORIGIN'])
 const accountsUrl = accounts.getEndpoint('http');
 
 const webApp = configure(builder.addExecutable('web', 'sh', web,
-  ['-c', 'exec ../../node_modules/.bin/vinext dev --host 127.0.0.1 --port "$PORT"']),
+  ['-c', 'exec ../../node_modules/.bin/vinext dev --hostname 127.0.0.1 --port "$PORT"']),
 webSpec, ['MAIN_ORIGIN', 'ACCOUNT_ORIGIN'])
   .withEnvironment('MAIN_ORIGIN', mainUrl)
   // Account accepts browser-originated writes only from its public base URL (the
@@ -112,8 +114,11 @@ webSpec, ['MAIN_ORIGIN', 'ACCOUNT_ORIGIN'])
   .withHttpEndpoint(frontendEndpoint(3000))
   .waitFor(backend);
 await accounts.withEnvironment('WEB_ORIGIN', webApp.getEndpoint('http'));
+// Both vinext processes select the first free inspector port. Start the web
+// process first so Accounts cannot select its port during the same startup race.
+await accounts.waitFor(webApp);
 
-builder.addExecutable('storybook', 'sh', web,
+await builder.addExecutable('storybook', 'sh', web,
   ['-c', 'exec ../../node_modules/.bin/storybook dev --host 127.0.0.1 --no-open -p "$PORT"'])
   .withHttpEndpoint(frontendEndpoint(6006));
 

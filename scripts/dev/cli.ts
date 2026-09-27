@@ -379,6 +379,20 @@ async function prepareDev(options: StackOptions): Promise<Record<string, string>
   const { apps } = await stackUp(options);
   await migrateApps(apps);
   await initializeGraph(apps);
+  const search = new FusekiClient(apps.FUSEKI_URL);
+  const health = await search.commandHealth() as { textIndexUncertain?: boolean };
+  if (health.textIndexUncertain === true) {
+    if (options.profile !== 'dev' && !options.persistent) {
+      throw new Error(`Fuseki search index is uncertain. This disposable stack cannot run search:rebuild. Recover it with \`task stack:reset -- --profile qa --run-id ${options.runId}\`, then \`task dev -- --backend\`.`);
+    }
+    const stackArgs = options.profile === 'dev' ? []
+      : ['--profile', 'qa', '--run-id', options.runId!, '--persistent'];
+    try { run('bun', ['scripts/operations/rebuild-content-search.ts', ...stackArgs], process.env, 420_000); }
+    catch (error) {
+      throw new Error(`Fuseki search index is uncertain. Run \`task search:rebuild${stackArgs.length ? ` -- ${stackArgs.join(' ')}` : ''}\` while Main is stopped. Automatic rebuild failed: ${String(error)}`);
+    }
+  }
+  run('bun', ['services/main/src/relay-init.ts'], { ...process.env, ...apps }, 30_000);
   const authDir = join(stackDirectory(root, options), 'web-auth');
   const runtimePath = join(authDir, 'runtime.env');
   const publicPath = join(authDir, 'public.json');
@@ -487,7 +501,7 @@ async function devStart(args: string[]): Promise<void> {
     { ...process.env, REZICS_DEV_ENV: envFile, REZICS_DEV_MODE: mode });
   console.log(`${mode === 'main' ? 'Shared backend and frontend' : mode === 'frontend'
     ? 'Frontend against the shared backend' : 'Isolated backend and frontend'}:`);
-  for (const resource of ['account', 'main', 'accounts', 'web', 'storybook']) {
+  for (const resource of ['account', 'main', 'main-relay', 'accounts', 'web', 'storybook']) {
     try { aspireCli(['wait', resource, '--timeout', '180'], process.env, true); }
     catch { /* frontend mode has no account/main executables; a failure shows in the table */ }
   }

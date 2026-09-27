@@ -64,6 +64,16 @@ tasks:
     cmds:
       - bun scripts/dev/cli.ts dev:prepare {{.CLI_ARGS}}
 
+  dev:seed:
+    desc: Seed the shared local demo through its public APIs.
+    cmds:
+      - bun scripts/dev/seed/cli.ts {{.CLI_ARGS}}
+
+  dev:typecheck:
+    desc: Type-check the development scripts.
+    cmds:
+      - bun node_modules/typescript/bin/tsc --project scripts/dev/tsconfig.json
+
   aspire:
     desc: Run the pinned Aspire CLI against the dev AppHost (describe, logs, wait, agent mcp, ...).
     cmds:

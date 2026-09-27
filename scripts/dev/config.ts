@@ -180,6 +180,8 @@ export function appEnvironment(compose: Record<string, string>, dir: string): Re
     ACCOUNT_DATABASE_URL: pgUrl('account', compose.REZICS_ACCOUNT_PASSWORD, compose.POSTGRES_PORT),
     ACCOUNT_ACCESS_DATABASE_URL: pgUrl('access', compose.REZICS_ACCESS_PASSWORD, compose.POSTGRES_PORT),
     ACCOUNT_RELAY_DATABASE_URL: pgUrl('relay', compose.REZICS_RELAY_PASSWORD, compose.POSTGRES_PORT),
+    MAIN_RELAY_DATABASE_URL: pgUrl('relay', compose.REZICS_RELAY_PASSWORD, compose.POSTGRES_PORT),
+    MAIN_RELAY_CONSUMER: 'main-graph-v1',
     ACCOUNT_BASE_URL: account, ACCOUNT_PORT: compose.ACCOUNT_PORT,
     ...(compose.ACCOUNTS_PORT ? { ACCOUNTS_PORT: compose.ACCOUNTS_PORT } : {}),
     ACCOUNT_ISSUER: `${account}/api/auth`,

@@ -1,10 +1,11 @@
 import { randomBytes, randomUUID } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { Pool } from 'pg';
 import { createAccountAuth } from '../../services/account/src/auth.ts';
 import { createAccountApp } from '../../services/account/src/app.ts';
+import { operatorRole, rolePermits } from '../../services/account/src/operators.ts';
 import { FusekiClient } from '../../services/main/src/infrastructure/fuseki.ts';
 import { MAIN_SITE_SCOPE } from '../../apps/web/features/auth/scopes.ts';
 import { appEnvironment, readEnv, savePrivate, stackDirectory } from './config.ts';
@@ -102,6 +103,40 @@ async function signUp(app: ReturnType<typeof createAccountApp>, base: string,
   return { id: body.user.id, email, password, cookie };
 }
 
+interface OperatorCredentials { id: string; email: string; password: string }
+
+/** Retired fixtures are private siblings of web-auth, created when the issuer
+ * changes. Only a still-authorized operator with working credentials is reused. */
+export async function retiredOperator<T>(stackDir: string,
+  accept: (operator: OperatorCredentials) => Promise<T | undefined>): Promise<T | undefined> {
+  const recoveryPath = join(stackDir, 'web-auth-operator-recovery.json');
+  const retiredPaths = readdirSync(stackDir, { withFileTypes: true })
+    .filter(item => item.isDirectory() && item.name.startsWith('web-auth.retired-'))
+    .sort((a, b) => b.name.localeCompare(a.name))
+    .map(entry => join(stackDir, entry.name, 'private.json'));
+  for (const path of [recoveryPath, ...retiredPaths]) {
+    if (!existsSync(path)) continue;
+    let operator: OperatorCredentials | undefined;
+    try { operator = (JSON.parse(readFileSync(path, 'utf8')) as { operator?: OperatorCredentials }).operator; }
+    catch { continue; }
+    if (!operator || ![operator.id, operator.email, operator.password].every(value => typeof value === 'string')) continue;
+    const result = await accept(operator);
+    if (result !== undefined) return result;
+  }
+  return undefined;
+}
+
+async function signInOperator(app: ReturnType<typeof createAccountApp>, base: string,
+  operator: OperatorCredentials): Promise<(OperatorCredentials & { cookie: string }) | undefined> {
+  const response = await app.handle(new Request(`${base}/api/auth/sign-in/email`, {
+    method: 'POST', headers: { 'content-type': 'application/json', origin: base },
+    body: JSON.stringify({ email: operator.email, password: operator.password }),
+  }));
+  const cookie = response.headers.get('set-cookie');
+  await response.body?.cancel();
+  return response.status === 200 && cookie ? { ...operator, cookie } : undefined;
+}
+
 async function grantWorkCreation(pool: Pool, issuer: string, memberId: string,
   actor: string): Promise<string> {
   const principalId = randomUUID();
@@ -166,10 +201,13 @@ export async function bootstrapWebAuth(options: WebAuthOptions): Promise<WebAuth
     }
   }
   const outputDir = join(stackDir, 'web-auth');
+  const recoveryPath = join(stackDir, 'web-auth-operator-recovery.json');
   if (existsSync(outputDir)) {
-    throw new Error('Web auth already attempted for this QA project; reset it and remove its private stack directory before retrying');
+    if (readdirSync(outputDir).length === 0) rmSync(outputDir, { recursive: true });
+    else throw new Error('Web auth already attempted for this QA project; inspect its private files before retrying');
   }
   mkdirSync(outputDir, { mode: 0o700 });
+  try {
   if (await initializationState(apps) === 'fresh') {
     const bootstrapApps = join(outputDir, 'qa-apps.json');
     const bootstrapCompose = join(outputDir, 'qa-compose.json');
@@ -180,10 +218,10 @@ export async function bootstrapWebAuth(options: WebAuthOptions): Promise<WebAuth
     rmSync(bootstrapApps);
     rmSync(bootstrapCompose);
     if (bootstrap.status !== 0 || bootstrap.error) {
-      writeFileSync(join(outputDir, 'bootstrap.log'),
+      writeFileSync(join(stackDir, 'web-auth-bootstrap.log'),
         [bootstrap.stdout, bootstrap.stderr, bootstrap.error?.message].filter(Boolean).join('\n'),
         { mode: 0o600 });
-      throw new Error('QA owner/graph bootstrap failed; inspect private web-auth/bootstrap.log, then reset and remove this project');
+      throw new Error('QA owner/graph bootstrap failed; inspect private web-auth-bootstrap.log, then reset this project');
     }
   }
 
@@ -194,7 +232,19 @@ export async function bootstrapWebAuth(options: WebAuthOptions): Promise<WebAuth
     const auth = createAccountAuth({ baseURL: apps.ACCOUNT_BASE_URL!, secret: apps.ACCOUNT_SECRET!,
       resource: apps.ACCOUNT_MAIN_RESOURCE!, pool: accountPool, operatorUserIds: operatorIds });
     const app = createAccountApp(auth, accountPool);
-    const operator = await signUp(app, apps.ACCOUNT_BASE_URL!, 'operator');
+    const bootstrapped = await accountPool.query('SELECT 1 FROM rezics_account_operator_bootstrap');
+    const operator = bootstrapped.rowCount
+      ? await retiredOperator(stackDir, async credentials => {
+        const role = await operatorRole(accountPool, credentials.id);
+        return role && rolePermits(role, 'clients:manage')
+          ? signInOperator(app, apps.ACCOUNT_BASE_URL!, credentials) : undefined;
+      })
+      : await signUp(app, apps.ACCOUNT_BASE_URL!, 'operator');
+    if (!operator) throw new Error('No retired local operator can register the web client; restore its private credentials or use the Account operator API');
+    if (!bootstrapped.rowCount) {
+      writeFileSync(recoveryPath, JSON.stringify({ operator: { id: operator.id,
+        email: operator.email, password: operator.password } }), { mode: 0o600 });
+    }
     operatorIds.add(operator.id);
     const headers = new Headers({ cookie: operator.cookie, origin: apps.ACCOUNT_BASE_URL! });
     const mainClient = await auth.api.adminCreateOAuthClient({ headers,
@@ -235,11 +285,16 @@ export async function bootstrapWebAuth(options: WebAuthOptions): Promise<WebAuth
     savePrivate(runtimeEnvPath, { ...apps, ACCOUNT_OPERATOR_USER_IDS: operator.id,
       ACCOUNT_MAIN_CLIENT_ID: mainClient.client_id,
       ACCOUNT_MAIN_CLIENT_SECRET: mainClient.client_secret });
+    rmSync(recoveryPath, { force: true });
     return { publicConfigPath, privateConfigPath, runtimeEnvPath,
       clientId: webClient.client_id, actingSubject: actor };
   } finally {
     await accountPool.end();
     await accessPool.end();
+  }
+  } catch (error) {
+    rmSync(outputDir, { recursive: true, force: true });
+    throw error;
   }
 }
 
