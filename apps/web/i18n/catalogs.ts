@@ -30,6 +30,9 @@ export const catalogs = {
     fr: () => import('../features/home/messages/fr.ts').then(module => module.default),
     es: () => import('../features/home/messages/es.ts').then(module => module.default),
   }),
+  realm: splitCatalog(() => import('../features/realm/messages.ts').then(module => module.messages), {
+    'zh-Hans': () => import('../features/realm/messages/zh-Hans.ts').then(module => module.default),
+  }),
   search: inlineCatalog(() => import('../features/search/messages.ts').then(module => module.messages)),
   shell: splitCatalog(() => import('../features/shell/messages.ts').then(module => module.messages), {
     'zh-Hant': () => import('../features/shell/messages/zh-Hant.ts').then(module => module.default),
@@ -43,4 +46,7 @@ export const catalogs = {
   studio: inlineCatalog(() => import('../features/studio/messages.ts').then(module => module.messages)),
   work: inlineCatalog(() => import('../features/work/messages.ts').then(module => module.messages)),
   workPage: inlineCatalog(() => import('../features/work-page/messages.ts').then(module => module.messages)),
+  zones: splitCatalog(() => import('../features/zones/messages.ts').then(module => module.messages), {
+    'zh-Hans': () => import('../features/zones/messages/zh-Hans.ts').then(module => module.default),
+  }),
 };

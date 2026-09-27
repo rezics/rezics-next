@@ -20,7 +20,7 @@ export function withoutLocale(pathname: string): string {
 /** Routes backed by locale-prefixed pages; auth and service paths stay at the origin root. */
 export function isPublicPagePath(pathname: string): boolean {
   const bare = withoutLocale(pathname);
-  return bare === '/' || /^\/(?:discover|search|studio|w|works)(?:\/|$)/.test(bare)
+  return bare === '/' || /^\/(?:discover|r|search|studio|w|works)(?:\/|$)/.test(bare)
     || bare === '/identity';
 }
 

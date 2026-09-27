@@ -6,6 +6,7 @@ import { accountClient } from './features/auth/client.ts';
 import { refreshSession } from './features/auth/refresh.ts';
 import { type SessionCookie, sessionCookies } from './features/auth/session-state.ts';
 import { isPublicPagePath, LOCALE_COOKIE, pathLocale, resolveLocale } from './i18n/locale.ts';
+import { isZonePage, ZONE_NONCE_HEADER, zoneCsp, zoneNonce } from './features/zones/csp.ts';
 
 // Refreshes the session before any page, Server Action, route handler or BFF
 // call reads it, so each request refreshes at most once and nothing
@@ -44,7 +45,15 @@ export async function proxy(request: NextRequest): Promise<NextResponse> {
   else headers.delete('x-rezics-page-url');
   headers.set('cookie', rewriteCookieHeader(request.headers.get('cookie'), Object.fromEntries(
     cookies.map(cookie => [cookie.name, cookie.value || null]))));
+  const nonce = isZonePage(pathname) ? zoneNonce() : null;
+  const policy = nonce && zoneCsp(nonce, process.env.NODE_ENV === 'development');
+  headers.delete(ZONE_NONCE_HEADER);
+  if (nonce && policy) {
+    headers.set('content-security-policy', policy);
+    headers.set(ZONE_NONCE_HEADER, nonce);
+  }
   const response = NextResponse.next({ request: { headers } });
+  if (policy) response.headers.set('content-security-policy', policy);
   for (const cookie of cookies) response.cookies.set(cookie.name, cookie.value, cookie.options);
   return response;
 }
