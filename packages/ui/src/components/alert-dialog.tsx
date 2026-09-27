@@ -23,7 +23,12 @@ import {
  * clear label.
  */
 export const AlertDialog = (props: React.ComponentProps<typeof Dialog>) => (
-  <Dialog data-slot="alert-dialog-root" role="alertdialog" {...props} />
+  <Dialog
+    data-slot="alert-dialog-root"
+    {...props}
+    closeOnInteractOutside={false}
+    role="alertdialog"
+  />
 );
 
 export const AlertDialogTrigger = (props: React.ComponentProps<typeof DialogTrigger>) => (

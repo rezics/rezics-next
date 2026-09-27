@@ -66,6 +66,17 @@ export const Bottom: Story = {
     await expect(
       within(drawer).getByRole('heading', { name: 'The Three-Body Problem' }),
     ).toBeVisible();
+    await expect(within(drawer).getByRole('button', { name: 'Want to read' })).toHaveFocus();
+  },
+};
+
+export const PendingChange: Story = {
+  render: () => <ShelfDrawer pending />,
+  async play({ canvasElement }) {
+    const drawer = await openDrawer(canvasElement);
+    await userEvent.keyboard('{Escape}');
+    await expect(drawer).toBeVisible();
+    await expect(within(drawer).getByRole('button', { name: 'Want to read' })).toBeDisabled();
   },
 };
 

@@ -77,6 +77,7 @@ export const Right: Story = {
   async play({ canvasElement }) {
     const sheet = await openSheet(canvasElement);
     await expect(within(sheet).getByText('Rev 42 · 2 hours ago')).toBeVisible();
+    await expect(within(sheet).getAllByRole('button', { name: 'Close' })[0]).toHaveFocus();
   },
 };
 

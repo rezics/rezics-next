@@ -6,6 +6,11 @@ import { Portal } from '@ark-ui/react/portal';
 import { XIcon } from 'lucide-react';
 import React from 'react';
 import { tv, type VariantProps } from 'tailwind-variants';
+import {
+  initialDialogFocus,
+  useDialogContentRef,
+  useDialogOpen,
+} from '../hooks/use-dialog-behavior.ts';
 import { cn } from '../utils.ts';
 import { Button } from './button.tsx';
 import { ScrollArea } from './scroll-area.tsx';
@@ -19,9 +24,16 @@ interface DialogContextProps {
    * @default true
    */
   modal?: boolean;
+  pending: boolean;
+  contentRef: React.RefObject<HTMLDivElement | null>;
 }
 
-const DialogContext = React.createContext({} as DialogContextProps);
+const DialogContext = React.createContext<DialogContextProps | null>(null);
+
+type DialogRootProps = React.ComponentProps<typeof ArkDialog.Root> & {
+  /** Keep the dialog open while an asynchronous change is in flight. */
+  pending?: boolean;
+};
 
 /**
  * A modal window for a short, focused task that must finish or be dismissed before the page
@@ -30,12 +42,49 @@ const DialogContext = React.createContext({} as DialogContextProps);
  * (`bottomStickOnMobile`). Use an alert dialog for irreversible confirmations, a sheet for side
  * panels that keep context, and a popover for light, non-blocking choices.
  */
-export const Dialog = (props: React.ComponentProps<typeof ArkDialog.Root>) => {
-  const { modal = true, lazyMount = true, unmountOnExit = true, ...rest } = props;
+export const Dialog = (props: DialogRootProps) => {
+  const {
+    modal = true,
+    lazyMount = true,
+    unmountOnExit = true,
+    pending = false,
+    open,
+    defaultOpen,
+    onOpenChange,
+    onFocusOutside,
+    onRequestDismiss,
+    onEscapeKeyDown,
+    onPointerDownOutside,
+    initialFocusEl,
+    closeOnEscape = true,
+    closeOnInteractOutside = props.role !== 'alertdialog',
+    ...rest
+  } = props;
+  const contentRef = React.useRef<HTMLDivElement>(null);
+  const controlled = useDialogOpen({ open, defaultOpen, onOpenChange, pending });
 
   return (
-    <DialogContext.Provider value={{ modal }}>
-      <ArkDialog.Root lazyMount={lazyMount} modal={modal} unmountOnExit={unmountOnExit} {...rest} />
+    <DialogContext.Provider value={{ modal, pending, contentRef }}>
+      <ArkDialog.Root
+        {...rest}
+        {...controlled}
+        closeOnEscape={!pending && closeOnEscape}
+        closeOnInteractOutside={!pending && closeOnInteractOutside}
+        initialFocusEl={initialFocusEl ?? (() => initialDialogFocus(contentRef.current))}
+        lazyMount={lazyMount}
+        modal={modal}
+        onEscapeKeyDown={onEscapeKeyDown}
+        onFocusOutside={(event) => {
+          onFocusOutside?.(event);
+          event.preventDefault();
+        }}
+        onPointerDownOutside={onPointerDownOutside}
+        onRequestDismiss={(event) => {
+          onRequestDismiss?.(event);
+          event.preventDefault();
+        }}
+        unmountOnExit={unmountOnExit}
+      />
     </DialogContext.Provider>
   );
 };
@@ -165,8 +214,10 @@ export const DialogContent = (props: DialogContentProps) => {
     size = 'md',
     className,
     children,
+    ref,
     ...rest
   } = props;
+  const { pending, ref: mergedRef } = useDialogContentBehavior(ref);
 
   return (
     <Portal>
@@ -178,6 +229,7 @@ export const DialogContent = (props: DialogContentProps) => {
         <ArkDialog.Content
           className={cn(dialogContentVariants({ size, bottomStickOnMobile }), className)}
           data-slot="dialog-content"
+          ref={mergedRef}
           {...rest}
         >
           {children}
@@ -187,6 +239,7 @@ export const DialogContent = (props: DialogContentProps) => {
               <Button
                 aria-label="Close"
                 className="absolute inset-e-2 top-2 opacity-64 hover:opacity-100"
+                disabled={pending}
                 size="icon-sm"
                 variant="ghost"
               >
@@ -288,9 +341,16 @@ export const DialogDescription = (props: React.ComponentProps<typeof ArkDialog.D
   );
 };
 
-export const DialogClose = (props: React.ComponentProps<typeof ArkDialog.CloseTrigger>) => (
-  <ArkDialog.CloseTrigger data-slot="dialog-close-trigger" {...props} />
-);
+export const DialogClose = (props: React.ComponentProps<typeof ArkDialog.CloseTrigger>) => {
+  const { pending } = _useDialog();
+  return (
+    <ArkDialog.CloseTrigger
+      data-slot="dialog-close-trigger"
+      {...props}
+      disabled={pending || props.disabled}
+    />
+  );
+};
 
 export const DialogFooter = (props: React.ComponentProps<typeof ark.div>) => {
   const { className, ...rest } = props;
@@ -321,3 +381,11 @@ const _useDialog = () => {
 
   return context;
 };
+
+/** Shared by the sheet and command palette, which render their own content. */
+export const useDialogContentBehavior = (forwardedRef: React.Ref<HTMLDivElement> | undefined) => {
+  const { contentRef, pending } = _useDialog();
+  return { pending, ref: useDialogContentRef(contentRef, forwardedRef) };
+};
+
+export const useDialogPending = () => _useDialog().pending;

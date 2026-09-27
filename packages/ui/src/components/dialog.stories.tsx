@@ -1,4 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
+import { useState } from 'react';
 import { expect, screen, userEvent, waitFor, within } from 'storybook/test';
 import { dismissed, settled, withSurface } from '../stories/support.tsx';
 import { Button } from './button.tsx';
@@ -13,6 +14,7 @@ import {
 } from './dialog.tsx';
 import { Field, FieldError, FieldHelper, FieldLabel } from './field.tsx';
 import { Input } from './input.tsx';
+import { Menu, MenuContent, MenuItem, MenuTrigger } from './menu.tsx';
 
 const meta = {
   title: 'Rezics UI/Dialog',
@@ -29,7 +31,7 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 
 const NewShelf = (props: { invalid?: boolean; saving?: boolean }) => (
-  <Dialog>
+  <Dialog pending={props.saving}>
     <DialogTrigger asChild>
       <Button>New shelf</Button>
     </DialogTrigger>
@@ -72,6 +74,7 @@ export const Default: Story = {
     await expect(title).toBeVisible();
     await expect(title).toHaveClass('font-sans');
     await expect(within(dialog).getByLabelText('Shelf name')).toHaveValue('Hard science fiction');
+    await expect(within(dialog).getByLabelText('Shelf name')).toHaveFocus();
   },
 };
 
@@ -119,6 +122,152 @@ export const Saving: Story = {
     await expect(within(dialog).getByRole('button', { name: 'Create shelf' })).toHaveAttribute(
       'aria-busy',
       'true',
+    );
+    await userEvent.keyboard('{Escape}');
+    await expect(dialog).toBeVisible();
+    await expect(within(dialog).getByRole('button', { name: 'Close' })).toBeDisabled();
+    await expect(within(dialog).getByRole('button', { name: 'Cancel' })).toBeDisabled();
+  },
+};
+
+export const MenuLaunch: Story = {
+  render: () => {
+    const [open, setOpen] = useState(false);
+    return (
+      <>
+        <Menu>
+          <MenuTrigger asChild>
+            <Button>Post actions</Button>
+          </MenuTrigger>
+          <MenuContent>
+            <MenuItem value="new-shelf" onClick={() => setOpen(true)}>
+              New shelf
+            </MenuItem>
+          </MenuContent>
+        </Menu>
+        <Dialog open={open} onOpenChange={({ open: next }) => setOpen(next)}>
+          <DialogContent>
+            <DialogHeader title="Create a shelf" />
+            <DialogBody>
+              <Input aria-label="Shelf name" />
+            </DialogBody>
+          </DialogContent>
+        </Dialog>
+      </>
+    );
+  },
+  async play({ canvasElement }) {
+    await userEvent.click(within(canvasElement).getByRole('button', { name: 'Post actions' }));
+    await userEvent.click(screen.getByRole('menuitem', { name: 'New shelf' }));
+    const dialog = await settled(await screen.findByRole('dialog'));
+    await waitFor(() =>
+      expect(within(dialog).getByRole('textbox', { name: 'Shelf name' })).toHaveFocus(),
+    );
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    await expect(dialog).toBeVisible();
+  },
+};
+
+export const ChainedDialogs: Story = {
+  render: () => {
+    const [step, setStep] = useState(0);
+    return (
+      <>
+        <Button onClick={() => setStep(1)}>Start</Button>
+        <Dialog
+          open={step === 1}
+          onOpenChange={({ open }) => {
+            if (!open) setStep(2);
+          }}
+        >
+          <DialogContent>
+            <DialogHeader title="First step" />
+            <DialogFooter>
+              <DialogClose asChild>
+                <Button>Continue</Button>
+              </DialogClose>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+        <Dialog
+          open={step === 2}
+          onOpenChange={({ open }) => {
+            if (!open) setStep(0);
+          }}
+        >
+          <DialogContent>
+            <DialogHeader title="Second step" />
+            <DialogBody>
+              <Input aria-label="Shelf name" />
+            </DialogBody>
+          </DialogContent>
+        </Dialog>
+      </>
+    );
+  },
+  async play({ canvasElement }) {
+    await userEvent.click(within(canvasElement).getByRole('button', { name: 'Start' }));
+    const first = await settled(await screen.findByRole('dialog', { name: 'First step' }));
+    await userEvent.click(within(first).getByRole('button', { name: 'Continue' }));
+    const second = await settled(await screen.findByRole('dialog', { name: 'Second step' }));
+    await waitFor(() =>
+      expect(within(second).getByRole('textbox', { name: 'Shelf name' })).toHaveFocus(),
+    );
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    await expect(second).toBeVisible();
+  },
+};
+
+export const PreferredFocusAndTyping: Story = {
+  render: () => (
+    <Dialog>
+      <DialogTrigger asChild>
+        <Button>Edit shelf</Button>
+      </DialogTrigger>
+      <DialogContent>
+        <DialogHeader title="Edit shelf" />
+        <DialogBody className="flex flex-col gap-3">
+          <Input aria-label="First field" />
+          <Input aria-label="Shelf name" data-autofocus />
+        </DialogBody>
+      </DialogContent>
+    </Dialog>
+  ),
+  async play({ canvasElement }) {
+    const dialog = await openDialog(canvasElement, 'Edit shelf');
+    const input = within(dialog).getByRole('textbox', { name: 'Shelf name' });
+    await expect(input).toHaveFocus();
+    await userEvent.setup({ delay: 35 }).type(input, 'Hard SF');
+    await expect(input).toHaveValue('Hard SF');
+    await expect(dialog).toBeVisible();
+  },
+};
+
+export const OverflowingBodyFocus: Story = {
+  render: () => (
+    <Dialog>
+      <DialogTrigger asChild>
+        <Button>Realm guidelines</Button>
+      </DialogTrigger>
+      <DialogContent className="max-h-64">
+        <DialogHeader title="Realm guidelines" />
+        <DialogBody>
+          {guidelines.map(([title, text]) => (
+            <p className="mb-4" key={title}>
+              {text}
+            </p>
+          ))}
+        </DialogBody>
+      </DialogContent>
+    </Dialog>
+  ),
+  async play({ canvasElement }) {
+    const dialog = await openDialog(canvasElement, 'Realm guidelines');
+    const close = within(dialog).getByRole('button', { name: 'Close' });
+    await waitFor(() => expect(close).toHaveFocus());
+    await expect(dialog.querySelector('[data-slot="scroll-area-viewport"]')).toHaveAttribute(
+      'tabindex',
+      '0',
     );
   },
 };

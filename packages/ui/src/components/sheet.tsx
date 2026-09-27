@@ -15,6 +15,8 @@ import {
   DialogHeader,
   DialogOverlay,
   DialogTitle,
+  useDialogContentBehavior,
+  useDialogPending,
 } from './dialog.tsx';
 
 export const useSheet = useDialogContext;
@@ -158,8 +160,10 @@ export const SheetContent = (props: SheetContentProps) => {
     variant = 'default',
     className,
     children,
+    ref,
     ...rest
   } = props;
+  const { pending, ref: mergedRef } = useDialogContentBehavior(ref);
 
   return (
     <Portal>
@@ -169,6 +173,7 @@ export const SheetContent = (props: SheetContentProps) => {
         <ArkDialog.Content
           className={cn(sheetContentVariants({ placement, variant }), className)}
           data-slot="sheet-content"
+          ref={mergedRef}
           {...rest}
         >
           {children}
@@ -178,6 +183,7 @@ export const SheetContent = (props: SheetContentProps) => {
               <Button
                 aria-label="Close"
                 className="absolute inset-e-2 top-2 opacity-64 hover:opacity-100"
+                disabled={pending}
                 size="icon-sm"
                 variant="ghost"
               >
@@ -215,9 +221,16 @@ export const SheetBody = (props: React.ComponentProps<typeof DialogBody>) => {
   );
 };
 
-export const SheetClose = (props: React.ComponentProps<typeof ArkDialog.CloseTrigger>) => (
-  <ArkDialog.CloseTrigger data-slot="sheet-close" {...props} />
-);
+export const SheetClose = (props: React.ComponentProps<typeof ArkDialog.CloseTrigger>) => {
+  const pending = useDialogPending();
+  return (
+    <ArkDialog.CloseTrigger
+      data-slot="sheet-close"
+      {...props}
+      disabled={pending || props.disabled}
+    />
+  );
+};
 
 export const SheetFooter = (props: React.ComponentProps<typeof DialogFooter>) => {
   const { className, ...rest } = props;

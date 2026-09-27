@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { expect, fn, screen, userEvent, within } from 'storybook/test';
+import { expect, fireEvent, fn, screen, userEvent, within } from 'storybook/test';
 import { dismissed, settled, withSurface } from '../stories/support.tsx';
 import {
   AlertDialog,
@@ -53,9 +53,21 @@ export const RemovePost: Story = {
   async play({ args, canvasElement }) {
     const alert = await openAlert(canvasElement, 'Remove post');
     await expect(within(alert).queryByRole('button', { name: 'Close' })).not.toBeInTheDocument();
+    await expect(within(alert).getByRole('button', { name: 'Keep post' })).toHaveFocus();
     await expect(args.onOpenChange).toHaveBeenLastCalledWith(
       expect.objectContaining({ open: true }),
     );
+  },
+};
+
+export const OutsideDoesNotCancel: Story = {
+  ...RemovePost,
+  async play({ canvasElement }) {
+    const alert = await openAlert(canvasElement, 'Remove post');
+    const backdrop = document.querySelector<HTMLElement>('[data-slot="dialog-overlay"]');
+    if (!backdrop) throw new Error('Alert dialog backdrop missing');
+    await fireEvent.pointerDown(backdrop);
+    await expect(alert).toBeVisible();
   },
 };
 
@@ -80,7 +92,7 @@ export const CancelWithButton: Story = {
 
 export const Removing: Story = {
   render: (args) => (
-    <AlertDialog {...args}>
+    <AlertDialog {...args} pending>
       <AlertDialogTrigger asChild>
         <Button variant="outline">Delete shelf</Button>
       </AlertDialogTrigger>
@@ -104,6 +116,8 @@ export const Removing: Story = {
       'aria-busy',
       'true',
     );
+    await userEvent.keyboard('{Escape}');
+    await expect(alert).toBeVisible();
   },
 };
 

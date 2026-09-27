@@ -24,6 +24,7 @@ import {
   DialogPositioner,
   DialogTrigger,
   dialogContentVariants,
+  useDialogContentBehavior,
 } from './dialog.tsx';
 import type { InputProps } from './input.tsx';
 import { InputGroup, InputGroupAddon, InputGroupInput } from './input-group.tsx';
@@ -58,8 +59,10 @@ export const CommandDialogContent = (props: CommandDialogContentProps) => {
     description = 'Search for a command to run...',
     className,
     children,
+    ref,
     ...rest
   } = props;
+  const { ref: mergedRef } = useDialogContentBehavior(ref);
 
   return (
     <Portal>
@@ -74,6 +77,7 @@ export const CommandDialogContent = (props: CommandDialogContentProps) => {
             className,
           )}
           data-slot="command-dialog-content"
+          ref={mergedRef}
           {...rest}
         >
           <DialogHeader className="sr-only" description={description} title={title} />

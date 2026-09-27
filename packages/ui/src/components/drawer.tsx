@@ -6,6 +6,11 @@ import { Portal } from '@ark-ui/react/portal';
 import { XIcon } from 'lucide-react';
 import React from 'react';
 import { tv, type VariantProps } from 'tailwind-variants';
+import {
+  initialDialogFocus,
+  useDialogContentRef,
+  useDialogOpen,
+} from '../hooks/use-dialog-behavior.ts';
 import { cn } from '../utils.ts';
 import { Button } from './button.tsx';
 import { ScrollArea } from './scroll-area.tsx';
@@ -19,9 +24,16 @@ interface DrawerModalContextProps {
    * @default true
    */
   modal?: boolean;
+  pending: boolean;
+  contentRef: React.RefObject<HTMLDivElement | null>;
 }
 
-const DrawerModalContext = React.createContext({} as DrawerModalContextProps);
+const DrawerModalContext = React.createContext<DrawerModalContextProps | null>(null);
+
+type DrawerRootProps = React.ComponentProps<typeof ArkDrawer.Root> & {
+  /** Keep the drawer open while an asynchronous change is in flight. */
+  pending?: boolean;
+};
 
 export const DrawerProvider = (props: React.ComponentProps<typeof ArkDrawer.Indent>) => {
   const { className, children, ...rest } = props;
@@ -65,17 +77,49 @@ export const DrawerProvider = (props: React.ComponentProps<typeof ArkDrawer.Inde
  * small screens. It follows the finger, supports snap points and dismisses by swipe, Escape or the
  * backdrop. On desktop prefer a dialog, sheet or popover.
  */
-export const Drawer = (props: React.ComponentProps<typeof ArkDrawer.Root>) => {
-  const { modal = true, lazyMount = true, unmountOnExit = true, ...rest } = props;
+export const Drawer = (props: DrawerRootProps) => {
+  const {
+    modal = true,
+    lazyMount = true,
+    unmountOnExit = true,
+    pending = false,
+    open,
+    defaultOpen,
+    onOpenChange,
+    onFocusOutside,
+    onRequestDismiss,
+    onEscapeKeyDown,
+    onPointerDownOutside,
+    initialFocusEl,
+    closeOnEscape = true,
+    closeOnInteractOutside = props.role !== 'alertdialog',
+    ...rest
+  } = props;
+  const contentRef = React.useRef<HTMLDivElement>(null);
+  const controlled = useDialogOpen({ open, defaultOpen, onOpenChange, pending });
 
   return (
-    <DrawerModalContext.Provider value={{ modal }}>
+    <DrawerModalContext.Provider value={{ modal, pending, contentRef }}>
       <ArkDrawer.Root
+        {...rest}
+        {...controlled}
+        closeOnEscape={!pending && closeOnEscape}
+        closeOnInteractOutside={!pending && closeOnInteractOutside}
         data-slot="drawer"
+        initialFocusEl={initialFocusEl ?? (() => initialDialogFocus(contentRef.current))}
         lazyMount={lazyMount}
         modal={modal}
+        onEscapeKeyDown={onEscapeKeyDown}
+        onFocusOutside={(event) => {
+          onFocusOutside?.(event);
+          event.preventDefault();
+        }}
+        onPointerDownOutside={onPointerDownOutside}
+        onRequestDismiss={(event) => {
+          onRequestDismiss?.(event);
+          event.preventDefault();
+        }}
         unmountOnExit={unmountOnExit}
-        {...rest}
       />
     </DrawerModalContext.Provider>
   );
@@ -263,8 +307,12 @@ export const DrawerContent = (props: DrawerContentProps) => {
     showCloseButton = false,
     className,
     children,
+    ref,
+    draggable,
     ...rest
   } = props;
+  const { contentRef, pending } = _useDrawerModal();
+  const mergedRef = useDialogContentRef(contentRef, ref);
 
   return (
     <Portal>
@@ -284,6 +332,8 @@ export const DrawerContent = (props: DrawerContentProps) => {
                   className,
                 )}
                 data-slot="drawer-content"
+                draggable={pending ? false : draggable}
+                ref={mergedRef}
                 {...rest}
               >
                 <DrawerGrabber show={showBar} />
@@ -295,6 +345,7 @@ export const DrawerContent = (props: DrawerContentProps) => {
                     <Button
                       aria-label="Close"
                       className="absolute inset-e-4 top-4 opacity-64 hover:opacity-100 group-data-[swipe-direction=up]/drawer:top-[calc(1rem+env(safe-area-inset-top,0))]"
+                      disabled={pending}
                       size="icon-sm"
                       variant="ghost"
                     >
@@ -433,9 +484,16 @@ export const DrawerBody = (props: DrawerBodyProps) => {
   );
 };
 
-export const DrawerClose = (props: React.ComponentProps<typeof ArkDrawer.CloseTrigger>) => (
-  <ArkDrawer.CloseTrigger data-slot="drawer-close" {...props} />
-);
+export const DrawerClose = (props: React.ComponentProps<typeof ArkDrawer.CloseTrigger>) => {
+  const { pending } = _useDrawerModal();
+  return (
+    <ArkDrawer.CloseTrigger
+      data-slot="drawer-close"
+      {...props}
+      disabled={pending || props.disabled}
+    />
+  );
+};
 
 const drawerFooterVariants = tv({
   base: ['shrink-0', 'flex flex-col-reverse gap-2', 'sm:rounded-none', 'px-(--space) py-4'],
