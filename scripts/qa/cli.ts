@@ -384,11 +384,16 @@ try {
     const down = command(root, 'corepack', ['yarn', 'stack:reset', '--profile', 'qa', '--run-id', projectRunId], 120_000);
     if (!down.ok) { errors.push(`QA stack cleanup failed: ${projectRunId}`); writeFileSync(join(logs, `${projectRunId}-cleanup.log`), down.output); }
   }
-  if (!options.keep) for (const projectRunId of startedFixtureProjects) {
-    const down = command(root, 'corepack', ['yarn', 'stack:reset', '--profile', 'qa',
-      '--run-id', projectRunId, '--persistent'], 120_000);
-    if (!down.ok) { errors.push(`Fixture stack cleanup failed: ${projectRunId}`);
-      writeFileSync(join(logs, `${projectRunId}-cleanup.log`), down.output); }
+  // Restored fixture copies hold large persistent volumes; removing one took over
+  // 120 s in record run 20260927t054833-96d374, so the copies reset concurrently.
+  if (!options.keep) {
+    const resets = await Promise.all(startedFixtureProjects.map(async projectRunId => ({ projectRunId,
+      down: await commandAsync(root, 'corepack', ['yarn', 'stack:reset', '--profile', 'qa',
+        '--run-id', projectRunId, '--persistent'], 300_000) })));
+    for (const { projectRunId, down } of resets) {
+      if (!down.ok) { errors.push(`Fixture stack cleanup failed: ${projectRunId}`);
+        writeFileSync(join(logs, `${projectRunId}-cleanup.log`), down.output); }
+    }
   }
   try {
     const sourceAfter = sourceIdentity(root);
