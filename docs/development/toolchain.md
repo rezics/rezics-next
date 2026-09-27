@@ -245,6 +245,7 @@ Pass command arguments after `--`; run `task --list` for the live command menu.
 | `task check:unused` | Report unused files, dependencies and exports with Knip. |
 | `task ast-grep` | Run the pinned ast-grep binary (scan or test) with sgconfig.yml. |
 | `task docs:check` | Check documentation links, fragments and navigation. |
+| `task i18n:check` | Report locale catalog gaps and fail on extra keys or insert placeholder mismatches. |
 | `task test` | Run explicit test files or the affected plan (-- --affected [<base>] [--list]). |
 | `task qa` | Run the QA harness tiers (-- --backend, --tier, --record, ...). |
 | `task qa:replay` | Replay one property or model test with a logged seed. |
