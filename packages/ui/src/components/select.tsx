@@ -3,12 +3,12 @@
 import { Portal } from '@ark-ui/react';
 import { ark } from '@ark-ui/react/factory';
 import { Select as ArkSelect, useSelectContext } from '@ark-ui/react/select';
-import { CheckIcon, ChevronsUpDownIcon, XIcon } from 'lucide-react';
+import { CheckIcon, ChevronDownIcon, XIcon } from 'lucide-react';
 import type React from 'react';
 import type { VariantProps } from 'tailwind-variants';
 import { cn } from '../utils.ts';
+import { FieldLabel } from './field.tsx';
 import { inputVariants } from './input.tsx';
-import { Separator } from './separator.tsx';
 
 export const useSelect = useSelectContext;
 
@@ -42,6 +42,13 @@ interface SelectTriggerProps
   showClear?: boolean;
 }
 
+/** Accessible name for a Select that is not inside a Field with a FieldLabel. */
+export const SelectLabel = (props: React.ComponentProps<typeof ArkSelect.Label>) => (
+  <FieldLabel asChild>
+    <ArkSelect.Label data-slot="select-label" {...props} />
+  </FieldLabel>
+);
+
 export const SelectTrigger = (props: SelectTriggerProps) => {
   const { showClear = false, size = 'md', className, children, ...rest } = props;
 
@@ -53,8 +60,8 @@ export const SelectTrigger = (props: SelectTriggerProps) => {
           'w-fit',
           'flex items-center gap-2',
           'text-sm',
-          'data-placeholder-shown:text-muted-foreground/64',
-          'data-[state=open]:border-primary data-[state=open]:ring-[3px] data-[state=open]:ring-ring/32',
+          'data-placeholder-shown:text-muted-foreground',
+          'data-[state=open]:border-ring/50 data-[state=open]:ring-2 data-[state=open]:ring-ring/20',
           '[&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 [&_svg]:text-muted-foreground',
           className,
         )}
@@ -69,8 +76,11 @@ export const SelectTrigger = (props: SelectTriggerProps) => {
               <XIcon />
             </SelectClearTrigger>
           )}
-          <ArkSelect.Indicator data-slot="select-indicator">
-            <ChevronsUpDownIcon />
+          <ArkSelect.Indicator
+            className="transition-transform data-[state=open]:rotate-180 motion-reduce:transition-none"
+            data-slot="select-indicator"
+          >
+            <ChevronDownIcon />
           </ArkSelect.Indicator>
         </div>
       </ArkSelect.Trigger>
@@ -78,12 +88,14 @@ export const SelectTrigger = (props: SelectTriggerProps) => {
   );
 };
 
-export const SelectSeparator = (props: React.ComponentProps<typeof Separator>) => {
+// Decorative: a listbox may only contain options and groups, so no separator role.
+export const SelectSeparator = (props: React.ComponentProps<typeof ark.div>) => {
   const { className, ...rest } = props;
 
   return (
-    <Separator
-      className={cn('pointer-events-none -mx-1 my-1 h-px bg-border', className)}
+    <ark.div
+      aria-hidden
+      className={cn('pointer-events-none -mx-1.5 my-1.5 h-px bg-border/60', className)}
       data-slot="select-separator"
       {...rest}
     />
@@ -112,10 +124,10 @@ export const SelectContent = (props: React.ComponentProps<typeof ArkSelect.Conte
             'z-50',
             'relative',
             'max-h-96 min-w-(--reference-width)',
-            'p-1',
+            'p-1.5',
             'bg-popover',
             'text-popover-foreground',
-            'rounded-2xl border shadow-lg/5',
+            'rounded-2xl border border-border/60 shadow-(--aura-shadow-float)',
             'origin-(--transform-origin)',
             'outline-none',
             'overflow-y-auto',
@@ -150,7 +162,7 @@ export const SelectGroup = (props: SelectGroupProps) => {
 
   return (
     <ArkSelect.ItemGroup data-slot="select-group" {...rest}>
-      {!heading && <SelectGroupLabel>{heading}</SelectGroupLabel>}
+      {!!heading && <SelectGroupLabel>{heading}</SelectGroupLabel>}
 
       {children}
     </ArkSelect.ItemGroup>
@@ -162,7 +174,7 @@ export const SelectGroupLabel = (props: React.ComponentProps<typeof ArkSelect.It
 
   return (
     <ArkSelect.ItemGroupLabel
-      className={cn('px-2 py-1.5', 'font-semibold text-muted-foreground text-xs', className)}
+      className={cn('px-3 py-1.5', 'font-semibold text-muted-foreground text-xs', className)}
       data-slot="select-group-label"
       {...rest}
     />
@@ -177,17 +189,19 @@ export const SelectItem = (props: React.ComponentProps<typeof ArkSelect.Item>) =
       className={cn(
         'relative',
         'w-full',
-        'py-1.5 ps-2 pe-8',
+        'py-2 ps-3 pe-9',
         'flex items-center gap-2',
         'select-none text-base md:text-sm',
         'rounded-xl',
         'cursor-default',
         'outline-hidden',
-        'in-[[data-slot=select-content]:has([data-slot=select-group-label])]:ps-4',
+        'in-[[data-slot=select-content]:has([data-slot=select-group-label])]:ps-5',
         'data-highlighted:bg-accent data-highlighted:text-accent-foreground',
+        'data-[state=checked]:font-medium data-[state=checked]:text-primary',
+        'data-highlighted:data-[state=checked]:text-accent-foreground',
         'data-disabled:pointer-events-none data-disabled:opacity-64',
         '[&_svg]:pointer-events-none [&_svg]:shrink-0',
-        "[&_svg:not([class*='size-'])]:size-4 [&_svg]:text-muted-foreground",
+        "[&_svg:not([class*='size-'])]:size-4 [&_svg:not([class*='text-'])]:text-muted-foreground",
         className,
       )}
       data-slot="select-item"
@@ -200,9 +214,9 @@ export const SelectItem = (props: React.ComponentProps<typeof ArkSelect.Item>) =
         {children}
       </ArkSelect.ItemText>
 
-      <span className="absolute inset-e-2 flex size-4 items-center justify-center">
+      <span className="absolute inset-e-3 flex size-4 items-center justify-center">
         <ArkSelect.ItemIndicator data-slot="select-item-indicator">
-          <CheckIcon />
+          <CheckIcon className="text-current" />
         </ArkSelect.ItemIndicator>
       </span>
     </ArkSelect.Item>
@@ -233,13 +247,18 @@ export const SelectClearTrigger = (props: React.ComponentProps<typeof ArkSelect.
 export const SelectEmpty = (props: React.ComponentProps<typeof ark.div>) => {
   const { className, ...rest } = props;
 
-  const { empty } = useSelectContext();
+  // Zag's `empty` means "nothing selected"; this part is for a list with no options.
+  const { collection } = useSelectContext();
 
-  if (empty) {
+  if (collection.size === 0) {
     return (
+      // A listbox must contain options, so the message is a disabled one.
       <ark.div
-        className={cn('px-2 py-1.5', 'text-center text-muted-foreground text-sm', className)}
-        role="presentation"
+        aria-disabled
+        aria-selected={false}
+        className={cn('px-3 py-2', 'text-center text-muted-foreground text-sm', className)}
+        data-slot="select-empty"
+        role="option"
         {...rest}
       />
     );

@@ -7,6 +7,7 @@ import {
 import { EyeIcon, EyeOffIcon } from 'lucide-react';
 import type React from 'react';
 import { cn } from '../utils.ts';
+import type { InputProps } from './input.tsx';
 import {
   InputGroup,
   InputGroupAddon,
@@ -18,7 +19,7 @@ import {
 export const usePasswordInput = usePasswordInputContext;
 
 interface PasswordInputProps
-  extends React.ComponentProps<typeof ArkPasswordInput.Root>,
+  extends Omit<React.ComponentProps<typeof ArkPasswordInput.Root>, 'size'>,
     Pick<InputGroupProps, 'size'> {}
 
 export const PasswordInput = (props: PasswordInputProps) => {
@@ -53,11 +54,18 @@ export const PasswordInputGroup = (
   );
 };
 
-export const PasswordInputInput = (props: React.ComponentProps<typeof ArkPasswordInput.Input>) => (
-  <ArkPasswordInput.Input asChild data-slot="password-input-input" {...props}>
-    <InputGroupInput />
-  </ArkPasswordInput.Input>
-);
+export const PasswordInputInput = (
+  props: Omit<React.ComponentProps<typeof ArkPasswordInput.Input>, 'size'> &
+    Pick<InputProps, 'size'>,
+) => {
+  const { size, ...rest } = props;
+
+  return (
+    <ArkPasswordInput.Input asChild data-slot="password-input-input" {...rest}>
+      <InputGroupInput size={size} />
+    </ArkPasswordInput.Input>
+  );
+};
 
 export const PasswordInputTrigger = (
   props: React.ComponentProps<typeof ArkPasswordInput.VisibilityTrigger>,
