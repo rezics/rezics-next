@@ -1,21 +1,26 @@
 import { t } from 'elysia';
 import type { Static } from 'typebox';
 import { pageFields, readId, readPosition, readUuid } from '../work/read-contract.ts';
+import { submissionState } from '../realm-submission/schema.ts';
 
 export const MANAGEMENT_READ_COST = { pageSize: 20, graphCalls: 2, graphBytes: 16 * 1024,
-  sqlStatements: 11, statementTimeoutMs: 5_000, deadlineMs: 10_000 } as const;
+  sqlStatements: 13, statementTimeoutMs: 5_000, deadlineMs: 10_000 } as const;
 
 export const managementQuery = { actingSubject: readId,
   limit: t.Optional(t.Integer({ minimum: 1, maximum: MANAGEMENT_READ_COST.pageSize })),
   cursor: t.Optional(t.String({ minLength: 1, maxLength: 2048 })) };
 
-export const moderationItem = t.Object({ id: readUuid, kind: t.Union([
-  t.Literal('content_report'), t.Literal('rights_complaint')]),
+export const moderationKind = t.Union([t.Literal('content_report'), t.Literal('rights_complaint'),
+  t.Literal('contribution_submission'), t.Literal('correction_submission')]);
+export const moderationItem = t.Object({ id: readUuid, kind: moderationKind,
   state: t.Union([t.Literal('open'), t.Literal('closed')]),
   generation: t.String(), decisionHead: t.Nullable(readUuid), openedAt: t.String(),
   authorAgent: t.Nullable(readId), reasonCode: t.Nullable(t.String()),
   target: t.Object({ owner: t.String(), resource: t.String(), component: t.String() }),
-  context: readId });
+  context: readId,
+  submission: t.Nullable(t.Object({ revision: readUuid, state: submissionState,
+    contribution: readId, publicationDecision: readId, selectedDraft: readId,
+    correctionOf: t.Nullable(readId) })) });
 
 export const auditItem = t.Object({ id: readUuid, caseId: t.Nullable(readUuid),
   kind: t.Union([t.Literal('content_moderation'), t.Literal('rights_disposition'),

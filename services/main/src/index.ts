@@ -89,6 +89,8 @@ import { RelayHandoffPositions } from './modules/outbox/relay-position.ts';
 import { OwnerOperations } from './modules/owner/operations.ts';
 import { governanceServices } from './modules/governance/composition.ts';
 import { ManagementReadStore } from './modules/management-reads/read-store.ts';
+import { RealmSubmissionStore } from './modules/realm-submission/store.ts';
+import { RealmSubmissionReads } from './modules/realm-submission/reads.ts';
 import { AccessProposalExecutions } from './modules/proposal/access.ts';
 import { currentContentSubjectReader } from './modules/notification/subjects.ts';
 import { NotificationRealtimeHub } from './modules/notification/realtime.ts';
@@ -270,6 +272,8 @@ const app = createMainApp(fuseki, {
   recommendations,
   governance: governanceServices(pool, contentPool, content, sourceIntake, access, environment),
   managementReads: new ManagementReadStore(pool, environment),
+  realmSubmissions: new RealmSubmissionStore(pool, access, environment),
+  realmSubmissionReads: new RealmSubmissionReads(pool),
   ...(relayPool ? { notifications: { store: notificationStore, realtime: notificationRealtime,
     ...(notificationDispatcher ? { dispatcher: notificationDispatcher } : {}),
     ...(notificationProviderConfig.callbackSecret && notificationProvider

@@ -17,10 +17,11 @@ export const realmGovernanceScope = (realm: string) => `governance:realm:${realm
 const organizationScope = (realm: string) => `publication:reject:${realm}`;
 
 interface Options { actingSubject: string; limit?: number; cursor?: string }
-interface CaseRow { id: string; kind: 'content_report' | 'rights_complaint'; state: 'open' | 'closed';
+interface CaseRow { id: string; kind: 'content_report' | 'rights_complaint'
+  | 'contribution_submission' | 'correction_submission'; state: 'open' | 'closed';
   generation: string; decision_head: string | null; opened_at: Date; opened_key: string; target_owner: string;
   target_resource: string; target_component: string; context: string; author_agent: string | null;
-  reason_code: string | null }
+  reason_code: string | null; submission: unknown | null }
 interface DecisionRow { id: string; case_id: string | null; kind: 'content_moderation' | 'rights_disposition'
   | 'organization_publication_rejection'; outcome: string; acting_subject: string; decided_at: Date;
   decided_key: string;
@@ -47,17 +48,20 @@ export class ManagementReadStore {
       exists: rows[0].realm?.value === realm };
   }
 
-  private async authority(client: PoolClient, principal: VerifiedPrincipal, subject: string, scope: string) {
+  private async authority(client: PoolClient, principal: VerifiedPrincipal, subject: string, scope: string,
+    optional = false) {
     const row = (await client.query(`SELECT 1 FROM access.principal p
       JOIN access.representation r ON r.principal_id = p.id AND r.subject_id = $3
-        AND r.active AND r.valid_until > clock_timestamp()
+        AND r.active AND r.valid_until > clock_timestamp() AND r.action = $5
       JOIN access.authority_subject s ON s.id = r.subject_id AND s.active
       JOIN access.permission_grant g ON g.recipient_subject = s.id AND g.scope_id = $4
-        AND g.action = 'governance.moderate' AND g.active AND g.valid_until > clock_timestamp()
+        AND g.action = $5 AND g.active AND g.valid_until > clock_timestamp()
       JOIN access.scope_gate gate ON gate.id = g.scope_id AND gate.open AND gate.dispatch_open
       WHERE p.account_issuer = $1 AND p.account_subject = $2 AND p.active
-      LIMIT 1 FOR SHARE OF p, r, s, g, gate`, [principal.issuer, principal.subject, subject, scope])).rows[0];
-    if (!row) throw new ManagementReadMissing('Realm management is unavailable');
+      LIMIT 1 FOR SHARE OF p, r, s, g, gate`, [principal.issuer, principal.subject, subject, scope,
+      scope.startsWith('review:decide:') ? 'review.decide' : 'governance.moderate'])).rows[0];
+    if (!row && !optional) throw new ManagementReadMissing('Realm management is unavailable');
+    return !!row;
   }
 
   private async revision(client: PoolClient, realm: string, final: boolean): Promise<string> {
@@ -70,8 +74,10 @@ export class ManagementReadStore {
 
   private async page<T extends { id: string }>(principal: VerifiedPrincipal, realm: string, options: Options,
     family: 'moderation' | 'audit', filter: string | null,
-    select: (client: PoolClient, after: { time: string; id: string } | null, limit: number) => Promise<T[]>,
-    map: (row: T) => unknown, time: (row: T) => string) {
+    select: (client: PoolClient, after: { time: string; id: string } | null, limit: number,
+      submissions: boolean) => Promise<T[]>,
+    map: (row: T) => unknown, time: (row: T) => string, reviewOnly = false,
+    includeSubmissions = false) {
     if (!native.test(realm) || !native.test(options.actingSubject)) throw new WorkReadInvalid('Invalid Realm read');
     const limit = options.limit ?? MANAGEMENT_READ_COST.pageSize;
     if (!Number.isInteger(limit) || limit < 1 || limit > MANAGEMENT_READ_COST.pageSize) {
@@ -86,8 +92,10 @@ export class ManagementReadStore {
         bytesLeft: MANAGEMENT_READ_COST.graphBytes * MANAGEMENT_READ_COST.graphCalls }, async () => {
       await client.query('BEGIN');
       await client.query(`SET LOCAL statement_timeout = '${MANAGEMENT_READ_COST.statementTimeoutMs}ms'`);
-      const scope = realmGovernanceScope(realm);
+      const scope = reviewOnly ? `review:decide:${realm}` : realmGovernanceScope(realm);
       await this.authority(client, principal, options.actingSubject, scope);
+      const submissions = reviewOnly || includeSubmissions && family === 'moderation'
+        && await this.authority(client, principal, options.actingSubject, `review:decide:${realm}`, true);
       const start = await this.graphBasis(realm);
       if (!start.exists) throw new ManagementReadMissing('Realm management is unavailable');
       // Materialize an empty Realm position before reading it; this also fences
@@ -97,13 +105,13 @@ export class ManagementReadStore {
       const revision = await this.revision(client, realm, false);
       const position: ManagementPosition = { dataEpoch: start.epoch,
         sequence: `${start.sequence}:${revision}` };
-      const binding = [family, realm, options.actingSubject, principal.issuer, principal.subject, filter];
+      const binding = [family, realm, options.actingSubject, principal.issuer, principal.subject, filter, submissions];
       const cursor = decodeReadCursor(options.cursor, binding, position);
       const after = cursor ? { time: cursor.after, id: cursor.order } : null;
       if (after && (!Number.isFinite(Date.parse(after.time)) || !uuid.test(after.id))) {
         throw new WorkReadInvalid('Invalid page cursor');
       }
-      const rows = await select(client, after, limit + 1);
+      const rows = await select(client, after, limit + 1, submissions);
       if (rows.length > limit + 1) throw new ManagementReadLimit('Page exceeds its row budget');
       const chosen = rows.slice(0, limit);
       const nextCursor = rows.length > limit
@@ -134,27 +142,49 @@ export class ManagementReadStore {
   }
 
   moderation(principal: VerifiedPrincipal, realm: string, options: Options,
-    state: 'open' | 'closed', kind: CaseRow['kind'] | null) {
+    state: 'open' | 'closed', kind: CaseRow['kind'] | null, includeSubmissions = false) {
     const scope = realmGovernanceScope(realm);
+    const reviewOnly = kind?.endsWith('_submission') ?? false;
     return this.page(principal, realm, options, 'moderation', `${state}:${kind ?? '*'}`,
-      async (client, after, limit) => (await client.query<CaseRow>(`SELECT cases.*,
-          first_report.acting_subject AS author_agent, first_report.reason_code
+      // Each indexed branch stops at pageSize + 1 before the bounded merge.
+      // Review-only readers cannot inspect governance reports; governance-only
+      // readers cannot inspect offers or their author-visible decision state.
+      async (client, after, limit, submissions) => (await client.query<CaseRow>(`SELECT * FROM (
+        (SELECT cases.*, first_report.acting_subject AS author_agent, first_report.reason_code,
+          NULL::jsonb AS submission
         FROM (SELECT id, kind, state, generation::text, decision_head, opened_at,
           to_char(opened_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS opened_key,
           target_owner, target_resource, target_component, context
           FROM access.governance_case WHERE authority_scope_id = $1 AND authority_kind = 'realm'
-            AND context = $2 AND state = $3 AND ${kind ? 'kind = $4' : '$4::text IS NULL'}
+            AND $8 AND context = $2 AND state = $3 AND ${kind ? 'kind = $4' : '$4::text IS NULL'}
             AND ($5::timestamptz IS NULL OR (opened_at, id) > ($5::timestamptz, $6::uuid))
           ORDER BY opened_at, id LIMIT $7) cases
         LEFT JOIN LATERAL (SELECT acting_subject, reason_code FROM access.governance_report
           WHERE case_id = cases.id ORDER BY received_at, id LIMIT 1) first_report ON true
-        ORDER BY cases.opened_at, cases.id`, [scope, realm, state, kind, after?.time ?? null,
-        after?.id ?? null, limit])).rows,
+        ORDER BY cases.opened_at, cases.id LIMIT $7)
+        UNION ALL
+        (SELECT id, kind || '_submission' AS kind,
+          CASE WHEN state IN ('pending', 'deciding') THEN 'open' ELSE 'closed' END AS state,
+          generation::text, CASE WHEN state = 'pending' THEN NULL ELSE revision END AS decision_head,
+          opened_at, to_char(opened_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS opened_key,
+          'graph' AS target_owner, work AS target_resource, contribution AS target_component,
+          realm AS context, submitting_agent AS author_agent, public_reason AS reason_code,
+          jsonb_build_object('revision', revision, 'state', state, 'contribution', contribution,
+            'publicationDecision', publication_decision, 'selectedDraft', selected_draft,
+            'correctionOf', correction_of) AS submission
+          FROM access.realm_submission WHERE realm = $2 AND $9
+            AND ${state === 'open' ? "state IN ('pending', 'deciding')" : "state IN ('accepted', 'rejected', 'changes-requested', 'withdrawn', 'stale')"}
+            AND ${kind ? "kind = replace($4, '_submission', '')" : '$4::text IS NULL'}
+            AND ($5::timestamptz IS NULL OR (opened_at, id) > ($5::timestamptz, $6::uuid))
+          ORDER BY opened_at, id LIMIT $7)
+        ) candidates ORDER BY opened_at, id LIMIT $7`, [scope, realm, state, kind, after?.time ?? null,
+        after?.id ?? null, limit, !reviewOnly, submissions])).rows,
       row => ({ id: row.id, kind: row.kind, state: row.state, generation: row.generation,
         decisionHead: row.decision_head, openedAt: row.opened_at.toISOString(),
         authorAgent: row.author_agent, reasonCode: row.reason_code,
         target: { owner: row.target_owner, resource: row.target_resource,
-          component: row.target_component }, context: row.context }), row => row.opened_key);
+          component: row.target_component }, context: row.context, submission: row.submission }),
+      row => row.opened_key, reviewOnly, includeSubmissions);
   }
 
   audit(principal: VerifiedPrincipal, realm: string, options: Options, kind: DecisionRow['kind'] | null) {

@@ -75,6 +75,8 @@ import type { LicenseScopeHook } from '../modules/export/planner.ts';
 import type { GovernanceStore } from '../modules/governance/store.ts';
 import type { GovernanceRules } from '../modules/governance/rules.ts';
 import type { ManagementReadStore } from '../modules/management-reads/read-store.ts';
+import type { RealmSubmissionStore } from '../modules/realm-submission/store.ts';
+import type { RealmSubmissionReads } from '../modules/realm-submission/reads.ts';
 import type { AccessProposalExecutions } from '../modules/proposal/access.ts';
 import type { NotificationStore } from '../modules/notification/store.ts';
 import type { NotificationDispatcher } from '../modules/notification/dispatcher.ts';
@@ -91,6 +93,8 @@ export interface MainWorkDependencies {
   agentProvisioning?: AgentProvisioning;
   governance?: { store: GovernanceStore; rules?: GovernanceRules };
   managementReads?: ManagementReadStore;
+  realmSubmissions?: RealmSubmissionStore;
+  realmSubmissionReads?: RealmSubmissionReads;
   proposalExecutions?: AccessProposalExecutions;
   notifications?: { store: NotificationStore; dispatcher?: NotificationDispatcher;
     realtime?: NotificationRealtimeHub; providerSecrets?: Readonly<Record<string, string>> };

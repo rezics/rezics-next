@@ -2,7 +2,7 @@ import { Elysia, t } from 'elysia';
 import { problemResult } from '../api-contract.ts';
 import { authorizedReadProblems } from '../api-responses.ts';
 import { AccountAssertionDenied, AccountAssertionUnavailable } from '../modules/account/verify-assertion.ts';
-import { auditPage, managementQuery, moderationPage } from '../modules/management-reads/read-contract.ts';
+import { auditPage, managementQuery, moderationKind, moderationPage } from '../modules/management-reads/read-contract.ts';
 import { ManagementReadLimit, ManagementReadMissing, ManagementReadUnavailable }
   from '../modules/management-reads/read-store.ts';
 import { WorkReadInvalid, WorkReadMoved } from '../modules/work/read-session.ts';
@@ -35,16 +35,26 @@ export function managementReadRoutes(work: MainWorkDependencies) {
     .get('/v1/realms/:realm/moderation', { params, detail,
       query: t.Object({ ...managementQuery,
         state: t.Optional(t.Union([t.Literal('open'), t.Literal('closed')])),
-        type: t.Optional(t.Union([t.Literal('content_report'), t.Literal('rights_complaint')])) },
+        type: t.Optional(moderationKind) },
       { additionalProperties: false }),
       response: { 200: moderationPage, ...problems },
     }, async ({ request, params: path, query }) => {
       try {
-        const principal = await work.account.verify(request, ['governance:decide']);
+        const principal = await work.account.verify(request,
+          [query.type?.endsWith('_submission') ? 'realm:adopt' : 'governance:decide']);
+        // An unfiltered page aggregates only consented families. Access grants
+        // do not widen a connected application's OAuth consent ceiling.
+        let includeSubmissions = false;
+        if (!query.type) {
+          try {
+            const reviewer = await work.account.verify(request, ['realm:adopt']);
+            includeSubmissions = reviewer.issuer === principal.issuer && reviewer.subject === principal.subject;
+          } catch (error) { if (!(error instanceof AccountAssertionDenied)) throw error; }
+        }
         if (!work.managementReads) throw new ManagementReadUnavailable('Management owner is unavailable');
         const realm = `https://rezics.com/id/${path.realm}`;
         const result = await work.managementReads.moderation(principal, realm, query,
-          query.state ?? 'open', query.type ?? null);
+          query.state ?? 'open', query.type ?? null, includeSubmissions);
         return Response.json(result, { headers });
       } catch (error) { return readError(error); }
     })
