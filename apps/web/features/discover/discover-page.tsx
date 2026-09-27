@@ -8,7 +8,7 @@ import { PageContainer, PageHeader } from '../shell/page.tsx';
 import type { DiscoverMessages } from './messages.ts';
 import { Notice } from './notice.tsx';
 import type { DiscoveryLoader } from './query.ts';
-import type { BrowseScope } from './scope.ts';
+import { type BrowseScope, neighbourScope } from './scope.ts';
 import { ScopeBar, type ScopeRealm, scopeName } from './scope-bar.tsx';
 import { Shelf } from './shelf.tsx';
 import { type DiscoverState, discoverHref, type ShelfSpec, type WorkTypeKey, workTypes } from './state.ts';
@@ -83,8 +83,8 @@ export function DiscoverPage({ state, realm, realmMissing, question, shelves, si
   const scopeLabel = scopeName(state.scope, realm, t);
   const line = state.scope.kind === 'global' ? t.scopeLineGlobal : state.scope.kind === 'mine' ? t.scopeLineMine
     : t.scopeLineRealm({ realm: scopeLabel });
-  const neighbour = state.scope.kind === 'global' ? undefined
-    : { href: hrefIn(state, { kind: 'global' }), label: t.seeGlobal };
+  const next = neighbourScope(state.scope);
+  const neighbour = next ? { href: hrefIn(state, next), label: t.seeGlobal } : undefined;
   const filters = [
     ...(state.context ? [{ label: question ? t.contextFilter({ question: question.question }) : t.contextFilterUnknown,
       href: discoverHref({ ...state, context: null }) }] : []),
