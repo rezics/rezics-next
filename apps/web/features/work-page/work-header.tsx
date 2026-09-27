@@ -31,10 +31,10 @@ export function WorkCover({ cover, title, language, className }: {
   }
   const hue = coverHues[Number.parseInt(cover.key.slice(0, 4), 16) % coverHues.length];
   const style = { '--cover-hue': hue } as CSSProperties;
-  return <div aria-hidden="true" style={style} className={cn(frame, 'flex flex-col justify-between p-2.5 sm:p-4',
+  return <div aria-hidden="true" style={style} className={cn(frame, 'flex flex-col justify-between p-2 sm:p-4',
     'bg-[linear-gradient(165deg,oklch(0.46_0.1_var(--cover-hue)),oklch(0.3_0.08_var(--cover-hue)))]')}>
-    <span lang={language} className="line-clamp-5 hyphens-auto break-words font-work-title text-white text-xs/snug
-      sm:text-base/snug">
+    <span lang={language} className="line-clamp-5 hyphens-auto break-words font-work-title text-[0.6875rem]/snug
+      text-white sm:text-base/snug">
       {title}</span>
     <span className="h-px w-1/3 bg-white/50" />
   </div>;

@@ -1,5 +1,5 @@
 import { Skeleton } from '@rezics/ui/skeleton';
-import { ExternalLinkIcon, TriangleAlertIcon } from 'lucide-react';
+import { TriangleAlertIcon } from 'lucide-react';
 import { materializeData } from 'native-i18n';
 import type { UiLocale } from '../../i18n/define.ts';
 import type { WorkPageMessages } from './messages.ts';
@@ -35,7 +35,8 @@ export function WorkCredits({ credits, locale, messages }: {
         return <dd key={credit.id}>
           <a href={`https://openlibrary.org/authors/${encodeURIComponent(key)}`} rel="noreferrer"
             className="font-medium text-primary underline-offset-4 hover:underline">
-            {t.openLibraryAuthor({ key })}<ExternalLinkIcon aria-hidden="true" className="ms-1 inline size-3.5 align-[-2px]" /></a>
+            {/* A text arrow joined by a no-break space wraps with the last word; an icon would not. */}
+            {t.openLibraryAuthor({ key })}{'\u00a0'}<span aria-hidden="true">↗</span></a>
         </dd>;
       })}
     </dl>
