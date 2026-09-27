@@ -46,7 +46,8 @@ Define per-owner thresholds and resulting admission/index/placement actions.
 The governing [workload policy](../workload-budgets.md) owns timing and limits.
 
 The [depth study](../../research/access-depth-representation-and-voting.md)
-proposes initial experiment profiles: 32-edge group/resource hierarchies,
+explains why these initial experiment profiles need qualification: 32-edge
+group/resource hierarchies,
 8-edge representation/dependency chains, 64 evaluator levels, 2,048 decision
 states, a 50 ms evaluation deadline and 100-target ordinary batches. These are
 unqualified tuning candidates, not production limits or achieved task coverage.

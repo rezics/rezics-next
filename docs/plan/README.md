@@ -76,8 +76,10 @@ representation. Stage F applies the [voting contract](../contracts/votes-and-ref
 to institutional entitlements and approved collective decisions. Direct proxies
 and explicit allocations are charter-enabled capabilities under that contract;
 live proxy rerouting and full liquid delegation require a separate qualified
-profile. Numeric Access work limits and 99% legitimate-task coverage remain
-qualification targets in the [depth study](../research/access-depth-representation-and-voting.md).
+profile. Numeric Access work limits in the
+[workload profile](../storage/workloads/identity-access-capacity.md) and 99%
+legitimate-task coverage in the [depth study](../research/access-depth-representation-and-voting.md)
+remain qualification targets.
 
 Redis is outside the first release's delivery and acceptance scope. Likes and
 favorites must work through Main's TDB2 authority without Redis. Redis deployment,
