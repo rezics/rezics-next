@@ -4,6 +4,7 @@ import { AccountMenu } from './account-menu.tsx';
 import { messages } from './messages.ts';
 import type { Session } from './session.ts';
 import { messages as shellMessages } from '../shell/messages.ts';
+import shellZhHans from '../shell/messages/zh-Hans.ts';
 import { ShellProvider } from '../shell/shell-provider.tsx';
 
 const ada = 'https://rezics.com/id/b8df6385-cec9-4fa0-8b89-71def5fa82b5';
@@ -18,7 +19,7 @@ const meta = { title: 'Auth/Account menu', component: AccountMenu,
   args: { session, messages: messages.en, accountOrigin: 'https://account.rezics.test' },
   decorators: [(Story, context) => {
     const locale = context.globals.locale === 'zh-Hans' ? 'zh-Hans' : 'en';
-    return <ShellProvider locale={locale} messages={shellMessages[locale]} initialTheme="system"
+    return <ShellProvider locale={locale} messages={locale === 'zh-Hans' ? { ...shellMessages, ...shellZhHans } : shellMessages} initialTheme="system"
       initialCollapsed={false}><div className="flex justify-end p-4"><Story /></div></ShellProvider>;
   }],
 } satisfies Meta<typeof AccountMenu>;
