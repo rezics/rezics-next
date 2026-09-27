@@ -62,7 +62,9 @@ export function AuditTab({ userId, initial }: { userId: string; initial: AuditPa
 
 export function AppsTab({ detail }: { detail: UserDetail }) {
   const { t } = useTranslation('admin');
-  const locale = useLocale().current === 'zh-CN' ? 'zh-CN' : 'en';
+  const current = useLocale().current;
+  // Account scope descriptions are keyed en and zh-CN.
+  const locale = current === 'zh-Hans' || current === 'zh-Hant' ? 'zh-CN' : 'en';
   const { api } = useAdminClient();
   const apps = usePages(detail.apps, cursor => api.apps(detail.profile.id, cursor));
   return <Panel title={t.user.tabs.apps}>
