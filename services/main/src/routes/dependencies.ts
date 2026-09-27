@@ -136,6 +136,7 @@ export interface MainWorkDependencies {
       | 'publicRealmCount' | 'realmDirectory'
       | 'withWorkEditAuthority'
       | 'canReadSemanticResource'
+      | 'canMarkOfficialZone'
       | 'readRatingAggregateInventory' | 'checkRatingAggregateFence'
       | 'readRatingContextPolicyWitness' | 'issueTitleAdmission'>>;
   releaseRatingInventory?: ReleaseRatingInventoryStore;

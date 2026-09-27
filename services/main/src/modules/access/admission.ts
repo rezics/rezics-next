@@ -630,6 +630,15 @@ export class AccessAdmissionRegistry {
       `rating:read:${context}`, 'rating.observation.read');
   }
 
+  /** The separate platform grant gates official Zone identity and route changes. */
+  async canMarkOfficialZone(principal: VerifiedPrincipal, actingSubject: string, zone: string)
+    : Promise<boolean> {
+    if (!/^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/.test(zone)
+      || !/^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/.test(actingSubject)) return false;
+    return this.canReadScopedResource(principal, actingSubject,
+      `zone:official:${zone}`, 'zone.official');
+  }
+
   /** Returns only a currently active Access counting identity for an introspected Account subject. */
   async activePrincipalId(principal: VerifiedPrincipal): Promise<string | null> {
     const client = await this.pool.connect();

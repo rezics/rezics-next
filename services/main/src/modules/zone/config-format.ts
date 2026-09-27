@@ -1,5 +1,6 @@
 import { Type, type Static } from 'typebox';
 import { Value } from 'typebox/value';
+import { checkZonePresentation, ZonePresentation } from './presentation-format.ts';
 
 // Immutable Zone configuration payload referenced by a zone-capability-v1
 // revision manifest. Typed routes and presentation are validated; the
@@ -12,7 +13,8 @@ export const ZONE_LIMITS = { configBytes: 65_536, advancedBytes: 262_144, queryB
   queryNesting: 4, queryBudgetMs: 2_000, queryBudgetRows: 1_000 } as const;
 
 const nativeId = Type.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' });
-const reference = Type.String({ minLength: 1, maxLength: 2048, pattern: '^[a-z][a-z0-9+.-]*:\\S+$' });
+const reference = Type.String({ maxLength: 128,
+  pattern: '^https://rezics\\.com/definition/[a-z0-9]+(?:-[a-z0-9]+)*$' });
 
 /** Nested query Blocks share the Zone request budget; a block never raises it. */
 export const ZoneQueryBlock = Type.Object({
@@ -30,10 +32,13 @@ export const ZoneConfiguration = Type.Object({
   state: Type.Union([Type.Literal('active'), Type.Literal('retired')]),
   disclosure: Type.Union([Type.Literal('public'), Type.Literal('private')]),
   defaultRealm: Type.Optional(nativeId),
+  official: Type.Optional(Type.Object({ routeSegment: Type.String({
+    pattern: '^[a-z0-9]+(-[a-z0-9]+)*$', maxLength: 64 }) }, { additionalProperties: false })),
   /** An exact, shared semantic Context selection for this Zone's presentation. */
   defaultContext: Type.Optional(Type.Object({ context: nativeId, semanticRevision: nativeId },
     { additionalProperties: false })),
-  presentation: Type.Optional(reference),
+  /** Typed publication layout. Legacy definition IRIs remain readable during migration. */
+  presentation: Type.Optional(Type.Union([reference, ZonePresentation])),
   budget: Type.Object({
     timeMs: Type.Integer({ minimum: 1, maximum: ZONE_LIMITS.queryBudgetMs }),
     rows: Type.Integer({ minimum: 1, maximum: ZONE_LIMITS.queryBudgetRows }),
@@ -68,6 +73,18 @@ export function checkZoneConfiguration(bytes: Uint8Array): ZoneConfiguration {
       throw new InvalidZoneConfiguration('Zone query block nesting differs');
     }
     depth.set(block.block, parentDepth + 1);
+  }
+  if (typeof config.presentation === 'object') {
+    try { checkZonePresentation(config.presentation, config.queryBlocks); }
+    catch (error) {
+      throw new InvalidZoneConfiguration(error instanceof Error ? error.message : 'Invalid Zone presentation');
+    }
+  }
+  if (config.official && (!config.defaultRealm || config.disclosure !== 'public')) {
+    throw new InvalidZoneConfiguration('Official Zone needs a public default Realm');
+  }
+  if (typeof config.presentation === 'object' && config.presentation.official && !config.official) {
+    throw new InvalidZoneConfiguration('Official package needs an official Zone');
   }
   return config;
 }

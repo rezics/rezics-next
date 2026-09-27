@@ -5,12 +5,15 @@ import { authorCreditFixture, nativeId, shortId } from '../fixtures/author-credi
 import { S3ImmutableObjects, type ImmutableObjects }
   from '../../../services/main/src/infrastructure/immutable-objects.ts';
 import { readZoneConfiguration } from '../../../services/main/src/modules/zone/configuration.ts';
+import { DEFAULT_ZONE_PRESENTATION, ZONE_PRESETS }
+  from '../../../services/main/src/modules/zone/presentation-format.ts';
+import { createMainApp } from '../../../services/main/src/app.ts';
 
 test('WIKI01/WIKI02/VIEW03/VIEW06/CTX01: two Zones mount one Collection without owning or disclosing it', async () => {
   if (!Bun.env.REZICS_QA_RUN_ID) throw new Error('Run through the isolated integration tier');
   const f = await authorCreditFixture(Bun.env as Record<string, string>,
     resolve('.temp', `zone-wiki-${randomUUID()}`),
-    'openid work:create work:read space:create zone:edit collection:edit semantic:read context:write');
+    'openid work:create work:read space:create zone:edit owner:operate collection:edit semantic:read context:write');
   const objects = new S3ImmutableObjects({ endpoint: Bun.env.MAIN_S3_ENDPOINT!,
     bucket: Bun.env.MAIN_S3_BUCKET!, region: Bun.env.MAIN_S3_REGION!,
     accessKeyId: Bun.env.MAIN_S3_ACCESS_KEY!, secretAccessKey: Bun.env.MAIN_S3_SECRET_KEY!,
@@ -75,6 +78,59 @@ test('WIKI01/WIKI02/VIEW03/VIEW06/CTX01: two Zones mount one Collection without 
         GRAPH <urn:rezics:graph:current> { <${zone.zone}> rv:defaultContext
           <${sharedContext.context}> ; rv:defaultContextRevision <${revision}> . } }`)).boolean).toBe(true);
     }
+    const publicationZone = created[1]!;
+    const publicationHead = (await readZoneConfiguration(f.env, publicationZone.zone)).revision;
+    expect((await f.call('PUT', `/v1/zones/${shortId(publicationZone.zone)}/configuration`, {
+      expectedHead: publicationHead, actingSubject: f.actor,
+      presentation: 'https://rezics.com/definition/unvalidated-theme',
+    })).status).toBe(400);
+    const publication = { ...DEFAULT_ZONE_PRESENTATION, preset: 'serial' as const,
+      tokens: ZONE_PRESETS.serial,
+      modules: [{ id: 'featured', type: 'editorial-list' as const, title: 'Featured',
+        source: { kind: 'collection' as const, collection } }] };
+    const publicationWrite = await f.json<{ revision: string }>(await f.call('PUT',
+      `/v1/zones/${shortId(publicationZone.zone)}/configuration`, {
+        expectedHead: publicationHead, actingSubject: f.actor, presentation: publication,
+      }), 200);
+    const anonymous = createMainApp(f.env.fuseki, { environment: f.env,
+      account: f.account.verifier, access: f.access });
+    const presentationUrl = `http://main.local/v1/zones/${shortId(publicationZone.zone)}/presentation`;
+    const publicResponse = await anonymous.handle(new Request(presentationUrl));
+    expect(publicResponse.status).toBe(200);
+    expect(publicResponse.headers.get('cache-control')).toBe('public, max-age=30');
+    const etag = publicResponse.headers.get('etag')!;
+    expect(await publicResponse.json()).toMatchObject({ revision: publicationWrite.revision,
+      presentation: publication, execution: { state: 'fallback', reason: 'none_approved' },
+      cost: { graphReads: 1, objectReads: 2, maxModules: 24 } });
+    expect((await anonymous.handle(new Request(presentationUrl,
+      { headers: { 'if-none-match': etag } }))).status).toBe(304);
+    const safeView = await anonymous.handle(new Request(presentationUrl + '?safe-theme=1',
+      { headers: { 'if-none-match': etag } }));
+    expect(safeView.status).toBe(200);
+    expect(await safeView.json()).toMatchObject({ execution: { reason: 'safe_mode' },
+      renderTokens: { accent: ZONE_PRESETS.clean.accent } });
+    expect((await f.call('PUT', `/v1/zones/${shortId(publicationZone.zone)}/configuration`, {
+      expectedHead: publicationWrite.revision, actingSubject: f.actor,
+      official: { routeSegment: 'books' }, defaultRealm: secondSpace.realm,
+    })).status).toBe(403);
+    await f.grant(`zone:official:${publicationZone.zone}`, 'zone.official');
+    const marked = await f.json<{ revision: string }>(await f.call('PUT',
+      `/v1/zones/${shortId(publicationZone.zone)}/configuration`, {
+        expectedHead: publicationWrite.revision, actingSubject: f.actor,
+        official: { routeSegment: 'books' }, defaultRealm: secondSpace.realm,
+      }), 200);
+    expect(marked.revision).not.toBe(publicationWrite.revision);
+    expect(await (await anonymous.handle(new Request('http://main.local/v1/zones?official=true'))).json())
+      .toMatchObject({ items: [{ zone: publicationZone.zone, realm: secondSpace.realm,
+        routeSegment: 'books' }], cost: { graphReads: 1, rows: 1 } });
+    expect(await (await anonymous.handle(new Request(
+      'http://main.local/v1/zones/by-segment/books'))).json()).toMatchObject({
+      zone: publicationZone.zone, realm: secondSpace.realm });
+    await f.grant(`zone:official:${created[0]!.zone}`, 'zone.official');
+    expect((await f.call('PUT', `/v1/zones/${shortId(created[0]!.zone)}/configuration`, {
+      expectedHead: (await readZoneConfiguration(f.env, created[0]!.zone)).revision,
+      actingSubject: f.actor, official: { routeSegment: 'books' }, defaultRealm: space.realm,
+    })).status).toBe(400);
     const mountBody = (zone: typeof created[number], presentation: string) => ({
       expectedHead: zone.revision, collection, routeSegment: 'shared', disclosure: 'public',
       presentation, actingSubject: f.actor,
@@ -118,7 +174,7 @@ test('WIKI01/WIKI02/VIEW03/VIEW06/CTX01: two Zones mount one Collection without 
         budget: { timeMs: 500, rows: 20 } }), 200);
     const edited = await f.json<{ revision: string }>(await f.call('PUT', configurationPath,
       { expectedHead: configured.revision, actingSubject: f.actor,
-        presentation: 'https://rezics.com/definition/ordinary-theme' }), 200);
+        presentation: publication }), 200);
     const preserved = await readZoneConfiguration(f.env, created[0]!.zone);
     expect(preserved.configuration.advanced).toMatch(/^sha256:[0-9a-f]{64}$/);
     expect(preserved.advancedBase64).toBe(advancedBase64);
@@ -128,7 +184,7 @@ test('WIKI01/WIKI02/VIEW03/VIEW06/CTX01: two Zones mount one Collection without 
     expect((await readZoneConfiguration(f.env, created[1]!.zone)).configuration.defaultContext)
       .toEqual({ context: sharedContext.context, semanticRevision: laterContext.semanticRevision });
     expect((await f.call('PUT', configurationPath, { expectedHead: initial.revision,
-      actingSubject: f.actor, presentation: 'https://rezics.com/definition/stale' })).status).toBe(409);
+      actingSubject: f.actor, presentation: publication })).status).toBe(409);
     const originalFuseki = f.env.fuseki;
     let lostRetire = false;
     f.env.fuseki = new Proxy(originalFuseki, { get(target, property) {
