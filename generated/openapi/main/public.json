@@ -208885,6 +208885,1399 @@
         ]
       }
     },
+    "/v1/recipes/{id}/measures": {
+      "get": {
+        "operationId": "getV1RecipesByIdMeasures",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "actingSubject",
+            "required": true,
+            "schema": {
+              "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "revision",
+            "required": false,
+            "schema": {
+              "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "cost": {},
+                    "measures": {
+                      "items": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "basis": {
+                            "enum": [
+                              "per-serving",
+                              "whole-recipe"
+                            ],
+                            "type": "string"
+                          },
+                          "coverage": {
+                            "enum": [
+                              "complete",
+                              "partial",
+                              "unknown"
+                            ],
+                            "type": "string"
+                          },
+                          "evidence": {
+                            "maxLength": 2048,
+                            "minLength": 1,
+                            "pattern": "^[a-z][a-z0-9+.-]*:\\S+$",
+                            "type": "string"
+                          },
+                          "kind": {
+                            "enum": [
+                              "yield",
+                              "servings",
+                              "preparation-duration",
+                              "cooking-duration",
+                              "total-duration",
+                              "nutrient"
+                            ]
+                          },
+                          "nutrient": {
+                            "maxLength": 2048,
+                            "minLength": 1,
+                            "pattern": "^[a-z][a-z0-9+.-]*:\\S+$",
+                            "type": "string"
+                          },
+                          "provenance": {
+                            "enum": [
+                              "declared",
+                              "source-stated",
+                              "computed"
+                            ],
+                            "type": "string"
+                          },
+                          "unit": {
+                            "maxLength": 2048,
+                            "minLength": 1,
+                            "pattern": "^[a-z][a-z0-9+.-]*:\\S+$",
+                            "type": "string"
+                          },
+                          "unitText": {
+                            "maxLength": 100,
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "value": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "denominator": {
+                                "maximum": 1000000000000,
+                                "minimum": 1,
+                                "type": "integer"
+                              },
+                              "numerator": {
+                                "maximum": 1000000000000,
+                                "minimum": 0,
+                                "type": "integer"
+                              }
+                            },
+                            "required": [
+                              "numerator",
+                              "denominator"
+                            ],
+                            "type": "object"
+                          },
+                          "valueLexical": {
+                            "maxLength": 100,
+                            "minLength": 1,
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "value",
+                          "basis",
+                          "coverage",
+                          "provenance"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "owner": {
+                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                      "type": "string"
+                    },
+                    "predecessor": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "revision": {
+                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                      "type": "string"
+                    },
+                    "sourcePosition": {},
+                    "structure": {
+                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "structure",
+                    "owner",
+                    "revision",
+                    "predecessor",
+                    "measures",
+                    "sourcePosition",
+                    "cost"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 200"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 400,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 400"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 401,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 401"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 403,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 403"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 404,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 404"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 500,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 500"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 503,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 503"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      },
+      "post": {
+        "operationId": "postV1RecipesByIdMeasures",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 128,
+              "minLength": 1,
+              "pattern": "^[A-Za-z0-9:_./-]{1,128}$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "actingSubject": {
+                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                    "type": "string"
+                  },
+                  "expectedHead": {
+                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                    "type": "string"
+                  },
+                  "nutrition": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "basis": {
+                        "enum": [
+                          "per-serving",
+                          "whole-recipe"
+                        ],
+                        "type": "string"
+                      },
+                      "inputs": {
+                        "items": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "coverage": {
+                              "enum": [
+                                "complete",
+                                "partial",
+                                "unknown"
+                              ],
+                              "type": "string"
+                            },
+                            "values": {
+                              "items": {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "amount": {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "denominator": {
+                                        "maximum": 1000000000000,
+                                        "minimum": 1,
+                                        "type": "integer"
+                                      },
+                                      "numerator": {
+                                        "maximum": 1000000000000,
+                                        "minimum": 0,
+                                        "type": "integer"
+                                      }
+                                    },
+                                    "required": [
+                                      "numerator",
+                                      "denominator"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  "nutrient": {
+                                    "format": "uri",
+                                    "maxLength": 2048,
+                                    "type": "string"
+                                  },
+                                  "unit": {
+                                    "format": "uri",
+                                    "maxLength": 2048,
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "nutrient",
+                                  "unit",
+                                  "amount"
+                                ],
+                                "type": "object"
+                              },
+                              "maxItems": 64,
+                              "type": "array"
+                            }
+                          },
+                          "required": [
+                            "coverage",
+                            "values"
+                          ],
+                          "type": "object"
+                        },
+                        "maxItems": 512,
+                        "type": "array"
+                      }
+                    },
+                    "required": [
+                      "basis",
+                      "inputs"
+                    ],
+                    "type": "object"
+                  },
+                  "servings": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "coverage": {
+                        "enum": [
+                          "complete",
+                          "partial",
+                          "unknown"
+                        ],
+                        "type": "string"
+                      },
+                      "evidence": {
+                        "format": "uri",
+                        "maxLength": 2048,
+                        "type": "string"
+                      },
+                      "provenance": {
+                        "enum": [
+                          "declared",
+                          "source-stated"
+                        ],
+                        "type": "string"
+                      },
+                      "value": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "denominator": {
+                            "maximum": 1000000000000,
+                            "minimum": 1,
+                            "type": "integer"
+                          },
+                          "numerator": {
+                            "maximum": 1000000000000,
+                            "minimum": 0,
+                            "type": "integer"
+                          }
+                        },
+                        "required": [
+                          "numerator",
+                          "denominator"
+                        ],
+                        "type": "object"
+                      }
+                    },
+                    "required": [
+                      "value",
+                      "coverage",
+                      "provenance"
+                    ],
+                    "type": "object"
+                  },
+                  "yield": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "coverage": {
+                        "enum": [
+                          "complete",
+                          "partial",
+                          "unknown"
+                        ],
+                        "type": "string"
+                      },
+                      "evidence": {
+                        "format": "uri",
+                        "maxLength": 2048,
+                        "type": "string"
+                      },
+                      "provenance": {
+                        "enum": [
+                          "declared",
+                          "source-stated"
+                        ],
+                        "type": "string"
+                      },
+                      "unit": {
+                        "format": "uri",
+                        "maxLength": 2048,
+                        "type": "string"
+                      },
+                      "unitText": {
+                        "maxLength": 100,
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "value": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "denominator": {
+                            "maximum": 1000000000000,
+                            "minimum": 1,
+                            "type": "integer"
+                          },
+                          "numerator": {
+                            "maximum": 1000000000000,
+                            "minimum": 0,
+                            "type": "integer"
+                          }
+                        },
+                        "required": [
+                          "numerator",
+                          "denominator"
+                        ],
+                        "type": "object"
+                      }
+                    },
+                    "required": [
+                      "value",
+                      "coverage",
+                      "provenance"
+                    ],
+                    "type": "object"
+                  }
+                },
+                "required": [
+                  "expectedHead",
+                  "actingSubject",
+                  "yield",
+                  "nutrition"
+                ],
+                "type": "object"
+              }
+            },
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "actingSubject": {
+                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                    "type": "string"
+                  },
+                  "expectedHead": {
+                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                    "type": "string"
+                  },
+                  "nutrition": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "basis": {
+                        "enum": [
+                          "per-serving",
+                          "whole-recipe"
+                        ],
+                        "type": "string"
+                      },
+                      "inputs": {
+                        "items": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "coverage": {
+                              "enum": [
+                                "complete",
+                                "partial",
+                                "unknown"
+                              ],
+                              "type": "string"
+                            },
+                            "values": {
+                              "items": {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "amount": {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "denominator": {
+                                        "maximum": 1000000000000,
+                                        "minimum": 1,
+                                        "type": "integer"
+                                      },
+                                      "numerator": {
+                                        "maximum": 1000000000000,
+                                        "minimum": 0,
+                                        "type": "integer"
+                                      }
+                                    },
+                                    "required": [
+                                      "numerator",
+                                      "denominator"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  "nutrient": {
+                                    "format": "uri",
+                                    "maxLength": 2048,
+                                    "type": "string"
+                                  },
+                                  "unit": {
+                                    "format": "uri",
+                                    "maxLength": 2048,
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "nutrient",
+                                  "unit",
+                                  "amount"
+                                ],
+                                "type": "object"
+                              },
+                              "maxItems": 64,
+                              "type": "array"
+                            }
+                          },
+                          "required": [
+                            "coverage",
+                            "values"
+                          ],
+                          "type": "object"
+                        },
+                        "maxItems": 512,
+                        "type": "array"
+                      }
+                    },
+                    "required": [
+                      "basis",
+                      "inputs"
+                    ],
+                    "type": "object"
+                  },
+                  "servings": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "coverage": {
+                        "enum": [
+                          "complete",
+                          "partial",
+                          "unknown"
+                        ],
+                        "type": "string"
+                      },
+                      "evidence": {
+                        "format": "uri",
+                        "maxLength": 2048,
+                        "type": "string"
+                      },
+                      "provenance": {
+                        "enum": [
+                          "declared",
+                          "source-stated"
+                        ],
+                        "type": "string"
+                      },
+                      "value": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "denominator": {
+                            "maximum": 1000000000000,
+                            "minimum": 1,
+                            "type": "integer"
+                          },
+                          "numerator": {
+                            "maximum": 1000000000000,
+                            "minimum": 0,
+                            "type": "integer"
+                          }
+                        },
+                        "required": [
+                          "numerator",
+                          "denominator"
+                        ],
+                        "type": "object"
+                      }
+                    },
+                    "required": [
+                      "value",
+                      "coverage",
+                      "provenance"
+                    ],
+                    "type": "object"
+                  },
+                  "yield": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "coverage": {
+                        "enum": [
+                          "complete",
+                          "partial",
+                          "unknown"
+                        ],
+                        "type": "string"
+                      },
+                      "evidence": {
+                        "format": "uri",
+                        "maxLength": 2048,
+                        "type": "string"
+                      },
+                      "provenance": {
+                        "enum": [
+                          "declared",
+                          "source-stated"
+                        ],
+                        "type": "string"
+                      },
+                      "unit": {
+                        "format": "uri",
+                        "maxLength": 2048,
+                        "type": "string"
+                      },
+                      "unitText": {
+                        "maxLength": 100,
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "value": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "denominator": {
+                            "maximum": 1000000000000,
+                            "minimum": 1,
+                            "type": "integer"
+                          },
+                          "numerator": {
+                            "maximum": 1000000000000,
+                            "minimum": 0,
+                            "type": "integer"
+                          }
+                        },
+                        "required": [
+                          "numerator",
+                          "denominator"
+                        ],
+                        "type": "object"
+                      }
+                    },
+                    "required": [
+                      "value",
+                      "coverage",
+                      "provenance"
+                    ],
+                    "type": "object"
+                  }
+                },
+                "required": [
+                  "expectedHead",
+                  "actingSubject",
+                  "yield",
+                  "nutrition"
+                ],
+                "type": "object"
+              }
+            },
+            "multipart/form-data": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "actingSubject": {
+                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                    "type": "string"
+                  },
+                  "expectedHead": {
+                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                    "type": "string"
+                  },
+                  "nutrition": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "basis": {
+                        "enum": [
+                          "per-serving",
+                          "whole-recipe"
+                        ],
+                        "type": "string"
+                      },
+                      "inputs": {
+                        "items": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "coverage": {
+                              "enum": [
+                                "complete",
+                                "partial",
+                                "unknown"
+                              ],
+                              "type": "string"
+                            },
+                            "values": {
+                              "items": {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "amount": {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "denominator": {
+                                        "maximum": 1000000000000,
+                                        "minimum": 1,
+                                        "type": "integer"
+                                      },
+                                      "numerator": {
+                                        "maximum": 1000000000000,
+                                        "minimum": 0,
+                                        "type": "integer"
+                                      }
+                                    },
+                                    "required": [
+                                      "numerator",
+                                      "denominator"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  "nutrient": {
+                                    "format": "uri",
+                                    "maxLength": 2048,
+                                    "type": "string"
+                                  },
+                                  "unit": {
+                                    "format": "uri",
+                                    "maxLength": 2048,
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "nutrient",
+                                  "unit",
+                                  "amount"
+                                ],
+                                "type": "object"
+                              },
+                              "maxItems": 64,
+                              "type": "array"
+                            }
+                          },
+                          "required": [
+                            "coverage",
+                            "values"
+                          ],
+                          "type": "object"
+                        },
+                        "maxItems": 512,
+                        "type": "array"
+                      }
+                    },
+                    "required": [
+                      "basis",
+                      "inputs"
+                    ],
+                    "type": "object"
+                  },
+                  "servings": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "coverage": {
+                        "enum": [
+                          "complete",
+                          "partial",
+                          "unknown"
+                        ],
+                        "type": "string"
+                      },
+                      "evidence": {
+                        "format": "uri",
+                        "maxLength": 2048,
+                        "type": "string"
+                      },
+                      "provenance": {
+                        "enum": [
+                          "declared",
+                          "source-stated"
+                        ],
+                        "type": "string"
+                      },
+                      "value": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "denominator": {
+                            "maximum": 1000000000000,
+                            "minimum": 1,
+                            "type": "integer"
+                          },
+                          "numerator": {
+                            "maximum": 1000000000000,
+                            "minimum": 0,
+                            "type": "integer"
+                          }
+                        },
+                        "required": [
+                          "numerator",
+                          "denominator"
+                        ],
+                        "type": "object"
+                      }
+                    },
+                    "required": [
+                      "value",
+                      "coverage",
+                      "provenance"
+                    ],
+                    "type": "object"
+                  },
+                  "yield": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "coverage": {
+                        "enum": [
+                          "complete",
+                          "partial",
+                          "unknown"
+                        ],
+                        "type": "string"
+                      },
+                      "evidence": {
+                        "format": "uri",
+                        "maxLength": 2048,
+                        "type": "string"
+                      },
+                      "provenance": {
+                        "enum": [
+                          "declared",
+                          "source-stated"
+                        ],
+                        "type": "string"
+                      },
+                      "unit": {
+                        "format": "uri",
+                        "maxLength": 2048,
+                        "type": "string"
+                      },
+                      "unitText": {
+                        "maxLength": 100,
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "value": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "denominator": {
+                            "maximum": 1000000000000,
+                            "minimum": 1,
+                            "type": "integer"
+                          },
+                          "numerator": {
+                            "maximum": 1000000000000,
+                            "minimum": 0,
+                            "type": "integer"
+                          }
+                        },
+                        "required": [
+                          "numerator",
+                          "denominator"
+                        ],
+                        "type": "object"
+                      }
+                    },
+                    "required": [
+                      "value",
+                      "coverage",
+                      "provenance"
+                    ],
+                    "type": "object"
+                  }
+                },
+                "required": [
+                  "expectedHead",
+                  "actingSubject",
+                  "yield",
+                  "nutrition"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "cost": {
+                      "properties": {
+                        "pagesRead": {
+                          "type": "integer"
+                        },
+                        "pagesWritten": {
+                          "type": "integer"
+                        },
+                        "placementsWritten": {
+                          "type": "integer"
+                        },
+                        "rebalanced": {
+                          "type": "integer"
+                        },
+                        "segmentsWritten": {
+                          "type": "integer"
+                        }
+                      },
+                      "required": [
+                        "pagesRead",
+                        "pagesWritten",
+                        "placementsWritten",
+                        "segmentsWritten",
+                        "rebalanced"
+                      ],
+                      "type": "object"
+                    },
+                    "occurrences": {
+                      "items": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      },
+                      "type": "array"
+                    },
+                    "receipt": {
+                      "type": "string"
+                    },
+                    "replayed": {
+                      "type": "boolean"
+                    },
+                    "revision": {
+                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                      "type": "string"
+                    },
+                    "sourcePosition": {
+                      "properties": {
+                        "dataEpoch": {
+                          "type": "string"
+                        },
+                        "datasetId": {
+                          "const": "product",
+                          "type": "string"
+                        },
+                        "sequence": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "datasetId",
+                        "dataEpoch",
+                        "sequence"
+                      ],
+                      "type": "object"
+                    },
+                    "structure": {
+                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "receipt",
+                    "replayed",
+                    "structure",
+                    "sourcePosition"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 200"
+          },
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 202,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 202"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 400,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 400"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 401,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 401"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 403,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 403"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 404,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 404"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 409,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 409"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 500,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 500"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 503,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 503"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
     "/v1/recipes/{id}/scalings": {
       "post": {
         "operationId": "postV1RecipesByIdScalings",
