@@ -137,12 +137,25 @@ test('OPS03: recovery coverage discovers a new owner schema table and owner-row 
     expect(Object.keys(accessBaseline.tables)).toEqual(expect.arrayContaining([
       'access.admission', 'access.group_change_receipt', 'access.group_impact_proposal',
       'access.group_impact_activation', 'access.search_read_lease']));
+    const outboxBeforeFence = await accessOutboxCoverage(accessPool);
+    const revisionBeforeFence = BigInt((await accessPool.query<{ revision: string }>(
+      'SELECT revision::text FROM access.discovery_source_fence WHERE id')).rows[0]!.revision);
     await engageAccessRecoveryFence(accessPool);
-    expect(await accessStateCoverage(accessPool)).toEqual(accessBaseline.state);
+    const afterFence = await accessStateTables(accessPool);
+    expect(BigInt((await accessPool.query<{ revision: string }>(
+      'SELECT revision::text FROM access.discovery_source_fence WHERE id')).rows[0]!.revision))
+      .toBe(revisionBeforeFence + 1n);
+    expect(afterFence.tables['access.discovery_source_fence']?.digest)
+      .not.toBe(accessBaseline.tables['access.discovery_source_fence']?.digest);
+    for (const [name, coverage] of Object.entries(accessBaseline.tables)) {
+      if (name !== 'access.discovery_source_fence') expect(afterFence.tables[name]).toEqual(coverage);
+    }
+    expect(await accessOutboxCoverage(accessPool)).toEqual(outboxBeforeFence);
+    expect(afterFence.state).toEqual(await accessStateCoverage(accessPool));
     await accessPool.query(`CREATE TABLE access.probe_${nonce} (id uuid PRIMARY KEY, note text NOT NULL)`);
     const accessTable = await accessStateTables(accessPool);
     expect(accessTable.tables[`access.probe_${nonce}`]).toEqual({ count: '0', digest: emptyDigest });
-    expect(accessTable.state.digest).not.toBe(accessBaseline.state.digest);
+    expect(accessTable.state.digest).not.toBe(afterFence.state.digest);
     await accessPool.query(`INSERT INTO access.probe_${nonce} (id, note) VALUES ($1, 'authority')`,
       [randomUUID()]);
     const accessRow = await accessStateCoverage(accessPool);
