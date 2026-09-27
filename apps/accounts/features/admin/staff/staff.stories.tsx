@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { expect, fn, screen, userEvent, within } from 'storybook/test';
+import { expect, fn, screen, userEvent, waitFor, within } from 'storybook/test';
 import { StaffPage } from './staff.tsx';
-import { operators, settled, support, users, withAdmin } from '../story-support.tsx';
+import { openDialog, operators, support, typist, users, withAdmin } from '../story-support.tsx';
 import { chinese, dark } from '../../../.storybook/variants.ts';
 
 const meta = {
@@ -33,14 +33,16 @@ export const AddStaffMember: Story = {
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     await userEvent.click(await canvas.findByRole('button', { name: 'Add staff member' }));
-    const find = await settled(await screen.findByRole('dialog', { name: 'Give someone an operator role' }));
-    await userEvent.type(within(find).getByLabelText('Their account email'), 'ada@example.test');
-    await userEvent.click(within(find).getByRole('button', { name: 'Find' }));
-    const role = await settled(await screen.findByRole('alertdialog', { name: 'Change the role of Ada Lovelace' }));
+    const find = await openDialog('dialog', 'Give someone an operator role');
+    await typist.type(within(find).getByLabelText('Their account email'), 'ada@example.test');
+    const findButton = within(find).getByRole('button', { name: 'Find' });
+    await waitFor(() => expect(findButton).toBeEnabled());
+    await userEvent.click(findButton);
+    const role = await openDialog('alertdialog', 'Change the role of Ada Lovelace');
     await expect(within(role).getByRole('radio', { name: /^Support/ })).toBeChecked();
-    await userEvent.type(within(role).getByLabelText('Why (for the audit log)'), 'Joins the support rotation');
+    await typist.type(within(role).getByLabelText('Why (for the audit log)'), 'Joins the support rotation');
     await userEvent.click(within(role).getByRole('button', { name: 'Change role' }));
-    await expect(setRole).toHaveBeenCalledWith('u-ada', 'support', 'Joins the support rotation');
+    await waitFor(() => expect(setRole).toHaveBeenCalledWith('u-ada', 'support', 'Joins the support rotation'), { timeout: 5_000 });
   },
 };
 

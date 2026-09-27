@@ -7,7 +7,7 @@ import { NativeSelect } from '@rezics/ui/native-select';
 import { PasswordInput, PasswordInputGroup, PasswordInputInput, PasswordInputTrigger } from '@rezics/ui/password-input';
 import { Textarea } from '@rezics/ui/textarea';
 import { CircleAlertIcon } from 'lucide-react';
-import { useState } from 'react';
+import { useId, useRef, useState } from 'react';
 import { useAdminClient } from '../api/admin-client.tsx';
 import type { AdminFailure, AdminResult } from '../api/client.ts';
 import type { ReasonCode } from '../api/types.ts';
@@ -19,6 +19,30 @@ import { useTranslation } from '../../../i18n/client.ts';
 // place that turns a service error into words.
 
 export interface Reauth { password: string; totpCode: string }
+
+/** A panel dialog's open/close and first focus. It closes only when the
+ * person asks: Escape, a click outside (not for alert dialogs, which want an
+ * explicit choice) or its own Cancel or Close button; Ark also closes a
+ * dialog whose layer goes down with a closing menu or dialog, which is
+ * ignored, and nothing closes it while a change is pending. Focus starts on
+ * `[data-autofocus]` or the first form control: left to itself the dialog can
+ * pick its scrolling body, which stops being focusable a moment later and
+ * drops focus onto the page behind. Spread `root` on Dialog; pass `content`
+ * as DialogContent's ref. */
+export function useDismiss(onClose: () => void, { enabled = true, outside = true }: { enabled?: boolean; outside?: boolean } = {}) {
+  const intent = useRef(false);
+  const content = useRef<HTMLDivElement>(null);
+  const mark = () => { intent.current = true; };
+  return { content, root: {
+    closeOnEscape: enabled, closeOnInteractOutside: enabled && outside, onEscapeKeyDown: mark, onPointerDownOutside: mark,
+    initialFocusEl: () => content.current?.querySelector<HTMLElement>('[data-autofocus], input:not([type="hidden"]):not(:disabled), '
+      + 'select:not(:disabled), textarea:not(:disabled), button:not(:disabled)') ?? null,
+    onOpenChange: ({ open }: { open: boolean }) => {
+      if (!open && intent.current && enabled) onClose();
+      intent.current = false;
+    },
+  } };
+}
 
 type AdminText = ReturnType<typeof useTranslation<'admin'>>['t'];
 export function errorMessage(failure: Pick<AdminFailure, 'code'>, t: AdminText): string {
@@ -37,8 +61,9 @@ export function ErrorAlert({ message }: { message: string | null }) {
 function ReauthFields({ value, onChange, secondFactor, disabled, autoFocus, description }: { value: Reauth;
   onChange(value: Reauth): void; secondFactor: boolean; disabled?: boolean; autoFocus?: boolean; description?: string }) {
   const { t } = useTranslation('admin');
+  const id = useId();
   return <>
-    <Field disabled={disabled}>
+    <Field id={`reauth-password${id}`} disabled={disabled}>
       <FieldLabel>{t.yourPassword}</FieldLabel>
       <PasswordInput autoComplete="current-password" translations={{ visibilityTrigger: () => t.showPassword }}>
         <PasswordInputGroup>
@@ -49,7 +74,7 @@ function ReauthFields({ value, onChange, secondFactor, disabled, autoFocus, desc
       </PasswordInput>
       {description ? <FieldDescription>{description}</FieldDescription> : null}
     </Field>
-    {secondFactor ? <Field disabled={disabled}>
+    {secondFactor ? <Field id={`reauth-totp${id}`} disabled={disabled}>
       <FieldLabel>{t.totpCode}</FieldLabel>
       <Input inputMode="numeric" autoComplete="one-time-code" pattern="\d{6}" maxLength={6} value={value.totpCode}
         onChange={event => onChange({ ...value, totpCode: event.currentTarget.value.replace(/\D/g, '') })} />
@@ -87,7 +112,7 @@ export function TypedConfirmation({ expected, value, onChange, disabled, showErr
   onChange(value: string): void; disabled?: boolean; showError: boolean }) {
   const { t } = useTranslation('admin');
   const mismatch = showError && value.trim() !== expected;
-  return <Field invalid={mismatch} disabled={disabled}>
+  return <Field id={`typed-confirmation${useId()}`} invalid={mismatch} disabled={disabled}>
     <FieldLabel>{t.typeToConfirm({ value: expected })}</FieldLabel>
     <Input value={value} autoComplete="off" spellCheck={false} autoCapitalize="none"
       onChange={event => onChange(event.currentTarget.value)} className="font-mono" />
@@ -102,10 +127,12 @@ export function ReasonFields({ codes, value, onChange, required, withMessage, di
   codes: readonly ReasonCode[]; value: Reason; onChange(value: Reason): void; required: boolean; withMessage: boolean;
   disabled?: boolean; showErrors: boolean }) {
   const { t } = useTranslation('admin');
+  // Prefixed IDs: each label names its own control, whatever else on the page uses a bare useId().
+  const id = useId();
   const codeMissing = showErrors && required && !value.code;
   const detailShort = showErrors && required && value.detail.trim().length < 3;
   return <>
-    <Field invalid={codeMissing} disabled={disabled} required={required}>
+    <Field id={`reason-code${id}`} invalid={codeMissing} disabled={disabled} required={required}>
       <FieldLabel>{t.reasonCode}</FieldLabel>
       <NativeSelect value={value.code} className="w-full" onChange={event => onChange({ ...value,
         code: event.currentTarget.value as ReasonCode | '' })}>
@@ -114,14 +141,14 @@ export function ReasonFields({ codes, value, onChange, required, withMessage, di
       </NativeSelect>
       <FieldError>{t.reasonCodePlaceholder}</FieldError>
     </Field>
-    <Field invalid={detailShort} disabled={disabled} required={required}>
+    <Field id={`reason-detail${id}`} invalid={detailShort} disabled={disabled} required={required}>
       <FieldLabel>{t.reasonDetail}</FieldLabel>
       <Textarea value={value.detail} maxLength={1000} className="min-h-20"
         onChange={event => onChange({ ...value, detail: event.currentTarget.value })} />
       <FieldDescription>{t.reasonDetailHelp}</FieldDescription>
       <FieldError>{t.reasonTooShort}</FieldError>
     </Field>
-    {withMessage ? <Field disabled={disabled}>
+    {withMessage ? <Field id={`reason-message${id}`} disabled={disabled}>
       <FieldLabel>{t.messageLabel}</FieldLabel>
       <Textarea value={value.message} maxLength={2000} className="min-h-20"
         onChange={event => onChange({ ...value, message: event.currentTarget.value })} />

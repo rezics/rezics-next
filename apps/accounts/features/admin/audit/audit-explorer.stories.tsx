@@ -27,12 +27,12 @@ export const Explore: Story = {
     await expect(canvas.getByText('suspended')).toBeVisible();
     await userEvent.selectOptions(canvas.getByLabelText('Outcome'), 'failed');
     await waitFor(() => expect(audit).toHaveBeenCalledWith(expect.objectContaining({ outcome: 'failed', from: expect.stringMatching(/^\d{4}-/) })));
-    await expect(replaceUrl).toHaveBeenLastCalledWith('/admin/audit?outcome=failed');
+    await waitFor(() => expect(replaceUrl).toHaveBeenLastCalledWith('/admin/audit?outcome=failed'), { timeout: 5_000 });
     await waitFor(() => expect(within(canvas.getByRole('table')).getAllByRole('row')).toHaveLength(2));
     await userEvent.click(within(canvas.getByRole('table')).getByRole('button', { name: 'Details' }));
     await userEvent.click(await canvas.findByRole('button', { name: 'Only actions by Margaret Hamilton' }));
     await expect(await canvas.findByText('Staff member: Margaret Hamilton')).toBeVisible();
-    await expect(replaceUrl).toHaveBeenLastCalledWith('/admin/audit?outcome=failed&actor=u-margaret');
+    await waitFor(() => expect(replaceUrl).toHaveBeenLastCalledWith('/admin/audit?outcome=failed&actor=u-margaret'), { timeout: 5_000 });
   },
 };
 

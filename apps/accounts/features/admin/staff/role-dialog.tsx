@@ -6,10 +6,10 @@ import { Field, FieldError, FieldLabel } from '@rezics/ui/field';
 import { Textarea } from '@rezics/ui/textarea';
 import { toast } from '@rezics/ui/toast';
 import { cn } from '@rezics/ui/utils';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useAdminClient } from '../api/admin-client.tsx';
 import type { OperatorRole } from '../api/types.ts';
-import { ErrorAlert, TypedConfirmation, useReauth } from '../actions/confirm.tsx';
+import { ErrorAlert, TypedConfirmation, useDismiss, useReauth } from '../actions/confirm.tsx';
 import { useTranslation } from '../../../i18n/client.ts';
 
 export interface RoleTarget { id: string; name: string; email: string; role: OperatorRole | null }
@@ -18,9 +18,28 @@ type Choice = OperatorRole | 'none';
 /** Owners change roles. Making someone an owner, or taking a role from an
  * owner, also needs their email typed and the operator's password. */
 export function RoleDialog({ target, onClose, onDone }: { target: RoleTarget; onClose(): void; onDone(): void }) {
+  const [pending, setPending] = useState(false);
+  const dismiss = useDismiss(onClose, { enabled: !pending, outside: false });
+  return <Dialog open role="alertdialog" {...dismiss.root}>
+    <DialogContent ref={dismiss.content} size="md" showCloseButton={false}>
+      <RoleForm target={target} onCancel={onClose} onDone={onDone} onPending={setPending} />
+    </DialogContent>
+  </Dialog>;
+}
+
+/** The role form inside a dialog: its title, choices, reason and confirmation. */
+export function RoleForm({ target, onCancel, onDone, onPending }: { target: RoleTarget; onCancel(): void; onDone(): void;
+  onPending(pending: boolean): void }) {
   const { t } = useTranslation('admin');
   const { api } = useAdminClient();
   const [choice, setChoice] = useState<Choice>(target.role ?? 'support');
+  const current = useRef<HTMLInputElement>(null);
+  // Focus starts on the current choice: the dialog picks it (data-autofocus),
+  // and this moves it there when the form replaces the find step.
+  useEffect(() => {
+    const frame = requestAnimationFrame(() => current.current?.focus());
+    return () => cancelAnimationFrame(frame);
+  }, []);
   const [reason, setReason] = useState('');
   const [typed, setTyped] = useState('');
   const [showErrors, setShowErrors] = useState(false);
@@ -36,18 +55,15 @@ export function RoleDialog({ target, onClose, onDone }: { target: RoleTarget; on
   async function submit() {
     setShowErrors(true);
     if (invalid) return;
-    setPending(true); setError(null);
+    setPending(true); onPending(true); setError(null);
     const result = await reauth.run(() => api.setRole(target.id, choice === 'none' ? null : choice, reason.trim()));
-    setPending(false);
+    setPending(false); onPending(false);
     if (!result.ok) { setError(result.message); return; }
     toast.success({ title: t.roleChanged, description: t.requestId({ id: result.data.requestId }) });
     onDone();
   }
   const choices: Choice[] = ['owner', 'admin', 'support', 'none'];
-  return <Dialog open role="alertdialog" onOpenChange={details => { if (!details.open && !pending) onClose(); }}
-    closeOnInteractOutside={!pending} closeOnEscape={!pending}>
-    <DialogContent size="md" showCloseButton={!pending}>
-      <form className="contents" noValidate onSubmit={event => { event.preventDefault(); void submit(); }}>
+  return <form className="contents" noValidate onSubmit={event => { event.preventDefault(); void submit(); }}>
         <DialogHeader title={t.roleTitle({ name: label })} />
         <DialogBody className="flex flex-col gap-4">
           <fieldset className="flex flex-col gap-2" disabled={pending}>
@@ -55,6 +71,8 @@ export function RoleDialog({ target, onClose, onDone }: { target: RoleTarget; on
             {choices.map(value => <label key={value} className={cn('flex cursor-pointer gap-3 rounded-2xl border px-4 py-3 text-sm transition-colors',
               choice === value ? 'border-primary/40 bg-primary/5' : 'border-border/60 hover:bg-accent/40')}>
               <input type="radio" name="role" value={value} checked={choice === value} onChange={() => setChoice(value)}
+                ref={value === (target.role ?? 'support') ? current : undefined}
+                data-autofocus={value === (target.role ?? 'support') || undefined}
                 className="mt-0.5 size-4 accent-primary" />
               <span><span className="block font-medium">{value === 'none' ? t.removeRole : t.roles[value]}</span>
                 <span className="block text-muted-foreground">{t.roleConsequence[value]}</span></span>
@@ -70,11 +88,9 @@ export function RoleDialog({ target, onClose, onDone }: { target: RoleTarget; on
           <ErrorAlert message={error} />
         </DialogBody>
         <DialogFooter>
-          <Button variant="outline" onClick={onClose} disabled={pending}>{t.cancel}</Button>
+          <Button variant="outline" onClick={onCancel} disabled={pending}>{t.cancel}</Button>
           <Button type="submit" variant={high || choice === 'none' ? 'destructive' : 'default'} isLoading={pending} disabled={unchanged}>
             {t.user.changeRole}</Button>
         </DialogFooter>
-      </form>
-    </DialogContent>
-  </Dialog>;
+      </form>;
 }

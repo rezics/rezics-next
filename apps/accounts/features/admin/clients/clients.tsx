@@ -12,7 +12,7 @@ import { ChevronDownIcon, ChevronRightIcon, EllipsisIcon } from 'lucide-react';
 import { Fragment, useState } from 'react';
 import { useAdminClient } from '../api/admin-client.tsx';
 import type { AdminClientEntry, ClientPage } from '../api/types.ts';
-import { ErrorAlert, TypedConfirmation, useReauth } from '../actions/confirm.tsx';
+import { ErrorAlert, TypedConfirmation, useDismiss, useReauth } from '../actions/confirm.tsx';
 import { DateOnly } from '../format.tsx';
 import { PageHeading } from '../shell/admin-states.tsx';
 import { CopyButton } from '../user/parts.tsx';
@@ -116,6 +116,7 @@ function ClientDialog({ action, client, onClose, onDone }: { action: ClientActio
   const [showErrors, setShowErrors] = useState(false);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const dismiss = useDismiss(onClose, { enabled: !pending, outside: false });
   const invalid = (needsReason && reason.trim().length < 3) || (high && typed.trim() !== name) || reauth.missing;
   async function submit() {
     setShowErrors(true);
@@ -130,9 +131,8 @@ function ClientDialog({ action, client, onClose, onDone }: { action: ClientActio
     toast.success({ title: t.clientDone[action]({ name }) });
     onDone();
   }
-  return <Dialog open role="alertdialog" onOpenChange={details => { if (!details.open && !pending) onClose(); }}
-    closeOnInteractOutside={!pending} closeOnEscape={!pending}>
-    <DialogContent size="md" showCloseButton={!pending}>
+  return <Dialog open role="alertdialog" {...dismiss.root}>
+    <DialogContent ref={dismiss.content} size="md" showCloseButton={false}>
       <form className="contents" noValidate onSubmit={event => { event.preventDefault(); void submit(); }}>
         <DialogHeader title={t.clientTitles[action]({ name })} description={t.clientConsequences[action]} />
         <DialogBody className="flex flex-col gap-4">

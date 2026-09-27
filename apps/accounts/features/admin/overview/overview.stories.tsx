@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, fn, screen, userEvent, waitFor, within } from 'storybook/test';
 import { Overview } from './overview.tsx';
-import { overview, settled, support, users, withAdmin } from '../story-support.tsx';
+import { openDialog, overview, support, typist, users, withAdmin } from '../story-support.tsx';
 import { chinese, dark, phone } from '../../../.storybook/variants.ts';
 
 const meta = {
@@ -48,15 +48,15 @@ export const CommandPalette: Story = {
   async play({ canvasElement }) {
     await within(canvasElement).findByRole('heading', { level: 1, name: 'Overview' });
     await userEvent.keyboard('{Control>}k{/Control}');
-    const dialog = await settled(await screen.findByRole('dialog', { name: 'Command palette' }));
+    const dialog = await openDialog('dialog', 'Command palette');
     const input = within(dialog).getByRole('combobox', { name: 'Command palette' });
     await waitFor(() => expect(input).toHaveFocus());
     await expect(within(dialog).getByRole('option', { name: /Staff & roles/ })).toBeVisible();
-    await userEvent.type(input, 'ada', { delay: 30 });
+    await typist.type(input, 'ada');
     await waitFor(() => expect(found).toHaveBeenCalledWith(expect.objectContaining({ q: 'ada', limit: 5 }), expect.anything()));
     const option = await within(dialog).findByRole('option', { name: /Ada Lovelace/ });
     await userEvent.click(option);
-    await expect(navigate).toHaveBeenCalledWith('/admin/users/u-ada');
+    await waitFor(() => expect(navigate).toHaveBeenCalledWith('/admin/users/u-ada'), { timeout: 5_000 });
   },
 };
 
@@ -65,7 +65,7 @@ export const Shortcuts: Story = {
   async play({ canvasElement }) {
     await within(canvasElement).findByRole('heading', { level: 1, name: 'Overview' });
     await userEvent.keyboard('?');
-    const dialog = await settled(await screen.findByRole('dialog', { name: 'Keyboard shortcuts' }));
+    const dialog = await openDialog('dialog', 'Keyboard shortcuts');
     await expect(within(dialog).getByText('Select or deselect the row')).toBeVisible();
   },
 };
@@ -77,7 +77,7 @@ export const Phone: Story = {
     const canvas = within(canvasElement);
     await expect(await canvas.findByRole('heading', { level: 1, name: 'Overview' })).toBeVisible();
     await userEvent.click(canvas.getByRole('button', { name: 'Open navigation' }));
-    const sheet = await settled(await screen.findByRole('dialog', { name: 'Admin sections' }));
+    const sheet = await openDialog('dialog', 'Admin sections');
     await expect(within(sheet).getByRole('link', { name: 'Users' })).toHaveAttribute('href', '/admin/users');
   },
 };

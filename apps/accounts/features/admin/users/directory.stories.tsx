@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, fn, screen, userEvent, waitFor, within } from 'storybook/test';
 import { UserDirectory } from './directory.tsx';
-import { ada, finishedJob, grace, radia, settled, users, withAdmin } from '../story-support.tsx';
+import { ada, finishedJob, grace, radia, openDialog, users, withAdmin } from '../story-support.tsx';
 import { chinese, dark, phone } from '../../../.storybook/variants.ts';
 
 const initialState = { text: '', sort: 'createdAt' as const, direction: 'desc' as const, cursor: null };
@@ -40,8 +40,8 @@ export const SearchAsYouType: Story = {
     await typist.type(await canvas.findByRole('searchbox', { name: 'Search users' }), 'status:suspended -role:none');
     await waitFor(() => expect(search).toHaveBeenCalledWith(expect.objectContaining({ status: 'suspended',
       role: 'owner,admin,support' }), expect.anything()));
-    await expect(search).toHaveBeenCalledTimes(1);
-    await expect(replaceUrl).toHaveBeenLastCalledWith('/admin/users?q=status%3Asuspended+-role%3Anone', false);
+    await waitFor(() => expect(search).toHaveBeenCalledTimes(1), { timeout: 5_000 });
+    await waitFor(() => expect(replaceUrl).toHaveBeenLastCalledWith('/admin/users?q=status%3Asuspended+-role%3Anone', false), { timeout: 5_000 });
     await expect(canvas.getByRole('button', { name: 'Remove filter Status: Suspended' })).toBeVisible();
     await expect(canvas.getByRole('button', { name: 'Remove filter Role: any staff role' })).toBeVisible();
     await waitFor(() => expect(within(canvas.getByRole('table')).getAllByRole('row')).toHaveLength(2));
@@ -60,7 +60,7 @@ export const ExactJump: Story = {
     await typist.type(await canvas.findByRole('searchbox'), 'ada@example.test');
     await expect(await canvas.findByText('Exact match: Ada Lovelace')).toBeVisible();
     await userEvent.keyboard('{Enter}');
-    await expect(navigate).toHaveBeenCalledWith('/admin/users/u-ada');
+    await waitFor(() => expect(navigate).toHaveBeenCalledWith('/admin/users/u-ada'), { timeout: 5_000 });
   },
 };
 
@@ -110,16 +110,16 @@ export const KeyboardAndBulk: Story = {
     await expect(canvas.getByRole('link', { name: 'Radia Perlman' })).toHaveFocus();
     const toolbar = canvas.getByRole('toolbar', { name: '2 selected' });
     await userEvent.click(within(toolbar).getByRole('button', { name: 'Suspend…' }));
-    const dialog = await settled(await screen.findByRole('alertdialog', { name: 'Suspend 2 users?' }));
+    const dialog = await openDialog('alertdialog', 'Suspend 2 users?');
     await expect(within(dialog).getByText(/Including Ada Lovelace and Radia Perlman/)).toBeVisible();
     await userEvent.selectOptions(within(dialog).getByLabelText('Reason'), 'spam');
-    await userEvent.type(within(dialog).getByLabelText('Details for the audit log'), 'Coordinated spam wave');
-    await userEvent.type(within(dialog).getByLabelText('Type 2 to confirm'), '2');
-    await userEvent.type(within(dialog).getByLabelText('Your password'), 'correct horse');
+    await typist.type(within(dialog).getByLabelText('Details for the audit log'), 'Coordinated spam wave');
+    await typist.type(within(dialog).getByLabelText('Type 2 to confirm'), '2');
+    await typist.type(within(dialog).getByLabelText('Your password'), 'correct horse');
     await userEvent.click(within(dialog).getByRole('button', { name: 'Suspend' }));
-    await expect(reauthenticate).toHaveBeenCalledWith('correct horse', undefined);
-    await expect(bulk).toHaveBeenCalledWith(expect.objectContaining({ action: 'suspend', reasonCode: 'spam', reason: 'Coordinated spam wave',
-      userIds: ['u-ada', 'u-radia'] }));
+    await waitFor(() => expect(reauthenticate).toHaveBeenCalledWith('correct horse', undefined), { timeout: 5_000 });
+    await waitFor(() => expect(bulk).toHaveBeenCalledWith(expect.objectContaining({ action: 'suspend', reasonCode: 'spam', reason: 'Coordinated spam wave',
+      userIds: ['u-ada', 'u-radia'] })), { timeout: 5_000 });
     // The job's dialog replaces the form once the service has admitted it, then polls the job.
     await waitFor(() => expect(screen.getByText('1 done · 1 unchanged · 1 failed')).toBeVisible(), { timeout: 5_000 });
     await expect(screen.getByText(/staff accounts need an owner/)).toBeVisible();

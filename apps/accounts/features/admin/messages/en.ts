@@ -113,6 +113,7 @@ export default {
     title: 'Command palette',
     description: 'Go to a section, find a user or act on the one you’re viewing.',
     placeholder: 'Type a command or a user’s name or email',
+    results: 'Commands and users',
     trigger: 'Search or run a command',
     navigate: 'Go to',
     users: 'Users',

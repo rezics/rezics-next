@@ -15,7 +15,8 @@ import { RoleBadge, StatusBadge } from '../badges.tsx';
 import { DateOnly, Time } from '../format.tsx';
 import { PageHeading } from '../shell/admin-states.tsx';
 import { useAdmin } from '../shell/admin-context.tsx';
-import { type RoleTarget, RoleDialog } from './role-dialog.tsx';
+import { useDismiss } from '../actions/confirm.tsx';
+import { type RoleTarget, RoleDialog, RoleForm } from './role-dialog.tsx';
 import { useTranslation } from '../../../i18n/client.ts';
 
 const roles: OperatorRole[] = ['owner', 'admin', 'support'];
@@ -79,40 +80,44 @@ export function StaffPage({ operators }: { operators: Operators }) {
         </Table>
       </section>
     </div>
-    {adding ? <AddStaffDialog onClose={() => setAdding(false)} onFound={found => { setAdding(false); setTarget(found); }} /> : null}
+    {adding ? <AddStaffDialog onClose={() => setAdding(false)} onDone={() => { setAdding(false); refresh(); }} /> : null}
     {target ? <RoleDialog target={target} onClose={() => setTarget(null)} onDone={() => { setTarget(null); refresh(); }} /> : null}
   </>;
 }
 
-/** Find the account by its exact email, then choose the role. */
-function AddStaffDialog({ onClose, onFound }: { onClose(): void; onFound(target: RoleTarget): void }) {
+/** Find the account by its exact email, then choose its role in the same
+ * dialog (one dialog, so nothing closes while the next one opens). */
+function AddStaffDialog({ onClose, onDone }: { onClose(): void; onDone(): void }) {
   const { t } = useTranslation('admin');
   const { api } = useAdminClient();
   const [email, setEmail] = useState('');
   const [pending, setPending] = useState(false);
   const [missing, setMissing] = useState(false);
+  const [found, setFound] = useState<RoleTarget | null>(null);
+  const dismiss = useDismiss(onClose, { enabled: !pending, outside: !found });
   async function find() {
     setPending(true); setMissing(false);
     const result = await api.users({ q: email.trim(), limit: 1 });
     setPending(false);
     const user = result.ok ? result.data.exact : null;
     if (!user || user.email.toLowerCase() !== email.trim().toLowerCase()) { setMissing(true); return; }
-    onFound({ id: user.id, name: user.name, email: user.email, role: user.role });
+    setFound({ id: user.id, name: user.name, email: user.email, role: user.role });
   }
-  return <Dialog open onOpenChange={details => { if (!details.open) onClose(); }}>
-    <DialogContent size="sm">
-      <form className="contents" onSubmit={event => { event.preventDefault(); void find(); }}>
-        <DialogHeader title={t.addStaffTitle} />
-        <DialogBody>
-          <Field invalid={missing}><FieldLabel>{t.addStaffEmail}</FieldLabel>
-            <Input type="email" value={email} autoFocus autoComplete="off" onChange={event => setEmail(event.currentTarget.value)} />
-            <FieldError>{t.addStaffNotFound}</FieldError></Field>
-        </DialogBody>
-        <DialogFooter>
-          <Button variant="outline" onClick={onClose}>{t.cancel}</Button>
-          <Button type="submit" isLoading={pending} disabled={!email.includes('@')}>{t.addStaffFind}</Button>
-        </DialogFooter>
-      </form>
+  return <Dialog open role={found ? 'alertdialog' : 'dialog'} {...dismiss.root}>
+    <DialogContent ref={dismiss.content} size={found ? 'md' : 'sm'} showCloseButton={false}>
+      {found ? <RoleForm target={found} onCancel={onClose} onDone={onDone} onPending={setPending} />
+        : <form className="contents" onSubmit={event => { event.preventDefault(); void find(); }}>
+          <DialogHeader title={t.addStaffTitle} />
+          <DialogBody>
+            <Field invalid={missing}><FieldLabel>{t.addStaffEmail}</FieldLabel>
+              <Input type="email" value={email} autoFocus autoComplete="off" onChange={event => setEmail(event.currentTarget.value)} />
+              <FieldError>{t.addStaffNotFound}</FieldError></Field>
+          </DialogBody>
+          <DialogFooter>
+            <Button variant="outline" onClick={onClose}>{t.cancel}</Button>
+            <Button type="submit" isLoading={pending} disabled={!email.includes('@')}>{t.addStaffFind}</Button>
+          </DialogFooter>
+        </form>}
     </DialogContent>
   </Dialog>;
 }

@@ -113,6 +113,7 @@ export default {
     title: '命令面板',
     description: '前往某个分区、查找用户，或对当前查看的用户执行操作。',
     placeholder: '输入命令，或用户的姓名、邮箱',
+    results: '命令和用户',
     trigger: '搜索或运行命令',
     navigate: '前往',
     users: '用户',

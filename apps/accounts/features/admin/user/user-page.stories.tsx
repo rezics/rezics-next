@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, fn, screen, userEvent, waitFor, within } from 'storybook/test';
 import { UserPage } from './user-page.tsx';
-import { auditPage, detail, operators, radia, settled, withAdmin } from '../story-support.tsx';
+import { auditPage, detail, openDialog, operators, radia, typist, withAdmin } from '../story-support.tsx';
 import { chinese, dark, phone } from '../../../.storybook/variants.ts';
 
 const meta = {
@@ -37,21 +37,21 @@ export const SuspendWithFriction: Story = {
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     await userEvent.click(await canvas.findByRole('button', { name: 'Suspend…' }));
-    const dialog = await settled(await screen.findByRole('alertdialog', { name: 'Suspend Radia Perlman?' }));
+    const dialog = await openDialog('alertdialog', 'Suspend Radia Perlman?');
     await expect(within(dialog).getByText(/They are signed out on every device/)).toBeVisible();
     await userEvent.click(within(dialog).getByRole('button', { name: 'Suspend' }));
     await waitFor(() => expect(within(dialog).getByText('That doesn’t match.')).toBeVisible());
     await expect(act).not.toHaveBeenCalled();
     await userEvent.selectOptions(within(dialog).getByLabelText('Reason'), 'abuse');
-    await userEvent.type(within(dialog).getByLabelText('Details for the audit log'), 'Harassment report #1190');
-    await userEvent.type(within(dialog).getByLabelText('Message to the user (optional)'), 'We received reports of harassment.');
+    await typist.type(within(dialog).getByLabelText('Details for the audit log'), 'Harassment report #1190');
+    await typist.type(within(dialog).getByLabelText('Message to the user (optional)'), 'We received reports of harassment.');
     await userEvent.selectOptions(within(dialog).getByLabelText('Duration'), 'month');
-    await userEvent.type(within(dialog).getByLabelText('Type radia@example.test to confirm'), 'radia@example.test');
-    await userEvent.type(within(dialog).getByLabelText('Your password'), 'correct horse');
+    await typist.type(within(dialog).getByLabelText('Type radia@example.test to confirm'), 'radia@example.test');
+    await typist.type(within(dialog).getByLabelText('Your password'), 'correct horse');
     await userEvent.click(within(dialog).getByRole('button', { name: 'Suspend' }));
-    await expect(reauthenticate).toHaveBeenCalledWith('correct horse', undefined);
-    await expect(act).toHaveBeenCalledWith('u-radia', expect.objectContaining({ action: 'suspend', reasonCode: 'abuse',
-      reason: 'Harassment report #1190', userMessage: 'We received reports of harassment.', expiresAt: expect.stringMatching(/^\d{4}-/) }));
+    await waitFor(() => expect(reauthenticate).toHaveBeenCalledWith('correct horse', undefined), { timeout: 5_000 });
+    await waitFor(() => expect(act).toHaveBeenCalledWith('u-radia', expect.objectContaining({ action: 'suspend', reasonCode: 'abuse',
+      reason: 'Harassment report #1190', userMessage: 'We received reports of harassment.', expiresAt: expect.stringMatching(/^\d{4}-/) })), { timeout: 5_000 });
     // Toasts slide in; wait for the confirmation to settle.
     await waitFor(() => expect(screen.getByText('Radia Perlman is suspended')).toBeVisible());
   },
@@ -69,15 +69,15 @@ export const StepUpThenRetry: Story = {
     staleCalls = 0;
     const canvas = within(canvasElement);
     await userEvent.click(await canvas.findByRole('button', { name: 'Sign out everywhere…' }));
-    const dialog = await settled(await screen.findByRole('alertdialog', { name: 'Sign Radia Perlman out everywhere?' }));
+    const dialog = await openDialog('alertdialog', 'Sign Radia Perlman out everywhere?');
     await expect(within(dialog).queryByLabelText('Your password')).toBeNull();
     await userEvent.selectOptions(within(dialog).getByLabelText('Reason'), 'user-request');
-    await userEvent.type(within(dialog).getByLabelText('Details for the audit log'), 'Lost a laptop');
+    await typist.type(within(dialog).getByLabelText('Details for the audit log'), 'Lost a laptop');
     await userEvent.click(within(dialog).getByRole('button', { name: 'Sign out everywhere' }));
-    await expect(await within(dialog).findByText('Confirm it’s you to continue.')).toBeVisible();
-    await userEvent.type(within(dialog).getByLabelText('Your password'), 'correct horse');
+    await expect(await within(dialog).findByText('Confirm it’s you to continue.', {}, { timeout: 5_000 })).toBeVisible();
+    await typist.type(within(dialog).getByLabelText('Your password'), 'correct horse');
     await userEvent.click(within(dialog).getByRole('button', { name: 'Sign out everywhere' }));
-    await expect(confirm).toHaveBeenCalledWith('correct horse', undefined);
+    await waitFor(() => expect(confirm).toHaveBeenCalledWith('correct horse', undefined), { timeout: 5_000 });
     await waitFor(() => expect(stale).toHaveBeenCalledTimes(2));
     const [first, second] = stale.mock.calls as unknown as [[string, { commandId: string }], [string, { commandId: string }]];
     await expect(second[1].commandId).toBe(first[1].commandId);
@@ -93,11 +93,11 @@ export const NoteNotSaved: Story = {
     const canvas = within(canvasElement);
     await userEvent.click(await canvas.findByRole('button', { name: 'Add note' }));
     const text = canvas.getByRole('textbox', { name: 'Add a note about Radia Perlman' });
-    await userEvent.type(text, 'Called the reporter back.');
+    await typist.type(text, 'Called the reporter back.');
     await userEvent.click(canvas.getByRole('button', { name: 'Save note' }));
     await expect(await canvas.findByText(/The note wasn’t saved/)).toBeVisible();
     await expect(text).toHaveValue('Called the reporter back.');
-    await expect(note).toHaveBeenCalledWith('u-radia', expect.objectContaining({ action: 'add-note', note: 'Called the reporter back.' }));
+    await waitFor(() => expect(note).toHaveBeenCalledWith('u-radia', expect.objectContaining({ action: 'add-note', note: 'Called the reporter back.' })), { timeout: 5_000 });
   },
 };
 
@@ -131,15 +131,15 @@ export const Roles: Story = {
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     await userEvent.click(await canvas.findByRole('button', { name: 'Change role' }));
-    const dialog = await settled(await screen.findByRole('alertdialog', { name: 'Change the role of Radia Perlman' }));
+    const dialog = await openDialog('alertdialog', 'Change the role of Radia Perlman');
     await userEvent.click(within(dialog).getByRole('radio', { name: /^Admin/ }));
     await expect(within(dialog).queryByLabelText('Your password')).toBeNull();
     await userEvent.click(within(dialog).getByRole('radio', { name: /^Owner/ }));
     await expect(within(dialog).getByLabelText('Your password')).toBeVisible();
     await userEvent.click(within(dialog).getByRole('radio', { name: /^Support/ }));
-    await userEvent.type(within(dialog).getByLabelText('Why (for the audit log)'), 'Joining the support rotation');
+    await typist.type(within(dialog).getByLabelText('Why (for the audit log)'), 'Joining the support rotation');
     await userEvent.click(within(dialog).getByRole('button', { name: 'Change role' }));
-    await expect(setRole).toHaveBeenCalledWith('u-radia', 'support', 'Joining the support rotation');
+    await waitFor(() => expect(setRole).toHaveBeenCalledWith('u-radia', 'support', 'Joining the support rotation'), { timeout: 5_000 });
   },
 };
 

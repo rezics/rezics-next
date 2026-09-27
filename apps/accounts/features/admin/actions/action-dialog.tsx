@@ -14,7 +14,7 @@ import { useAdminClient } from '../api/admin-client.tsx';
 import type { AdminAction, BulkAction, Job, ReasonCode } from '../api/types.ts';
 import { useAdmin } from '../shell/admin-context.tsx';
 import { type ActionTarget, damage, type Duration, sanctions, suspensionEnd } from './actions.ts';
-import { ErrorAlert, type Reason, ReasonFields, TypedConfirmation, useReauth } from './confirm.tsx';
+import { ErrorAlert, type Reason, ReasonFields, TypedConfirmation, useDismiss, useReauth } from './confirm.tsx';
 import { nameList } from '../format.tsx';
 import { useLocale, useTranslation } from '../../../i18n/client.ts';
 
@@ -53,6 +53,7 @@ function ActionForm({ request, onClose, onDone }: { request: ActionRequest; onCl
   const [error, setError] = useState<string | null>(null);
   const [jobId, setJobId] = useState<string | null>(null);
   const expected = single ? single.email : String(targets.length);
+  const dismiss = useDismiss(onClose, { enabled: !pending, outside: level === 'low' });
   const label = single ? single.name || single.email : '';
 
   const end = action === 'suspend' ? suspensionEnd(duration, customDate) : undefined;
@@ -88,9 +89,8 @@ function ActionForm({ request, onClose, onDone }: { request: ActionRequest; onCl
   if (jobId) return <BulkProgress jobId={jobId} action={action as BulkAction} count={targets.length} onClose={onDone} />;
   const title = single ? t.actionTitles[action]({ name: label }) : t.bulkTitles[action as BulkAction](targets.length);
   const sample = targets.slice(0, 3).map(target => target.name || target.email);
-  return <Dialog open onOpenChange={details => { if (!details.open && !pending) onClose(); }}
-    closeOnInteractOutside={!pending} closeOnEscape={!pending} role={level === 'low' ? 'dialog' : 'alertdialog'}>
-    <DialogContent size="md" showCloseButton={!pending}>
+  return <Dialog open {...dismiss.root} role={level === 'low' ? 'dialog' : 'alertdialog'}>
+    <DialogContent ref={dismiss.content} size="md" showCloseButton={false}>
       <form className="contents" onSubmit={event => { event.preventDefault(); void submit(); }} noValidate>
         <DialogHeader title={title} description={t.consequences[action]} />
         <DialogBody className="flex flex-col gap-4">
@@ -145,6 +145,7 @@ function BulkProgress({ jobId, action, count, onClose }: { jobId: string; action
   const { t } = useTranslation('admin');
   const { api } = useAdminClient();
   const [job, setJob] = useState<Job | null>(null);
+  const dismiss = useDismiss(onClose);
   useEffect(() => {
     let stopped = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
@@ -159,8 +160,8 @@ function BulkProgress({ jobId, action, count, onClose }: { jobId: string; action
   }, [api, jobId]);
   const done = job ? job.total - job.pending : 0;
   const total = job?.total ?? count;
-  return <Dialog open onOpenChange={details => { if (!details.open) onClose(); }}>
-    <DialogContent size="md">
+  return <Dialog open {...dismiss.root}>
+    <DialogContent ref={dismiss.content} size="md" showCloseButton={false}>
       <DialogHeader title={t.bulkTitles[action](total)}
         description={job?.finishedAt ? t.jobResult({ succeeded: job.succeeded, skipped: job.skipped, failed: job.failed })
           : t.bulkRunning} />

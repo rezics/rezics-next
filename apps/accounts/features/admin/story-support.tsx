@@ -1,7 +1,7 @@
 // Fixtures and a fake Account operator API for the panel's stories. Stories
 // render real components inside the real shell; only the network is faked.
 import type { Decorator } from '@storybook/react-vite';
-import { fn } from 'storybook/test';
+import { expect, fn, screen, userEvent, waitFor } from 'storybook/test';
 import { AdminClientProvider, type AdminClient } from './api/admin-client.tsx';
 import type { AdminApi, AdminResult } from './api/client.ts';
 import type { AdminMe, AdminUser, AuditEntry, AuditPage, ClientPage, Job, Operators, Overview, UserDetail } from './api/types.ts';
@@ -67,7 +67,7 @@ export const overview: Overview = {
 
 export const detail = (user: AdminUser = radia): UserDetail => ({
   profile: user,
-  methods: { password: true, passkeys: [{ id: 'pk1', name: 'MacBook Touch ID', createdAt: ago(60 * 24 * 30), backedUp: true, deviceType: 'multiDevice',
+  methods: { password: true, passwordChangedAt: ago(60 * 24 * 90), passkeys: [{ id: 'pk1', name: 'MacBook Touch ID', createdAt: ago(60 * 24 * 30), backedUp: true, deviceType: 'multiDevice',
       provider: null, lastUsedAt: ago(60 * 24 * 2) }],
     totp: null },
   sessions: { nextCursor: null, items: [{ id: 's1', createdAt: ago(60 * 24), lastActiveAt: ago(30), expiresAt: ahead(6),
@@ -145,6 +145,19 @@ export const withAdmin: Decorator = (Story, { parameters }) => {
     <AdminShell me={admin.me ?? owner} user={operatorUser} density={admin.density ?? 'comfortable'} section={admin.section}>
       <Story /></AdminShell></AdminClientProvider>;
 };
+
+/** Types at a person's pace: under a loaded full-suite run, instant typing
+ * into controlled inputs can drop keys, as no reader would. */
+export const typist = userEvent.setup({ delay: 20 });
+
+/** A dialog that opens after an answer from the fake API, settled. Under a
+ * loaded full-suite run it can take longer than the default second to appear. */
+export async function openDialog(role: 'dialog' | 'alertdialog', name: string): Promise<HTMLElement> {
+  const dialog = await settled(await screen.findByRole(role, { name }, { timeout: 5_000 }));
+  // A dialog must take focus (keyboard users start inside it), and typing before it does loses keys.
+  await waitFor(() => expect(dialog.contains(dialog.ownerDocument.activeElement)).toBe(true), { timeout: 5_000 });
+  return dialog;
+}
 
 /** Waits for a dialog's opening animation, so visibility checks see it settled. */
 export async function settled<T extends Element>(element: T): Promise<T> {

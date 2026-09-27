@@ -78,7 +78,7 @@ export function CommandPalette() {
 
   return <CommandDialog open={paletteOpen} onOpenChange={details => { if (!details.open) close(); }}>
     <CommandDialogContent title={t.palette.title} description={t.palette.description}>
-      <Command collection={collection} inputValue={input} onInputValueChange={details => setInput(details.inputValue)}
+      <Command aria-label={t.palette.results} collection={collection} inputValue={input} onInputValueChange={details => setInput(details.inputValue)}
         onValueChange={details => {
           const entry = entries.find(item => item.value === details.value[0]);
           if (!entry) return;

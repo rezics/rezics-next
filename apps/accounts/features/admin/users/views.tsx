@@ -8,6 +8,7 @@ import { cn } from '@rezics/ui/utils';
 import { BookmarkPlusIcon, XIcon } from 'lucide-react';
 import { useState } from 'react';
 import type { SavedView } from '../api/types.ts';
+import { useDismiss } from '../actions/confirm.tsx';
 import { sameSearch } from './state.ts';
 import { useTranslation } from '../../../i18n/client.ts';
 
@@ -45,8 +46,9 @@ export function ViewTabs({ text, views, onOpen, onSave, onRemove }: { text: stri
 function SaveViewDialog({ query, onClose, onSave }: { query: string; onClose(): void; onSave(name: string): void }) {
   const { t } = useTranslation('admin');
   const [name, setName] = useState(query.slice(0, 60));
-  return <Dialog open onOpenChange={details => { if (!details.open) onClose(); }}>
-    <DialogContent size="sm">
+  const dismiss = useDismiss(onClose);
+  return <Dialog open {...dismiss.root}>
+    <DialogContent ref={dismiss.content} size="sm" showCloseButton={false}>
       <form className="contents" onSubmit={event => { event.preventDefault(); if (name.trim()) onSave(name.trim()); }}>
         <DialogHeader title={t.views.saveTitle} description={t.views.saveBody} />
         <DialogBody>

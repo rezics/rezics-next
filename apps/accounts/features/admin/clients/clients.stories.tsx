@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, fn, screen, userEvent, waitFor, within } from 'storybook/test';
 import { ClientsPage } from './clients.tsx';
-import { clients, settled, withAdmin } from '../story-support.tsx';
+import { clients, openDialog, typist, withAdmin } from '../story-support.tsx';
 import { dark, phone } from '../../../.storybook/variants.ts';
 
 const meta = {
@@ -33,13 +33,13 @@ export const Disable: Story = {
     const canvas = within(canvasElement);
     await userEvent.click(await canvas.findByRole('button', { name: 'Actions for REZICS' }));
     await userEvent.click(await screen.findByRole('menuitem', { name: 'Disable…' }));
-    const dialog = await settled(await screen.findByRole('alertdialog', { name: 'Disable REZICS?' }));
-    await userEvent.type(within(dialog).getByLabelText('Details for the audit log'), 'Leaked secret in a public repo');
-    await userEvent.type(within(dialog).getByLabelText('Type REZICS to confirm'), 'REZICS');
-    await userEvent.type(within(dialog).getByLabelText('Your password'), 'correct horse');
+    const dialog = await openDialog('alertdialog', 'Disable REZICS?');
+    await typist.type(within(dialog).getByLabelText('Details for the audit log'), 'Leaked secret in a public repo');
+    await typist.type(within(dialog).getByLabelText('Type REZICS to confirm'), 'REZICS');
+    await typist.type(within(dialog).getByLabelText('Your password'), 'correct horse');
     await userEvent.click(within(dialog).getByRole('button', { name: 'Disable' }));
-    await expect(setClient).toHaveBeenCalledWith('rezics-web', expect.objectContaining({ action: 'disable',
-      reason: 'Leaked secret in a public repo' }));
+    await waitFor(() => expect(setClient).toHaveBeenCalledWith('rezics-web', expect.objectContaining({ action: 'disable',
+      reason: 'Leaked secret in a public repo' })), { timeout: 5_000 });
     await waitFor(() => expect(refresh).toHaveBeenCalled());
   },
 };
