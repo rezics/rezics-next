@@ -14,7 +14,7 @@ import LocalizedLink from '../shell/localized-link.tsx';
 import { type Dismissal, DismissedPost, EngagementBar, JoinButton } from './actions.tsx';
 import { useFeed } from './feed-context.tsx';
 import { absoluteTime, relativeTime } from './time.ts';
-import { type FeedItem, uuidOf } from './types.ts';
+import type { FeedItem } from './types.ts';
 
 type T = ReturnType<typeof useFeed>['t'];
 
@@ -111,7 +111,7 @@ function excerptOf(item: FeedItem): string | null {
 
 
 function Byline({ item }: { item: FeedItem }) {
-  const { t, locale, now, avatarQuery, tab } = useFeed();
+  const { t, locale, now, avatarQuery, tab, realmPath } = useFeed();
   const names = new Intl.ListFormat(locale, { style: 'long', type: 'conjunction' })
     .format(item.group.actors.map(actor => actor.name));
   const reason = item.reason.kind === 'trending-in-realm' ? t.trending({ realm: item.realm?.name.value ?? '' })
@@ -129,7 +129,7 @@ function Byline({ item }: { item: FeedItem }) {
       : <CommunityIcon icon={null} name={item.actor.name} person />}
     <p className="flex min-w-0 flex-1 flex-wrap items-center gap-x-1.5 gap-y-0.5 text-muted-foreground">
       {item.realm ? <>
-        <Link href={localizedPath(`/r/${uuidOf(item.realm.id)}`, locale)} lang={item.realm.name.language}
+        <Link href={localizedPath(realmPath(item.realm.id), locale)} lang={item.realm.name.language}
           className="relative z-10 truncate font-semibold text-foreground outline-none hover:underline
             focus-visible:ring-2 focus-visible:ring-ring">{item.realm.name.value}</Link>
         <span aria-hidden="true">·</span>

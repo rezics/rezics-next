@@ -44,6 +44,8 @@ export interface RailData {
   suggestions: SuggestedFollow[];
   moderated: Moderated[];
   ranking: FeedPage['ranking'] | null;
+  /** Official Zones' route segments by Realm, so a suggestion links as `/r/fiction` where it has one. */
+  realmSegments?: Readonly<Record<string, string>>;
 }
 
 /**
@@ -99,7 +101,8 @@ export function Rail({ data, signedIn, locale, messages, kinds, avatarQuery = ''
           return <li key={item.id} className="flex items-center gap-3">
             <CommunityIcon icon={item.icon} name={item.name.value} size="md" avatarQuery={avatarQuery} />
             <span className="grid min-w-0 flex-1">
-              <LocalizedLink href={localizedPath(`/r/${item.realm.slice(-36)}`, locale)} lang={item.name.language}
+              <LocalizedLink href={localizedPath(`/r/${data.realmSegments?.[item.realm] ?? item.realm.slice(-36)}`, locale)}
+                lang={item.name.language}
                 className="truncate font-medium text-sm hover:underline">{item.name.value}</LocalizedLink>
               <span className="truncate text-muted-foreground text-xs">
                 {[reasonLabel(item, t, kinds), members].filter(Boolean).join(' · ')}</span>

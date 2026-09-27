@@ -49,6 +49,11 @@ export function realmSegment(realm: string, official: readonly Community[]): str
   return zone ? zone.href.replace(/^\/r\//, '') : realm.slice(-36);
 }
 
+/** Each official Zone's Realm with its route segment, for links that should read `/r/fiction`. */
+export function segmentsOf(official: readonly Community[]): Record<string, string> {
+  return Object.fromEntries(official.flatMap(zone => zone.realm ? [[zone.realm, realmSegment(zone.realm, official)]] : []));
+}
+
 /** Where Manage opens: the one Realm the reader manages directly, or the list of them. */
 export function manageHref(moderated: readonly Pick<Moderated, 'href'>[]): string {
   return moderated.length === 1 ? moderated[0]!.href : '/manage';

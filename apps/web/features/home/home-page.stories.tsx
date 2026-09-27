@@ -144,6 +144,19 @@ export const FollowStateEverywhere: Story = {
   },
 };
 
+/** A Realm that is an official Zone links by the Zone's segment, as the navigation does. */
+export const ZoneAddresses: Story = {
+  args: props({ state: state({ tab: 'all' }),
+    official: [{ id: storyId(958, 'aaaa'), kind: 'zone', realm: realms.kitchen.id, name: 'Kitchen · 厨房', language: 'en',
+      icon: null, href: '/r/kitchen', activity: 'unknown' }],
+    page: { ok: true, data: page([post(42, { realm: realms.kitchen, target: { title: name('Scallion pancakes') } })],
+      { scope: 'all' }) } }),
+  async play({ canvasElement }) {
+    const post = within(canvasElement).getByRole('article', { name: 'Scallion pancakes' });
+    await expect(within(post).getByRole('link', { name: realms.kitchen.name.value })).toHaveAttribute('href', '/en/r/kitchen');
+  },
+};
+
 /** A new person picks kinds and languages, then follows the suggested communities in one step. */
 export const NewPerson: Story = {
   args: props({ newPerson: true, followed: { realms: [], zones: [], complete: true },

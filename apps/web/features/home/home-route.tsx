@@ -7,7 +7,7 @@ import { localizedPath } from '../../i18n/locale.ts';
 import { getMessages } from '../../i18n/server.ts';
 import { signInPath } from '../auth/paths.ts';
 import { feedSearch, interestKinds } from '../feed/state.ts';
-import { followedRealmIds } from '../shell/communities.ts';
+import { followedRealmIds, segmentsOf } from '../shell/communities.ts';
 import { HomePage } from './home-page.tsx';
 import { PICKER_COOKIE, WELCOME_COOKIE } from './cookies.ts';
 import type { HomeMessages } from './messages.ts';
@@ -21,10 +21,10 @@ async function HomeRail({ locale, messages, kinds, followed, ranking, signedIn, 
   followed: ReadonlySet<string>;
   ranking: Parameters<typeof Rail>[0]['data']['ranking']; signedIn: boolean; avatarQuery: string;
 }) {
-  const [trending, suggestions, moderated] = await Promise.all([readTrending(), readSuggestions(locale),
-    readModerated(locale)]);
+  const [trending, suggestions, moderated, official] = await Promise.all([readTrending(), readSuggestions(locale),
+    readModerated(locale), readOfficialZones(locale)]);
   return <Rail locale={locale} messages={messages} kinds={kinds} signedIn={signedIn} avatarQuery={avatarQuery}
-    data={{ trending, ranking, moderated,
+    data={{ trending, ranking, moderated, realmSegments: segmentsOf(official),
       suggestions: suggestions.filter(item => !followed.has(item.id) && !followed.has(item.realm)) }} />;
 }
 
@@ -41,7 +41,7 @@ export async function HomeRoute({ locale, searchParams }: { locale: UiLocale;
   const [home, feedMessages, feed, jar] = await Promise.all([getMessages('home', locale),
     getMessages('feed', locale), readHomeFeed(searchParams, locale), cookies()]);
   const [continueItems, official, interests] = await Promise.all([
-    feed.actingSubject ? readContinue() : null, feed.signedIn ? [] : readOfficialZones(locale),
+    feed.actingSubject ? readContinue() : null, readOfficialZones(locale),
     feed.newPerson ? readInterests(locale) : { kinds: [], languages: [locale] }]);
   // Sign-in returns to this view, with its filters.
   const signInHref = signInPath(localizedPath(`/${feedSearch(feed.state, feed.defaults)}`, locale));

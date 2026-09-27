@@ -26,13 +26,17 @@ interface FeedEnvironment {
    * button can claim a Realm is not followed when it may be.
    */
   followedRealms: readonly string[] | null;
+  /** Official Zones' route segments by Realm, so a Realm links as `/r/fiction` where it has one. */
+  realmSegments?: Readonly<Record<string, string>>;
   /** Stories pass an in-memory Main; the app talks to Main through the BFF. */
   api?: FeedApi;
 }
 
-interface FeedValue extends Omit<FeedEnvironment, 'messages' | 'api' | 'followedRealms'> {
+interface FeedValue extends Omit<FeedEnvironment, 'messages' | 'api' | 'followedRealms' | 'realmSegments'> {
   t: ReturnType<typeof materializeData<FeedMessages>>;
   api: () => FeedApi;
+  /** A Realm's page, by its Zone's segment when it has one. */
+  realmPath: (realm: string) => string;
   /** 'joined', 'join', or 'unknown' when the follow list is incomplete. */
   realmState: (realm: string) => 'joined' | 'join' | 'unknown';
   markJoined: (realm: string, joined: boolean) => void;
@@ -46,7 +50,8 @@ export function useFeed(): FeedValue {
   return value;
 }
 
-export function FeedProvider({ children, messages, api, followedRealms, ...environment }: FeedEnvironment & {
+export function FeedProvider({ children, messages, api, followedRealms, realmSegments = {}, ...environment }:
+  FeedEnvironment & {
   children: ReactNode;
 }) {
   // Created on first use: the browser client needs `window`, which the server render has not.
@@ -59,6 +64,7 @@ export function FeedProvider({ children, messages, api, followedRealms, ...envir
   const value: FeedValue = {
     ...environment, t,
     api: getApi,
+    realmPath: realm => `/r/${realmSegments[realm] ?? realm.slice(-36)}`,
     realmState(realm) {
       const now = changed.get(realm);
       if (now !== undefined) return now ? 'joined' : 'join';

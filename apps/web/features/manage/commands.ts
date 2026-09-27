@@ -1,8 +1,7 @@
 import type { Decision } from './queue-state.ts';
 import { readDecisionBasis, readMembers, readRoles, readSettings, readSubmission } from './read.ts';
 import { type DecisionBasis, type InvitationCommand, type MainClient, type MemberCommand, type ModerationDecisionCommand,
-  type ModerationItem,
-  problemCode, type ReadFailure, type RoleCommand, type SettingsView, uuidOf } from './types.ts';
+  type ModerationItem, problemCode, type ReadFailure, type RoleCommand, type SettingsView, uuidOf } from './types.ts';
 
 // Commands from the browser through the BFF. Each intent carries one
 // Idempotency-Key, so a retry after a lost response replays the same receipt
@@ -94,7 +93,8 @@ const isComponent = (value: string): value is DecisionTarget['component'] =>
 
 /**
  * Main's keep or remove decision for a report, from its decision basis.
- * Keeping closes the case and changes nothing. Removing hides each reported
+ * Keeping records the decision and changes nothing; Main keeps the case open
+ * so it can still be reversed (`isDecidedReport`). Removing hides each reported
  * revision still available (`disclosure` fence on exactly that revision, so
  * an author's later fix shows) and compares each target's head with the one
  * the basis read. Both cite the Realm's published rules and a retained

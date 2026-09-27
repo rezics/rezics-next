@@ -67,19 +67,18 @@ function outcomeOf(result: Outcome<unknown>): Settled {
 const typing = (target: EventTarget | null) => target instanceof HTMLElement && target.closest(
   'input:not([type=checkbox]):not([type=radio]), textarea, select, [contenteditable=""], [contenteditable="true"]') !== null;
 
+/** What the reports read so far say about the Realm's rules: one published rule basis serves every report. */
+function rulesOf(bases: Record<string, Loaded<DecisionBasis> | 'loading'>): RulesState {
+  const read = Object.values(bases).flatMap(basis => basis !== 'loading' && basis.ok ? [basis.data] : []);
+  if (read.some(basis => basis.ruleBasis)) return 'published';
+  return read.length ? 'missing' : 'unknown';
+}
+
 /**
  * The Realm's triage list: one list across reports, rights complaints and
  * submissions, the current item in context beside it, keyboard triage, bulk
  * decisions and an undo window before anything reaches Main.
  */
-/** What the reports read so far say about the Realm's rules: one published rule basis serves every report. */
-function rulesOf(bases: Record<string, Loaded<DecisionBasis> | 'loading'>): RulesState {
-  const read = Object.values(bases).filter(basis => basis !== 'loading' && basis.ok)
-    .map(basis => (basis as { data: DecisionBasis }).data);
-  if (read.some(basis => basis.ruleBasis)) return 'published';
-  return read.length ? 'missing' : 'unknown';
-}
-
 export function QueueView({ realm, address = realm, actingSubject, authority = fullAuthority, rulesHref = null, view,
   initial, agents: initialAgents, works: initialWorks, now, locale, messages, api: givenApi,
   undoWindowMs = UNDO_WINDOW_MS }: QueueViewProps) {
@@ -220,8 +219,8 @@ export function QueueView({ realm, address = realm, actingSubject, authority = f
       setFlash(t.notAvailable({ action: actionLabel(fitting, t) }));
       return;
     }
-    if (action === 'approve' || action === 'keep') decide(ids, { action, reason: null, note: null });
-    else if (needsReason(action)) setDialog({ action, ids });
+    if (needsReason(action)) setDialog({ action, ids });
+    else decide(ids, { action, reason: null, note: null });
   }, [decide, t]);
 
   useEffect(() => {

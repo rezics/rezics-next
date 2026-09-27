@@ -71,7 +71,8 @@ export function actionsFor(item: ModerationItem, authority: QueueAuthority = ful
 }
 
 /** Main requires a reason for everything except approving a submission or keeping reported content. */
-export const needsReason = (action: QueueAction) => action !== 'approve' && action !== 'keep';
+export const needsReason = (action: QueueAction): action is Exclude<QueueAction, 'approve' | 'keep'> =>
+  action !== 'approve' && action !== 'keep';
 
 export interface PendingDecision {
   key: string;

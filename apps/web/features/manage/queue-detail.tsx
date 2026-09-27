@@ -8,6 +8,7 @@ import { Skeleton } from '@rezics/ui/skeleton';
 import { cn } from '@rezics/ui/utils';
 import { ArrowUpRightIcon, CircleAlertIcon, InfoIcon, SirenIcon } from 'lucide-react';
 import { materializeData } from 'native-i18n';
+import type { ReactNode } from 'react';
 import type { UiLocale } from '../../i18n/define.ts';
 import LocalizedLink from '../shell/localized-link.tsx';
 import { agentLabel, dateTime, isoTime, relativeTime, shownHandle } from './format.ts';
@@ -29,7 +30,7 @@ type T = ReturnType<typeof materializeData<ManageMessages>>;
 function ReportNote({ item, authority, rules, rulesHref, t }: { item: ModerationItem; authority: QueueAuthority;
   rules: RulesState; rulesHref: string | null; t: T }) {
   let text: string | null = null;
-  let link: React.ReactNode = null;
+  let link: ReactNode = null;
   if (item.kind === 'rights_complaint') {
     text = !authority.escalate ? t.rightsDecisionsOwner : item.escalation ? t.alreadyEscalated : t.rightsDecisionsLater;
   } else if (authority.decideReports && rules === 'missing') {
