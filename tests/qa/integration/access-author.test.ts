@@ -121,7 +121,10 @@ test('author baseline: metadata, own libraries, handles and narrow resource admi
     }
     expect((await h.admit('media.upload', `media:owner:${h.actor}`)).dispatchEligible).toBe(true);
     await expect(h.admit('media.upload', `media:owner:${other}`)).rejects.toBeInstanceOf(AdmissionDenied);
-    expect((await h.accessPool.query('SELECT id FROM access.permission_grant WHERE recipient_subject = $1', [h.actor])).rowCount).toBe(0);
+    // Provisioning grants only recipient consent; author operations still rely
+    // on the baseline instead of manufactured resource permissions.
+    expect((await h.accessPool.query('SELECT action,scope_id FROM access.permission_grant WHERE recipient_subject = $1',
+      [h.actor])).rows).toEqual([{ action: 'access.membership.consent',scope_id: 'work:create:root' }]);
     await h.access.closeScope(`content:publish:${work.work}`, '0');
     await expect(h.admit('content.publish', `content:publish:${work.work}`)).rejects.toBeInstanceOf(AdmissionDenied);
     expect((await h.accessPool.query('SELECT open FROM access.scope_gate WHERE id = $1',

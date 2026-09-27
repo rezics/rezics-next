@@ -71,8 +71,8 @@ test('baseline: current verified email enables real Work creation, without SQL g
     const result = await created.json() as { work: string; admissionId: string };
     expect(result.work).toMatch(/^https:\/\/rezics.com\/id\//);
     expect((await h.work(key)).status).toBe(200);
-    const grants = await h.accessPool.query('SELECT id FROM access.permission_grant WHERE recipient_subject = $1', [h.subject]);
-    expect(grants.rowCount).toBe(0);
+    const grants = await h.accessPool.query('SELECT action,scope_id FROM access.permission_grant WHERE recipient_subject = $1', [h.subject]);
+    expect(grants.rows).toEqual([{ action: 'access.membership.consent',scope_id: 'work:create:root' }]);
     const proofs = await h.accessPool.query(`SELECT a.state, b.policy_id FROM access.admission a
       JOIN access.baseline_admission b ON b.admission_id = a.id WHERE a.idempotency_key = $1`, [key]);
     expect(proofs.rows).toEqual([{ state: 'sealed', policy_id: 'baseline-member-v1' }]);

@@ -81,5 +81,3 @@ CREATE TABLE access.realm_roster_listing (
 );
 CREATE INDEX realm_roster_public_page ON access.realm_roster_listing (realm,member) WHERE listed;
 CREATE INDEX realm_roster_featured_page ON access.realm_roster_listing (realm,member) WHERE listed AND featured;
-CREATE INDEX realm_managed_grants ON access.permission_grant (recipient_subject,scope_id,action) WHERE active;
-CREATE INDEX realm_managed_submission_counts ON access.realm_submission (realm,state,id);
