@@ -1,6 +1,7 @@
 'use client';
 
 import { ark } from '@ark-ui/react/factory';
+import { useFieldContext } from '@ark-ui/react/field';
 import type React from 'react';
 import { tv, type VariantProps } from 'tailwind-variants';
 import { cn } from '../utils.ts';
@@ -8,30 +9,34 @@ import { Button } from './button.tsx';
 import { Input } from './input.tsx';
 import { Textarea } from './textarea.tsx';
 
-const inpuGroupVariants = tv({
+// Same chrome as Input (Aura's tinted field with an inset shadow) so a group and a bare
+// input line up; the ring shows only while the group's own control has focus.
+export const inputGroupVariants = tv({
   base: [
     'group/input-group',
     'relative',
     'w-full min-w-0',
     'flex items-center',
-    'bg-background dark:bg-input/30',
-    'rounded-xl border border-input shadow-xs/5',
+    'bg-primary/5',
+    'rounded-xl border border-border/80 shadow-[inset_0_1px_2px_rgba(0,0,0,0.04)] hover:border-border',
     'transition-[color,box-shadow]',
-    'has-[>textarea]:h-auto',
+    'has-[>textarea]:h-auto has-[>textarea]:rounded-2xl',
     'has-[>[data-align=inline-start]]:[&>input]:ps-2',
     'has-[>[data-align=inline-end]]:[&>input]:pe-2',
     'has-[>[data-align=block-start]]:h-auto has-[>[data-align=block-start]]:flex-col has-[>[data-align=block-start]]:[&>input]:pb-3',
     'has-[>[data-align=block-end]]:h-auto has-[>[data-align=block-end]]:flex-col has-[>[data-align=block-end]]:[&>input]:pt-3',
-    'outline-none focus-within:border-primary focus-within:ring-[3px] focus-within:ring-ring/32',
+    'outline-none',
+    'data-disabled:pointer-events-none data-disabled:opacity-64',
+    'has-[[data-slot=input-group-control]:focus-visible]:border-ring/50 has-[[data-slot=input-group-control]:focus-visible]:ring-2 has-[[data-slot=input-group-control]:focus-visible]:ring-ring/20',
     'has-[[data-slot][aria-invalid=true]]:border-destructive has-[[data-slot][aria-invalid=true]]:ring-[3px] has-[[data-slot][aria-invalid=true]]:ring-destructive/24',
     'dark:has-[[data-slot][aria-invalid=true]]:border-destructive-foreground dark:has-[[data-slot][aria-invalid=true]]:ring-destructive-foreground/40',
     'motion-reduce:transition-none!',
   ],
   variants: {
     size: {
-      sm: ['h-7'],
-      md: ['h-8'],
-      lg: ['h-9'],
+      sm: ['h-8', 'rounded-lg'],
+      md: ['h-9'],
+      lg: ['h-10'],
     },
   },
   defaultVariants: {
@@ -41,14 +46,19 @@ const inpuGroupVariants = tv({
 
 export interface InputGroupProps
   extends React.ComponentProps<typeof ark.div>,
-    VariantProps<typeof inpuGroupVariants> {}
+    VariantProps<typeof inputGroupVariants> {}
 
 export const InputGroup = (props: InputGroupProps) => {
   const { size = 'md', className, ...rest } = props;
+  // A disabled Field disables the whole frame; aria-disabled also tells checkers that the
+  // dimmed addon text belongs to an inactive control.
+  const disabled = useFieldContext()?.disabled || undefined;
 
   return (
     <ark.div
-      className={cn(inpuGroupVariants({ size }), className)}
+      aria-disabled={disabled}
+      className={cn(inputGroupVariants({ size }), className)}
+      data-disabled={disabled}
       data-size={size}
       data-slot="input-group"
       role="group"
@@ -64,8 +74,7 @@ const inputGroupAddonVariants = tv({
     'py-1.5',
     'select-none font-medium text-muted-foreground text-sm',
     'cursor-text',
-    'group-data-[disabled=true]/input-group:opacity-64',
-    '[&>kbd]:rounded-[calc(var(--radius)-5px)]',
+    '[&>kbd]:rounded-lg',
     "[&_svg:not([class*='size-'])]:size-4",
   ],
   variants: {
@@ -131,12 +140,12 @@ const inputGroupButtonVariants = tv({
         'h-6',
         'gap-1',
         'px-2',
-        'rounded-[calc(var(--radius)-5px)]',
+        'rounded-lg',
         'has-[>svg]:px-2',
         "[&_svg:not([class*='size-'])]:size-3.5",
       ],
-      sm: ['h-8', 'gap-1.5', 'px-2.5', 'rounded-md', 'has-[>svg]:px-2.5'],
-      'icon-xs': ['size-6', 'rounded-[calc(var(--radius)-5px)]', 'p-0', 'has-[>svg]:p-0'],
+      sm: ['h-8', 'gap-1.5', 'px-2.5', 'rounded-lg', 'has-[>svg]:px-2.5'],
+      'icon-xs': ['size-6', 'rounded-lg', 'p-0', 'has-[>svg]:p-0'],
       'icon-sm': ['size-8', 'p-0', 'has-[>svg]:p-0'],
     },
   },
@@ -187,11 +196,11 @@ export const InputGroupInput = (props: React.ComponentProps<typeof Input>) => {
   return (
     <Input
       className={cn(
-        'flex-1',
+        'h-full flex-1',
         'bg-transparent',
         'rounded-none border-0 shadow-none',
         'focus-visible:ring-0',
-        'disabled:bg-transparent aria-invalid:ring-0 data-invalid:ring-0',
+        'disabled:bg-transparent disabled:opacity-100 aria-invalid:ring-0 data-invalid:ring-0',
         'dark:bg-transparent dark:disabled:bg-transparent',
         className,
       )}
@@ -212,7 +221,7 @@ export const InputGroupTextarea = (props: React.ComponentProps<typeof Textarea>)
         'bg-transparent',
         'resize-none rounded-none border-0 shadow-none',
         'focus-visible:ring-0',
-        'disabled:bg-transparent aria-invalid:ring-0 data-invalid:ring-0',
+        'disabled:bg-transparent disabled:opacity-100 aria-invalid:ring-0 data-invalid:ring-0',
         'dark:bg-transparent dark:disabled:bg-transparent',
         className,
       )}
