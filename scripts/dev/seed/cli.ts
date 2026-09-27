@@ -5,6 +5,7 @@ import { dirname, isAbsolute, join, resolve } from 'node:path';
 import { readEnv } from '../config.ts';
 import { SeedApi, SeedApiError, type SeedEndpoints } from './api.ts';
 import { people, realms, seedKey, semanticTypes, works } from './plan.ts';
+import { seedReply } from './replies.ts';
 
 interface Options { dryRun: boolean; resetOwn: boolean }
 interface WorkReceipt { work: string; mainVersion: string; workRevision: string; mainRevision: string;
@@ -138,6 +139,9 @@ async function run(options: Options): Promise<boolean> {
     actingSubject: owner.actingSubject }, ownerToken, seedKey('translation', 'pride-zh')));
 
   let publishedCount = 0;
+  let selectedCount = 0;
+  let commentCount = 0;
+  let replyCount = 0;
   for (const excerpt of works.filter(work => work.excerpt)) {
     const target = created.get(excerpt.id)!;
     const body = excerpt.excerpt!;
@@ -152,13 +156,27 @@ async function run(options: Options): Promise<boolean> {
           contribution: contribution.contribution, expectedDraftHead: contribution.draftRevision,
           expectedPublicationHead: null, rightsBasis: 'original-contribution', disclosure: 'public',
           actingSubject: owner.actingSubject }, ownerToken, seedKey('publication', excerpt.id)));
-      if (published) await optional('Main selection', () => api.post('/v1/publication-selections', {
+      const selected = published && await optional('Main selection', () => api.post('/v1/publication-selections', {
         profile: 'main-default-selection-v1', context: { kind: 'main-version-default', id: target.mainVersion },
         work: target.work, contribution: contribution.contribution,
         publicationDecision: published.publicationDecision, expectedSelectionHead: null,
         selectionBasis: 'main-maintainer', actingSubject: owner.actingSubject },
       ownerToken, seedKey('selection', excerpt.id)));
       if (published) publishedCount++;
+      if (selected) selectedCount++;
+      if (published) {
+        const replyTarget = { id: `comment:${excerpt.id}`, work: target.work,
+          revision: contribution.draftRevision, language: 'en' };
+        const comment = await optional('Member comment', () => seedReply(api, sessions[1] ?? owner,
+          replyTarget, `I saved this passage from ${excerpt.title} to discuss with the reading group.`));
+        if (comment) {
+          commentCount++;
+          const reply = await optional('Member reply', () => seedReply(api, sessions[2] ?? owner,
+            { ...replyTarget, id: `response:${excerpt.id}` },
+            'Which detail in this passage stood out to you?', comment));
+          if (reply) replyCount++;
+        }
+      }
     }
   }
   for (const person of sessions) await optional('Personal collection', () => api.post('/v1/collections', {
@@ -178,7 +196,7 @@ async function run(options: Options): Promise<boolean> {
     findings.add('Public Work list: zero visible Works; metadata-only records need a selected publication');
   }
 
-  console.log(`\nSeeded ${created.size} Works, ${createdRealms.length} Realms, ${people.length} Account users, ${agentCount} Agents, ${publishedCount} published contributions.`);
+  console.log(`\nSeeded ${created.size} Works, ${createdRealms.length} Realms, ${people.length} Account users, ${agentCount} Agents, ${publishedCount} published contributions, ${selectedCount} Main selections, ${commentCount} comments, ${replyCount} replies.`);
   console.log('Demo sign-in credentials:');
   for (const person of people) console.log(`  ${person.name}: ${person.email} / ${person.password}`);
   console.log('Search URLs:');
