@@ -52,4 +52,6 @@ export const isolatedIntegrationFileList = [
   'services/main/tests/profiles.integration.test.ts',
   // Person onboarding and vanity claims need a fresh Agent graph and Access owner.
   'tests/qa/integration/agent-handle.test.ts',
+  // Directory assertions need an empty Realm population; scale probes inject raw heads and a global restore hold.
+  'tests/qa/integration/realm-directory.test.ts',
 ] as const;

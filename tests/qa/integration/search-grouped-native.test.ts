@@ -16,9 +16,23 @@ import { selectMainDefault, mainSelectionDigest }
   from '../../../services/main/src/modules/work/select-main.ts';
 import { searchRoutes } from '../../../services/main/src/routes/search.ts';
 import { contextFixture, nativeId } from './context-fixture.ts';
+import { cloneQaAccountAccessDatabases } from '../support/databases.ts';
+
+async function groupedFixture() {
+  if (!Bun.env.REZICS_QA_RUN_ID) throw new Error('Run through the isolated QA integration tier');
+  const databases = await cloneQaAccountAccessDatabases(Bun.env.REZICS_QA_RUN_ID);
+  try {
+    const fixture = await contextFixture({ ...Bun.env,
+      ACCOUNT_DATABASE_URL: databases.urls.account,
+      ACCESS_DATABASE_URL: databases.urls.access } as Record<string, string>);
+    return { ...fixture, close: async () => {
+      try { await fixture.close(); } finally { await databases.close(); }
+    } };
+  } catch (error) { await databases.close(); throw error; }
+}
 
 test('SEARCH01/SEARCH04/SEARCH10: public grouped route binds one lead and counts admitted facts at explicit grains', async () => {
-  const f = await contextFixture(Bun.env as Record<string, string>);
+  const f = await groupedFixture();
   try {
     const phrase = '山河书页';
     const realm = await f.realm('Grouped search');
@@ -333,7 +347,7 @@ test('SEARCH01/SEARCH04/SEARCH10: public grouped route binds one lead and counts
 }, 120_000);
 
 test('SEARCH01/SEARCH04: one Chinese text-rating-Statement join keeps overlapping paths and Context criteria exact', async () => {
-  const f = await contextFixture(Bun.env as Record<string, string>);
+  const f = await groupedFixture();
   try {
     const realm = await f.realm('Joined grouped search');
     const phrase = '山河书页';

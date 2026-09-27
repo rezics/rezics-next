@@ -39,8 +39,10 @@ test('IAM25/IAM26/IAM33: recipient request admits one exact Agent mandate', asyn
   }
   const state = join(root, '.temp', `representation-api-${randomUUID()}`);
   mkdirSync(state, { recursive: true, mode: 0o700 });
-  const accountPool = new Pool({ connectionString: Bun.env.ACCOUNT_DATABASE_URL });
-  const accessPool = new Pool({ connectionString: Bun.env.ACCESS_DATABASE_URL });
+  // Operator bootstrap is once per database; authority epochs also belong to this fixture.
+  const databases = await cloneQaAccountAccessDatabases(Bun.env.REZICS_QA_RUN_ID);
+  const accountPool = new Pool({ connectionString: databases.urls.account });
+  const accessPool = new Pool({ connectionString: databases.urls.access });
   const port = await freePort();
   const base = `http://127.0.0.1:${port}`;
   const operators = new Set<string>();
@@ -156,7 +158,7 @@ test('IAM25/IAM26/IAM33: recipient request admits one exact Agent mandate', asyn
     const managerRead = await request('GET', longReadPath, managerToken);
     expect(managerRead.status).toBe(200);
     expect(JSON.stringify(await managerRead.json())).not.toContain(recipientPrincipal!);
-    // Earlier files in the same QA stack may advance the shared gate's epoch; read it, never assume '0'.
+    // Each accepted authority change advances the gate; use the owner's current epoch.
     const epoch = () => accessPool.query<{ authority_epoch: string }>(`
       SELECT authority_epoch FROM access.scope_gate WHERE id = 'work:create:root'`)
       .then(result => result.rows[0]!.authority_epoch);
@@ -258,6 +260,7 @@ test('IAM25/IAM26/IAM33: recipient request admits one exact Agent mandate', asyn
   } finally {
     await account.stop();
     await Promise.all([accountPool.end(), accessPool.end()]);
+    await databases.close();
     rmSync(state, { recursive: true, force: true });
   }
 }, 180_000);
