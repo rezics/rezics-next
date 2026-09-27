@@ -197,6 +197,8 @@ export default {
   permRules: '发布规则', permRulesHelp: '发布领域规则的新修订。',
   permSettings: '更改设置', permSettingsHelp: '更改谁可以投稿等领域设置。',
   permRoles: '管理角色', permRolesHelp: '创建角色、调整其权限并授予他人。',
+  permReview: '审核投稿', permReviewHelp: '批准、拒绝或退回提交给本 Realm 的作品和章节。',
+  permAdopt: '收录作品', permAdoptHelp: '将通过审核的作品收入本 Realm，并发布其精选。',
   noPermissions: '没有权限',
   permissionCount: plural({ other: insert('{{count}} 项权限') }, { count: asValue(number()) }),
   impactTitle: '受影响的人',
