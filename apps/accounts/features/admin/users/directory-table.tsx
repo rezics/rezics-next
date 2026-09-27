@@ -94,7 +94,7 @@ export function DirectoryTable({ users, columns, loading, sort, direction, onSor
         const label = user.name || user.email;
         return <TableRow key={user.id} data-state={selected.has(user.id) ? 'selected' : undefined} data-active={index === active || undefined}
           onClick={event => { if (!(event.target as HTMLElement).closest('a,button,input')) onActive(index); }}
-          className="data-active:shadow-[inset_3px_0_0_var(--color-primary)]">
+          className="data-active:shadow-[inset_3px_0_0_var(--color-primary)] data-[state=selected]:bg-primary/[0.03]">
           <TableCell className={cn(cellPadding, 'ps-4')}><SelectBox checked={selected.has(user.id)} label={t.selectUser({ name: label })}
             onChange={value => onSelect([user.id], value)} /></TableCell>
           {columns.map(column => cell(column, user, index))}

@@ -26,7 +26,7 @@ export function Panel({ title, description, action, children, className }: { tit
 /** Label and value rows inside a panel. */
 export function Facts({ rows }: { rows: [string, ReactNode][] }) {
   return <dl className="divide-y divide-border/60 border-t border-border/60">
-    {rows.map(([label, value]) => <div key={label} className="grid grid-cols-[minmax(0,10rem)_minmax(0,1fr)] gap-4 px-5 py-2.5 text-sm
+    {rows.map(([label, value]) => <div key={label} className="grid gap-x-4 gap-y-0.5 px-5 py-2.5 text-sm sm:grid-cols-[minmax(0,10rem)_minmax(0,1fr)]
       group-data-[density=compact]/admin:py-1.5">
       <dt className="text-muted-foreground">{label}</dt><dd className="min-w-0 break-words">{value}</dd></div>)}
   </dl>;

@@ -61,6 +61,7 @@ export function StaffPage({ operators }: { operators: Operators }) {
       <section aria-labelledby="permissions-table">
         <h2 id="permissions-table" className="mb-3 text-lg font-semibold">{t.permissionsTable}</h2>
         <Table className="min-w-[36rem]">
+          <TableCaption className="sr-only">{t.permissionsTable}</TableCaption>
           <TableHeader><TableRow>
             <TableHead scope="col" className="px-3">{t.permission}</TableHead>
             {roles.map(role => <TableHead key={role} scope="col" className="px-3 text-center">{t.roles[role]}</TableHead>)}

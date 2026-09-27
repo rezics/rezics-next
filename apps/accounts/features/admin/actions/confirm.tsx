@@ -7,8 +7,11 @@ import { NativeSelect } from '@rezics/ui/native-select';
 import { PasswordInput, PasswordInputGroup, PasswordInputInput, PasswordInputTrigger } from '@rezics/ui/password-input';
 import { Textarea } from '@rezics/ui/textarea';
 import { CircleAlertIcon } from 'lucide-react';
-import type { AdminFailure } from '../api/client.ts';
+import { useState } from 'react';
+import { useAdminClient } from '../api/admin-client.tsx';
+import type { AdminFailure, AdminResult } from '../api/client.ts';
 import type { ReasonCode } from '../api/types.ts';
+import { useAdmin } from '../shell/admin-context.tsx';
 import { useTranslation } from '../../../i18n/client.ts';
 
 // The parts every staff confirmation shares: the reason, the operator's
@@ -52,6 +55,31 @@ export function ReauthFields({ value, onChange, secondFactor, disabled, autoFocu
         onChange={event => onChange({ ...value, totpCode: event.currentTarget.value.replace(/\D/g, '') })} />
     </Field> : null}
   </>;
+}
+
+/** Re-authentication inside a confirmation dialog: always for the most
+ * damaging changes, and after the service answers `step_up_required` for the
+ * rest. `run` confirms the password first when asked, then makes the change;
+ * a retry keeps the caller's command ID, so it cannot apply twice. */
+export function useReauth(always: boolean) {
+  const { t } = useTranslation('admin');
+  const { api } = useAdminClient();
+  const { me } = useAdmin();
+  const [asked, setAsked] = useState(always);
+  const [value, setValue] = useState<Reauth>({ password: '', totpCode: '' });
+  async function run<T>(change: () => Promise<AdminResult<T>>): Promise<{ ok: true; data: T } | { ok: false; message: string }> {
+    if (asked) {
+      const confirmed = await api.reauthenticate(value.password, me.secondFactor ? value.totpCode : undefined);
+      if (!confirmed.ok) return { ok: false, message: confirmed.code === 'forbidden' ? t.stepUpFailed : errorMessage(confirmed, t) };
+    }
+    const result = await change();
+    if (result.ok) return result;
+    if (result.code === 'step_up_required') setAsked(true);
+    return { ok: false, message: errorMessage(result, t) };
+  }
+  const fields = (disabled: boolean) => asked ? <ReauthFields value={value} onChange={setValue} secondFactor={me.secondFactor}
+    disabled={disabled} description={always ? t.reauthHelp : t.stepUpBody} autoFocus={!always} /> : null;
+  return { run, fields, missing: asked && !value.password };
 }
 
 /** Typing the target's identifier: the friction for changes that are hard to undo. */

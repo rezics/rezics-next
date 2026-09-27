@@ -55,16 +55,16 @@ export function UserPage({ initial, data }: { initial: UserDetail; data: TabData
     <header className="mb-5 flex flex-wrap items-start gap-4">
       <UserAvatar user={user} size="lg" className="size-14 text-xl" />
       <div className="min-w-0 flex-1">
-        <h1 className="text-2xl font-semibold tracking-tight md:text-[28px]">{label}</h1>
-        <p className="flex flex-wrap items-center gap-x-2 text-sm text-muted-foreground">
-          <span className="inline-flex items-center gap-1">{user.email}<CopyButton value={user.email} label={t.user.copyEmail} /></span>
-          <span className="inline-flex items-center gap-1 font-mono text-xs">{user.id}<CopyButton value={user.id} label={t.user.copyId} /></span>
+        <h1 className="text-2xl font-semibold tracking-tight break-words md:text-[28px]">{label}</h1>
+        <p className="flex flex-wrap items-center gap-x-3 text-sm text-muted-foreground">
+          <span className="min-w-0"><span className="break-all">{user.email}</span> <CopyButton value={user.email} label={t.user.copyEmail} /></span>
+          <span className="min-w-0"><span className="break-all font-mono text-xs">{user.id}</span> <CopyButton value={user.id} label={t.user.copyId} /></span>
         </p>
         <p className="mt-2 flex flex-wrap gap-1.5"><StatusBadge status={user.status} />{user.role ? <RoleBadge role={user.role} /> : null}
           {user.emailVerified ? null : <UnverifiedBadge />}</p>
       </div>
       {actions.length ? <div className="flex flex-wrap items-center gap-2">
-        {buttons.map(action => <Button key={action} variant={action === 'suspend' || action === 'require-password-reset' ? 'destructive' : 'outline'}
+        {buttons.map(action => <Button key={action} variant={action === 'suspend' ? 'destructive' : 'outline'}
           size="md" onClick={() => open(action)}>{t.actions[action]}</Button>)}
         {rest.length ? <Menu positioning={{ placement: 'bottom-end' }} onSelect={({ value }) => open(value as AdminAction)}>
           <MenuTrigger asChild><Button variant="outline" size="icon-md" aria-label={t.actions.more}><EllipsisIcon aria-hidden="true" /></Button></MenuTrigger>
@@ -83,7 +83,7 @@ export function UserPage({ initial, data }: { initial: UserDetail; data: TabData
     <div key={version} className="contents">
       {tabData.tab === 'overview' ? <OverviewTab detail={detail} onChanged={reload} />
         : tabData.tab === 'security' ? <SecurityTab detail={detail} />
-          : tabData.tab === 'roles' ? <RolesTab detail={detail} permissions={tabData.permissions} onChanged={reload} />
+          : tabData.tab === 'roles' ? <RolesTab detail={detail} permissions={tabData.permissions} onChanged={() => void reload()} />
             : tabData.tab === 'sanctions' ? <SanctionsTab userId={user.id} initial={tabData.page} />
               : tabData.tab === 'audit' ? <AuditTab userId={user.id} initial={tabData.page} />
                 : <AppsTab detail={detail} />}

@@ -20,7 +20,6 @@ import { AdminProvider, type Density, useAdmin } from './admin-context.tsx';
 import { CommandPalette } from './command-palette.tsx';
 import { isEditable, isMac, usePageKeys } from './keys.ts';
 import { ShortcutsDialog } from './shortcuts-dialog.tsx';
-import { StepUpProvider } from './step-up.tsx';
 import { useTranslation } from '../../../i18n/client.ts';
 
 export type AdminSection = 'overview' | 'users' | 'staff' | 'clients' | 'audit';
@@ -39,7 +38,7 @@ const sections = [
 export function AdminShell({ me, user, density, section, children }: { me: AdminMe; user: AvatarUser;
   density: Density; section?: AdminSection; children: ReactNode }) {
   return <AdminProvider me={me} density={density}>
-    <StepUpProvider><Frame user={user} section={section}>{children}</Frame></StepUpProvider>
+    <Frame user={user} section={section}>{children}</Frame>
   </AdminProvider>;
 }
 
@@ -103,7 +102,7 @@ function Frame({ user, section, children }: { user: AvatarUser; section?: AdminS
         <Sheet open={menuOpen} onOpenChange={details => setMenuOpen(details.open)}>
           <SheetTrigger asChild><Button variant="ghost" size="icon-md" aria-label={t.openMenu} className="lg:hidden">
             <MenuIcon aria-hidden="true" /></Button></SheetTrigger>
-          <SheetContent placement="left" className="w-72">
+          <SheetContent placement="left" className="w-72" aria-label={t.sectionsLabel}>
             <SheetHeader><Brand label={t.panelHome} product={t.productName} href={adminPaths.overview} /></SheetHeader>
             <SheetBody className="flex flex-col gap-6">
               <Navigation section={section} onNavigate={() => setMenuOpen(false)} />

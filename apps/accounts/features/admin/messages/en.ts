@@ -75,6 +75,7 @@ export default {
   clearSelection: 'Clear selection',
   moreAvailable: 'More users match',
   showing: plural({ '=0': 'No users', one: '1 user', other: insert('{{value}} users') }),
+  pages: 'Pages',
   firstPage: 'First page',
   nextPage: 'Next page',
   previousPage: 'Previous page',
@@ -87,6 +88,7 @@ export default {
   clearFilters: 'Clear search and filters',
 
   views: {
+    label: 'Views',
     all: 'All users',
     save: 'Save view',
     saveTitle: 'Save this search as a view',
@@ -277,9 +279,7 @@ export default {
   showPassword: 'Show password',
   totpCode: 'Authenticator code',
   reauthHelp: 'Confirm it’s you. We check your password before this change.',
-  stepUpTitle: 'Confirm it’s you',
   stepUpBody: 'Staff changes need a sign-in from the last 5 minutes. Enter your password to continue.',
-  stepUpContinue: 'Confirm and continue',
   stepUpFailed: 'That password or code isn’t right.',
   cancel: 'Cancel',
   confirmActions: {

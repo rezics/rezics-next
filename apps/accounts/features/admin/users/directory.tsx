@@ -132,24 +132,21 @@ export function UserDirectory({ initialState, initial, preferences }: { initialS
       {selected.size ? <div role="toolbar" aria-label={t.selected(selected.size)}
         className="flex min-h-10 flex-wrap items-center gap-2 rounded-2xl border border-primary/25 bg-primary/5 px-3 py-2">
         <span className="me-2 text-sm font-medium">{t.selected(selected.size)}</span>
-        {bulk.map(action => <Button key={action} size="sm" variant={action === 'suspend' || action === 'require-password-reset' ? 'destructive' : 'outline'}
+        {bulk.map(action => <Button key={action} size="sm" variant={action === 'suspend' ? 'destructive' : 'outline'}
           onClick={() => setRequest({ action, targets: selectedUsers.map(toTarget) })}>{t.actions[action]}</Button>)}
         <Button size="sm" variant="ghost" className="ms-auto" onClick={() => setSelected(new Set())}>
           <XIcon aria-hidden="true" />{t.clearSelection}</Button>
-      </div> : <div className="flex flex-wrap items-start gap-2">
-        <div className="min-w-0 flex-1"><SearchBox value={text} inputRef={search} exact={exact} onType={setText}
-          onComposing={setComposing} onApply={commit} onOpenExact={() => exact && navigate(userHref(exact.id))}
-          onArrowDown={() => focusRow(0)} /></div>
-        <Menu positioning={{ placement: 'bottom-end' }} closeOnSelect={false}>
+      </div> : <SearchBox value={text} inputRef={search} exact={exact} onType={setText}
+        onComposing={setComposing} onApply={commit} onOpenExact={() => exact && navigate(userHref(exact.id))}
+        onArrowDown={() => focusRow(0)} tools={<Menu positioning={{ placement: 'bottom-end' }} closeOnSelect={false}>
           <MenuTrigger asChild><Button variant="outline" className="h-10"><Columns3Icon aria-hidden="true" />{t.columns.choose}</Button></MenuTrigger>
           <MenuContent className="min-w-52">
             {columnOrder.map(column => <MenuCheckboxItem key={column} value={column} checked={columns.includes(column)}
               disabled={column === 'name'} onCheckedChange={checked => saveColumns(columnOrder.filter(item =>
                 item === column ? checked : columns.includes(item)))}>{t.columns[column]}</MenuCheckboxItem>)}
           </MenuContent>
-        </Menu>
-      </div>}
-      {read?.status === 'error' ? <Alert variant="destructive"><CircleAlertIcon aria-hidden="true" />
+        </Menu>} />}
+      {read?.status === 'error' && !loading ? <Alert variant="destructive"><CircleAlertIcon aria-hidden="true" />
         <AlertDescription>{t.errorLine({ code: read.code })}</AlertDescription>
         <AlertAction><Button size="sm" variant="outline" onClick={() => setReload(value => value + 1)}>{t.retry}</Button></AlertAction>
       </Alert> : users && !users.length && !loading ? <div className="flex flex-col items-center gap-3 rounded-3xl border border-dashed border-border px-6 py-14 text-center">
@@ -161,7 +158,7 @@ export function UserDirectory({ initialState, initial, preferences }: { initialS
       </div> : <DirectoryTable users={users} columns={columns} loading={loading} sort={state.sort} direction={state.direction} onSort={sortBy}
         selected={selected} onSelect={toggle} active={active} onActive={setActive}
         onAction={(action: AdminAction, user) => setRequest({ action, targets: [toTarget(user)] })} />}
-      {data && (data.nextCursor || state.cursor) ? <nav aria-label={t.users} className="flex flex-wrap items-center justify-end gap-2">
+      {data && (data.nextCursor || state.cursor) ? <nav aria-label={t.pages} className="flex flex-wrap items-center justify-end gap-2">
         {data.nextCursor ? <span className="me-auto text-sm text-muted-foreground">{t.moreAvailable}</span> : null}
         {state.cursor ? <Button variant="ghost" size="sm" onClick={() => { setPrevious([]); go({ ...state, cursor: null }, true); }}>
           <ChevronsLeftIcon aria-hidden="true" />{t.firstPage}</Button> : null}

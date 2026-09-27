@@ -1,0 +1,55 @@
+import type { Meta, StoryObj } from '@storybook/react-vite';
+import { expect, fn, screen, userEvent, waitFor, within } from 'storybook/test';
+import { ClientsPage } from './clients.tsx';
+import { clients, settled, withAdmin } from '../story-support.tsx';
+import { dark, phone } from '../../../.storybook/variants.ts';
+
+const meta = {
+  title: 'Accounts/Admin/OAuth clients', component: ClientsPage,
+  args: { clients }, decorators: [withAdmin], parameters: { admin: { section: 'clients' } },
+} satisfies Meta<typeof ClientsPage>;
+export default meta;
+type Story = StoryObj<typeof meta>;
+
+export const Clients: Story = {
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    const table = await canvas.findByRole('table', { name: 'OAuth clients' });
+    const notes = within(table).getAllByRole('row').find(row => row.textContent?.includes('Notes'))!;
+    await expect(within(notes).getByText('Disabled')).toBeVisible();
+    await expect(within(notes).getByText('Revoked')).toBeVisible();
+    await userEvent.click(within(table).getByRole('button', { name: 'Details of REZICS' }));
+    await expect(await canvas.findByText('https://rezics.test/auth/callback')).toBeVisible();
+    await expect(within(table).getByRole('button', { name: 'Details of REZICS' })).toHaveAttribute('aria-expanded', 'true');
+  },
+};
+
+const setClient = fn(async () => ({ ok: true as const, data: { status: true, requestId: 'req-6' } }));
+const refresh = fn();
+/** Disabling breaks the App for everyone: type its name and confirm with a password. */
+export const Disable: Story = {
+  parameters: { admin: { section: 'clients', api: { setClient }, client: { refresh } } },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await userEvent.click(await canvas.findByRole('button', { name: 'Actions for REZICS' }));
+    await userEvent.click(await screen.findByRole('menuitem', { name: 'Disable…' }));
+    const dialog = await settled(await screen.findByRole('alertdialog', { name: 'Disable REZICS?' }));
+    await userEvent.type(within(dialog).getByLabelText('Details for the audit log'), 'Leaked secret in a public repo');
+    await userEvent.type(within(dialog).getByLabelText('Type REZICS to confirm'), 'REZICS');
+    await userEvent.type(within(dialog).getByLabelText('Your password'), 'correct horse');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Disable' }));
+    await expect(setClient).toHaveBeenCalledWith('rezics-web', expect.objectContaining({ action: 'disable',
+      reason: 'Leaked secret in a public repo' }));
+    await waitFor(() => expect(refresh).toHaveBeenCalled());
+  },
+};
+
+export const Empty: Story = {
+  args: { clients: { items: [], nextCursor: null } },
+  async play({ canvasElement }) {
+    await expect(await within(canvasElement).findByText('No OAuth clients are registered.')).toBeVisible();
+  },
+};
+
+export const Dark: Story = { ...Clients, globals: dark };
+export const Phone: Story = { globals: phone, play: Empty.play, args: Empty.args };

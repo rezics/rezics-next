@@ -12,11 +12,9 @@ import { ChevronDownIcon, ChevronRightIcon, EllipsisIcon } from 'lucide-react';
 import { Fragment, useState } from 'react';
 import { useAdminClient } from '../api/admin-client.tsx';
 import type { AdminClientEntry, ClientPage } from '../api/types.ts';
-import { ErrorAlert, errorMessage, type Reauth, ReauthFields, TypedConfirmation } from '../actions/confirm.tsx';
+import { ErrorAlert, TypedConfirmation, useReauth } from '../actions/confirm.tsx';
 import { DateOnly } from '../format.tsx';
 import { PageHeading } from '../shell/admin-states.tsx';
-import { useAdmin } from '../shell/admin-context.tsx';
-import { useStepUp } from '../shell/step-up.tsx';
 import { CopyButton } from '../user/parts.tsx';
 import { useTranslation } from '../../../i18n/client.ts';
 
@@ -108,33 +106,27 @@ export function ClientsPage({ clients }: { clients: ClientPage }) {
 function ClientDialog({ action, client, onClose, onDone }: { action: ClientAction; client: AdminClientEntry; onClose(): void; onDone(): void }) {
   const { t } = useTranslation('admin');
   const { api } = useAdminClient();
-  const { me } = useAdmin();
-  const stepUp = useStepUp();
   const name = client.name ?? client.clientId;
   const high = action === 'disable' || action === 'revoke';
   const needsReason = action === 'disable' || action === 'enable';
   const [commandId] = useState(() => crypto.randomUUID());
   const [reason, setReason] = useState('');
   const [typed, setTyped] = useState('');
-  const [reauth, setReauth] = useState<Reauth>({ password: '', totpCode: '' });
+  const reauth = useReauth(high);
   const [showErrors, setShowErrors] = useState(false);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const invalid = (needsReason && reason.trim().length < 3) || (high && (typed.trim() !== name || !reauth.password));
+  const invalid = (needsReason && reason.trim().length < 3) || (high && typed.trim() !== name) || reauth.missing;
   async function submit() {
     setShowErrors(true);
     if (invalid) return;
     setPending(true); setError(null);
-    if (high) {
-      const confirmed = await api.reauthenticate(reauth.password, me.secondFactor ? reauth.totpCode : undefined);
-      if (!confirmed.ok) { setPending(false); setError(confirmed.code === 'forbidden' ? t.stepUpFailed : errorMessage(confirmed, t)); return; }
-    }
     const result = action === 'disable' || action === 'enable'
-      ? await stepUp(() => api.setClient(client.clientId, { action, reason: reason.trim(), commandId }))
-      : action === 'revoke' ? await stepUp(() => api.changeInstallation({ change: 'revoke', installationId: client.installation!.id }))
-        : await stepUp(() => api.changeInstallation({ change: 'install', clientId: client.clientId, scopes: client.scopes ?? [], changeKey: commandId }));
+      ? await reauth.run(() => api.setClient(client.clientId, { action, reason: reason.trim(), commandId }))
+      : action === 'revoke' ? await reauth.run(() => api.changeInstallation({ change: 'revoke', installationId: client.installation!.id }))
+        : await reauth.run(() => api.changeInstallation({ change: 'install', clientId: client.clientId, scopes: client.scopes ?? [], changeKey: commandId }));
     setPending(false);
-    if (!result.ok) { setError(errorMessage(result, t)); return; }
+    if (!result.ok) { setError(result.message); return; }
     toast.success({ title: t.clientDone[action]({ name }) });
     onDone();
   }
@@ -150,10 +142,8 @@ function ClientDialog({ action, client, onClose, onDone }: { action: ClientActio
             <FieldDescription>{t.reasonDetailHelp}</FieldDescription>
             <FieldError>{t.reasonTooShort}</FieldError>
           </Field> : null}
-          {high ? <>
-            <TypedConfirmation expected={name} value={typed} onChange={setTyped} disabled={pending} showError={showErrors} />
-            <ReauthFields value={reauth} onChange={setReauth} secondFactor={me.secondFactor} disabled={pending} description={t.reauthHelp} />
-          </> : null}
+          {high ? <TypedConfirmation expected={name} value={typed} onChange={setTyped} disabled={pending} showError={showErrors} /> : null}
+          {reauth.fields(pending)}
           <ErrorAlert message={error} />
         </DialogBody>
         <DialogFooter>

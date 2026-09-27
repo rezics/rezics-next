@@ -32,7 +32,7 @@ export function ViewTabs({ text, views, onOpen, onSave, onRemove }: { text: stri
         <XIcon className="size-3.5" aria-hidden="true" /></button> : null}
     </li>;
   };
-  return <nav aria-label={t.users} className="flex items-center gap-2">
+  return <nav aria-label={t.views.label} className="flex items-center gap-2">
     <ul className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto [scrollbar-width:none]">
       {builtIn.map(view => tab(view, false))}{views.map(view => tab(view, true))}</ul>
     {text.trim() && !current ? <Button variant="ghost" size="sm" onClick={() => setSaving(true)}>

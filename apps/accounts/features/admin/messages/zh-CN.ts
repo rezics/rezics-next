@@ -75,6 +75,7 @@ export default {
   clearSelection: '取消选择',
   moreAvailable: '还有更多匹配的用户',
   showing: plural({ '=0': '没有用户', other: insert('{{value}} 位用户') }),
+  pages: '分页',
   firstPage: '第一页',
   nextPage: '下一页',
   previousPage: '上一页',
@@ -87,6 +88,7 @@ export default {
   clearFilters: '清除搜索和筛选',
 
   views: {
+    label: '视图',
     all: '全部用户',
     save: '保存视图',
     saveTitle: '将此搜索保存为视图',
@@ -276,9 +278,7 @@ export default {
   showPassword: '显示密码',
   totpCode: '身份验证器代码',
   reauthHelp: '确认是您本人。执行此更改前会验证您的密码。',
-  stepUpTitle: '确认是您本人',
   stepUpBody: '员工操作需要最近 5 分钟内登录过。请输入密码继续。',
-  stepUpContinue: '确认并继续',
   stepUpFailed: '密码或代码不正确。',
   cancel: '取消',
   confirmActions: {

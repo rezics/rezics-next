@@ -4,7 +4,7 @@ import { Badge } from '@rezics/ui/badge';
 import { Button } from '@rezics/ui/button';
 import { cn } from '@rezics/ui/utils';
 import { ArrowRightIcon, BanIcon, CircleCheckIcon, KeyRoundIcon, LoaderIcon, MailWarningIcon, ShieldAlertIcon } from 'lucide-react';
-import type { ReactNode } from 'react';
+import { type ReactNode, useId } from 'react';
 import type { Overview as OverviewData, QueueUser } from '../api/types.ts';
 import { Actor, actionLabel, reasonLabel, Target, userHref } from '../audit/entry.tsx';
 import { count as formatCount, DateOnly, Time } from '../format.tsx';
@@ -20,7 +20,7 @@ function QueueCard({ title, body, icon, queue, href, detail, tone }: { title: st
   const locale = useLocale().current;
   const empty = queue.count === 0;
   const shown = formatCount(queue.count, locale);
-  const headingId = `queue-${title.replace(/\W+/g, '-')}`;
+  const headingId = useId();
   return <section aria-labelledby={headingId} className="flex flex-col rounded-3xl border border-border/60 bg-card shadow-(--aura-shadow-card)">
     <header className="flex items-start gap-3 px-5 pt-5">
       <span className={cn('grid size-10 shrink-0 place-items-center rounded-2xl', empty ? 'bg-success/10 text-success-foreground'
@@ -31,7 +31,7 @@ function QueueCard({ title, body, icon, queue, href, detail, tone }: { title: st
         <h2 id={headingId} className="font-semibold">{title}</h2>
         <p className="text-sm text-muted-foreground">{body}</p>
       </div>
-      <p className="text-3xl font-semibold tabular-nums" aria-label={`${title}: ${queue.capped ? t.queues.capped({ count: shown }) : shown}`}>
+      <p className="text-3xl font-semibold tabular-nums"><span className="sr-only">{title}: </span>
         {queue.capped ? t.queues.capped({ count: shown }) : shown}</p>
     </header>
     {empty ? <p className="px-5 pt-4 pb-5 text-sm text-muted-foreground">{t.queues.nothing}</p> : <ul className="mt-3 divide-y divide-border/60">

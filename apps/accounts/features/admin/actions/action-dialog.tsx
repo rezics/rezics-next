@@ -13,9 +13,8 @@ import { useEffect, useState } from 'react';
 import { useAdminClient } from '../api/admin-client.tsx';
 import type { AdminAction, BulkAction, Job, ReasonCode } from '../api/types.ts';
 import { useAdmin } from '../shell/admin-context.tsx';
-import { useStepUp } from '../shell/step-up.tsx';
 import { type ActionTarget, damage, type Duration, sanctions, suspensionEnd } from './actions.ts';
-import { ErrorAlert, errorMessage, type Reason, ReasonFields, type Reauth, ReauthFields, TypedConfirmation } from './confirm.tsx';
+import { ErrorAlert, type Reason, ReasonFields, TypedConfirmation, useReauth } from './confirm.tsx';
 import { nameList } from '../format.tsx';
 import { useLocale, useTranslation } from '../../../i18n/client.ts';
 
@@ -37,7 +36,6 @@ function ActionForm({ request, onClose, onDone }: { request: ActionRequest; onCl
   const locale = useLocale().current;
   const { api } = useAdminClient();
   const { me } = useAdmin();
-  const stepUp = useStepUp();
   const { action, targets } = request;
   const single = targets.length === 1 ? targets[0]! : null;
   const level = !single && damage[action] === 'low' ? 'medium' : damage[action];
@@ -49,7 +47,7 @@ function ActionForm({ request, onClose, onDone }: { request: ActionRequest; onCl
   const [duration, setDuration] = useState<Duration>('week');
   const [customDate, setCustomDate] = useState('');
   const [typed, setTyped] = useState('');
-  const [reauth, setReauth] = useState<Reauth>({ password: '', totpCode: '' });
+  const reauth = useReauth(level === 'high');
   const [showErrors, setShowErrors] = useState(false);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -60,38 +58,30 @@ function ActionForm({ request, onClose, onDone }: { request: ActionRequest; onCl
   const end = action === 'suspend' ? suspensionEnd(duration, customDate) : undefined;
   const invalid = (sanction && (!reason.code || reason.detail.trim().length < 3))
     || (action === 'add-note' && !note.trim()) || end === null
-    || (level === 'high' && (typed.trim() !== expected || !reauth.password));
+    || (level === 'high' && typed.trim() !== expected) || reauth.missing;
 
   async function submit() {
     setShowErrors(true);
     if (invalid) return;
     setPending(true); setError(null);
-    if (level === 'high') {
-      const confirmed = await api.reauthenticate(reauth.password, me.secondFactor ? reauth.totpCode : undefined);
-      if (!confirmed.ok) {
-        setPending(false);
-        setError(confirmed.code === 'forbidden' ? t.stepUpFailed : errorMessage(confirmed, t));
-        return;
-      }
-    }
     const code = reason.code || undefined;
     // The service wants a reason for every action; a note or a resend without
     // details records the chosen reason's name, or the action's.
     const text = reason.detail.trim() || (code ? t.reasonCodes[code] : t.actionLabels[action]);
     const message = sanction && reason.message.trim() ? reason.message.trim() : undefined;
     if (single) {
-      const result = await stepUp(() => api.act(single.id, { action, commandId, reason: text, reasonCode: code,
+      const result = await reauth.run(() => api.act(single.id, { action, commandId, reason: text, reasonCode: code,
         userMessage: message, expiresAt: end ?? undefined, note: action === 'add-note' ? note.trim() : undefined }));
       setPending(false);
-      if (!result.ok) { setError(errorMessage(result, t)); return; }
+      if (!result.ok) { setError(result.message); return; }
       toast.success({ title: t.done[action]({ name: label }), description: t.requestId({ id: result.data.requestId }) });
       onDone();
       return;
     }
-    const result = await stepUp(() => api.bulk({ action: action as BulkAction, commandId, reason: text, reasonCode: code!,
+    const result = await reauth.run(() => api.bulk({ action: action as BulkAction, commandId, reason: text, reasonCode: code!,
       userMessage: message, expiresAt: end ?? undefined, userIds: targets.map(target => target.id) }));
     setPending(false);
-    if (!result.ok) { setError(errorMessage(result, t)); return; }
+    if (!result.ok) { setError(result.message); return; }
     setJobId(result.data.jobId);
   }
 
@@ -133,11 +123,9 @@ function ActionForm({ request, onClose, onDone }: { request: ActionRequest; onCl
           </div> : null}
           {action === 'add-note' ? null : <ReasonFields codes={codes} value={reason} onChange={setReason} required={sanction}
             withMessage={sanction} disabled={pending} showErrors={showErrors} />}
-          {level === 'high' ? <>
-            <TypedConfirmation expected={expected} value={typed} onChange={setTyped} disabled={pending} showError={showErrors} />
-            <ReauthFields value={reauth} onChange={setReauth} secondFactor={me.secondFactor} disabled={pending}
-              description={t.reauthHelp} />
-          </> : null}
+          {level === 'high' ? <TypedConfirmation expected={expected} value={typed} onChange={setTyped} disabled={pending}
+            showError={showErrors} /> : null}
+          {reauth.fields(pending)}
           <ErrorAlert message={error} />
         </DialogBody>
         <DialogFooter>

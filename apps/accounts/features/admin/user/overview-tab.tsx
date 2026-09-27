@@ -9,12 +9,11 @@ import { NotebookPenIcon } from 'lucide-react';
 import { useState } from 'react';
 import { useAdminClient } from '../api/admin-client.tsx';
 import type { UserDetail } from '../api/types.ts';
-import { ErrorAlert, errorMessage } from '../actions/confirm.tsx';
+import { ErrorAlert, useReauth } from '../actions/confirm.tsx';
 import { reasonLabel } from '../audit/entry.tsx';
 import { StatusBadge } from '../badges.tsx';
 import { DateOnly, ExactTime, Time } from '../format.tsx';
 import { useAdmin } from '../shell/admin-context.tsx';
-import { useStepUp } from '../shell/step-up.tsx';
 import { CopyButton, Facts, Panel } from './parts.tsx';
 import { useTranslation } from '../../../i18n/client.ts';
 
@@ -43,9 +42,9 @@ export function OverviewTab({ detail, onChanged }: { detail: UserDetail; onChang
       [t.user.updated, <Time key="updated" iso={user.updatedAt} />],
     ]} /></Panel>
     <Panel title={t.user.identity}><Facts rows={[
-      [t.user.userId, <span key="id" className="inline-flex items-center gap-1 font-mono text-xs">{user.id}
+      [t.user.userId, <span key="id"><span className="break-all font-mono text-xs">{user.id}</span>{' '}
         <CopyButton value={user.id} label={t.user.copyId} /></span>],
-      [t.user.email, <span key="email" className="inline-flex items-center gap-1">{user.email}<CopyButton value={user.email} label={t.user.copyEmail} /></span>],
+      [t.user.email, <span key="email"><span className="break-all">{user.email}</span>{' '}<CopyButton value={user.email} label={t.user.copyEmail} /></span>],
       [t.user.emailVerified, user.emailVerified ? t.filters.yes : t.filters.no],
       [t.filters['2fa'], user.twoFactorEnabled ? t.filters.yes : t.filters.no],
     ]} /></Panel>
@@ -59,7 +58,7 @@ function Notes({ userId, name, notes, onChanged }: { userId: string; name: strin
   const { t } = useTranslation('admin');
   const { api } = useAdminClient();
   const { can } = useAdmin();
-  const stepUp = useStepUp();
+  const reauth = useReauth(false);
   const [text, setText] = useState('');
   const [open, setOpen] = useState(false);
   const [pending, setPending] = useState<Note | null>(null);
@@ -67,11 +66,11 @@ function Notes({ userId, name, notes, onChanged }: { userId: string; name: strin
   const [commandId, setCommandId] = useState(() => crypto.randomUUID());
   async function save() {
     const body = text.trim();
-    if (!body) return;
+    if (!body || reauth.missing) return;
     setError(null);
     setPending({ id: 'pending', authorId: '', authorName: null, authorEmail: null, body, createdAt: new Date().toISOString(), pending: true });
-    const result = await stepUp(() => api.act(userId, { action: 'add-note', commandId, reason: t.actionLabels['add-note'], note: body }));
-    if (!result.ok) { setPending(null); setError(`${t.user.noteFailed} ${errorMessage(result, t)}`); return; }
+    const result = await reauth.run(() => api.act(userId, { action: 'add-note', commandId, reason: t.actionLabels['add-note'], note: body }));
+    if (!result.ok) { setPending(null); setError(`${t.user.noteFailed} ${result.message}`); return; }
     await onChanged();
     setPending(null); setText(''); setOpen(false); setCommandId(crypto.randomUUID());
   }
@@ -84,10 +83,11 @@ function Notes({ userId, name, notes, onChanged }: { userId: string; name: strin
         <Textarea value={text} autoFocus maxLength={4000} placeholder={t.user.notePlaceholder} aria-label={t.actionTitles['add-note']({ name })}
           onChange={event => setText(event.currentTarget.value)} />
         <FieldDescription>{t.consequences['add-note']}</FieldDescription></Field>
+      {reauth.fields(!!pending)}
       <ErrorAlert message={error} />
       <div className="flex justify-end gap-2">
         <Button variant="outline" onClick={() => { setOpen(false); setError(null); }} disabled={!!pending}>{t.cancel}</Button>
-        <Button type="submit" isLoading={!!pending} disabled={!text.trim()}>{pending ? t.user.savingNote : t.user.saveNote}</Button>
+        <Button type="submit" isLoading={!!pending} disabled={!text.trim() || reauth.missing}>{pending ? t.user.savingNote : t.user.saveNote}</Button>
       </div>
     </form> : null}
     {shown.length ? <ol className="divide-y divide-border/60 border-t border-border/60">

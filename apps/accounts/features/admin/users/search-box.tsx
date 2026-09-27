@@ -5,7 +5,7 @@ import { Kbd } from '@rezics/ui/kbd';
 import { Menu, MenuContent, MenuGroup, MenuItem, MenuSeparator, MenuTrigger } from '@rezics/ui/menu';
 import { Popover, PopoverBody, PopoverContent, PopoverHeader, PopoverTrigger } from '@rezics/ui/popover';
 import { CircleHelpIcon, CornerDownLeftIcon, ListFilterIcon, SearchIcon, TriangleAlertIcon, XIcon } from 'lucide-react';
-import { type RefObject, useRef } from 'react';
+import { type ReactNode, type RefObject, useRef } from 'react';
 import type { AdminUser } from '../api/types.ts';
 import { addFilter, type FilterKey, isChip, parseQuery, type QueryProblem, type QueryToken, removeToken } from './query.ts';
 import { useTranslation } from '../../../i18n/client.ts';
@@ -43,7 +43,9 @@ const utcDate = (time: number) => new Date(time).toISOString().slice(0, 10);
 
 /** The directory's search box: text with filters, removable chips, what
  * couldn't be understood, and the exact ID/email match to jump to. */
-export function SearchBox({ value, onType, onComposing, onApply, exact, onOpenExact, inputRef, onArrowDown }: { value: string;
+export function SearchBox({ value, onType, onComposing, onApply, exact, onOpenExact, inputRef, onArrowDown, tools }: { value: string;
+  /** More toolbar buttons, beside Add filter. */
+  tools?: ReactNode;
   /** Typing: searched after a pause, never mid-composition. */
   onType(value: string): void; onComposing(composing: boolean): void;
   /** Enter, chips, filters and clearing: searched at once. */
@@ -60,7 +62,7 @@ export function SearchBox({ value, onType, onComposing, onApply, exact, onOpenEx
   };
   return <div className="flex flex-col gap-2">
     <div className="flex flex-wrap items-center gap-2">
-      <div className="relative min-w-0 flex-1 basis-72">
+      <div className="relative min-w-0 flex-1 basis-full sm:basis-72">
         <SearchIcon aria-hidden="true" className="pointer-events-none absolute start-3.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
         <input ref={inputRef} id="admin-search" type="search" role="searchbox" aria-label={t.search.label}
           aria-describedby="admin-search-help" placeholder={t.search.placeholder} value={value} autoComplete="off"
@@ -111,6 +113,7 @@ export function SearchBox({ value, onType, onComposing, onApply, exact, onOpenEx
           <MenuItem value="email">{`${t.filters.email}…`}</MenuItem>
         </MenuContent>
       </Menu>
+      {tools}
     </div>
     {chips.length ? <ul className="flex flex-wrap gap-1.5" aria-label={t.search.addFilter}>
       {chips.map(token => {

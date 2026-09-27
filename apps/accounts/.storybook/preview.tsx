@@ -25,7 +25,7 @@ const withAccountsApp: Decorator = (Story, context) => {
 };
 
 // Like the root layout, seed every catalog so no story suspends mid-interaction.
-const seed = (locale: string) => i18n.getTranslation(['common', 'auth', 'consent', 'account'], [locale]);
+const seed = (locale: string) => i18n.getTranslation(['common', 'auth', 'consent', 'account', 'admin'], [locale]);
 
 const preview: Preview = {
   loaders: [async ({ globals }) => ({ i18n: await seed(globals.locale === 'zh-CN' ? 'zh-CN' : 'en') })],
