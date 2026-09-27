@@ -169,7 +169,7 @@ test('new person chooses a handle, returns home and keeps the acting profile aft
     }
     await page.getByRole('button', { name: 'Save public profile' }).click();
     if (process.env.REZICS_EXPECT_AVATAR_FAILURE === '1') {
-      await expect(page.getByRole('status').filter({ hasText: /Avatar upload is not permitted|Avatar service is unavailable/ }))
+      await expect(page.getByRole('status').filter({ hasText: /An avatar cannot be set|Avatar service is unavailable/ }))
         .toBeVisible({ timeout: 30_000 });
       await expect(page.getByRole('textbox', { name: 'Bio' }))
         .toHaveValue('Keep this text when avatar upload fails.');
