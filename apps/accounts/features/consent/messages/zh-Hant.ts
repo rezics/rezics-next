@@ -1,1 +1,32 @@
-export default {} satisfies Partial<typeof import('./en.ts').default>;
+import { insert } from 'native-i18n';
+
+export default {
+  title: insert('{{app}} 想要存取你的 REZICS 帳戶', { app: String }),
+  unknownApp: '某個應用程式',
+  signedInAs: '目前登入的帳戶',
+  switchAccount: '不是你本人？切換帳戶',
+  allowIntro: insert('這會允許 {{app}}：', { app: String }),
+  groupIdentity: '確認你的身分',
+  groupWorks: '管理你的作品',
+  groupOffline: '保持存取權',
+  groupOther: '其他存取權',
+  scopeOpenid: '將你連結至 REZICS 帳戶',
+  scopeProfile: '查看你的姓名和個人資料相片',
+  scopeEmail: '查看你的電子郵件地址',
+  scopeOfflineAccess: '在你未使用應用程式時仍保持連線',
+  scopeWorkRead: '查看作品，包括你可私下查看的作品',
+  scopeWorkCreate: '代表你建立作品',
+  scopeWorkEdit: '代表你編輯作品',
+  scopeOtherPrefix: '使用',
+  trust: insert('請確認你信任 {{app}}。你隨時可以在 REZICS 帳戶中移除它的存取權。', { app: String }),
+  appPolicy: '隱私權政策',
+  appTerms: '服務條款',
+  allow: '允許',
+  deny: '取消',
+  working: '處理中…',
+  expired: '此要求已逾期。請返回應用程式並再試一次。',
+  unavailable: '無法完成此要求。請稍後再試。',
+  invalidTitle: '此要求無效',
+  invalidBody: '連結不完整或已逾期。請返回應用程式並重新開始。',
+  signedOutBody: '你尚未回覆前，工作階段就已結束。請重新登入以查看此要求。',
+} satisfies Partial<typeof import('./en.ts').default>;

@@ -1,1 +1,32 @@
-export default {} satisfies Partial<typeof import('./en.ts').default>;
+import { insert } from 'native-i18n';
+
+export default {
+  title: insert('{{app}} が REZICS アカウントへのアクセスを求めています', { app: String }),
+  unknownApp: 'アプリ',
+  signedInAs: 'ログイン中のアカウント',
+  switchAccount: '自分ではありませんか？アカウントを切り替える',
+  allowIntro: insert('許可すると、{{app}} は次の操作を行えるようになります。', { app: String }),
+  groupIdentity: 'ユーザーを識別する',
+  groupWorks: '作品を利用する',
+  groupOffline: 'アクセスを維持する',
+  groupOther: 'その他のアクセス',
+  scopeOpenid: 'REZICS アカウントにリンクする',
+  scopeProfile: '名前とプロフィール写真を表示する',
+  scopeEmail: 'メールアドレスを表示する',
+  scopeOfflineAccess: 'アプリを使用していないときも接続を維持する',
+  scopeWorkRead: '非公開で閲覧できる作品を含め、作品を表示する',
+  scopeWorkCreate: 'ユーザーに代わって作品を作成する',
+  scopeWorkEdit: 'ユーザーに代わって作品を編集する',
+  scopeOtherPrefix: '次の権限を使用：',
+  trust: insert('{{app}} を信頼できることを確認してください。REZICS アカウントでいつでもアクセス権を削除できます。', { app: String }),
+  appPolicy: 'プライバシー ポリシー',
+  appTerms: '利用規約',
+  allow: '許可',
+  deny: 'キャンセル',
+  working: '処理中…',
+  expired: 'このリクエストの有効期限が切れました。アプリに戻り、もう一度お試しください。',
+  unavailable: 'このリクエストを完了できませんでした。しばらくしてからもう一度お試しください。',
+  invalidTitle: 'このリクエストは無効です',
+  invalidBody: 'リンクが不完全か、有効期限が切れています。アプリに戻り、最初からやり直してください。',
+  signedOutBody: '回答する前にセッションが終了しました。もう一度ログインして、このリクエストを確認してください。',
+} satisfies Partial<typeof import('./en.ts').default>;
