@@ -200608,6 +200608,32 @@
                         "minLength": 2,
                         "type": "string"
                       },
+                      "excludeTypes": {
+                        "items": {
+                          "enum": [
+                            "https://schema.org/Book",
+                            "https://schema.org/DigitalDocument",
+                            "https://schema.org/Recipe"
+                          ],
+                          "type": "string"
+                        },
+                        "maxItems": 3,
+                        "type": "array",
+                        "uniqueItems": true
+                      },
+                      "includeTypes": {
+                        "items": {
+                          "enum": [
+                            "https://schema.org/Book",
+                            "https://schema.org/DigitalDocument",
+                            "https://schema.org/Recipe"
+                          ],
+                          "type": "string"
+                        },
+                        "maxItems": 3,
+                        "type": "array",
+                        "uniqueItems": true
+                      },
                       "language": {
                         "maxLength": 35,
                         "minLength": 2,
@@ -200686,6 +200712,32 @@
                       "author": {
                         "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                         "type": "string"
+                      },
+                      "excludeTypes": {
+                        "items": {
+                          "enum": [
+                            "https://schema.org/Book",
+                            "https://schema.org/DigitalDocument",
+                            "https://schema.org/Recipe"
+                          ],
+                          "type": "string"
+                        },
+                        "maxItems": 3,
+                        "type": "array",
+                        "uniqueItems": true
+                      },
+                      "includeTypes": {
+                        "items": {
+                          "enum": [
+                            "https://schema.org/Book",
+                            "https://schema.org/DigitalDocument",
+                            "https://schema.org/Recipe"
+                          ],
+                          "type": "string"
+                        },
+                        "maxItems": 3,
+                        "type": "array",
+                        "uniqueItems": true
                       },
                       "language": {
                         "maxLength": 35,
@@ -200783,6 +200835,32 @@
                         ],
                         "type": "object"
                       },
+                      "excludeTypes": {
+                        "items": {
+                          "enum": [
+                            "https://schema.org/Book",
+                            "https://schema.org/DigitalDocument",
+                            "https://schema.org/Recipe"
+                          ],
+                          "type": "string"
+                        },
+                        "maxItems": 3,
+                        "type": "array",
+                        "uniqueItems": true
+                      },
+                      "includeTypes": {
+                        "items": {
+                          "enum": [
+                            "https://schema.org/Book",
+                            "https://schema.org/DigitalDocument",
+                            "https://schema.org/Recipe"
+                          ],
+                          "type": "string"
+                        },
+                        "maxItems": 3,
+                        "type": "array",
+                        "uniqueItems": true
+                      },
                       "language": {
                         "maxLength": 35,
                         "minLength": 2,
@@ -200861,6 +200939,32 @@
                       "author": {
                         "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                         "type": "string"
+                      },
+                      "excludeTypes": {
+                        "items": {
+                          "enum": [
+                            "https://schema.org/Book",
+                            "https://schema.org/DigitalDocument",
+                            "https://schema.org/Recipe"
+                          ],
+                          "type": "string"
+                        },
+                        "maxItems": 3,
+                        "type": "array",
+                        "uniqueItems": true
+                      },
+                      "includeTypes": {
+                        "items": {
+                          "enum": [
+                            "https://schema.org/Book",
+                            "https://schema.org/DigitalDocument",
+                            "https://schema.org/Recipe"
+                          ],
+                          "type": "string"
+                        },
+                        "maxItems": 3,
+                        "type": "array",
+                        "uniqueItems": true
                       },
                       "language": {
                         "maxLength": 35,
@@ -200963,6 +201067,32 @@
                         ],
                         "type": "object"
                       },
+                      "excludeTypes": {
+                        "items": {
+                          "enum": [
+                            "https://schema.org/Book",
+                            "https://schema.org/DigitalDocument",
+                            "https://schema.org/Recipe"
+                          ],
+                          "type": "string"
+                        },
+                        "maxItems": 3,
+                        "type": "array",
+                        "uniqueItems": true
+                      },
+                      "includeTypes": {
+                        "items": {
+                          "enum": [
+                            "https://schema.org/Book",
+                            "https://schema.org/DigitalDocument",
+                            "https://schema.org/Recipe"
+                          ],
+                          "type": "string"
+                        },
+                        "maxItems": 3,
+                        "type": "array",
+                        "uniqueItems": true
+                      },
                       "language": {
                         "maxLength": 35,
                         "minLength": 2,
@@ -201064,6 +201194,32 @@
                           "id"
                         ],
                         "type": "object"
+                      },
+                      "excludeTypes": {
+                        "items": {
+                          "enum": [
+                            "https://schema.org/Book",
+                            "https://schema.org/DigitalDocument",
+                            "https://schema.org/Recipe"
+                          ],
+                          "type": "string"
+                        },
+                        "maxItems": 3,
+                        "type": "array",
+                        "uniqueItems": true
+                      },
+                      "includeTypes": {
+                        "items": {
+                          "enum": [
+                            "https://schema.org/Book",
+                            "https://schema.org/DigitalDocument",
+                            "https://schema.org/Recipe"
+                          ],
+                          "type": "string"
+                        },
+                        "maxItems": 3,
+                        "type": "array",
+                        "uniqueItems": true
                       },
                       "language": {
                         "maxLength": 35,
@@ -201607,6 +201763,32 @@
                         "minLength": 2,
                         "type": "string"
                       },
+                      "excludeTypes": {
+                        "items": {
+                          "enum": [
+                            "https://schema.org/Book",
+                            "https://schema.org/DigitalDocument",
+                            "https://schema.org/Recipe"
+                          ],
+                          "type": "string"
+                        },
+                        "maxItems": 3,
+                        "type": "array",
+                        "uniqueItems": true
+                      },
+                      "includeTypes": {
+                        "items": {
+                          "enum": [
+                            "https://schema.org/Book",
+                            "https://schema.org/DigitalDocument",
+                            "https://schema.org/Recipe"
+                          ],
+                          "type": "string"
+                        },
+                        "maxItems": 3,
+                        "type": "array",
+                        "uniqueItems": true
+                      },
                       "language": {
                         "maxLength": 35,
                         "minLength": 2,
@@ -201685,6 +201867,32 @@
                       "author": {
                         "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                         "type": "string"
+                      },
+                      "excludeTypes": {
+                        "items": {
+                          "enum": [
+                            "https://schema.org/Book",
+                            "https://schema.org/DigitalDocument",
+                            "https://schema.org/Recipe"
+                          ],
+                          "type": "string"
+                        },
+                        "maxItems": 3,
+                        "type": "array",
+                        "uniqueItems": true
+                      },
+                      "includeTypes": {
+                        "items": {
+                          "enum": [
+                            "https://schema.org/Book",
+                            "https://schema.org/DigitalDocument",
+                            "https://schema.org/Recipe"
+                          ],
+                          "type": "string"
+                        },
+                        "maxItems": 3,
+                        "type": "array",
+                        "uniqueItems": true
                       },
                       "language": {
                         "maxLength": 35,
@@ -201782,6 +201990,32 @@
                         ],
                         "type": "object"
                       },
+                      "excludeTypes": {
+                        "items": {
+                          "enum": [
+                            "https://schema.org/Book",
+                            "https://schema.org/DigitalDocument",
+                            "https://schema.org/Recipe"
+                          ],
+                          "type": "string"
+                        },
+                        "maxItems": 3,
+                        "type": "array",
+                        "uniqueItems": true
+                      },
+                      "includeTypes": {
+                        "items": {
+                          "enum": [
+                            "https://schema.org/Book",
+                            "https://schema.org/DigitalDocument",
+                            "https://schema.org/Recipe"
+                          ],
+                          "type": "string"
+                        },
+                        "maxItems": 3,
+                        "type": "array",
+                        "uniqueItems": true
+                      },
                       "language": {
                         "maxLength": 35,
                         "minLength": 2,
@@ -201860,6 +202094,32 @@
                       "author": {
                         "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                         "type": "string"
+                      },
+                      "excludeTypes": {
+                        "items": {
+                          "enum": [
+                            "https://schema.org/Book",
+                            "https://schema.org/DigitalDocument",
+                            "https://schema.org/Recipe"
+                          ],
+                          "type": "string"
+                        },
+                        "maxItems": 3,
+                        "type": "array",
+                        "uniqueItems": true
+                      },
+                      "includeTypes": {
+                        "items": {
+                          "enum": [
+                            "https://schema.org/Book",
+                            "https://schema.org/DigitalDocument",
+                            "https://schema.org/Recipe"
+                          ],
+                          "type": "string"
+                        },
+                        "maxItems": 3,
+                        "type": "array",
+                        "uniqueItems": true
                       },
                       "language": {
                         "maxLength": 35,
@@ -201962,6 +202222,32 @@
                         ],
                         "type": "object"
                       },
+                      "excludeTypes": {
+                        "items": {
+                          "enum": [
+                            "https://schema.org/Book",
+                            "https://schema.org/DigitalDocument",
+                            "https://schema.org/Recipe"
+                          ],
+                          "type": "string"
+                        },
+                        "maxItems": 3,
+                        "type": "array",
+                        "uniqueItems": true
+                      },
+                      "includeTypes": {
+                        "items": {
+                          "enum": [
+                            "https://schema.org/Book",
+                            "https://schema.org/DigitalDocument",
+                            "https://schema.org/Recipe"
+                          ],
+                          "type": "string"
+                        },
+                        "maxItems": 3,
+                        "type": "array",
+                        "uniqueItems": true
+                      },
                       "language": {
                         "maxLength": 35,
                         "minLength": 2,
@@ -202063,6 +202349,32 @@
                           "id"
                         ],
                         "type": "object"
+                      },
+                      "excludeTypes": {
+                        "items": {
+                          "enum": [
+                            "https://schema.org/Book",
+                            "https://schema.org/DigitalDocument",
+                            "https://schema.org/Recipe"
+                          ],
+                          "type": "string"
+                        },
+                        "maxItems": 3,
+                        "type": "array",
+                        "uniqueItems": true
+                      },
+                      "includeTypes": {
+                        "items": {
+                          "enum": [
+                            "https://schema.org/Book",
+                            "https://schema.org/DigitalDocument",
+                            "https://schema.org/Recipe"
+                          ],
+                          "type": "string"
+                        },
+                        "maxItems": 3,
+                        "type": "array",
+                        "uniqueItems": true
                       },
                       "language": {
                         "maxLength": 35,
@@ -202606,6 +202918,32 @@
                         "minLength": 2,
                         "type": "string"
                       },
+                      "excludeTypes": {
+                        "items": {
+                          "enum": [
+                            "https://schema.org/Book",
+                            "https://schema.org/DigitalDocument",
+                            "https://schema.org/Recipe"
+                          ],
+                          "type": "string"
+                        },
+                        "maxItems": 3,
+                        "type": "array",
+                        "uniqueItems": true
+                      },
+                      "includeTypes": {
+                        "items": {
+                          "enum": [
+                            "https://schema.org/Book",
+                            "https://schema.org/DigitalDocument",
+                            "https://schema.org/Recipe"
+                          ],
+                          "type": "string"
+                        },
+                        "maxItems": 3,
+                        "type": "array",
+                        "uniqueItems": true
+                      },
                       "language": {
                         "maxLength": 35,
                         "minLength": 2,
@@ -202684,6 +203022,32 @@
                       "author": {
                         "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                         "type": "string"
+                      },
+                      "excludeTypes": {
+                        "items": {
+                          "enum": [
+                            "https://schema.org/Book",
+                            "https://schema.org/DigitalDocument",
+                            "https://schema.org/Recipe"
+                          ],
+                          "type": "string"
+                        },
+                        "maxItems": 3,
+                        "type": "array",
+                        "uniqueItems": true
+                      },
+                      "includeTypes": {
+                        "items": {
+                          "enum": [
+                            "https://schema.org/Book",
+                            "https://schema.org/DigitalDocument",
+                            "https://schema.org/Recipe"
+                          ],
+                          "type": "string"
+                        },
+                        "maxItems": 3,
+                        "type": "array",
+                        "uniqueItems": true
                       },
                       "language": {
                         "maxLength": 35,
@@ -202781,6 +203145,32 @@
                         ],
                         "type": "object"
                       },
+                      "excludeTypes": {
+                        "items": {
+                          "enum": [
+                            "https://schema.org/Book",
+                            "https://schema.org/DigitalDocument",
+                            "https://schema.org/Recipe"
+                          ],
+                          "type": "string"
+                        },
+                        "maxItems": 3,
+                        "type": "array",
+                        "uniqueItems": true
+                      },
+                      "includeTypes": {
+                        "items": {
+                          "enum": [
+                            "https://schema.org/Book",
+                            "https://schema.org/DigitalDocument",
+                            "https://schema.org/Recipe"
+                          ],
+                          "type": "string"
+                        },
+                        "maxItems": 3,
+                        "type": "array",
+                        "uniqueItems": true
+                      },
                       "language": {
                         "maxLength": 35,
                         "minLength": 2,
@@ -202859,6 +203249,32 @@
                       "author": {
                         "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                         "type": "string"
+                      },
+                      "excludeTypes": {
+                        "items": {
+                          "enum": [
+                            "https://schema.org/Book",
+                            "https://schema.org/DigitalDocument",
+                            "https://schema.org/Recipe"
+                          ],
+                          "type": "string"
+                        },
+                        "maxItems": 3,
+                        "type": "array",
+                        "uniqueItems": true
+                      },
+                      "includeTypes": {
+                        "items": {
+                          "enum": [
+                            "https://schema.org/Book",
+                            "https://schema.org/DigitalDocument",
+                            "https://schema.org/Recipe"
+                          ],
+                          "type": "string"
+                        },
+                        "maxItems": 3,
+                        "type": "array",
+                        "uniqueItems": true
                       },
                       "language": {
                         "maxLength": 35,
@@ -202961,6 +203377,32 @@
                         ],
                         "type": "object"
                       },
+                      "excludeTypes": {
+                        "items": {
+                          "enum": [
+                            "https://schema.org/Book",
+                            "https://schema.org/DigitalDocument",
+                            "https://schema.org/Recipe"
+                          ],
+                          "type": "string"
+                        },
+                        "maxItems": 3,
+                        "type": "array",
+                        "uniqueItems": true
+                      },
+                      "includeTypes": {
+                        "items": {
+                          "enum": [
+                            "https://schema.org/Book",
+                            "https://schema.org/DigitalDocument",
+                            "https://schema.org/Recipe"
+                          ],
+                          "type": "string"
+                        },
+                        "maxItems": 3,
+                        "type": "array",
+                        "uniqueItems": true
+                      },
                       "language": {
                         "maxLength": 35,
                         "minLength": 2,
@@ -203062,6 +203504,32 @@
                           "id"
                         ],
                         "type": "object"
+                      },
+                      "excludeTypes": {
+                        "items": {
+                          "enum": [
+                            "https://schema.org/Book",
+                            "https://schema.org/DigitalDocument",
+                            "https://schema.org/Recipe"
+                          ],
+                          "type": "string"
+                        },
+                        "maxItems": 3,
+                        "type": "array",
+                        "uniqueItems": true
+                      },
+                      "includeTypes": {
+                        "items": {
+                          "enum": [
+                            "https://schema.org/Book",
+                            "https://schema.org/DigitalDocument",
+                            "https://schema.org/Recipe"
+                          ],
+                          "type": "string"
+                        },
+                        "maxItems": 3,
+                        "type": "array",
+                        "uniqueItems": true
                       },
                       "language": {
                         "maxLength": 35,
@@ -203912,6 +204380,122 @@
                           "const": "1",
                           "type": "string"
                         },
+                        "facets": {
+                          "properties": {
+                            "languages": {
+                              "properties": {
+                                "precision": {
+                                  "const": "exact",
+                                  "type": "string"
+                                },
+                                "values": {
+                                  "items": {
+                                    "properties": {
+                                      "count": {
+                                        "minimum": 0,
+                                        "type": "integer"
+                                      },
+                                      "value": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "value",
+                                      "count"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  "type": "array"
+                                }
+                              },
+                              "required": [
+                                "precision",
+                                "values"
+                              ],
+                              "type": "object"
+                            },
+                            "populationBasis": {
+                              "const": "all-filters",
+                              "type": "string"
+                            },
+                            "resultGrain": {
+                              "const": "work",
+                              "type": "string"
+                            },
+                            "terms": {
+                              "properties": {
+                                "precision": {
+                                  "const": "lower-bound",
+                                  "type": "string"
+                                },
+                                "values": {
+                                  "items": {
+                                    "properties": {
+                                      "count": {
+                                        "minimum": 0,
+                                        "type": "integer"
+                                      },
+                                      "value": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "value",
+                                      "count"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  "type": "array"
+                                }
+                              },
+                              "required": [
+                                "precision",
+                                "values"
+                              ],
+                              "type": "object"
+                            },
+                            "types": {
+                              "properties": {
+                                "precision": {
+                                  "const": "exact",
+                                  "type": "string"
+                                },
+                                "values": {
+                                  "items": {
+                                    "properties": {
+                                      "count": {
+                                        "minimum": 0,
+                                        "type": "integer"
+                                      },
+                                      "value": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "value",
+                                      "count"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  "type": "array"
+                                }
+                              },
+                              "required": [
+                                "precision",
+                                "values"
+                              ],
+                              "type": "object"
+                            }
+                          },
+                          "required": [
+                            "populationBasis",
+                            "resultGrain",
+                            "languages",
+                            "terms",
+                            "types"
+                          ],
+                          "type": "object"
+                        },
                         "indexGeneration": {
                           "type": "string"
                         },
@@ -203946,6 +204530,13 @@
                               "selection": {
                                 "type": "string"
                               },
+                              "types": {
+                                "items": {
+                                  "type": "string"
+                                },
+                                "maxItems": 3,
+                                "type": "array"
+                              },
                               "work": {
                                 "type": "string"
                               }
@@ -203958,7 +204549,8 @@
                               "revision",
                               "selection",
                               "language",
-                              "score"
+                              "score",
+                              "types"
                             ],
                             "type": "object"
                           },
@@ -203997,6 +204589,7 @@
                         "indexGeneration",
                         "total",
                         "sourcePosition",
+                        "facets",
                         "context",
                         "results"
                       ],
@@ -204016,6 +204609,122 @@
                         "contractVersion": {
                           "const": "1",
                           "type": "string"
+                        },
+                        "facets": {
+                          "properties": {
+                            "languages": {
+                              "properties": {
+                                "precision": {
+                                  "const": "exact",
+                                  "type": "string"
+                                },
+                                "values": {
+                                  "items": {
+                                    "properties": {
+                                      "count": {
+                                        "minimum": 0,
+                                        "type": "integer"
+                                      },
+                                      "value": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "value",
+                                      "count"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  "type": "array"
+                                }
+                              },
+                              "required": [
+                                "precision",
+                                "values"
+                              ],
+                              "type": "object"
+                            },
+                            "populationBasis": {
+                              "const": "all-filters",
+                              "type": "string"
+                            },
+                            "resultGrain": {
+                              "const": "work",
+                              "type": "string"
+                            },
+                            "terms": {
+                              "properties": {
+                                "precision": {
+                                  "const": "lower-bound",
+                                  "type": "string"
+                                },
+                                "values": {
+                                  "items": {
+                                    "properties": {
+                                      "count": {
+                                        "minimum": 0,
+                                        "type": "integer"
+                                      },
+                                      "value": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "value",
+                                      "count"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  "type": "array"
+                                }
+                              },
+                              "required": [
+                                "precision",
+                                "values"
+                              ],
+                              "type": "object"
+                            },
+                            "types": {
+                              "properties": {
+                                "precision": {
+                                  "const": "exact",
+                                  "type": "string"
+                                },
+                                "values": {
+                                  "items": {
+                                    "properties": {
+                                      "count": {
+                                        "minimum": 0,
+                                        "type": "integer"
+                                      },
+                                      "value": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "value",
+                                      "count"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  "type": "array"
+                                }
+                              },
+                              "required": [
+                                "precision",
+                                "values"
+                              ],
+                              "type": "object"
+                            }
+                          },
+                          "required": [
+                            "populationBasis",
+                            "resultGrain",
+                            "languages",
+                            "terms",
+                            "types"
+                          ],
+                          "type": "object"
                         },
                         "indexGeneration": {
                           "type": "string"
@@ -204055,6 +204764,13 @@
                               "selection": {
                                 "type": "string"
                               },
+                              "types": {
+                                "items": {
+                                  "type": "string"
+                                },
+                                "maxItems": 3,
+                                "type": "array"
+                              },
                               "work": {
                                 "type": "string"
                               }
@@ -204067,7 +204783,8 @@
                               "revision",
                               "selection",
                               "language",
-                              "score"
+                              "score",
+                              "types"
                             ],
                             "type": "object"
                           },
@@ -204106,6 +204823,7 @@
                         "indexGeneration",
                         "total",
                         "sourcePosition",
+                        "facets",
                         "profile",
                         "context",
                         "results"
@@ -204138,6 +204856,122 @@
                         "contractVersion": {
                           "const": "1",
                           "type": "string"
+                        },
+                        "facets": {
+                          "properties": {
+                            "languages": {
+                              "properties": {
+                                "precision": {
+                                  "const": "exact",
+                                  "type": "string"
+                                },
+                                "values": {
+                                  "items": {
+                                    "properties": {
+                                      "count": {
+                                        "minimum": 0,
+                                        "type": "integer"
+                                      },
+                                      "value": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "value",
+                                      "count"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  "type": "array"
+                                }
+                              },
+                              "required": [
+                                "precision",
+                                "values"
+                              ],
+                              "type": "object"
+                            },
+                            "populationBasis": {
+                              "const": "all-filters",
+                              "type": "string"
+                            },
+                            "resultGrain": {
+                              "const": "work",
+                              "type": "string"
+                            },
+                            "terms": {
+                              "properties": {
+                                "precision": {
+                                  "const": "lower-bound",
+                                  "type": "string"
+                                },
+                                "values": {
+                                  "items": {
+                                    "properties": {
+                                      "count": {
+                                        "minimum": 0,
+                                        "type": "integer"
+                                      },
+                                      "value": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "value",
+                                      "count"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  "type": "array"
+                                }
+                              },
+                              "required": [
+                                "precision",
+                                "values"
+                              ],
+                              "type": "object"
+                            },
+                            "types": {
+                              "properties": {
+                                "precision": {
+                                  "const": "exact",
+                                  "type": "string"
+                                },
+                                "values": {
+                                  "items": {
+                                    "properties": {
+                                      "count": {
+                                        "minimum": 0,
+                                        "type": "integer"
+                                      },
+                                      "value": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "value",
+                                      "count"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  "type": "array"
+                                }
+                              },
+                              "required": [
+                                "precision",
+                                "values"
+                              ],
+                              "type": "object"
+                            }
+                          },
+                          "required": [
+                            "populationBasis",
+                            "resultGrain",
+                            "languages",
+                            "terms",
+                            "types"
+                          ],
+                          "type": "object"
                         },
                         "indexGeneration": {
                           "type": "string"
@@ -204176,6 +205010,13 @@
                               "selection": {
                                 "type": "string"
                               },
+                              "types": {
+                                "items": {
+                                  "type": "string"
+                                },
+                                "maxItems": 3,
+                                "type": "array"
+                              },
                               "work": {
                                 "type": "string"
                               }
@@ -204189,6 +205030,7 @@
                               "selection",
                               "language",
                               "score",
+                              "types",
                               "reason"
                             ],
                             "type": "object"
@@ -204228,6 +205070,7 @@
                         "indexGeneration",
                         "total",
                         "sourcePosition",
+                        "facets",
                         "context",
                         "results"
                       ],
@@ -204250,6 +205093,122 @@
                         "contractVersion": {
                           "const": "1",
                           "type": "string"
+                        },
+                        "facets": {
+                          "properties": {
+                            "languages": {
+                              "properties": {
+                                "precision": {
+                                  "const": "exact",
+                                  "type": "string"
+                                },
+                                "values": {
+                                  "items": {
+                                    "properties": {
+                                      "count": {
+                                        "minimum": 0,
+                                        "type": "integer"
+                                      },
+                                      "value": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "value",
+                                      "count"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  "type": "array"
+                                }
+                              },
+                              "required": [
+                                "precision",
+                                "values"
+                              ],
+                              "type": "object"
+                            },
+                            "populationBasis": {
+                              "const": "all-filters",
+                              "type": "string"
+                            },
+                            "resultGrain": {
+                              "const": "work",
+                              "type": "string"
+                            },
+                            "terms": {
+                              "properties": {
+                                "precision": {
+                                  "const": "lower-bound",
+                                  "type": "string"
+                                },
+                                "values": {
+                                  "items": {
+                                    "properties": {
+                                      "count": {
+                                        "minimum": 0,
+                                        "type": "integer"
+                                      },
+                                      "value": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "value",
+                                      "count"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  "type": "array"
+                                }
+                              },
+                              "required": [
+                                "precision",
+                                "values"
+                              ],
+                              "type": "object"
+                            },
+                            "types": {
+                              "properties": {
+                                "precision": {
+                                  "const": "exact",
+                                  "type": "string"
+                                },
+                                "values": {
+                                  "items": {
+                                    "properties": {
+                                      "count": {
+                                        "minimum": 0,
+                                        "type": "integer"
+                                      },
+                                      "value": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "value",
+                                      "count"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  "type": "array"
+                                }
+                              },
+                              "required": [
+                                "precision",
+                                "values"
+                              ],
+                              "type": "object"
+                            }
+                          },
+                          "required": [
+                            "populationBasis",
+                            "resultGrain",
+                            "languages",
+                            "terms",
+                            "types"
+                          ],
+                          "type": "object"
                         },
                         "indexGeneration": {
                           "type": "string"
@@ -204442,6 +205401,13 @@
                               "selection": {
                                 "type": "string"
                               },
+                              "types": {
+                                "items": {
+                                  "type": "string"
+                                },
+                                "maxItems": 3,
+                                "type": "array"
+                              },
                               "work": {
                                 "type": "string"
                               }
@@ -204455,6 +205421,7 @@
                               "selection",
                               "language",
                               "score",
+                              "types",
                               "classification"
                             ],
                             "type": "object"
@@ -204494,6 +205461,7 @@
                         "indexGeneration",
                         "total",
                         "sourcePosition",
+                        "facets",
                         "profile",
                         "context",
                         "classificationSense",
@@ -204530,6 +205498,122 @@
                         "contractVersion": {
                           "const": "1",
                           "type": "string"
+                        },
+                        "facets": {
+                          "properties": {
+                            "languages": {
+                              "properties": {
+                                "precision": {
+                                  "const": "exact",
+                                  "type": "string"
+                                },
+                                "values": {
+                                  "items": {
+                                    "properties": {
+                                      "count": {
+                                        "minimum": 0,
+                                        "type": "integer"
+                                      },
+                                      "value": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "value",
+                                      "count"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  "type": "array"
+                                }
+                              },
+                              "required": [
+                                "precision",
+                                "values"
+                              ],
+                              "type": "object"
+                            },
+                            "populationBasis": {
+                              "const": "all-filters",
+                              "type": "string"
+                            },
+                            "resultGrain": {
+                              "const": "work",
+                              "type": "string"
+                            },
+                            "terms": {
+                              "properties": {
+                                "precision": {
+                                  "const": "lower-bound",
+                                  "type": "string"
+                                },
+                                "values": {
+                                  "items": {
+                                    "properties": {
+                                      "count": {
+                                        "minimum": 0,
+                                        "type": "integer"
+                                      },
+                                      "value": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "value",
+                                      "count"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  "type": "array"
+                                }
+                              },
+                              "required": [
+                                "precision",
+                                "values"
+                              ],
+                              "type": "object"
+                            },
+                            "types": {
+                              "properties": {
+                                "precision": {
+                                  "const": "exact",
+                                  "type": "string"
+                                },
+                                "values": {
+                                  "items": {
+                                    "properties": {
+                                      "count": {
+                                        "minimum": 0,
+                                        "type": "integer"
+                                      },
+                                      "value": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "value",
+                                      "count"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  "type": "array"
+                                }
+                              },
+                              "required": [
+                                "precision",
+                                "values"
+                              ],
+                              "type": "object"
+                            }
+                          },
+                          "required": [
+                            "populationBasis",
+                            "resultGrain",
+                            "languages",
+                            "terms",
+                            "types"
+                          ],
+                          "type": "object"
                         },
                         "indexGeneration": {
                           "type": "string"
@@ -204725,6 +205809,13 @@
                               "selection": {
                                 "type": "string"
                               },
+                              "types": {
+                                "items": {
+                                  "type": "string"
+                                },
+                                "maxItems": 3,
+                                "type": "array"
+                              },
                               "work": {
                                 "type": "string"
                               }
@@ -204738,6 +205829,7 @@
                               "selection",
                               "language",
                               "score",
+                              "types",
                               "reason",
                               "classification"
                             ],
@@ -204778,6 +205870,7 @@
                         "indexGeneration",
                         "total",
                         "sourcePosition",
+                        "facets",
                         "profile",
                         "context",
                         "classificationSense",
@@ -204814,6 +205907,122 @@
                         "contractVersion": {
                           "const": "1",
                           "type": "string"
+                        },
+                        "facets": {
+                          "properties": {
+                            "languages": {
+                              "properties": {
+                                "precision": {
+                                  "const": "exact",
+                                  "type": "string"
+                                },
+                                "values": {
+                                  "items": {
+                                    "properties": {
+                                      "count": {
+                                        "minimum": 0,
+                                        "type": "integer"
+                                      },
+                                      "value": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "value",
+                                      "count"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  "type": "array"
+                                }
+                              },
+                              "required": [
+                                "precision",
+                                "values"
+                              ],
+                              "type": "object"
+                            },
+                            "populationBasis": {
+                              "const": "all-filters",
+                              "type": "string"
+                            },
+                            "resultGrain": {
+                              "const": "work",
+                              "type": "string"
+                            },
+                            "terms": {
+                              "properties": {
+                                "precision": {
+                                  "const": "lower-bound",
+                                  "type": "string"
+                                },
+                                "values": {
+                                  "items": {
+                                    "properties": {
+                                      "count": {
+                                        "minimum": 0,
+                                        "type": "integer"
+                                      },
+                                      "value": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "value",
+                                      "count"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  "type": "array"
+                                }
+                              },
+                              "required": [
+                                "precision",
+                                "values"
+                              ],
+                              "type": "object"
+                            },
+                            "types": {
+                              "properties": {
+                                "precision": {
+                                  "const": "exact",
+                                  "type": "string"
+                                },
+                                "values": {
+                                  "items": {
+                                    "properties": {
+                                      "count": {
+                                        "minimum": 0,
+                                        "type": "integer"
+                                      },
+                                      "value": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "value",
+                                      "count"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  "type": "array"
+                                }
+                              },
+                              "required": [
+                                "precision",
+                                "values"
+                              ],
+                              "type": "object"
+                            }
+                          },
+                          "required": [
+                            "populationBasis",
+                            "resultGrain",
+                            "languages",
+                            "terms",
+                            "types"
+                          ],
+                          "type": "object"
                         },
                         "indexGeneration": {
                           "type": "string"
@@ -205076,6 +206285,13 @@
                               "selection": {
                                 "type": "string"
                               },
+                              "types": {
+                                "items": {
+                                  "type": "string"
+                                },
+                                "maxItems": 3,
+                                "type": "array"
+                              },
                               "work": {
                                 "type": "string"
                               }
@@ -205089,6 +206305,7 @@
                               "selection",
                               "language",
                               "score",
+                              "types",
                               "reason",
                               "classification",
                               "rating"
@@ -205130,6 +206347,7 @@
                         "indexGeneration",
                         "total",
                         "sourcePosition",
+                        "facets",
                         "profile",
                         "context",
                         "classificationSense",
@@ -205546,6 +206764,32 @@
                         ],
                         "type": "object"
                       },
+                      "excludeTypes": {
+                        "items": {
+                          "enum": [
+                            "https://schema.org/Book",
+                            "https://schema.org/DigitalDocument",
+                            "https://schema.org/Recipe"
+                          ],
+                          "type": "string"
+                        },
+                        "maxItems": 3,
+                        "type": "array",
+                        "uniqueItems": true
+                      },
+                      "includeTypes": {
+                        "items": {
+                          "enum": [
+                            "https://schema.org/Book",
+                            "https://schema.org/DigitalDocument",
+                            "https://schema.org/Recipe"
+                          ],
+                          "type": "string"
+                        },
+                        "maxItems": 3,
+                        "type": "array",
+                        "uniqueItems": true
+                      },
                       "language": {
                         "maxLength": 35,
                         "minLength": 2,
@@ -205689,6 +206933,32 @@
                           "expiresAt"
                         ],
                         "type": "object"
+                      },
+                      "excludeTypes": {
+                        "items": {
+                          "enum": [
+                            "https://schema.org/Book",
+                            "https://schema.org/DigitalDocument",
+                            "https://schema.org/Recipe"
+                          ],
+                          "type": "string"
+                        },
+                        "maxItems": 3,
+                        "type": "array",
+                        "uniqueItems": true
+                      },
+                      "includeTypes": {
+                        "items": {
+                          "enum": [
+                            "https://schema.org/Book",
+                            "https://schema.org/DigitalDocument",
+                            "https://schema.org/Recipe"
+                          ],
+                          "type": "string"
+                        },
+                        "maxItems": 3,
+                        "type": "array",
+                        "uniqueItems": true
                       },
                       "language": {
                         "maxLength": 35,
@@ -205846,6 +207116,32 @@
                         ],
                         "type": "object"
                       },
+                      "excludeTypes": {
+                        "items": {
+                          "enum": [
+                            "https://schema.org/Book",
+                            "https://schema.org/DigitalDocument",
+                            "https://schema.org/Recipe"
+                          ],
+                          "type": "string"
+                        },
+                        "maxItems": 3,
+                        "type": "array",
+                        "uniqueItems": true
+                      },
+                      "includeTypes": {
+                        "items": {
+                          "enum": [
+                            "https://schema.org/Book",
+                            "https://schema.org/DigitalDocument",
+                            "https://schema.org/Recipe"
+                          ],
+                          "type": "string"
+                        },
+                        "maxItems": 3,
+                        "type": "array",
+                        "uniqueItems": true
+                      },
                       "language": {
                         "maxLength": 35,
                         "minLength": 2,
@@ -205985,6 +207281,32 @@
                           "expiresAt"
                         ],
                         "type": "object"
+                      },
+                      "excludeTypes": {
+                        "items": {
+                          "enum": [
+                            "https://schema.org/Book",
+                            "https://schema.org/DigitalDocument",
+                            "https://schema.org/Recipe"
+                          ],
+                          "type": "string"
+                        },
+                        "maxItems": 3,
+                        "type": "array",
+                        "uniqueItems": true
+                      },
+                      "includeTypes": {
+                        "items": {
+                          "enum": [
+                            "https://schema.org/Book",
+                            "https://schema.org/DigitalDocument",
+                            "https://schema.org/Recipe"
+                          ],
+                          "type": "string"
+                        },
+                        "maxItems": 3,
+                        "type": "array",
+                        "uniqueItems": true
                       },
                       "language": {
                         "maxLength": 35,
@@ -206146,6 +207468,32 @@
                         ],
                         "type": "object"
                       },
+                      "excludeTypes": {
+                        "items": {
+                          "enum": [
+                            "https://schema.org/Book",
+                            "https://schema.org/DigitalDocument",
+                            "https://schema.org/Recipe"
+                          ],
+                          "type": "string"
+                        },
+                        "maxItems": 3,
+                        "type": "array",
+                        "uniqueItems": true
+                      },
+                      "includeTypes": {
+                        "items": {
+                          "enum": [
+                            "https://schema.org/Book",
+                            "https://schema.org/DigitalDocument",
+                            "https://schema.org/Recipe"
+                          ],
+                          "type": "string"
+                        },
+                        "maxItems": 3,
+                        "type": "array",
+                        "uniqueItems": true
+                      },
                       "language": {
                         "maxLength": 35,
                         "minLength": 2,
@@ -206306,6 +207654,32 @@
                           "expiresAt"
                         ],
                         "type": "object"
+                      },
+                      "excludeTypes": {
+                        "items": {
+                          "enum": [
+                            "https://schema.org/Book",
+                            "https://schema.org/DigitalDocument",
+                            "https://schema.org/Recipe"
+                          ],
+                          "type": "string"
+                        },
+                        "maxItems": 3,
+                        "type": "array",
+                        "uniqueItems": true
+                      },
+                      "includeTypes": {
+                        "items": {
+                          "enum": [
+                            "https://schema.org/Book",
+                            "https://schema.org/DigitalDocument",
+                            "https://schema.org/Recipe"
+                          ],
+                          "type": "string"
+                        },
+                        "maxItems": 3,
+                        "type": "array",
+                        "uniqueItems": true
                       },
                       "language": {
                         "maxLength": 35,
@@ -206621,6 +207995,32 @@
                         ],
                         "type": "object"
                       },
+                      "excludeTypes": {
+                        "items": {
+                          "enum": [
+                            "https://schema.org/Book",
+                            "https://schema.org/DigitalDocument",
+                            "https://schema.org/Recipe"
+                          ],
+                          "type": "string"
+                        },
+                        "maxItems": 3,
+                        "type": "array",
+                        "uniqueItems": true
+                      },
+                      "includeTypes": {
+                        "items": {
+                          "enum": [
+                            "https://schema.org/Book",
+                            "https://schema.org/DigitalDocument",
+                            "https://schema.org/Recipe"
+                          ],
+                          "type": "string"
+                        },
+                        "maxItems": 3,
+                        "type": "array",
+                        "uniqueItems": true
+                      },
                       "language": {
                         "maxLength": 35,
                         "minLength": 2,
@@ -206764,6 +208164,32 @@
                           "expiresAt"
                         ],
                         "type": "object"
+                      },
+                      "excludeTypes": {
+                        "items": {
+                          "enum": [
+                            "https://schema.org/Book",
+                            "https://schema.org/DigitalDocument",
+                            "https://schema.org/Recipe"
+                          ],
+                          "type": "string"
+                        },
+                        "maxItems": 3,
+                        "type": "array",
+                        "uniqueItems": true
+                      },
+                      "includeTypes": {
+                        "items": {
+                          "enum": [
+                            "https://schema.org/Book",
+                            "https://schema.org/DigitalDocument",
+                            "https://schema.org/Recipe"
+                          ],
+                          "type": "string"
+                        },
+                        "maxItems": 3,
+                        "type": "array",
+                        "uniqueItems": true
                       },
                       "language": {
                         "maxLength": 35,
@@ -206921,6 +208347,32 @@
                         ],
                         "type": "object"
                       },
+                      "excludeTypes": {
+                        "items": {
+                          "enum": [
+                            "https://schema.org/Book",
+                            "https://schema.org/DigitalDocument",
+                            "https://schema.org/Recipe"
+                          ],
+                          "type": "string"
+                        },
+                        "maxItems": 3,
+                        "type": "array",
+                        "uniqueItems": true
+                      },
+                      "includeTypes": {
+                        "items": {
+                          "enum": [
+                            "https://schema.org/Book",
+                            "https://schema.org/DigitalDocument",
+                            "https://schema.org/Recipe"
+                          ],
+                          "type": "string"
+                        },
+                        "maxItems": 3,
+                        "type": "array",
+                        "uniqueItems": true
+                      },
                       "language": {
                         "maxLength": 35,
                         "minLength": 2,
@@ -207060,6 +208512,32 @@
                           "expiresAt"
                         ],
                         "type": "object"
+                      },
+                      "excludeTypes": {
+                        "items": {
+                          "enum": [
+                            "https://schema.org/Book",
+                            "https://schema.org/DigitalDocument",
+                            "https://schema.org/Recipe"
+                          ],
+                          "type": "string"
+                        },
+                        "maxItems": 3,
+                        "type": "array",
+                        "uniqueItems": true
+                      },
+                      "includeTypes": {
+                        "items": {
+                          "enum": [
+                            "https://schema.org/Book",
+                            "https://schema.org/DigitalDocument",
+                            "https://schema.org/Recipe"
+                          ],
+                          "type": "string"
+                        },
+                        "maxItems": 3,
+                        "type": "array",
+                        "uniqueItems": true
                       },
                       "language": {
                         "maxLength": 35,
@@ -207221,6 +208699,32 @@
                         ],
                         "type": "object"
                       },
+                      "excludeTypes": {
+                        "items": {
+                          "enum": [
+                            "https://schema.org/Book",
+                            "https://schema.org/DigitalDocument",
+                            "https://schema.org/Recipe"
+                          ],
+                          "type": "string"
+                        },
+                        "maxItems": 3,
+                        "type": "array",
+                        "uniqueItems": true
+                      },
+                      "includeTypes": {
+                        "items": {
+                          "enum": [
+                            "https://schema.org/Book",
+                            "https://schema.org/DigitalDocument",
+                            "https://schema.org/Recipe"
+                          ],
+                          "type": "string"
+                        },
+                        "maxItems": 3,
+                        "type": "array",
+                        "uniqueItems": true
+                      },
                       "language": {
                         "maxLength": 35,
                         "minLength": 2,
@@ -207381,6 +208885,32 @@
                           "expiresAt"
                         ],
                         "type": "object"
+                      },
+                      "excludeTypes": {
+                        "items": {
+                          "enum": [
+                            "https://schema.org/Book",
+                            "https://schema.org/DigitalDocument",
+                            "https://schema.org/Recipe"
+                          ],
+                          "type": "string"
+                        },
+                        "maxItems": 3,
+                        "type": "array",
+                        "uniqueItems": true
+                      },
+                      "includeTypes": {
+                        "items": {
+                          "enum": [
+                            "https://schema.org/Book",
+                            "https://schema.org/DigitalDocument",
+                            "https://schema.org/Recipe"
+                          ],
+                          "type": "string"
+                        },
+                        "maxItems": 3,
+                        "type": "array",
+                        "uniqueItems": true
                       },
                       "language": {
                         "maxLength": 35,
@@ -207696,6 +209226,32 @@
                         ],
                         "type": "object"
                       },
+                      "excludeTypes": {
+                        "items": {
+                          "enum": [
+                            "https://schema.org/Book",
+                            "https://schema.org/DigitalDocument",
+                            "https://schema.org/Recipe"
+                          ],
+                          "type": "string"
+                        },
+                        "maxItems": 3,
+                        "type": "array",
+                        "uniqueItems": true
+                      },
+                      "includeTypes": {
+                        "items": {
+                          "enum": [
+                            "https://schema.org/Book",
+                            "https://schema.org/DigitalDocument",
+                            "https://schema.org/Recipe"
+                          ],
+                          "type": "string"
+                        },
+                        "maxItems": 3,
+                        "type": "array",
+                        "uniqueItems": true
+                      },
                       "language": {
                         "maxLength": 35,
                         "minLength": 2,
@@ -207839,6 +209395,32 @@
                           "expiresAt"
                         ],
                         "type": "object"
+                      },
+                      "excludeTypes": {
+                        "items": {
+                          "enum": [
+                            "https://schema.org/Book",
+                            "https://schema.org/DigitalDocument",
+                            "https://schema.org/Recipe"
+                          ],
+                          "type": "string"
+                        },
+                        "maxItems": 3,
+                        "type": "array",
+                        "uniqueItems": true
+                      },
+                      "includeTypes": {
+                        "items": {
+                          "enum": [
+                            "https://schema.org/Book",
+                            "https://schema.org/DigitalDocument",
+                            "https://schema.org/Recipe"
+                          ],
+                          "type": "string"
+                        },
+                        "maxItems": 3,
+                        "type": "array",
+                        "uniqueItems": true
                       },
                       "language": {
                         "maxLength": 35,
@@ -207996,6 +209578,32 @@
                         ],
                         "type": "object"
                       },
+                      "excludeTypes": {
+                        "items": {
+                          "enum": [
+                            "https://schema.org/Book",
+                            "https://schema.org/DigitalDocument",
+                            "https://schema.org/Recipe"
+                          ],
+                          "type": "string"
+                        },
+                        "maxItems": 3,
+                        "type": "array",
+                        "uniqueItems": true
+                      },
+                      "includeTypes": {
+                        "items": {
+                          "enum": [
+                            "https://schema.org/Book",
+                            "https://schema.org/DigitalDocument",
+                            "https://schema.org/Recipe"
+                          ],
+                          "type": "string"
+                        },
+                        "maxItems": 3,
+                        "type": "array",
+                        "uniqueItems": true
+                      },
                       "language": {
                         "maxLength": 35,
                         "minLength": 2,
@@ -208135,6 +209743,32 @@
                           "expiresAt"
                         ],
                         "type": "object"
+                      },
+                      "excludeTypes": {
+                        "items": {
+                          "enum": [
+                            "https://schema.org/Book",
+                            "https://schema.org/DigitalDocument",
+                            "https://schema.org/Recipe"
+                          ],
+                          "type": "string"
+                        },
+                        "maxItems": 3,
+                        "type": "array",
+                        "uniqueItems": true
+                      },
+                      "includeTypes": {
+                        "items": {
+                          "enum": [
+                            "https://schema.org/Book",
+                            "https://schema.org/DigitalDocument",
+                            "https://schema.org/Recipe"
+                          ],
+                          "type": "string"
+                        },
+                        "maxItems": 3,
+                        "type": "array",
+                        "uniqueItems": true
                       },
                       "language": {
                         "maxLength": 35,
@@ -208296,6 +209930,32 @@
                         ],
                         "type": "object"
                       },
+                      "excludeTypes": {
+                        "items": {
+                          "enum": [
+                            "https://schema.org/Book",
+                            "https://schema.org/DigitalDocument",
+                            "https://schema.org/Recipe"
+                          ],
+                          "type": "string"
+                        },
+                        "maxItems": 3,
+                        "type": "array",
+                        "uniqueItems": true
+                      },
+                      "includeTypes": {
+                        "items": {
+                          "enum": [
+                            "https://schema.org/Book",
+                            "https://schema.org/DigitalDocument",
+                            "https://schema.org/Recipe"
+                          ],
+                          "type": "string"
+                        },
+                        "maxItems": 3,
+                        "type": "array",
+                        "uniqueItems": true
+                      },
                       "language": {
                         "maxLength": 35,
                         "minLength": 2,
@@ -208456,6 +210116,32 @@
                           "expiresAt"
                         ],
                         "type": "object"
+                      },
+                      "excludeTypes": {
+                        "items": {
+                          "enum": [
+                            "https://schema.org/Book",
+                            "https://schema.org/DigitalDocument",
+                            "https://schema.org/Recipe"
+                          ],
+                          "type": "string"
+                        },
+                        "maxItems": 3,
+                        "type": "array",
+                        "uniqueItems": true
+                      },
+                      "includeTypes": {
+                        "items": {
+                          "enum": [
+                            "https://schema.org/Book",
+                            "https://schema.org/DigitalDocument",
+                            "https://schema.org/Recipe"
+                          ],
+                          "type": "string"
+                        },
+                        "maxItems": 3,
+                        "type": "array",
+                        "uniqueItems": true
                       },
                       "language": {
                         "maxLength": 35,
@@ -208740,6 +210426,122 @@
                           "const": "main-version-default",
                           "type": "string"
                         },
+                        "facets": {
+                          "properties": {
+                            "languages": {
+                              "properties": {
+                                "precision": {
+                                  "const": "exact",
+                                  "type": "string"
+                                },
+                                "values": {
+                                  "items": {
+                                    "properties": {
+                                      "count": {
+                                        "minimum": 0,
+                                        "type": "integer"
+                                      },
+                                      "value": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "value",
+                                      "count"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  "type": "array"
+                                }
+                              },
+                              "required": [
+                                "precision",
+                                "values"
+                              ],
+                              "type": "object"
+                            },
+                            "populationBasis": {
+                              "const": "all-filters",
+                              "type": "string"
+                            },
+                            "resultGrain": {
+                              "const": "work",
+                              "type": "string"
+                            },
+                            "terms": {
+                              "properties": {
+                                "precision": {
+                                  "const": "lower-bound",
+                                  "type": "string"
+                                },
+                                "values": {
+                                  "items": {
+                                    "properties": {
+                                      "count": {
+                                        "minimum": 0,
+                                        "type": "integer"
+                                      },
+                                      "value": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "value",
+                                      "count"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  "type": "array"
+                                }
+                              },
+                              "required": [
+                                "precision",
+                                "values"
+                              ],
+                              "type": "object"
+                            },
+                            "types": {
+                              "properties": {
+                                "precision": {
+                                  "const": "exact",
+                                  "type": "string"
+                                },
+                                "values": {
+                                  "items": {
+                                    "properties": {
+                                      "count": {
+                                        "minimum": 0,
+                                        "type": "integer"
+                                      },
+                                      "value": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "value",
+                                      "count"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  "type": "array"
+                                }
+                              },
+                              "required": [
+                                "precision",
+                                "values"
+                              ],
+                              "type": "object"
+                            }
+                          },
+                          "required": [
+                            "populationBasis",
+                            "resultGrain",
+                            "languages",
+                            "terms",
+                            "types"
+                          ],
+                          "type": "object"
+                        },
                         "indexGeneration": {
                           "type": "string"
                         },
@@ -208842,6 +210644,13 @@
                               "selection": {
                                 "type": "string"
                               },
+                              "types": {
+                                "items": {
+                                  "type": "string"
+                                },
+                                "maxItems": 3,
+                                "type": "array"
+                              },
                               "work": {
                                 "type": "string"
                               }
@@ -208854,7 +210663,8 @@
                               "revision",
                               "selection",
                               "language",
-                              "score"
+                              "score",
+                              "types"
                             ],
                             "type": "object"
                           },
@@ -208888,6 +210698,7 @@
                       "required": [
                         "profile",
                         "resultGrain",
+                        "facets",
                         "relationComplete",
                         "population",
                         "total",
@@ -208905,6 +210716,122 @@
                         "context": {
                           "const": "main-version-default",
                           "type": "string"
+                        },
+                        "facets": {
+                          "properties": {
+                            "languages": {
+                              "properties": {
+                                "precision": {
+                                  "const": "exact",
+                                  "type": "string"
+                                },
+                                "values": {
+                                  "items": {
+                                    "properties": {
+                                      "count": {
+                                        "minimum": 0,
+                                        "type": "integer"
+                                      },
+                                      "value": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "value",
+                                      "count"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  "type": "array"
+                                }
+                              },
+                              "required": [
+                                "precision",
+                                "values"
+                              ],
+                              "type": "object"
+                            },
+                            "populationBasis": {
+                              "const": "all-filters",
+                              "type": "string"
+                            },
+                            "resultGrain": {
+                              "const": "work",
+                              "type": "string"
+                            },
+                            "terms": {
+                              "properties": {
+                                "precision": {
+                                  "const": "lower-bound",
+                                  "type": "string"
+                                },
+                                "values": {
+                                  "items": {
+                                    "properties": {
+                                      "count": {
+                                        "minimum": 0,
+                                        "type": "integer"
+                                      },
+                                      "value": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "value",
+                                      "count"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  "type": "array"
+                                }
+                              },
+                              "required": [
+                                "precision",
+                                "values"
+                              ],
+                              "type": "object"
+                            },
+                            "types": {
+                              "properties": {
+                                "precision": {
+                                  "const": "exact",
+                                  "type": "string"
+                                },
+                                "values": {
+                                  "items": {
+                                    "properties": {
+                                      "count": {
+                                        "minimum": 0,
+                                        "type": "integer"
+                                      },
+                                      "value": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "value",
+                                      "count"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  "type": "array"
+                                }
+                              },
+                              "required": [
+                                "precision",
+                                "values"
+                              ],
+                              "type": "object"
+                            }
+                          },
+                          "required": [
+                            "populationBasis",
+                            "resultGrain",
+                            "languages",
+                            "terms",
+                            "types"
+                          ],
+                          "type": "object"
                         },
                         "indexGeneration": {
                           "type": "string"
@@ -209008,6 +210935,13 @@
                               "selection": {
                                 "type": "string"
                               },
+                              "types": {
+                                "items": {
+                                  "type": "string"
+                                },
+                                "maxItems": 3,
+                                "type": "array"
+                              },
                               "work": {
                                 "type": "string"
                               }
@@ -209020,7 +210954,8 @@
                               "revision",
                               "selection",
                               "language",
-                              "score"
+                              "score",
+                              "types"
                             ],
                             "type": "object"
                           },
@@ -209054,6 +210989,7 @@
                       "required": [
                         "profile",
                         "resultGrain",
+                        "facets",
                         "relationComplete",
                         "population",
                         "total",
@@ -209081,6 +211017,122 @@
                           "required": [
                             "kind",
                             "id"
+                          ],
+                          "type": "object"
+                        },
+                        "facets": {
+                          "properties": {
+                            "languages": {
+                              "properties": {
+                                "precision": {
+                                  "const": "exact",
+                                  "type": "string"
+                                },
+                                "values": {
+                                  "items": {
+                                    "properties": {
+                                      "count": {
+                                        "minimum": 0,
+                                        "type": "integer"
+                                      },
+                                      "value": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "value",
+                                      "count"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  "type": "array"
+                                }
+                              },
+                              "required": [
+                                "precision",
+                                "values"
+                              ],
+                              "type": "object"
+                            },
+                            "populationBasis": {
+                              "const": "all-filters",
+                              "type": "string"
+                            },
+                            "resultGrain": {
+                              "const": "work",
+                              "type": "string"
+                            },
+                            "terms": {
+                              "properties": {
+                                "precision": {
+                                  "const": "lower-bound",
+                                  "type": "string"
+                                },
+                                "values": {
+                                  "items": {
+                                    "properties": {
+                                      "count": {
+                                        "minimum": 0,
+                                        "type": "integer"
+                                      },
+                                      "value": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "value",
+                                      "count"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  "type": "array"
+                                }
+                              },
+                              "required": [
+                                "precision",
+                                "values"
+                              ],
+                              "type": "object"
+                            },
+                            "types": {
+                              "properties": {
+                                "precision": {
+                                  "const": "exact",
+                                  "type": "string"
+                                },
+                                "values": {
+                                  "items": {
+                                    "properties": {
+                                      "count": {
+                                        "minimum": 0,
+                                        "type": "integer"
+                                      },
+                                      "value": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "value",
+                                      "count"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  "type": "array"
+                                }
+                              },
+                              "required": [
+                                "precision",
+                                "values"
+                              ],
+                              "type": "object"
+                            }
+                          },
+                          "required": [
+                            "populationBasis",
+                            "resultGrain",
+                            "languages",
+                            "terms",
+                            "types"
                           ],
                           "type": "object"
                         },
@@ -209189,6 +211241,13 @@
                               "selection": {
                                 "type": "string"
                               },
+                              "types": {
+                                "items": {
+                                  "type": "string"
+                                },
+                                "maxItems": 3,
+                                "type": "array"
+                              },
                               "work": {
                                 "type": "string"
                               }
@@ -209202,6 +211261,7 @@
                               "selection",
                               "language",
                               "score",
+                              "types",
                               "reason"
                             ],
                             "type": "object"
@@ -209236,6 +211296,7 @@
                       "required": [
                         "profile",
                         "resultGrain",
+                        "facets",
                         "relationComplete",
                         "population",
                         "total",
@@ -209256,6 +211317,122 @@
                         "context": {
                           "const": "main-version-default",
                           "type": "string"
+                        },
+                        "facets": {
+                          "properties": {
+                            "languages": {
+                              "properties": {
+                                "precision": {
+                                  "const": "exact",
+                                  "type": "string"
+                                },
+                                "values": {
+                                  "items": {
+                                    "properties": {
+                                      "count": {
+                                        "minimum": 0,
+                                        "type": "integer"
+                                      },
+                                      "value": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "value",
+                                      "count"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  "type": "array"
+                                }
+                              },
+                              "required": [
+                                "precision",
+                                "values"
+                              ],
+                              "type": "object"
+                            },
+                            "populationBasis": {
+                              "const": "all-filters",
+                              "type": "string"
+                            },
+                            "resultGrain": {
+                              "const": "work",
+                              "type": "string"
+                            },
+                            "terms": {
+                              "properties": {
+                                "precision": {
+                                  "const": "lower-bound",
+                                  "type": "string"
+                                },
+                                "values": {
+                                  "items": {
+                                    "properties": {
+                                      "count": {
+                                        "minimum": 0,
+                                        "type": "integer"
+                                      },
+                                      "value": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "value",
+                                      "count"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  "type": "array"
+                                }
+                              },
+                              "required": [
+                                "precision",
+                                "values"
+                              ],
+                              "type": "object"
+                            },
+                            "types": {
+                              "properties": {
+                                "precision": {
+                                  "const": "exact",
+                                  "type": "string"
+                                },
+                                "values": {
+                                  "items": {
+                                    "properties": {
+                                      "count": {
+                                        "minimum": 0,
+                                        "type": "integer"
+                                      },
+                                      "value": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "value",
+                                      "count"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  "type": "array"
+                                }
+                              },
+                              "required": [
+                                "precision",
+                                "values"
+                              ],
+                              "type": "object"
+                            }
+                          },
+                          "required": [
+                            "populationBasis",
+                            "resultGrain",
+                            "languages",
+                            "terms",
+                            "types"
+                          ],
+                          "type": "object"
                         },
                         "indexGeneration": {
                           "type": "string"
@@ -209512,6 +211689,13 @@
                               "selection": {
                                 "type": "string"
                               },
+                              "types": {
+                                "items": {
+                                  "type": "string"
+                                },
+                                "maxItems": 3,
+                                "type": "array"
+                              },
                               "work": {
                                 "type": "string"
                               }
@@ -209525,6 +211709,7 @@
                               "selection",
                               "language",
                               "score",
+                              "types",
                               "classification"
                             ],
                             "type": "object"
@@ -209559,6 +211744,7 @@
                       "required": [
                         "profile",
                         "resultGrain",
+                        "facets",
                         "relationComplete",
                         "population",
                         "total",
@@ -209590,6 +211776,122 @@
                           "required": [
                             "kind",
                             "id"
+                          ],
+                          "type": "object"
+                        },
+                        "facets": {
+                          "properties": {
+                            "languages": {
+                              "properties": {
+                                "precision": {
+                                  "const": "exact",
+                                  "type": "string"
+                                },
+                                "values": {
+                                  "items": {
+                                    "properties": {
+                                      "count": {
+                                        "minimum": 0,
+                                        "type": "integer"
+                                      },
+                                      "value": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "value",
+                                      "count"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  "type": "array"
+                                }
+                              },
+                              "required": [
+                                "precision",
+                                "values"
+                              ],
+                              "type": "object"
+                            },
+                            "populationBasis": {
+                              "const": "all-filters",
+                              "type": "string"
+                            },
+                            "resultGrain": {
+                              "const": "work",
+                              "type": "string"
+                            },
+                            "terms": {
+                              "properties": {
+                                "precision": {
+                                  "const": "lower-bound",
+                                  "type": "string"
+                                },
+                                "values": {
+                                  "items": {
+                                    "properties": {
+                                      "count": {
+                                        "minimum": 0,
+                                        "type": "integer"
+                                      },
+                                      "value": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "value",
+                                      "count"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  "type": "array"
+                                }
+                              },
+                              "required": [
+                                "precision",
+                                "values"
+                              ],
+                              "type": "object"
+                            },
+                            "types": {
+                              "properties": {
+                                "precision": {
+                                  "const": "exact",
+                                  "type": "string"
+                                },
+                                "values": {
+                                  "items": {
+                                    "properties": {
+                                      "count": {
+                                        "minimum": 0,
+                                        "type": "integer"
+                                      },
+                                      "value": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "value",
+                                      "count"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  "type": "array"
+                                }
+                              },
+                              "required": [
+                                "precision",
+                                "values"
+                              ],
+                              "type": "object"
+                            }
+                          },
+                          "required": [
+                            "populationBasis",
+                            "resultGrain",
+                            "languages",
+                            "terms",
+                            "types"
                           ],
                           "type": "object"
                         },
@@ -209851,6 +212153,13 @@
                               "selection": {
                                 "type": "string"
                               },
+                              "types": {
+                                "items": {
+                                  "type": "string"
+                                },
+                                "maxItems": 3,
+                                "type": "array"
+                              },
                               "work": {
                                 "type": "string"
                               }
@@ -209864,6 +212173,7 @@
                               "selection",
                               "language",
                               "score",
+                              "types",
                               "reason",
                               "classification"
                             ],
@@ -209899,6 +212209,7 @@
                       "required": [
                         "profile",
                         "resultGrain",
+                        "facets",
                         "relationComplete",
                         "population",
                         "total",
@@ -209930,6 +212241,122 @@
                           "required": [
                             "kind",
                             "id"
+                          ],
+                          "type": "object"
+                        },
+                        "facets": {
+                          "properties": {
+                            "languages": {
+                              "properties": {
+                                "precision": {
+                                  "const": "exact",
+                                  "type": "string"
+                                },
+                                "values": {
+                                  "items": {
+                                    "properties": {
+                                      "count": {
+                                        "minimum": 0,
+                                        "type": "integer"
+                                      },
+                                      "value": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "value",
+                                      "count"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  "type": "array"
+                                }
+                              },
+                              "required": [
+                                "precision",
+                                "values"
+                              ],
+                              "type": "object"
+                            },
+                            "populationBasis": {
+                              "const": "all-filters",
+                              "type": "string"
+                            },
+                            "resultGrain": {
+                              "const": "work",
+                              "type": "string"
+                            },
+                            "terms": {
+                              "properties": {
+                                "precision": {
+                                  "const": "lower-bound",
+                                  "type": "string"
+                                },
+                                "values": {
+                                  "items": {
+                                    "properties": {
+                                      "count": {
+                                        "minimum": 0,
+                                        "type": "integer"
+                                      },
+                                      "value": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "value",
+                                      "count"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  "type": "array"
+                                }
+                              },
+                              "required": [
+                                "precision",
+                                "values"
+                              ],
+                              "type": "object"
+                            },
+                            "types": {
+                              "properties": {
+                                "precision": {
+                                  "const": "exact",
+                                  "type": "string"
+                                },
+                                "values": {
+                                  "items": {
+                                    "properties": {
+                                      "count": {
+                                        "minimum": 0,
+                                        "type": "integer"
+                                      },
+                                      "value": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "value",
+                                      "count"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  "type": "array"
+                                }
+                              },
+                              "required": [
+                                "precision",
+                                "values"
+                              ],
+                              "type": "object"
+                            }
+                          },
+                          "required": [
+                            "populationBasis",
+                            "resultGrain",
+                            "languages",
+                            "terms",
+                            "types"
                           ],
                           "type": "object"
                         },
@@ -210258,6 +212685,13 @@
                               "selection": {
                                 "type": "string"
                               },
+                              "types": {
+                                "items": {
+                                  "type": "string"
+                                },
+                                "maxItems": 3,
+                                "type": "array"
+                              },
                               "work": {
                                 "type": "string"
                               }
@@ -210271,6 +212705,7 @@
                               "selection",
                               "language",
                               "score",
+                              "types",
                               "reason",
                               "classification",
                               "rating"
@@ -210307,6 +212742,7 @@
                       "required": [
                         "profile",
                         "resultGrain",
+                        "facets",
                         "relationComplete",
                         "population",
                         "total",
@@ -212995,6 +215431,463 @@
       }
     },
     "/v1/rating-contexts": {
+      "get": {
+        "operationId": "getV1Rating-contexts",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "maximum": 20,
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "maxLength": 2048,
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "scope",
+            "required": false,
+            "schema": {
+              "enum": [
+                "global",
+                "realm"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "realm",
+            "required": false,
+            "schema": {
+              "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "count": {
+                      "properties": {
+                        "kind": {
+                          "const": "exact-page",
+                          "type": "string"
+                        },
+                        "total": {
+                          "type": "null"
+                        },
+                        "value": {
+                          "minimum": 0,
+                          "type": "integer"
+                        }
+                      },
+                      "required": [
+                        "value",
+                        "kind",
+                        "total"
+                      ],
+                      "type": "object"
+                    },
+                    "items": {
+                      "items": {
+                        "properties": {
+                          "cadence": {
+                            "const": "standing",
+                            "type": "string"
+                          },
+                          "context": {
+                            "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                            "type": "string"
+                          },
+                          "language": {
+                            "const": "en",
+                            "type": "string"
+                          },
+                          "question": {
+                            "maxLength": 120,
+                            "minLength": 3,
+                            "type": "string"
+                          },
+                          "revision": {
+                            "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                            "type": "string"
+                          },
+                          "scale": {
+                            "properties": {
+                              "max": {
+                                "enum": [
+                                  5,
+                                  10
+                                ],
+                                "type": "string"
+                              },
+                              "min": {
+                                "const": 1,
+                                "type": "number"
+                              },
+                              "step": {
+                                "const": 1,
+                                "type": "number"
+                              }
+                            },
+                            "required": [
+                              "min",
+                              "max",
+                              "step"
+                            ],
+                            "type": "object"
+                          },
+                          "targetGrain": {
+                            "const": "main-version",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "context",
+                          "revision",
+                          "question",
+                          "language",
+                          "targetGrain",
+                          "cadence",
+                          "scale"
+                        ],
+                        "type": "object"
+                      },
+                      "maxItems": 20,
+                      "type": "array"
+                    },
+                    "nextCursor": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "profile": {
+                      "const": "standing-rating-contexts-v1",
+                      "type": "string"
+                    },
+                    "scope": {
+                      "properties": {
+                        "kind": {
+                          "enum": [
+                            "global",
+                            "realm"
+                          ],
+                          "type": "string"
+                        },
+                        "realm": {
+                          "~elyTyp": 7,
+                          "nullable": true,
+                          "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "kind",
+                        "realm"
+                      ],
+                      "type": "object"
+                    },
+                    "sourcePosition": {
+                      "properties": {
+                        "dataEpoch": {
+                          "type": "string"
+                        },
+                        "sequence": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "dataEpoch",
+                        "sequence"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "profile",
+                    "scope",
+                    "items",
+                    "nextCursor",
+                    "sourcePosition",
+                    "count"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 200"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 400,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 400"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 401,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 401"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 403,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 403"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 404,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 404"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 409,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 409"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 422,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 422"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 500,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 500"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 503,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 503"
+          }
+        }
+      },
       "post": {
         "operationId": "postV1Rating-contexts",
         "parameters": [
@@ -242744,9 +245637,264 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "properties": {},
-                  "required": [],
+                  "properties": {
+                    "complete": {
+                      "const": true,
+                      "type": "boolean"
+                    },
+                    "cost": {
+                      "properties": {
+                        "accessChecks": {
+                          "type": "integer"
+                        },
+                        "accessQueries": {
+                          "type": "integer"
+                        },
+                        "graphQueries": {
+                          "type": "integer"
+                        },
+                        "mediaQueries": {
+                          "type": "integer"
+                        }
+                      },
+                      "required": [
+                        "graphQueries",
+                        "mediaQueries",
+                        "accessChecks",
+                        "accessQueries"
+                      ],
+                      "type": "object"
+                    },
+                    "generation": {
+                      "properties": {
+                        "graph": {
+                          "type": "string"
+                        },
+                        "media": {
+                          "~elyTyp": 7,
+                          "nullable": true,
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "graph",
+                        "media"
+                      ],
+                      "type": "object"
+                    },
+                    "profile": {
+                      "const": "resource-summary-batch-v1",
+                      "type": "string"
+                    },
+                    "summaries": {
+                      "items": {
+                        "anyOf": [
+                          {
+                            "properties": {
+                              "reference": {
+                                "type": "string"
+                              },
+                              "status": {
+                                "const": "unavailable",
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "reference",
+                              "status"
+                            ],
+                            "type": "object"
+                          },
+                          {
+                            "properties": {
+                              "avatar": {
+                                "anyOf": [
+                                  {
+                                    "properties": {
+                                      "key": {
+                                        "type": "string"
+                                      },
+                                      "kind": {
+                                        "const": "fallback",
+                                        "type": "string"
+                                      },
+                                      "policy": {
+                                        "type": "string"
+                                      },
+                                      "resourceType": {
+                                        "enum": [
+                                          "work",
+                                          "main-version",
+                                          "space",
+                                          "realm",
+                                          "concept",
+                                          "character",
+                                          "context",
+                                          "role",
+                                          "relation-definition"
+                                        ],
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "kind",
+                                      "policy",
+                                      "key",
+                                      "resourceType"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  {
+                                    "properties": {
+                                      "basis": {
+                                        "properties": {
+                                          "context": {
+                                            "type": "string"
+                                          },
+                                          "policy": {
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "policy",
+                                          "context"
+                                        ],
+                                        "type": "object"
+                                      },
+                                      "crop": {
+                                        "~elyTyp": 7,
+                                        "nullable": true,
+                                        "type": [
+                                          "string",
+                                          "null"
+                                        ]
+                                      },
+                                      "height": {
+                                        "type": "integer"
+                                      },
+                                      "kind": {
+                                        "const": "image",
+                                        "type": "string"
+                                      },
+                                      "mediaType": {
+                                        "type": "string"
+                                      },
+                                      "selection": {
+                                        "type": "string"
+                                      },
+                                      "url": {
+                                        "type": "string"
+                                      },
+                                      "width": {
+                                        "type": "integer"
+                                      }
+                                    },
+                                    "required": [
+                                      "kind",
+                                      "selection",
+                                      "url",
+                                      "mediaType",
+                                      "width",
+                                      "height",
+                                      "crop",
+                                      "basis"
+                                    ],
+                                    "type": "object"
+                                  }
+                                ]
+                              },
+                              "disclosure": {
+                                "enum": [
+                                  "public",
+                                  "restricted"
+                                ],
+                                "type": "string"
+                              },
+                              "name": {
+                                "properties": {
+                                  "basis": {
+                                    "enum": [
+                                      "requested",
+                                      "fallback"
+                                    ],
+                                    "type": "string"
+                                  },
+                                  "context": {
+                                    "type": "string"
+                                  },
+                                  "direction": {
+                                    "enum": [
+                                      "ltr",
+                                      "rtl"
+                                    ],
+                                    "type": "string"
+                                  },
+                                  "language": {
+                                    "type": "string"
+                                  },
+                                  "preferenceRevision": {
+                                    "type": "string"
+                                  },
+                                  "value": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "value",
+                                  "language",
+                                  "direction",
+                                  "basis"
+                                ],
+                                "type": "object"
+                              },
+                              "reference": {
+                                "type": "string"
+                              },
+                              "status": {
+                                "const": "available",
+                                "type": "string"
+                              },
+                              "type": {
+                                "enum": [
+                                  "work",
+                                  "main-version",
+                                  "space",
+                                  "realm",
+                                  "concept",
+                                  "character",
+                                  "context",
+                                  "role",
+                                  "relation-definition"
+                                ],
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "reference",
+                              "status",
+                              "type",
+                              "disclosure",
+                              "name",
+                              "avatar"
+                            ],
+                            "type": "object"
+                          }
+                        ]
+                      },
+                      "maxItems": 64,
+                      "type": "array"
+                    }
+                  },
+                  "required": [
+                    "profile",
+                    "complete",
+                    "summaries",
+                    "generation",
+                    "cost"
+                  ],
                   "type": "object"
                 }
               }
@@ -293398,6 +296546,71 @@
                     "items": {
                       "items": {
                         "properties": {
+                          "classifications": {
+                            "items": {
+                              "properties": {
+                                "concept": {
+                                  "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                  "type": "string"
+                                },
+                                "decision": {
+                                  "type": "string"
+                                },
+                                "name": {
+                                  "properties": {
+                                    "basis": {
+                                      "enum": [
+                                        "requested",
+                                        "fallback"
+                                      ],
+                                      "type": "string"
+                                    },
+                                    "direction": {
+                                      "enum": [
+                                        "ltr",
+                                        "rtl"
+                                      ],
+                                      "type": "string"
+                                    },
+                                    "language": {
+                                      "type": "string"
+                                    },
+                                    "value": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "value",
+                                    "language",
+                                    "direction",
+                                    "basis"
+                                  ],
+                                  "type": "object"
+                                },
+                                "sense": {
+                                  "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                  "type": "string"
+                                },
+                                "source": {
+                                  "enum": [
+                                    "local",
+                                    "global"
+                                  ],
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "sense",
+                                "concept",
+                                "decision",
+                                "source",
+                                "name"
+                              ],
+                              "type": "object"
+                            },
+                            "maxItems": 3,
+                            "type": "array"
+                          },
                           "cover": {
                             "anyOf": [
                               {
@@ -293504,6 +296717,37 @@
                                   "decision": {
                                     "type": "string"
                                   },
+                                  "name": {
+                                    "properties": {
+                                      "basis": {
+                                        "enum": [
+                                          "requested",
+                                          "fallback"
+                                        ],
+                                        "type": "string"
+                                      },
+                                      "direction": {
+                                        "enum": [
+                                          "ltr",
+                                          "rtl"
+                                        ],
+                                        "type": "string"
+                                      },
+                                      "language": {
+                                        "type": "string"
+                                      },
+                                      "value": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "value",
+                                      "language",
+                                      "direction",
+                                      "basis"
+                                    ],
+                                    "type": "object"
+                                  },
                                   "sense": {
                                     "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                                     "type": "string"
@@ -293520,7 +296764,8 @@
                                   "sense",
                                   "concept",
                                   "decision",
-                                  "source"
+                                  "source",
+                                  "name"
                                 ],
                                 "type": [
                                   "object",
@@ -293546,6 +296791,57 @@
                               "classification"
                             ],
                             "type": "object"
+                          },
+                          "primaryCredits": {
+                            "items": {
+                              "properties": {
+                                "agent": {
+                                  "type": "null"
+                                },
+                                "displayName": {
+                                  "type": "null"
+                                },
+                                "handle": {
+                                  "type": "null"
+                                },
+                                "id": {
+                                  "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                  "type": "string"
+                                },
+                                "key": {
+                                  "type": "string"
+                                },
+                                "ordinal": {
+                                  "type": "integer"
+                                },
+                                "participantKind": {
+                                  "const": "external-reference",
+                                  "type": "string"
+                                },
+                                "provider": {
+                                  "const": "open-library",
+                                  "type": "string"
+                                },
+                                "role": {
+                                  "const": "author",
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "id",
+                                "role",
+                                "participantKind",
+                                "provider",
+                                "key",
+                                "ordinal",
+                                "agent",
+                                "displayName",
+                                "handle"
+                              ],
+                              "type": "object"
+                            },
+                            "maxItems": 3,
+                            "type": "array"
                           },
                           "rating": {
                             "~elyTyp": 7,
@@ -293649,6 +296945,8 @@
                           "title",
                           "cover",
                           "types",
+                          "primaryCredits",
+                          "classifications",
                           "rating",
                           "match"
                         ],
@@ -293656,6 +296954,72 @@
                       },
                       "maxItems": 20,
                       "type": "array"
+                    },
+                    "matchedTerm": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "properties": {
+                        "concept": {
+                          "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                          "type": "string"
+                        },
+                        "decision": {
+                          "type": "string"
+                        },
+                        "name": {
+                          "properties": {
+                            "basis": {
+                              "enum": [
+                                "requested",
+                                "fallback"
+                              ],
+                              "type": "string"
+                            },
+                            "direction": {
+                              "enum": [
+                                "ltr",
+                                "rtl"
+                              ],
+                              "type": "string"
+                            },
+                            "language": {
+                              "type": "string"
+                            },
+                            "value": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "value",
+                            "language",
+                            "direction",
+                            "basis"
+                          ],
+                          "type": "object"
+                        },
+                        "sense": {
+                          "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                          "type": "string"
+                        },
+                        "source": {
+                          "enum": [
+                            "local",
+                            "global"
+                          ],
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "sense",
+                        "concept",
+                        "decision",
+                        "source",
+                        "name"
+                      ],
+                      "type": [
+                        "object",
+                        "null"
+                      ]
                     },
                     "matches": {
                       "properties": {
@@ -293743,6 +297107,7 @@
                     "order",
                     "scope",
                     "context",
+                    "matchedTerm",
                     "items",
                     "nextCursor",
                     "sourcePosition",
