@@ -55,7 +55,10 @@ authored in the providers' documented response shapes (CurseForge
 required/optional/tool/embedded/include/incompatible file dependencies; Steam
 Workshop required-item children and Collection membership) pass through the real
 Account/Access/Main/Content receipt path with no duplicate download, no lost
-dependency grain and no invented mandatory installation constraint. The keyless
+dependency grain and no invented mandatory installation constraint. The
+API-key capture paths (`REZICS_CURSEFORGE_API_KEY`, `REZICS_NEXUS_API_KEY`,
+`REZICS_STEAM_WEB_API_KEY`) stay available as an optional configuration for
+advanced users; only their live tests are skipped for now. The keyless
 live Modrinth, Nexus and Steam Collection captures above stay as recorded
 evidence. Live acquisition for these providers is an explicit rollout boundary
 until the acquisition design is agreed.
