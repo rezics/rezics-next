@@ -1,0 +1,31 @@
+import { asValue, insert, number, plural } from 'native-i18n';
+import type { ZoneMessages } from '../messages.ts';
+
+export default {
+  more: '更多', shuffle: '换一换',
+  whyHere: insert('《{{title}}》为什么在这里', { title: String }),
+  untitled: '未命名作品',
+  rank: insert('第 {{rank}} 名', { rank: String }),
+  day: '日榜', week: '周榜', month: '月榜', completed: '已完结',
+  newChapter: insert('最新：{{chapter}}', { chapter: String }),
+  heroLabel: '精选', previous: '上一个', next: '下一个',
+  slide: insert('第 {{index}} 个，共 {{count}} 个', { index: String, count: String }),
+  read: '开始阅读', readWork: '看作品',
+  dismiss: '关闭', announcement: '公告',
+  adopted: insert('收录《{{title}}》', { title: String }), adoptedUnknown: '收录了一部作品',
+  classified: insert('为《{{title}}》归类', { title: String }), classifiedUnknown: '为一部作品归类',
+  classificationRejected: insert('驳回《{{title}}》的一项归类', { title: String }),
+  classificationRejectedUnknown: '驳回了一项归类',
+  ruleChanged: '修改了社区规则',
+  quoteBy: insert('{{reader}} 评', { reader: String }),
+  replies: plural({ other: insert('{{count}} 条回复') }, { count: asValue(number()) }),
+  failed: insert('无法加载{{module}}', { module: String }), retry: '重试',
+  lookLabel: '页面风格', lookZone: '社区设计', lookStandard: '标准外观',
+  lookHelp: '标准外观适用于所有社区。',
+  safeModeTitle: '正在显示这个社区的标准版式',
+  safeModeBody: '本页已关闭自定义设计，所有内容都使用平台自己的组件显示。',
+  showDesign: '显示完整设计',
+  picks: '精选', genres: '分类', latest: '最新作品', newChapters: '最新章节',
+  newlyAdded: '新收录', recentlyCompleted: '完结作品', rankings: '热门排行',
+  quotes: '新鲜书评', rising: '潜力新作', decisions: '最近的决定',
+} satisfies Partial<ZoneMessages>;
