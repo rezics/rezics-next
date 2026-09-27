@@ -255,6 +255,9 @@ export async function bootstrapWebAuth(options: WebAuthOptions): Promise<WebAuth
     const webClient = await auth.api.adminCreateOAuthClient({ headers,
       body: webClientRegistration(redirectUris) });
     const member = await signUp(app, apps.ACCOUNT_BASE_URL!, 'member');
+    // The running Account requires a verified email to sign in; the fixture's own people are verified.
+    await accountPool.query('UPDATE "user" SET "emailVerified" = true WHERE id = ANY($1::text[])',
+      [[operator.id, member.id]]);
     const discoveryResponse = await app.handle(new Request(
       `${apps.ACCOUNT_BASE_URL}/api/auth/.well-known/openid-configuration`));
     if (discoveryResponse.status !== 200) throw new Error('Account discovery is unavailable');
