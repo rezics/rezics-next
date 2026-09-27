@@ -98,7 +98,7 @@ export function ConnectedApps({ apps }: { apps: ConnectedApp[] }) {
         </AlertDialogHeader>
         <AlertDialogFooter>
           <AlertDialogCancel disabled={busy} onClick={() => setConfirming(false)}>{t.cancel}</AlertDialogCancel>
-          <AlertDialogAction variant="destructive" isLoading={busy} onClick={remove}>{t.remove}</AlertDialogAction>
+          <AlertDialogAction variant="destructive" isLoading={busy} onClick={() => void remove()}>{t.remove}</AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>

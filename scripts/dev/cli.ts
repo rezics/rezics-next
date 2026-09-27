@@ -353,6 +353,20 @@ async function initializeGraph(apps: Record<string, string>): Promise<void> {
   if (health.boolean !== true) throw new Error('Existing graph lineage does not match this stack; use stack:reset only if its data may be discarded');
 }
 
+/** A web auth fixture serves a stack only while it names the stack's issuer
+ * (Access grants are bound to it, and it moves to the Accounts app) and its
+ * client still exists (a worktree backend's dev:stop discards its data). */
+async function webAuthFixtureCurrent(apps: Record<string, string>, publicPath: string): Promise<boolean> {
+  const saved = JSON.parse(readFileSync(publicPath, 'utf8')) as { issuer?: string; clientId?: string };
+  if (saved.issuer !== `${apps.ACCOUNT_BASE_URL}/api/auth` || !saved.clientId) return false;
+  const account = new Client({ connectionString: apps.ACCOUNT_DATABASE_URL });
+  await account.connect();
+  try {
+    return Boolean((await account.query('SELECT 1 FROM public."oauthClient" WHERE "clientId" = $1',
+      [saved.clientId])).rowCount);
+  } finally { await account.end(); }
+}
+
 const overridesFile = join(root, '.env.dev');
 /** Variable names whose values are masked in output and passed to Aspire as secrets. */
 const secretName = /SECRET|TOKEN|KEY|PASSWORD|_DATABASE_URL$/;
@@ -368,10 +382,7 @@ async function prepareDev(options: StackOptions): Promise<Record<string, string>
   const authDir = join(stackDirectory(root, options), 'web-auth');
   const runtimePath = join(authDir, 'runtime.env');
   const publicPath = join(authDir, 'public.json');
-  if (existsSync(publicPath) && (JSON.parse(readFileSync(publicPath, 'utf8')) as { issuer?: string })
-    .issuer !== `${apps.ACCOUNT_BASE_URL}/api/auth`) {
-    // The public Account origin moved (to the Accounts app); the fixture's
-    // Access grant names the old issuer, so keep it aside and register anew.
+  if (existsSync(publicPath) && !await webAuthFixtureCurrent(apps, publicPath)) {
     renameSync(authDir, `${authDir}.retired-${Date.now()}`);
   }
   if (!existsSync(runtimePath) || !existsSync(publicPath)) {

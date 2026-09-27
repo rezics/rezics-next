@@ -41,7 +41,7 @@ export function DataPrivacy() {
   return <>
     <SectionHeading title={t.dataPrivacy} intro={t.privacyIntro} />
     <SettingsCard title={t.deleteTitle}>
-      <form method="post" noValidate onSubmit={submit} className="flex flex-col gap-5 px-5 py-5 sm:px-6">
+      <form method="post" noValidate onSubmit={event => void submit(event)} className="flex flex-col gap-5 px-5 py-5 sm:px-6">
         <div className="flex gap-3 rounded-2xl bg-destructive/5 p-4">
           <TriangleAlertIcon className="mt-0.5 size-5 shrink-0 text-destructive-foreground" aria-hidden="true" />
           <div>

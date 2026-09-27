@@ -54,7 +54,7 @@ export function ConsentCard({ app, user, scopes, oauthQuery }: { app: ConsentApp
           <UserAvatar user={user} size="sm" />
           <span className="sr-only">{t.signedInAs} </span>
           <span className="truncate font-medium">{user.email}</span></span>
-        <Button variant="link" size="sm" className="px-0" disabled={!!busy} onClick={switchAccount}>
+        <Button variant="link" size="sm" className="px-0" disabled={!!busy} onClick={() => void switchAccount()}>
           {t.switchAccount}</Button>
       </div>
     </header>
@@ -87,8 +87,8 @@ export function ConsentCard({ app, user, scopes, oauthQuery }: { app: ConsentApp
         : t.unavailable}</AlertDescription></Alert> : null}
     <div className="flex flex-wrap justify-end gap-3">
       <Button variant="outline" size="lg" disabled={!!busy} isLoading={busy === 'deny'}
-        onClick={() => answer(false)}>{t.deny}</Button>
-      <Button size="lg" disabled={!!busy} isLoading={busy === 'allow'} onClick={() => answer(true)}>
+        onClick={() => void answer(false)}>{t.deny}</Button>
+      <Button size="lg" disabled={!!busy} isLoading={busy === 'allow'} onClick={() => void answer(true)}>
         {busy === 'allow' ? t.working : t.allow}</Button>
     </div>
   </div>;

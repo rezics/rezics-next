@@ -91,7 +91,7 @@ export function PersonalInfo({ user }: { user: AvatarUser & { emailVerified: boo
             <p className="text-sm text-muted-foreground">{t.profilePictureHelp}</p></div>
         </SettingsRow>
         {editing === 'name'
-          ? <InlineForm busy={busy} onSubmit={saveName} onCancel={() => setEditing(undefined)}>
+          ? <InlineForm busy={busy} onSubmit={event => void saveName(event)} onCancel={() => setEditing(undefined)}>
             <NameField label={t.fullName} value={name} error={fieldError} autoFocus disabled={busy}
               onChange={value => { setName(value); setFieldError(''); }} />
             <Note outcome={outcome?.row === 'name' ? outcome.value : undefined} />
@@ -104,7 +104,7 @@ export function PersonalInfo({ user }: { user: AvatarUser & { emailVerified: boo
       </SettingsCard>
       <SettingsCard title={t.contactInfo}>
         {editing === 'email'
-          ? <InlineForm busy={busy} onSubmit={saveEmail} onCancel={() => setEditing(undefined)}>
+          ? <InlineForm busy={busy} onSubmit={event => void saveEmail(event)} onCancel={() => setEditing(undefined)}>
             <EmailField label={t.newEmail} value={email} error={fieldError} autoComplete="email" autoFocus
               description={t.changeEmailHelp} disabled={busy}
               onChange={value => { setEmail(value); setFieldError(''); }} />
@@ -120,7 +120,7 @@ export function PersonalInfo({ user }: { user: AvatarUser & { emailVerified: boo
                 {user.emailVerified ? t.verified : t.unverified}</Badge>
             </div>
             {user.emailVerified ? null : <Button variant="link" className="mt-1 h-auto px-0" disabled={busy}
-              onClick={sendVerification}>{t.sendVerification}</Button>}
+              onClick={() => void sendVerification()}>{t.sendVerification}</Button>}
             <Note outcome={outcome?.row === 'email' ? outcome.value : undefined} />
           </SettingsRow>}
       </SettingsCard>

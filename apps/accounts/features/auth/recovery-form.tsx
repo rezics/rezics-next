@@ -46,7 +46,7 @@ export function RecoveryForm({ email: initial = '', carry = '' }: { email?: stri
     <AuthHeading title={t.recoveryTitle} subtitle={t.recoveryBody} />
     {outcome ? <Alert role="alert" variant="destructive" className="mb-6"><AlertDescription>
       {outcome === 'rate-limited' ? t.tooManyAttempts : t.unavailable}</AlertDescription></Alert> : null}
-    <form noValidate onSubmit={submit} className="flex flex-col gap-6">
+    <form noValidate onSubmit={event => void submit(event)} className="flex flex-col gap-6">
       <EmailField label={t.emailLabel} value={email} error={error} autoFocus disabled={busy}
         onChange={value => { setEmail(value); setError(''); }} />
       <div className="flex flex-wrap items-center justify-between gap-3">

@@ -63,7 +63,7 @@ function PasswordForm({ onDone, onCancel }: { onDone(): void; onCancel(): void }
     setFailure(failureText(result.kind, common));
   }
 
-  return <form method="post" noValidate onSubmit={submit} className="flex flex-col gap-4 px-5 py-4 sm:px-6">
+  return <form method="post" noValidate onSubmit={event => void submit(event)} className="flex flex-col gap-4 px-5 py-4 sm:px-6">
     <input type="text" name="username" autoComplete="username" hidden readOnly />
     <PasswordField label={t.currentPassword} name="current-password" value={values.current}
       error={errors.current} autoComplete="current-password" visibilityLabel={showLabel} autoFocus
@@ -127,13 +127,13 @@ function Devices({ devices }: { devices: DevicesView }) {
           </div>
           {item.current ? null : <Button variant="outline" size="sm" isLoading={busy === item.id}
             disabled={!!busy} aria-label={`${t.signOutDevice} · ${item.title}`}
-            onClick={() => run(item.id, () => api.revokeSession(item.token))}>{t.signOutDevice}</Button>}
+            onClick={() => void run(item.id, () => api.revokeSession(item.token))}>{t.signOutDevice}</Button>}
         </li>;
       })}
     </ul>
     <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-4 sm:px-6">
       {others.length ? <Button variant="outline" isLoading={busy === 'others'} disabled={!!busy}
-        onClick={() => run('others', () => api.revokeOtherSessions())}>{t.signOutAll}</Button>
+        onClick={() => void run('others', () => api.revokeOtherSessions())}>{t.signOutAll}</Button>
         : <p className="text-sm text-muted-foreground">{t.noOtherDevices}</p>}
     </div>
     {failure ? <Alert role="alert" variant="destructive" className="mx-5 mb-4 w-auto sm:mx-6">

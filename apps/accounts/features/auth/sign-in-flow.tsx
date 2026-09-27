@@ -96,7 +96,7 @@ export function SignInFlow({ next, oauthQuery, carry = '', reauthEmail, notice: 
       className="mb-6">
       <AlertDescription>{message(notice)}
         {notice === 'email-not-verified' ? <Button variant="outline" size="sm" className="w-fit"
-          disabled={busy} onClick={resendVerification}>{t.sendVerification}</Button> : null}
+          disabled={busy} onClick={() => void resendVerification()}>{t.sendVerification}</Button> : null}
       </AlertDescription></Alert> : null}
     {step === 'email'
       ? <form noValidate onSubmit={submitEmail} className="flex flex-col gap-6">
@@ -107,7 +107,7 @@ export function SignInFlow({ next, oauthQuery, carry = '', reauthEmail, notice: 
           <Button type="submit" size="lg">{t.next}</Button>
         </div>
       </form>
-      : <form method="post" noValidate onSubmit={submitPassword} className="flex flex-col gap-6">
+      : <form method="post" noValidate onSubmit={event => void submitPassword(event)} className="flex flex-col gap-6">
         <input type="email" name="username" autoComplete="username" value={email} readOnly hidden />
         <PasswordField label={t.passwordLabel} value={password} autoComplete="current-password" autoFocus
           visibilityLabel={t.showPassword} error={passwordError} disabled={busy}

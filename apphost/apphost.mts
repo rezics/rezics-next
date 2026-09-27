@@ -111,7 +111,7 @@ webSpec, ['MAIN_ORIGIN', 'ACCOUNT_ORIGIN'])
   .withEnvironment('ACCOUNT_ORIGIN', env.ACCOUNT_BASE_URL ?? accountsUrl)
   .withHttpEndpoint(frontendEndpoint(3000))
   .waitFor(backend);
-accounts.withEnvironment('WEB_ORIGIN', webApp.getEndpoint('http'));
+await accounts.withEnvironment('WEB_ORIGIN', webApp.getEndpoint('http'));
 
 builder.addExecutable('storybook', 'sh', web,
   ['-c', 'exec ../../node_modules/.bin/storybook dev --host 127.0.0.1 --no-open -p "$PORT"'])
