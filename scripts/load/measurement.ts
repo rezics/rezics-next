@@ -90,7 +90,8 @@ export function relayBacklogTrend(values: number[]) {
     growingAtEnd: endLag > 2 && lastWindowMean > firstWindowMean + 2 };
 }
 
-/** Counts actual Main→Fuseki HTTP attempts and wire body bytes through a local loopback proxy. */
+/** Counts Main→Fuseki HTTP attempts and body bytes through a loopback proxy.
+ * Native Jena operators, SQL plans and other-owner traffic remain unobserved. */
 export function startFusekiMeter(upstream: string) {
   const target = new URL(upstream);
   const counts: CallCounts = { calls: 0, sentBytes: 0, receivedBytes: 0, errors: 0 };
