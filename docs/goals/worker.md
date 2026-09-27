@@ -109,9 +109,13 @@ node_modules/.bin/biome lint <changed source directories>
 node_modules/.bin/oxlint --type-aware <changed source directories>        # promise rules
 ```
 
-In a worktree, `task dev` runs web and Storybook on random ports against the
-shared backend; `task urls` prints them. Use a browser (Playwright or the
-available browser tools) to check the changed screens and review screenshots.
+In a worktree, `task dev` runs web and Storybook natively on random ports
+against the shared backend; `task urls` prints them. Use a browser (Playwright
+from `apps/web`) to check the changed screens and review screenshots. Frontend
+work needs no Docker: start an isolated backend (`task dev -- --backend`) only
+when your brief changes a backend service, and stop your dev servers, browsers
+and any isolated stack (`task dev:stop`) before you hand off. The host is
+memory-bound; a leaked stack or dev server holds gigabytes.
 
 Before the handoff, `bun scripts/goal/goalctl.ts test --affected --list` prints
 the other tests your change reaches without running them. List any that fall

@@ -6,7 +6,7 @@ import { closeSync, copyFileSync, existsSync, mkdirSync, openSync, readdirSync, 
   readlinkSync, rmSync, statSync,
   writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { dirname, isAbsolute, join, resolve } from 'node:path';
+import { basename, dirname, isAbsolute, join, resolve } from 'node:path';
 
 export type State = 'running' | 'exited' | 'conflict' | 'merged' | 'stopped' | 'verified' | 'cancelled';
 export type Engine = 'claude' | 'codex' | 'luna' | 'astra' | 'grok' | 'cursor';
@@ -724,6 +724,16 @@ export function killWorktreeProcesses(worktree: string): number {
   return victims.length;
 }
 
+/** A worktree's `task dev -- --backend` stack is Compose project rezics-qa-wt-<dir>;
+ * its containers live in Docker, not in the worker's process tree. */
+export function removeWorktreeStack(worktree: string): void {
+  const project = `rezics-qa-wt-${basename(worktree)}`;
+  const listed = spawnSync('docker', ['ps', '-aq', '--filter', `label=com.docker.compose.project=${project}`],
+    { encoding: 'utf8', timeout: 30_000 });
+  if (listed.status !== 0 || !listed.stdout.trim()) return;
+  spawnSync('docker', ['compose', '-p', project, 'down', '-v'], { encoding: 'utf8', timeout: 180_000 });
+}
+
 async function stopTask(id: string): Promise<void> {
   const attempt = lastAttempt(taskOf(readLedger(), id));
   const program = programOf(engineOf(attempt));
@@ -734,6 +744,7 @@ async function stopTask(id: string): Promise<void> {
     if (pidAlive(attempt.pid, program)) process.kill(-attempt.pid, 'SIGKILL');
   }
   killWorktreeProcesses(taskOf(readLedger(), id).worktree);
+  removeWorktreeStack(taskOf(readLedger(), id).worktree);
   await withLedger(ledger => {
     const task = taskOf(ledger, id);
     lastAttempt(task).endedAt ??= new Date().toISOString();
@@ -817,6 +828,7 @@ async function closeTask(id: string, outcome: string): Promise<void> {
     }
     if (existsSync(task.worktree)) {
       killWorktreeProcesses(task.worktree);
+      removeWorktreeStack(task.worktree);
       // Tasks may leave intentionally read-only artifacts (for example immutable release trees).
       spawnSync('chmod', ['-R', 'u+w', task.worktree]);
       git(root, ['worktree', 'remove', '--force', task.worktree]);
