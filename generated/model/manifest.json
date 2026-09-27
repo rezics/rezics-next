@@ -422,6 +422,11 @@
       "file": "shapes/realm-local-selection-v1.ttl"
     },
     {
+      "id": "realm-public-profile-v1",
+      "sha256": "d03364027f8b706441ed9433b26360599f9b531f1a255bd1a49526d08f62ca24",
+      "file": "shapes/realm-public-profile-v1.ttl"
+    },
+    {
       "id": "realm-release-rating-context-v1",
       "sha256": "7520c99bb9669d866e67b4929ee624b1dafb3f2c6d616e67fca32bbd4a679c17",
       "file": "shapes/realm-release-rating-context-v1.ttl",
@@ -769,6 +774,11 @@
       "id": "work-editorial-field-v1",
       "sha256": "61a93b0c3f403a3450545c063cabfb8d12299586df48dbd4c9574d8831b30999",
       "file": "shapes/work-editorial-field-v1.ttl"
+    },
+    {
+      "id": "work-metadata-details-v1",
+      "sha256": "905826519ea23297628a4e192c81176ff210b1089cb1ba821a48b10456032a09",
+      "file": "shapes/work-metadata-details-v1.ttl"
     },
     {
       "id": "work-metadata-v1",
@@ -1927,6 +1937,36 @@
       ]
     },
     {
+      "type": "https://rezics.com/vocab/RealmModeratorChoiceRevision",
+      "routes": [
+        {
+          "profile": "realm-public-profile-v1",
+          "shape": "https://rezics.com/definition/realm-public-profile-v1/moderator-choice-shape",
+          "when": []
+        }
+      ]
+    },
+    {
+      "type": "https://rezics.com/vocab/RealmModeratorPublicChoice",
+      "routes": [
+        {
+          "profile": "realm-public-profile-v1",
+          "shape": "https://rezics.com/definition/realm-public-profile-v1/moderator-slot-shape",
+          "when": []
+        }
+      ]
+    },
+    {
+      "type": "https://rezics.com/vocab/RealmPublicProfileRevision",
+      "routes": [
+        {
+          "profile": "realm-public-profile-v1",
+          "shape": "https://rezics.com/definition/realm-public-profile-v1/revision-shape",
+          "when": []
+        }
+      ]
+    },
+    {
       "type": "https://rezics.com/vocab/RealmReplyPlacement",
       "routes": [
         {
@@ -2267,6 +2307,26 @@
       ]
     },
     {
+      "type": "https://rezics.com/vocab/WorkMetadataComponent",
+      "routes": [
+        {
+          "profile": "work-metadata-details-v1",
+          "shape": "https://rezics.com/definition/work-metadata-details-v1/component-shape",
+          "when": []
+        }
+      ]
+    },
+    {
+      "type": "https://rezics.com/vocab/WorkMetadataRevision",
+      "routes": [
+        {
+          "profile": "work-metadata-details-v1",
+          "shape": "https://rezics.com/definition/work-metadata-details-v1/revision-shape",
+          "when": []
+        }
+      ]
+    },
+    {
       "type": "https://rezics.com/vocab/Zone",
       "routes": [
         {
@@ -2487,6 +2547,7 @@
     "contexts/realm-experience-rating-observation-v1.jsonld": "372fda997fd7386d284afd111f82165fc162385a252e59a1a6294ef98bc0111a",
     "contexts/realm-local-rejection-v1.jsonld": "30c3195374180744439a2ee6db2a9e6accd2c3413c63b2b41581494121bebcb5",
     "contexts/realm-local-selection-v1.jsonld": "720dfeb8c7c39eddd9fa6c19d90cdba5f2490516039151575827c095834c0f27",
+    "contexts/realm-public-profile-v1.jsonld": "2bd8add71ce29bf135d3502e255d56decc2aab83ebadb3513ebbf2aa1dce7860",
     "contexts/realm-release-rating-context-v1.jsonld": "4fc40fca2efe60bafc880649eea0c609679800c9aaa70b4bb6068a8d38937e9c",
     "contexts/realm-release-rating-observation-v1.jsonld": "760d7eaa189c387c4a88401d7967671efe136086ffef15b7cdb27fc7217033dc",
     "contexts/realm-reply-placement-v1.jsonld": "8b60db1c14332a888f96264c301e4c9e4d4024fb8bdef15151814abd1681eeae",
@@ -2520,6 +2581,7 @@
     "contexts/work-derivation-unresolved-v1.jsonld": "d1fdd26fc0e2b347d986df2ecb6c7bc5e4ca3cc9b49864f855cf5f03857bf3d5",
     "contexts/work-derivation-v1.jsonld": "1361b50b75a374f9d6cd7e290a8ae5c4f440476ce19bbc79222935c4b2b1be30",
     "contexts/work-editorial-field-v1.jsonld": "f8e8f3277c99887f1b684590b8930b2376384b5537c9acf1ac2de61167292a25",
+    "contexts/work-metadata-details-v1.jsonld": "8e8ef6c96b041efb69387ecee7ef989ee3db98cd2db04891b4896a0f42fc10e3",
     "contexts/work-metadata-v1.jsonld": "982bdcde025ba5281c75255aa3a891d034b27f45175f114998801167bcb78a8d",
     "contexts/work-native-child-v1.jsonld": "6f5a3d023edc2048a18af848f10cacb6264a55d486e703d5909ec7ca4e9828ba",
     "contexts/work-title-control-v1.jsonld": "6d41cee07d63c6609e3c8ba36f45043ab1ff4ef888869d859520680125bb9b29",
@@ -2567,6 +2629,7 @@
     "shapes/realm-experience-rating-observation-v1.ttl": "c3ce902cafe8b737aac34080fb1caf4b3953f5c737e500129d16e1d630654afe",
     "shapes/realm-local-rejection-v1.ttl": "8db4a0124cf3b2ac61a28595fb05677e8dff8977c4b0a126740f583de6589e02",
     "shapes/realm-local-selection-v1.ttl": "065cee2ee14324f92989a206e106a538a243621f3c54c55c9519cfcadf22def4",
+    "shapes/realm-public-profile-v1.ttl": "d03364027f8b706441ed9433b26360599f9b531f1a255bd1a49526d08f62ca24",
     "shapes/realm-release-rating-context-v1.ttl": "7520c99bb9669d866e67b4929ee624b1dafb3f2c6d616e67fca32bbd4a679c17",
     "shapes/realm-release-rating-observation-v1.ttl": "451a60e884d8c09b3f3e0c91742be3044f2067054479ad4f662b9abe9ba02f2f",
     "shapes/realm-reply-placement-v1.ttl": "b939a1b25d6351a97f4ac0cf48240a0bf76a3f61b51e1ace558348fd382eb511",
@@ -2600,13 +2663,14 @@
     "shapes/work-derivation-unresolved-v1.ttl": "6c703f04dde8586aa0d5fbb5601fc532c0d572c2097eb18e927e4b601f8f71d2",
     "shapes/work-derivation-v1.ttl": "b86e60ef69cf6a20088119dbb582154c7f27cbf30f1a8334869603e49b0dea1b",
     "shapes/work-editorial-field-v1.ttl": "61a93b0c3f403a3450545c063cabfb8d12299586df48dbd4c9574d8831b30999",
+    "shapes/work-metadata-details-v1.ttl": "905826519ea23297628a4e192c81176ff210b1089cb1ba821a48b10456032a09",
     "shapes/work-metadata-v1.ttl": "ac918cf0458150520bf03f9683e6a363ad702376ebc50eaa729f98d84b3b8760",
     "shapes/work-native-child-v1.ttl": "1c9e1ed2ab97a4211095848ddce43f361082b5b80c042000d384658ad029d5d5",
     "shapes/work-title-control-v1.ttl": "100dddad43cac4fd47c3090e987ef9dc9aa272d189fc4240cc08302340c5d42d",
     "shapes/zone-capability-v1.ttl": "c518389e8a7777b2358a5ed98f6016e77a803aa8c9336fefc40201fb38df4f65",
-    "packages/model/src/generated/arbitraries.ts": "62ae80c1842b02d9043a95f0250543deaf4cc04ae90380a02d829a91b4206906",
-    "packages/model/src/generated/profiles.ts": "cd0102af155120b7bf26ead42005b24118f5a696220224c170111b6c23de9f65",
-    "packages/model/src/generated/schemas.ts": "b985d735c2e92e537b5c574b29a943a33cf46acd06f3bf439878c4b715276b1c",
-    "packages/model/src/generated/vocabulary.ts": "0bba22d14f8d917629107111eb06632b4e0dee2bc9b7a3efcfb33ecc655db26c"
+    "packages/model/src/generated/arbitraries.ts": "12bc1c7c8b045b065ed68f94c0edfc33ea9ffe312f2dfd5b6ef7aba69298fc14",
+    "packages/model/src/generated/profiles.ts": "27b9ab83aeb5657a5eb5985b75bbef3c399ba73e971cdf276377a0835e62641f",
+    "packages/model/src/generated/schemas.ts": "f54c95e553ef6a0d329da8e182ae424fde536d2e90bb85a8b2145d6d94bd65e3",
+    "packages/model/src/generated/vocabulary.ts": "5b37a21040ada3712a512d9e1bad8c1f00025b67a576f495c9b8c112ec28b813"
   }
 }

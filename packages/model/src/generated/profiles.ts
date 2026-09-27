@@ -574,6 +574,20 @@ export const profileRegistry = {
       "selection"
     ]
   },
+  "realm-public-profile-v1": {
+    "sha256": "d03364027f8b706441ed9433b26360599f9b531f1a255bd1a49526d08f62ca24",
+    "file": "shapes/realm-public-profile-v1.ttl",
+    "shapes": [
+      "https://rezics.com/definition/realm-public-profile-v1/moderator-slot-shape",
+      "https://rezics.com/definition/realm-public-profile-v1/revision-shape",
+      "https://rezics.com/definition/realm-public-profile-v1/moderator-choice-shape"
+    ],
+    "focusRoles": [
+      "moderator-slot",
+      "revision",
+      "moderator-choice"
+    ]
+  },
   "realm-release-rating-context-v1": {
     "sha256": "7520c99bb9669d866e67b4929ee624b1dafb3f2c6d616e67fca32bbd4a679c17",
     "file": "shapes/realm-release-rating-context-v1.ttl",
@@ -1012,6 +1026,20 @@ export const profileRegistry = {
       "slot",
       "value",
       "control"
+    ]
+  },
+  "work-metadata-details-v1": {
+    "sha256": "905826519ea23297628a4e192c81176ff210b1089cb1ba821a48b10456032a09",
+    "file": "shapes/work-metadata-details-v1.ttl",
+    "shapes": [
+      "https://rezics.com/definition/work-metadata-details-v1/work-shape",
+      "https://rezics.com/definition/work-metadata-details-v1/component-shape",
+      "https://rezics.com/definition/work-metadata-details-v1/revision-shape"
+    ],
+    "focusRoles": [
+      "work",
+      "component",
+      "revision"
     ]
   },
   "work-metadata-v1": {
