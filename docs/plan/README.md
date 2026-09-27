@@ -149,6 +149,7 @@ log is kept in [its history](../goals/history/codex-program-2026-09-26.md).
 | [G-144](../goals/tasks/G-144.md) / record 2 | GPT-6 Sol high: repair OPS08 unhandled Account connection error. | Dispatched 05:36 UTC. |
 | [G-145](../goals/tasks/G-145.md) / record 4 | GPT-6 Sol xhigh: make every declared test run in the full backend run. | Dispatched 07:06 UTC. |
 | [G-146](../goals/tasks/G-146.md) / record 5 | GPT-6 Sol xhigh: make OPS05's named host mix a statistically sound, stable measurement. | Dispatched 07:43 UTC. |
+| [G-147](../goals/tasks/G-147.md) / completion | GPT-6 Sol xhigh: executable cost-contract inventory for every backend entry point. | Dispatched 07:56 UTC. |
 | Authority and model backlog | IAM07–IAM37 and MODEL05–MODEL27 gaps, sequenced behind required Access and semantic owner decisions. | Planned at the [operation map](backend-operations.md); create bounded briefs when interfaces stabilize. |
 | Content, Space and community backlog | CTX, WORK, RATE, GRAPH, VIEW, BOOK, RECIPE, SUB and other M01–M10 gaps. | Planned at the operation map; retain all backend assertions. |
 | Search, sources and packages backlog | SEARCH, LIVE, PKG and HUB gaps after B75, with source/owner integration and recovery. | Planned at the operation map; selected B14–B74 evidence remains partial where named. |
