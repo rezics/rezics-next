@@ -190,7 +190,9 @@ export async function seedPracticalCorpus(env: WorkActivationEnvironment, conten
     selectionBasis: 'realm-manager-review' as const, actingSubject: actor };
   await authority.run(`publication:adopt:${space.realm}`, 'publication.adopt',
     realmSelectionDigest(adoptionInput), admission => selectRealmLocal(env, admission, adoptionInput));
-  const rejected = await contribution(works[2]!.work, 'rejected sapphire harbor', 'en');
+  const rejectedPhrase = startIndex === 0 ? 'rejected sapphire harbor'
+    : `freshrejectedbeacon${startIndex}`;
+  const rejected = await contribution(works[2]!.work, rejectedPhrase, 'en');
   const rejectionInput = { context: { kind: 'realm-local' as const, id: space.realm },
     work: works[2]!.work, mainVersion: works[2]!.main, expectedSelectionHead: null,
     decisionBasis: 'realm-manager-review' as const, reasonCode: 'not-approved' as const,
@@ -210,7 +212,7 @@ export async function seedPracticalCorpus(env: WorkActivationEnvironment, conten
     { name: 'realm-fallback', lane: 'realm', phrase: works[3]!.token, language: 'en',
       expectedWork: works[3]!.work, expectedContribution: published[3]!.contribution,
       expectedReason: 'main-fallback' },
-    { name: 'rejected-candidate', lane: 'realm', phrase: 'rejected sapphire harbor', language: 'en',
+    { name: 'rejected-candidate', lane: 'realm', phrase: rejectedPhrase, language: 'en',
       expectedWork: null },
     { name: 'content', lane: 'content', phrase: contentPhrase, language: 'en',
       expectedWork: works[0]!.work },

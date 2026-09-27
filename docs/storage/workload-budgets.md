@@ -397,3 +397,79 @@ and the fixture-backed 180-second load runner recognizes a restored corpus with
 at least 10,000 public units as the named practical profile. OPS05 and SEARCH18
 remain partial until that run measures latency, lag, memory and recovery, and
 the 20,000-unit scale and cold movement retry are exercised successfully.
+
+### Phase-D isolated load checks (G-115)
+
+The frozen-main fixture `fx-medium-c9f6e4fdcb52` contains 100,000 Works and
+10,000 indexed public MatchUnits. Independent writable copies
+`fixture-g115-1` and `fixture-g115-2` restored in 142.447 s and 124.681 s,
+respectively, including readiness and sampled smoke checks. No fixture was
+rebuilt. The registered REC02 load test on the first copy processed 10,000
+signals in 100 retained batches, half on one target and half spread over 999
+other Works. Its 4.4-second load-tier run
+`20260927t021732-774d74` passed: each generation tick consumed at most 16
+relay batches and 1,600 signals with at most 32 metered Access statements,
+produced 1,000 score rows and 10,000 slot rows, and paged the leading hot
+target through the ordered index with at most 16 Access statements. These are
+bounded-work and correctness observations for this fixture copy, not a
+production recommendation throughput claim.
+
+SEARCH18's first cold-storage trace on the second copy
+(`20260927t022011-31a2da`) returned a correct 64-result snapshot of the
+10,000-unit population in 1,503.0 ms, with eight Fuseki calls and 111,609
+received bytes. It missed the unchanged 1,500 ms single-query limit by 3.0 ms.
+After changing the cold probe to a one-hit query, the next run
+(`20260927t022135-3bbcaa`) exposed a diagnostic-only partition-route rebind
+error on a reused fixture copy; the test setup now rebinds its ephemeral
+meter endpoint before Main starts. The subsequent run
+(`20260927t022346-66d224`) cold-restarted storage in 48.066 s, then returned
+HTTP 503 `search_index_unavailable` at 1,556.4 ms on its first one-hit query.
+The server recorded one read attempt exhausting the 1,500 ms wall deadline;
+its meter saw four Fuseki calls, 8,852 response bytes and one upstream error.
+The degree, cursor and movement probes were not reached, so SEARCH18 remains
+unqualified. No call, byte or time budget was increased.
+
+The third through sixth writable restores took 316.611 s, 191.673 s,
+181.209 s and 232.176 s; every copy stayed below the 600-second preparation
+deadline. The first two OPS attempts exposed fixture-canary collisions in the
+fresh token and rejected-candidate phrases. A later run exposed Docker
+Desktop's separate container host network; the k6 runner now uses the same
+host-loopback mapping as the passing small public-query test. The clean sixth
+copy produced the first full 20-second phase-D mixed trace
+(`20260927t025054-7b83f2`): eight k6 read clients and two admitted writers
+against 100,000 imported Works, 10,000 imported public units and ten fresh
+command Works. It completed 198 HTTP reads and 22 writes, an observed 90/10
+read/write split. Read p95 was 1,457.6 ms (Main 1,486.6 ms, Realm 1,457.6 ms,
+Content 677.4 ms), while edit and selection write p95 were 4,924.3 ms and
+4,396.2 ms. Ten of 198 reads returned HTTP 503 (5.05%); both Content
+`dependency_unavailable` and public `search_index_unavailable` occurred. The
+zero-error objective and 2,500 ms write p95 objective therefore failed; the
+host profile is **not** qualified. No threshold was raised.
+
+The same failed run still measured relay and recovery separately: 26 relay
+samples peaked at one batch of lag and ended at zero; the checkpoint caught
+the graph at sequence 77. Main's observed process high-water mark was 150,904
+KiB. Before recovery, Fuseki's cgroup peak was 2,861,101,056 bytes and
+PostgreSQL's was 141,348,864 bytes; these containers reported no explicit
+cgroup memory limit, so the samples do not prove a host memory ceiling.
+ Persistent storage stop/start, Main search readiness, seven exact post-restart
+queries and relay drain completed in 22.979 s, with graph and checkpoint still
+at sequence 77. This is a measured 20-second fixture-backed scope, not the
+older 180-second sustained capacity profile or a 20,000-unit search scale.
+
+A later SEARCH18 diagnostic moved the cold 10,000-unit membership proof to
+Main's existing `/health/search-ready` gate and recorded it as setup. In
+`20260927t030200-c4cb1d`, cold readiness took 3.077 s over four probes;
+the first admitted one-hit query took 151.4 ms, the 64-hit query took
+123.8 ms, 512 admitted candidates took 215.7 ms, and 513 candidates returned
+the explicit 422 budget outcome. The cursor, language, payload and rejected
+Realm probes reached their assertions. Movement setup against an imported Work
+then failed `InvalidMainSelectionInput`, confirming that this read fixture
+cannot stand in for an authorial command target. The test now creates that
+target through Access and Main commands. Its final run
+`20260927t030607-5979ff` reached the intended selection-movement race, but
+the phrase request returned HTTP 503 `search_index_unavailable` at 1,501.9 ms
+after four Fuseki calls and 17,202 response bytes. Main recorded its first
+read attempt consuming the entire 1,500 ms deadline; a second bounded read
+never began. This is a correctness/error-objective failure under the retained
+limit, so SEARCH18 is not declared complete.

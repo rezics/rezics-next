@@ -3,6 +3,8 @@ import { closeSync, openSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { Pool } from 'pg';
 import { workEnvironment } from '../fixture/smoke.ts';
+import { activateMetadataWork, DATASET, metadataWorkRequestDigest }
+  from '../../services/main/src/modules/work/activate.ts';
 import { activateTextContribution, textContributionDigest }
   from '../../services/main/src/modules/contribution/draft.ts';
 import { publishTextContribution, textPublicationDigest }
@@ -11,7 +13,7 @@ import { selectMainDefault, mainSelectionDigest }
   from '../../services/main/src/modules/work/select-main.ts';
 import { MAX_SEARCH_FUSEKI_BYTES, MAX_SEARCH_FUSEKI_CALLS,
   MAX_SEARCH_RESPONSE_BYTES } from '../../services/main/src/modules/work/search-readiness.ts';
-import { delta, startFusekiMeter } from './measurement.ts';
+import { delta, searchProofDelta, startFusekiMeter } from './measurement.ts';
 import { LoadAuthority } from './corpus.ts';
 
 const root = resolve(import.meta.dir, '../..');
@@ -65,13 +67,21 @@ async function stop(child: ChildProcess | undefined): Promise<void> {
 
 async function ready(): Promise<void> {
   const until = Date.now() + 30_000;
+  const started = performance.now();
+  const before = meter.snapshot();
+  let attempts = 0;
   while (Date.now() < until && main?.exitCode === null) {
     try {
-      if ((await fetch(`${mainUrl}/health/ready`, { signal: AbortSignal.timeout(1500) })).ok) return;
+      attempts++;
+      if ((await fetch(`${mainUrl}/health/search-ready`, { signal: AbortSignal.timeout(10_000) })).ok) {
+        evidence.coldReadiness = { elapsedMs: performance.now() - started, attempts,
+          remote: delta(meter.snapshot(), before) };
+        return;
+      }
     } catch { /* Main is still starting. */ }
     await Bun.sleep(250);
   }
-  throw new Error('Main service readiness timed out');
+  throw new Error('Main search readiness timed out');
 }
 
 function coldStorageRestart(): number {
@@ -131,21 +141,34 @@ let failure: string | undefined;
 try {
   evidence.storageColdRestartMs = coldStorageRestart();
   await environment.workObjects.initialize();
+  // The meter has a fresh loopback port on each diagnostic run. Rebind only
+  // this isolated fixture copy's test endpoint before Main takes its route lease.
+  await accessPool.query(`UPDATE access.owner_partition_route
+    SET location = $1, lease_epoch = lease_epoch + 1
+    WHERE owner = 'graph' AND dataset_id = $2 AND routing_epoch = $3`,
+  [meter.url, DATASET, required('MAIN_ROUTING_EPOCH')]);
   main = startMain();
   await ready();
   const common = { profile: 'public-main-phrase-v1', phrase: 'public load', language: null };
-  const cold = await post('/v1/queries', common);
+  // Search readiness qualified the cold 10k index before admitting requests.
+  // A one-hit query then isolates request latency from response-size cost;
+  // the following 64-hit and 512-candidate queries exercise larger relations.
+  const cold = await post('/v1/queries', { profile: 'public-main-phrase-v1',
+    phrase: 'loadtokenaaah', language: 'zh' });
   evidence.cold = cold;
   assertCompleteRead(cold, 'Cold Main query');
   if (!Number.isSafeInteger(cold.result.population) || cold.result.population < 1
     || cold.result.population !== expectedPublicUnits
-    || !Number.isSafeInteger(cold.result.total) || cold.result.total < 2) {
+    || cold.result.total !== 1) {
     throw new Error(`Current fixture copy has too few indexed phrase units for cursor traces: ${JSON.stringify({
       population: cold.result.population, total: cold.result.total })}`);
   }
   const warm = await post('/v1/queries', common);
   evidence.warm = warm;
   assertCompleteRead(warm, 'Warm Main query');
+  if (warm.result.population !== cold.result.population || warm.result.total < 2) {
+    throw new Error('Warm Main query lacks the cursor population');
+  }
   const degree = await post('/v1/queries', { profile: 'public-main-phrase-v1',
     phrase: 'candidate degree', language: null });
   assertCompleteRead(degree, '512-candidate Main query');
@@ -177,13 +200,47 @@ try {
         code: rejected.result.code ?? rejected.result.error } })}`);
   }
 
+  // Imported public Works qualify read/index scale but have no authorial command
+  // history. Create the movement target through the real admission/command path.
+  authority = new LoadAuthority(accessPool);
+  await authority.initialize();
+  const title = `Search movement ${crypto.randomUUID()}`;
+  const created = await accessWrite<CommandReceipt & { work: string; mainVersion: string }>(
+    'work:create:root', 'work.create', metadataWorkRequestDigest(title),
+    admission => activateMetadataWork(environment, { title, admission }));
+  const initialInput = { work: created.work, language: 'en',
+    body: `public load freshsearch${crypto.randomUUID().replaceAll('-', '')}`,
+    actingSubject: authority.actor };
+  const initialDraft = await accessWrite<CommandReceipt & { contribution: string; draftRevision: string }>(
+    `contribution:create:${created.work}`, 'contribution.create', textContributionDigest(initialInput),
+    admission => activateTextContribution(environment, admission, initialInput));
+  const initialPublication = { contribution: initialDraft.contribution,
+    expectedDraftHead: initialDraft.draftRevision, expectedPublicationHead: null,
+    rightsBasis: 'original-contribution' as const, disclosure: 'public' as const,
+    actingSubject: authority.actor };
+  const initialPublished = await accessWrite<CommandReceipt & { publicationDecision: string }>(
+    `contribution:publish:${initialDraft.contribution}`, 'contribution.publish',
+    textPublicationDigest(initialPublication),
+    admission => publishTextContribution(environment, admission, initialPublication));
+  const initialSelection = { context: { kind: 'main-version-default' as const, id: created.mainVersion },
+    work: created.work, contribution: initialDraft.contribution,
+    publicationDecision: initialPublished.publicationDecision, expectedSelectionHead: null,
+    selectionBasis: 'main-maintainer' as const, actingSubject: authority.actor };
+  const selected = await accessWrite<CommandReceipt & { selection: string }>(
+    `publication:select:${created.mainVersion}`, 'publication.select',
+    mainSelectionDigest(initialSelection),
+    admission => selectMainDefault(environment, admission, initialSelection));
+  const target = { work: created.work, mainVersion: created.mainVersion,
+    selection: selected.selection, language: 'en' };
+  evidence.freshMovementTarget = { work: target.work, mainVersion: target.mainVersion };
+
   const pageBody = (continuation?: Record<string, unknown>) => ({
     profile: 'public-main-phrase-page-v1', phrase: 'public load', language: null, pageSize: 1,
     ...(continuation ? { continuation } : {}),
   });
   const first = await post('/v1/queries/page', pageBody());
   if (first.status !== 200 || first.result.relationComplete !== true
-    || first.result.population !== cold.result.population || first.result.total < 2
+    || first.result.population !== cold.result.population + 1 || first.result.total < 2
     || first.result.results?.length !== 1 || !first.result.next) {
     throw new Error(`SEARCH18 first page did not create a complete bounded continuation: ${JSON.stringify({
       status: first.status, total: first.result.total, next: first.result.next })}`);
@@ -221,13 +278,6 @@ try {
   assertCompleteRead(rejectedCandidate, 'Rejected Realm candidate query');
   evidence.rejectedCandidate = { ...rejectedCandidate, realm };
 
-  const target = first.result.results[0] as Record<string, string>;
-  if (![target.work, target.mainVersion, target.selection, target.language]
-    .every(value => typeof value === 'string')) {
-    throw new Error(`Search result lacks the owner identity needed for movement trace: ${JSON.stringify(target)}`);
-  }
-  authority = new LoadAuthority(accessPool);
-  await authority.initialize();
   const body = `public load movementtrace${crypto.randomUUID().replaceAll('-', '')}`;
   const draftInput = { work: target.work, language: target.language, body,
     actingSubject: authority.actor };
@@ -248,19 +298,27 @@ try {
   const digest = mainSelectionDigest(selectionInput);
   const stable = await post('/v1/queries', common);
   assertCompleteRead(stable, 'Stable Main baseline');
+  const proofBeforeMovement = meter.searchProofSnapshot();
   let selection: string | undefined;
+  let movementFailure: string | undefined;
   meter.beforeNextPhrase(async () => {
-    const selected = await accessWrite<CommandReceipt & { selection: string }>(
-      `publication:select:${target.mainVersion}`, 'publication.select', digest,
-      admission => selectMainDefault(environment, admission, selectionInput));
-    selection = selected.selection;
+    try {
+      const selected = await accessWrite<CommandReceipt & { selection: string }>(
+        `publication:select:${target.mainVersion}`, 'publication.select', digest,
+        admission => selectMainDefault(environment, admission, selectionInput));
+      selection = selected.selection;
+    } catch (error) {
+      movementFailure = error instanceof Error ? `${error.constructor.name}: ${error.message}` : String(error);
+    }
   });
   const moved = await post('/v1/queries', common);
   evidence.movementRetry = { stable, moved,
-    changedWork: target.work, contribution: draft.contribution, selection,
+    changedWork: target.work, contribution: draft.contribution, selection, movementFailure,
+    searchProof: searchProofDelta(meter.searchProofSnapshot(), proofBeforeMovement),
     additionalFusekiCallsOverStableBaseline: moved.remote.calls - stable.remote.calls,
     bounds: { calls: MAX_SEARCH_FUSEKI_CALLS, responseBytes: MAX_SEARCH_FUSEKI_BYTES,
       perResponseBytes: MAX_SEARCH_RESPONSE_BYTES, deadlineMs: 1500 } };
+  if (movementFailure) throw new Error(`Movement setup failed: ${movementFailure}`);
   assertCompleteRead(moved, 'Search movement retry');
   const movedWork = moved.result.results?.find((item: { work: string }) => item.work === target.work);
   if (!selection || !movedWork || movedWork.contribution !== draft.contribution
@@ -279,6 +337,7 @@ try {
   }
   evidence.publicUnitPopulation = cold.result.population;
   evidence.remoteTotal = meter.snapshot();
+  evidence.searchProofTotal = meter.searchProofSnapshot();
   evidence.completedAt = new Date().toISOString();
 } catch (error) {
   failure = error instanceof Error ? error.message : String(error);
@@ -287,6 +346,7 @@ try {
   await stop(main);
   await accessPool.end();
   evidence.remoteTotal = meter.snapshot();
+  evidence.searchProofTotal = meter.searchProofSnapshot();
   await meter.stop();
   evidence.completedAt ??= new Date().toISOString();
   writeFileSync(join(artifacts, 'search-probe-evidence.json'), JSON.stringify(evidence, null, 2) + '\n');

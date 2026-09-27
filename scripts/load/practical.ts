@@ -29,7 +29,7 @@ import { seedPracticalCorpus, type PracticalCorpus, type LoadAuthority, replacem
   writerCohorts, writerIndex }
   from './corpus.ts';
 import { combineLoadCorpus, validateLoadBaseline, type LoadBaseline } from './baseline.ts';
-import { loadDockerEnvironment } from './docker-env.ts';
+import { hostLoopbackAccess, loadDockerEnvironment } from './docker-env.ts';
 import { delta, laneReadLatencies, laneReadP95Within, parseCgroupMemory, percentile,
   processHighWaterKiB, relayBacklogTrend, searchProofDelta, selectPhraseQuery, startFusekiMeter }
   from './measurement.ts';
@@ -42,6 +42,7 @@ const durationSeconds = Number(process.argv[3]);
 const artifacts = process.argv[4]!;
 const seedWorkers = Number(process.argv[5]);
 const prepare = process.env.REZICS_LOAD_PREPARE === '1';
+const phaseD = process.env.REZICS_LOAD_PHASE_D === '1';
 const cohort = Number(process.env.REZICS_LOAD_COHORT ?? count);
 const baselineFile = process.env.REZICS_LOAD_BASELINE_FILE;
 if (!Number.isInteger(count) || count < 10 || count > 10_000
@@ -519,12 +520,15 @@ async function runK6(corpus: PracticalCorpus, authority: LoadAuthority) {
   writeFileSync(join(artifacts, 'load-cases.json'), JSON.stringify(fixture, null, 2) + '\n');
   const script = join(import.meta.dir, 'practical.k6.js');
   const fd = openSync(join(artifacts, 'k6.log'), 'w');
-  const child = spawn('docker', ['run', '--rm', '--network', 'host', '--user', '0:0',
+  const docker = loadDockerEnvironment();
+  const loopback = hostLoopbackAccess(docker);
+  const child = spawn('docker', ['run', '--rm', ...loopback.args, '--user', '0:0',
     '--volume', `${script}:/scripts/practical.js:ro,Z`,
-    '--volume', `${artifacts}:/artifacts:Z`, '--env', `MAIN_BASE_URL=${mainUrl}`,
+    '--volume', `${artifacts}:/artifacts:Z`,
+    '--env', `MAIN_BASE_URL=http://${loopback.host}:${needed('MAIN_PORT')}`,
     '--env', `DURATION_SECONDS=${durationSeconds}`, '--env', `WORKS=${count}`,
     'grafana/k6:2.3.0', 'run', '--summary-export=/artifacts/k6-summary.json',
-    '/scripts/practical.js'], { cwd: root, env: loadDockerEnvironment(), stdio: ['ignore', fd, fd] });
+    '/scripts/practical.js'], { cwd: root, env: docker, stdio: ['ignore', fd, fd] });
   closeSync(fd);
   const until = Date.now() + durationSeconds * 1000;
   const writes = mixedWriters(corpus, authority, until);
@@ -604,6 +608,10 @@ async function runK6(corpus: PracticalCorpus, authority: LoadAuthority) {
 
 let failure: string | undefined;
 try {
+  if (phaseD) await accessPool.query(`UPDATE access.owner_partition_route
+    SET location = $1, lease_epoch = lease_epoch + 1
+    WHERE owner = 'graph' AND dataset_id = $2 AND routing_epoch = $3`,
+  [meter.url, DATASET, needed('MAIN_ROUTING_EPOCH')]);
   const initialized = spawnSync('bun', ['services/main/src/relay-init.ts'], {
     cwd: root, env: relayEnvironment, encoding: 'utf8', timeout: 15_000 });
   if (initialized.status !== 0) throw new Error(`relay init failed: ${initialized.stderr}`);
@@ -627,9 +635,12 @@ try {
       indexGeneration: baseline.indexGeneration, cold: oldCases };
   }
   const seededAt = performance.now();
+  // The retained fixture owns the low load-token canaries. Use a disjoint
+  // fresh cohort so exact hot and language reads cannot match imported Works.
+  const startIndex = baseline?.works ?? (phaseD ? 1_000 : 0);
   const fresh = await seedPracticalCorpus(env, contentPool, accessPool,
     cohort, completed => { console.log(`Seeded ${completed}/${cohort} fresh Works`); },
-    seedWorkers, baseline?.works ?? 0);
+    seedWorkers, startIndex);
   const { authority } = fresh;
   const corpus = baseline ? combineLoadCorpus(baseline.corpus, fresh.corpus, count) : fresh.corpus;
   corpus.mainUnits += backgroundPublicUnits;
@@ -637,8 +648,63 @@ try {
   evidence.seed = { works: corpus.works.length, mainUnits: corpus.mainUnits,
     contentUnits: corpus.contentUnits, realm: corpus.realm, ratingContext: corpus.ratingContext,
     graphSequence: (await graphSequence()).toString(), freshWorks: cohort,
-    backgroundWorks };
-  if (prepare) {
+    backgroundWorks, startIndex };
+  if (phaseD) {
+    evidence.qualification = {
+      scope: '100,000 restored Works, 10,000 restored public units, ten fresh command Works, eight read clients and two admitted writers',
+      durationSeconds, host: 'development host; observed resources and latency only',
+      excludes: '180-second sustained profile and 20,000-unit public search scale',
+    };
+    await waitContent(corpus);
+    evidence.relayAfterSeed = await waitRelay();
+    evidence.beforeMix = await queryCases(corpus);
+    evidence.relayBeforeMix = await relayLag();
+    let mixedFailure: unknown;
+    try { evidence.mixed = await runK6(corpus, authority); }
+    catch (error) { mixedFailure = error; }
+    let relayFailure: unknown;
+    try { evidence.relayAfterMix = await waitRelay(); }
+    catch (error) { relayFailure = error; evidence.relayAfterMixError = String(error); }
+    evidence.memoryBeforeRecovery = { mainHighWaterKiB: highWaterKiB,
+      fuseki: containerMemory('fuseki'), postgres: containerMemory('postgres') };
+    const mixed = evidence.mixed as Awaited<ReturnType<typeof runK6>> | undefined;
+    const lag = evidence.relayDuringMix as { trend: { growingAtEnd: boolean } } | undefined;
+    const profileFailed = !mixed || (mixed.readP95Ms ?? Infinity) > 1500
+      || !laneReadP95Within(mixed.laneLatency, 1500)
+      || Math.max(mixed.writer.latencyMs.edit.p95 ?? Infinity,
+        mixed.writer.latencyMs.selection.p95 ?? Infinity,
+        mixed.writer.latencyMs.rating.p95 ?? Infinity) > 2500
+      || (lag?.trend.growingAtEnd ?? true) || highWaterKiB <= 0;
+    const sequenceBeforeRecovery = await graphSequence();
+    await stop(main);
+    await stop(relay);
+    await Promise.all([contentPool.end(), accessPool.end(), relayPool.end()]);
+    poolsOpen = false;
+    const recoveryStarted = Date.now();
+    stackCommand('stack:down', 'phase-d-storage-down');
+    stackCommand('stack:up', 'phase-d-storage-up');
+    contentPool = new Pool({ connectionString: needed('CONTENT_DATABASE_URL') });
+    accessPool = new Pool({ connectionString: needed('ACCESS_DATABASE_URL') });
+    relayPool = new Pool({ connectionString: needed('ACCOUNT_RELAY_DATABASE_URL') });
+    poolsOpen = true;
+    if (await graphSequence() !== sequenceBeforeRecovery) {
+      throw new Error('Phase-D graph sequence changed across storage recovery');
+    }
+    main = service('main-phase-d-restarted', 'services/main/src/index.ts', { FUSEKI_URL: meter.url });
+    relay = service('relay-phase-d-restarted', 'services/main/src/relay.ts', relayEnvironment);
+    await ready();
+    evidence.afterRecovery = await queryCases(corpus);
+    evidence.relayAfterRecovery = await waitRelay();
+    evidence.storageRecoveryMs = Date.now() - recoveryStarted;
+    if ((evidence.storageRecoveryMs as number) > 90_000) {
+      throw new Error('Phase-D persistent storage recovery exceeded 90 seconds');
+    }
+    evidence.memoryAfterRecovery = { mainHighWaterKiB: highWaterKiB,
+      fuseki: containerMemory('fuseki'), postgres: containerMemory('postgres') };
+    if (mixedFailure) throw mixedFailure;
+    if (relayFailure) throw relayFailure;
+    if (profileFailed) throw new Error('Phase-D named host latency, lag or Main memory objective failed');
+  } else if (prepare) {
     await waitContent(corpus);
     evidence.relayAfterSeed = await waitRelay();
     evidence.cold = await queryCases(corpus);

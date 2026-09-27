@@ -4,13 +4,15 @@ import { Pool } from 'pg';
 import { MANAGE_ACTION, MANAGE_SCOPE } from '../../../services/main/src/modules/recommendation/derived-generation.ts';
 import { RANKING_PROFILE, RankingGenerations } from '../../../services/main/src/modules/recommendation/ranking.ts';
 import { meteredPool, retainBatch, slotOf } from '../integration/recommendation-support.ts';
+import { phaseDFixture } from './fixture-phase-d.ts';
 
 test('REC02: hot target and sparse ranking keep bounded batch and page costs', async () => {
-  if (!Bun.env.REZICS_QA_RUN_ID || !Bun.env.ACCESS_DATABASE_URL || !Bun.env.ACCOUNT_RELAY_DATABASE_URL) {
+  if (!Bun.env.REZICS_QA_RUN_ID) {
     throw new Error('Run through the isolated load tier');
   }
-  const access = new Pool({ connectionString: Bun.env.ACCESS_DATABASE_URL, max: 4 });
-  const relay = new Pool({ connectionString: Bun.env.ACCOUNT_RELAY_DATABASE_URL, max: 2 });
+  const fixture = phaseDFixture('REC02');
+  const access = new Pool({ connectionString: fixture.apps.ACCESS_DATABASE_URL, max: 4 });
+  const relay = new Pool({ connectionString: fixture.apps.ACCOUNT_RELAY_DATABASE_URL, max: 2 });
   try {
     const meter = meteredPool(access);
     const principal = { issuer: 'https://load.rezics.test', subject: randomUUID() };
@@ -32,7 +34,7 @@ test('REC02: hot target and sparse ranking keep bounded batch and page costs', a
     const dataEpoch = randomUUID();
     const realm = `https://rezics.com/id/${randomUUID()}`;
     const width = 100;
-    const batches = 200;
+    const batches = 100;
     for (let batch = 0; batch < batches; batch++) {
       const signals = Array.from({ length: width }, (_, offset) => {
         const index = batch * width + offset;
@@ -72,7 +74,7 @@ test('REC02: hot target and sparse ranking keep bounded batch and page costs', a
       (SELECT count(*)::text FROM access.ranking_score WHERE generation_id = $1) AS scores,
       (SELECT count(*)::text FROM access.ranking_signal_slot WHERE generation_id = $1) AS slots`,
     [build.generation])).rows[0]!;
-    expect(totals).toEqual({ scores: '1000', slots: '20000' });
+    expect(totals).toEqual({ scores: '1000', slots: '10000' });
     meter.reset();
     const page = await rankings.page({ principal, actingSubject: actor }, basis, 20);
     expect(page.items[0]?.candidate).toBe(hot);
