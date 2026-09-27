@@ -369,6 +369,7 @@ export const isolatedIntegrationFiles = new Set([
 
 export const isolatedFaultFiles = new Set([
   'tests/qa/fault-recovery/partition-relocation.test.ts',
+  'tests/qa/fault-recovery/rights-restriction-replay.test.ts',
   'tests/qa/fault-recovery/semantic-lost-response.test.ts',
 ]);
 
