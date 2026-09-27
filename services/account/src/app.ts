@@ -5,6 +5,7 @@ import { currentInstallationIn, installClient, InstallationConflict, Installatio
   InstallationNotFound, readInstallation, revokeInstallation } from './installations.ts';
 import { currentIntrospection, presentedToken } from './introspection.ts';
 import { guardedAuthorizationCodeExchange } from './oauth-code-guard.ts';
+import { consumeAccountLimit } from './rate-limit.ts';
 import { AccountRecoveryConflict, AccountRecoveryDenied, AccountRecoveryStale,
   activateAccountRecovery, approveAccountRecovery, enrollAccountRecovery,
   readAccountRecoveryClaim, requestAccountRecovery } from './recovery-claim.ts';
@@ -109,6 +110,27 @@ export function createAccountApp(auth: ReturnType<typeof createAccountAuth>, poo
     '/api/auth/change-email', '/api/auth/update-user',
     '/api/auth/link-social', '/api/auth/unlink-account']);
   const guardedAuthHandler = async (request: Request): Promise<Response> => {
+    const path = new URL(request.url).pathname;
+    const emailPaths = new Set(['/api/auth/sign-up/email', '/api/auth/request-password-reset',
+      '/api/auth/send-verification-email']);
+    if (request.method === 'POST' && emailPaths.has(path)) {
+      const body = await request.clone().json().catch(() => null) as { email?: unknown } | null;
+      const email = typeof body?.email === 'string' ? body.email.trim().toLowerCase() : '';
+      if (email.length <= 320) {
+        try {
+          if (!await consumeAccountLimit(pool, String(auth.options.secret), `${path}:${email}`, 3, 300)) {
+            return Response.json({ error: 'rate_limited' }, { status: 429,
+              headers: { 'retry-after': '300' } });
+          }
+        } catch { return Response.json({ error: 'temporarily_unavailable' }, { status: 503 }); }
+      }
+      const response = await auth.handler(request);
+      // Strip the provider's synthetic user too: future plugin fields must not
+      // turn sign-up back into a public account-directory oracle.
+      return response.ok && path === '/api/auth/sign-up/email'
+        && auth.options.emailAndPassword?.requireEmailVerification
+        ? Response.json({ status: true }, { headers: { 'cache-control': 'no-store' } }) : response;
+    }
     if (request.method !== 'POST' || !credentialPaths.has(new URL(request.url).pathname)) {
       return auth.handler(request);
     }

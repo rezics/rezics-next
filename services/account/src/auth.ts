@@ -9,6 +9,7 @@ import { currentInstallationIn, INSTALLATION_CLAIM } from './installations.ts';
 import { signingKeyOptions } from './signing-keys.ts';
 import { providerScopes, resourceScopes } from './oauth-scopes.ts';
 import { currentRecoveryGeneration, RECOVERY_GENERATION_CLAIM } from './recovery-claim.ts';
+import { accountLocale, type AccountEmail } from './email.ts';
 
 export interface AccountConfig {
   baseURL: string;
@@ -16,6 +17,9 @@ export interface AccountConfig {
   resource: string;
   pool: Pool;
   operatorUserIds: ReadonlySet<string>;
+  email?: AccountEmail;
+  /** Only fixtures without email journeys disable verification; the HTTP process always requires it. */
+  requireEmailVerification?: boolean;
   accessDeletionFence?: (accountSubject: string) => Promise<void>;
 }
 
@@ -29,8 +33,32 @@ export function accountAuthOptions(config: AccountConfig) {
     baseURL: config.baseURL,
     secret: config.secret,
     database: config.pool,
-    emailAndPassword: { enabled: true },
-    user: { deleteUser: { enabled: !!config.accessDeletionFence,
+    emailAndPassword: { enabled: true,
+      requireEmailVerification: config.requireEmailVerification ?? true,
+      minPasswordLength: 12,
+      resetPasswordTokenExpiresIn: 1800,
+      revokeSessionsOnPasswordReset: true,
+      sendResetPassword: async ({ user, url }: { user: { id: string; email: string }; url: string }, request?: Request) => {
+        if (!config.email) throw new Error('Account email delivery is not configured');
+        await config.email.enqueue({ userId: user.id, to: user.email, url,
+          purpose: 'reset', locale: accountLocale(request) });
+      },
+    },
+    emailVerification: { sendOnSignUp: true, expiresIn: 1800,
+      sendVerificationEmail: async ({ user, url }: { user: { id: string; email: string }; url: string }, request?: Request) => {
+        if (!config.email && config.requireEmailVerification === false) return;
+        if (!config.email) throw new Error('Account email delivery is not configured');
+        await config.email.enqueue({ userId: user.id, to: user.email, url,
+          purpose: 'verify', locale: accountLocale(request) });
+      },
+    },
+    user: { changeEmail: { enabled: true,
+      sendChangeEmailConfirmation: async ({ user, url }: { user: { id: string; email: string }; url: string }, request?: Request) => {
+        if (!config.email) throw new Error('Account email delivery is not configured');
+        await config.email.enqueue({ userId: user.id, to: user.email, url,
+          purpose: 'change-email', locale: accountLocale(request) });
+      },
+    }, deleteUser: { enabled: !!config.accessDeletionFence,
       beforeDelete: async (user: { id: string }) => {
         if (config.operatorUserIds.has(user.id)) {
           throw new APIError('CONFLICT', { message: 'transfer operator responsibility before deletion' });

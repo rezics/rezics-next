@@ -46,7 +46,7 @@ test('IAM02: invalid OIDC requests and swapped two-client exchanges leave pendin
   const base = `http://127.0.0.1:${accountPort}`;
   const issuer = `${base}/api/auth`;
   const operators = new Set<string>();
-  const config = { baseURL: base, resource, pool, operatorUserIds: operators,
+  const config = { requireEmailVerification: false, baseURL: base, resource, pool, operatorUserIds: operators,
     secret: 'oidc-authorization-local-secret-32-plus-chars' };
   let account: ReturnType<typeof createAccountApp> | undefined;
   const clients: { stop: () => unknown }[] = [];

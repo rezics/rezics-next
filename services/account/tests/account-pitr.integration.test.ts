@@ -89,7 +89,7 @@ test('OPS03/IAM10 partial: archived Account WAL retains sign-out and deletion', 
     throw new Error(`${label} PostgreSQL did not complete recovery`);
   };
   const startAccount = (pool: Pool) => {
-    const config = { baseURL, secret, resource: 'https://main.rezics.test', pool,
+    const config = { requireEmailVerification: false, baseURL, secret, resource: 'https://main.rezics.test', pool,
       operatorUserIds, accessDeletionFence };
     const auth = createAccountAuth(config);
     app = createAccountApp(auth, pool).listen({ hostname: '127.0.0.1', port: accountPort });
@@ -101,7 +101,7 @@ test('OPS03/IAM10 partial: archived Account WAL retains sign-out and deletion', 
     primaryStarted = true;
     primary = new Pool({ host: '127.0.0.1', port: primaryPort, user: process.env.USER,
       database: 'postgres' });
-    const config = { baseURL, secret, resource: 'https://main.rezics.test',
+    const config = { requireEmailVerification: false, baseURL, secret, resource: 'https://main.rezics.test',
       pool: primary, operatorUserIds, accessDeletionFence };
     const migration = await getMigrations(accountAuthOptions(config));
     expect(migration.schemaProblems).toEqual([]);

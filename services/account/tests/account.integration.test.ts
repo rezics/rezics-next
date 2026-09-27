@@ -41,7 +41,7 @@ test('IAM01/IAM02/IAM10 partial: Account schema, session and OIDC discovery over
   const operatorUserIds = new Set<string>();
   const fencedSubjects: string[] = [];
   const unavailableSubjects = new Set<string>();
-  const config = { baseURL, secret: 'account-local-integration-secret-value-32',
+  const config = { requireEmailVerification: false, baseURL, secret: 'account-local-integration-secret-value-32',
     resource: 'https://main.rezics.test', pool, operatorUserIds,
     accessDeletionFence: async (subject: string) => {
       if (unavailableSubjects.has(subject)) throw new Error('Access is unavailable');

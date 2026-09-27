@@ -41,7 +41,7 @@ test('IAM09: withdrawn consent fences old refresh and Main access across clients
   const baseURL = `http://127.0.0.1:${accountPort}`;
   const resource = 'https://main.rezics.test';
   const operators = new Set<string>();
-  const config = { baseURL, resource, pool, operatorUserIds: operators,
+  const config = { requireEmailVerification: false, baseURL, resource, pool, operatorUserIds: operators,
     secret: 'consent-revocation-local-secret-32-plus-chars' };
   let app: ReturnType<typeof createAccountApp> | undefined;
   try {

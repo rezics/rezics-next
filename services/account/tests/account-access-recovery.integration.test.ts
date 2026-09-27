@@ -179,7 +179,7 @@ test('OPS03/IAM10 partial: two-owner deletion cut rejects either missing WAL fro
     const issuer = `${baseURL}/api/auth`;
     const registry = new AccessAdmissionRegistry(access.pool);
     let failRelayOnce = true;
-    const config = { baseURL, secret: 'two-owner-recovery-local-secret-value-32',
+    const config = { requireEmailVerification: false, baseURL, secret: 'two-owner-recovery-local-secret-value-32',
       resource: 'https://main.rezics.test', pool: account.pool,
       operatorUserIds: new Set<string>(),
       accessDeletionFence: async (subject: string) => {
