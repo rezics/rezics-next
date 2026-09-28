@@ -271,7 +271,8 @@ export function LibraryPage({ state, overview, view, reading, now, avatarQuery, 
   const firstUse = total === 0 && data.customShelves.length === 0;
   const titles = Object.fromEntries([...reading, ...view.ok ? view.data.rows : []]
     .map(row => [row.work.id, workTitle(row.work, locale)]));
-  return <LibraryProvider actingSubject={data.agent} seed={view.ok ? view.data.seed : {}}
+  // One provider per view: its reader store starts from this view's seed, and a note or selection stays behind.
+  return <LibraryProvider key={libraryHref(state)} actingSubject={data.agent} seed={view.ok ? view.data.seed : {}}
     ratingContext={data.ratingContext} titles={titles} api={api} readerActions={readerActions} locale={locale}
     messages={messages}>
     {/* Titles mix Latin and CJK; space them apart. */}

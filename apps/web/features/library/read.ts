@@ -131,7 +131,10 @@ async function readStates(main: MainClient, actingSubject: string, works: readon
     (_, index) => works.slice(index * READER_BATCH, (index + 1) * READER_BATCH));
   const answers = await pooled(batches, async batch => {
     const answer = await read(batch);
-    if (answer.ok || !alone || batch.length === 1 || answer.failure === 'sign-in') return [answer];
+    // Only a single batch is split, so the fallback costs at most one batch of reads.
+    if (answer.ok || !alone || batch.length === 1 || works.length > READER_BATCH || answer.failure === 'sign-in') {
+      return [answer];
+    }
     return pooled(batch, work => read([work]));
   });
   return new Map(answers.flat().flatMap(answer => (answer.ok ? answer.data.items : []).map(item => [item.work, item])));
