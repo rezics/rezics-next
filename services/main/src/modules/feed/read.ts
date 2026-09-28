@@ -1,4 +1,5 @@
 import { Value } from 'typebox/value';
+import { fusekiReadBudget } from '../../infrastructure/fuseki.ts';
 import type { VerifiedPrincipal } from '../access/admission.ts';
 import type { followTarget } from '../follows/contract.ts';
 import { readFollowTarget, readFollowTargets } from '../follows/read.ts';
@@ -23,6 +24,8 @@ import type { Static } from 'typebox';
 import { inOrder, settle, unwrap, type Settled } from './settled.ts';
 
 export interface FeedReader { principal: VerifiedPrincipal; agent: string }
+/** Graph calls left (of 160) below which reader state waits for the fence. */
+const SPECULATIVE_VIEWER_CALLS = 100;
 
 
 export async function visibleFeedSources(session: WorkReadSession, rows: readonly { id: string; kind: string }[]) {
@@ -366,9 +369,11 @@ export async function readFeed(session: WorkReadSession, query: FeedQuery, reade
   };
   const viewerTargets = (chosen: readonly FeedItem[]) => chosen.map(item => ({ activity: item.id, work: item.target.work,
     ...(item.card.kind === 'chapter' ? { occurrence: item.card.occurrence } : {}) }));
-  // Reader state depends only on the selected cards' targets, so it starts as
-  // soon as a likely selection is known and is read once per distinct target
-  // list; the fenced selection's own targets decide which read is used.
+  // Reader state depends only on the selected cards' targets, so it starts
+  // with the fence from the selection that holds if every card passes. It is
+  // read once per distinct target list, and the fenced selection's own targets
+  // decide which read is used; a second read happens only if the fence drops a
+  // card, so both share the read's graph budget without doubling it.
   const viewerReads = new Map<string, Promise<Settled<Awaited<ReturnType<FeedViewerStateReader['read']>> | undefined>>>();
   const readViewer = (targets: ReturnType<typeof viewerTargets>) => {
     const key = JSON.stringify(targets);
@@ -418,24 +423,6 @@ export async function readFeed(session: WorkReadSession, query: FeedQuery, reade
   const matchesRead = reader && scope === 'following' ? follows.matches(reader.principal, reader.agent,
     sources.map(source => [source.realm, source.zone, source.work, source.actor].filter((id): id is string => !!id)))
     : Promise.resolve(null);
-  // The selection if every candidate hydrates and passes the fence. Language
-  // and tag filters need hydrated cards, so those reads wait for the cards.
-  if (reader && !query.contentLanguages && !query.tags) {
-    void Promise.all([candidatesRead, matchesRead]).then(([candidates, matches]) => {
-      void readViewer(viewerTargets(select(candidates.map(source => {
-        const item = feedItem(source, memberRows.find(row => row.id === source.id)!,
-          { id: source.actor, displayName: '', handle: '', links: { profile: '' } }, null,
-          source.realm ? { id: source.realm, kind: 'realm', name: { value: '', language: 'und', direction: 'ltr', basis: 'fallback' },
-            icon: { kind: 'fallback', policy: 'avatar-fallback-v1', key: source.realm, resourceType: 'realm' },
-            realm: source.realm, href: '' } : null, source, { value: 0, kind: 'exact' }, undefined);
-        if (source.occurrence) item.card = { kind: 'chapter', occurrence: source.occurrence, parent: '' };
-        const followed = matches?.reasons[sources.indexOf(source)]?.[0];
-        item.reason = followed ? { kind: 'followed', target: followed.target, targetKind: followed.kind }
-          : { kind: 'recommended', basis: scope === 'following' ? 'thin-following' : 'all' };
-        return item;
-      })).chosen));
-    }).catch(() => { /* The fenced selection reads its own targets. */ });
-  }
   const [initialChapters, workKinds, summaries, presentationBatch, matches, candidates,
     [actors, workTargets, realmTargets, bodies, comments, cards, acceptedTags]] = await inOrder(
     chapterPointers(session, sources), kindsRead, summariesRead,
@@ -467,8 +454,11 @@ export async function readFeed(session: WorkReadSession, query: FeedQuery, reade
     } catch (error) { if (!(error instanceof WorkReadMissing)) throw error; }
   }
 
-  // The selection if every hydrated card also passes the fence.
-  if (reader) void readViewer(viewerTargets(select(items).chosen));
+  // The selection if every hydrated card also passes the fence. It starts
+  // early only while the read's graph budget has room for a second read.
+  if (reader && (fusekiReadBudget.getStore()?.callsLeft ?? 0) >= SPECULATIVE_VIEWER_CALLS) {
+    void readViewer(viewerTargets(select(items).chosen));
+  }
   // The disclosure fence repeats every owner gate once. Graph-derived source
   // fields are pinned by the read's graph position, so reply, card and
   // chapter checks run with the source re-read and are then shown to match it.
