@@ -2,7 +2,9 @@ import { expect, test } from 'bun:test';
 import { createHash, randomUUID } from 'node:crypto';
 import { resolve } from 'node:path';
 import { Elysia } from 'elysia';
+import { Pool } from 'pg';
 import { StudioAccess } from '../../../services/main/src/modules/studio/access.ts';
+import { authorWorkGeneration } from '../../../services/main/src/modules/access/author-baseline.ts';
 import { createAgentGraph } from '../../../services/main/src/modules/agent/graph.ts';
 import { agentProvisionDigest } from '../../../services/main/src/modules/agent/provision.ts';
 import { canonicalChapterWorks } from '../../../services/main/src/modules/structure/chapter-work.ts';
@@ -22,8 +24,17 @@ test('STUDIO draft heads and Work title language survive edits and stale retries
   const f = await authorCreditFixture(Bun.env as Record<string, string>,
     resolve('.temp', `studio-heads-${randomUUID()}`));
   try {
+    const accountPool = new Pool({ connectionString: Bun.env.ACCOUNT_DATABASE_URL });
+    try { await accountPool.query('UPDATE "user" SET "emailVerified" = true WHERE id = $1', [f.account.a.id]); }
+    finally { await accountPool.end(); }
+    f.account.tokenA = await f.account.tokenFor(f.account.a);
+    f.access.configureBaseline(f.env.fuseki);
+    const missing = await f.call('POST', '/v1/works', { profile: 'metadata-only-v1',
+      authoring: 'own-work', title: 'Unready author', language: 'en', actingSubject: f.actor });
+    expect(missing.status).toBe(409);
+    expect(await missing.json()).toMatchObject({ code: 'author_agent_unavailable' });
     const agent = { kind: 'person' as const, displayName: 'Studio Author' };
-    await createAgentGraph(f.env, { id: randomUUID(), agent: f.actor,
+    const graphAgent = await createAgentGraph(f.env, { id: randomUUID(), agent: f.actor,
       ...agent, digest: agentProvisionDigest(agent) });
     const created = await f.json<{ work: string; mainVersion: string; workRevision: string }>(await f.call('POST', '/v1/works', {
       profile: 'metadata-only-v1', authoring: 'own-work', title: '日本語の作品', language: 'ja',
@@ -33,19 +44,30 @@ test('STUDIO draft heads and Work title language survive edits and stale retries
     }), 201);
     await f.grant(`work:read:${created.work}`, 'work.read');
     const studio = new Elysia().use(studioRoutes({ environment: f.env,
-      account: f.account.verifier, access: f.access, studioAccess: new StudioAccess(f.accessPool) }));
+      account: f.account.verifier, access: f.access, studioAccess: new StudioAccess(f.accessPool, f.env.fuseki) }));
     const studioPath = `/v1/me/agents/${shortId(f.actor)}/works`;
     const studioCall = (token = f.account.tokenA) => studio.handle(new Request(`http://main.local${studioPath}`,
       { headers: { authorization: `Bearer ${token}` } }));
     expect((await studioCall()).status).toBe(403);
+    const controlId = randomUUID();
     await f.accessPool.query(`INSERT INTO access.representation
       (id, principal_id, subject_id, action, valid_until)
-      VALUES ($1,$2,$3,'agent.control','infinity'::timestamptz)`, [randomUUID(), f.principalId, f.actor]);
+      VALUES ($1,$2,$3,'agent.control','infinity'::timestamptz)`, [controlId, f.principalId, f.actor]);
+    await f.accessPool.query(`INSERT INTO access.agent_provision (id, principal_id, idempotency_key,
+      request_digest, agent_id, agent_kind, display_name, principal_epoch, state,
+      graph_data_epoch, graph_sequence, representation_id)
+      VALUES ($1,$2,$3,$4,$5,'person',$6,0,'active',$7,$8,$9)`, [randomUUID(), f.principalId,
+      randomUUID(), agentProvisionDigest(agent), f.actor, agent.displayName,
+      graphAgent.dataEpoch, graphAgent.sequence, controlId]);
     expect((await studioCall(f.account.tokenB)).status).toBe(403);
     const listed = await f.json<{ items: Array<{ id: string; state: string; texts: unknown[] }> }>(
       await studioCall(), 200);
     expect(listed.items).toContainEqual(expect.objectContaining({ id: created.work,
       state: 'empty', texts: [] }));
+    expect(await f.json<{ item: { id: string; relationship: string } }>(await studio.handle(new Request(
+      `http://main.local/v1/me/agents/${shortId(f.actor)}/works/${shortId(created.work)}`,
+      { headers: { authorization: `Bearer ${f.account.tokenA}` } })), 200))
+      .toMatchObject({ item: { id: created.work, relationship: 'authored' } });
     const exact = await f.json<{ title: string; language: string }>(await f.call('GET',
       `/v1/revisions/${shortId(created.workRevision)}?actingSubject=${encodeURIComponent(f.actor)}`), 200);
     expect(exact).toMatchObject({ title: '日本語の作品', language: 'ja',
@@ -84,14 +106,13 @@ test('STUDIO draft heads and Work title language survive edits and stale retries
       environment: f.env, account: f.account.verifier, access: f.access,
       contentAuthoring: content,
     })).use(studioRoutes({ environment: f.env, account: f.account.verifier,
-      access: f.access, contentAuthoring: content, studioAccess: new StudioAccess(f.accessPool) }));
+      access: f.access, contentAuthoring: content, studioAccess: new StudioAccess(f.accessPool, f.env.fuseki) }));
     const contentCall = (method: string, path: string, body?: object) => contentApp.handle(new Request(
       `http://main.local${path}`, { method, headers: { authorization: `Bearer ${f.account.tokenA}`,
         'idempotency-key': randomUUID(), ...(body ? { 'content-type': 'application/json' } : {}) },
       ...(body ? { body: JSON.stringify(body) } : {}) }));
     const variantsPath = `/v1/works/${shortId(created.work)}/content-variants?actingSubject=${encodeURIComponent(f.actor)}`;
-    expect((await contentCall('GET', variantsPath)).status).toBe(404);
-    await f.grant(`content:variants:${created.work}`, 'content.variants.read');
+    expect((await contentCall('GET', variantsPath)).status).toBe(200);
     expect(await f.json<{ items: unknown[] }>(await contentCall('GET', variantsPath), 200))
       .toMatchObject({ items: [] });
     await f.grant(`work:edit:${created.work}`, 'work.edit');
@@ -139,6 +160,13 @@ test('STUDIO draft heads and Work title language survive edits and stale retries
     const chapter = await f.json<{ work: string; workRevision: string; occurrence: string; compositionRevision: string;
       variantId: string; replayed: boolean }>(await chapterCall(), 200);
     expect(chapter.replayed).toBe(false);
+    const chapterClient = await f.accessPool.connect();
+    try {
+      expect((await chapterClient.query<{ action: string }>(`SELECT a.action FROM access.work_maintainer_set s
+        JOIN access.admission a ON a.id = s.creation_admission WHERE s.work = $1`, [chapter.work])).rows[0]?.action)
+        .toBe('work.edit');
+      expect(await authorWorkGeneration(chapterClient, f.env.fuseki, f.principalId, f.actor, chapter.work)).toBe('0');
+    } finally { chapterClient.release(); }
     expect(chapter.variantId).toMatch(/^urn:rezics:variant:/);
     const mapping = await canonicalChapterWorks(new WorkReadSession(
       { environment: f.env } as MainWorkDependencies,
@@ -173,6 +201,13 @@ test('STUDIO draft heads and Work title language survive edits and stale retries
     const chapterInventory = await f.json<{ items: Array<{ id: string }> }>(await studioCall(), 200);
     expect(chapterInventory.items.map(item => item.id)).toContain(created.work);
     expect(chapterInventory.items.map(item => item.id)).not.toContain(chapter.work);
+    const exactChapterPath = `/v1/me/agents/${shortId(f.actor)}/works/${shortId(chapter.work)}`;
+    expect(await f.json<{ item: { id: string; relationship: string; texts: unknown[]; submissions: unknown[] } }>(await studio.handle(
+      new Request(`http://main.local${exactChapterPath}`, { headers: { authorization: `Bearer ${f.account.tokenA}` } })), 200))
+      .toMatchObject({ item: { id: chapter.work, relationship: 'authored', texts: [], submissions: [] } });
+    expect((await studio.handle(new Request(`http://main.local${exactChapterPath}`))).status).toBe(401);
+    expect((await studio.handle(new Request(`http://main.local/v1/me/agents/${shortId(f.actor)}/works/${randomUUID()}`,
+      { headers: { authorization: `Bearer ${f.account.tokenA}` } }))).status).toBe(404);
     const source = await f.propose(`OL${Math.floor(Math.random() * 900000 + 100000)}W`,
       undefined, 'Imported studio classic');
     const imported = await f.adoptWork(source);
@@ -193,8 +228,6 @@ test('STUDIO draft heads and Work title language survive edits and stale retries
     const chapterHead = await f.json<{ title: string; language: string }>(await f.call('GET',
       `/v1/revisions/${shortId(chapter.workRevision)}?actingSubject=${encodeURIComponent(f.actor)}`), 200);
     expect(chapterHead).toMatchObject({ title: '第一章', language: 'ja' });
-    await f.grant(`content:draft:${chapter.work}`, 'content.draft');
-    await f.grant(`content:variants:${chapter.work}`, 'content.variants.read');
     const chapterDraft = await f.json<{ revisionId: string }>(await contentCall('POST',
       '/v1/content-drafts', { profile: 'content-text-v1', resourceId: chapter.work,
         variantId: chapter.variantId, language: { kind: 'tag', tag: 'ja', originalTag: 'ja' },

@@ -23,23 +23,29 @@ export async function maintainerControllerProof(client: PoolClient, principalId:
     ORDER BY r.id LIMIT 1 FOR SHARE OF p, r, s, b`, [principalId, actingSubject])).rows[0] ?? null;
 }
 
-/** Called only by the admission sealer after checking the Work receipt family.
+/** Called only by the admission sealer after checking the Work or chapter receipt family.
  * Replay cannot re-add a creator who subsequently transferred maintainership. */
 export async function recordInitialMaintainer(client: PoolClient, admission: {
-  id: string; principal_id: string; acting_subject: string; action: string;
-}, proof: GraphTerminalProof & { work?: string; mainVersion?: string }): Promise<void> {
-  if (admission.action !== 'work.create' || proof.outcome !== 'succeeded'
-    || !proof.work || !proof.mainVersion) return;
+  id: string; principal_id: string; acting_subject: string; action: string; scope_id: string;
+}, proof: GraphTerminalProof & { work?: string; mainVersion?: string;
+  chapterWork?: string; chapterMainVersion?: string }): Promise<void> {
+  if (proof.outcome !== 'succeeded') return;
+  const chapter = admission.action === 'work.edit' && proof.chapterWork && proof.chapterMainVersion
+    && admission.scope_id !== `work:edit:${proof.chapterWork}`;
+  if (admission.action !== 'work.create' && !chapter) return;
+  const work = chapter ? proof.chapterWork! : proof.work;
+  const mainVersion = chapter ? proof.chapterMainVersion! : proof.mainVersion;
+  if (!work || !mainVersion) return;
   const created = await client.query(`INSERT INTO access.work_maintainer_set
     (work, main_version, creation_admission) VALUES ($1,$2,$3)
-    ON CONFLICT (work) DO NOTHING RETURNING work`, [proof.work, proof.mainVersion, admission.id]);
+    ON CONFLICT (work) DO NOTHING RETURNING work`, [work, mainVersion, admission.id]);
   if (!created.rowCount) return;
   await client.query('INSERT INTO access.work_maintainer (work, agent) VALUES ($1,$2)',
-    [proof.work, admission.acting_subject]);
+    [work, admission.acting_subject]);
   await client.query(`INSERT INTO access.work_maintainer_receipt
     (id, work, principal_id, idempotency_key, request_digest, actor, target, action, generation, maintainers)
-    VALUES ($1,$2,$3,$4,$5,$6,$6,'create',0,$7)`, [admission.id, proof.work, admission.principal_id,
-    `work-create:${admission.id}`, proof.requestDigest, admission.acting_subject,
+    VALUES ($1,$2,$3,$4,$5,$6,$6,'create',0,$7)`, [admission.id, work, admission.principal_id,
+    `${chapter ? 'chapter-create' : 'work-create'}:${admission.id}`, proof.requestDigest, admission.acting_subject,
     JSON.stringify([admission.acting_subject])]);
 }
 

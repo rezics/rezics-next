@@ -1,14 +1,18 @@
 import type { Pool } from 'pg';
 import type { VerifiedPrincipal } from '../access/admission.ts';
 import { inAccessTransaction, requireRecoveryOpen } from '../access/policy-transaction.ts';
+import type { FusekiClient } from '../../infrastructure/fuseki.ts';
+import { authorWorkGeneration } from '../access/author-baseline.ts';
+import { baselineMemberProof } from '../access/baseline.ts';
 
 const nativeId = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
 const MAX_RESOURCES = 65;
 
-/** One current Access decision for a bounded summary batch. The predicates and
- * row locks mirror AccessAdmissionRegistry.canReadWork; no grant is cached. */
+/** One Access transaction for at most 65 resources. Explicit grants use one
+ * indexed batch query; author fallback uses one live receipt ASK per remaining
+ * Work, bounded by 65. No grant is cached. */
 export class MediaAccessBatchReader {
-  constructor(private readonly pool: Pool) {}
+  constructor(private readonly pool: Pool, private readonly graph?: Pick<FusekiClient, 'query'>) {}
 
   async canReadWorks(principal: VerifiedPrincipal, actingSubject: string,
     works: readonly string[]): Promise<Set<string>> {
@@ -50,7 +54,25 @@ export class MediaAccessBatchReader {
           ORDER BY id LIMIT 1 FOR SHARE) AS granted ON true
         FOR SHARE OF gate, principal, subject`,
       [principal.issuer, principal.subject, unique, actingSubject, prefix, action]);
-      return new Set(rows.rows.map(row => row.resource));
+      const allowed = new Set(rows.rows.map(row => row.resource));
+      if (action === 'work.read' && principal.emailVerified && this.graph) {
+        const actor = (await client.query<{ id: string }>(`SELECT id FROM access.principal
+          WHERE account_issuer = $1 AND account_subject = $2 AND active FOR SHARE`,
+        [principal.issuer, principal.subject])).rows[0];
+        if (actor && await baselineMemberProof(client, actor.id, actingSubject)) {
+          const gates = (await client.query<{ id: string; open: boolean }>(`SELECT id, open
+            FROM access.scope_gate WHERE id = ANY($1::text[]) FOR SHARE`,
+          [unique.map(work => `work:read:${work}`)])).rows;
+          const gateById = new Map(gates.map(gate => [gate.id, gate.open]));
+          for (const work of unique) {
+            if (allowed.has(work) || gateById.get(`work:read:${work}`) === false) continue;
+            if (await authorWorkGeneration(client, this.graph, actor.id, actingSubject, work) !== null) {
+              allowed.add(work);
+            }
+          }
+        }
+      }
+      return allowed;
     });
   }
 }

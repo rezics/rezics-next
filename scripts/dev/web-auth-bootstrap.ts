@@ -7,6 +7,8 @@ import { createAccountAuth } from '../../services/account/src/auth.ts';
 import { createAccountApp } from '../../services/account/src/app.ts';
 import { operatorRole, rolePermits } from '../../services/account/src/operators.ts';
 import { FusekiClient } from '../../services/main/src/infrastructure/fuseki.ts';
+import { createAgentGraph } from '../../services/main/src/modules/agent/graph.ts';
+import { agentProvisionDigest } from '../../services/main/src/modules/agent/provision.ts';
 import { MAIN_SITE_SCOPE, MAIN_SITE_SCOPES } from '../../apps/web/features/auth/scopes.ts';
 import { appEnvironment, readEnv, savePrivate, stackDirectory } from './config.ts';
 
@@ -270,6 +272,11 @@ export async function bootstrapWebAuth(options: WebAuthOptions): Promise<WebAuth
       throw new Error('Account discovery differs from the QA issuer');
     }
     const actor = `https://rezics.com/id/${randomUUID()}`;
+    const agent = { kind: 'person' as const, displayName: 'Local author' };
+    await createAgentGraph({ fuseki: new FusekiClient(apps.FUSEKI_URL!),
+      lineage: { dataEpoch: apps.MAIN_DATA_EPOCH!, routingEpoch: apps.MAIN_ROUTING_EPOCH! },
+      objectDirectory: join(outputDir, 'objects') },
+    { id: randomUUID(), agent: actor, ...agent, digest: agentProvisionDigest(agent) });
     const principalId = await grantWorkCreation(accessPool, discovery.issuer, member.id, actor);
     const publicConfigPath = join(outputDir, 'public.json');
     const privateConfigPath = join(outputDir, 'private.json');

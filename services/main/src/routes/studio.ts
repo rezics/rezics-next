@@ -1,6 +1,6 @@
 import { Elysia, t } from 'elysia';
 import { ControlDenied, ControlUnavailable } from '../modules/access/topology-control.ts';
-import { readStudioWorks } from '../modules/studio/works.ts';
+import { readStudioWork, readStudioWorks } from '../modules/studio/works.ts';
 import { changeAdmittedComposition } from '../modules/structure/change-admitted.ts';
 import { derivedId, readCompositionHeader } from '../modules/structure/graph.ts';
 import { GRAPHS, iri } from '../modules/work/activate.ts';
@@ -13,6 +13,7 @@ import { workReadError, workReadProblems } from './work-reads.ts';
 
 export const openApiOperations = {
   '/v1/me/agents/{agent}/works': { get: { bearer: true } },
+  '/v1/me/agents/{agent}/works/{id}': { get: { bearer: true } },
   '/v1/works/{id}/content-variants': { get: { bearer: true } },
   '/v1/works/{id}/chapters': { post: { bearer: true, idempotencyKey: true } },
 } as const;
@@ -50,6 +51,22 @@ export function studioRoutes(work: MainWorkDependencies) {
         { actingSubject: agent, limit: query.limit, cursor: query.cursor },
         session => readStudioWorks(session, agent, { state: query.state, type: query.type,
           view: query.view })),
+      { headers: { 'cache-control': 'private, no-store' } });
+    } catch (error) {
+      if (error instanceof ControlDenied) return problem(403, 'studio_denied', 'Agent control is unavailable');
+      if (error instanceof ControlUnavailable) return problem(503, 'studio_unavailable', 'Agent authority is unavailable');
+      return workReadError(error);
+    }
+  }).get('/v1/me/agents/:agent/works/:id', {
+    params: t.Object({ agent: readUuid, id: readUuid }),
+    response: { 200: t.Object({ item, sourcePosition: t.Object({ dataEpoch: t.String(),
+      sequence: t.String() }) }), ...workReadProblems },
+  }, async ({ request, params }) => {
+    const agent = `https://rezics.com/id/${params.agent}`;
+    const id = `https://rezics.com/id/${params.id}`;
+    try {
+      return Response.json(await workRead(work, request, { actingSubject: agent },
+        session => readStudioWork(session, agent, id)),
       { headers: { 'cache-control': 'private, no-store' } });
     } catch (error) {
       if (error instanceof ControlDenied) return problem(403, 'studio_denied', 'Agent control is unavailable');

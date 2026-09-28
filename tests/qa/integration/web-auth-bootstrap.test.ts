@@ -120,6 +120,8 @@ test('IAM01/WORK01: authenticated metadata-only Work has an empty Main Version',
     expect(userInfo.status).toBe(200);
     expect(await userInfo.json()).toMatchObject({ sub: privateConfig.member.id });
     const fuseki = new FusekiClient(runtime.FUSEKI_URL!);
+    expect((await fuseki.query(`PREFIX rv: <${RV}> ASK { GRAPH ${iri(GRAPHS.current)} {
+      ${iri(result.actingSubject)} a rv:Agent ; rv:head ?head . } }`)).boolean).toBe(true);
     const main = createMainApp(fuseki, {
       environment: { fuseki, lineage: { dataEpoch: runtime.MAIN_DATA_EPOCH!,
         routingEpoch: runtime.MAIN_ROUTING_EPOCH! },
@@ -194,6 +196,13 @@ test('IAM01/WORK01: authenticated metadata-only Work has an empty Main Version',
       accessDatabaseUrl: runtime.ACCESS_DATABASE_URL!, fusekiUrl: runtime.FUSEKI_URL!,
       work: created.work });
     expect((await read()).status).toBe(200);
+    const authored = await main.handle(new Request('http://localhost/v1/works', {
+      method: 'POST', headers: { authorization: `Bearer ${token}`,
+        'content-type': 'application/json', 'idempotency-key': `web-author-${randomUUID()}` },
+      body: JSON.stringify({ profile: 'metadata-only-v1', authoring: 'own-work',
+        title: 'Local authored Work', actingSubject: result.actingSubject }),
+    }));
+    expect(authored.status, await authored.clone().text()).toBe(201);
   } finally {
     await account.stop();
     await accountPool.end();

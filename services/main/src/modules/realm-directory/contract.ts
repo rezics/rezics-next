@@ -2,6 +2,7 @@ import { t } from 'elysia';
 import { pageFields, readAvatar, readId, readName } from '../work/read-contract.ts';
 
 export const realmDirectoryItem = t.Object({ id: readId, space: readId, name: readName,
+  reviewMode: t.Union([t.Literal('mandatory'), t.Literal('trusted-members'), t.Literal('open')]),
   icon: readAvatar, description: t.Nullable(readName),
   membership: t.Object({ count: t.Union([
     t.Object({ kind: t.Literal('unknown'), value: t.Null() }),
@@ -18,4 +19,4 @@ export const realmDirectoryPage = t.Object({ profile: t.Literal('realm-directory
  * in bounded source batches. Substring search can scan the SQL index relation.
  * No candidate population ceiling; response and source batch sizes are separate. */
 export const REALM_DIRECTORY_COST = { pageSize: 20, sourceBatch: 32,
-  profileBatch: 4, refreshBatches: 2, graphCalls: 160, deadlineMs: 10_000 } as const;
+  profileBatch: 4, refreshBatches: 2, graphCalls: 161, deadlineMs: 10_000 } as const;

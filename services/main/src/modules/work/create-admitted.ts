@@ -3,7 +3,7 @@ import type { AccessAdmissionRegistry } from '../access/admission.ts';
 import { AdmissionDenied, AdmissionExpired, type RegisteredAdmission } from '../access/admission.ts';
 import { createHash } from 'node:crypto';
 import {
-  activateMetadataWork, CancelledActivation, IdempotencyConflict, metadataWorkRequestDigest,
+  activateMetadataWork, AuthorAgentUnavailable, CancelledActivation, IdempotencyConflict, metadataWorkRequestDigest,
   PendingActivation, type WorkActivationEnvironment, type WorkActivationReceipt,
 } from './activate.ts';
 import { readWorkTerminalReceipt } from './receipt.ts';
@@ -110,7 +110,8 @@ export async function createAdmittedMetadataWork(
     await access.recordGraphOutcome(admission.id, terminal);
     return result;
   } catch (error) {
-    if (error instanceof IdempotencyConflict || error instanceof CancelledActivation) throw error;
+    if (error instanceof IdempotencyConflict || error instanceof CancelledActivation
+      || error instanceof AuthorAgentUnavailable) throw error;
     // The admission is durable. The graph may have committed even when a response
     // or Access outcome write failed, so the caller must use the same key again.
     throw new PendingAdmittedWork(registered.id);

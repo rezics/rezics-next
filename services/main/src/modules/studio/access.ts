@@ -4,10 +4,13 @@ import { ceilingFor, mandateFor, normalizeControlError, requireMandate,
   requirePrincipal } from '../access/topology-control.ts';
 import { fusekiReadBudget } from '../../infrastructure/fuseki.ts';
 import { WorkReadUnavailable } from '../work/read-session.ts';
+import type { FusekiClient } from '../../infrastructure/fuseki.ts';
+import { authorWorkGeneration } from '../access/author-baseline.ts';
+import { baselineMemberProof } from '../access/baseline.ts';
 
 /** Access-owned evidence for private Studio pages, fenced to one read transaction. */
 export class StudioAccess {
-  constructor(private readonly pool: Pool) {}
+  constructor(private readonly pool: Pool, private readonly graph?: Pick<FusekiClient, 'query'>) {}
 
   private async transaction<T>(operation: (client: PoolClient) => Promise<T>): Promise<T> {
     const signal = fusekiReadBudget.getStore()?.signal ?? AbortSignal.timeout(10_000);
@@ -89,7 +92,26 @@ export class StudioAccess {
     });
   }
 
-  /** Explicit grant only; the Access baseline owner defines when the grant is issued. */
+  /** Exact Work lookup; O(1) indexed Access rows, independent of inventory size. */
+  async studioWork(principal: VerifiedPrincipal, agent: string, work: string) {
+    return this.transaction(async client => {
+      const actor = await requirePrincipal(client, principal);
+      const mandate = await requireMandate(client, actor.id, agent, 'agent.control');
+      const subject = (await client.query<{ generation: string }>(`SELECT generation::text
+        FROM access.authority_subject WHERE id = $1 AND kind = 'agent' AND active FOR SHARE`, [agent])).rows[0];
+      if (!subject) throw new WorkReadUnavailable('Studio Agent is unavailable');
+      const row = (await client.query<{ action: string; created_at: Date; generation: string }>(`
+        SELECT a.action, a.registered_at AS created_at, s.generation::text FROM access.work_maintainer_set s
+        JOIN access.work_maintainer m ON m.work = s.work AND m.agent = $2
+        JOIN access.admission a ON a.id = s.creation_admission
+        WHERE s.work = $1 AND a.acting_subject = $2 AND a.state = 'sealed'
+          AND a.graph_outcome = 'succeeded' FOR SHARE OF s`, [work, agent])).rows[0];
+      return { row: row ?? null, stamp: JSON.stringify([actor.id, actor.epoch, mandate.id,
+        mandate.generation, subject.generation, row?.generation ?? null]) };
+    });
+  }
+
+  /** One exact author proof or an explicit grant, fenced by the same scope gate. */
   async canReadContentVariants(principal: VerifiedPrincipal, actingSubject: string,
     work: string): Promise<boolean> {
     if (!/^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/.test(work)
@@ -98,8 +120,11 @@ export class StudioAccess {
       const scope = `content:variants:${work}`;
       const gate = (await client.query<{ open: boolean }>(`SELECT open FROM access.scope_gate
         WHERE id = $1 FOR SHARE`, [scope])).rows[0];
-      if (!gate?.open) return false;
+      if (gate && !gate.open) return false;
       const actor = await requirePrincipal(client, principal);
+      if (principal.emailVerified && await baselineMemberProof(client, actor.id, actingSubject)
+        && await authorWorkGeneration(client, this.graph, actor.id, actingSubject, work) !== null) return true;
+      if (!gate) return false;
       const mandate = await mandateFor(client, actor.id, actingSubject, 'content.variants.read');
       const ceiling = await ceilingFor(client, actingSubject, 'content.variants.read', undefined, scope);
       return !!mandate && !!ceiling;

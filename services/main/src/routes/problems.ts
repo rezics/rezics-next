@@ -67,7 +67,7 @@ import { TitleControlConflict, TitleControlInvalid, TitleControlUnavailable }
 import { RevisionCorrupt, RevisionNotFound, RevisionUnavailable } from '../modules/work/history.ts';
 import { InvalidWorkScalarValue } from '../modules/work/scalar-value.ts';
 import { RecoveryHold } from '../modules/work/restore-lineage.ts';
-import { CancelledActivation, IdempotencyConflict } from '../modules/work/activate.ts';
+import { AuthorAgentUnavailable, CancelledActivation, IdempotencyConflict } from '../modules/work/activate.ts';
 import { ContributionWorkUnavailable, InvalidContributionInput }
   from '../modules/contribution/draft.ts';
 import { ContributionEditUnavailable, StaleContributionDraftHead }
@@ -258,6 +258,9 @@ export function commandError(error: unknown): Response {
       result: null, retry: { allowed: true, afterMs: 1000 } }, {
       status: 202, headers: { 'cache-control': 'no-store', 'retry-after': '1' },
     });
+  }
+  if (error instanceof AuthorAgentUnavailable) {
+    return problem(409, 'author_agent_unavailable', 'Author Agent has no active graph record');
   }
   if (error instanceof AccountAssertionDenied) {
     return problem(401, 'account_assertion_denied', 'Account assertion is invalid or inactive',

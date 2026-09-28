@@ -86,6 +86,7 @@ export class IdempotencyConflict extends Error {}
 export class PendingActivation extends Error {}
 export class CancelledActivation extends Error {}
 export class InvalidWorkSemanticTypes extends Error {}
+export class AuthorAgentUnavailable extends Error {}
 
 export function hash(value: string | Uint8Array): string {
   return createHash('sha256').update(value).digest('hex');
@@ -320,7 +321,7 @@ export async function activateMetadataWork(env: WorkActivationEnvironment, inten
     GRAPH ${iri(GRAPHS.current)} { ${iri(intent.authorAgent)} a rv:Agent ; rv:head ?head . }
     GRAPH ${iri(GRAPHS.revisions)} { ?head a rv:RevisionAnchor ;
       rv:component ${iri(intent.authorAgent)} . } }`)).boolean === true : false;
-  if (intent.authorAgent && !authorReady) throw new Error('Author Agent graph is unavailable');
+  if (intent.authorAgent && !authorReady) throw new AuthorAgentUnavailable('Author Agent graph is unavailable');
   const credit = authorReady && intent.authorAgent ? { id: ID + Bun.randomUUIDv7(),
     revision: ID + Bun.randomUUIDv7(), agent: intent.authorAgent } : undefined;
   const validations = [...await workMetadataValidations(env, work, main),

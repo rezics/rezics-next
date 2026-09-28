@@ -1,15 +1,87 @@
-import { decodeReadCursor, encodeReadCursor, pageResult, WorkReadLimit, WorkReadMoved,
+import { decodeReadCursor, encodeReadCursor, pageResult, WorkReadLimit, WorkReadMissing, WorkReadMoved,
   WorkReadUnavailable, type WorkReadSession } from '../work/read-session.ts';
 import { GRAPHS, RV, iri, lit } from '../work/activate.ts';
 import { FALLBACK_POLICY } from '../media/summary.ts';
 
 export const STUDIO_WORK_COST = { pageSize: 20, candidateAdmissions: 200, textsPerPage: 200,
   submissionsPerPage: 200, graphCalls: 5, accessCalls: 4 } as const;
+export const STUDIO_WORK_DETAIL_COST = { graphCalls: 4, accessCalls: 4,
+  texts: 200, submissions: 200 } as const;
 const types = ['https://schema.org/Book', 'https://schema.org/DigitalDocument',
   'https://schema.org/Recipe'] as const;
 type WorkType = typeof types[number];
 export interface StudioWorkFilters { state?: 'draft' | 'published' | 'empty'; type?: WorkType;
   view?: 'authored' | 'curated' }
+
+/** Exact Agent Work, including chapters omitted from the inventory. One Work
+ * graph head and at most 200 of the Agent's texts and submissions. */
+export async function readStudioWork(session: WorkReadSession, agent: string, work: string) {
+  const principal = session.principal;
+  const access = session.deps.studioAccess;
+  if (!principal || !access || session.options.actingSubject !== agent) {
+    throw new WorkReadUnavailable('Studio authority is unavailable');
+  }
+  const first = await access.studioWork(principal, agent, work);
+  if (!first.row) throw new WorkReadMissing('Studio Work is unavailable');
+  const heads = await session.query(`SELECT ?main ?head ?mainHead ?title ?disclosure WHERE {
+    GRAPH ${iri(GRAPHS.current)} { ${iri(work)} a schema:CreativeWork ; rv:head ?head ;
+      rv:mainVersion ?main ; rdfs:label ?title .
+      ?main a rv:MainVersion ; rv:head ?mainHead ; rv:work ${iri(work)} .
+      OPTIONAL { ${iri(work)} rv:disclosure ?disclosure }
+      FILTER NOT EXISTS { ${iri(work)} rv:protectionHead ?protection } }
+  } LIMIT 2`, 2);
+  if (heads.length !== 1 || !heads[0]?.main || !heads[0]?.head || !heads[0]?.mainHead
+    || !heads[0]?.title) throw new WorkReadMissing('Studio Work is unavailable');
+  const head = heads[0];
+  const credits = await session.query(`SELECT ?credit WHERE {
+    GRAPH ${iri(GRAPHS.current)} { ?credit a rv:NativeAgentCredit ; rv:work ${iri(work)} ;
+      rv:agent ${iri(agent)} ; schema:roleName "author" ; rv:creditRevision ?creditHead . }
+    GRAPH ${iri(GRAPHS.revisions)} { ?creditHead a rv:NativeAgentCreditRevision ;
+      rv:component ?credit ; rv:work ${iri(work)} ; rv:agent ${iri(agent)} .
+      FILTER NOT EXISTS { ?creditHead a rv:ErasedRevision } }
+  } LIMIT 2`, 2);
+  const typeRows = await session.query(`SELECT ?type WHERE { GRAPH ${iri(GRAPHS.current)} {
+    ${iri(work)} a ?type . FILTER(?type IN (${types.map(type => `<${type}>`).join(', ')}))
+  } } LIMIT ${types.length + 1}`, types.length + 1);
+  const textRows = await session.query(`SELECT ?contribution ?language ?draft ?publication ?selected WHERE {
+    GRAPH ${iri(GRAPHS.current)} { ?contribution a rv:TextContribution ; rv:work ${iri(work)} ;
+      rv:author ${iri(agent)} ; rv:language ?language ; rv:draftHead ?draft .
+      OPTIONAL { ?contribution rv:publicationHead ?publication } }
+    OPTIONAL { FILTER(BOUND(?publication)) GRAPH ${iri(GRAPHS.revisions)} {
+      ?publication rv:selectedDraft ?selected . } }
+  } LIMIT ${STUDIO_WORK_DETAIL_COST.texts + 1}`, STUDIO_WORK_DETAIL_COST.texts + 1);
+  if (textRows.length > STUDIO_WORK_DETAIL_COST.texts) throw new WorkReadLimit('Studio texts exceed Work budget');
+  const texts = textRows.map(row => {
+    if (!row.contribution || !row.language || !row.draft) throw new WorkReadUnavailable('Studio text is incomplete');
+    return { contribution: row.contribution.value, language: row.language.value,
+      draftHead: row.draft.value, publicationHead: row.publication?.value ?? null,
+      publicationDraft: row.selected?.value ?? null };
+  });
+  const details = await access.studioWorkDetails(principal, agent, [work]);
+  const summary = await session.summaries([work]);
+  const cover = summary.find(item => item.reference === work);
+  const again = await access.studioWork(principal, agent, work);
+  const finalDetails = await access.studioWorkDetails(principal, agent, [work]);
+  if (again.stamp !== first.stamp || JSON.stringify(finalDetails) !== JSON.stringify(details)) {
+    throw new WorkReadMoved('Studio Work authority or details changed');
+  }
+  const createdAt = first.row.created_at.toISOString();
+  const updatedAt = new Date(Math.max(first.row.created_at.valueOf(),
+    details.edits[0]?.updated_at.valueOf() ?? 0)).toISOString();
+  return { item: { id: work, mainVersion: head.main.value, workRevision: head.head.value,
+    mainRevision: head.mainHead.value,
+    title: { value: head.title.value, language: head.title['xml:lang'] ?? 'en' },
+    relationship: first.row.action === 'work.edit' || credits.length ? 'authored' as const : 'curated' as const,
+    cover: cover?.status === 'available' ? cover.avatar : { kind: 'fallback' as const,
+      policy: FALLBACK_POLICY, key: work, resourceType: 'work' as const },
+    types: typeRows.map(row => row.type?.value).filter((value): value is string => !!value),
+    disclosure: head.disclosure?.value === `${RV}Public` ? 'public' as const : 'restricted' as const,
+    state: texts.some(text => text.publicationHead) ? 'published' as const
+      : texts.length ? 'draft' as const : 'empty' as const,
+    texts, submissions: details.submissions.map(item => ({ id: item.id, realm: item.realm,
+      state: item.state, openedAt: item.opened_at.toISOString(), updatedAt: item.updated_at.toISOString() })),
+    createdAt, updatedAt }, sourcePosition: session.position };
+}
 
 /** Agent control is fenced before and after this bounded cross-owner read. */
 export async function readStudioWorks(session: WorkReadSession, agent: string,

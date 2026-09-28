@@ -12,6 +12,7 @@ import { WorkMaintainers } from '../../../services/main/src/modules/work/maintai
 import { allocateAgentHandle } from '../../../services/main/src/modules/agent/handle.ts';
 import { AgentVanityHandles } from '../../../services/main/src/modules/agent/vanity.ts';
 import { MediaAccessBatchReader } from '../../../services/main/src/modules/media/access-batch.ts';
+import { StudioAccess } from '../../../services/main/src/modules/studio/access.ts';
 import { createAdmittedTextContribution } from '../../../services/main/src/modules/contribution/create-admitted.ts';
 import { publishAdmittedTextContribution } from '../../../services/main/src/modules/contribution/publish-admitted.ts';
 import { cloneQaAccountAccessDatabases } from '../support/databases.ts';
@@ -39,7 +40,8 @@ async function fixture() {
   const account = { verify: (request: Request) => h.verifier.verify(request, ['agent:create']) };
   const app = createMainApp(h.fuseki, { environment: h.env, account, access,
     content: storage.content, contentAuthoring: storage.content, media: storage.media,
-    mediaAccess: new MediaAccessBatchReader(h.accessPool),
+    mediaAccess: new MediaAccessBatchReader(h.accessPool, h.fuseki),
+    studioAccess: new StudioAccess(h.accessPool, h.fuseki),
     profiles: new ProfilesAccess(h.accessPool), actingContexts: new AccessActingContexts(h.accessPool, h.env),
     realmSubmissions: new RealmSubmissionStore(h.accessPool, access, h.env),
     realmSubmissionReads: new RealmSubmissionReads(h.accessPool) });
@@ -85,6 +87,9 @@ test('author baseline: metadata, own libraries, handles and narrow resource admi
     const work = await h.work();
     const other = await h.agent();
     const otherWork = await h.work(other);
+    const covers = new MediaAccessBatchReader(h.accessPool, h.fuseki);
+    expect(await covers.canReadWorks(h.principal, h.actor, [work.work, otherWork.work]))
+      .toEqual(new Set([work.work]));
     const authority = await h.access.withWorkEditAuthority(h.principal, h.actor, work.work, async proof => proof);
     expect(authority.grantId).toBeNull();
     expect(authority.baseline).toMatchObject({ kind: 'author-baseline-v1', workGeneration: '0' });
@@ -204,13 +209,27 @@ test('author baseline: public author submissions preserve Realm review, isolatio
     const key = randomUUID();
     const submitted = await h.call('POST', path, submission, key);
     expect(submitted.status, await submitted.clone().text()).toBe(201);
-    expect((await submitted.json() as { submission: { state: string } }).submission.state).toBe('pending');
+    const opened = await submitted.json() as { submission: { id: string; revision: string; state: string } };
+    expect(opened.submission.state).toBe('pending');
     expect((await h.call('POST', path, submission, key)).status).toBe(200);
     const mine = await h.call('GET', `/v1/my/submissions?actingSubject=${encodeURIComponent(h.actor)}`);
     expect(mine.status).toBe(200);
     expect((await mine.json() as { items: unknown[] }).items).toHaveLength(1);
+    const detail = await h.call('GET', `/v1/me/agents/${short(h.actor)}/works/${short(work.work)}`);
+    expect(detail.status, await detail.clone().text()).toBe(200);
+    expect(await detail.json()).toMatchObject({ item: { id: work.work,
+      submissions: [{ id: opened.submission.id, state: 'pending' }] } });
     const other = await h.agent();
     expect((await h.call('POST', path, { ...submission, actingSubject: other })).status).toBe(403);
+    const withdrawPath = `${path}/${opened.submission.id}/withdrawals`;
+    await expect(h.admit('submission.withdraw', `submission:submit:${realm}`))
+      .rejects.toBeInstanceOf(AdmissionDenied);
+    expect((await h.call('POST', withdrawPath, { actingSubject: other,
+      expectedRevision: opened.submission.revision })).status).toBe(403);
+    const withdrawal = await h.call('POST', withdrawPath, { actingSubject: h.actor,
+      expectedRevision: opened.submission.revision });
+    expect(withdrawal.status, await withdrawal.clone().text()).toBe(200);
+    expect((await withdrawal.json() as { submission: { state: string } }).submission.state).toBe('withdrawn');
     await expect(h.admit('submission.submit', `submission:submit:${realm}`)).rejects.toBeInstanceOf(AdmissionDenied);
     const pending = await h.admit('submission.submit', `submission:submit:${realm}`,
       { baselineContribution: candidate.contribution });
@@ -225,6 +244,8 @@ test('author baseline: public author submissions preserve Realm review, isolatio
     const organization = await h.agent('organization');
     await new WorkMaintainers(h.accessPool, h.env).change(h.principal, { work: work.work,
       actingSubject: h.actor, target: organization, expectedGeneration: '0', action: 'transfer' }, randomUUID());
+    expect(await new MediaAccessBatchReader(h.accessPool, h.fuseki)
+      .canReadWorks(h.principal, h.actor, [work.work])).toEqual(new Set());
     await expect(h.access.claim(beforeTransfer.id, beforeTransfer.requestDigest, h.principal)).rejects.toBeInstanceOf(AdmissionDenied);
     expect((await h.call('POST', path, submission)).status).toBe(403);
   } finally { await h.close(); }
@@ -272,5 +293,15 @@ test('author baseline: exact Content publication and search eligibility use reso
     const avatar = await h.call('PUT', `/v1/resources/${short(work.work)}/avatar`, {
       profile: 'resource-avatar-selection-v1', asset: reserved.asset, expectedSelection: null, actingSubject: h.actor });
     expect(avatar.status, await avatar.clone().text()).toBe(201);
+    const own = await h.call('GET', `/v1/resources/${short(work.work)}?actingSubject=${encodeURIComponent(h.actor)}`);
+    expect(own.status, await own.clone().text()).toBe(200);
+    expect(await own.json()).toMatchObject({ avatar: { kind: 'image' } });
+    const stranger = await h.agent();
+    expect((await h.call('GET', `/v1/resources/${short(work.work)}?actingSubject=${encodeURIComponent(stranger)}`)).status)
+      .toBe(404);
+    const batch = await h.call('POST', '/v1/resources/summaries', { profile: 'resource-summary-batch-v1',
+      resources: [work.work], actingSubject: h.actor });
+    expect(batch.status, await batch.clone().text()).toBe(200);
+    expect(await batch.json()).toMatchObject({ summaries: [{ status: 'available', avatar: { kind: 'image' } }] });
   } finally { await h.close(); }
 }, 120_000);

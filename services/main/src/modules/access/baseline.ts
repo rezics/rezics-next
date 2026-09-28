@@ -7,7 +7,7 @@ import { globalContextPattern } from '../rating/global.ts';
 import type { AdmissionRequest } from './admission.ts';
 import { maintainerControllerProof, maintainerGeneration } from '../work/maintainer-proof.ts';
 import { publicReplyRoot } from '../realm-reply/root.ts';
-import { authorSubmissionProof, authorWorkGeneration } from './author-baseline.ts';
+import { authorSubmissionProof, authorWithdrawalProof, authorWorkGeneration } from './author-baseline.ts';
 
 export const BASELINE_MEMBER_POLICY = 'baseline-member-v1';
 const native = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
@@ -42,7 +42,7 @@ export interface BaselineProof {
 export type BaselineTarget = { kind: 'root' }
   | { kind: 'work' | 'collection' | 'contribution' | 'rating' | 'personal' | 'comment'
   | 'maintainer' | 'reply' | 'reply-draft' | 'realm-reply' | 'author-work' | 'submission'
-  | 'avatar'; id: string };
+  | 'avatar' | 'submission-withdraw'; id: string };
 
 /** Closed permission vocabulary. In particular, a public Realm does not gain
  * a baseline policy, and translation authorization is not translation proposal. */
@@ -56,6 +56,7 @@ export function baselineTarget(action: string, scope: string): BaselineTarget | 
     'media.upload': { prefix: 'media:owner:', kind: 'personal' },
     'media.avatar': { prefix: 'media:avatar:', kind: 'avatar' },
     'submission.submit': { prefix: 'submission:submit:', kind: 'submission' },
+    'submission.withdraw': { prefix: 'submission:submit:', kind: 'submission-withdraw' },
     'contribution.create': { prefix: 'contribution:create:', kind: 'work' },
     'translation.link': { prefix: 'translation:link:', kind: 'work' },
     'content.comment': { prefix: 'content:comment:', kind: 'comment' },
@@ -142,6 +143,9 @@ export async function baselineTargetAllowed(client: PoolClient, graph: Pick<Fuse
   if (target.kind === 'submission') {
     return await authorSubmissionProof(client, graph, principalId, actingSubject, target.id, contribution) !== null;
   }
+  if (target.kind === 'submission-withdraw') {
+    return await authorWithdrawalProof(client, actingSubject, target.id, contribution) !== null;
+  }
   if (target.kind === 'realm-reply') {
     const member = !!await realmApprovedProof(client, target.id, principalId, actingSubject);
     return (await graph.query(`PREFIX rv: <https://rezics.com/vocab/> ASK {
@@ -223,8 +227,11 @@ export async function newBaselineProof(client: PoolClient, graph: Pick<FusekiCli
     ? await authorWorkGeneration(client, graph, principalId, request.actingSubject, authorWork) : null;
   const submission = target.kind === 'submission' ? await authorSubmissionProof(client, graph, principalId,
     request.actingSubject, target.id, request.baselineContribution ?? null) : null;
+  const withdrawal = target.kind === 'submission-withdraw'
+    ? await authorWithdrawalProof(client, request.actingSubject, target.id, request.baselineContribution ?? null) : null;
   const allowed = avatarControl !== null || (authorWork ? authorGeneration !== null
     : target.kind === 'submission' ? !!submission
+      : target.kind === 'submission-withdraw' ? !!withdrawal
       : await baselineTargetAllowed(client, graph, principalId, request.actingSubject,
         target, request.baselineCollectionCreate === true, request.baselineRelatedWork ?? null,
         request.baselineSourceRevision ?? null, request.baselineContribution ?? null));
@@ -234,7 +241,7 @@ export async function newBaselineProof(client: PoolClient, graph: Pick<FusekiCli
     collection_create: request.baselineCollectionCreate === true,
     related_work: request.baselineRelatedWork ?? null, source_revision: request.baselineSourceRevision ?? null,
     submission_contribution: request.baselineContribution ?? null,
-    author_work: authorWork ?? submission?.work ?? null,
+    author_work: authorWork ?? submission?.work ?? withdrawal ?? null,
     author_generation: authorGeneration ?? submission?.generation ?? null,
     avatar_control_id: avatarControl?.id ?? null,
     avatar_control_generation: avatarControl?.generation ?? null,
@@ -284,6 +291,10 @@ export async function baselineProofCurrent(client: PoolClient, graph: Pick<Fusek
     const current = await authorSubmissionProof(client, graph, admission.principal_id,
       admission.acting_subject, target.id, saved.submission_contribution ?? null);
     return !!current && current.work === saved.author_work && current.generation === saved.author_generation;
+  }
+  if (target.kind === 'submission-withdraw') {
+    return saved.author_work !== null && saved.author_work === await authorWithdrawalProof(client,
+      admission.acting_subject, target.id, saved.submission_contribution ?? null);
   }
   return baselineTargetAllowed(client, graph, admission.principal_id, admission.acting_subject,
     target, saved.collection_create, saved.related_work, saved.source_revision, saved.submission_contribution ?? null);

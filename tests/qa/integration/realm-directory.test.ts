@@ -5,7 +5,7 @@ import { randomUUID } from 'node:crypto';
 import { startMediaStack } from './media-support.ts';
 import { GRAPHS, RV, iri } from '../../../services/main/src/modules/work/activate.ts';
 
-interface DirectoryItem { id: string; name: { value: string; language: string };
+interface DirectoryItem { id: string; reviewMode: 'mandatory' | 'trusted-members' | 'open'; name: { value: string; language: string };
   description: { value: string } | null; membership: { count: { kind: string; value: number | null } };
   icon: { kind: string }; links: { realm: string } }
 interface DirectoryPage { items: DirectoryItem[]; nextCursor: string | null;
@@ -43,8 +43,14 @@ test('Realm directory: public profiles, activity/member/newest pages, CJK search
     const get = (path: string) => stack.call('GET', path);
     const beforeCalls = stack.fuseki.queries;
     const activity = await json<DirectoryPage>(await get('/v1/realms?limit=1'));
-    expect(stack.fuseki.queries - beforeCalls).toBeLessThanOrEqual(12);
+    expect(stack.fuseki.queries - beforeCalls).toBeLessThanOrEqual(13);
     expect(activity.items.map(item => item.id)).toEqual([second.realm]);
+    expect(activity.items[0]?.reviewMode).toBe('mandatory');
+    await stack.fuseki.update(`PREFIX rv: <${RV}> DELETE { GRAPH ${iri(GRAPHS.current)} {
+      ${iri(second.realm)} rv:reviewMode ?mode } } INSERT { GRAPH ${iri(GRAPHS.current)} {
+      ${iri(second.realm)} rv:reviewMode "open" } } WHERE { OPTIONAL { GRAPH ${iri(GRAPHS.current)} {
+      ${iri(second.realm)} rv:reviewMode ?mode } } }`);
+    expect((await json<DirectoryPage>(await get('/v1/realms?limit=1'))).items[0]?.reviewMode).toBe('open');
     expect(activity.nextCursor).toBeString();
     expect(activity.count).toEqual({ value: 1, kind: 'exact-page', total: null });
     const activityMore = await json<DirectoryPage>(await get(`/v1/realms?limit=1&cursor=${activity.nextCursor}`));

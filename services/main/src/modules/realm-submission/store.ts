@@ -232,7 +232,7 @@ export class RealmSubmissionStore {
           revision = $2, generation = generation + 1, updated_at = clock_timestamp()
           WHERE id = $1 RETURNING *`, [id, randomUUID()])).rows[0]!;
         return this.save(client, admission, updated);
-      });
+      }, `https://rezics.com/id/${id}`);
   }
 
   private async finishAdoption(admission: RegisteredAdmission, operation: Operation): Promise<Operation> {

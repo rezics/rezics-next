@@ -11,9 +11,10 @@ test('author baseline uses exact resource scopes and a closed action vocabulary'
   }
   expect(baselineTarget('media.avatar', `media:avatar:${id}`)).toEqual({ kind: 'avatar', id });
   expect(baselineTarget('submission.submit', `submission:submit:${id}`)).toEqual({ kind: 'submission', id });
+  expect(baselineTarget('submission.withdraw', `submission:submit:${id}`)).toEqual({ kind: 'submission-withdraw', id });
   expect(baselineTarget('media.upload', `media:owner:${id}`)).toEqual({ kind: 'personal', id });
   for (const [action, scope] of [['media.manage', `media:owner:${id}`],
-    ['submission.withdraw', `submission:submit:${id}`], ['review.decide', `review:decide:${id}`]]) {
+    ['review.decide', `review:decide:${id}`]]) {
     expect(baselineTarget(action!, scope!)).toBeNull();
   }
 });

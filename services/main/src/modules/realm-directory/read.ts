@@ -5,6 +5,7 @@ import type { PublicProfile } from '../realm-profile/schema.ts';
 import { pageResult, WorkReadInvalid, WorkReadMoved, WorkReadUnavailable,
   type WorkReadSession } from '../work/read-session.ts';
 import { realmDirectoryItem } from './contract.ts';
+import { GRAPHS, iri } from '../work/activate.ts';
 import type { RealmDirectorySort } from './index.ts';
 export type { RealmDirectorySort } from './index.ts';
 export { searchText } from './source.ts';
@@ -23,6 +24,17 @@ export async function readRealmDirectory(session: WorkReadSession,
   const index = session.deps.access.realmDirectory;
   if (!index) throw new WorkReadUnavailable('Realm directory index is unavailable');
   const page = await index.page(session, { sort: input.sort, q: query });
+  const modes = page.rows.length ? await session.query(`SELECT ?realm ?mode WHERE {
+    VALUES ?realm { ${page.rows.map(row => iri(row.realm)).join(' ')} }
+    GRAPH ${iri(GRAPHS.current)} { ?realm a rv:Realm . OPTIONAL { ?realm rv:reviewMode ?mode } }
+  } LIMIT ${page.rows.length + 1}`, page.rows.length + 1) : [];
+  if (modes.length !== page.rows.length || new Set(modes.map(row => row.realm?.value)).size !== modes.length) {
+    throw new WorkReadMoved('Realm review policy changed');
+  }
+  const modeByRealm = new Map(modes.map(row => [row.realm!.value, row.mode?.value ?? 'mandatory']));
+  if ([...modeByRealm.values()].some(mode => !['mandatory', 'trusted-members', 'open'].includes(mode))) {
+    throw new WorkReadUnavailable('Realm review policy is invalid');
+  }
   const summaries = await session.summaries(page.rows.map(row => row.realm));
   const summaryById = new Map(summaries.map(summary => [summary.reference, summary]));
   const items: Item[] = page.rows.map(candidate => {
@@ -40,6 +52,7 @@ export async function readRealmDirectory(session: WorkReadSession,
         ? summary.avatar : fallbackAvatar('realm', candidate.realm)
       : profile ? fallbackAvatar('realm', candidate.realm) : summary.avatar;
     return { id: candidate.realm, space: candidate.space,
+      reviewMode: modeByRealm.get(candidate.realm)! as Item['reviewMode'],
       name: profile ? localized(profile, session.options.language, 'name') : summary.name,
       icon, description: profile ? localized(profile, session.options.language, 'description') : null,
       membership: { count: profile?.count.kind === 'exact'
