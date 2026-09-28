@@ -30,6 +30,66 @@ export const DISCOVERY_SELECTED_TERM_COST = { terms: DISCOVERY_COST.pageSize, qu
 export const discoverySelectedTermsSql = `SELECT term, concept, work_count::text FROM access.discovery_term_count
   WHERE generation_id = $1 AND term = ANY($2::text[]) LIMIT ${DISCOVERY_SELECTED_TERM_COST.terms}`;
 
+/** A Condition page reads at most `window` recent rows per drive term, checks each
+ * with at most `groups + 1` primary-key probes, then loads at most `pageSize` payloads. */
+export const DISCOVERY_CONDITION_COST = { driveTerms: 8, groups: 8, groupTerms: 32, excludedTerms: 32, window: 60,
+  pageSize: DISCOVERY_COST.pageSize, queries: 2 } as const;
+
+/** Terms a Work's entries must and must not carry, beside the drive terms it is reached by. */
+export interface DiscoveryCondition { drive: string[]; groups: string[][]; excluded: string[] }
+
+/** Recent seeks per drive term, each Work checked by `(generation_id, work, work_type, term)` probes. */
+export function discoveryConditionSql(groups: number, excluded: boolean, continuation: boolean): string {
+  const probe = (parameter: number) => `EXISTS (SELECT 1 FROM access.discovery_entry x
+    WHERE x.generation_id = $1 AND x.work = d.work AND x.work_type = $2 AND x.term = ANY($${parameter}::text[]))`;
+  const first = continuation ? 7 : 5;
+  const checks = [...Array.from({ length: groups }, (_, index) => probe(first + index)),
+    ...excluded ? [`NOT ${probe(first + groups)}`] : []];
+  return `SELECT d.work, d.recent_order::text AS order_key, d.term, ${checks.join(' AND ') || 'true'} AS matched
+    FROM unnest($3::text[]) AS drive(term) CROSS JOIN LATERAL (
+      SELECT e.work, e.recent_order, e.term FROM access.discovery_entry e
+      WHERE e.generation_id = $1 AND e.work_type = $2 AND e.term = drive.term
+        ${continuation ? 'AND (e.recent_order, e.work COLLATE "C") > ($5::numeric, $6::text COLLATE "C")' : ''}
+      ORDER BY e.recent_order, e.work COLLATE "C" LIMIT $4) d`;
+}
+export const discoveryConditionPayloadSql = `SELECT e.work, e.payload FROM access.discovery_entry e
+  JOIN unnest($3::text[], $4::text[]) AS k(work, term) ON e.work = k.work AND e.term = k.term
+  WHERE e.generation_id = $1 AND e.work_type = $2`;
+
+type SeekPosition = { key: string; work: string };
+const beyond = (a: SeekPosition, b: SeekPosition) => BigInt(a.key) > BigInt(b.key) || (a.key === b.key && a.work > b.work);
+export interface ConditionRow { work: string; order_key: string; term: string; matched: boolean }
+
+/**
+ * The page a Condition seek decides. A drive term whose window filled may have
+ * rows past its last one, so no row beyond the earliest such last row is
+ * decided: the page ends there and `next` resumes after it, even when fewer
+ * than `limit` Works matched. A Work reached by several drive terms counts once.
+ */
+export function decideConditionPage(drive: readonly string[], scanned: readonly ConditionRow[], window: number,
+  limit: number): { page: ConditionRow[]; next: SeekPosition | null } {
+  let horizon: SeekPosition | null = null;
+  for (const term of drive) {
+    const rows = scanned.filter(item => item.term === term);
+    const last = rows.at(-1);
+    if (rows.length === window && last) {
+      const bound = { key: last.order_key, work: last.work };
+      if (!horizon || beyond(horizon, bound)) horizon = bound;
+    }
+  }
+  const decided = new Map<string, ConditionRow>();
+  for (const item of scanned) {
+    if (!decided.has(item.work) && !(horizon && beyond({ key: item.order_key, work: item.work }, horizon))) {
+      decided.set(item.work, item);
+    }
+  }
+  const matched = [...decided.values()].filter(item => item.matched).sort((a, b) =>
+    beyond({ key: a.order_key, work: a.work }, { key: b.order_key, work: b.work }) ? 1 : -1);
+  const page = matched.slice(0, limit);
+  const last = page.at(-1);
+  return { page, next: matched.length > limit && last ? { key: last.order_key, work: last.work } : horizon };
+}
+
 export function discoverySeekSql(sort: 'recent' | 'top-rated', continuation: boolean): string {
   const key = sort === 'recent' ? 'recent_order' : 'rating_order';
   return `SELECT work, ${key}::text AS order_key, payload FROM access.discovery_entry
@@ -395,6 +455,44 @@ export class DiscoveryProjection {
         LIMIT ${bound + 1}`, [row.generation_id, works])).rows;
       if (rows.length > bound) throw new RecommendationUnavailable('Work terms exceed their bound');
       return rows;
+    });
+  }
+
+  /**
+   * One page of Works, newest first, whose entries meet a Condition: reached by a
+   * drive term, carrying a term of every group and none excluded. Each drive term
+   * reads at most `window` rows (`decideConditionPage`); `next` is null only
+   * when the seeks were exhausted.
+   */
+  async conditionPage(row: DiscoveryGeneration, type: string, condition: DiscoveryCondition, limit: number,
+    after?: SeekPosition) {
+    const { drive, groups, excluded } = condition;
+    const cost = DISCOVERY_CONDITION_COST;
+    if (!Number.isInteger(limit) || limit < 1 || limit > cost.pageSize || !drive.length
+      || drive.length > cost.driveTerms || new Set(drive).size !== drive.length || groups.length > cost.groups
+      || groups.flat().length > cost.groupTerms || excluded.length > cost.excludedTerms
+      || [...drive, ...groups.flat(), ...excluded].some(term => !/^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/.test(term))) {
+      throw new RecommendationUnavailable('Discovery Condition is out of bounds');
+    }
+    return inAccess(this.pool, async client => {
+      const fence = await sourceFence(client);
+      if (fence.generation !== row.recovery_generation) throw new RecommendationRestart('Discovery recovery basis expired');
+      const scanned = (await client.query<ConditionRow>(discoveryConditionSql(groups.length, excluded.length > 0, !!after),
+        [row.generation_id, type, drive, cost.window, ...after ? [after.key, after.work] : [], ...groups,
+          ...excluded.length ? [excluded] : []])).rows;
+      const { page, next } = decideConditionPage(drive, scanned, cost.window, limit);
+      const payloads = page.length ? new Map((await client.query<{ work: string; payload: DiscoveryRow['payload'] }>(
+        discoveryConditionPayloadSql, [row.generation_id, type, page.map(item => item.work), page.map(item => item.term)]))
+        .rows.map(item => [item.work, item.payload])) : new Map<string, DiscoveryRow['payload']>();
+      const rows: DiscoveryRow[] = page.map(item => {
+        const payload = payloads.get(item.work);
+        if (!payload) throw new RecommendationUnavailable('Discovery Condition row is unavailable');
+        return { work: item.work, order_key: item.order_key, payload };
+      });
+      if (Buffer.byteLength(JSON.stringify(rows)) > DISCOVERY_COST.projectionBytes) {
+        throw new RecommendationUnavailable('Discovery page exceeds its byte budget');
+      }
+      return { rows, next };
     });
   }
 

@@ -3,7 +3,7 @@ import { decodeReadCursor, encodeReadCursor, pageResult, WorkReadInvalid, WorkRe
   type WorkReadSession } from '../work/read-session.ts';
 import type { Static } from 'typebox';
 import { DISCOVERY_COST, discoveryItem, type DiscoveryCredit, type DiscoveryQuery, type OwnedDiscoveryBasis,
-  type DiscoveryPayload, type PopularTermsQuery } from './contract.ts';
+  type DiscoveryPayload, type DiscoveryRow, type PopularTermsQuery } from './contract.ts';
 import { MAX_SUMMARY_BATCH, type ResourceSummary } from '../media/summary.ts';
 import { admitDiscoveryBasis } from './source.ts';
 import { readSerialSummaries } from '../work/summary-serial.ts';
@@ -40,6 +40,33 @@ export async function readDiscovery(session: WorkReadSession, projection: Discov
   const rows = await projection.page(active, sort, query.type ?? '', query.term ?? '', limit,
     after && cursor ? { key: after.key, work: cursor.after } : undefined);
   const page = rows.slice(0, limit);
+  const items = await discoveryCards(session, page, query.type ?? null, query.term ? new Set([query.term]) : null);
+  const final = await projection.active(basis, session.position, active.generation_id);
+  const stale = active.stale || final.stale;
+  const visible = stale ? query.term ? [] : items.map(item => ({ ...item,
+    primaryCredits: [], classifications: [], match: { ...item.match, classification: null } })) : items;
+  const seen = (after?.seen ?? 0) + visible.length;
+  if (!Number.isSafeInteger(seen)) throw new WorkReadLimit('Discovery count exceeds its integer domain');
+  const last = page.at(-1);
+  const next = rows.length > limit && last ? encodeReadCursor(binding, session.position, last.work,
+    JSON.stringify({ generation: active.generation_id, key: last.order_key, seen }),
+    cursor?.expiresAt ?? Date.now() + READ_BASIS_RETENTION_MS) : null;
+  return { profile: 'discovery-works-v1' as const, order: sort,
+    scope: { kind: basis.scope, realm: basis.realm }, context: basis.context,
+    matchedTerm: query.term ? visible[0]?.match.classification ?? null : null,
+    generation: active.generation_id, stale,
+    projectionPosition: { dataEpoch: active.source_epoch, sequence: active.source_sequence },
+    ...pageResult(session, visible, next), matches: { value: seen, kind: next || stale ? 'lower-bound' as const : 'exact' as const } };
+}
+
+/**
+ * Cards for projected rows, in their order. Works no longer public, and chapter
+ * Works shown through their book, are left out. With `terms`, each row was
+ * reached by one of those Senses: its match must carry one, and a Work whose
+ * matched Concept can no longer be named is left out.
+ */
+export async function discoveryCards(session: WorkReadSession, page: readonly DiscoveryRow[], type: string | null,
+  terms: ReadonlySet<string> | null): Promise<Static<typeof discoveryItem>[]> {
   const ids = page.map(row => row.work);
   const chapterParents = await canonicalChapterWorks(session, ids);
   // Retained ordering is independent of live title/cover disclosure. Stale
@@ -68,17 +95,17 @@ export async function readDiscovery(session: WorkReadSession, projection: Discov
     return summary?.status === 'available' && summary.type === 'concept' ? { ...tag, name: summary.name } : null;
   };
   const fenced = await session.summaries(ids);
-  const items: Static<typeof discoveryItem>[] = page.flatMap((row, index) => {
+  return page.flatMap((row, index): Static<typeof discoveryItem>[] => {
     if (chapterParents.has(row.work)) return [];
     const summary = summaries[index];
     if (summary?.status !== 'available' || summary.type !== 'work' || summary.disclosure !== 'public'
       || fenced[index]?.status !== 'available' || fenced[index]?.disclosure !== 'public') return [];
     const payload = row.payload;
-    if (query.term && payload.classification?.sense !== query.term) {
+    if (terms && !terms.has(payload.classification?.sense ?? '')) {
       throw new WorkReadUnavailable('Discovery match basis is unavailable');
     }
     const classification = payload.classification ? named(payload.classification) : null;
-    if (query.term && !classification) return [];
+    if (terms && !classification) return [];
     return [{ id: row.work, revision: payload.revision, mainVersion: payload.mainVersion,
       types: payload.types, title: summary.name, cover: summary.avatar, rating: payload.rating,
       ...serial.get(row.work)!,
@@ -89,24 +116,8 @@ export async function readDiscovery(session: WorkReadSession, projection: Discov
         return name ? [{ ...credit, ...name }] : [];
       }),
       classifications: (payload.classifications ?? []).flatMap(tag => { const item = named(tag); return item ? [item] : []; }),
-      match: { publication: 'public-main' as const, type: query.type ?? null, classification } }];
+      match: { publication: 'public-main' as const, type, classification } }];
   });
-  const final = await projection.active(basis, session.position, active.generation_id);
-  const stale = active.stale || final.stale;
-  const visible = stale ? query.term ? [] : items.map(item => ({ ...item,
-    primaryCredits: [], classifications: [], match: { ...item.match, classification: null } })) : items;
-  const seen = (after?.seen ?? 0) + visible.length;
-  if (!Number.isSafeInteger(seen)) throw new WorkReadLimit('Discovery count exceeds its integer domain');
-  const last = page.at(-1);
-  const next = rows.length > limit && last ? encodeReadCursor(binding, session.position, last.work,
-    JSON.stringify({ generation: active.generation_id, key: last.order_key, seen }),
-    cursor?.expiresAt ?? Date.now() + READ_BASIS_RETENTION_MS) : null;
-  return { profile: 'discovery-works-v1' as const, order: sort,
-    scope: { kind: basis.scope, realm: basis.realm }, context: basis.context,
-    matchedTerm: query.term ? visible[0]?.match.classification ?? null : null,
-    generation: active.generation_id, stale,
-    projectionPosition: { dataEpoch: active.source_epoch, sequence: active.source_sequence },
-    ...pageResult(session, visible, next), matches: { value: seen, kind: next || stale ? 'lower-bound' as const : 'exact' as const } };
 }
 
 /** The build caches Work counts by accepted Sense; this read seeks at most 20

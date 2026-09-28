@@ -67,7 +67,8 @@ export function followsRoutes(work: MainWorkDependencies) {
       } catch (error) { return homeError(error); }
     })
     .get('/v1/follows/:id', { params: t.Object({ id: readUuid }),
-      query: t.Object({ kind: t.Union([t.Literal('realm'), t.Literal('zone'), t.Literal('work'), t.Literal('agent')]),
+      query: t.Object({ kind: t.Union([t.Literal('realm'), t.Literal('zone'), t.Literal('work'), t.Literal('agent'),
+        t.Literal('concept')]),
         ...stateQuery }, { additionalProperties: false }), detail: { security: [{}, { bearerAuth: [] }] },
       response: { 200: followState, ...workReadProblems },
     }, ({ request, params, query }) => state(request, `https://rezics.com/id/${params.id}`, query.kind, query))

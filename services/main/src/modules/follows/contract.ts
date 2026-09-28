@@ -3,8 +3,12 @@ import type { Static } from 'typebox';
 import { shelfWork } from '../profiles/read-contract.ts';
 import { pageFields, pageQuery, readAvatar, readId, readName, readUuid } from '../work/read-contract.ts';
 
+/**
+ * What a follow names. Following a `concept` follows its one-Condition Filter
+ * (`conceptFilter`): Works whose accepted values include the Concept.
+ */
 export const followKind = t.Union([t.Literal('realm'), t.Literal('zone'), t.Literal('work'), t.Literal('agent'),
-  t.Literal('external-author')]);
+  t.Literal('external-author'), t.Literal('concept')]);
 export type FollowKind = Static<typeof followKind>;
 /**
  * An author a catalogue lists but REZICS has no Agent for, keyed by provider

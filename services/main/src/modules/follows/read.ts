@@ -2,6 +2,7 @@ import type { Static } from 'typebox';
 import { FOLLOWED_AUTHORS_COST, newestAuthorWorks, readExternalAuthorTarget } from '../author-page/follow.ts';
 import { readAgent, readAgentCards, shelfWorks } from '../profiles/read.ts';
 import { readAuthorNames } from '../source/author-name-read.ts';
+import { resolveConcepts } from '../concept-page/read.ts';
 import { GRAPHS, iri } from '../work/activate.ts';
 import { decodeReadCursor, encodeReadCursor, pageResult, WorkReadLimit, WorkReadMissing, WorkReadMoved,
   publicWork, WorkReadUnavailable, type WorkReadSession } from '../work/read-session.ts';
@@ -25,6 +26,12 @@ export async function readFollowTarget(session: WorkReadSession, target: string,
       realm: null, href: agent.links.profile };
   }
   let summaryId = target;
+  let owner: string | null = null;
+  if (kind === 'concept') {
+    const concept = (await resolveConcepts(session, [target])).get(target);
+    if (!concept) throw new WorkReadMissing('Follow target is unavailable');
+    owner = concept.realm;
+  }
   if (kind === 'work') {
     const visible = await session.query(`SELECT DISTINCT ?work WHERE { BIND(${iri(target)} AS ?work)
       ${publicWork('?work', '?main')} } LIMIT 2`, 1);
@@ -57,8 +64,9 @@ export async function readFollowTarget(session: WorkReadSession, target: string,
   if (summary?.status !== 'available' || summary.disclosure !== 'public'
     || summary.type !== (kind === 'zone' ? 'realm' : kind)) throw new WorkReadMissing('Follow target is unavailable');
   return { id: target, kind, name: summary.name, icon: summary.avatar,
-    realm: kind === 'zone' || kind === 'realm' ? summaryId : null,
-    href: kind === 'work' ? `/w/${target.slice(-36)}` : `/r/${summaryId.slice(-36)}` };
+    realm: kind === 'zone' || kind === 'realm' ? summaryId : owner,
+    href: kind === 'work' ? `/w/${target.slice(-36)}` : kind === 'concept' ? `/concepts/${target.slice(-36)}`
+      : `/r/${summaryId.slice(-36)}` };
 }
 
 type FollowTarget = Static<typeof followTarget>;
@@ -111,7 +119,8 @@ export async function readFollows(session: WorkReadSession, store: FollowsStore,
   const unavailable = (row: { target: string; kind: FollowKind; revision: string }) => ({
     id: row.target, kind: row.kind, available: false as const, revision: row.revision,
     name: null, icon: null, realm: null, href: null });
-  const ids = page.rows.slice(0, limit).filter(row => row.kind === 'work' || row.kind === 'realm').map(row => row.target);
+  const ids = page.rows.slice(0, limit).filter(row => ['work', 'realm', 'concept'].includes(row.kind))
+    .map(row => row.target);
   const summaries = new Map((await session.summaries(ids)).map(summary => [summary.reference, summary]));
   for (const row of page.rows.slice(0, limit)) {
     try { items.push({ ...await readFollowTarget(session, row.target, row.kind, summaries), available: true, revision: row.revision }); }
