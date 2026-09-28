@@ -4,10 +4,11 @@ import type { UiLocale } from '../../i18n/define.ts';
 import { memoryReaderActions } from '../catalogue/fixtures.ts';
 import type { ReaderActions } from '../catalogue/reader-actions.tsx';
 import { AdoptionRegion } from './adoption.tsx';
+import { AlsoEnjoyedSection } from './also-enjoyed.tsx';
 import { AuthorSection, type WorkAuthor } from './author.tsx';
 import { janeAusten } from '../author/fixtures.ts';
 import { authorHref } from '../author/route.ts';
-import { ClassificationRegion } from './classification.tsx';
+import { ClassificationRegion, type CommunityGenres } from './classification.tsx';
 import { WorkCredits } from './credits.tsx';
 import * as fixture from './fixtures.ts';
 import { messages } from './messages.ts';
@@ -15,8 +16,8 @@ import { RatingLine, RatingSummaryRegion } from './ratings.tsx';
 import { WorkRecord } from './record.tsx';
 import { type WorkScope, workHref } from './route.ts';
 import { ScopeBar, type ScopeRealm } from './scope-bar.tsx';
-import type { AdoptionPage, AgentCreditPage, ClassificationPage, CreditPage, Loaded, RatingRead,
-  WorkHeader } from './types.ts';
+import type { AdoptionPage, AgentCreditPage, AlsoEnjoyedPage, ClassificationPage, CreditPage, Loaded, RatingRead,
+  WorkHeader, WorkStats } from './types.ts';
 import type { ReadStart } from './read.ts';
 import { OverviewLayout, ReadButton, WorkFrame } from './work-frame.tsx';
 import { WorkAbout } from './work-header.tsx';
@@ -25,6 +26,10 @@ interface OverviewArgs {
   work: WorkHeader; agentCredits: Loaded<AgentCreditPage>; credits: Loaded<CreditPage>; scope: WorkScope | null;
   realms: ScopeRealm[];
   ratings: Loaded<RatingRead>; classifications: Loaded<ClassificationPage> | null; adoptions: Loaded<AdoptionPage>;
+  /** The header's reader numbers and the rows of Works to read next. */
+  stats?: Loaded<WorkStats>; alsoEnjoyed?: Loaded<AlsoEnjoyedPage>;
+  /** Genres the Work's communities chose, which everyone's view shows when everyone chose none. */
+  communities?: CommunityGenres[];
   locale: UiLocale; readerActions?: ReaderActions;
   authorOverride?: WorkAuthor;
   /** Where Read leads; the frame's Contents link when left out. */
@@ -32,8 +37,8 @@ interface OverviewArgs {
 }
 
 /** The Overview as the route composes it, with each region's Main answer given directly. */
-function Overview({ work, agentCredits, credits, scope, realms, ratings, classifications, adoptions,
-  locale, readerActions, readAction, authorOverride }: OverviewArgs) {
+function Overview({ work, agentCredits, credits, scope, realms, ratings, classifications, adoptions, stats,
+  alsoEnjoyed, communities, locale, readerActions, readAction, authorOverride }: OverviewArgs) {
   const t = messages[locale];
   const view = scope ? fixture.scopeView(scope, realms) : null;
   const scopeBar = <ScopeBar workRef={fixture.workRef} scope={scope} realms={realms} locale={locale} messages={t} />;
@@ -47,17 +52,22 @@ function Overview({ work, agentCredits, credits, scope, realms, ratings, classif
     readerActions={readerActions}
     signedIn={Boolean(readerActions)} signInHref={`/auth/start?next=%2F${locale}%2Fw%2F${fixture.workRef}`}
     credits={<WorkCredits agentCredits={agentCredits} credits={credits} locale={locale} messages={t} />}
-    ratingLine={scope?.kind === 'global' ? <RatingLine ratings={ratings} locale={locale} messages={t} /> : null}
+    ratingLine={scope?.kind === 'global' ? <RatingLine ratings={ratings} stats={stats} locale={locale} messages={t} />
+      : null}
     readAction={readAction === undefined ? undefined
       : <ReadButton workRef={fixture.workRef} start={readAction} messages={t} />}>
     <OverviewLayout messages={t} about={<WorkAbout work={work} messages={t} />} scopeBar={scopeBar}
       ratings={view ? <RatingSummaryRegion ratings={ratings} view={view} scopeBar={scopeBar} locale={locale}
         messages={t} /> : null}
-      classification={view ? <ClassificationRegion classifications={classifications} view={view} locale={locale}
-        messages={t} /> : null}
+      classification={view ? <ClassificationRegion classifications={classifications} view={view}
+        communities={communities} locale={locale} messages={t} /> : null}
       adoption={view ? <AdoptionRegion adoptions={adoptions} view={view} locale={locale} messages={t} /> : null}
-      record={<WorkRecord work={work} locale={locale} messages={t}
-        citation={`${work.title.value}. Maren Osei. REZICS. https://rezics.com/${locale}/w/${fixture.workRef}`} />}
+      record={<>
+        <WorkRecord work={work} locale={locale} messages={t}
+          citation={`${work.title.value}. Maren Osei. REZICS. https://rezics.com/${locale}/w/${fixture.workRef}`} />
+        {alsoEnjoyed ? <AlsoEnjoyedSection alsoEnjoyed={alsoEnjoyed} book realms={realms} locale={locale} messages={t} />
+          : null}
+      </>}
       author={authorOverride ? <AuthorSection author={authorOverride} work={fixture.workRef} locale={locale}
         messages={t} /> : author ? <AuthorSection author={{ kind: 'agent', name: author.displayName,
         handle: author.handle, works: fixture.agentWorks }} work={fixture.workRef} locale={locale} messages={t} /> : null} />
@@ -74,7 +84,7 @@ const meta = {
   component: Overview,
   args: { work: fixture.work, agentCredits: fixture.agentCredits, credits: fixture.credits, scope: fixture.globalScope, realms: fixture.realms,
     ratings: fixture.globalRatings, classifications: fixture.globalClassifications, adoptions: fixture.adoptions,
-    locale: 'en' },
+    stats: fixture.workStats, alsoEnjoyed: fixture.alsoEnjoyed(fixture.coReaderPicks), locale: 'en' },
   parameters: route(),
 } satisfies Meta<typeof Overview>;
 export default meta;
@@ -108,8 +118,10 @@ export const Global: Story = {
     await expect(stats).toHaveTextContent('Updated');
     await expect(canvas.getByText('A novel of rivers, maps and the stories a city tells about itself.')).toBeVisible();
     await expect(canvas.getByRole('region', { name: 'About this Work' })).toHaveTextContent('A surveyor maps a delta');
-    // The summary under the title leads down to the full ratings.
+    // The numbers under the title, as Goodreads gives them: ratings and reviews lead down to their sections.
     await expect(canvas.getByRole('link', { name: '1,287 ratings' })).toHaveAttribute('href', '#work-ratings');
+    await expect(within(byline).getByRole('link', { name: '214 reviews' })).toHaveAttribute('href', '#work-reviews');
+    await expect(within(byline).getByText('38 people are currently reading')).toBeVisible();
     // Signed out, the shelf and rating controls lead to sign-in, which returns here.
     await expect(canvas.getByRole('link', { name: /^Want to read/ }))
       .toHaveAttribute('href', `/auth/start?next=%2Fen%2Fw%2F${fixture.workRef}`);
@@ -128,6 +140,11 @@ export const Global: Story = {
       'AdventureRelevance: Substantial', 'Coming of ageRelevance: Incidental', 'Maps and cartography', '海洋']);
     await expect(within(genres).getByRole('link', { name: 'Adventure' }))
       .toHaveAttribute('href', expect.stringMatching(/^\/en\/discover\?term=[0-9a-f-]{36}$/));
+    // What readers also enjoyed follows the details, before the ratings, as on Goodreads.
+    const regions = canvas.getAllByRole('region').map(region => region.getAttribute('aria-labelledby'));
+    await expect(regions.indexOf('work-also-co-readers')).toBeLessThan(regions.indexOf('work-ratings'));
+    await expect(within(canvas.getByRole('region', { name: 'Readers also enjoyed' })).getAllByRole('article'))
+      .toHaveLength(9);
     await expect(within(canvas.getByRole('region', { name: 'Communities' })).getByRole('link', { name: /Tidewater Readers/ }))
       .toHaveAttribute('href', `/en/w/${fixture.workRef}?scope=realm&realm=${fixture.realms[0]!.id}`);
     const author = canvas.getByRole('region', { name: 'About the author' });
@@ -237,6 +254,48 @@ export const EmptyGlobal: Story = {
     await expect(canvas.queryByRole('region', { name: 'Genres' })).toBeNull();
     // Everyone's view offers the first community that features the Work, never silently switching to it.
     await expect(canvas.getAllByRole('link', { name: 'See Tidewater Readers' })).toHaveLength(1);
+  },
+};
+
+/** Nobody tagged the Work for everyone, but its communities did: their genres show, each named, opening their shelf. */
+export const CommunityGenresOnly: Story = {
+  args: { classifications: fixture.noClassifications, communities: fixture.communityGenres },
+  async play({ canvasElement }) {
+    const genres = within(canvasElement).getByRole('region', { name: 'Genres' });
+    const tidewater = within(genres).getByRole('list', { name: 'Chosen in Tidewater Readers' });
+    await expect(within(tidewater).getAllByRole('listitem').map(item => item.textContent))
+      .toEqual(['Book club pick 2026Relevance: Central', 'Estuary cycle']);
+    await expect(within(tidewater).getByRole('link', { name: 'Estuary cycle' })).toHaveAttribute('href',
+      expect.stringMatching(new RegExp(`^/en/discover\\?scope=realm&realm=${fixture.realms[0]!.id}&term=[0-9a-f-]{36}$`)));
+    await expect(within(genres).getByRole('list', { name: 'Chosen in 海洋文学研究会' })).toHaveTextContent('海洋文学');
+  },
+};
+
+/** Past what Main counts, the numbers say "at least"; nobody reading now is no line at all. */
+export const ReaderNumbers: Story = {
+  args: { stats: fixture.busyWorkStats },
+  async play({ canvasElement }) {
+    const byline = within(canvasElement).getByRole('heading', { level: 1 }).parentElement!;
+    await expect(within(byline).getByRole('link', { name: '10,000+ reviews' })).toBeVisible();
+    await expect(within(byline).getByText('10,000+ people are currently reading')).toBeVisible();
+  },
+};
+
+export const NoRatingsYetReaders: Story = {
+  args: { ratings: fixture.noGlobalRatings, stats: fixture.workStats },
+  async play({ canvasElement }) {
+    const byline = within(canvasElement).getByRole('heading', { level: 1 }).parentElement!;
+    await expect(within(byline).getByText('No ratings yet')).toBeVisible();
+    await expect(within(byline).getByText('38 people are currently reading')).toBeVisible();
+  },
+};
+
+export const QuietReaderNumbers: Story = {
+  args: { stats: fixture.quietWorkStats },
+  async play({ canvasElement }) {
+    const byline = within(canvasElement).getByRole('heading', { level: 1 }).parentElement!;
+    await expect(within(byline).getByText('1,287 ratings')).toBeVisible();
+    await expect(within(byline).queryByText(/review|reading/)).toBeNull();
   },
 };
 
@@ -356,6 +415,9 @@ export const LongCjkTitle: Story = {
     await expect(canvas.getByRole('heading', { level: 1 })).toHaveAttribute('lang', 'zh-Hans');
     await expect(canvas.getByRole('link', { name: '概览' })).toHaveAttribute('aria-current', 'page');
     await expect(canvas.getByRole('region', { name: '评分' })).toHaveTextContent('1,287 个评分');
+    await expect(canvas.getByRole('link', { name: '214 篇书评' })).toHaveAttribute('href', '#work-reviews');
+    await expect(canvas.getByText('38 人正在读')).toBeVisible();
+    await expect(canvas.getByRole('region', { name: '读过的人也喜欢' })).toBeVisible();
     await noOverflow();
   },
 };

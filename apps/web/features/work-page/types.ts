@@ -40,6 +40,11 @@ export type AgentProfile = Ok<ReturnType<Main['v1']['agents']>['get']>;
 export type ReviewPage = Ok<Work['reviews']['get']>;
 export type Review = ReviewPage['items'][number];
 export type ReviewQuery = NonNullable<Parameters<Work['reviews']['get']>[0]>['query'];
+export type AlsoEnjoyedPage = Ok<Work['also-enjoyed']['get']>;
+export type AlsoEnjoyedItem = AlsoEnjoyedPage['items'][number];
+/** People reading the Work now and its reviews, counted from public libraries (`work/read-stats.ts`). */
+export type WorkStats = Ok<Work['reader-stats']['get']>;
+export type StatCount = WorkStats['reading'];
 
 /** A reviewer as the page names them; null while Main cannot. */
 export interface Reviewer { name: string; handle: string }

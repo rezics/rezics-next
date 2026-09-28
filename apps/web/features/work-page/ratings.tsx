@@ -1,5 +1,6 @@
 import { buttonVariants } from '@rezics/ui/button';
 import { cn } from '@rezics/ui/utils';
+import { UsersRoundIcon } from 'lucide-react';
 import { materializeData } from 'native-i18n';
 import Link from '../shell/localized-link.tsx';
 import type { ReactNode } from 'react';
@@ -12,9 +13,19 @@ import type { WorkPageMessages } from './messages.ts';
 import { Region, RegionFailure } from './region.tsx';
 import { idOf, workHref } from './route.ts';
 import { ScopeOffer, type ScopeView, scopeName } from './scope-bar.tsx';
-import type { Loaded, RatingRead, RatingSummary } from './types.ts';
+import type { Loaded, RatingRead, RatingSummary, StatCount, WorkStats } from './types.ts';
 
 export const RATINGS_REGION = 'work-ratings';
+/** `REVIEWS_REGION` in reviews.tsx, a client module whose constants a server component can't import. */
+export const REVIEWS_ANCHOR = 'work-reviews';
+
+type Translation = ReturnType<typeof materializeData<WorkPageMessages>>;
+
+/** "5 reviews", or "10,000+ reviews" once there are more than Main counts. */
+function counted(count: StatCount, exact: (value: number) => string, atLeast: (values: { count: string }) => string,
+  locale: UiLocale) {
+  return count.kind === 'exact' ? exact(count.value) : atLeast({ count: formatNumber(count.value, locale) });
+}
 
 /** Goodreads' distribution: "5 stars", a bar in the star color, the count and its share. */
 function Distribution({ summary, locale, messages }: { summary: RatingSummary; locale: UiLocale; messages: WorkPageMessages }) {
@@ -45,9 +56,17 @@ function EmptyScope({ title, children }: { title: string; children?: ReactNode }
   </div>;
 }
 
-/** The mean as Goodreads sets it: stars, the number large in the Work-title face, the count beside. */
-function Mean({ summary, locale, messages, size = 'lg', href, className }: {
+const countLink = cn('rounded-sm underline-offset-4 outline-none hover:text-foreground hover:underline',
+  'focus-visible:ring-2 focus-visible:ring-ring');
+
+/**
+ * The mean as Goodreads sets it: stars, the number large in the Work-title
+ * face, then the counts ("1,287 ratings · 214 reviews").
+ */
+function Mean({ summary, locale, messages, size = 'lg', href, reviews, className }: {
   summary: RatingSummary; locale: UiLocale; messages: WorkPageMessages; size?: 'md' | 'lg'; href?: string;
+  /** The reviews answering the same question, beside the ratings count. */
+  reviews?: ReactNode;
   className?: string;
 }) {
   const t = materializeData(messages, { locale });
@@ -60,25 +79,47 @@ function Mean({ summary, locale, messages, size = 'lg', href, className }: {
       {mean}<span className="sr-only"> — {t.average({ mean, max: formatNumber(max, locale) })}</span>
       {max === 5 ? null : <span aria-hidden="true" className="ms-1 font-normal font-sans text-base text-muted-foreground">
         / {formatNumber(max, locale)}</span>}</p>
-    {href ? <Link href={href} className="rounded-sm text-muted-foreground text-sm underline-offset-4 outline-none
-      hover:text-foreground hover:underline focus-visible:ring-2 focus-visible:ring-ring">{count}</Link>
-      : <p className="text-muted-foreground text-sm">{count}</p>}
+    <p className="flex flex-wrap items-center gap-x-1.5 text-muted-foreground text-sm">
+      {href ? <Link href={href} className={countLink}>{count}</Link> : count}
+      {reviews ? <><span aria-hidden="true">·</span>{reviews}</> : null}
+    </p>
   </div>;
 }
 
+/** "3 people are currently reading", as Goodreads counts them, from public libraries only. */
+function ReadingNow({ count, locale, t }: { count: StatCount; locale: UiLocale; t: Translation }) {
+  if (!count.value) return null;
+  return <p className="flex items-center gap-1.5 text-muted-foreground text-sm">
+    <UsersRoundIcon aria-hidden="true" className="size-4 shrink-0" />
+    {counted(count, t.readingNow, t.readingNowAtLeast, locale)}</p>;
+}
+
 /**
- * The rating summary under the title: everyone's mean for the Work's first
- * rating question, linking down to the full distribution. Says nothing when
- * the read failed; the Ratings section below says so and offers a retry.
+ * The numbers under the title, as Goodreads heads a book page: everyone's
+ * mean for the Work's first rating question with its ratings and reviews,
+ * each linking down to its section, then how many people are reading it now.
+ * Says nothing of a read that failed; the sections below say so and offer a
+ * retry, and numbers Main could not count are left out.
  */
-export function RatingLine({ ratings, locale, messages }: {
-  ratings: Loaded<RatingRead>; locale: UiLocale; messages: WorkPageMessages;
+export function RatingLine({ ratings, stats, locale, messages }: {
+  ratings: Loaded<RatingRead>;
+  /** Readers and reviews counted from public libraries, for the same question as `ratings`. */
+  stats?: Loaded<WorkStats>;
+  locale: UiLocale; messages: WorkPageMessages;
 }) {
-  if (!ratings.ok || ratings.data.summary.status !== 'available' || !ratings.data.summary.scale) return null;
+  const t = materializeData(messages, { locale });
+  const counts = stats?.ok ? stats.data : null;
+  const reading = counts ? <ReadingNow count={counts.reading} locale={locale} t={t} /> : null;
+  if (!ratings.ok || ratings.data.summary.status !== 'available' || !ratings.data.summary.scale) return reading;
   const { summary } = ratings.data;
-  if (!summary.count) return <p className="text-muted-foreground text-sm">{messages.noRatingsGlobal}</p>;
-  return <Mean summary={summary} locale={locale} messages={messages} size="md" href={`#${RATINGS_REGION}`}
-    className="justify-center lg:justify-start" />;
+  if (!summary.count) return <><p className="text-muted-foreground text-sm">{t.noRatingsGlobal}</p>{reading}</>;
+  const reviews = counts?.reviews?.value ? <Link href={`#${REVIEWS_ANCHOR}`} className={countLink}>
+    {counted(counts.reviews, t.reviewCount, t.reviewCountAtLeast, locale)}</Link> : null;
+  return <>
+    <Mean summary={summary} locale={locale} messages={messages} size="md" href={`#${RATINGS_REGION}`} reviews={reviews}
+      className="justify-center lg:justify-start" />
+    {reading}
+  </>;
 }
 
 /**

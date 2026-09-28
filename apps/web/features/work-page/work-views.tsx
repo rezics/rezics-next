@@ -12,17 +12,18 @@ import authorZhHans from '../author/messages/zh-Hans.ts';
 import { readOpenLibraryAuthor, readOpenLibraryAuthorWorks } from '../author/read.ts';
 import { authorSeparator, coverKindOf } from '../catalogue/work.ts';
 import { AdoptionRegion } from './adoption.tsx';
+import { AlsoEnjoyedSection } from './also-enjoyed.tsx';
 import { AuthorSection } from './author.tsx';
-import { ClassificationRegion } from './classification.tsx';
+import { ClassificationRegion, type CommunityGenres } from './classification.tsx';
 import { WorkCredits, WorkCreditsSkeleton } from './credits.tsx';
 import { HistoryRegion } from './history.tsx';
 import type { WorkPageMessages } from './messages.ts';
 import { RatingLine, RatingSummaryRegion } from './ratings.tsx';
 import { ContentsRegion } from './contents.tsx';
 import { DiscussionRegion } from './discussion.tsx';
-import { oneTextLanguage, readAdoptions, readAgentCredits, readAgentWorks, readClassifications, readContents,
-  readCredits, readDiscussion, readHistory, readingAgent, readRatings, readReaderState, readRealm, readReviewer,
-  readReviews, readStart, readVersions } from './read.ts';
+import { oneTextLanguage, readAdoptions, readAgentCredits, readAgentWorks, readAlsoEnjoyed, readClassifications,
+  readContents, readCredits, readDiscussion, readHistory, readingAgent, readRatings, readReaderState, readRealm,
+  readReviewer, readReviews, readStart, readVersions, readWorkStats } from './read.ts';
 import { RegionSkeleton } from './region.tsx';
 import { WorkRecord } from './record.tsx';
 import { type ContentsQuery, EVERYONE, type HistoryFilter, idOf, type VersionQuery, type WorkScope, workHref }
@@ -76,9 +77,14 @@ async function Cover({ id, work, avatarQuery, locale, messages }: Common & {
   return <WorkPageCover work={work} authors={authors} avatarQuery={avatarQuery} />;
 }
 
-/** Everyone's rating summary for the header, on the Work's first rating question. */
+/**
+ * Everyone's rating summary for the header, on the Work's first rating
+ * question, with its reviews and the people reading the Work now.
+ */
 async function RatingLineSlot({ id, locale, messages }: Common & { id: string }) {
-  return <RatingLine ratings={await readRatings(id, EVERYONE, undefined)} locale={locale} messages={messages} />;
+  const ratings = await readRatings(id, EVERYONE, undefined);
+  const stats = await readWorkStats(id, ratings.ok ? ratings.data.context?.context : undefined);
+  return <RatingLine ratings={ratings} stats={stats} locale={locale} messages={messages} />;
 }
 
 /** "Read": the next unread chapter, chapter 1 or the one text, read after the page has started to stream. */
@@ -195,8 +201,22 @@ async function Reviews({ workRef, id, work, scope, context: chosen, locale, mess
 async function Classification(props: ScopedProps) {
   const [scopeView, classifications] = await Promise.all([view(props), props.scope.kind === 'mine' ? null
     : readClassifications(props.id, props.locale, props.scope)]);
-  return <ClassificationRegion classifications={classifications} view={scopeView} locale={props.locale}
-    messages={props.messages} />;
+  // Nobody tagged it for everyone: show what the first two communities featuring it chose, named as theirs.
+  const untagged = props.scope.kind === 'global' && classifications?.ok && !classifications.data.items.length;
+  const communities: CommunityGenres[] = untagged ? await Promise.all(scopeView.realms.slice(0, 2).map(async realm => {
+    const chosen = await readClassifications(props.id, props.locale, { kind: 'realm', realm: realm.id });
+    return { realm, items: chosen.ok ? chosen.data.items.filter(item => item.source === 'local') : [] };
+  })) : [];
+  return <ClassificationRegion classifications={classifications} view={scopeView} communities={communities}
+    locale={props.locale} messages={props.messages} />;
+}
+
+/** Works to read next, beside the ones this Work's readers also enjoyed. */
+async function AlsoEnjoyed({ id, work, locale, messages }: Common & { id: string; work: Header }) {
+  const [alsoEnjoyed, realms, { avatarQuery }] = await Promise.all([readAlsoEnjoyed(id, locale),
+    scopeRealms(id, null, locale), browseReader()]);
+  return <AlsoEnjoyedSection alsoEnjoyed={alsoEnjoyed} book={coverKindOf(work.types) === 'book'} realms={realms}
+    avatarQuery={avatarQuery} locale={locale} messages={messages} />;
 }
 
 async function Adoption(props: ScopedProps) {
@@ -231,8 +251,12 @@ export function WorkOverview({ workRef, id, work, scope, context, locale, messag
       label={loading} lines={2} />}>
       <Adoption workRef={workRef} id={id} scope={scope} locale={locale} messages={messages} />
     </Suspense> : null}
-    record={<Suspense fallback={<WorkRecord work={work} locale={locale} messages={messages} />}>
-      <Record id={id} workRef={workRef} work={work} locale={locale} messages={messages} /></Suspense>}
+    // Goodreads sets "Readers also enjoyed" before ratings and reviews; it follows the details it reads beside.
+    record={<>
+      <Suspense fallback={<WorkRecord work={work} locale={locale} messages={messages} />}>
+        <Record id={id} workRef={workRef} work={work} locale={locale} messages={messages} /></Suspense>
+      <Suspense fallback={null}><AlsoEnjoyed id={id} work={work} locale={locale} messages={messages} /></Suspense>
+    </>}
     author={<Suspense fallback={null}><Author id={id} locale={locale} messages={messages} /></Suspense>} />;
 }
 

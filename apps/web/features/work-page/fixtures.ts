@@ -3,9 +3,10 @@
 import type { ReviewApi } from './reviews-api.ts';
 import type { WorkScope } from './route.ts';
 import type { ScopeRealm, ScopeView } from './scope-bar.tsx';
-import type { AdoptionPage, AgentCreditPage, AgentWorksPage, ChapterRead, ClassificationPage, ContentsPage, CreditPage,
-  DiscussionPage, HistoryPage, Loaded, Progress, RatingContext, RatingRead, Review, Reviewer, ReviewPage, VersionPage,
-  WorkHeader, WorkName, WorkText } from './types.ts';
+import type { CommunityGenres } from './classification.tsx';
+import type { AdoptionPage, AgentCreditPage, AgentWorksPage, AlsoEnjoyedItem, AlsoEnjoyedPage, ChapterRead,
+  ClassificationPage, ContentsPage, CreditPage, DiscussionPage, HistoryPage, Loaded, Progress, RatingContext, RatingRead,
+  Review, Reviewer, ReviewPage, VersionPage, WorkHeader, WorkName, WorkStats, WorkText } from './types.ts';
 
 const iri = (uuid: string) => `https://rezics.com/id/${uuid}`;
 const name = (value: string, language = 'en'): WorkName => ({ value, language, direction: 'ltr', basis: 'requested' });
@@ -150,6 +151,58 @@ export const realmClassifications = ok<ClassificationPage>({ ...page([chip('Estu
   chip('Book club pick 2026', 'local'), chip('Adventure', 'global'), chip('Maritime fiction', 'global')]),
 scope: { kind: 'realm', realm: iri(realmA) } });
 export const noClassifications = ok<ClassificationPage>({ ...page([]), scope: { kind: 'global', realm: null } });
+/** Genres the two communities featuring the Work chose, for everyone's view when everyone chose none. */
+export const communityGenres: CommunityGenres[] = [
+  { realm: realms[0]!, items: [chip('Estuary cycle', 'local'), chip('Book club pick 2026', 'local', 'en', 'central')] },
+  { realm: realms[1]!, items: [chip('海洋文学', 'local', 'zh-Hans')] },
+];
+
+/** The numbers under the header's rating: public libraries reading it now and reviews of the same question. */
+export const workStats = ok<WorkStats>({ profile: 'work-reader-stats-v1', work: workId,
+  reading: { value: 38, kind: 'exact' }, reviews: { value: 214, kind: 'exact' }, sourcePosition });
+/** Past what Main counts, a number says "at least". */
+export const busyWorkStats = ok<WorkStats>({ profile: 'work-reader-stats-v1', work: workId,
+  reading: { value: 10_000, kind: 'lower-bound' }, reviews: { value: 10_000, kind: 'lower-bound' }, sourcePosition });
+export const quietWorkStats = ok<WorkStats>({ profile: 'work-reader-stats-v1', work: workId,
+  reading: { value: 0, kind: 'exact' }, reviews: { value: 0, kind: 'exact' }, sourcePosition });
+
+let picks = 0;
+/** A Work Main recommends beside this one, as its also-enjoyed read cards it. */
+const pick = (title: string, author: string, basis: AlsoEnjoyedItem['basis'], rating: [number, number] | null,
+  options: { language?: string; type?: string; completion?: AlsoEnjoyedItem['completionStatus'] } = {}): AlsoEnjoyedItem => {
+  const uuid = `4e5f6a7b-8c9d-4e0f-a1b2-${(++picks).toString().padStart(12, '0')}`;
+  return { id: iri(uuid), revision: iri(`5f6a7b8c-9d0e-4f1a-b2c3-${picks.toString().padStart(12, '0')}`), mainVersion,
+    title: name(title, options.language), types: [options.type ?? 'https://schema.org/Book'],
+    cover: { kind: 'fallback', policy: 'avatar-fallback-v1', key: uuid.replaceAll('-', ''), resourceType: 'work' },
+    tagline: null, completionStatus: options.completion ?? null, chapterCount: null, wordCount: null, lastUpdatedAt: null,
+    primaryCredits: [{ id: iri(`6a7b8c9d-0e1f-4a2b-83c4-${picks.toString().padStart(12, '0')}`), role: 'author',
+      participantKind: 'external-reference', provider: 'open-library', key: `/authors/OL${picks}A`, ordinal: 0,
+      agent: null, displayName: author, handle: null }],
+    rating: rating ? { context: globalContext, count: rating[1], sum: Math.round(rating[0] * rating[1]), mean: rating[0],
+      scale: { min: 1, max: 5 } } : null, basis };
+};
+export const coReaderPicks: AlsoEnjoyedItem[] = [
+  pick('Seascraper', 'Benjamin Wood', 'co-readers', [4, 94]),
+  pick('John of John', 'Douglas Stuart', 'co-readers', [4.26, 100]),
+  pick('Land', 'Maggie O’Farrell', 'co-readers', [4.21, 100]),
+  pick('May We Feed the King', 'Rebecca Perry', 'co-readers', [3.73, 51]),
+  pick('雨夜书店 · 连载小说', '林梅', 'co-readers', [4.67, 6], { language: 'zh-Hans', completion: 'ongoing' }),
+  pick('The Salt Road', 'Maren Osei', 'co-readers', [4.4, 37]),
+  pick('Lanterns over the Estuary', 'Idris Vale', 'co-readers', null),
+  pick('A Grammar of Floods', 'Maren Osei', 'co-readers', [3.9, 12]),
+  pick('Tidal Atlas: Charts and Stories from the World’s Great Deltas, Newly Collected', 'Idris Vale', 'co-readers',
+    [4.8, 5]),
+];
+export const similarPicks: AlsoEnjoyedItem[] = [
+  pick('The Night Ferry Library', 'Hana Ito', 'similar', [4.1, 22]),
+  pick('Salt and Starlight', 'Ada Brennan', 'similar', [3.6, 8]),
+];
+export const realmPicks: AlsoEnjoyedItem[] = [
+  pick('Bilingual book club discussion prompt', 'Lin Mei 林梅', 'realm', [4.67, 3],
+    { type: 'https://rezics.com/vocab/PromptTemplate' }),
+  pick('Recipe scaling assistant skill', 'Lin Mei 林梅', 'realm', null, { type: 'https://rezics.com/vocab/SkillPackage' }),
+];
+export const alsoEnjoyed = (items: AlsoEnjoyedItem[]) => ok<AlsoEnjoyedPage>({ profile: 'also-enjoyed-v1', ...page(items) });
 
 export const versions = ok<VersionPage>(page([
   { id: iri('11a3c5e7-9b0d-4f2a-8c4e-6a8c0e2a4c61'), kind: 'text-variant', language: 'en',

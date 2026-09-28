@@ -10,9 +10,10 @@ import { type ReaderSeed, readerEntry } from '../catalogue/reader-store.ts';
 import { localizedPath } from '../../i18n/locale.ts';
 import { chapterHref, chapterPlaceHref, type ContentsQuery, idOf, iriOf, mainScope, parseWorkRef, textHref,
   type VersionQuery, type WorkRef, type WorkScope, workHref } from './route.ts';
-import type { AdoptionPage, AgentCreditPage, AgentWorksPage, ChapterRead, ClassificationPage, ContentsPage, CreditPage,
-  DiscussionPage, HistoryKind, HistoryPage, Loaded, Progress, RatingContextPage, RatingRead, ReadFailure,
-  RealmHeader, Reviewer, ReviewPage, ReviewQuery, VersionPage, WorkHeader, WorkText } from './types.ts';
+import type { AdoptionPage, AgentCreditPage, AgentWorksPage, AlsoEnjoyedPage, ChapterRead, ClassificationPage,
+  ContentsPage, CreditPage, DiscussionPage, HistoryKind, HistoryPage, Loaded, Progress, RatingContextPage, RatingRead,
+  ReadFailure, RealmHeader, Reviewer, ReviewPage, ReviewQuery, VersionPage, WorkHeader, WorkStats, WorkText }
+  from './types.ts';
 
 // Server reads for the Work page. Each returns a `Loaded` result instead of
 // throwing, so one region's failure never takes down another. Reads are
@@ -196,6 +197,27 @@ export async function readDiscussion(id: string, realm: string | undefined, curs
 export const readAgentWorks = cache(async (agent: string, locale: UiLocale): Promise<Loaded<AgentWorksPage>> => {
   const { main, actingSubject } = await reader();
   return settle(() => main.v1.agents({ id: agent.slice(-36) }).works.get({ query: { language: locale, actingSubject,
+    limit: 12 } }));
+});
+
+/**
+ * The numbers under the header's rating: people whose public library has the
+ * Work on Currently reading, and the reviews answering `context`, everyone's
+ * rating question the header shows.
+ */
+export const readWorkStats = cache(async (id: string, context: string | undefined): Promise<Loaded<WorkStats>> => {
+  const { main, actingSubject } = await reader();
+  return settle(() => main.v1.works({ id })['reader-stats'].get({ query: { actingSubject, context } }));
+});
+
+/**
+ * Works this one's readers also enjoyed, or similar ones when too few have
+ * read it, each card saying which (`basis`). One page of twelve: three pages
+ * of the row on a wide screen.
+ */
+export const readAlsoEnjoyed = cache(async (id: string, locale: UiLocale): Promise<Loaded<AlsoEnjoyedPage>> => {
+  const { main, actingSubject } = await reader();
+  return settle(() => main.v1.works({ id })['also-enjoyed'].get({ query: { language: locale, actingSubject,
     limit: 12 } }));
 });
 
