@@ -145,8 +145,11 @@ export class FeedStore {
 
   async page(position: ReadPosition, revision: string, sort: 'best' | 'new' | 'top', limit: number,
     after: { key: string; id: string } | undefined, reader: { principal: VerifiedPrincipal; agent: string } | undefined,
-    window: NonNullable<FeedQuery['window']>, asOf: number) {
+    window: NonNullable<FeedQuery['window']>, asOf: number, kinds?: readonly string[]) {
     if (!Number.isInteger(limit) || limit < 1 || limit > FEED_COST.pageSize) throw new ControlInvalid('Invalid feed page');
+    if (kinds && (kinds.length < 1 || kinds.length > 8 || new Set(kinds).size !== kinds.length)) {
+      throw new ControlInvalid('Invalid feed kinds');
+    }
     return controlRead(this.pool, async client => {
       const checkpoint = (await client.query<FeedCheckpoint>('SELECT * FROM access.feed_checkpoint WHERE id FOR SHARE')).rows[0];
       if (checkpoint?.data_epoch !== position.dataEpoch || checkpoint.revision !== revision) throw new WorkReadMoved('Feed changed');
@@ -154,30 +157,51 @@ export class FeedStore {
       const cutoff = window === 'all' ? new Date(0) : new Date(asOf - (window === 'week' ? 7 : 30) * 86_400_000);
       // New has an unbounded history but a bounded index seek. Best declares
       // its recent candidate horizon and ranks only that bounded cohort.
+      // A kind filter seeks that kind: filtering after the seek hid every
+      // discussion behind newer catalogue posts.
       if (sort === 'top') {
         const key = after ? JSON.parse(after.key) as { score: number; time: string } : null;
-        // Seek before applying the time window. Old high-score rows yield
-        // sparse pages with continuation rather than an unbounded filtered scan.
+        const kindParam = key ? 7 : 4;
         return (await client.query<FeedRow>(`WITH candidates AS MATERIALIZED (
           SELECT * FROM access.feed_item WHERE data_epoch = $1 AND group_leader
+            ${kinds ? `AND kind = ANY($${kindParam}::text[])` : ''}
             ${key ? 'AND (score, sort_time, id) < ($4::integer,$5::timestamptz,$6)' : ''}
           ORDER BY score DESC, sort_time DESC, id DESC LIMIT $2
         ) SELECT c.*, COALESCE(v.value,0) AS vote, v.revision AS vote_revision
           FROM candidates c LEFT JOIN access.feed_vote v ON v.target = c.id AND v.principal_id = $3
           ORDER BY c.score DESC, c.sort_time DESC, c.id DESC`,
-        [position.dataEpoch, limit + 1, owner, ...(key ? [key.score, key.time, after!.id] : [])])).rows
+        [position.dataEpoch, limit + 1, owner, ...(key ? [key.score, key.time, after!.id] : []), ...(kinds ? [kinds] : [])])).rows
           .map(row => ({ ...row, order_key: JSON.stringify({ score: row.score, time: row.sort_time.toISOString() }) }));
       }
-      const candidates = (await client.query<FeedRow>(`WITH candidates AS MATERIALIZED (
-        SELECT * FROM access.feed_item WHERE data_epoch = $1 AND group_leader
-          AND sort_time >= $3 AND sort_time <= $4
-          ${sort === 'new' && after ? 'AND (sort_time, id) < ($6::timestamptz, $7)' : ''}
-        ORDER BY sort_time DESC, id DESC LIMIT $2
-      ) SELECT c.*, c.sort_time::text AS order_key, COALESCE(v.value,0) AS vote, v.revision AS vote_revision
-        FROM candidates c LEFT JOIN access.feed_vote v ON v.target = c.id AND v.principal_id = $5
-        ORDER BY c.sort_time DESC, c.id DESC`,
-      [position.dataEpoch, sort === 'new' ? limit + 1 : FEED_RANKING.candidatePool, cutoff, new Date(asOf), owner,
-        ...(sort === 'new' && after ? [after.key, after.id] : [])])).rows;
+      const rankedPool = sort === 'best' && !kinds;
+      /** Discussions stay in Best's cohort when newer catalogue posts would otherwise fill it. */
+      const talkReserve = 64;
+      const candidates = (await client.query<FeedRow>(rankedPool ? `WITH recent AS (
+          SELECT * FROM access.feed_item WHERE data_epoch = $1 AND group_leader
+            AND sort_time >= $3 AND sort_time <= $4
+          ORDER BY sort_time DESC, id DESC LIMIT $2
+        ), talks AS (
+          SELECT * FROM access.feed_item WHERE data_epoch = $1 AND group_leader
+            AND kind IN ('discussion', 'reply')
+            AND sort_time >= $3 AND sort_time <= $4
+          ORDER BY sort_time DESC, id DESC LIMIT ${talkReserve}
+        ), candidates AS (
+          SELECT * FROM recent UNION SELECT * FROM talks
+        ) SELECT c.*, c.sort_time::text AS order_key, COALESCE(v.value,0) AS vote, v.revision AS vote_revision
+          FROM candidates c LEFT JOIN access.feed_vote v ON v.target = c.id AND v.principal_id = $5
+          ORDER BY c.sort_time DESC, c.id DESC`
+        : `WITH candidates AS MATERIALIZED (
+          SELECT * FROM access.feed_item WHERE data_epoch = $1 AND group_leader
+            AND sort_time >= $3 AND sort_time <= $4
+            ${sort === 'new' && after ? 'AND (sort_time, id) < ($6::timestamptz, $7)' : ''}
+            ${kinds ? `AND kind = ANY($${sort === 'new' && after ? 8 : 6}::text[])` : ''}
+          ORDER BY sort_time DESC, id DESC LIMIT $2
+        ) SELECT c.*, c.sort_time::text AS order_key, COALESCE(v.value,0) AS vote, v.revision AS vote_revision
+          FROM candidates c LEFT JOIN access.feed_vote v ON v.target = c.id AND v.principal_id = $5
+          ORDER BY c.sort_time DESC, c.id DESC`,
+      [position.dataEpoch, rankedPool ? FEED_RANKING.candidatePool - talkReserve
+        : sort === 'new' ? limit + 1 : FEED_RANKING.candidatePool, cutoff, new Date(asOf), owner,
+        ...(sort === 'new' && after ? [after.key, after.id] : []), ...(rankedPool || !kinds ? [] : [kinds])])).rows;
       if (sort === 'new') return candidates;
       const ranked = rankCandidates(candidates.map(row => ({ ...row, time: row.sort_time.getTime() })), sort)
         .map((row, index) => ({ ...row, order_key: String(index) }));

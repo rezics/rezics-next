@@ -63,7 +63,7 @@ describe('dev seed plan', () => {
     expect(realms.every(realm => realm.featured.length > 0
       && realm.featured.every(id => works.some(work => work.id === id)))).toBe(true);
     expect(new Set(works.map(work => work.language))).toEqual(new Set(['en', 'zh-Hans']));
-    expect(new Set(works.map(work => work.type))).toEqual(new Set(['book', 'document', 'recipe', 'prompt', 'skill']));
+    expect(new Set(works.map(work => work.type))).toEqual(new Set(['book', 'document', 'recipe', 'prompt', 'skill', 'mod']));
     expect(works.filter(work => work.excerpt).length).toBeGreaterThanOrEqual(5);
   });
 
@@ -76,6 +76,7 @@ describe('dev seed plan', () => {
     expect(semanticTypes('document')).toEqual(['https://schema.org/DigitalDocument']);
     expect(semanticTypes('prompt')).toEqual(['https://rezics.com/vocab/PromptTemplate']);
     expect(semanticTypes('skill')).toEqual(['https://rezics.com/vocab/SkillPackage']);
+    expect(semanticTypes('mod')).toEqual(['https://rezics.com/vocab/ModPackage']);
   });
 
   test('attributes original Works to their creators and leaves imported classics unclaimed by demo authors', () => {
@@ -358,7 +359,7 @@ describe('dev seed plan', () => {
     expect(steps.map(step => step.name)).toEqual([
       'seedAccounts', 'seedClassics', 'seedWorks', 'seedContributions', 'seedRealms', 'seedAdoptions',
       'seedLibrary', 'seedChapters', 'seedModeration', 'seedHomeFeed',
-      'seedProfileCredits', 'seedProfileBios', 'seedProfileFollows', 'seedOfficialZones', 'seedBookConcepts',
+      'seedProfileCredits', 'seedProfileBios', 'seedProfileFollows', 'seedOfficialZones', 'seedRecipes', 'seedBookConcepts',
       'seedOfficialThemes',
       // Shelves, ratings and votes wait for readable classics and community Realms (G-385).
       'seedProfileShelves', 'seedCommunityRealms', 'seedCommunityDiscussions', 'seedReadingLives',

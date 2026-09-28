@@ -375,7 +375,7 @@ export async function readFeed(session: WorkReadSession, query: FeedQuery, reade
     after = { id: cursor.after, key: order.key }; asOf = order.asOf; recentRealms = order.recentRealms; followedSeen = order.followedSeen;
   }
   const limit = Math.min(query.limit ?? FEED_COST.pageSize, query.concepts ? FEED_COST.tagCandidates : FEED_COST.candidates);
-  const rows = await store.page(session.position, checkpoint.revision, sort, limit, after, reader, window, asOf);
+  const rows = await store.page(session.position, checkpoint.revision, sort, limit, after, reader, window, asOf, query.kinds);
   const page: FeedRow[] = [];
   let members = 0;
   for (const row of rows.slice(0, limit)) {

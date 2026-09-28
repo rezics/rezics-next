@@ -5,6 +5,7 @@ import { createServer } from 'node:net';
 import { join, resolve } from 'node:path';
 import { Pool } from 'pg';
 import { digest } from '../src/modules/recommendation/derived-generation.ts';
+import { FeedStore } from '../src/modules/feed/store.ts';
 
 // Migration 820 on a real Access schema: discussions and replies grouped
 // before it become posts of their own, with the keys refresh gives them
@@ -89,3 +90,48 @@ test('G401: grouped discussions and replies become posts of their own, and repla
   await pool.query(readFileSync(join(accessDir, SOLO), 'utf8'));
   expect(await rows()).toEqual(after);
 }, 60_000);
+
+test('a kind seek returns discussions that are older than the newest catalogue posts', async () => {
+  await pool.query(readFileSync(join(accessDir, SOLO), 'utf8'));
+  const epoch = 'kind-seek';
+  await pool.query(`INSERT INTO access.feed_checkpoint (data_epoch, sequence, revision)
+    VALUES ($1, 1, gen_random_uuid()) ON CONFLICT (id) DO UPDATE
+    SET data_epoch = EXCLUDED.data_epoch, sequence = EXCLUDED.sequence, revision = EXCLUDED.revision`, [epoch]);
+  const realm = id(910);
+  await pool.query(`INSERT INTO access.feed_item (data_epoch, id, sequence, kind, occurred_at, time_basis, score,
+      best_key, realm, group_bucket, group_key, group_leader, group_members, sort_time)
+    SELECT $1, 'https://rezics.com/id/00000000-0000-4000-8000-' || lpad(n::text, 12, '0'), n, 'adoption',
+      now(), 'revision', 0, 0, NULL, 'adopt-' || n, 'adopt-' || n, true,
+      ARRAY['https://rezics.com/id/00000000-0000-4000-8000-' || lpad(n::text, 12, '0')], now()
+    FROM generate_series(1, 200) AS n`, [epoch]);
+  const put = (n: number, score: number) => pool.query(
+    `INSERT INTO access.feed_item (data_epoch, id, sequence, kind, occurred_at, time_basis, score, best_key,
+      realm, group_bucket, group_key, group_leader, group_members, sort_time)
+     VALUES ($1,$2,$3,'discussion', now() - make_interval(hours => 1), 'revision', $4::int, $4::float8, $5, $2, $2, true, ARRAY[$2],
+      now() - make_interval(hours => 1))`,
+    [epoch, id(n), n, score, realm]);
+  await put(2001, 8);
+  await put(2002, 6);
+  const store = new FeedStore(pool);
+  const position = { dataEpoch: epoch, sequence: '1' };
+  const revision = (await store.checkpoint(epoch)).revision;
+  const asOf = Date.now() + 60_000;
+  const newest = await store.page(position, revision, 'new', 8, undefined, undefined, 'all', asOf);
+  expect(newest.every(row => row.kind === 'adoption')).toBe(true);
+  const discussed = await store.page(position, revision, 'new', 8, undefined, undefined, 'all', asOf, ['discussion']);
+  expect(discussed.map(row => row.id).sort()).toEqual([id(2001), id(2002)].sort());
+  // Best keeps those older discussions in its cohort, past a full page of newer posts.
+  const buried = await store.page(position, revision, 'best', 20, undefined, undefined, 'all', asOf);
+  expect(buried.map(row => row.id)).not.toEqual(expect.arrayContaining([id(2001)]));
+  let cursor: { key: string; id: string } | undefined;
+  const seen = new Set<string>();
+  for (let page = 0; page < 20; page++) {
+    const rows = await store.page(position, revision, 'best', 20, cursor, undefined, 'all', asOf);
+    for (const row of rows.slice(0, 20)) seen.add(row.id);
+    const last = rows[19];
+    if (!last) break;
+    cursor = { key: last.order_key, id: last.id };
+  }
+  expect(seen.has(id(2001))).toBe(true);
+  expect(seen.has(id(2002))).toBe(true);
+});

@@ -103,11 +103,14 @@ describe('Reading lives', () => {
       .some(entry => entry.work === work && entry.status !== 'want-to-read') || (plan.get(person)?.get(work) ?? 0) >= 4;
     const candidate = (person: string, work: string) => readingLives.find(life => life.person === person)!.shelf
       .some(entry => entry.work === work && entry.status === 'read') || (plan.get(person)?.get(work) ?? 0) >= 4;
+    const workType = (id: string) => works.find(work => work.id === id)?.type
+      ?? extraWorks.find(work => work.id === id)?.type ?? 'book';
     for (const id of coReaderWorks) {
       const readers = readingLives.map(life => life.person).filter(person => source(person, id));
       expect(readers.length).toBeGreaterThanOrEqual(4);
+      // "Readers also enjoyed" keeps the source's kind and drops its authors' other Works.
       const candidates = [...known].filter(work => work !== id && authorOf(work) !== authorOf(id)
-        && readers.some(person => candidate(person, work)));
+        && workType(work) === workType(id) && readers.some(person => candidate(person, work)));
       expect(candidates.length).toBeGreaterThan(0);
     }
   });

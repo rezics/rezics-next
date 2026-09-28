@@ -3,7 +3,7 @@ import { communityRealms } from './community-plan.ts';
 import { publicWork } from './community-step.ts';
 import { works } from './plan.ts';
 import { checkModsDiscovery } from './official-zones-step.ts';
-import { missingCoReaders } from './reading-lives-coreaders.ts';
+import { missingCoReaders, seedCoReaders } from './reading-lives-coreaders.ts';
 import { coReaderWorks } from './reading-lives-plan.ts';
 import { reviews } from './reviews-plan.ts';
 
@@ -81,5 +81,9 @@ export async function checkPublicReads(state: SeedState) {
     });
   }
   await state.optional('Mods discovery refresh', () => checkModsDiscovery(state));
+  // Discovery's refresh writes while the check waits. A co-reader generation pinned
+  // before that wait is stale by the time Home is read, so build again once the
+  // catalogue is quiet.
+  await seedCoReaders(state);
   await state.optional('Community, reviews and co-readers', () => checkCommunity(state));
 }

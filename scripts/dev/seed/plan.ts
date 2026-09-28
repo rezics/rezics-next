@@ -1,5 +1,5 @@
 export interface DemoPerson { id: string; name: string; handle: string; email: string; password: string }
-export interface DemoWork { id: string; title: string; type: 'book' | 'document' | 'recipe' | 'prompt' | 'skill';
+export interface DemoWork { id: string; title: string; type: 'book' | 'document' | 'recipe' | 'prompt' | 'skill' | 'mod';
   language: 'en' | 'zh-Hans'; excerpt?: string; tagline?: string;
   completionStatus?: 'ongoing' | 'completed' | 'hiatus';
   author?: 'mei' | 'daniel' | 'an' | 'sophie' | 'jun' | 'aria' | 'leo' | 'moonlight';
@@ -64,6 +64,11 @@ export const works: readonly DemoWork[] = [
     excerpt: 'Ask for the original servings and the desired servings. Show the new quantities and flag ingredients that need judgment.' },
   { id: 'mod-guide', title: 'Mod setup checklist', type: 'document', language: 'en', author: 'mei',
     excerpt: 'Record the game version, required dependencies, load order, and a way to restore the previous setup before changing mods.' },
+  // Other people's mods, so Lumen Lanterns (Jun's) can name co-readers of the same kind.
+  { id: 'camp-lanterns', title: 'Camp Lanterns', type: 'mod', language: 'en', author: 'sophie',
+    excerpt: 'Hang warm lanterns around a campsite. Place one, light it, and keep a spare in the chest.' },
+  { id: 'trail-markers', title: 'Trail Markers', type: 'mod', language: 'en', author: 'leo',
+    excerpt: 'Leave a visible marker where a path splits. Markers stay until the player who placed them picks them up.' },
 ];
 
 export const realms = [
@@ -128,7 +133,7 @@ export function seedKey(kind: string, id: string): string {
 
 const typeIris = { book: 'https://schema.org/Book', document: 'https://schema.org/DigitalDocument',
   recipe: 'https://schema.org/Recipe', prompt: 'https://rezics.com/vocab/PromptTemplate',
-  skill: 'https://rezics.com/vocab/SkillPackage' } as const satisfies Record<DemoWork['type'], string>;
+  skill: 'https://rezics.com/vocab/SkillPackage', mod: 'https://rezics.com/vocab/ModPackage' } as const satisfies Record<DemoWork['type'], string>;
 
 export function semanticTypes(type: DemoWork['type']): string[] {
   return [typeIris[type]];

@@ -4,6 +4,7 @@ import { GRAPHS, iri, lit, WORK_SEMANTIC_TYPES } from '../work/activate.ts';
 import { readWorkClassifications } from '../work/read-classifications.ts';
 import { queryWorkStandingRating } from '../rating/global-aggregate.ts';
 import { standingRatingSlotIri } from '../rating/observation.ts';
+import { fusekiReadBudget } from '../../infrastructure/fuseki.ts';
 import { publicWork, WorkReadInvalid, WorkReadLimit, WorkReadMissing, WorkReadUnavailable,
   type WorkReadSession } from '../work/read-session.ts';
 import { DISCOVERY_COST, type DiscoveryBasis, type ProjectedWork } from './contract.ts';
@@ -106,7 +107,12 @@ export async function projectDiscoveryBatch(session: WorkReadSession, basis: Dis
       new Set(own!.map(row => row[key]?.value)).size !== 1)) throw new WorkReadUnavailable('Discovery source is ambiguous');
     const classified = basis.scope !== 'mine' && first.classified!.value === 'true';
     const credited = first.credited!.value === 'true' || !!session.deps.sourceAdoptions;
-    const cost = (classified ? 100 : 0) + (basis.context ? 2 : 0) + (credited ? 1 : 0);
+    // One classified Work is a handful of owner reads. Fill the step's graph
+    // budget instead of stopping after the first, so a quiet catalogue (the
+    // seed's Mods genres) activates within a minute rather than one Work per tick.
+    const callsLeft = fusekiReadBudget.getStore()?.callsLeft;
+    if (classified && checkpoint !== after && callsLeft !== undefined && callsLeft < 40) break;
+    const cost = (classified ? 20 : 0) + (basis.context ? 2 : 0) + (credited ? 1 : 0);
     if (spent + cost > 120 && checkpoint !== after) break;
     spent += cost;
     checkpoint = work;
