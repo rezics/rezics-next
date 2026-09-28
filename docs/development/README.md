@@ -13,6 +13,8 @@ configuration. For a development stack and its cleanup, follow
 [installation](../operations/installation.md). The [disposable local web auth
 fixture](local-web-auth.md) has its own run procedure.
 
+To discard and recreate this checkout's dev data, run `task dev:reset -- --yes` (it prints the exact volumes and directories first).
+
 Use `task test -- <explicit test files>` for changed behavior. Preview the
 dependency-selected plan with `task test -- --affected --list`, then run
 `task test -- --affected` when appropriate. The [test harness](../testing/test-harness.md)

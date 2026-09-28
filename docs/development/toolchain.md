@@ -213,12 +213,13 @@ Pass command arguments after `--`; run `task --list` for the live command menu.
 | `task toolchain:install` | From a clean clone, install dependencies, check runtimes, pull images, build Fuseki and install Chromium. |
 | `task dev` | Start the dev environment under Aspire. Main checkout: shared backend and frontend on ports 3002 (Account), 3001 (Main), 3004 (Accounts app), 3000 (web), 6006 (Storybook). Worktree: Accounts app, web and Storybook on random ports against it, or -- --backend for its own isolated stack. |
 | `task dev:stop` | Stop this checkout's AppHost; a worktree backend also removes its isolated stack. |
+| `task dev:reset` | Print and, with -- --yes, recreate only this checkout's dev stack data. |
 | `task urls` | Show this checkout's running resources with their URLs and health. |
 | `task env` | Show the application environment this checkout uses, secrets masked, and where it comes from. |
 | `task env:example` | Regenerate each workspace's .env.example from its envalid config specs. |
 | `task zones:digest` | Compute the digest of an installed official Zone source package. |
 | `task dev:prepare` | Start storage, apply migrations and write the application environment without starting processes. |
-| `task dev:seed` | Seed the shared local demo through its public APIs. |
+| `task dev:seed` | Seed this checkout's local demo through its public APIs. |
 | `task dev:typecheck` | Type-check the development scripts. |
 | `task aspire` | Run the pinned Aspire CLI against the dev AppHost (describe, logs, wait, agent mcp, ...). |
 | `task aspire:restore` | Generate the TypeScript AppHost SDK for the pinned Aspire version. |
