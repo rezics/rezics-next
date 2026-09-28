@@ -8,7 +8,7 @@ export const AUTHOR_FACTS_COST = { captureBytes: 65_536, dateCharacters: 100, na
 
 const identifierScheme = t.Union([t.Literal('project_gutenberg'), t.Literal('librivox'), t.Literal('wikidata'),
   t.Literal('lc_naf'), t.Literal('viaf'), t.Literal('isni')]);
-export type AuthorIdentifierScheme = Static<typeof identifierScheme>;
+type AuthorIdentifierScheme = Static<typeof identifierScheme>;
 /**
  * Where an author page links onward, in its order: free books to read or hear
  * first, then the authority files that identify the person. Only these
@@ -16,7 +16,7 @@ export type AuthorIdentifierScheme = Static<typeof identifierScheme>;
  * (Amazon, Goodreads, IMDb…) stay in the capture. Addresses as each registry
  * publishes them (2026-09-28).
  */
-export const AUTHOR_IDENTIFIER_SCHEMES = {
+const AUTHOR_IDENTIFIER_SCHEMES = {
   project_gutenberg: { pattern: /^[1-9][0-9]{0,6}$/, url: (id: string) => `https://www.gutenberg.org/ebooks/author/${id}` },
   librivox: { pattern: /^[1-9][0-9]{0,6}$/, url: (id: string) => `https://librivox.org/author/${id}` },
   wikidata: { pattern: /^Q[1-9][0-9]{0,11}$/, url: (id: string) => `https://www.wikidata.org/wiki/${id}` },
@@ -30,11 +30,11 @@ const schemes = Object.keys(AUTHOR_IDENTIFIER_SCHEMES) as AuthorIdentifierScheme
 export const sourceFactProvenance = { record: t.String(), observation: t.String(), revision: t.String(),
   sourceRevision: t.Nullable(t.String()), digest: t.String(), url: t.String(), fetchedAt: t.String(),
   basis: t.Literal('facts') };
-export const authorFactField = t.Union([t.Literal('/birth_date'), t.Literal('/death_date'),
+const authorFactField = t.Union([t.Literal('/birth_date'), t.Literal('/death_date'),
   t.Literal('/fuller_name'), t.TemplateLiteral([t.Literal('/remote_ids/'), identifierScheme])]);
 /** The name's provenance with the fact's own JSON Pointer into the same capture. */
-export const authorFactProvenance = t.Object({ ...sourceFactProvenance, field: authorFactField });
-export type AuthorFactProvenance = Static<typeof authorFactProvenance>;
+const authorFactProvenance = t.Object({ ...sourceFactProvenance, field: authorFactField });
+type AuthorFactProvenance = Static<typeof authorFactProvenance>;
 const factDate = t.Object({ text: t.String({ minLength: 1, maxLength: AUTHOR_FACTS_COST.dateCharacters }),
   year: t.Nullable(t.Integer({ minimum: 1, maximum: 9999 })), month: t.Nullable(t.Integer({ minimum: 1, maximum: 12 })),
   day: t.Nullable(t.Integer({ minimum: 1, maximum: 31 })), approximate: t.Boolean(), source: authorFactProvenance });

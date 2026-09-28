@@ -18,7 +18,7 @@ import { pageFields, readAvatar, readId, readName, readPosition, WORK_READ_COST 
 export const AUTHOR_PAGE_COST = { works: AUTHOR_WORKS_COST.works, pageSize: WORK_READ_COST.pageSize,
   creditsPerWork: 3, readerProbe: 10_000, sqlStatementMs: 1_000, responseBytes: 512 * 1024 } as const;
 
-export const authorKeyPattern = '^/authors/OL[1-9][0-9]{0,11}A$';
+const authorKeyPattern = '^/authors/OL[1-9][0-9]{0,11}A$';
 const count = t.Object({ value: t.Integer({ minimum: 0 }),
   kind: t.Union([t.Literal('exact'), t.Literal('lower-bound')]) });
 
