@@ -40,6 +40,8 @@ export interface ChapterListProps {
 }
 
 type Row = Pick<ContentsItem, 'occurrence' | 'label' | 'target' | 'availability'>;
+/** Marks a row added here whose place Main has not named yet. */
+const UNPLACED = 'unplaced:';
 
 function Status({ row, memory, t }: { row: Row; memory: ChapterMemory | undefined; t: T }) {
   const changed = memory?.publishedHead && memory.head && memory.head !== memory.publishedHead;
@@ -111,8 +113,9 @@ export function ChapterList({ agent, book, page, offset = 0, moreHref = null, lo
       if (result.outcome === 'done' && result.chapter && result.structure) {
         attempt.current = null;
         setComposition({ structure: result.structure, head: result.head });
-        setRows(current => [...current, { occurrence: result.chapter!, label: { value: name, language: book.language },
-          target: result.chapter!, availability: 'unavailable' }]);
+        // Until Main names the new place (the refresh below), the row cannot be moved.
+        setRows(current => [...current, { occurrence: result.occurrence ?? `${UNPLACED}${result.chapter}`,
+          label: { value: name, language: book.language }, target: result.chapter!, availability: 'unavailable' }]);
         form.reset();
         setAnnouncement(t.chapterAdded({ title: name }));
         router.refresh();
@@ -129,6 +132,7 @@ export function ChapterList({ agent, book, page, offset = 0, moreHref = null, lo
     const row = rows[index];
     const target = index + direction;
     if (!row || !composition || target < 0 || target >= rows.length || busy) return;
+    if ([row, rows[target]].some(item => item?.occurrence.startsWith(UNPLACED))) return;
     // Up: after the chapter two above (or first). Down: after the chapter below.
     const after = direction === -1 ? target === 0 ? null : rows[target - 1]!.occurrence : rows[target]!.occurrence;
     setBusy(row.occurrence);
@@ -171,6 +175,8 @@ export function ChapterList({ agent, book, page, offset = 0, moreHref = null, lo
           known?.savedAt ? t.savedWhen({ time: relativeTime(known.savedAt, clock, locale, 'long') }) : null]
           .filter((part): part is string => part !== null);
         const name = row.label?.value ?? t.chapterHidden;
+        const placed = (item: Row | undefined) => Boolean(item) && !item!.occurrence.startsWith(UNPLACED);
+        const fixed = !placed(row);
         return <li key={row.occurrence} className="grid grid-cols-[2rem_minmax(0,1fr)] items-center gap-x-3 gap-y-2 px-3 py-3
           sm:grid-cols-[2.5rem_minmax(0,1fr)_auto] sm:px-4">
           <span className="text-center font-medium text-muted-foreground text-sm tabular-nums">{offset + index + 1}</span>
@@ -192,10 +198,12 @@ export function ChapterList({ agent, book, page, offset = 0, moreHref = null, lo
               className={buttonVariants({ variant: 'ghost', size: 'sm' })}>
               <BookOpenIcon aria-hidden="true" /><span className="max-sm:sr-only">{t.readChapter}</span></Link> : null}
             <Button type="button" variant="ghost" size="icon-sm" aria-label={t.moveUp({ title: name })}
-              disabled={index < firstMovable || busy !== null} onClick={() => void move(index, -1)}>
+              disabled={index < firstMovable || fixed || !placed(rows[index - 1]) || busy !== null}
+              onClick={() => void move(index, -1)}>
               <ArrowUpIcon aria-hidden="true" /></Button>
             <Button type="button" variant="ghost" size="icon-sm" aria-label={t.moveDown({ title: name })}
-              disabled={index === rows.length - 1 || busy !== null} onClick={() => void move(index, 1)}>
+              disabled={index === rows.length - 1 || fixed || !placed(rows[index + 1]) || busy !== null}
+              onClick={() => void move(index, 1)}>
               <ArrowDownIcon aria-hidden="true" /></Button>
           </div>
         </li>;

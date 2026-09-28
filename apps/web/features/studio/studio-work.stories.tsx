@@ -69,7 +69,10 @@ export const Chapters: Story = {
     await userEvent.click(canvas.getByRole('button', { name: 'Add chapter' }));
     await expect(await canvas.findByRole('link', { name: 'Write “第四章 站台”' })).toBeInTheDocument();
     await expect(canvas.getByRole('textbox', { name: 'New chapter' })).toHaveValue('');
-    await expect(calls).toEqual(['move', 'work', 'insert']);
+    // A chapter just added moves at once: Main's answer named its place.
+    await userEvent.click(canvas.getByRole('button', { name: 'Move “第四章 站台” up' }));
+    await waitFor(() => expect(within(list).getAllByRole('listitem')[2]).toHaveTextContent('第四章 站台'));
+    await expect(calls).toEqual(['move', 'work', 'insert', 'move']);
   },
 };
 

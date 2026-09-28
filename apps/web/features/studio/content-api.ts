@@ -168,7 +168,9 @@ export async function readCompositionHead(actingSubject: string, book: string, l
  */
 export async function createChapter(input: { actingSubject: string; book: string; mainVersion: string;
   composition: { structure: string; head: string } | null; title: string; language: string; key: string },
-main: MainClient = browserMainApi()): Promise<ChapterCommand & { chapter?: string; structure?: string }> {
+main: MainClient = browserMainApi()): Promise<ChapterCommand & { chapter?: string; structure?: string;
+  /** The chapter's place in the composition, when Main's answer names it (a replayed answer may not). */
+  occurrence?: string }> {
   const headers = (step: string) => ({ headers: { 'idempotency-key': `${input.key}:${step}` } });
   const composition = input.composition ?? await (async (): Promise<{ structure: string; head: string } | Refusal> => {
     const created = await settled(() => main.v1.compositions.post({ profile: 'book-composition', work: input.book,
@@ -195,7 +197,7 @@ main: MainClient = browserMainApi()): Promise<ChapterCommand & { chapter?: strin
       label: { value: input.title, language: input.language } }] }, headers(`insert:${idOf(composition.head)}`)));
   if (placed.error) return { outcome: commandOf(placed.error), chapter, structure };
   if (!placed.data || 'operationId' in placed.data || !placed.data.revision) return { outcome: 'pending', chapter, structure };
-  return { outcome: 'done', head: placed.data.revision, chapter, structure };
+  return { outcome: 'done', head: placed.data.revision, chapter, structure, occurrence: placed.data.occurrences?.[0] };
 }
 
 /** Moves one chapter to the top of the Book or after another chapter. */

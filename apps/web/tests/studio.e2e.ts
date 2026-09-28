@@ -112,7 +112,7 @@ test('STUDIO01: a writer builds a chaptered book, writes through offline and a s
     await shoot(page, info, 'studio-home-start');
 
     // A new book, in Chinese: it opens on its chapters.
-    await page.getByRole('link', { name: 'New work' }).click();
+    await page.getByRole('link', { name: 'New work', exact: true }).click();
     await expect(page).toHaveURL(`${studio}/new`);
     const title = `雨夜书店 ${Date.now() % 1000}`;
     await page.getByRole('textbox', { name: 'Title' }).fill(title);

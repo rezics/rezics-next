@@ -70,6 +70,7 @@ describe('Studio chapter commands', () => {
     const created = await createChapter({ actingSubject: agent, book: ids.serial, mainVersion: ids.serial, composition: null,
       title: '第一章 雨夜', language: 'zh-Hans', key: 'k1' }, main.main);
     expect(created.outcome).toBe('done');
+    expect(created.occurrence).toBe(main.book(ids.serial)?.items[0]?.occurrence);
     expect(main.calls).toEqual(['composition', 'work', 'insert']);
     expect(main.book(ids.serial)?.items).toEqual([expect.objectContaining({ target: created.chapter,
       label: { value: '第一章 雨夜', language: 'zh-Hans' } })]);
