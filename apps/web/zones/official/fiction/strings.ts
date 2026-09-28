@@ -17,7 +17,6 @@ type Strings = typeof en;
 
 const translations: Record<string, Strings> = {
   en,
-  },
   'zh-Hans': {
     tagline: '网络连载、轻小说与原创作品，由小说编辑部公开甄选。',
     official: 'REZICS 官方专区',
