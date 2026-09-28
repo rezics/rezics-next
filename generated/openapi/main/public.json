@@ -36273,12 +36273,20 @@
                                   "basis"
                                 ],
                                 "type": "object"
+                              },
+                              "types": {
+                                "items": {
+                                  "type": "string"
+                                },
+                                "maxItems": 8,
+                                "type": "array"
                               }
                             },
                             "required": [
                               "id",
                               "title",
-                              "cover"
+                              "cover",
+                              "types"
                             ],
                             "type": "object"
                           },
@@ -103333,6 +103341,182 @@
                               },
                               {
                                 "properties": {
+                                  "count": {
+                                    "properties": {
+                                      "kind": {
+                                        "enum": [
+                                          "exact",
+                                          "lower-bound"
+                                        ],
+                                        "type": "string"
+                                      },
+                                      "value": {
+                                        "minimum": 0,
+                                        "type": "integer"
+                                      }
+                                    },
+                                    "required": [
+                                      "value",
+                                      "kind"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  "kind": {
+                                    "const": "list",
+                                    "type": "string"
+                                  },
+                                  "works": {
+                                    "items": {
+                                      "properties": {
+                                        "cover": {
+                                          "anyOf": [
+                                            {
+                                              "properties": {
+                                                "key": {
+                                                  "type": "string"
+                                                },
+                                                "kind": {
+                                                  "const": "fallback",
+                                                  "type": "string"
+                                                },
+                                                "policy": {
+                                                  "type": "string"
+                                                },
+                                                "resourceType": {
+                                                  "type": "string"
+                                                }
+                                              },
+                                              "required": [
+                                                "kind",
+                                                "policy",
+                                                "key",
+                                                "resourceType"
+                                              ],
+                                              "type": "object"
+                                            },
+                                            {
+                                              "properties": {
+                                                "basis": {
+                                                  "properties": {
+                                                    "context": {
+                                                      "type": "string"
+                                                    },
+                                                    "policy": {
+                                                      "type": "string"
+                                                    }
+                                                  },
+                                                  "required": [
+                                                    "policy",
+                                                    "context"
+                                                  ],
+                                                  "type": "object"
+                                                },
+                                                "crop": {
+                                                  "~elyTyp": 7,
+                                                  "nullable": true,
+                                                  "type": [
+                                                    "string",
+                                                    "null"
+                                                  ]
+                                                },
+                                                "height": {
+                                                  "type": "integer"
+                                                },
+                                                "kind": {
+                                                  "const": "image",
+                                                  "type": "string"
+                                                },
+                                                "mediaType": {
+                                                  "type": "string"
+                                                },
+                                                "selection": {
+                                                  "type": "string"
+                                                },
+                                                "url": {
+                                                  "type": "string"
+                                                },
+                                                "width": {
+                                                  "type": "integer"
+                                                }
+                                              },
+                                              "required": [
+                                                "kind",
+                                                "selection",
+                                                "url",
+                                                "mediaType",
+                                                "width",
+                                                "height",
+                                                "crop",
+                                                "basis"
+                                              ],
+                                              "type": "object"
+                                            }
+                                          ]
+                                        },
+                                        "id": {
+                                          "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                          "type": "string"
+                                        },
+                                        "title": {
+                                          "properties": {
+                                            "basis": {
+                                              "enum": [
+                                                "requested",
+                                                "fallback"
+                                              ],
+                                              "type": "string"
+                                            },
+                                            "direction": {
+                                              "enum": [
+                                                "ltr",
+                                                "rtl"
+                                              ],
+                                              "type": "string"
+                                            },
+                                            "language": {
+                                              "type": "string"
+                                            },
+                                            "value": {
+                                              "type": "string"
+                                            }
+                                          },
+                                          "required": [
+                                            "value",
+                                            "language",
+                                            "direction",
+                                            "basis"
+                                          ],
+                                          "type": "object"
+                                        },
+                                        "types": {
+                                          "items": {
+                                            "type": "string"
+                                          },
+                                          "maxItems": 3,
+                                          "type": "array"
+                                        }
+                                      },
+                                      "required": [
+                                        "id",
+                                        "title",
+                                        "cover",
+                                        "types"
+                                      ],
+                                      "type": "object"
+                                    },
+                                    "maxItems": 3,
+                                    "type": "array"
+                                  }
+                                },
+                                "required": [
+                                  "kind",
+                                  "count",
+                                  "works"
+                                ],
+                                "type": "object"
+                              },
+                              {
+                                "properties": {
                                   "helpfulCount": {
                                     "minimum": 0,
                                     "type": "integer"
@@ -104120,6 +104304,13 @@
                                 ],
                                 "type": "object"
                               },
+                              "types": {
+                                "items": {
+                                  "type": "string"
+                                },
+                                "maxItems": 3,
+                                "type": "array"
+                              },
                               "work": {
                                 "~elyTyp": 7,
                                 "nullable": true,
@@ -104135,6 +104326,7 @@
                               "work",
                               "title",
                               "cover",
+                              "types",
                               "excerpt",
                               "language"
                             ],
@@ -126558,6 +126750,13 @@
                             ],
                             "type": "object"
                           },
+                          "types": {
+                            "items": {
+                              "type": "string"
+                            },
+                            "maxItems": 3,
+                            "type": "array"
+                          },
                           "unreadCount": {
                             "properties": {
                               "kind": {
@@ -126590,6 +126789,7 @@
                           "work",
                           "title",
                           "cover",
+                          "types",
                           "source",
                           "lastPosition",
                           "nextUnread",
@@ -127647,12 +127847,20 @@
                                   "basis"
                                 ],
                                 "type": "object"
+                              },
+                              "types": {
+                                "items": {
+                                  "type": "string"
+                                },
+                                "maxItems": 8,
+                                "type": "array"
                               }
                             },
                             "required": [
                               "id",
                               "title",
-                              "cover"
+                              "cover",
+                              "types"
                             ],
                             "type": [
                               "object",
@@ -141137,12 +141345,20 @@
                                   "basis"
                                 ],
                                 "type": "object"
+                              },
+                              "types": {
+                                "items": {
+                                  "type": "string"
+                                },
+                                "maxItems": 8,
+                                "type": "array"
                               }
                             },
                             "required": [
                               "id",
                               "title",
-                              "cover"
+                              "cover",
+                              "types"
                             ],
                             "type": [
                               "object",
@@ -145072,12 +145288,20 @@
                                   "basis"
                                 ],
                                 "type": "object"
+                              },
+                              "types": {
+                                "items": {
+                                  "type": "string"
+                                },
+                                "maxItems": 8,
+                                "type": "array"
                               }
                             },
                             "required": [
                               "id",
                               "title",
-                              "cover"
+                              "cover",
+                              "types"
                             ],
                             "type": [
                               "object",
@@ -334453,6 +334677,173 @@
                     "items": {
                       "items": {
                         "properties": {
+                          "authors": {
+                            "items": {
+                              "anyOf": [
+                                {
+                                  "properties": {
+                                    "agent": {
+                                      "type": "null"
+                                    },
+                                    "confirmation": {
+                                      "const": "source-reported",
+                                      "type": "string"
+                                    },
+                                    "displayName": {
+                                      "~elyTyp": 7,
+                                      "maxLength": 200,
+                                      "minLength": 1,
+                                      "nullable": true,
+                                      "type": [
+                                        "string",
+                                        "null"
+                                      ]
+                                    },
+                                    "handle": {
+                                      "type": "null"
+                                    },
+                                    "id": {
+                                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                      "type": "string"
+                                    },
+                                    "key": {
+                                      "type": "string"
+                                    },
+                                    "nameSource": {
+                                      "properties": {
+                                        "basis": {
+                                          "const": "facts",
+                                          "type": "string"
+                                        },
+                                        "digest": {
+                                          "type": "string"
+                                        },
+                                        "fetchedAt": {
+                                          "type": "string"
+                                        },
+                                        "field": {
+                                          "const": "/name",
+                                          "type": "string"
+                                        },
+                                        "observation": {
+                                          "type": "string"
+                                        },
+                                        "record": {
+                                          "type": "string"
+                                        },
+                                        "revision": {
+                                          "type": "string"
+                                        },
+                                        "sourceRevision": {
+                                          "~elyTyp": 7,
+                                          "nullable": true,
+                                          "type": [
+                                            "string",
+                                            "null"
+                                          ]
+                                        },
+                                        "url": {
+                                          "type": "string"
+                                        }
+                                      },
+                                      "required": [
+                                        "record",
+                                        "observation",
+                                        "revision",
+                                        "sourceRevision",
+                                        "digest",
+                                        "url",
+                                        "fetchedAt",
+                                        "basis",
+                                        "field"
+                                      ],
+                                      "type": "object"
+                                    },
+                                    "ordinal": {
+                                      "type": "integer"
+                                    },
+                                    "participantKind": {
+                                      "const": "external-reference",
+                                      "type": "string"
+                                    },
+                                    "provider": {
+                                      "const": "open-library",
+                                      "type": "string"
+                                    },
+                                    "role": {
+                                      "const": "author",
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "id",
+                                    "role",
+                                    "participantKind",
+                                    "provider",
+                                    "key",
+                                    "ordinal",
+                                    "agent",
+                                    "displayName",
+                                    "handle"
+                                  ],
+                                  "type": "object"
+                                },
+                                {
+                                  "properties": {
+                                    "agent": {
+                                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                      "type": "string"
+                                    },
+                                    "displayName": {
+                                      "maxLength": 200,
+                                      "minLength": 1,
+                                      "type": "string"
+                                    },
+                                    "handle": {
+                                      "maxLength": 100,
+                                      "minLength": 1,
+                                      "type": "string"
+                                    },
+                                    "id": {
+                                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                      "type": "string"
+                                    },
+                                    "key": {
+                                      "type": "null"
+                                    },
+                                    "ordinal": {
+                                      "type": "null"
+                                    },
+                                    "participantKind": {
+                                      "const": "agent",
+                                      "type": "string"
+                                    },
+                                    "provider": {
+                                      "type": "null"
+                                    },
+                                    "role": {
+                                      "const": "author",
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "id",
+                                    "role",
+                                    "participantKind",
+                                    "provider",
+                                    "key",
+                                    "ordinal",
+                                    "agent",
+                                    "displayName",
+                                    "handle"
+                                  ],
+                                  "type": "object"
+                                }
+                              ]
+                            },
+                            "maxItems": 3,
+                            "type": "array"
+                          },
                           "cover": {
                             "anyOf": [
                               {
@@ -334590,6 +334981,13 @@
                             ],
                             "type": "object"
                           },
+                          "types": {
+                            "items": {
+                              "type": "string"
+                            },
+                            "maxItems": 3,
+                            "type": "array"
+                          },
                           "work": {
                             "type": "string"
                           }
@@ -334599,6 +334997,8 @@
                           "mainVersion",
                           "title",
                           "cover",
+                          "types",
+                          "authors",
                           "matchedField",
                           "matchedText",
                           "matchedLanguage"
@@ -382777,6 +383177,13 @@
                             ],
                             "type": "object"
                           },
+                          "types": {
+                            "items": {
+                              "type": "string"
+                            },
+                            "maxItems": 8,
+                            "type": "array"
+                          },
                           "work": {
                             "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                             "type": "string"
@@ -382787,6 +383194,7 @@
                           "realm",
                           "title",
                           "cover",
+                          "types",
                           "rank",
                           "reason"
                         ],
