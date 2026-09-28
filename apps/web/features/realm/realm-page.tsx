@@ -15,7 +15,7 @@ import { parseTheme, THEME_COOKIE } from '../shell/preferences.ts';
 import { ZONE_NONCE_HEADER } from '../zones/csp.ts';
 import { decideExecution, type Execution, isSafeMode, ZONE_LOOK_COOKIE, zoneLookEnabled } from '../zones/execution.ts';
 import { LookMenu } from '../zones/look-menu.tsx';
-import type { ZoneMessages } from '../zones/messages.ts';
+import { defaultModuleTitle, type ZoneMessages } from '../zones/messages.ts';
 import { defaultPresentation, type ZonePresentation } from '../zones/presentation.ts';
 import { zoneTheme } from '../zones/theme.ts';
 import { ExecutionNotice, ZoneFrame, ZoneMasthead } from '../zones/zone-frame.tsx';
@@ -98,7 +98,7 @@ export async function loadRealmView(ref: string, locale: UiLocale, search: Searc
   // A Zone whose presentation cannot be read still renders its Realm with the default layout.
   const presentation: ZonePresentation = read?.ok ? { ...read.data.presentation,
     modules: read.data.presentation.modules.map(({ titles, tabs, ...module }) => ({ ...module,
-      title: titles?.[locale] ?? module.title,
+      title: titles?.[locale] ?? defaultModuleTitle(module.type, zoneMessages),
       ...tabs ? { tabs: tabs.map(({ labels, ...tab }) => ({ ...tab, label: labels?.[locale] ?? tab.label })) } : {} })) }
     : defaultPresentation(zoneMessages);
   const bannerMedia = read?.ok ? read.data.bannerMedia : [];

@@ -31,4 +31,7 @@ export default {
   picks: 'À la une', genres: 'Genres', latest: 'Nouveautés', newChapters: 'Nouveaux chapitres',
   newlyAdded: 'Ajouts récents', recentlyCompleted: 'Œuvres terminées', rankings: 'Classements',
   quotes: 'Citations récentes', rising: 'En hausse', decisions: 'Décisions récentes',
+  moduleHeroCarousel: 'À la une', moduleChipNav: 'Explorer', moduleAnnouncement: 'Annonce', moduleShelf: 'Nouveautés',
+  moduleRanking: 'Classements', moduleEditorialList: 'Sélection de la rédaction', moduleQuoteStream: 'Voix des lecteurs',
+  moduleRising: 'Nouveautés à suivre', moduleDecisionLog: 'Décisions récentes', moduleDiscussionList: 'Discussions', modulePeople: 'Membres',
 } satisfies Partial<ZoneMessages>;

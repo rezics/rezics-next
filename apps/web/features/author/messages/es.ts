@@ -1,0 +1,33 @@
+import { insert, plural } from 'native-i18n';
+import type { AuthorMessages } from '../messages.ts';
+
+export default {
+  author: 'Autor',
+  unnamedAuthor: insert('Autor de Open Library {{id}}', { id: String }),
+  lifespan: insert('{{birth}}–{{death}}', { birth: String, death: String }),
+  bornIn: insert('Nació en {{year}}', { year: String }),
+  diedIn: insert('Murió en {{year}}', { year: String }),
+  circa: insert('hacia {{year}}', { year: String }),
+  details: 'Detalles', born: 'Nacimiento', died: 'Fallecimiento', fullName: 'Nombre completo',
+  totals: 'En REZICS',
+  worksLabel: plural({ one: 'obra', other: 'obras' }), averageLabel: 'valoración media',
+  ratingsLabel: plural({ one: 'valoración', other: 'valoraciones' }), readersLabel: plural({ one: 'lector', other: 'lectores' }),
+  noRatings: 'Aún no hay valoraciones',
+  worksHeading: insert('Obras de {{name}}', { name: String }), coAuthors: 'Con',
+  serialOngoing: 'Serie en curso', serialHiatus: 'Serie en pausa', allWorks: 'Todas las obras',
+  noWorks: 'Aún no hay obras de este autor atribuidas en REZICS.', worksUnavailable: 'No se pudieron cargar las obras',
+  readFree: 'Leer y escuchar gratis', records: 'Catálogos e identificadores',
+  project_gutenberg: 'Proyecto Gutenberg', project_gutenbergNote: 'Libros electrónicos gratuitos',
+  librivox: 'LibriVox', librivoxNote: 'Audiolibros gratuitos', openLibrary: 'Open Library',
+  wikidata: 'Wikidata', lc_naf: 'Biblioteca del Congreso', viaf: 'VIAF', isni: 'ISNI',
+  sourceNote: insert('Nombre y datos del catálogo de Open Library, consultado el {{date}}.', { date: String }),
+  sourceNoteUndated: 'Nombre y datos del catálogo de Open Library.', viewRecord: 'Ver ficha',
+  unavailableTitle: 'No se pudo cargar este autor',
+  unavailableBody: 'REZICS no puede acceder ahora a la página de este autor. Vuelve a intentarlo dentro de un momento.',
+  retry: 'Reintentar', movedTitle: 'La lista cambió mientras pasabas las páginas',
+  movedBody: 'Vuelve a empezar desde la primera página para ver la lista actual.',
+  firstPage: 'Primera página', nextPage: 'Página siguiente', backTo: insert('Volver a {{name}}', { name: String }),
+  description: insert('Obras de {{name}} en REZICS: valoraciones, lectores y por dónde empezar.', { name: String }),
+  descriptionLifespan: insert('{{name}} ({{lifespan}}). Obras en REZICS, con valoraciones y lectores.',
+    { name: String, lifespan: String }),
+} satisfies Partial<AuthorMessages>;

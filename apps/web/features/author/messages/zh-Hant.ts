@@ -1,0 +1,31 @@
+import { insert, plural } from 'native-i18n';
+import type { AuthorMessages } from '../messages.ts';
+
+export default {
+  author: '作者',
+  unnamedAuthor: insert('Open Library 作者 {{id}}', { id: String }),
+  lifespan: insert('{{birth}}–{{death}}', { birth: String, death: String }),
+  bornIn: insert('出生於{{year}}', { year: String }),
+  diedIn: insert('逝世於{{year}}', { year: String }),
+  circa: insert('約 {{year}}', { year: String }),
+  details: '資料', born: '出生', died: '逝世', fullName: '全名',
+  totals: 'REZICS 上',
+  worksLabel: plural({ other: '部作品' }), averageLabel: '平均評分',
+  ratingsLabel: plural({ other: '則評分' }), readersLabel: plural({ other: '位讀者' }), noRatings: '尚無評分',
+  worksHeading: insert('{{name}}的作品', { name: String }), coAuthors: '合著',
+  serialOngoing: '連載中', serialHiatus: '暫停連載', allWorks: '全部作品',
+  noWorks: 'REZICS 上尚無署名這位作者的作品。', worksUnavailable: '無法載入作品',
+  readFree: '免費閱讀與聆聽', records: '目錄與識別碼',
+  project_gutenberg: '古騰堡計畫', project_gutenbergNote: '免費電子書',
+  librivox: 'LibriVox', librivoxNote: '免費有聲書', openLibrary: 'Open Library',
+  wikidata: '維基數據', lc_naf: '美國國會圖書館', viaf: 'VIAF', isni: 'ISNI',
+  sourceNote: insert('姓名與資料取自 Open Library 目錄，於 {{date}} 取得。', { date: String }),
+  sourceNoteUndated: '姓名與資料取自 Open Library 目錄。', viewRecord: '查看記錄',
+  unavailableTitle: '無法載入這位作者',
+  unavailableBody: 'REZICS 目前無法連線至這位作者的頁面，請稍後再試。', retry: '再試一次',
+  movedTitle: '翻頁期間清單有所變動', movedBody: '請從第一頁重新開始，以查看目前清單。',
+  firstPage: '第一頁', nextPage: '下一頁', backTo: insert('返回{{name}}', { name: String }),
+  description: insert('{{name}}在 REZICS 上的作品：評分、讀者，以及從哪裡開始讀。', { name: String }),
+  descriptionLifespan: insert('{{name}}（{{lifespan}}）。REZICS 上的作品、評分與讀者。',
+    { name: String, lifespan: String }),
+} satisfies Partial<AuthorMessages>;

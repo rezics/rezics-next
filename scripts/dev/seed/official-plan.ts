@@ -375,12 +375,14 @@ export const realmProfiles: Record<OfficialRealmId, { name: Bilingual; descripti
   },
 };
 
-type Titles = { en: string; 'zh-Hans': string; 'zh-Hant': string };
+type Titles = { en: string; 'zh-Hant': string; 'zh-Hans': string; ja: string; ko: string; de: string; fr: string; es: string };
 const titled = (titles: Titles) => ({ title: titles.en, titles });
 // A fresh copy each time: presentations are sent and compared, never shared.
 const labelled = (labels: Titles) => ({ label: labels.en, labels: { ...labels } });
-const newlyAdded = { en: 'Newly added', 'zh-Hans': '新收录', 'zh-Hant': '新收錄' };
-const completed = { en: 'Completed', 'zh-Hans': '完结作品', 'zh-Hant': '完結作品' };
+const newlyAdded: Titles = { en: 'Newly added', 'zh-Hant': '新收錄', 'zh-Hans': '新收录', ja: '新着作品', ko: '새로 추가된 작품',
+  de: 'Neu hinzugefügt', fr: 'Ajouts récents', es: 'Nuevas incorporaciones' };
+const completed: Titles = { en: 'Completed', 'zh-Hant': '完結作品', 'zh-Hans': '完结作品', ja: '完結済み', ko: '완결',
+  de: 'Abgeschlossen', fr: 'Terminées', es: 'Terminadas' };
 const feed = (block: string) => ({ kind: 'query-block' as const, block });
 
 /**
@@ -394,32 +396,39 @@ export function officialPresentation(realm: OfficialRealmId, preset: ZonePresent
     source: { kind: 'collection' as const, collection: editorList(realm, list.id) } }));
   const [first, ...more] = lists;
   const editors = first ? [{ id: 'editors', type: 'editorial-list' as const,
-    ...titled({ en: 'Editors’ picks', 'zh-Hans': '编辑推荐', 'zh-Hant': '編輯推薦' }), source: first.source,
+    ...titled({ en: 'Editors’ picks', 'zh-Hant': '編輯推薦', 'zh-Hans': '编辑推荐', ja: '編集者のおすすめ',
+      ko: '편집자 추천', de: 'Empfehlungen der Redaktion', fr: 'Choix de la rédaction', es: 'Selección editorial' }), source: first.source,
     ...more.length ? { tabs: more.map(list => ({ id: list.id, label: list.id, source: list.source })) } : {},
     options: { layout: 'rows' as const, limit: 2 } }] : [];
   const decisions = { id: 'decisions', type: 'decision-log' as const,
-    ...titled({ en: 'Recent decisions', 'zh-Hans': '最近的决定', 'zh-Hant': '最近的決定' }),
+    ...titled({ en: 'Recent decisions', 'zh-Hant': '近期決策', 'zh-Hans': '最近的决定', ja: '最近の決定', ko: '최근 결정',
+      de: 'Aktuelle Entscheidungen', fr: 'Décisions récentes', es: 'Decisiones recientes' }),
     source: feed('recent-decisions'), options: { rail: true, limit: 6 } };
   const base = { profile: 'zone-presentation-v1' as const, preset, tokens: ZONE_PRESETS[preset],
     navigation: [], banners: [], ...(packagedZone(realm) ? { official: { theme: officialTheme(realm) } } : {}) };
   if (realm !== 'fiction') {
     const special = realm === 'mods' ? [
       ...modContext ? [{ id: 'games', type: 'chip-nav' as const,
-        ...titled({ en: 'Games and loaders', 'zh-Hans': '游戏与加载器', 'zh-Hant': '遊戲與載入器' }),
+        ...titled({ en: 'Games and loaders', 'zh-Hant': '遊戲與載入器', 'zh-Hans': '游戏与加载器', ja: 'ゲームとローダー',
+          ko: '게임과 로더', de: 'Spiele und Loader', fr: 'Jeux et chargeurs', es: 'Juegos y cargadores' }),
         source: { kind: 'context' as const, context: modContext } }] : [],
       { id: 'trending', type: 'ranking' as const,
-        ...titled({ en: 'Trending', 'zh-Hans': '热门趋势', 'zh-Hant': '熱門趨勢' }),
+        ...titled({ en: 'Trending', 'zh-Hant': '熱門趨勢', 'zh-Hans': '热门趋势', ja: '人気上昇中', ko: '인기 급상승',
+          de: 'Im Trend', fr: 'Tendances', es: 'Tendencias' }),
         source: feed('rankings'), options: { metric: 'reads' as const, interval: 'week' as const } },
     ] : realm === 'books' ? [
       { id: 'authors', type: 'people' as const,
-        ...titled({ en: 'Authors to follow', 'zh-Hans': '值得关注的作者', 'zh-Hant': '值得關注的作者' }),
+        ...titled({ en: 'Authors to follow', 'zh-Hant': '值得關注的作者', 'zh-Hans': '值得关注的作者', ja: 'フォローしたい作家',
+          ko: '팔로우할 작가', de: 'Autorinnen und Autoren zum Folgen', fr: 'Auteurs à suivre', es: 'Autores para seguir' }),
         source: feed('new-adoptions') },
     ] : [];
     return { ...base, modules: [
-      { id: 'picks', type: 'hero-carousel', ...titled({ en: 'Featured', 'zh-Hans': '精选', 'zh-Hant': '精選' }),
+      { id: 'picks', type: 'hero-carousel', ...titled({ en: 'Featured', 'zh-Hant': '精選', 'zh-Hans': '精选', ja: 'おすすめ',
+        ko: '추천', de: 'Highlights', fr: 'À la une', es: 'Destacados' }),
         source: feed('new-adoptions'), options: { limit: 4 } },
       ...special,
-      { id: 'latest', type: 'shelf', ...titled({ en: 'Latest', 'zh-Hans': '最新收录', 'zh-Hant': '最新收錄' }),
+      { id: 'latest', type: 'shelf', ...titled({ en: 'Latest', 'zh-Hant': '最新收錄', 'zh-Hans': '最新收录', ja: '最新作品',
+        ko: '최신 작품', de: 'Neueste Werke', fr: 'Nouveautés', es: 'Novedades' }),
         source: feed('new-adoptions'), tabs: [
           { id: 'adopted', ...labelled(newlyAdded), source: feed('new-adoptions') },
           { id: 'completed', ...labelled(completed), source: feed('recently-completed') }] },
@@ -427,24 +436,33 @@ export function officialPresentation(realm: OfficialRealmId, preset: ZonePresent
     ] };
   }
   return { ...base, modules: [
-    { id: 'picks', type: 'hero-carousel', ...titled({ en: 'Featured', 'zh-Hans': '精选', 'zh-Hant': '精選' }),
+    { id: 'picks', type: 'hero-carousel', ...titled({ en: 'Featured', 'zh-Hant': '精選', 'zh-Hans': '精选', ja: 'おすすめ',
+      ko: '추천', de: 'Highlights', fr: 'À la une', es: 'Destacados' }),
       source: feed('new-adoptions'), options: { limit: 5 } },
     { id: 'contest', type: 'announcement', ...titled({
       en: 'Autumn serial contest: entries open until October 31',
-      'zh-Hans': '秋季连载征文开放投稿，十月三十一日截止',
-      'zh-Hant': '秋季連載徵文開放投稿，十月三十一日截止' }), source: feed('recent-decisions') },
-    { id: 'latest', type: 'shelf', ...titled({ en: 'Latest', 'zh-Hans': '最新连载', 'zh-Hant': '最新連載' }),
+      'zh-Hant': '秋季連載徵文開放投稿，十月三十一日截止', 'zh-Hans': '秋季连载征文开放投稿，十月三十一日截止',
+      ja: '秋の連載小説コンテスト：10月31日まで応募受付', ko: '가을 연재 공모전: 10월 31일까지 응모',
+      de: 'Herbstlicher Serienwettbewerb: Beiträge bis 31. Oktober',
+      fr: 'Concours de feuilletons d’automne : candidatures jusqu’au 31 octobre',
+      es: 'Concurso otoñal de seriales: participa hasta el 31 de octubre' }), source: feed('recent-decisions') },
+    { id: 'latest', type: 'shelf', ...titled({ en: 'Latest', 'zh-Hant': '最新連載', 'zh-Hans': '最新连载', ja: '最新の連載',
+      ko: '최신 연재', de: 'Neueste Serien', fr: 'Séries récentes', es: 'Series recientes' }),
       source: feed('latest-chapters'), tabs: [
-        { id: 'chapters', ...labelled({ en: 'New chapters', 'zh-Hans': '最新章节', 'zh-Hant': '最新章節' }),
+        { id: 'chapters', ...labelled({ en: 'New chapters', 'zh-Hant': '最新章節', 'zh-Hans': '最新章节', ja: '新着エピソード',
+          ko: '새 회차', de: 'Neue Kapitel', fr: 'Nouveaux chapitres', es: 'Capítulos nuevos' }),
           source: feed('latest-chapters') },
         { id: 'adopted', ...labelled(newlyAdded), source: feed('new-adoptions') },
         { id: 'completed', ...labelled(completed), source: feed('recently-completed') }] },
-    { id: 'charts', type: 'ranking', ...titled({ en: 'Charts', 'zh-Hans': '热门排行', 'zh-Hant': '熱門排行' }),
+    { id: 'charts', type: 'ranking', ...titled({ en: 'Charts', 'zh-Hant': '熱門排行', 'zh-Hans': '热门排行', ja: 'ランキング',
+      ko: '인기 순위', de: 'Ranglisten', fr: 'Classements', es: 'Clasificaciones' }),
       source: feed('rankings'), options: { metric: 'reads', interval: 'week' } },
     ...editors,
-    { id: 'quotes', type: 'quote-stream', ...titled({ en: 'Fresh from readers', 'zh-Hans': '新鲜书评',
-      'zh-Hant': '新鮮書評' }), source: feed('reader-quotes'), options: { limit: 3 } },
-    { id: 'rising', type: 'rising', ...titled({ en: 'New and rising', 'zh-Hans': '潜力新作', 'zh-Hant': '潛力新作' }),
+    { id: 'quotes', type: 'quote-stream', ...titled({ en: 'Fresh from readers', 'zh-Hant': '新鮮書評', 'zh-Hans': '新鲜书评',
+      ja: '読者の声', ko: '독자들의 한마디', de: 'Stimmen aus der Leserschaft', fr: 'Voix des lecteurs', es: 'Voces de lectores' }),
+      source: feed('reader-quotes'), options: { limit: 3 } },
+    { id: 'rising', type: 'rising', ...titled({ en: 'New and rising', 'zh-Hant': '潛力新作', 'zh-Hans': '潜力新作',
+      ja: '新登場・急上昇', ko: '새롭게 주목받는 작품', de: 'Neu und im Aufwind', fr: 'Nouveautés en hausse', es: 'Novedades en alza' }),
       source: feed('rising'), options: { rail: true, limit: 5 } },
     decisions,
   ] };

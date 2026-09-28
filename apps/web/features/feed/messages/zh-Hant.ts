@@ -98,4 +98,8 @@ export default {
   emptyFilteredKind: insert('目前沒有 {{kind}} 貼文。', { kind: String }),
   includeAllLanguages: '包含所有語言', includeAllRealms: '包含所有社群',
   showEverything: '顯示所有內容', searchAll: '搜尋整個 REZICS',
+  published: '已發布',
+  listWorks: plural({ other: insert('{{count}} 部作品') }, { count: asValue(number()) }),
+  listWorksAtLeast: plural({ other: insert('{{count}} 部以上作品') }, { count: asValue(number()) }),
+  listPreview: '此清單中的作品',
 } satisfies Partial<FeedMessages>;

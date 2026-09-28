@@ -106,4 +106,8 @@ export default {
   emptyFilteredKind: insert('{{kind}} 게시물이 아직 없어요.', { kind: String }),
   includeAllLanguages: '모든 언어 포함', includeAllRealms: '모든 커뮤니티 포함',
   showEverything: '모두 표시', searchAll: 'REZICS 전체 검색',
+  published: '게시됨',
+  listWorks: plural({ other: insert('작품 {{count}}개') }, { count: asValue(number()) }),
+  listWorksAtLeast: plural({ other: insert('{{count}}개 이상 작품') }, { count: asValue(number()) }),
+  listPreview: '이 목록의 작품',
 } satisfies Partial<FeedMessages>;

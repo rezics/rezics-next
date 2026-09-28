@@ -1,0 +1,32 @@
+import { insert, plural } from 'native-i18n';
+import type { AuthorMessages } from '../messages.ts';
+
+export default {
+  author: '작가',
+  unnamedAuthor: insert('Open Library 작가 {{id}}', { id: String }),
+  lifespan: insert('{{birth}}–{{death}}', { birth: String, death: String }),
+  bornIn: insert('{{year}}년 출생', { year: String }),
+  diedIn: insert('{{year}}년 사망', { year: String }),
+  circa: insert('약 {{year}}년', { year: String }),
+  details: '상세 정보', born: '출생', died: '사망', fullName: '이름',
+  totals: 'REZICS 활동',
+  worksLabel: plural({ other: '작품' }), averageLabel: '평균 평점',
+  ratingsLabel: plural({ other: '개 평점' }), readersLabel: plural({ other: '명 독자' }), noRatings: '아직 평점이 없습니다',
+  worksHeading: insert('{{name}}의 작품', { name: String }), coAuthors: '공동 집필',
+  serialOngoing: '연재 중', serialHiatus: '연재 중단', allWorks: '모든 작품',
+  noWorks: 'REZICS에 이 작가의 작품이 아직 등록되지 않았습니다.', worksUnavailable: '작품을 불러오지 못했습니다',
+  readFree: '무료로 읽고 듣기', records: '목록과 식별자',
+  project_gutenberg: '프로젝트 구텐베르크', project_gutenbergNote: '무료 전자책',
+  librivox: 'LibriVox', librivoxNote: '무료 오디오북', openLibrary: 'Open Library',
+  wikidata: '위키데이터', lc_naf: '미국 의회도서관', viaf: 'VIAF', isni: 'ISNI',
+  sourceNote: insert('이름과 정보는 Open Library 목록에서 가져왔습니다. 조회일: {{date}}.', { date: String }),
+  sourceNoteUndated: '이름과 정보는 Open Library 목록에서 가져왔습니다.', viewRecord: '기록 보기',
+  unavailableTitle: '작가 정보를 불러오지 못했습니다',
+  unavailableBody: 'REZICS가 지금은 이 작가 페이지에 연결되지 않습니다. 잠시 후 다시 시도해 주세요.',
+  retry: '다시 시도', movedTitle: '페이지를 넘기는 동안 목록이 바뀌었습니다',
+  movedBody: '현재 목록을 보려면 첫 페이지부터 다시 시작해 주세요.',
+  firstPage: '첫 페이지', nextPage: '다음 페이지', backTo: insert('{{name}}(으)로 돌아가기', { name: String }),
+  description: insert('REZICS의 {{name}} 작품: 평점, 독자, 어디서부터 읽을지.', { name: String }),
+  descriptionLifespan: insert('{{name}}({{lifespan}}). REZICS의 작품, 평점과 독자.',
+    { name: String, lifespan: String }),
+} satisfies Partial<AuthorMessages>;

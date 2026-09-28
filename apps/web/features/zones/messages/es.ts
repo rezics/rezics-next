@@ -31,4 +31,7 @@ export default {
   picks: 'Destacados', genres: 'Géneros', latest: 'Novedades', newChapters: 'Capítulos nuevos',
   newlyAdded: 'Nuevas incorporaciones', recentlyCompleted: 'Obras terminadas', rankings: 'Clasificaciones',
   quotes: 'Citas recientes', rising: 'En ascenso', decisions: 'Decisiones recientes',
+  moduleHeroCarousel: 'Destacados', moduleChipNav: 'Explorar', moduleAnnouncement: 'Anuncio', moduleShelf: 'Novedades',
+  moduleRanking: 'Clasificaciones', moduleEditorialList: 'Selección editorial', moduleQuoteStream: 'Citas de lectores',
+  moduleRising: 'Novedades en auge', moduleDecisionLog: 'Decisiones recientes', moduleDiscussionList: 'Debates', modulePeople: 'Miembros',
 } satisfies Partial<ZoneMessages>;

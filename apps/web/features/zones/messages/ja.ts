@@ -31,4 +31,7 @@ export default {
   picks: '注目作品', genres: 'ジャンル', latest: '最新作品', newChapters: '新着エピソード',
   newlyAdded: '新着作品', recentlyCompleted: '最近完結した作品', rankings: 'ランキング',
   quotes: '読者の声', rising: '新登場・急上昇', decisions: '最近の決定',
+  moduleHeroCarousel: 'おすすめ', moduleChipNav: 'カテゴリー', moduleAnnouncement: 'お知らせ', moduleShelf: '新着',
+  moduleRanking: 'ランキング', moduleEditorialList: '編集者のおすすめ', moduleQuoteStream: '読者の声',
+  moduleRising: '注目の新作', moduleDecisionLog: '最近の決定', moduleDiscussionList: 'ディスカッション', modulePeople: 'メンバー',
 } satisfies Partial<ZoneMessages>;

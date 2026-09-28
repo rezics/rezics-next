@@ -98,4 +98,8 @@ export default {
   emptyFilteredKind: insert('{{kind}}の投稿はまだありません。', { kind: String }),
   includeAllLanguages: 'すべての言語を含める', includeAllRealms: 'すべてのコミュニティを含める',
   showEverything: 'すべて表示', searchAll: 'REZICS 全体を検索',
+  published: '公開済み',
+  listWorks: plural({ other: insert('{{count}}作品') }, { count: asValue(number()) }),
+  listWorksAtLeast: plural({ other: insert('{{count}}作品以上') }, { count: asValue(number()) }),
+  listPreview: 'このリストの作品',
 } satisfies Partial<FeedMessages>;

@@ -31,4 +31,7 @@ export default {
   picks: '精選', genres: '類型', latest: '最新作品', newChapters: '新章節',
   newlyAdded: '新收錄', recentlyCompleted: '近期完結', rankings: '排行榜',
   quotes: '讀者摘錄', rising: '新作與人氣上升', decisions: '近期決策',
+  moduleHeroCarousel: '精選', moduleChipNav: '瀏覽', moduleAnnouncement: '公告', moduleShelf: '最新作品',
+  moduleRanking: '排行榜', moduleEditorialList: '編輯推薦', moduleQuoteStream: '讀者摘錄',
+  moduleRising: '新作與人氣上升', moduleDecisionLog: '近期決策', moduleDiscussionList: '討論', modulePeople: '成員',
 } satisfies Partial<ZoneMessages>;

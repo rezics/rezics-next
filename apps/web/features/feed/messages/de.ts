@@ -106,4 +106,8 @@ export default {
   emptyFilteredKind: insert('Hier gibt es noch keine Beiträge der Art „{{kind}}“.', { kind: String }),
   includeAllLanguages: 'Alle Sprachen einschließen', includeAllRealms: 'Alle Communities einschließen',
   showEverything: 'Alles anzeigen', searchAll: 'REZICS durchsuchen',
+  published: 'Veröffentlicht',
+  listWorks: plural({ one: insert('{{count}} Werk'), other: insert('{{count}} Werke') }, { count: asValue(number()) }),
+  listWorksAtLeast: plural({ one: insert('{{count}}+ Werk'), other: insert('{{count}}+ Werke') }, { count: asValue(number()) }),
+  listPreview: 'Auf dieser Liste',
 } satisfies Partial<FeedMessages>;

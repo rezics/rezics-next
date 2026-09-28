@@ -21,4 +21,8 @@ export default {
   saving: '保存中…',
   saveFailed: '保存できませんでした。もう一度お試しください。',
   ongoing: '連載中', hiatus: '休載中',
+  whyItsHere: 'ここに掲載された理由', openRecipe: 'レシピを開く', install: 'インストール', copyPrompt: 'プロンプトをコピー',
+  promptCopied: 'プロンプトをコピーしました', copyFailed: 'コピーできませんでした。もう一度お試しください。',
+  typeBook: '本', typeGuide: 'ガイド', typeRecipe: 'レシピ', typePrompt: 'プロンプト', typeSkill: 'スキル', typeMod: 'MOD',
+  typeSoftware: 'ソフトウェア', typeFilm: '映画', typeSeries: 'テレビシリーズ', typeVideo: '動画', typeAudio: '音声', typeMusic: '音楽',
 } satisfies Partial<CatalogueMessages>;

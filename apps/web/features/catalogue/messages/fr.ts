@@ -21,4 +21,8 @@ export default {
   saving: 'Enregistrement…',
   saveFailed: 'Enregistrement impossible. Réessayez.',
   ongoing: 'En cours', hiatus: 'En pause',
+  whyItsHere: 'Pourquoi cette œuvre est ici', openRecipe: 'Ouvrir la recette', install: 'Installer', copyPrompt: 'Copier le prompt',
+  promptCopied: 'Prompt copié', copyFailed: 'Copie impossible. Réessayez.',
+  typeBook: 'Livre', typeGuide: 'Guide', typeRecipe: 'Recette', typePrompt: 'Prompt', typeSkill: 'Compétence', typeMod: 'Mod',
+  typeSoftware: 'Logiciel', typeFilm: 'Film', typeSeries: 'Série télévisée', typeVideo: 'Vidéo', typeAudio: 'Audio', typeMusic: 'Musique',
 } satisfies Partial<CatalogueMessages>;

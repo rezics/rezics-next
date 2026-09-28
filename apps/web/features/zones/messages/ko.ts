@@ -31,4 +31,7 @@ export default {
   picks: '추천 작품', genres: '장르', latest: '최신 작품', newChapters: '새 회차',
   newlyAdded: '새로 추가된 작품', recentlyCompleted: '완결 작품', rankings: '순위',
   quotes: '독자들의 한마디', rising: '새롭게 주목받는 작품', decisions: '최근 결정',
+  moduleHeroCarousel: '추천 작품', moduleChipNav: '둘러보기', moduleAnnouncement: '공지', moduleShelf: '최신 작품',
+  moduleRanking: '순위', moduleEditorialList: '편집자 추천', moduleQuoteStream: '독자들의 글',
+  moduleRising: '새롭게 주목받는 작품', moduleDecisionLog: '최근 결정', moduleDiscussionList: '토론', modulePeople: '멤버',
 } satisfies Partial<ZoneMessages>;

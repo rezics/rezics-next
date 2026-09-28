@@ -1,4 +1,5 @@
 import { asValue, insert, number, plural } from 'native-i18n';
+import type { ZoneModuleType } from '@rezics/zone-sdk';
 
 export const messages = {
   more: 'More', shuffle: 'Shuffle',
@@ -30,6 +31,26 @@ export const messages = {
   picks: 'Featured', genres: 'Genres', latest: 'Latest', newChapters: 'New chapters',
   newlyAdded: 'Newly added', recentlyCompleted: 'Completed', rankings: 'Rankings',
   quotes: 'Fresh from readers', rising: 'New and rising', decisions: 'Recent decisions',
+  moduleHeroCarousel: 'Featured', moduleChipNav: 'Browse', moduleAnnouncement: 'Announcement',
+  moduleShelf: 'Latest', moduleRanking: 'Rankings', moduleEditorialList: 'Editors’ picks',
+  moduleQuoteStream: 'Reader quotes', moduleRising: 'New and rising', moduleDecisionLog: 'Recent decisions',
+  moduleDiscussionList: 'Discussions', modulePeople: 'People',
 };
 
 export type ZoneMessages = typeof messages;
+
+type ModuleTitleKey = 'moduleHeroCarousel' | 'moduleChipNav' | 'moduleAnnouncement' | 'moduleShelf' |
+  'moduleRanking' | 'moduleEditorialList' | 'moduleQuoteStream' | 'moduleRising' | 'moduleDecisionLog' |
+  'moduleDiscussionList' | 'modulePeople';
+
+const moduleTitleKeys: Record<ZoneModuleType, ModuleTitleKey> = {
+  'hero-carousel': 'moduleHeroCarousel', 'chip-nav': 'moduleChipNav', announcement: 'moduleAnnouncement',
+  shelf: 'moduleShelf', ranking: 'moduleRanking', 'editorial-list': 'moduleEditorialList',
+  'quote-stream': 'moduleQuoteStream', rising: 'moduleRising', 'decision-log': 'moduleDecisionLog',
+  'discussion-list': 'moduleDiscussionList', people: 'modulePeople',
+};
+
+/** A localized fallback heading when a Zone has no title for the current locale. */
+export function defaultModuleTitle(type: ZoneModuleType, localized: Pick<ZoneMessages, ModuleTitleKey>): string {
+  return localized[moduleTitleKeys[type]];
+}

@@ -3,6 +3,8 @@ import { defineMessages, localeNames, uiLocales } from '../i18n/define.ts';
 import { i18n } from '../i18n/instance.ts';
 import { isPublicPagePath, localizedPath, matchUiLocaleTag, pathLocale, resolveLocale,
   withoutLocale } from '../i18n/locale.ts';
+import { navigation } from '../features/shell/navigation.ts';
+import { defaultModuleTitle } from '../features/zones/messages.ts';
 
 describe('interface locale', () => {
   test('a selected locale wins over browser preference and invalid choices fall back', () => {
@@ -26,6 +28,22 @@ describe('interface locale', () => {
     for (const tag of ['zh', 'zh-Hans', 'zh-CN', 'zh-SG']) expect(matchUiLocaleTag(tag)).toBe('zh-Hans');
     expect(matchUiLocaleTag('ko-KR')).toBe('ko');
     expect(matchUiLocaleTag('pt-BR')).toBeUndefined();
+  });
+
+  test('main navigation has a full accessible name and concise phone captions', () => {
+    for (const locale of uiLocales) {
+      for (const item of navigation) expect(item.label[locale].trim()).not.toBe('');
+    }
+    const notifications = navigation.find(item => item.href === '/notifications')!;
+    expect(notifications.label.de).toBe('Benachrichtigungen');
+    expect(notifications.bottomLabel?.de).toBe('Meldungen');
+    expect(notifications.label.fr).toBe('Notifications');
+    expect(notifications.bottomLabel?.fr).toBe('Alertes');
+    expect(notifications.label.es).toBe('Notificaciones');
+    expect(notifications.bottomLabel?.es).toBe('Avisos');
+    const library = navigation.find(item => item.href === '/library')!;
+    expect(library.label.fr).toBe('Bibliothèque');
+    expect(library.bottomLabel?.fr).toBe('Livres');
   });
 
   test('missing translated keys fall back to English one key at a time', () => {
@@ -72,6 +90,16 @@ describe('interface locale', () => {
         const single = await i18n.getTranslation(namespace, [locale]);
         expect(single.locale.current).toBe(locale);
       }
+    }
+  });
+
+  test('Zone module fallback headings resolve in every interface locale', async () => {
+    const types = ['hero-carousel', 'chip-nav', 'announcement', 'shelf', 'ranking', 'editorial-list',
+      'quote-stream', 'rising', 'decision-log', 'discussion-list', 'people'] as const;
+    for (const locale of uiLocales) {
+      const { t } = await i18n.getTranslation('zones', [locale]);
+      for (const type of types) expect(defaultModuleTitle(type, t).trim()).not.toBe('');
+      if (locale !== 'en') expect(defaultModuleTitle('hero-carousel', t)).not.toBe('Featured');
     }
   });
 });

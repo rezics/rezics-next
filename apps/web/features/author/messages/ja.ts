@@ -1,0 +1,32 @@
+import { insert, plural } from 'native-i18n';
+import type { AuthorMessages } from '../messages.ts';
+
+export default {
+  author: '著者',
+  unnamedAuthor: insert('Open Library の著者 {{id}}', { id: String }),
+  lifespan: insert('{{birth}}–{{death}}', { birth: String, death: String }),
+  bornIn: insert('{{year}}年生', { year: String }),
+  diedIn: insert('{{year}}年没', { year: String }),
+  circa: insert('{{year}}年頃', { year: String }),
+  details: '詳細', born: '生年', died: '没年', fullName: '氏名',
+  totals: 'REZICS での情報',
+  worksLabel: plural({ other: '作品' }), averageLabel: '平均評価',
+  ratingsLabel: plural({ other: '件の評価' }), readersLabel: plural({ other: '人の読者' }), noRatings: '評価はまだありません',
+  worksHeading: insert('{{name}}の作品', { name: String }), coAuthors: '共著',
+  serialOngoing: '連載中', serialHiatus: '休載中', allWorks: 'すべての作品',
+  noWorks: 'REZICSにはこの著者の作品はまだ登録されていません。', worksUnavailable: '作品を読み込めませんでした',
+  readFree: '無料で読む・聴く', records: '書誌情報と識別子',
+  project_gutenberg: 'プロジェクト・グーテンベルク', project_gutenbergNote: '無料の電子書籍',
+  librivox: 'LibriVox', librivoxNote: '無料のオーディオブック', openLibrary: 'Open Library',
+  wikidata: 'ウィキデータ', lc_naf: '米国議会図書館', viaf: 'VIAF', isni: 'ISNI',
+  sourceNote: insert('氏名と情報は Open Library のカタログから取得（{{date}}）。', { date: String }),
+  sourceNoteUndated: '氏名と情報は Open Library のカタログから取得。', viewRecord: '書誌情報を見る',
+  unavailableTitle: '著者情報を読み込めませんでした',
+  unavailableBody: 'REZICSは現在この著者のページに接続できません。しばらくしてからもう一度お試しください。',
+  retry: '再試行', movedTitle: 'ページをめくっている間にリストが更新されました',
+  movedBody: '現在のリストを表示するには、最初のページからやり直してください。',
+  firstPage: '最初のページ', nextPage: '次のページ', backTo: insert('{{name}}に戻る', { name: String }),
+  description: insert('REZICSでの{{name}}の作品：評価、読者、読み始める作品。', { name: String }),
+  descriptionLifespan: insert('{{name}}（{{lifespan}}）。REZICSでの作品、評価、読者。',
+    { name: String, lifespan: String }),
+} satisfies Partial<AuthorMessages>;

@@ -29,4 +29,7 @@ export default {
   picks: '精选', genres: '分类', latest: '最新作品', newChapters: '最新章节',
   newlyAdded: '新收录', recentlyCompleted: '完结作品', rankings: '热门排行',
   quotes: '新鲜书评', rising: '潜力新作', decisions: '最近的决定',
+  moduleHeroCarousel: '精选', moduleChipNav: '浏览', moduleAnnouncement: '公告', moduleShelf: '最新作品',
+  moduleRanking: '热门排行', moduleEditorialList: '编辑推荐', moduleQuoteStream: '读者摘录',
+  moduleRising: '潜力新作', moduleDecisionLog: '最近的决定', moduleDiscussionList: '讨论', modulePeople: '成员',
 } satisfies Partial<ZoneMessages>;

@@ -106,4 +106,8 @@ export default {
   emptyFilteredKind: insert('Aún no hay publicaciones de tipo {{kind}}.', { kind: String }),
   includeAllLanguages: 'Incluir todos los idiomas', includeAllRealms: 'Incluir todas las comunidades',
   showEverything: 'Mostrar todo', searchAll: 'Buscar en todo REZICS',
+  published: 'Publicado',
+  listWorks: plural({ one: insert('{{count}} obra'), other: insert('{{count}} obras') }, { count: asValue(number()) }),
+  listWorksAtLeast: plural({ one: insert('{{count}}+ obra'), other: insert('{{count}}+ obras') }, { count: asValue(number()) }),
+  listPreview: 'En esta lista',
 } satisfies Partial<FeedMessages>;

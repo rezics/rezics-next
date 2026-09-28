@@ -22,7 +22,7 @@ export function BottomNav() {
         const count = item.href === '/notifications' && unread?.count ? unreadBadge(unread) : null;
         return <li key={item.href} className="min-w-0">
           <Link href={localizedPath(item.href, locale)} aria-current={isCurrent(item, pathname) ? 'page' : undefined}
-            aria-label={count ? `${item.label[locale]} · ${t.notificationsUnread({ count })}` : undefined}
+            aria-label={count ? `${item.label[locale]} · ${t.notificationsUnread({ count })}` : item.label[locale]}
             className={cn('group flex h-full flex-col items-center justify-center gap-1 px-1 outline-none',
               'font-medium text-[11px] text-muted-foreground transition-colors',
               'focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset',
@@ -33,7 +33,7 @@ export function BottomNav() {
                 <item.icon aria-hidden="true" className="size-5" /></span>
               : <span className="relative"><item.icon aria-hidden="true" className="size-5" />
                 {count ? <UnreadBadge label={count} className="-top-1.5 -end-2.5" /> : null}</span>}
-            <span className="max-w-full truncate">{item.label[locale]}</span>
+            <span className="max-w-full truncate">{item.bottomLabel?.[locale] ?? item.label[locale]}</span>
           </Link>
         </li>;
       })}

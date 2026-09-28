@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { checkZonePresentation } from '../../../services/main/src/modules/zone/presentation-format.ts';
 import { checkFirstPartyBundle } from '../../../services/main/src/modules/theme/first-party-bundle.ts';
+import { uiLocales } from '../../../apps/web/i18n/define.ts';
 import { editorList, extraWorks, fictionQuotes, fictionWorks, officialPresentation, type OfficialRealmId, penNames,
   officialTheme, packagedZone, publicTexts, realmProfiles, zoneContent } from './official-plan.ts';
 import { officialBuildBundle, officialSourceDigest, themeNeedsActivation, themeNeedsRevision }
@@ -21,9 +22,17 @@ describe('Official Zone presentations', () => {
       expect(presentation.modules.map(module => module.type)).toContain('hero-carousel');
       // Every module and tab speaks the Zone's languages.
       for (const module of presentation.modules) {
-        expect(module.titles).toMatchObject({ en: module.title, 'zh-Hans': expect.any(String) });
+        const titles = module.titles;
+        expect(titles).toMatchObject({ en: module.title });
+        if (!titles) throw new Error('Official modules should have localized titles.');
+        for (const locale of uiLocales) {
+          const title = titles[locale];
+          if (typeof title !== 'string') throw new Error(`Official modules need a ${locale} title.`);
+          expect(title.trim()).not.toBe('');
+        }
         for (const tab of module.type === 'shelf' ? module.tabs ?? [] : []) {
-          expect(tab.labels).toMatchObject({ en: tab.label, 'zh-Hans': expect.any(String) });
+          expect(tab.labels).toMatchObject({ en: tab.label });
+          for (const locale of uiLocales) expect(tab.labels?.[locale]?.trim()).not.toBe('');
         }
       }
     }

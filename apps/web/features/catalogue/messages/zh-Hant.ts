@@ -21,4 +21,8 @@ export default {
   saving: '儲存中…',
   saveFailed: '無法儲存，請再試一次。',
   ongoing: '連載中', hiatus: '暫停更新',
+  whyItsHere: '入選原因', openRecipe: '打開食譜', install: '安裝', copyPrompt: '複製提示詞',
+  promptCopied: '已複製提示詞', copyFailed: '無法複製，請再試一次。',
+  typeBook: '書籍', typeGuide: '指南', typeRecipe: '食譜', typePrompt: '提示詞', typeSkill: '技能', typeMod: '模組',
+  typeSoftware: '軟體', typeFilm: '電影', typeSeries: '電視影集', typeVideo: '影片', typeAudio: '音訊', typeMusic: '音樂',
 } satisfies Partial<CatalogueMessages>;
