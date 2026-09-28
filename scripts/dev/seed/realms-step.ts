@@ -5,6 +5,42 @@ import { stableId, type SeedState, type SpaceReceipt } from './state.ts';
 import { officialPresentation, withoutTabLabels } from './official-plan.ts';
 import { SeedApiError } from './api.ts';
 
+/** Public Minecraft and loader concepts back the official Mods filter chips. */
+async function modsContext(state: SeedState, steward: SeedState['createdRealms'][number]['steward']) {
+  const input = { ...state.operatorInput!, ownerAccountSubject: steward.accountId,
+    actingSubject: steward.actingSubject };
+  await grantHomeSeedAuthority(input, [
+    { action: 'classification.proposition.define', scope: 'classification:define:global' },
+    { action: 'context.create', scope: 'context:create:root' },
+  ]);
+  const concepts: Array<{ concept: string; definitionRevision: string }> = [];
+  for (const label of ['Minecraft', 'Fabric', 'Forge', 'NeoForge']) {
+    concepts.push(await state.api.post<{ concept: string; definitionRevision: string }>(
+      '/v1/classification-propositions', { profile: 'classification-proposition-v1', label,
+        actingSubject: steward.actingSubject }, steward.token,
+    seedKey('official-mod-concept-attempt', `${label.toLowerCase()}:${Bun.randomUUIDv7()}`)));
+  }
+  const context = await state.api.post<{ context: string }>('/v1/contexts', {
+    profile: 'context-v1', role: 'shared', disclosure: 'public', base: null,
+    entries: concepts.map(item => ({ target: item.concept, relation: null, state: 'defined',
+      definition: item.definitionRevision, applicability: [] })),
+    actingSubject: steward.actingSubject }, steward.token, seedKey('official-mod-context', 'games'));
+  return context.context;
+}
+
+function configuredModsContext(presentation: unknown): string | null {
+  if (!presentation || typeof presentation !== 'object' || !('modules' in presentation)
+    || !Array.isArray(presentation.modules)) return null;
+  const games = presentation.modules.find((item: unknown) => item && typeof item === 'object'
+    && 'id' in item && item.id === 'games');
+  const source = games && typeof games === 'object' && 'source' in games ? games.source : null;
+  return source && typeof source === 'object' && 'kind' in source && source.kind === 'context'
+    && 'context' in source && typeof source.context === 'string'
+    && /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/.test(source.context)
+    && source.context !== `https://rezics.com/id/${stableId('official-context:mods-games')}`
+    ? source.context : null;
+}
+
 export async function seedRealms(state: SeedState) {
   const { api, created, createdRealms, seededZones, operatorInput, operatorSession } = state;
   const owner = state.sessions[0]!;
@@ -49,7 +85,11 @@ export async function seedRealms(state: SeedState) {
       parent.steward.token);
     // The layout lives with the official Zones' content (official-plan.ts), which fills it later in the run.
     // A Main without localized tab labels gets the same layout with default labels.
-    const presentation = officialPresentation(realm.id, realm.preset);
+    const context = realm.id === 'mods'
+      ? configuredModsContext(currentZone.configuration.presentation)
+        ?? await state.optional('Mods game and loader concepts', () => modsContext(state, parent.steward))
+      : undefined;
+    const presentation = officialPresentation(realm.id, realm.preset, context ?? undefined);
     const current = { defaultRealm: currentZone.configuration.defaultRealm,
       official: currentZone.configuration.official, presentation: currentZone.configuration.presentation };
     for (const [variant, candidate] of [['', presentation], [':plain', withoutTabLabels(presentation)]] as const) {

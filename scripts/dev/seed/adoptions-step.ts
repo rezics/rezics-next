@@ -7,6 +7,8 @@ export async function seedAdoptions(state: SeedState) {
   const { api, created, createdRealms, operatorInput, publicForRealm } = state;
   for (const realm of createdRealms) {
     if (!operatorInput) break;
+    // The official Mods and Workshop steps adopt their typed items after publication.
+    if (realm.id === 'mods' || realm.id === 'ai-workshop') continue;
     const featured = realms.find(item => item.id === realm.id)?.featured.find(id => publicForRealm.has(id));
     if (!featured) continue;
     const target = created.get(featured)!, publication = publicForRealm.get(featured)!;

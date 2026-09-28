@@ -206,7 +206,7 @@ export const publicTexts: Readonly<Record<string, { language: Language; text: st
 
 /** New Works that give the smaller Zones more than one pick; created by a demo person, not a pen name. */
 export const extraWorks: readonly { id: string; realm: OfficialRealmId; owner: string; title: string;
-  type: 'document'; language: Language; tagline: string; text: string }[] = [
+  type: 'document' | 'mod' | 'prompt' | 'skill-package'; language: Language; tagline: string; text: string }[] = [
   { id: 'stardew-farm', realm: 'mods', owner: 'jun', title: '星露谷物语 · 春季农场整合包', type: 'document',
     language: 'zh-Hans', tagline: '二十个模组，一个存档就能用的春季农场。',
     text: '安装顺序\n先装 SMAPI，再装内容补丁，最后放入农场地图。每一步都备份存档。' },
@@ -219,7 +219,51 @@ export const extraWorks: readonly { id: string; realm: OfficialRealmId; owner: s
   { id: 'club-notes', realm: 'ai-workshop', owner: 'aria', title: 'Book club notes assistant', type: 'document',
     language: 'en', tagline: 'Turn a messy discussion into three questions for next week.',
     text: 'How to use it\nPaste the notes. Ask for the three questions the group disagreed on, with one quote each.' },
+  { id: 'lumen-fabric', realm: 'mods', owner: 'jun', title: 'Lumen Lanterns', type: 'mod', language: 'en',
+    tagline: 'Warm lantern light for Minecraft 1.21.1 on Fabric.',
+    text: 'Lumen Lanterns 1.3.0\nInstall the matching Fabric loader and keep a backup of your world before adding mods.' },
+  { id: 'weaver-forge', realm: 'mods', owner: 'jun', title: 'Chunk Weaver', type: 'mod', language: 'en',
+    tagline: 'Prepare nearby Minecraft chunks before you explore on Forge.',
+    text: 'Chunk Weaver 1.4.2\nTest in a copy of your world before changing the server mod set.' },
+  { id: 'tidy-fabric', realm: 'mods', owner: 'jun', title: 'Tidy Inventory', type: 'mod', language: 'en',
+    tagline: 'Sort chests with one key on Minecraft 1.21.1 with Fabric.',
+    text: 'Tidy Inventory 2.0.1\nInstall with a matching Fabric loader and test your key bindings.' },
+  { id: 'quiet-forge', realm: 'mods', owner: 'jun', title: 'Quiet Villagers', type: 'mod', language: 'en',
+    tagline: 'Quieter trading sounds for Minecraft 1.21.1 with Forge.',
+    text: 'Quiet Villagers 1.0.2\nInstall on the client and test sound settings after updating.' },
+  { id: 'club-prompt-v1', realm: 'ai-workshop', owner: 'aria', title: 'Book club discussion prompt',
+    type: 'prompt', language: 'en', tagline: 'Find the questions readers actually disagree about.',
+    text: 'Use the published prompt to turn notes into discussion questions.' },
+  { id: 'glossary-prompt-v1', realm: 'ai-workshop', owner: 'aria', title: 'Bilingual glossary prompt',
+    type: 'prompt', language: 'en', tagline: 'Set translation terms before drafting the full text.',
+    text: 'Use the published prompt to keep a glossary beside a translation.' },
+  { id: 'recipe-skill-v1', realm: 'ai-workshop', owner: 'aria', title: 'Recipe scaling skill',
+    type: 'skill-package', language: 'en', tagline: 'Scale ingredient amounts and flag judgment calls.',
+    text: 'The published Skill asks for servings and scales quantities.' },
+  { id: 'reading-skill-v1', realm: 'ai-workshop', owner: 'aria', title: 'Reading notes skill',
+    type: 'skill-package', language: 'en', tagline: 'Turn reading notes into a short recap and open questions.',
+    text: 'The published Skill groups notes by theme and marks uncertain claims.' },
 ];
+
+/** Local, fictional Minecraft packages. Native captures come from the same Fabric/Forge
+ * manifest surfaces exercised by the mod provider fixtures. */
+export const officialMods = [
+  { id: 'lumen-fabric', ecosystem: 'fabric', nativeId: 'lumenlanterns', release: '1.3.0' },
+  { id: 'weaver-forge', ecosystem: 'forge', nativeId: 'chunkweaver', release: '1.4.2' },
+  { id: 'tidy-fabric', ecosystem: 'fabric', nativeId: 'tidyinventory', release: '2.0.1' },
+  { id: 'quiet-forge', ecosystem: 'forge', nativeId: 'quietvillagers', release: '1.0.2' },
+] as const;
+
+export const officialHubItems = [
+  { id: 'club-prompt-v1', kind: 'prompt', name: 'book-club-discussion',
+    content: 'Read the following book club notes. List three questions the group disagreed on. For each, quote a short phrase from the notes and explain both views. If the notes do not support three disagreements, say how many you found.\n\nNotes: {{notes}}' },
+  { id: 'glossary-prompt-v1', kind: 'prompt', name: 'bilingual-glossary',
+    content: 'Read the source text below. List names and specialist terms with proposed translations before translating. Use each chosen term consistently. At the end, list terms whose meaning remains uncertain.\n\nSource text: {{notes}}' },
+  { id: 'recipe-skill-v1', kind: 'skill-package', name: 'recipe-scaling',
+    content: 'Ask for the original and desired number of servings. Scale measured ingredients by the ratio. Keep cooking times separate and flag ingredients such as salt and spices for a taste check.' },
+  { id: 'reading-skill-v1', kind: 'skill-package', name: 'reading-notes',
+    content: 'Ask for the reader’s notes. Group the notes by theme, write a short recap, and list open questions. Do not add events or quotations absent from the notes.' },
+] as const;
 
 /** Which public Works each official Realm adopts, and the editors' lists its Zone shows. */
 export const zoneContent: Record<OfficialRealmId, { adopt: readonly string[];
@@ -236,14 +280,16 @@ export const zoneContent: Record<OfficialRealmId, { adopt: readonly string[];
   books: { adopt: ['pride', 'alice', 'jane-eyre', 'frankenstein', 'little-women', 'secret-garden', 'sherlock'],
     lists: [{ id: 'start-here', name: 'Classics to start with · 从这里开始读经典',
       works: ['pride', 'jane-eyre', 'little-women', 'secret-garden', 'alice', 'frankenstein'] }] },
-  mods: { adopt: ['mod-guide', 'stardew-farm', 'shader-guide'],
-    lists: [{ id: 'first-mods', name: 'First mods · 第一次装模组', works: ['mod-guide', 'stardew-farm', 'shader-guide'] }] },
-  'ai-workshop': { adopt: ['prompt', 'skill', 'glossary-prompt', 'club-notes'],
+  mods: { adopt: ['mod-guide', 'stardew-farm', 'shader-guide',
+    'lumen-fabric', 'weaver-forge', 'tidy-fabric', 'quiet-forge'],
+    lists: [{ id: 'first-mods', name: 'First mods · 第一次装模组',
+      works: ['lumen-fabric', 'weaver-forge', 'tidy-fabric', 'quiet-forge'] }] },
+  'ai-workshop': { adopt: ['club-prompt-v1', 'glossary-prompt-v1', 'recipe-skill-v1', 'reading-skill-v1'],
     lists: [
       { id: 'reading-prompts', name: 'Prompts for readers · 读书人的提示词',
-        works: ['prompt', 'club-notes'] },
+        works: ['club-prompt-v1', 'reading-skill-v1'] },
       { id: 'writing-prompts', name: 'Writing and translation · 写作与翻译',
-        works: ['glossary-prompt', 'skill'] },
+        works: ['glossary-prompt-v1', 'recipe-skill-v1'] },
     ] },
   software: { adopt: ['bun', 'elysia', 'react', 'typescript'],
     lists: [{ id: 'web-stack', name: 'A small web stack · 一套小而全的 Web 技术栈',
@@ -342,7 +388,8 @@ const feed = (block: string) => ({ kind: 'query-block' as const, block });
  * open with their picks, what is new, one editors' list and their decisions.
  * Modules with nothing to show yet stay off the page.
  */
-export function officialPresentation(realm: OfficialRealmId, preset: ZonePresentation['preset']): ZonePresentation {
+export function officialPresentation(realm: OfficialRealmId, preset: ZonePresentation['preset'],
+  modContext?: string): ZonePresentation {
   const lists = zoneContent[realm].lists.map(list => ({ id: list.id,
     source: { kind: 'collection' as const, collection: editorList(realm, list.id) } }));
   const [first, ...more] = lists;
@@ -357,10 +404,9 @@ export function officialPresentation(realm: OfficialRealmId, preset: ZonePresent
     navigation: [], banners: [], ...(packagedZone(realm) ? { official: { theme: officialTheme(realm) } } : {}) };
   if (realm !== 'fiction') {
     const special = realm === 'mods' ? [
-      { id: 'games', type: 'chip-nav' as const,
+      ...modContext ? [{ id: 'games', type: 'chip-nav' as const,
         ...titled({ en: 'Games and loaders', 'zh-Hans': '游戏与加载器', 'zh-Hant': '遊戲與載入器' }),
-        source: { kind: 'context' as const,
-          context: `https://rezics.com/id/${stableId('official-context:mods-games')}` } },
+        source: { kind: 'context' as const, context: modContext } }] : [],
       { id: 'trending', type: 'ranking' as const,
         ...titled({ en: 'Trending', 'zh-Hans': '热门趋势', 'zh-Hant': '熱門趨勢' }),
         source: feed('rankings'), options: { metric: 'reads' as const, interval: 'week' as const } },

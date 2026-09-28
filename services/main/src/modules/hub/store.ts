@@ -38,6 +38,7 @@ export interface PromptRevisionInput extends HubIdentity {
 }
 export interface HubImportView {
   import: string; revision: string; variant: string; contentOperation: string;
+  contentEpoch: string;
   sourceTreeSha256: string; name: string; description: string;
   files: Array<{ path: string; file: string; sha256: string; role: string;
     executable: boolean; bytesBase64: string }>;
@@ -50,6 +51,7 @@ export interface HubRequirementView {
 }
 export interface PromptRevisionView {
   revision: string; variant: string; predecessor: string | null;
+  contentEpoch: string;
   content: string; parameterSchema: Record<string, unknown>;
   examples: Array<{ parameters: Record<string, unknown>; output: string }>;
   applicability: PromptRevisionInput['applicability']; schemaSha256: string; createdAt: string;
@@ -352,6 +354,7 @@ export class HubStore {
       throw new HubUnavailable('Skill requirement rows differ from their exact Content revision');
     }
     return { import: row.id, revision: row.revision_id, variant: exact.reference.variantId,
+      contentEpoch: (await this.content.ownerPosition()).dataEpoch,
       contentOperation: row.content_operation_id, sourceTreeSha256: row.source_tree_sha256,
       name: String(body.name), description: String(body.description),
       files: files.map((file, index) => ({ path: file.path, file: file.file_id, sha256: file.sha256,
@@ -454,6 +457,7 @@ export class HubStore {
       throw new HubUnavailable('Prompt applicability differs from its exact Content revision');
     }
     return { revision: id, variant: row.variant_id, predecessor: exact.reference.predecessor,
+      contentEpoch: (await this.content.ownerPosition()).dataEpoch,
       content: String(body.content), parameterSchema: body.parameterSchema as Record<string, unknown>,
       examples: body.examples as PromptRevisionView['examples'],
       applicability: body.applicability as PromptRevisionView['applicability'],

@@ -1,9 +1,9 @@
 import { createHash } from 'node:crypto';
 import { derivedId } from '../../../services/main/src/modules/structure/graph.ts';
 import { SeedApiError } from './api.ts';
-import { grantRealmProfileSeed, realmProfileClient } from './official-authority.ts';
-import { editorList, extraWorks, fictionQuotes, fictionWorks, type OfficialRealmId, penNames, publicTexts,
-  realmProfiles, zoneContent } from './official-plan.ts';
+import { grantRealmProfileSeed, officialModClient, realmProfileClient } from './official-authority.ts';
+import { editorList, extraWorks, fictionQuotes, fictionWorks, officialHubItems, officialMods,
+  type OfficialRealmId, penNames, publicTexts, realmProfiles, zoneContent } from './official-plan.ts';
 import { grantCuratedCollectionSeed, grantHomeSeedAuthority, grantImportedContributionSeedAuthority,
   type LocalOperatorInput } from './operator.ts';
 import { demoClassics } from '../../../tests/fixtures/sources/open-library.ts';
@@ -22,6 +22,9 @@ import { refreshSeedTokens, type AgentReceipt, type ContributionReceipt, type Pu
 const short = (id: string) => id.slice(-36);
 const BOOK = 'https://schema.org/Book';
 const DOCUMENT = 'https://schema.org/DigitalDocument';
+const kinds = { document: DOCUMENT, mod: 'https://rezics.com/vocab/ModPackage',
+  prompt: 'https://rezics.com/vocab/PromptTemplate',
+  'skill-package': 'https://rezics.com/vocab/SkillPackage' } as const;
 interface Published { contribution: string; decision: string; draftRevision: string }
 interface Placed { work: WorkReceipt; language: string; published: Published | null }
 
@@ -295,10 +298,90 @@ async function lighterTexts(o: Official) {
     await o.state.optional(`Zone work ${extra.id}`, async () => {
       const as = o.person(extra.owner);
       const target = await o.api.post<WorkReceipt>('/v1/works', { profile: 'metadata-only-v1', title: extra.title,
-        semanticTypes: [DOCUMENT], authoring: 'own-work', actingSubject: as.actingSubject }, as.token, seedKey('official-work', extra.id));
+        semanticTypes: [kinds[extra.type]], authoring: 'own-work', actingSubject: as.actingSubject },
+      as.token, seedKey('official-work', extra.id));
       await describeWork(o, extra.id, target, as.actingSubject, as, extra.language, extra.tagline, null);
       o.works.set(extra.id, { work: target, language: extra.language,
         published: await publish(o, extra.id, target, as.actingSubject, as, extra.language, extra.text) });
+    });
+  }
+}
+
+/** Verified native captures become explicit, disclosure-safe Work bindings. */
+async function mods(o: Official) {
+  const as = o.person('jun');
+  const api = await officialModClient(o.operator);
+  for (const item of officialMods) {
+    await refreshSeedTokens(o.state);
+    await o.state.optional(`Public mod ${item.id}`, async () => {
+      const token = await api.token(as.cookie);
+      const target = o.works.get(item.id);
+      if (!target?.published) throw new Error(`Mod Work ${item.id} is not public`);
+      const manifest = item.ecosystem === 'fabric'
+        ? JSON.stringify({ schemaVersion: 1, id: item.nativeId, version: item.release,
+          environment: 'client', depends: {} })
+        : `modLoader="javafml"\nloaderVersion="[52,)"\nlicense="MIT"\nclientSideOnly=true\n[[mods]]\nmodId="${item.nativeId}"\nversion="${item.release}"\n`;
+      const bytes = Buffer.from(manifest);
+      const resolved = await api.post<{ resolution: { resolution: string } }>(
+        '/v1/package-resolutions/mods', { profile: 'mod-native-capture-v1', ecosystem: item.ecosystem,
+          side: 'CLIENT', root: item.nativeId, runtime: { loaderVersion: '52', gameVersion: '1.21.1' },
+          captures: [{ identity: item.nativeId, surface: 'manifest', status: 'observed',
+            bytesBase64: bytes.toString('base64'), sha256: createHash('sha256').update(bytes).digest('hex') }] },
+      token, seedKey('official-mod-resolution', item.id));
+      await api.post(`/v1/package-resolutions/mods/${short(resolved.resolution.resolution)}/work-binding`,
+        { work: target.work.work, actingSubject: as.actingSubject }, token,
+        seedKey('official-mod-binding', item.id));
+    });
+  }
+}
+
+/** Content publication and public eligibility make exact Hub revisions available to Zone cards. */
+async function hubItems(o: Official) {
+  const as = o.person('aria');
+  const schema = { $schema: 'https://json-schema.org/draft/2020-12/schema', type: 'object',
+    properties: { notes: { type: 'string' } }, required: ['notes'], additionalProperties: false };
+  for (const item of officialHubItems) {
+    await refreshSeedTokens(o.state);
+    await o.state.optional(`Published Hub item ${item.id}`, async () => {
+      const target = o.works.get(item.id);
+      if (!target?.published) throw new Error(`Hub Work ${item.id} is not public`);
+      const resourceId = target.work.work;
+      await grantHomeSeedAuthority(o.input(as, as.actingSubject), [
+        { action: 'work.read', scope: `work:read:${resourceId}` },
+        { action: 'content.draft', scope: `content:draft:${resourceId}` },
+        { action: 'content.publish', scope: `content:publish:${resourceId}` },
+        { action: 'content.search-eligibility', scope: `content:search-eligibility:${resourceId}` },
+      ]);
+      const variantId = `urn:rezics:variant:${derivedId(`official-hub:${item.id}`).slice(-36)}`;
+      const identity = { resourceId, variantId, language: { kind: 'tag', tag: 'en', originalTag: 'en' },
+        direction: 'ltr', expectedHead: null, actingSubject: as.actingSubject };
+      const revision = item.kind === 'prompt'
+        ? await o.api.post<{ revision: string; contentEpoch: string }>('/v1/prompts/revisions', {
+          ...identity, profile: 'rezics-prompt-revision-v1', content: item.content,
+          parameterSchema: schema, examples: [{ parameters: { notes: 'Readers disagreed about the ending.' },
+            output: 'What did the ending mean to each reader?' }], applicability: { models: [], tools: [] } },
+        as.token, seedKey('official-hub-revision-v2', item.id))
+        : await o.api.post<{ revision: string; contentEpoch: string }>('/v1/hub/imports', {
+          ...identity, profile: 'agent-skills-directory-import-v1', sourceFormat: 'agent-skills-directory-v1',
+          sourceLocator: { label: item.name },
+          files: [{ path: 'SKILL.md', executable: false,
+            bytesBase64: Buffer.from(`---\nname: ${item.name}\ndescription: ${item.content.slice(0, 180)}\n---\n# ${item.name}\n${item.content}\n`).toString('base64') }] },
+        as.token, seedKey('official-hub-revision-v2', item.id));
+      const exact = await o.read<{ reference: { byteDigest: string } }>(
+        `/v1/content-revisions/${revision.revision}?actingSubject=${encodeURIComponent(as.actingSubject)}`,
+        as.token);
+      if (!exact) throw new Error(`Hub revision ${item.id} is unreadable`);
+      const published = await o.api.post<{ decision: string; status: string }>('/v1/content-publications', {
+        profile: 'content-publication-v1', preparationId: seedKey('official-hub', item.id),
+        revisionId: revision.revision, expectedDigest: exact.reference.byteDigest,
+        expectedContentEpoch: revision.contentEpoch, resourceId, variantId,
+        expectedPublicationHead: null, actingSubject: as.actingSubject },
+      as.token, seedKey('official-hub-publication', item.id));
+      if (published.status !== 'active') throw new Error(`Hub revision ${item.id} is not published`);
+      await o.api.post('/v1/content-search-eligibility', { profile: 'content-search-eligibility-v1',
+        resourceId, variantId, publicationDecision: published.decision, expectedEligibilityHead: null,
+        actingSubject: as.actingSubject, rightsBasis: 'original-contribution', disclosure: 'public' },
+      as.token, seedKey('official-hub-eligibility', item.id));
     });
   }
 }
@@ -521,6 +604,8 @@ export async function seedOfficialZones(state: SeedState) {
   await state.optional('Official Zones: pen names', () => penNameAgents(o));
   await fictionSerials(o);
   await lighterTexts(o);
+  await mods(o);
+  await hubItems(o);
   await refreshSeedTokens(state);
   await state.optional('Official Zones: adoptions', () => adoptions(o));
   await refreshSeedTokens(state);

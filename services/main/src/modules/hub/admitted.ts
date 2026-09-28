@@ -74,7 +74,7 @@ export async function saveAdmittedHubDraft(env: WorkActivationEnvironment, conte
     scope, requestDigest: digest, expectedHead: input.expectedHead,
     rightsBasis: 'original-contribution' };
   if (admission.state !== 'sealed') {
-    try { await access.claim(admission.id, digest); }
+    try { await access.claim(admission.id, digest, principal); }
     catch (error) {
       if (!(error instanceof AdmissionDenied || error instanceof AdmissionExpired)) throw error;
       if (!await content.readDraftReceipt(command.operationId)) {

@@ -282,7 +282,8 @@ export async function grantCuratedCollectionSeed(input: LocalOperatorInput, coll
 export async function grantHomeSeedAuthority(input: LocalOperatorInput,
   grants: readonly { action: 'work.edit' | 'work.read' | 'content.draft'
     | 'content.publish' | 'content.search-eligibility' | 'publication.adopt'
-    | 'rating.context.create' | 'rating.observation.set'; scope: string }[]) {
+    | 'rating.context.create' | 'rating.observation.set' | 'context.create'
+    | 'classification.proposition.define'; scope: string }[]) {
   loopback(input.accessDatabaseUrl);
   const scopePrefix = { 'work.edit': 'work:edit:https://rezics.com/id/',
     'work.read': 'work:read:https://rezics.com/id/',
@@ -291,11 +292,15 @@ export async function grantHomeSeedAuthority(input: LocalOperatorInput,
     'content.search-eligibility': 'content:search-eligibility:https://rezics.com/id/',
     'publication.adopt': 'publication:adopt:https://rezics.com/id/',
     'rating.context.create': 'rating:context:https://rezics.com/id/',
-    'rating.observation.set': 'rating:observe:https://rezics.com/id/' } as const;
+    'rating.observation.set': 'rating:observe:https://rezics.com/id/',
+    'context.create': 'context:create:root',
+    'classification.proposition.define': 'classification:define:global' } as const;
   if (grants.length > 10 || grants.some(({ action, scope }) =>
-    !scope.startsWith(scopePrefix[action])
-    || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(
-      scope.slice(scopePrefix[action].length)))) {
+    action === 'context.create' || action === 'classification.proposition.define'
+      ? scope !== scopePrefix[action]
+      : (!scope.startsWith(scopePrefix[action])
+        || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(
+          scope.slice(scopePrefix[action].length))))) {
     throw new Error('Home seed grant is outside the serial fixture');
   }
   const pool = new Pool({ connectionString: input.accessDatabaseUrl });

@@ -13,9 +13,26 @@ import { refreshSeedTokens, type SeedState, type WorkReceipt }
   from '../../../scripts/dev/seed/state.ts';
 import { openLibraryFixtureFetch } from '../../../scripts/dev/seed/open-library-fixtures.ts';
 import { demoClassics } from '../../fixtures/sources/open-library.ts';
-import { publicTexts } from '../../../scripts/dev/seed/official-plan.ts';
+import { officialHubItems, officialMods, publicTexts, zoneContent, extraWorks }
+  from '../../../scripts/dev/seed/official-plan.ts';
 
 describe('dev seed plan', () => {
+  test('official mod and Hub cards have typed public Works and bounded distinct native seeds', () => {
+    const extra = new Map(extraWorks.map(work => [work.id, work]));
+    expect(officialMods.length).toBeGreaterThanOrEqual(4);
+    for (const mod of officialMods) {
+      expect(mod.nativeId).toMatch(/^[a-z][a-z0-9_]+$/);
+      expect(extra.get(mod.id)?.type).toBe('mod');
+      expect(zoneContent.mods.adopt).toContain(mod.id);
+    }
+    for (const item of officialHubItems) {
+      expect(extra.get(item.id)?.type).toBe(item.kind);
+      expect(zoneContent['ai-workshop'].adopt).toContain(item.id);
+      expect(item.content.length).toBeGreaterThan(80);
+    }
+    expect(new Set([...officialMods, ...officialHubItems].map(item => item.id)).size)
+      .toBe(officialMods.length + officialHubItems.length);
+  });
   test('contains distinct stable Accounts, Works and Realms across both languages', () => {
     expect(people).toHaveLength(7);
     expect(new Set(people.map(person => person.email)).size).toBe(people.length);

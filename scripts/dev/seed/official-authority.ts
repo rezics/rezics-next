@@ -12,6 +12,8 @@ import type { LocalOperatorInput } from './operator.ts';
 
 const PROFILE_CLIENT = 'Local official Realm profile seed';
 const PROFILE_SCOPE = 'openid realm:profile realm:public-role';
+const MOD_CLIENT = 'Local official Mods seed';
+const MOD_SCOPE = 'openid package:resolve work:edit work:read';
 
 function loopback(value: string) {
   const url = new URL(value);
@@ -49,6 +51,36 @@ export async function realmProfileClient(input: LocalOperatorInput): Promise<See
     }
     if (!clientId) throw new Error('Account did not register the Realm profile seed client');
     return new SeedApi({ ...input.endpoints, clientId, scope: PROFILE_SCOPE });
+  } finally { await pool.end(); }
+}
+
+/** The web client does not request package:resolve; demo mod authors use a scoped native client. */
+export async function officialModClient(input: LocalOperatorInput): Promise<SeedApi> {
+  loopback(input.accountDatabaseUrl);
+  const signed = await new SeedApi(input.endpoints).signInOrUp(input.credentials);
+  if (signed.id !== input.accountSubject) throw new Error('Seed fixture operator identity changed');
+  const pool = new Pool({ connectionString: input.accountDatabaseUrl });
+  try {
+    const scopes = JSON.stringify(MOD_SCOPE.split(' '));
+    const reused = await pool.query<{ clientId: string }>(`SELECT c."clientId" FROM "oauthClient" c
+      JOIN rezics_oauth_installation i ON i.client_id = c."clientId" AND i.state = 'active'
+      WHERE c.name = $1 AND c."userId" = $2 AND c.disabled IS NOT TRUE
+        AND c."redirectUris" @> jsonb_build_array($3::text) AND c.scopes @> $4::jsonb AND i.scopes @> $4::jsonb
+      ORDER BY c."createdAt" DESC LIMIT 1`, [MOD_CLIENT, signed.id, input.endpoints.redirectUri, scopes]);
+    let clientId = reused.rows[0]?.clientId;
+    if (!clientId) {
+      const auth = createAccountAuth({ baseURL: input.endpoints.account, secret: input.accountSecret,
+        resource: input.endpoints.resource, pool, operatorUserIds: new Set([signed.id]) });
+      const client = await auth.api.adminCreateOAuthClient({
+        headers: new Headers({ cookie: signed.cookie, origin: input.endpoints.account }),
+        body: { client_name: MOD_CLIENT, application_type: 'native',
+          redirect_uris: [input.endpoints.redirectUri], token_endpoint_auth_method: 'none',
+          grant_types: ['authorization_code'], skip_consent: true, require_pkce: true,
+          scope: MOD_SCOPE } });
+      clientId = client.client_id;
+    }
+    if (!clientId) throw new Error('Account did not register the Mods seed client');
+    return new SeedApi({ ...input.endpoints, clientId, scope: MOD_SCOPE });
   } finally { await pool.end(); }
 }
 

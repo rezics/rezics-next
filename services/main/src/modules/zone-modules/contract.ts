@@ -4,6 +4,15 @@ import { pageFields, readAvatar, readId, readName, readPosition, workCard }
 import { realmDecision } from '../realm-reads/read-contract.ts';
 import { discoveryCredit } from '../discovery/contract.ts';
 
+export const zoneModCard = t.Object({ profile: t.Literal('mod-work-card-v1'), game: t.Literal('Minecraft'),
+  gameVersions: t.Array(t.String(), { maxItems: 1 }),
+  loaders: t.Array(t.Union([t.Literal('Fabric'), t.Literal('Forge'), t.Literal('NeoForge')]),
+    { maxItems: 1 }), latestRelease: t.Nullable(t.String()), capturedAt: t.String() });
+export const zoneHubCard = t.Object({ profile: t.Literal('hub-work-card-v1'),
+  kind: t.Union([t.Literal('prompt'), t.Literal('skill-package')]),
+  declaredModels: t.Array(t.String(), { maxItems: 64 }), testedModels: t.Array(t.String(), { maxItems: 64 }),
+  preview: t.String({ maxLength: 240 }), copyText: t.String({ maxLength: 65_536 }) });
+
 export const ZONE_MODULE_COST = { pageSize: 20, candidateRows: 21, typeRows: 160,
   serialHeads: 20, summaryBatches: 2, replyReviewChecks: 40, contentRevisions: 20,
   contentBytes: 20 * 1_048_576, creditQueries: 20,
@@ -12,7 +21,8 @@ export const ZONE_MODULE_COST = { pageSize: 20, candidateRows: 21, typeRows: 160
 
 export const zoneWork = t.Object({ ...workCard.properties,
   primaryCredits: t.Array(discoveryCredit, { maxItems: 3 }), evidence: readId,
-  dataEpoch: t.String(), sequence: t.String() });
+  dataEpoch: t.String(), sequence: t.String(),
+  mod: t.Nullable(zoneModCard), hub: t.Nullable(zoneHubCard) });
 export const zoneWorkPage = t.Object({ profile: t.Union([
   t.Literal('zone-new-adoptions-v1'), t.Literal('zone-recently-completed-v1')]),
   realm: readId, items: t.Array(zoneWork, { maxItems: ZONE_MODULE_COST.pageSize }), ...pageFields });

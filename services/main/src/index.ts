@@ -397,7 +397,7 @@ const app = createMainApp(fuseki, {
   packageCargoResolutions: new CargoResolutionStore(contentPool),
   packageNpmResolutions: new NpmResolutionStore(contentPool),
   packageNixResolutions: new NixResolutionStore(contentPool),
-  packageModResolutions: new ModResolutionStore(contentPool),
+  packageModResolutions: new ModResolutionStore(contentPool, pool),
   packageLocks,
   packageInstallations,
   hub,

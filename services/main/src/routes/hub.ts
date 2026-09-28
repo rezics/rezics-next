@@ -23,7 +23,8 @@ const identity = { resourceId: native, variantId: variant, language,
   direction: t.Union([t.Literal('ltr'), t.Literal('rtl'), t.Literal('none')]),
   expectedHead: t.Nullable(groupUuid), actingSubject: native };
 const importView = t.Object({ import: groupUuid, revision: groupUuid, variant,
-  contentOperation: t.String(), sourceTreeSha256: digest, name: t.String(), description: t.String(),
+  contentOperation: t.String(), contentEpoch: groupUuid, sourceTreeSha256: digest,
+  name: t.String(), description: t.String(),
   files: t.Array(t.Object({ path: t.String(), file: groupUuid, sha256: digest, role: t.String(),
     executable: t.Boolean(), bytesBase64: t.String() })),
   missingRequirements: t.Array(t.String()), requirements: t.Array(t.Object({ ordinal: t.Integer(),
@@ -32,7 +33,7 @@ const importView = t.Object({ import: groupUuid, revision: groupUuid, variant,
     declaration: t.Union([t.Literal('declared'), t.Literal('missing'), t.Literal('unsupported')]),
     sourcePath: t.String(), sourcePointer: t.String() })), residuals: t.Array(t.String()), createdAt: t.String() });
 const promptView = t.Object({ revision: groupUuid, variant, predecessor: t.Nullable(groupUuid),
-  content: t.String(), parameterSchema: t.Record(t.String(), t.Unknown()),
+  contentEpoch: groupUuid, content: t.String(), parameterSchema: t.Record(t.String(), t.Unknown()),
   examples: t.Array(t.Object({ parameters: t.Record(t.String(), t.Unknown()), output: t.String() })),
   applicability: t.Object({ models: t.Array(t.String()), tools: t.Array(t.String()) }),
   schemaSha256: digest, createdAt: t.String() });

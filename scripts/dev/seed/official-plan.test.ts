@@ -43,7 +43,8 @@ describe('Official Zone presentations', () => {
       const layout = officialPresentation(realm, realms.find(item => item.id === realm)!.preset);
       expect(layout.official?.theme ?? null).toBe(packagedZone(realm) ? officialTheme(realm) : null);
     }
-    const mods = officialPresentation('mods', 'vibrant').modules;
+    const mods = officialPresentation('mods', 'vibrant',
+      'https://rezics.com/id/00000000-0000-0000-0000-000000000001').modules;
     expect(mods.map(module => module.id)).toContain('games');
     expect(mods.find(module => module.id === 'games')?.type).toBe('chip-nav');
     expect(mods.find(module => module.id === 'trending')).toMatchObject({ type: 'ranking',
