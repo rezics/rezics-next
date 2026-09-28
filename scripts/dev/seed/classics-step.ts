@@ -5,8 +5,8 @@ import type { FixtureLock } from '../../fixtures/pull.ts';
 import { demoClassics } from '../../../tests/fixtures/sources/open-library.ts';
 import { grantImportedWorkSeedAuthority } from './operator.ts';
 import { openLibraryFixtureFetch } from './open-library-fixtures.ts';
-import { SeedApiError } from './api.ts';
-import { seedKey } from './plan.ts';
+import { SeedApiError, type SeedApi } from './api.ts';
+import { seedKey, works } from './plan.ts';
 import { seedClassicTexts } from './classics-text-step.ts';
 import type { SeedState, WorkReceipt } from './state.ts';
 
@@ -18,6 +18,21 @@ interface Conversion { conversion: string; projection: {
   title: string; authorRefs: { sourceKey: string; roleKey: string | null }[] | null } }
 interface Proposal { proposal: string; observation: string; conversion: string;
   candidateTitle: string }
+
+/** Explicit English for new adoptions; replay the original request on older stacks. */
+export async function adoptClassic(api: Pick<SeedApi, 'post'>, path: string, proposal: Proposal,
+  classicId: string, actor: string, token: string) {
+  const english = works.some(work => work.id === classicId && work.language === 'en');
+  const body = { profile: 'source-native-work-adoption-v1', actingSubject: actor,
+    confirmedTitle: proposal.candidateTitle };
+  const post = (titleLanguage?: string) => api.post<{ adoption: WorkReceipt; replayed: boolean }>(path,
+    { ...body, ...(titleLanguage ? { titleLanguage } : {}) }, token, seedKey('source-adoption', classicId));
+  try { return await post(english ? 'en' : undefined); }
+  catch (error) {
+    if (!(error instanceof SeedApiError) || error.status !== 409) throw error;
+    return post(english ? undefined : 'en');
+  }
+}
 
 /** Acquire every demo classic through Main's source route and verify its fixture receipt. */
 export async function seedClassics(state: SeedState): Promise<void> {
@@ -66,18 +81,7 @@ export async function seedClassics(state: SeedState): Promise<void> {
       { profile: 'open-library-native-work-proposal-v1' }, token,
       seedKey('source-proposal', classic.id))).proposal;
     const adoptionPath = `/v1/sources/proposals/${shortId(proposal.proposal)}/adoption/native-work`;
-    const adoptionBody = { profile: 'source-native-work-adoption-v1', actingSubject: actor,
-      confirmedTitle: proposal.candidateTitle };
-    const adopted = await api.post<{ adoption: WorkReceipt; replayed: boolean }>(
-      adoptionPath, adoptionBody, token, seedKey('source-adoption', classic.id))
-      .catch(async (error: unknown) => {
-        // Stacks seeded before adoption kept the source language recorded these
-        // intents with titleLanguage 'en'; replay that exact body to reuse them.
-        // A clean `task dev:reset` gives every classic its source language.
-        if (!(error instanceof SeedApiError) || error.status !== 409) throw error;
-        return api.post<{ adoption: WorkReceipt; replayed: boolean }>(adoptionPath,
-          { ...adoptionBody, titleLanguage: 'en' }, token, seedKey('source-adoption', classic.id));
-      });
+    const adopted = await adoptClassic(api, adoptionPath, proposal, classic.id, actor, token);
     const receipt = { ...adopted.adoption, replayed: adopted.replayed };
     state.created.set(classic.id, receipt);
     await grantImportedWorkSeedAuthority(state.operatorInput, receipt.work, receipt.mainVersion);

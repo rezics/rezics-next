@@ -3,11 +3,16 @@ import { createHash } from 'node:crypto';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { pullFixtures, readLockedFixture, type FixtureLock } from '../../../scripts/fixtures/pull.ts';
-import { classicText, splitClassic } from '../../../scripts/dev/seed/classics-text.ts';
+import { classicParagraphs, classicText, splitClassic } from '../../../scripts/dev/seed/classics-text.ts';
 import { gutenberg, gutenbergBooks, stripGutenbergWrapper, type GutenbergText } from '../../fixtures/sources/gutenberg.ts';
 
 const root = resolve(import.meta.dir, '../../..');
 const wrapped = (body: string) => `License header\r\n*** START OF THE PROJECT GUTENBERG EBOOK TEST ***\r\n\r\n${body}\r\n*** END OF THE PROJECT GUTENBERG EBOOK TEST ***\r\nLicense footer`;
+
+test('Gutenberg: printed prose becomes reader paragraphs while indented verse keeps its lines', () => {
+  expect(classicParagraphs('A printed paragraph\nwraps here.\n\nA second paragraph.\n\n  Verse one\n  Verse two'))
+    .toBe('A printed paragraph wraps here.\nA second paragraph.\nVerse one\nVerse two');
+});
 
 test('Gutenberg: strip the wrapper, preserve Unicode and reject ambiguous or residual trademark text', () => {
   expect(stripGutenbergWrapper(wrapped('“Café”\r\n\r\nA story.'))).toBe('“Café”\n\nA story.\n');
@@ -57,6 +62,7 @@ for (const book of gutenbergBooks) {
     }
     if (book.id === 'pride') {
       expect(chapters[0]!.body).toStartWith('It is a truth universally acknowledged');
+      expect(chapters[0]!.body.split('\n')[0]).toBe('It is a truth universally acknowledged, that a single man in possession of a good fortune must be in want of a wife.');
       expect(chapters[1]!.body).toStartWith('Mr. Bennet was among the earliest');
       for (const chapter of sections) expect(chapter.body).not.toMatch(/Illustration|\]\]/);
     }

@@ -1,12 +1,53 @@
 import { expect, test } from 'bun:test';
-import { publishClassicChapters, classicChapterIdentity } from '../../../scripts/dev/seed/classics-text-step.ts';
-import type { SeedApi } from '../../../scripts/dev/seed/api.ts';
+import { publishClassicChapters, classicChapterIdentity, ensureClassicBookType } from '../../../scripts/dev/seed/classics-text-step.ts';
+import { adoptClassic } from '../../../scripts/dev/seed/classics-step.ts';
+import { SeedApiError, type SeedApi } from '../../../scripts/dev/seed/api.ts';
 import type { WorkReceipt } from '../../../scripts/dev/seed/state.ts';
 
 const actor = 'https://rezics.com/id/11111111-1111-4111-a111-111111111111';
 const target: WorkReceipt = { work: 'https://rezics.com/id/22222222-2222-4222-a222-222222222222',
   mainVersion: 'https://rezics.com/id/33333333-3333-4333-a333-333333333333',
   workRevision: 'work-head', mainRevision: 'main-head', replayed: false };
+
+test('Gutenberg seed: English adoption requests a known title language and replays legacy untyped adoptions', async () => {
+  const requests: unknown[] = [];
+  const keys: string[] = [];
+  let legacy = false;
+  const post: SeedApi['post'] = async <T>(_path: string, body: unknown, _token: string, key: string) => {
+    requests.push(body); keys.push(key);
+    if (legacy && (body as { titleLanguage?: string }).titleLanguage === 'en') {
+      throw new SeedApiError('adoption', 409, 'idempotency conflict');
+    }
+    return { adoption: target, replayed: legacy } as T;
+  };
+  const proposal = { proposal: 'proposal', observation: 'observation', conversion: 'conversion',
+    candidateTitle: 'Pride and Prejudice' };
+  await adoptClassic({ post }, '/adoption', proposal, 'pride', actor, 'operator-token');
+  expect(requests[0]).toMatchObject({ titleLanguage: 'en', confirmedTitle: 'Pride and Prejudice' });
+  legacy = true;
+  const replay = await adoptClassic({ post }, '/adoption', proposal, 'pride', actor, 'operator-token');
+  expect(replay.adoption.work).toBe(target.work);
+  expect(requests[2]).not.toHaveProperty('titleLanguage');
+  expect(new Set(keys).size).toBe(1);
+});
+
+test('Gutenberg seed: the operator states Book for the current revision once, without changing identity', async () => {
+  let current = { revision: target.workRevision, types: [] as string[] };
+  const writes: unknown[] = [];
+  const put: SeedApi['put'] = async <T>(path: string, body: unknown, token: string) => {
+    expect(path).toBe(`/v1/works/${target.work.slice(-36)}/type`);
+    expect(token).toBe('operator-token');
+    writes.push(body);
+    current = { revision: 'typed-head', types: ['https://schema.org/Book'] };
+    return {} as T;
+  };
+  const input = { read: async () => current, api: { put }, book: 'pride', work: target.work,
+    actor, token: 'operator-token' };
+  await ensureClassicBookType(input);
+  await ensureClassicBookType(input);
+  expect(writes).toEqual([{ profile: 'work-type-v1', expectedHead: target.workRevision,
+    types: ['https://schema.org/Book'], actingSubject: actor }]);
+});
 
 test('Gutenberg seed: a lost chapter response replays original intents without duplicate chapters or assessments', async () => {
   const ledger = new Map<string, { body: unknown; result: unknown }>();

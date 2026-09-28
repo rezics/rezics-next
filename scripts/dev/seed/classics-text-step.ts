@@ -14,6 +14,18 @@ export interface ClassicSource { provider: 'project-gutenberg'; identifier: stri
   byteDigest: string; retrievedAt: string }
 interface Contents { items: { target: string | null; selectedRevision: string | null }[] }
 
+/** Old source adoptions were untyped. State Book through its revisioned command, preserving the Work identity. */
+export async function ensureClassicBookType(input: {
+  read: () => Promise<{ revision: string; types: string[] }>;
+  api: Pick<SeedApi, 'put'>; book: string; work: string; actor: string; token: string;
+}) {
+  const current = await input.read();
+  if (current.types.includes('https://schema.org/Book')) return;
+  await input.api.put(`/v1/works/${short(input.work)}/type`, { profile: 'work-type-v1',
+    expectedHead: current.revision, types: ['https://schema.org/Book'], actingSubject: input.actor },
+  input.token, seedKey('classic-type', `${input.book}:${short(current.revision)}`));
+}
+
 /** Deterministic identity is the same one the Studio chapter command derives. */
 export function classicChapterIdentity(work: string, actor: string, book: string, index: number) {
   const key = seedKey('classic-chapter', `${book}:${index}`);
@@ -31,9 +43,10 @@ export async function publishClassicChapters(input: {
   const { api, target, book, actor, token, chapters, source } = input;
   const composition = await api.post<{ structure: string; revision: string }>('/v1/compositions', {
     profile: 'book-composition', work: target.work, mainVersion: target.mainVersion, actingSubject: actor },
-  token, seedKey('classic-composition', book)).catch((error: unknown) => {
+  // The pre-type seed's composition intent was durably cancelled on existing stacks.
+  token, seedKey('classic-composition-v2', book)).catch((error: unknown) => {
     if (error instanceof SeedApiError && error.status === 404) {
-      throw new Error(`Classic ${book}: Main rejected the book composition; the imported Work needs a native schema:Book kind before chapters can be seeded`, { cause: error });
+      throw new Error(`Classic ${book}: Main rejected the book composition; the imported Work needs the schema:Book type before chapters can be seeded`, { cause: error });
     }
     throw error;
   });
@@ -62,17 +75,17 @@ export async function publishClassicChapters(input: {
       '/v1/content-drafts', { profile: 'content-public-domain-text-v1', resourceId: made.work,
         variantId: identity.variantId, language: { kind: 'tag', tag: 'en', originalTag: 'en' }, direction: 'ltr',
         expectedHead: null, body: chapter.body, actingSubject: actor, assessmentId: assessment.assessmentId, source },
-    token, seedKey('classic-draft', `${book}:${index}`));
+    token, seedKey('classic-draft-v2', `${book}:${index}`));
     const publication = await api.post<{ decision: string; status: string }>('/v1/content-publications', {
-      profile: 'content-publication-v1', preparationId: seedKey('classic-preparation', `${book}:${index}`),
+      profile: 'content-publication-v1', preparationId: seedKey('classic-preparation-v2', `${book}:${index}`),
       revisionId: saved.revisionId, expectedDigest: saved.byteDigest, expectedContentEpoch: saved.sourcePosition.dataEpoch,
       resourceId: made.work, variantId: identity.variantId, expectedPublicationHead: null, actingSubject: actor },
-    token, seedKey('classic-publication', `${book}:${index}`));
+    token, seedKey('classic-publication-v2', `${book}:${index}`));
     if (publication.status !== 'active' || !publication.decision) throw new Error(`Classic ${book}:${index} is not published`);
     await api.post('/v1/content-search-eligibility', { profile: 'content-search-eligibility-v2',
       resourceId: made.work, variantId: identity.variantId, publicationDecision: publication.decision,
       expectedEligibilityHead: null, actingSubject: actor, rightsBasis: 'public-domain',
-      assessmentId: assessment.assessmentId, disclosure: 'public' }, token, seedKey('classic-eligibility', `${book}:${index}`));
+      assessmentId: assessment.assessmentId, disclosure: 'public' }, token, seedKey('classic-eligibility-v2', `${book}:${index}`));
   }
 }
 
@@ -81,13 +94,24 @@ async function seedTexts(state: SeedState): Promise<void> {
   const plans = classicTextPlan(root); // Verify every locked book before the first write.
   const lock = JSON.parse(readFileSync(`${root}/tests/fixtures/fixtures.lock.json`, 'utf8')) as FixtureLock;
   const author = state.penAgents.get('northstar'), writer = state.sessions.find(session => session.id === 'mei');
-  if (!state.operatorInput || !author || !writer) throw new Error('Classics require the North Star Editions editor');
+  if (!state.operatorInput || !state.operatorSession || !author || !writer) {
+    throw new Error('Classics require the North Star Editions editor and seed operator');
+  }
   const operator = { ...state.operatorInput, ownerAccountSubject: writer.accountId, actingSubject: author };
   await grantClassicAssessmentAuthority(operator);
   for (const { book, fixture, chapters, totalSections } of plans) {
     await refreshSeedTokens(state);
     const target = state.created.get(book.id);
     if (!target) throw new Error(`Classic ${book.id} has not been acquired`);
+    await grantHomeSeedAuthority(operator, [
+      { action: 'work.read', scope: `work:read:${target.work}` },
+      { action: 'work.edit', scope: `work:edit:${target.work}` }]);
+    await grantHomeSeedAuthority({ ...operator, ownerAccountSubject: operator.accountSubject },
+      [{ action: 'work.edit', scope: `work:edit:${target.work}` }]);
+    await ensureClassicBookType({ read: () => state.api.get(
+      `/v1/works/${short(target.work)}?actingSubject=${encodeURIComponent(author)}`, writer.token),
+    api: state.operatorSession.api, book: book.id, work: target.work,
+    actor: author, token: state.operatorSession.token });
     const entry = lock.entries.find(item => item.source === 'gutenberg' && item.id === `pg${book.edition}`)!;
     let contents: Contents | null = null;
     try { contents = await state.api.getPublic<Contents>(`/v1/works/${short(target.work)}/contents?limit=20`); }
@@ -95,7 +119,6 @@ async function seedTexts(state: SeedState): Promise<void> {
     const complete = chapters.every((_, index) => contents?.items.some(item => item.selectedRevision
       && item.target === classicChapterIdentity(target.work, author, book.id, index).work));
     if (!complete) {
-      await grantHomeSeedAuthority(operator, [{ action: 'work.edit', scope: `work:edit:${target.work}` }]);
       await publishClassicChapters({ api: state.api, target, book: book.id, actor: author, token: writer.token,
         chapters, fixtureDigest: entry.sha256,
         source: { provider: 'project-gutenberg', identifier: `ebook/${book.edition}`, url: entry.requestUrl,

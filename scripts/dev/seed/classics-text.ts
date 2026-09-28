@@ -38,6 +38,16 @@ function withoutIllustrations(body: string): string {
   return result + body.slice(cursor);
 }
 
+/** Content stores one paragraph per line. Preserve intentionally indented verse, but unwrap printed prose. */
+export function classicParagraphs(body: string): string {
+  return body.trim().split(/\n\s*\n/).map(block => {
+    const lines = block.split('\n');
+    return lines.some(line => /^ {2,}\S/.test(line))
+      ? lines.map(line => line.trim()).join('\n')
+      : lines.map(line => line.trim()).join(' ');
+  }).join('\n');
+}
+
 /** Anchored edition-specific headings exclude indented contents and Holmes's internal I./II./III. */
 export function splitClassic(book: GutenbergBook, text: string): ClassicChapter[] {
   const patterns: Record<GutenbergBook['id'], RegExp> = {
@@ -61,8 +71,8 @@ export function splitClassic(book: GutenbergBook, text: string): ClassicChapter[
     const title = book.id === 'sherlock' ? `${number}. ${subtitle}`
       : `${letter ? 'Letter' : 'Chapter'} ${number}${subtitle ? `: ${subtitle}` : ''}`;
     // Omit illustration placeholders, never prose, from a text-only edition.
-    const body = withoutIllustrations(text.slice(heading.index + heading[0].length,
-      headings[index + 1]?.index ?? text.length)).trim();
+    const body = classicParagraphs(withoutIllustrations(text.slice(heading.index + heading[0].length,
+      headings[index + 1]?.index ?? text.length)));
     if (body.length < 500) throw new Error(`${book.id}: empty or truncated ${title}`);
     return { title, body, kind: letter ? 'letter' : 'chapter' };
   });
