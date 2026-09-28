@@ -9,6 +9,9 @@ import { messages } from './messages.ts';
 import zhHans from './messages/zh-Hans.ts';
 
 const zh = { ...messages, ...zhHans };
+/** A Work row's credit line as read aloud: its names are links, so the line is matched whole. */
+const creditLine = (text: string) => (_: string, element: Element | null) =>
+  element?.matches('p.text-muted-foreground') === true && element.textContent === text;
 const signedOut = { signedIn: false };
 const signedIn = { signedIn: true, actingSubject: storyId(77), seed: {} };
 
@@ -40,7 +43,7 @@ export const OpenLibraryAuthor: Story = {
     await expect(works.getByRole('link', { name: 'Pride and Prejudice' }))
       .toHaveAttribute('href', `/en/w/${storyId(101).slice(-36)}`);
     // A co-written Work names both authors in credit order.
-    await expect(works.getByText('Jane Austen, Margaret Drabble', { selector: 'p.text-muted-foreground' })).toBeVisible();
+    await expect(works.getByText(creditLine('Jane Austen, Margaret Drabble'))).toBeVisible();
     // Signed out, the shelf button leads to sign-in and back to this page.
     await expect(works.getAllByRole('link', { name: /Want to read/ })[0])
       .toHaveAttribute('href', `/auth/start?next=${encodeURIComponent('/en/authors/open-library/OL21594A')}`);
@@ -131,7 +134,7 @@ export const Chinese: Story = {
     await expect(canvas.getByRole('heading', { level: 1, name: '曹雪芹' })).toBeVisible();
     await expect(canvas.getByText('约1717年—1763年')).toBeVisible();
     await expect(canvas.getByRole('region', { name: '曹雪芹的作品' })).toBeVisible();
-    await expect(canvas.getByText('曹雪芹, 高鹗', { selector: 'p.text-muted-foreground' })).toBeVisible();
+    await expect(canvas.getByText(creditLine('曹雪芹、高鹗'))).toBeVisible();
     await expect(canvas.getByText('部作品')).toBeVisible();
     await expect(canvas.queryByRole('region', { name: '免费阅读与收听' })).toBeNull();
     await expect(canvas.getByRole('link', { name: /Open Library/ })).toBeVisible();

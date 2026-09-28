@@ -126,9 +126,9 @@ const newestFirst = (a: ShownAuthor, b: ShownAuthor) => {
 
 /**
  * The authors the reader follows, REZICS authors and Open Library authors
- * alike, each with their newest Work on REZICS, the most recent first. A row
- * that scrolls, so the shelf below stays in reach. Following nobody, it is
- * not drawn; authors who are no longer public are left out.
+ * alike, each with their newest Work on REZICS, the most recent first.
+ * Following nobody, it is not drawn; authors who are no longer public are
+ * left out.
  */
 function FollowedAuthorsSection({ authors, avatarQuery, locale, messages }: {
   authors: Loaded<FollowedAuthors>; avatarQuery?: string; locale: UiLocale; messages: LibraryMessages;
@@ -145,11 +145,13 @@ function FollowedAuthorsSection({ authors, avatarQuery, locale, messages }: {
   const link = 'rounded-sm outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring';
   return <section aria-labelledby="library-authors" className="grid gap-4">
     <h2 id="library-authors" className="font-semibold text-xl tracking-tight">{t.authorsYouFollow}</h2>
+    {/* As Currently reading: a row that scrolls on a phone, a grid on wider screens. */}
     <ul className="-mx-4 flex snap-x snap-mandatory scroll-px-4 gap-3 overflow-x-auto px-4 pb-1 [scrollbar-width:none]
-      sm:mx-0 sm:px-0">
+      sm:mx-0 sm:grid sm:grid-cols-2 sm:gap-4 sm:overflow-visible sm:px-0 xl:grid-cols-3">
       {shown.map(author => {
         const work = author.newestWork ? shelfCard(author.newestWork) : null;
-        return <li key={author.id} className="group/tile flex w-64 shrink-0 snap-start gap-3 rounded-2xl bg-muted/50 p-3">
+        return <li key={author.id} className="group/tile flex w-[75%] shrink-0 snap-start gap-3 rounded-2xl bg-muted/50
+          p-3 sm:w-auto">
           {work ? <CoverLink work={work} avatarQuery={avatarQuery} className="w-14 shrink-0 self-start" />
             : <span aria-hidden="true" className="grid size-14 shrink-0 place-items-center rounded-full bg-accent
               font-semibold font-work-title text-accent-foreground text-xl">{initials(author.name.value)}</span>}

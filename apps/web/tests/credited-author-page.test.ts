@@ -4,7 +4,8 @@ import { caoXueqin, conanDoyle, janeAusten, lewisCarroll, unnamedAuthor } from '
 import { messages } from '../features/author/messages.ts';
 import zhHans from '../features/author/messages/zh-Hans.ts';
 import { authorJsonLd, authorMetadata } from '../features/author/metadata.ts';
-import { authorHref, openLibraryAuthorHref, parseCursor, parseOpenLibraryAuthor } from '../features/author/route.ts';
+import { authorHref, externalAuthorFollow, openLibraryAuthorHref, parseCursor, parseOpenLibraryAuthor }
+  from '../features/author/route.ts';
 import { materializeData } from 'native-i18n';
 import { isPublicPagePath } from '../i18n/locale.ts';
 import { discoveryWork } from '../features/discover/cards.ts';
@@ -47,6 +48,10 @@ describe('author addresses', () => {
     expect(isPublicPagePath('/authorsx')).toBe(false);
     expect(parseCursor(['a'])).toBeUndefined();
     expect(parseCursor('x'.repeat(2049))).toBeUndefined();
+  });
+
+  test('an Open Library author is followed by provider and key, as Main names them', () => {
+    expect(externalAuthorFollow('/authors/OL21594A')).toBe('open-library:OL21594A');
   });
 });
 
