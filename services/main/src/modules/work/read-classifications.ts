@@ -24,8 +24,10 @@ export async function readWorkClassifications(session: WorkReadSession, work: st
   const limit = session.options.limit ?? 20;
   const binding = ['classifications', work, scope, session.options.language ?? null, ...(selectedSenses ? [selectedSenses] : [])];
   const cursor = decodeReadCursor(session.options.cursor, binding, session.position);
-  const rows = await session.query(`SELECT DISTINCT ?sense ?revision ?concept WHERE {
+  const rows = await session.query(`SELECT DISTINCT ?sense ?revision ?concept ?realmContext WHERE {
     ${selectedSenses ? `VALUES ?sense { ${selectedSenses.map(iri).join(' ')} }` : ''}
+    ${scope.kind === 'realm' ? `OPTIONAL { GRAPH ${iri(GRAPHS.current)} {
+      ${iri(scope.realm!)} rv:classificationContext ?realmContext } }` : ''}
     GRAPH ${iri(GRAPHS.current)} {
       ?sense a rv:ClassificationSense ; rv:senseState rv:Active ; rv:head ?revision ; rv:expression ?expression .
       ?expression rv:assertedConcept ?concept ; rv:expressionState rv:Active .
@@ -50,12 +52,14 @@ export async function readWorkClassifications(session: WorkReadSession, work: st
     throw new WorkReadUnavailable('Classification candidates are ambiguous');
   }
   const page = rows.slice(0, limit);
+  // A Realm without its own classification Context reads the Global decisions it inherits.
+  const realmContext = scope.kind === 'realm' && rows.some(row => row.realmContext);
   const accepted: { sense: string; concept: string; decision: string; source: 'local' | 'global';
     sourceContext: string; meaningKey: string | null }[] = [];
   for (const row of page) {
     session.checkDeadline();
     const result = await resolveClassification(session.deps.environment, { work, mainVersion: basis.card.mainVersion,
-      sense: row.sense!.value, context: scope.kind === 'realm'
+      sense: row.sense!.value, context: realmContext
         ? { kind: 'realm-classification', id: scope.realm! } : { kind: 'global' } });
     if (result.state !== 'accepted' || !result.decision || !result.sourceContext) continue;
     accepted.push({ sense: row.sense!.value, concept: row.concept!.value, decision: result.decision,

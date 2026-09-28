@@ -8,7 +8,7 @@ interface Item { id: string; name: string | null; concept: { id: string; name: {
   filter: unknown; facets: string[]; position: number | null; home: 'available' | 'unsupported'; revision: string }
 interface Page { revision: string | null; items: Item[]; complete: boolean }
 interface Receipt { action: string; id: string | null; filterRevision: string | null; revision: string; replayed: boolean }
-interface FeedPage { items: { target: { work: string | null } }[]; nextCursor: string | null }
+interface FeedPage { items: { target: { work: string | null }; realm: { id: string } | null }[]; nextCursor: string | null }
 
 const language = resolveFacet('language')!.id;
 
@@ -45,8 +45,9 @@ test('G-431 Saved Filters: create, rename, pin, reorder, unpin and delete; a fol
       '/v1/classification-propositions', { profile: 'classification-proposition-v1', label, actingSubject: a.actor },
       a.token), 201);
     const [fantasy, mystery] = [await define('Saved fantasy'), await define('Saved mystery')];
-    const [tagged, other] = [seeded.works[3]!, seeded.works[4]!];
-    for (const [work, term] of [[tagged, fantasy], [other, mystery]] as const) {
+    // The first Work is also the Home community's pick; that Realm keeps no classification Context of its own.
+    const [picked, tagged, other] = [seeded.works[0]!, seeded.works[3]!, seeded.works[4]!];
+    for (const [work, term] of [[picked, fantasy], [tagged, fantasy], [other, mystery]] as const) {
       await json(await call('POST', '/v1/classification-decisions', { profile: 'classification-direct-decision-v1',
         work: work.work, mainVersion: work.mainVersion, sense: term.sense, context: { kind: 'global' },
         outcome: 'accepted', expectedDecisionHead: null, actingSubject: a.actor }, a.token), 201);
@@ -128,8 +129,10 @@ test('G-431 Saved Filters: create, rename, pin, reorder, unpin and delete; a fol
       throw new Error('Saved Filter feed did not terminate');
     };
     const magicPosts = await feed(`scope=all&sort=new&savedFilter=${magic.id}`);
-    expect(magicPosts.length).toBeGreaterThan(0);
-    expect(magicPosts.every(item => item.target.work === tagged.work)).toBe(true);
+    expect(magicPosts.some(item => item.target.work === tagged.work)).toBe(true);
+    // A Realm without its own classification Context reads the Global decisions it inherits.
+    expect(magicPosts.some(item => item.target.work === picked.work && item.realm?.id === seeded.realm.realm)).toBe(true);
+    expect(magicPosts.every(item => [tagged.work, picked.work].includes(item.target.work!))).toBe(true);
     expect((await feed(`scope=all&sort=best&savedFilter=${puzzles.id}`)).every(item => item.target.work === other.work))
       .toBe(true);
     expect((await call('GET', signed(`/v1/feed?scope=all&savedFilter=${magic.id}&contentLanguages=en`), undefined,
