@@ -228,13 +228,13 @@ function extraRoutes6(fuseki: FusekiClient, work: SearchRouteDependencies) {
     .use(softwareFactRoutes(work))
     .use(realmReplyRoutes(work))
     .use(pollRoutes(work))
-    .use(semanticRoutes(fuseki, work))
-    .use(relationRoutes(fuseki, work))
-    .use(hubRoutes(work));
+    .use(semanticRoutes(fuseki, work));
 }
 
 function extraRoutes7(fuseki: FusekiClient, work: SearchRouteDependencies) {
   return new Elysia()
+    .use(relationRoutes(fuseki, work))
+    .use(hubRoutes(work))
     .use(authorRoutes(work))
     .use(progressRoutes(fuseki, work))
     .use(workStatsRoutes(work))
