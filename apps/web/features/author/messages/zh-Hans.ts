@@ -1,0 +1,58 @@
+import { insert, plural } from 'native-i18n';
+import type { AuthorMessages } from '../messages.ts';
+
+export default {
+  author: '作者',
+  unnamedAuthor: insert('Open Library 作者 {{id}}', { id: String }),
+  lifespan: insert('{{birth}}—{{death}}', { birth: String, death: String }),
+  bornIn: insert('生于{{year}}', { year: String }),
+  diedIn: insert('卒于{{year}}', { year: String }),
+  circa: insert('约{{year}}', { year: String }),
+  details: '资料',
+  born: '出生',
+  died: '逝世',
+  fullName: '全名',
+
+  totals: '在 REZICS',
+  worksLabel: plural({ other: '部作品' }),
+  averageLabel: '平均评分',
+  ratingsLabel: plural({ other: '个评分' }),
+  readersLabel: plural({ other: '位读者' }),
+  noRatings: '暂无评分',
+
+  worksHeading: insert('{{name}}的作品', { name: String }),
+  coAuthors: '合著',
+  serialOngoing: '连载中',
+  serialHiatus: '暂停更新',
+  allWorks: '全部作品',
+  noWorks: 'REZICS 上还没有署名这位作者的作品。',
+  worksUnavailable: '未能加载作品',
+
+  readFree: '免费阅读与收听',
+  records: '目录与标识',
+  project_gutenberg: '古登堡计划',
+  project_gutenbergNote: '免费电子书',
+  librivox: 'LibriVox',
+  librivoxNote: '免费有声书',
+  openLibrary: 'Open Library',
+  wikidata: '维基数据',
+  lc_naf: '美国国会图书馆',
+  viaf: 'VIAF',
+  isni: 'ISNI',
+  sourceNote: insert('名字与资料取自 Open Library 目录，获取于{{date}}。', { date: String }),
+  sourceNoteUndated: '名字与资料取自 Open Library 目录。',
+  viewRecord: '查看记录',
+
+  unavailableTitle: '未能加载这位作者',
+  unavailableBody: 'REZICS 暂时无法获取这位作者的页面，请稍后重试。',
+  retry: '重试',
+  movedTitle: '翻页时列表发生了变化',
+  movedBody: '请从第一页重新开始，查看当前的列表。',
+  firstPage: '第一页',
+  nextPage: '下一页',
+  backTo: insert('返回{{name}}', { name: String }),
+
+  description: insert('{{name}}在 REZICS 上的作品：评分、读者和从哪里开始读。', { name: String }),
+  descriptionLifespan: insert('{{name}}（{{lifespan}}）。REZICS 上的作品、评分与读者。',
+    { name: String, lifespan: String }),
+} satisfies Partial<AuthorMessages>;
