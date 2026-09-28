@@ -29,7 +29,7 @@ services:
       retries: 30
 
   fuseki:
-    image: rezics/fuseki:6.2.0-cmd0.5.34-0d4db108de1b
+    image: rezics/fuseki:6.2.0-cmd0.5.34-ae8eb902ae22
     stop_grace_period: 60s
     build:
       context: ../..

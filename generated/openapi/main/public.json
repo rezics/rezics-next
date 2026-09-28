@@ -248421,6 +248421,21 @@
                               "mainVersion": {
                                 "type": "string"
                               },
+                              "matchedChapter": {
+                                "properties": {
+                                  "title": {
+                                    "type": "string"
+                                  },
+                                  "work": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "work",
+                                  "title"
+                                ],
+                                "type": "object"
+                              },
                               "matchedField": {
                                 "enum": [
                                   "title",
@@ -250352,6 +250367,21 @@
                               },
                               "mainVersion": {
                                 "type": "string"
+                              },
+                              "matchedChapter": {
+                                "properties": {
+                                  "title": {
+                                    "type": "string"
+                                  },
+                                  "work": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "work",
+                                  "title"
+                                ],
+                                "type": "object"
                               },
                               "matchedField": {
                                 "enum": [
@@ -252293,6 +252323,21 @@
                               },
                               "mainVersion": {
                                 "type": "string"
+                              },
+                              "matchedChapter": {
+                                "properties": {
+                                  "title": {
+                                    "type": "string"
+                                  },
+                                  "work": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "work",
+                                  "title"
+                                ],
+                                "type": "object"
                               },
                               "matchedField": {
                                 "enum": [
@@ -254385,6 +254430,21 @@
                               },
                               "mainVersion": {
                                 "type": "string"
+                              },
+                              "matchedChapter": {
+                                "properties": {
+                                  "title": {
+                                    "type": "string"
+                                  },
+                                  "work": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "work",
+                                  "title"
+                                ],
+                                "type": "object"
                               },
                               "matchedField": {
                                 "enum": [
@@ -256488,6 +256548,21 @@
                               },
                               "mainVersion": {
                                 "type": "string"
+                              },
+                              "matchedChapter": {
+                                "properties": {
+                                  "title": {
+                                    "type": "string"
+                                  },
+                                  "work": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "work",
+                                  "title"
+                                ],
+                                "type": "object"
                               },
                               "matchedField": {
                                 "enum": [
@@ -258618,6 +258693,21 @@
                               },
                               "mainVersion": {
                                 "type": "string"
+                              },
+                              "matchedChapter": {
+                                "properties": {
+                                  "title": {
+                                    "type": "string"
+                                  },
+                                  "work": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "work",
+                                  "title"
+                                ],
+                                "type": "object"
                               },
                               "matchedField": {
                                 "enum": [
@@ -263453,6 +263543,21 @@
                               "mainVersion": {
                                 "type": "string"
                               },
+                              "matchedChapter": {
+                                "properties": {
+                                  "title": {
+                                    "type": "string"
+                                  },
+                                  "work": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "work",
+                                  "title"
+                                ],
+                                "type": "object"
+                              },
                               "matchedField": {
                                 "enum": [
                                   "title",
@@ -264183,6 +264288,21 @@
                               },
                               "mainVersion": {
                                 "type": "string"
+                              },
+                              "matchedChapter": {
+                                "properties": {
+                                  "title": {
+                                    "type": "string"
+                                  },
+                                  "work": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "work",
+                                  "title"
+                                ],
+                                "type": "object"
                               },
                               "matchedField": {
                                 "enum": [
@@ -264926,6 +265046,21 @@
                               },
                               "mainVersion": {
                                 "type": "string"
+                              },
+                              "matchedChapter": {
+                                "properties": {
+                                  "title": {
+                                    "type": "string"
+                                  },
+                                  "work": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "work",
+                                  "title"
+                                ],
+                                "type": "object"
                               },
                               "matchedField": {
                                 "enum": [
@@ -265817,6 +265952,21 @@
                               },
                               "mainVersion": {
                                 "type": "string"
+                              },
+                              "matchedChapter": {
+                                "properties": {
+                                  "title": {
+                                    "type": "string"
+                                  },
+                                  "work": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "work",
+                                  "title"
+                                ],
+                                "type": "object"
                               },
                               "matchedField": {
                                 "enum": [
@@ -266718,6 +266868,21 @@
                               },
                               "mainVersion": {
                                 "type": "string"
+                              },
+                              "matchedChapter": {
+                                "properties": {
+                                  "title": {
+                                    "type": "string"
+                                  },
+                                  "work": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "work",
+                                  "title"
+                                ],
+                                "type": "object"
                               },
                               "matchedField": {
                                 "enum": [
@@ -267646,6 +267811,21 @@
                               },
                               "mainVersion": {
                                 "type": "string"
+                              },
+                              "matchedChapter": {
+                                "properties": {
+                                  "title": {
+                                    "type": "string"
+                                  },
+                                  "work": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "work",
+                                  "title"
+                                ],
+                                "type": "object"
                               },
                               "matchedField": {
                                 "enum": [
