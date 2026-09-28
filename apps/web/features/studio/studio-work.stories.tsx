@@ -248,6 +248,10 @@ export const Volumes: Story = {
     await userEvent.type(canvas.getByRole('textbox', { name: /Title/ }), '第三卷 晴');
     await userEvent.click(canvas.getByRole('button', { name: 'Create' }));
     const third = await canvas.findByRole('button', { name: /^第三卷 晴/ });
+    // Extras close the book: the new volume stands before them.
+    const order = () => canvas.getAllByRole('button', { name: /^(第.卷|番外)/ }).map(button => button.textContent ?? '');
+    await expect(order().findIndex(name => name.startsWith('第三卷')))
+      .toBeLessThan(order().findIndex(name => name.startsWith('番外')));
     await expect(canvas.getByRole('combobox', { name: 'Add to' })).toHaveTextContent('第三卷 晴');
     await waitFor(() => expect(canvas.getByRole('button', { name: 'Add chapter' })).toBeEnabled());
     await userEvent.type(canvas.getByRole('textbox', { name: 'New chapter' }), '第五章 放晴');
