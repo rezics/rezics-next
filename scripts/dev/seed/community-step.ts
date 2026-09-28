@@ -1,6 +1,7 @@
 import { isDeepStrictEqual } from 'node:util';
 import { SeedApiError, type SeedApi } from './api.ts';
 import { communityPeople, communityRealms, type CommunityRealm } from './community-plan.ts';
+import { follow } from './feed.ts';
 import { grantRealmProfileSeed, realmProfileClient } from './official-authority.ts';
 import { grantHomeSeedAuthority, type LocalOperatorInput } from './operator.ts';
 import { people, seedKey } from './plan.ts';
@@ -190,6 +191,11 @@ export async function seedCommunityRealms(state: SeedState) {
       await moderatorRole(state, plan, root, owner);
       await profile(state, operator, plan, receipt.realm, owner, client, tokens);
       adopted += await adopt(state, operator, plan, receipt.realm, owner);
+      // Members follow the Realms they join, so Home and the sidebar carry them.
+      for (const member of plan.members.map(id => person(state, id))) {
+        await follow(state.api, member, receipt.realm, 'realm',
+          seedKey('follow', `${member.id}:realm:${plan.id}:${short(receipt.realm)}`));
+      }
       state.communityRealms.set(plan.id, { realm: receipt.realm, owner });
     });
   }

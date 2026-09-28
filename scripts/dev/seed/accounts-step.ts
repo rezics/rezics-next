@@ -1,10 +1,11 @@
+import { communityPeople } from './community-plan.ts';
 import { operatorSeedSession } from './operator.ts';
 import { penNames, people, seedKey } from './plan.ts';
 import type { AgentReceipt, SeedState } from './state.ts';
 
 export async function seedAccounts(state: SeedState) {
   const { api, endpoints, fixture } = state;
-  for (const person of people) {
+  for (const person of [...people, ...communityPeople]) {
     const signed = await api.signInOrUp(person);
     const token = await api.token(signed.cookie);
     const agent = await api.post<AgentReceipt>('/v1/agents', {

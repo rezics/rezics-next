@@ -737,4 +737,5 @@ export async function seedOfficialZones(state: SeedState) {
   await profiles(o);
   await refreshSeedTokens(state);
   await state.optional('Fiction: reader quotes', () => quotes(o));
+  for (const [id, placed] of o.works) if (placed.published) state.publicWorks.set(id, { work: placed.work, ...placed.published });
 }

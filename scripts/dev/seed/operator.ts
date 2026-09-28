@@ -302,7 +302,7 @@ export async function grantHomeSeedAuthority(input: LocalOperatorInput,
     | 'content.publish' | 'content.search-eligibility' | 'publication.adopt'
     | 'rating.context.create' | 'rating.observation.set' | 'context.create'
     | 'classification.proposition.define' | 'classification.context.configure'
-    | 'classification.decision.set'; scope: string }[]) {
+    | 'classification.decision.set' | 'recommendation.generation.manage'; scope: string }[]) {
   loopback(input.accessDatabaseUrl);
   const scopePrefix = { 'work.edit': 'work:edit:https://rezics.com/id/',
     'work.read': 'work:read:https://rezics.com/id/',
@@ -315,9 +315,11 @@ export async function grantHomeSeedAuthority(input: LocalOperatorInput,
     'context.create': 'context:create:root',
     'classification.context.configure': 'classification:context:https://rezics.com/id/',
     'classification.decision.set': 'classification:decide:https://rezics.com/id/',
-    'classification.proposition.define': 'classification:define:global' } as const;
+    'classification.proposition.define': 'classification:define:global',
+    'recommendation.generation.manage': 'recommendation:manage' } as const;
   if (grants.length > 10 || grants.some(({ action, scope }) =>
     action === 'context.create' || action === 'classification.proposition.define'
+      || action === 'recommendation.generation.manage'
       ? scope !== scopePrefix[action]
       : (!scope.startsWith(scopePrefix[action])
         || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(

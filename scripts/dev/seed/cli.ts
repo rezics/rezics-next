@@ -9,6 +9,9 @@ import { seedAdoptions } from './adoptions-step.ts';
 import { seedChapters } from './chapters-step.ts';
 import { checkPublicReads } from './checks-step.ts';
 import { seedClassics } from './classics-step.ts';
+import { seedCommunityDiscussions } from './community-discussions.ts';
+import { communityPeople, communityRealms } from './community-plan.ts';
+import { seedCommunityRealms } from './community-step.ts';
 import { seedContributions } from './contributions-step.ts';
 import { seedHomeFeed } from './feed-step.ts';
 import { seedLibrary } from './library-step.ts';
@@ -21,8 +24,11 @@ import { seedProfileCredits } from './profile-credits-step.ts';
 import { seedProfileFollows } from './profile-follows-step.ts';
 import { seedProfileShelves } from './profile-shelves-step.ts';
 import { seedRatings } from './ratings.ts';
+import { seedCoReaders } from './reading-lives-coreaders.ts';
+import { seedReadingLives } from './reading-lives-step.ts';
 import { seedRealms } from './realms-step.ts';
 import { printSeedReport } from './report-step.ts';
+import { seedReviews } from './reviews-step.ts';
 import { refreshSeedTokens, type SeedState, type SeedStep } from './state.ts';
 import { seedWorks } from './works-step.ts';
 
@@ -97,25 +103,30 @@ function describe(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
-// Each phase owns one file; this is the only ordering declaration.
+// Each phase owns one file; this is the only ordering declaration. Community
+// Realms, reading lives, ratings and reviews follow the official Zones, whose
+// Works they discuss and rate; co-readers are built from all of it, last.
 export const steps: readonly SeedStep[] = [
   seedAccounts, seedClassics, seedWorks, seedContributions, seedRealms, seedAdoptions,
-  seedRatings, seedLibrary, seedChapters, seedModeration, seedHomeFeed,
+  seedLibrary, seedChapters, seedModeration, seedHomeFeed,
   seedProfileCredits, seedProfileBios, seedProfileShelves, seedProfileFollows, seedOfficialZones,
-  seedOfficialThemes,
+  seedOfficialThemes, seedCommunityRealms, seedCommunityDiscussions, seedReadingLives, seedRatings,
+  seedReviews, seedCoReaders,
   checkPublicReads, printSeedReport,
 ];
 
 export function dryRunLines(): string[] {
   return [
     ...works.map(work => `  ${work.id}: ${work.title} [${work.type}]`),
+    ...communityRealms.map(realm => `  Community Realm ${realm.id}: ${realm.name.en} (${realm.members.length} members)`),
     'Demo sign-in credentials:',
-    ...people.map(person => `  ${person.name}: ${person.email} / ${person.password}`),
+    ...[...people, ...communityPeople].map(person => `  ${person.name}: ${person.email} / ${person.password}`),
   ];
 }
 
 async function run(options: Options): Promise<boolean> {
-  console.log(`Demo plan: ${people.length} accounts, ${works.length} Works, ${realms.length} Realms.`);
+  console.log(`Demo plan: ${people.length + communityPeople.length} accounts, ${works.length} Works, ${
+    realms.length} official and ${communityRealms.length} community Realms.`);
   if (options.dryRun) {
     for (const line of dryRunLines()) console.log(line);
     if (options.resetOwn) console.log('Reset requires a public API to delete the seed-owned graph and Access data.');
@@ -134,8 +145,9 @@ async function run(options: Options): Promise<boolean> {
     },
     sessions: [], penAgents: new Map(), operatorInput: null, operatorSession: null, agentCount: 0,
     created: new Map(), createdRealms: [], seededZones: [],
-    publishedCount: 0, selectedCount: 0, publicForRealm: new Map(),
-    commentCount: 0, replyCount: 0, profileCreditCount: 0, profileFollowCount: 0 };
+    publishedCount: 0, selectedCount: 0, publicForRealm: new Map(), publicWorks: new Map(),
+    ratingContext: null, communityRealms: new Map(),
+    commentCount: 0, replyCount: 0, reviewCount: 0, profileCreditCount: 0, profileFollowCount: 0 };
   for (const step of steps) {
     await refreshSeedTokens(state);
     await step(state);

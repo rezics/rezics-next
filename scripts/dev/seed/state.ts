@@ -28,8 +28,15 @@ export interface SeedState {
   publishedCount: number;
   selectedCount: number;
   publicForRealm: Map<string, { contribution: string; decision: string }>;
+  /** Works the official Zones published, by plan id, for later steps that adopt, discuss and rate them. */
+  publicWorks: Map<string, { work: WorkReceipt; contribution: string; decision: string }>;
+  /** The standing global rating question, once the ratings step has read it. */
+  ratingContext: string | null;
+  /** Community Realms by plan id, as later steps place discussions in them. */
+  communityRealms: Map<string, { realm: string; owner: Session }>;
   commentCount: number;
   replyCount: number;
+  reviewCount: number;
   profileCreditCount: number;
   profileFollowCount: number;
 }
