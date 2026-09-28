@@ -15,8 +15,8 @@ export async function enqueueAccountEmail(db: Pool | PoolClient, secret: string,
   input: Parameters<AccountEmail['enqueue']>[0], id: string = randomUUID()) {
   const payload = await symmetricEncrypt({ key: secret, data: JSON.stringify(input) });
   await db.query(`INSERT INTO rezics_account_email (id, user_id, payload, expires_at)
-    VALUES ($1, $2, $3, now() + interval '30 minutes') ON CONFLICT (id) DO NOTHING`,
-  [id, input.userId, payload]);
+    VALUES ($1, $2, $3, now() + ($4::int * interval '1 minute')) ON CONFLICT (id) DO NOTHING`,
+  [id, input.userId, payload, input.purpose === 'digest' ? 1_440 : 30]);
 }
 
 export function accountLocale(request?: Request): AccountLocale {
