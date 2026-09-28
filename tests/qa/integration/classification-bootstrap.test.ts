@@ -53,7 +53,10 @@ test('G-380: fresh proposition bootstraps once, concurrent callers agree, relay 
     await Promise.all(Array.from({ length: 8 }, () => ensureGlobalClassificationContext(env)));
     expect(await sequence()).toBe(count);
     const contextId = ID + Bun.randomUUIDv7(), realmId = ID + Bun.randomUUIDv7();
-    const session = { options: {}, deps: { environment: env }, position: { dataEpoch: env.lineage.dataEpoch, sequence: count },
+    const session = { options: {}, deps: { environment: env, discovery: {
+      active: async () => ({ generation_id: Bun.randomUUIDv7(), source_epoch: env.lineage.dataEpoch,
+        source_sequence: count, stale: false }), selectedTerms: async () => [],
+    } }, position: { dataEpoch: env.lineage.dataEpoch, sequence: count },
       query: async (query: string) => (await fuseki.query(`${READ_PREFIX}\n${query}`)).results!.bindings,
       summaries: async (ids: string[]) => ids.map(id => ({ reference: id, status: 'available',
         type: 'concept', disclosure: 'public', name: { value: 'Minecraft', language: 'en' } })),
@@ -64,7 +67,7 @@ test('G-380: fresh proposition bootstraps once, concurrent callers agree, relay 
         { target: proposition.definitions!.concept, state: 'defined', relation: null, definition: proposition.revision },
       ] }) as never);
     expect(chips.items).toEqual([{ id: proposition.definitions!.sense, concept: proposition.definitions!.concept,
-      name: { value: 'Minecraft', language: 'en' } }]);
+      name: { value: 'Minecraft', language: 'en' }, workCount: 0 }]);
 
     await reset();
     await Promise.all(Array.from({ length: 8 }, () => ensureGlobalClassificationContext(env)));

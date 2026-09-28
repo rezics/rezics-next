@@ -9,6 +9,7 @@ import { grantCuratedCollectionSeed, grantHomeSeedAuthority, grantImportedContri
 import { demoClassics } from '../../../tests/fixtures/sources/open-library.ts';
 import { people, profilePlan, seedKey, works } from './plan.ts';
 import { seedReply } from './replies.ts';
+import { modsConcepts } from './realms-step.ts';
 import { refreshSeedTokens, type AgentReceipt, type ContributionReceipt, type PublicationReceipt,
   type SeedState, type Session, type WorkReceipt } from './state.ts';
 
@@ -335,6 +336,82 @@ async function mods(o: Official) {
   }
 }
 
+/** The steward accepts game/loader Senses in Mods, independently of its navigation Context. */
+async function modClassifications(o: Official) {
+  const { receipt: { realm }, steward } = o.realm('mods');
+  await grantHomeSeedAuthority(o.input(steward, steward.actingSubject), [
+    { action: 'classification.context.configure', scope: `classification:context:${realm}` },
+    { action: 'classification.decision.set', scope: `classification:decide:${realm}` },
+  ]);
+  if (!await o.read(`/v1/realms/${short(realm)}/classification-context`)) {
+    await o.api.post('/v1/classification-contexts', { profile: 'classification-context-v1',
+      realm, actingSubject: steward.actingSubject }, steward.token, seedKey('official-mod-acceptance', realm));
+  }
+  const concepts = await modsConcepts(o.state, steward);
+  for (const item of officialMods) {
+    const target = o.works.get(item.id);
+    if (!target?.published) throw new Error(`Mod Work ${item.id} is not public`);
+    for (const label of ['Minecraft', item.ecosystem === 'fabric' ? 'Fabric' : 'Forge']) {
+      const sense = concepts.get(label)!.sense;
+      const selection = { context: { kind: 'realm-classification', id: realm },
+        work: target.work.work, mainVersion: target.work.mainVersion, sense };
+      const current = await o.api.post<{ state: string; source: string; decision: string | null }>(
+        '/v1/classification-resolutions', { profile: 'classification-resolution-v1', ...selection },
+        steward.token, seedKey('official-mod-classification-read', `${item.id}:${label}`));
+      if (current.state === 'accepted') continue;
+      const expectedDecisionHead = current.source === 'local' ? current.decision : null;
+      await o.api.post('/v1/classification-decisions', {
+        profile: 'classification-direct-decision-v1', ...selection, expectedDecisionHead,
+        outcome: 'accepted', actingSubject: steward.actingSubject }, steward.token,
+      seedKey('official-mod-classification', `${item.id}:${label}:${expectedDecisionHead ?? 'first'}`));
+    }
+  }
+}
+
+/** Wait for the automatic discovery refresh after all seed writes, then exercise
+ * the same public Sense links as the Mods chips. No rating Context belongs here. */
+export async function checkModsDiscovery(state: SeedState) {
+  const realm = state.createdRealms.find(item => item.id === 'mods')?.receipt.realm;
+  if (!realm) throw new Error('Mods Realm is unavailable');
+  const zone = await state.api.getPublic<{ presentation: { modules: Array<{ id: string;
+    source: { kind: string; context?: string } }> } }>(`/v1/realms/${short(realm)}/zone`);
+  const context = zone.presentation.modules.find(item => item.id === 'games')?.source.context;
+  if (!context) throw new Error('Mods game and loader navigation Context is unavailable');
+  const genres = await state.api.getPublic<{ items: Array<{ id: string; name: { value: string } }> }>(
+    `/v1/realms/${short(realm)}/modules/genres/${short(context)}?language=en`);
+  const deadline = Date.now() + 60_000;
+  let pending = 'Discovery refresh';
+  while (Date.now() < deadline) {
+    const results: string[] = [];
+    for (const label of ['Minecraft', 'Fabric', 'Forge', 'NeoForge']) {
+      const term = genres.items.find(item => item.name.value === label)?.id;
+      if (!term) throw new Error(`Mods has no ${label} Sense`);
+      const params = new URLSearchParams({ scope: 'realm', realm, term, language: 'en' });
+      const response = await fetch(`${state.endpoints.main}/v1/works?${params}`, {
+        signal: AbortSignal.timeout(Math.max(1, Math.min(10_000, deadline - Date.now()))) });
+      if ([409, 503].includes(response.status)) { await response.body?.cancel(); break; }
+      if (!response.ok) throw new SeedApiError('Mods Discover', response.status, await response.text());
+      const page = await response.json() as { stale: boolean; nextCursor: string | null;
+        items: Array<{ title: { value: string } }> };
+      if (page.stale) break;
+      const expected = officialMods.filter(item => label === 'Minecraft' || item.ecosystem === label.toLowerCase())
+        .map(item => extraWorks.find(work => work.id === item.id)!.title).sort();
+      const actual = page.items.map(item => item.title.value).sort();
+      if (page.nextCursor || JSON.stringify(actual) !== JSON.stringify(expected)) {
+        throw new Error(`Mods ${label} Discover returned ${JSON.stringify(actual)}; expected ${JSON.stringify(expected)}`);
+      }
+      results.push(`${label}=${actual.length}`);
+    }
+    if (results.length === 4) {
+      console.log(`Mods discovery: ${results.join(', ')}.`);
+      return;
+    }
+    pending = `Discovery refresh (${results.length}/4 genre queries current)`;
+    await new Promise(resolve => setTimeout(resolve, 1000));
+  }
+  throw new Error(`${pending} did not finish within 60 seconds`);
+}
+
 /** Content publication and public eligibility make exact Hub revisions available to Zone cards. */
 const officialSkillDescriptions = {
   'recipe-skill-v1': 'Scale recipe ingredients for a new serving count, with separate checks for seasoning and cooking time.',
@@ -643,6 +720,7 @@ export async function seedOfficialZones(state: SeedState) {
   await refreshSeedTokens(state);
   await state.optional('Official Zones: adoptions', () => adoptions(o));
   await refreshSeedTokens(state);
+  await state.optional('Mods: game and loader classifications', () => modClassifications(o));
   await editorLists(o);
   await refreshSeedTokens(state);
   await state.optional('Official Realms: joining and rules', () => joining(o));

@@ -99,7 +99,8 @@ export async function migrateV1Decision(env: WorkActivationEnvironment, admissio
         rv:expression ?expression .
       ?expression a rv:ClassificationExpression ; rv:propositionKind rv:ConceptAssertion ;
         rv:expressionState rv:Active ; rv:assertedConcept ?concept .
-      OPTIONAL { ?context rv:head ?contextRevision }
+      # A global bootstrap head is not a Realm policy revision on the old Decision.
+      OPTIONAL { ?context rv:contextRole rv:RealmClassification ; rv:head ?contextRevision }
     }
     GRAPH ${iri(GRAPHS.revisions)} {
       ?senseRevision a rv:RevisionAnchor ; rv:component ?sense ;

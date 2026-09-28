@@ -1,5 +1,5 @@
 import { t } from 'elysia';
-import { pageFields, readAvatar, readId, readName, readPosition, workCard }
+import { pageFields, readAvatar, readId, readName, readPosition, readUuid, workCard }
   from '../work/read-contract.ts';
 import { realmDecision } from '../realm-reads/read-contract.ts';
 import { discoveryCredit } from '../discovery/contract.ts';
@@ -42,8 +42,10 @@ export const zoneReplyPage = t.Object({ profile: t.Union([
     excerpt: t.String({ maxLength: 240 }), dataEpoch: t.String(), sequence: t.String() }),
   { maxItems: ZONE_MODULE_COST.pageSize }), ...pageFields });
 export const zoneGenrePage = t.Object({ profile: t.Literal('zone-genres-v1'),
-  realm: readId, context: readId,
-  items: t.Array(t.Object({ id: readId, concept: readId, name: readName }), { maxItems: ZONE_MODULE_COST.pageSize }),
+  realm: readId, context: readId, generation: readUuid, stale: t.Boolean(), projectionPosition: readPosition,
+  items: t.Array(t.Object({ id: readId, concept: readId, name: readName,
+    workCount: t.Nullable(t.Integer({ minimum: 0, maximum: Number.MAX_SAFE_INTEGER })) }),
+  { maxItems: ZONE_MODULE_COST.pageSize }),
   ...pageFields });
 export const zoneEditorLists = t.Object({ profile: t.Literal('zone-editor-lists-v1'),
   realm: readId, lists: t.Array(t.Object({ collection: readId, name: readName,

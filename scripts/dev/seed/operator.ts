@@ -301,7 +301,8 @@ export async function grantHomeSeedAuthority(input: LocalOperatorInput,
   grants: readonly { action: 'work.edit' | 'work.read' | 'content.draft'
     | 'content.publish' | 'content.search-eligibility' | 'publication.adopt'
     | 'rating.context.create' | 'rating.observation.set' | 'context.create'
-    | 'classification.proposition.define'; scope: string }[]) {
+    | 'classification.proposition.define' | 'classification.context.configure'
+    | 'classification.decision.set'; scope: string }[]) {
   loopback(input.accessDatabaseUrl);
   const scopePrefix = { 'work.edit': 'work:edit:https://rezics.com/id/',
     'work.read': 'work:read:https://rezics.com/id/',
@@ -312,6 +313,8 @@ export async function grantHomeSeedAuthority(input: LocalOperatorInput,
     'rating.context.create': 'rating:context:https://rezics.com/id/',
     'rating.observation.set': 'rating:observe:https://rezics.com/id/',
     'context.create': 'context:create:root',
+    'classification.context.configure': 'classification:context:https://rezics.com/id/',
+    'classification.decision.set': 'classification:decide:https://rezics.com/id/',
     'classification.proposition.define': 'classification:define:global' } as const;
   if (grants.length > 10 || grants.some(({ action, scope }) =>
     action === 'context.create' || action === 'classification.proposition.define'

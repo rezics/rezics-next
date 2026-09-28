@@ -5,25 +5,31 @@ import { stableId, type SeedState, type SpaceReceipt } from './state.ts';
 import { officialPresentation, withoutTabLabels } from './official-plan.ts';
 import { SeedApiError } from './api.ts';
 
-/** Public Minecraft and loader concepts back the official Mods filter chips. */
-async function modsContext(state: SeedState, steward: SeedState['createdRealms'][number]['steward']) {
+/** Replay the same exact definitions for navigation and classification decisions. */
+export async function modsConcepts(state: SeedState, steward: SeedState['createdRealms'][number]['steward']) {
   const input = { ...state.operatorInput!, ownerAccountSubject: steward.accountId,
     actingSubject: steward.actingSubject };
   await grantHomeSeedAuthority(input, [
     { action: 'classification.proposition.define', scope: 'classification:define:global' },
     { action: 'context.create', scope: 'context:create:root' },
   ]);
-  const concepts: Array<{ concept: string; definitionRevision: string }> = [];
+  const concepts = new Map<string, { concept: string; sense: string; definitionRevision: string }>();
   for (const label of ['Minecraft', 'Fabric', 'Forge', 'NeoForge']) {
-    concepts.push(await state.api.post<{ concept: string; definitionRevision: string }>(
+    concepts.set(label, await state.api.post<{ concept: string; sense: string; definitionRevision: string }>(
       '/v1/classification-propositions', { profile: 'classification-proposition-v1', label,
         actingSubject: steward.actingSubject }, steward.token,
     // A new stable namespace leaves legacy cancelled admissions replayable.
     seedKey('official-mod-concept-v3', label.toLowerCase())));
   }
+  return concepts;
+}
+
+/** Public Minecraft and loader concepts back the official Mods filter chips. */
+async function modsContext(state: SeedState, steward: SeedState['createdRealms'][number]['steward']) {
+  const concepts = await modsConcepts(state, steward);
   const context = await state.api.post<{ context: string }>('/v1/contexts', {
     profile: 'context-v1', role: 'shared', disclosure: 'public', base: null,
-    entries: concepts.map(item => ({ target: item.concept, relation: null, state: 'defined',
+    entries: [...concepts.values()].map(item => ({ target: item.concept, relation: null, state: 'defined',
       definition: item.definitionRevision, applicability: [] })),
     actingSubject: steward.actingSubject }, steward.token, seedKey('official-mod-context', 'games'));
   return context.context;

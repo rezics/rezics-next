@@ -2,9 +2,11 @@ import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { startMediaStack } from './media-support.ts';
 import { createMainApp } from '../../../services/main/src/app.ts';
-import { DiscoveryProjection, discoverySeekSql } from '../../../services/main/src/modules/discovery/store.ts';
+import { DiscoveryProjection, discoverySeekSql, discoverySelectedTermsSql,
+  DISCOVERY_SELECTED_TERM_COST } from '../../../services/main/src/modules/discovery/store.ts';
 import type { DiscoveryBasis } from '../../../services/main/src/modules/discovery/contract.ts';
-import { MANAGE_ACTION, MANAGE_SCOPE, RecommendationStale } from '../../../services/main/src/modules/recommendation/derived-generation.ts';
+import { MANAGE_ACTION, MANAGE_SCOPE, RecommendationRestart, RecommendationStale,
+  RecommendationUnavailable } from '../../../services/main/src/modules/recommendation/derived-generation.ts';
 import { GLOBAL_CONTEXT_SCOPE } from '../../../services/main/src/modules/rating/global.ts';
 import { GRAPHS, RV, iri } from '../../../services/main/src/modules/work/activate.ts';
 import { AccountAssertionDenied } from '../../../services/main/src/modules/account/verify-assertion.ts';
@@ -77,6 +79,21 @@ test('Discovery projection: native scoped reads, durable builds, disclosure, cur
     for (const target of [first, second]) await json(await a.send('POST', '/v1/classification-decisions', {
       profile: 'classification-direct-decision-v1', work: target.work, mainVersion: target.mainVersion,
       sense: term.sense, context: { kind: 'global' }, outcome: 'accepted', expectedDecisionHead: null, actingSubject: a.actor }), 201);
+    // Bootstrap heads are allowed only with the fixed global profile's revision proof.
+    // A head from another model must not weaken the global decision binding.
+    const bootstrapProfile = 'https://rezics.com/definition/classification-global-context-v1';
+    const replaceGlobalProfile = (before: string, after: string) => stack.fuseki.update(`
+      PREFIX rv: <${RV}> DELETE { GRAPH ${iri(GRAPHS.revisions)} { ?head rv:modelRevision ${iri(before)} } }
+      INSERT { GRAPH ${iri(GRAPHS.revisions)} { ?head rv:modelRevision ${iri(after)} } }
+      WHERE { GRAPH ${iri(GRAPHS.current)} { <urn:rezics:classification-context:global> rv:head ?head }
+        GRAPH ${iri(GRAPHS.revisions)} { ?head rv:modelRevision ${iri(before)} } }`);
+    await replaceGlobalProfile(bootstrapProfile, 'urn:rezics:wrong-global-profile');
+    try {
+      expect((await a.send('POST', '/v1/classification-decisions', {
+        profile: 'classification-direct-decision-v1', work: third.work, mainVersion: third.mainVersion,
+        sense: term.sense, context: { kind: 'global' }, outcome: 'accepted', expectedDecisionHead: null,
+        actingSubject: a.actor })).status).toBe(409);
+    } finally { await replaceGlobalProfile('urn:rezics:wrong-global-profile', bootstrapProfile); }
     await json(await a.send('POST', '/v1/classification-decisions', {
       profile: 'classification-direct-decision-v1', work: first.work, mainVersion: first.mainVersion,
       sense: term.sense, context: { kind: 'realm-classification', id: realm.realm }, outcome: 'rejected',
@@ -177,13 +194,24 @@ test('Discovery projection: native scoped reads, durable builds, disclosure, cur
     expect(translated.items[0]?.primaryCredits).toEqual([]);
     const popular = (params: Record<string, string> = {}) =>
       call(`/v1/discovery/popular-terms?${new URLSearchParams(params)}`);
-    const globalTerms = await json<{ items: { sense: string; name: { value: string; language: string };
+    const globalTerms = await json<{ sourcePosition: { dataEpoch: string; sequence: string }; items: { sense: string; name: { value: string; language: string };
       workCount: number }[] }>(await popular({ language: 'fr' }));
     expect(globalTerms.items).toMatchObject([{ sense: term.sense, name: { value: 'Aventure', language: 'fr' },
       workCount: 2 }]);
     const realmTerms = await json<typeof globalTerms>(await popular({ scope: 'realm', realm: realm.realm,
       context: local.context }));
     expect(realmTerms.items).toMatchObject([{ sense: term.sense, workCount: 1 }]);
+    // Configured chips can select any exact Sense, including one absent from the population.
+    const selectedGeneration = await owner.active({ ...base, owner: null }, globalTerms.sourcePosition);
+    expect(await owner.selectedTerms(selectedGeneration, [term.sense, uuid()]))
+      .toEqual([{ term: term.sense, concept: term.concept, work_count: '2' }]);
+    expect(await owner.selectedTerms(selectedGeneration, [])).toEqual([]);
+    for (const terms of [[term.sense, term.sense], ['invalid'],
+      Array.from({ length: DISCOVERY_SELECTED_TERM_COST.terms + 1 }, uuid)]) {
+      await expect(owner.selectedTerms(selectedGeneration, terms)).rejects.toBeInstanceOf(RecommendationUnavailable);
+    }
+    await expect(owner.selectedTerms({ ...selectedGeneration, recovery_generation: '-1' }, [term.sense]))
+      .rejects.toBeInstanceOf(RecommendationRestart);
     expect((await popular({ scope: 'realm' })).status).toBe(400);
     expect((await popular({ scope: 'realm', realm: uuid() })).status).toBe(404);
     expect((await popular({ limit: '21' })).status).toBe(400);
@@ -221,6 +249,22 @@ test('Discovery projection: native scoped reads, durable builds, disclosure, cur
       CROSS JOIN LATERAL unnest(ARRAY['', CASE WHEN i % 100 = 0 THEN $2 ELSE $3 END]) term`,
     [planBuild.generation, term.sense, uuid()]);
     await stack.accessPool.query('ANALYZE access.discovery_entry');
+    await stack.accessPool.query(`INSERT INTO access.discovery_term_count (generation_id, term, concept, work_count)
+      SELECT $1, 'https://rezics.com/id/00000000-0000-4000-8000-' || lpad(i::text,12,'0'), $2, 20001 - i
+      FROM generate_series(1,20000) i`, [planBuild.generation, term.concept]);
+    await stack.accessPool.query('ANALYZE access.discovery_term_count');
+    const selectedKeys = Array.from({ length: DISCOVERY_SELECTED_TERM_COST.terms }, (_, index) =>
+      `https://rezics.com/id/00000000-0000-4000-8000-${String(19981 + index).padStart(12, '0')}`);
+    const selectedPlan = (await stack.accessPool.query(`EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON) ${discoverySelectedTermsSql}`,
+      [planBuild.generation, selectedKeys])).rows[0]['QUERY PLAN'][0].Plan;
+    const countNodes = (node: Record<string, unknown>): Record<string, unknown>[] =>
+      [node, ...((node.Plans ?? []) as Record<string, unknown>[]).flatMap(countNodes)];
+    const selectedNodes = countNodes(selectedPlan);
+    expect(selectedNodes.some(node => node['Index Name'] === 'discovery_term_count_pkey')).toBe(true);
+    expect(selectedNodes.some(node => ['Sort', 'Seq Scan', 'Aggregate'].includes(String(node['Node Type'])))).toBe(false);
+    expect(Math.max(...selectedNodes.map(node => Number(node['Actual Rows'] ?? 0)))).toBeLessThanOrEqual(20);
+    expect((await owner.selectedTerms({ ...selectedGeneration, generation_id: planBuild.generation }, selectedKeys)))
+      .toHaveLength(20);
     for (const sort of ['recent', 'top-rated'] as const) for (const type of ['', 'https://schema.org/Book']) {
       for (const filter of ['', term.sense]) for (const continued of [false, true]) {
       const explained = await stack.accessPool.query(`EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON) ${discoverySeekSql(sort, continued)}`,

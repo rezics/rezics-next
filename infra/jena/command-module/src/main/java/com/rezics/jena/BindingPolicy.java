@@ -299,7 +299,18 @@ final class BindingPolicy {
             exact("decision", RV + "contextRevision", iri(arg("context-revision")));
         } else {
             absent("context", RV + "realm"); absent("context", RV + "fallbackContext");
-            absent("context", RV + "head"); absent("decision", RV + "contextRevision");
+            // Legacy globals have no head. The system bootstrap retains its own
+            // revision; it is not a Realm policy revision on a global Decision.
+            var heads = data.find(iri(GLOBAL), iri(RV + "head"), Node.ANY).toList();
+            if (heads.size() > 1) violations.add("global classification head is ambiguous");
+            for (var head : heads) {
+                if (!head.getObject().isURI()) throw new IllegalArgumentException("invalid global classification head");
+                String revision = head.getObject().getURI();
+                at(revision, "http://www.w3.org/1999/02/22-rdf-syntax-ns#type", iri(RV + "RevisionAnchor"));
+                check(revision, RV + "component", iri(GLOBAL), true);
+                check(revision, RV + "modelRevision", iri("https://rezics.com/definition/classification-global-context-v1"), true);
+            }
+            absent("decision", RV + "contextRevision");
         }
         if (arg("predecessor") == null) absent("decision", RV + "predecessor");
         else exact("decision", RV + "predecessor", iri(arg("predecessor")));

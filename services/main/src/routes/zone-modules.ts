@@ -2,6 +2,7 @@ import { Elysia, t } from 'elysia';
 import { readZoneChapters, readZoneDecisions, readZoneWorks } from '../modules/zone-modules/read.ts';
 import { readZoneReplies } from '../modules/zone-modules/replies.ts';
 import { readZoneGenres } from '../modules/zone-modules/genres.ts';
+import { discoveryError } from '../modules/discovery/management.ts';
 import { readZoneEditorLists } from '../modules/zone-modules/editor-lists.ts';
 import { zoneChapterPage, zoneDecisionPage, zoneEditorLists, zoneGenrePage, zoneReplyPage, zoneWorkPage }
   from '../modules/zone-modules/contract.ts';
@@ -77,7 +78,7 @@ export function zoneModuleRoutes(work: MainWorkDependencies) {
     }, async ({ request, params: path, query: options }) => {
       try { return Response.json(await workRead(work, new Request(request.url), options,
         session => readZoneGenres(session, id(path.realm), id(path.context))), { headers }); }
-      catch (error) { return workReadError(error); }
+      catch (error) { return discoveryError(error); }
     })
     .get('/v1/realms/:realm/modules/editor-lists', {
       params, query: t.Object({ language: t.Optional(readLanguage) }, { additionalProperties: false }),

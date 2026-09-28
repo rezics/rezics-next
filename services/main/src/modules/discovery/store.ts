@@ -26,6 +26,10 @@ const basisOf = (row: DiscoveryGeneration): OwnedDiscoveryBasis => ({ scope: row
   realm: row.realm, context: row.context, owner: row.principal_id });
 export const discoveryScopeKey = (basis: OwnedDiscoveryBasis) => digest(['discovery-standing-mean-v1', basis]);
 
+export const DISCOVERY_SELECTED_TERM_COST = { terms: DISCOVERY_COST.pageSize, queries: 1 } as const;
+export const discoverySelectedTermsSql = `SELECT term, concept, work_count::text FROM access.discovery_term_count
+  WHERE generation_id = $1 AND term = ANY($2::text[]) LIMIT ${DISCOVERY_SELECTED_TERM_COST.terms}`;
+
 export function discoverySeekSql(sort: 'recent' | 'top-rated', continuation: boolean): string {
   const key = sort === 'recent' ? 'recent_order' : 'rating_order';
   return `SELECT work, ${key}::text AS order_key, payload FROM access.discovery_entry
@@ -356,6 +360,21 @@ export class DiscoveryProjection {
         throw new RecommendationUnavailable('Discovery page exceeds its byte budget');
       }
       return result;
+    });
+  }
+
+  /** Exact selected-Sense lookups on (generation_id, term), independent of popularity rank.
+   * Absent rows mean zero only when the caller verifies the generation is fresh. */
+  async selectedTerms(row: DiscoveryGeneration, terms: readonly string[]) {
+    if (terms.length > DISCOVERY_SELECTED_TERM_COST.terms || new Set(terms).size !== terms.length
+      || terms.some(term => !/^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/.test(term))) {
+      throw new RecommendationUnavailable('Selected term page is out of bounds');
+    }
+    return inAccess(this.pool, async client => {
+      const fence = await sourceFence(client);
+      if (fence.generation !== row.recovery_generation) throw new RecommendationRestart('Discovery recovery basis expired');
+      return terms.length ? (await client.query<{ term: string; concept: string; work_count: string }>(
+        discoverySelectedTermsSql, [row.generation_id, terms])).rows : [];
     });
   }
 

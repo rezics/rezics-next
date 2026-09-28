@@ -1,5 +1,6 @@
 import type { SeedState } from './state.ts';
 import { works } from './plan.ts';
+import { checkModsDiscovery } from './official-zones-step.ts';
 
 export async function checkPublicReads(state: SeedState) {
   const { endpoints, findings } = state;
@@ -38,4 +39,5 @@ export async function checkPublicReads(state: SeedState) {
       }
     });
   }
+  await state.optional('Mods discovery refresh', () => checkModsDiscovery(state));
 }
