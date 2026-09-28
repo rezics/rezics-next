@@ -1,0 +1,17 @@
+id: no-native-select
+language: Tsx
+severity: error
+message: Web controls use the styled @rezics/ui Select or Menu.
+files:
+  - apps/web/**/*.js
+  - apps/web/**/*.jsx
+  - apps/web/**/*.ts
+  - apps/web/**/*.tsx
+rule:
+  any:
+    - kind: jsx_opening_element
+      regex: '^<select(?:\s|>)'
+    - kind: jsx_self_closing_element
+      regex: '^<select(?:\s|/>)'
+    - kind: import_statement
+      regex: "(?s)^import\\b.*['\"]@rezics/ui/native-select['\"]"

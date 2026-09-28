@@ -1,0 +1,8 @@
+id: no-native-select
+valid:
+  - "import { Select } from '@rezics/ui/select'; const x = <Select collection={items} />;"
+  - "const x = <selectable-button />;"
+invalid:
+  - "const x = <select name='scope'><option value='all'>All</option></select>;"
+  - "const x = <select name='scope' />;"
+  - "import { NativeSelect } from '@rezics/ui/native-select';"
