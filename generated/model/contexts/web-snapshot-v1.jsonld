@@ -1,0 +1,58 @@
+{
+  "@context": {
+    "sh": {
+      "@id": "http://www.w3.org/ns/shacl#",
+      "@prefix": true
+    },
+    "rdf": {
+      "@id": "http://www.w3.org/1999/02/22-rdf-syntax-ns#",
+      "@prefix": true
+    },
+    "xsd": {
+      "@id": "http://www.w3.org/2001/XMLSchema#",
+      "@prefix": true
+    },
+    "rv": {
+      "@id": "https://rezics.com/vocab/",
+      "@prefix": true
+    },
+    "rdf:type": {
+      "@id": "http://www.w3.org/1999/02/22-rdf-syntax-ns#type",
+      "@type": "@id"
+    },
+    "rv:acquisition": {
+      "@id": "https://rezics.com/vocab/acquisition",
+      "@type": "@id"
+    },
+    "rv:byteDigest": {
+      "@id": "https://rezics.com/vocab/byteDigest"
+    },
+    "rv:byteLength": {
+      "@id": "https://rezics.com/vocab/byteLength",
+      "@type": "xsd:integer"
+    },
+    "rv:coverageComplete": {
+      "@id": "https://rezics.com/vocab/coverageComplete",
+      "@type": "@id"
+    },
+    "rv:coverageScope": {
+      "@id": "https://rezics.com/vocab/coverageScope"
+    },
+    "rv:fetchedAt": {
+      "@id": "https://rezics.com/vocab/fetchedAt",
+      "@type": "xsd:dateTime"
+    },
+    "rv:object": {
+      "@id": "https://rezics.com/vocab/object",
+      "@type": "@id"
+    },
+    "rv:publication": {
+      "@id": "https://rezics.com/vocab/publication",
+      "@type": "@id"
+    },
+    "rv:work": {
+      "@id": "https://rezics.com/vocab/work",
+      "@type": "@id"
+    }
+  }
+}

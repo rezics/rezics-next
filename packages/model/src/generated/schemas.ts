@@ -626,6 +626,14 @@ export const RelationOccurrenceV1RevisionShapeSchema = Type.Object({ "@id": Type
 
 export type RelationOccurrenceV1RevisionShape = Static<typeof RelationOccurrenceV1RevisionShapeSchema>;
 
+export const ReleaseV1ReleaseShapeSchema = Type.Object({ "@id": Type.String({ minLength: 1 }), "rdf:type": Type.Array(Type.Literal("https://rezics.com/vocab/Release"), { maxItems: 1, minItems: 1 }), "rv:work": Type.Array(Type.String({}), { minItems: 1, maxItems: 1 }), "rv:releaseKind": Type.Array(Type.Union([Type.Literal("formal"), Type.Literal("web"), Type.Literal("fixed"), Type.Literal("virtual")]), { minItems: 1, maxItems: 1 }), "rv:releaseStatus": Type.Array(Type.Union([Type.Literal("official"), Type.Literal("unofficial"), Type.Literal("virtual"), Type.Literal("withdrawn"), Type.Literal("cancelled")]), { minItems: 1, maxItems: 1 }), "rv:releaseHead": Type.Array(Type.String({}), { minItems: 1, maxItems: 1 }), "rv:contentLanguages": Type.Optional(Type.Array(Type.String({"maxLength":400}), { maxItems: 1 })), "rv:titleLanguage": Type.Optional(Type.Array(Type.String({}), { maxItems: 1 })), "rv:tracklistLanguage": Type.Optional(Type.Array(Type.String({}), { maxItems: 1 })), "rv:originalLanguages": Type.Optional(Type.Array(Type.String({"maxLength":200}), { maxItems: 1 })), "rv:isTranslation": Type.Optional(Type.Array(Type.Literal("true"), { maxItems: 1 })), "rv:originalUrl": Type.Optional(Type.Array(Type.String({"maxLength":512}), { maxItems: 1 })), "rv:fixedRelease": Type.Optional(Type.Array(Type.String({}), { maxItems: 1 })), "rv:coverageScope": Type.Optional(Type.Array(Type.String({"maxLength":120}), { maxItems: 1 })), "rv:coverageComplete": Type.Optional(Type.Array(Type.Union([Type.Literal("true"), Type.Literal("false")]), { maxItems: 1 })) }, { additionalProperties: true });
+
+export type ReleaseV1ReleaseShape = Static<typeof ReleaseV1ReleaseShapeSchema>;
+
+export const ReleaseV1RevisionShapeSchema = Type.Object({ "@id": Type.String({ minLength: 1 }), "rdf:type": Type.Array(Type.Union([Type.Literal("https://rezics.com/vocab/ReleaseRevision"), Type.Literal("https://rezics.com/vocab/RevisionAnchor")]), { minItems: 2, maxItems: 2 }), "rv:component": Type.Array(Type.String({}), { minItems: 1, maxItems: 1 }), "rv:releaseState": Type.Array(Type.String({"maxLength":8192}), { minItems: 1, maxItems: 1 }), "rv:predecessor": Type.Optional(Type.Array(Type.String({}), { maxItems: 1 })), "rv:manifest": Type.Array(Type.String({}), { minItems: 1, maxItems: 1 }), "rv:correctionEvidence": Type.Optional(Type.Array(Type.String({}), { maxItems: 1 })), "rv:modelRevision": Type.Array(Type.Literal("https://rezics.com/definition/release-v1"), { maxItems: 1, minItems: 1 }), "rv:shapeRevision": Type.Array(Type.Literal("https://rezics.com/definition/release-v1"), { maxItems: 1, minItems: 1 }), "rv:dataEpoch": Type.Array(Type.String({}), { minItems: 1, maxItems: 1 }), "rv:sequence": Type.Array(Type.Integer({"minimum":1}), { minItems: 1, maxItems: 1 }) }, { additionalProperties: true });
+
+export type ReleaseV1RevisionShape = Static<typeof ReleaseV1RevisionShapeSchema>;
+
 export const RightsOfferingV1DeclarationShapeSchema = Type.Intersect([Type.Object({ "@id": Type.String({ minLength: 1 }), "rdf:type": Type.Array(Type.Union([Type.Literal("https://rezics.com/vocab/RightsDeclaration"), Type.Literal("https://rezics.com/vocab/RevisionAnchor")]), { minItems: 2, maxItems: 2 }), "rv:target": Type.Array(Type.String({}), { minItems: 1, maxItems: 1 }), "rv:declarationScope": Type.Array(Type.String({}), { minItems: 1, maxItems: 1 }), "rv:instrument": Type.Array(Type.String({}), { minItems: 1, maxItems: 1 }), "rv:grantorKnowledge": Type.Array(Type.Union([Type.Literal("https://rezics.com/vocab/Known"), Type.Literal("https://rezics.com/vocab/Unknown")]), { minItems: 1, maxItems: 1 }), "rv:declaredBy": Type.Optional(Type.Array(Type.String({}), { maxItems: 1 })), "rv:declaredAt": Type.Optional(Type.Array(Type.String({ pattern: "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?(?:Z|[+-]\\d{2}:\\d{2})$" }), { maxItems: 1 })), "rv:provenance": Type.Array(Type.String({}), { minItems: 1, maxItems: 1 }), "rv:authorityEvidence": Type.Optional(Type.Array(Type.String({}), { maxItems: 1 })), "rv:declarationOrigin": Type.Array(Type.Union([Type.Literal("https://rezics.com/vocab/NativeDeclaration"), Type.Literal("https://rezics.com/vocab/ImportedEvidence")]), { minItems: 1, maxItems: 1 }), "rv:operation": Type.Array(Type.String({}), { minItems: 1, maxItems: 1 }), "rv:dataEpoch": Type.Array(Type.String({}), { minItems: 1, maxItems: 1 }), "rv:sequence": Type.Array(Type.Integer({"minimum":1}), { minItems: 1, maxItems: 1 }), "rv:modelRevision": Type.Array(Type.Literal("https://rezics.com/definition/rights-offering-v1"), { maxItems: 1, minItems: 1 }) }, { additionalProperties: true }), Type.Union([Type.Object({ "@id": Type.String({ minLength: 1 }), "rv:grantorKnowledge": Type.Array(Type.String({}), { minItems: 1, contains: Type.Literal("https://rezics.com/vocab/Known") }), "rv:declaredBy": Type.Array(Type.String({}), { minItems: 1 }) }, { additionalProperties: true }), Type.Object({ "@id": Type.String({ minLength: 1 }), "rv:grantorKnowledge": Type.Array(Type.String({}), { minItems: 1, contains: Type.Literal("https://rezics.com/vocab/Unknown") }), "rv:declaredBy": Type.Optional(Type.Array(Type.Unknown(), { maxItems: 0 })) }, { additionalProperties: true })])]);
 
 export type RightsOfferingV1DeclarationShape = Static<typeof RightsOfferingV1DeclarationShapeSchema>;
@@ -874,6 +882,14 @@ export const ValueExactV1ExternalReferenceShapeSchema = Type.Object({ "@id": Typ
 
 export type ValueExactV1ExternalReferenceShape = Static<typeof ValueExactV1ExternalReferenceShapeSchema>;
 
+export const WebPublicationV1PublicationShapeSchema = Type.Object({ "@id": Type.String({ minLength: 1 }), "rdf:type": Type.Array(Type.Literal("https://rezics.com/vocab/Release"), { maxItems: 1, minItems: 1 }), "rv:releaseKind": Type.Array(Type.Literal("web"), { minItems: 1, maxItems: 1 }), "rv:originalUrl": Type.Array(Type.String({"maxLength":512}), { minItems: 1, maxItems: 1 }) }, { additionalProperties: true });
+
+export type WebPublicationV1PublicationShape = Static<typeof WebPublicationV1PublicationShapeSchema>;
+
+export const WebSnapshotV1SnapshotShapeSchema = Type.Object({ "@id": Type.String({ minLength: 1 }), "rdf:type": Type.Array(Type.Literal("https://rezics.com/vocab/WebSnapshot"), { maxItems: 1, minItems: 1 }), "rv:publication": Type.Array(Type.String({}), { minItems: 1, maxItems: 1 }), "rv:work": Type.Array(Type.String({}), { minItems: 1, maxItems: 1 }), "rv:fetchedAt": Type.Array(Type.String({ pattern: "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?(?:Z|[+-]\\d{2}:\\d{2})$" }), { minItems: 1, maxItems: 1 }), "rv:byteDigest": Type.Array(Type.String({"pattern":"^[0-9a-f]{64}$"}), { minItems: 1, maxItems: 1 }), "rv:byteLength": Type.Array(Type.Integer({"minimum":1}), { minItems: 1, maxItems: 1 }), "rv:coverageScope": Type.Array(Type.String({"maxLength":120}), { minItems: 1, maxItems: 1 }), "rv:coverageComplete": Type.Array(Type.Union([Type.Literal("true"), Type.Literal("false")]), { minItems: 1, maxItems: 1 }), "rv:object": Type.Array(Type.String({}), { minItems: 1, maxItems: 1 }), "rv:acquisition": Type.Array(Type.Union([Type.Literal("fixture"), Type.Literal("fetch")]), { minItems: 1, maxItems: 1 }) }, { additionalProperties: true });
+
+export type WebSnapshotV1SnapshotShape = Static<typeof WebSnapshotV1SnapshotShapeSchema>;
+
 export const WorkAddressClaimV1BindingShapeSchema = Type.Object({ "@id": Type.String({ minLength: 1 }), "rdf:type": Type.Array(Type.String({}), { minItems: 1, contains: Type.Literal("https://rezics.com/vocab/RouteBinding") }), "rv:routeNamespace": Type.Array(Type.Literal("work"), { maxItems: 1, minItems: 1 }), "rv:normalizedSlug": Type.Array(Type.String({"minLength":1,"maxLength":64,"pattern":"^[a-z0-9]+(-[a-z0-9]+)*$"}), { minItems: 1, maxItems: 1 }), "rv:targetWork": Type.Array(Type.String({}), { minItems: 1, maxItems: 1 }), "rv:routeState": Type.Array(Type.Literal("https://rezics.com/vocab/Current"), { maxItems: 1, minItems: 1 }), "rv:routeRevision": Type.Array(Type.String({}), { minItems: 1, maxItems: 1 }) }, { additionalProperties: true });
 
 export type WorkAddressClaimV1BindingShape = Static<typeof WorkAddressClaimV1BindingShapeSchema>;
@@ -954,6 +970,14 @@ export const WorkMetadataDetailsV1RevisionShapeSchema = Type.Object({ "@id": Typ
 
 export type WorkMetadataDetailsV1RevisionShape = Static<typeof WorkMetadataDetailsV1RevisionShapeSchema>;
 
+export const WorkMetadataDetailsV2ComponentShapeSchema = Type.Object({ "@id": Type.String({ minLength: 1 }), "rdf:type": Type.Array(Type.String({}), { minItems: 1, contains: Type.Literal("https://rezics.com/vocab/EditionRecord") }), "rv:work": Type.Array(Type.String({}), { minItems: 1, maxItems: 1 }), "rv:metadataKind": Type.Array(Type.Literal("edition"), { minItems: 1, maxItems: 1 }), "rv:metadataHead": Type.Array(Type.String({}), { minItems: 1, maxItems: 1 }), "rv:editionState": Type.Array(Type.Union([Type.Literal("https://rezics.com/vocab/Active"), Type.Literal("https://rezics.com/vocab/Withdrawn")]), { minItems: 1, maxItems: 1 }), "rv:editionLanguage": Type.Optional(Type.Array(Type.String({}), { maxItems: 1 })), "rv:contentLanguages": Type.Optional(Type.Array(Type.String({"maxLength":400}), { maxItems: 1 })), "rv:titleLanguage": Type.Optional(Type.Array(Type.String({}), { maxItems: 1 })), "rv:tracklistLanguage": Type.Optional(Type.Array(Type.String({}), { maxItems: 1 })), "rv:originalLanguages": Type.Optional(Type.Array(Type.String({"maxLength":200}), { maxItems: 1 })), "rv:isTranslation": Type.Optional(Type.Array(Type.Literal("true"), { maxItems: 1 })) }, { additionalProperties: true });
+
+export type WorkMetadataDetailsV2ComponentShape = Static<typeof WorkMetadataDetailsV2ComponentShapeSchema>;
+
+export const WorkMetadataDetailsV2RevisionShapeSchema = Type.Object({ "@id": Type.String({ minLength: 1 }), "rdf:type": Type.Array(Type.Union([Type.Literal("https://rezics.com/vocab/WorkMetadataDetailsV2Revision"), Type.Literal("https://rezics.com/vocab/RevisionAnchor")]), { minItems: 2, maxItems: 2 }), "rv:component": Type.Array(Type.String({}), { minItems: 1, maxItems: 1 }), "rv:metadataState": Type.Array(Type.String({"maxLength":65536}), { minItems: 1, maxItems: 1 }), "rv:predecessor": Type.Optional(Type.Array(Type.String({}), { maxItems: 1 })), "rv:manifest": Type.Array(Type.String({}), { minItems: 1, maxItems: 1 }), "rv:modelRevision": Type.Array(Type.Literal("https://rezics.com/definition/work-metadata-details-v2"), { maxItems: 1, minItems: 1 }), "rv:shapeRevision": Type.Array(Type.Literal("https://rezics.com/definition/work-metadata-details-v2"), { maxItems: 1, minItems: 1 }), "rv:dataEpoch": Type.Array(Type.String({}), { minItems: 1, maxItems: 1 }), "rv:sequence": Type.Array(Type.Integer({"minimum":1}), { minItems: 1, maxItems: 1 }) }, { additionalProperties: true });
+
+export type WorkMetadataDetailsV2RevisionShape = Static<typeof WorkMetadataDetailsV2RevisionShapeSchema>;
+
 export const WorkMetadataV1WorkShapeSchema = Type.Object({ "@id": Type.String({ minLength: 1 }), "rdf:type": Type.Array(Type.String({}), { minItems: 1, contains: Type.Literal("https://schema.org/CreativeWork") }), "rv:mainVersion": Type.Array(Type.String({}), { minItems: 1, maxItems: 1 }), "rv:continuityProfile": Type.Array(Type.String({}), { minItems: 1, maxItems: 1 }), "rv:scalarValue": Type.Optional(Type.Array(Type.Unknown(), { maxItems: 1 })) }, { additionalProperties: true });
 
 export type WorkMetadataV1WorkShape = Static<typeof WorkMetadataV1WorkShapeSchema>;
@@ -961,6 +985,14 @@ export type WorkMetadataV1WorkShape = Static<typeof WorkMetadataV1WorkShapeSchem
 export const WorkMetadataV1MainVersionShapeSchema = Type.Object({ "@id": Type.String({ minLength: 1 }), "rdf:type": Type.Array(Type.String({}), { minItems: 1, contains: Type.Literal("https://rezics.com/vocab/MainVersion") }), "rv:work": Type.Array(Type.String({}), { minItems: 1, maxItems: 1 }), "rv:hostingPolicy": Type.Array(Type.Literal("https://rezics.com/vocab/MetadataOnly"), { minItems: 1, maxItems: 1 }) }, { additionalProperties: true });
 
 export type WorkMetadataV1MainVersionShape = Static<typeof WorkMetadataV1MainVersionShapeSchema>;
+
+export const WorkMetadataV2WorkShapeSchema = Type.Object({ "@id": Type.String({ minLength: 1 }), "rdf:type": Type.Array(Type.String({}), { minItems: 1, contains: Type.Literal("https://schema.org/CreativeWork") }), "rv:mainVersion": Type.Array(Type.String({}), { minItems: 1, maxItems: 1 }), "rv:continuityProfile": Type.Array(Type.String({}), { minItems: 1, maxItems: 1 }), "rv:scalarValue": Type.Optional(Type.Array(Type.Unknown(), { maxItems: 1 })), "rv:release": Type.Optional(Type.Array(Type.String({}), { maxItems: 64 })) }, { additionalProperties: true });
+
+export type WorkMetadataV2WorkShape = Static<typeof WorkMetadataV2WorkShapeSchema>;
+
+export const WorkMetadataV2MainVersionShapeSchema = Type.Object({ "@id": Type.String({ minLength: 1 }), "rdf:type": Type.Array(Type.String({}), { minItems: 1, contains: Type.Literal("https://rezics.com/vocab/MainVersion") }), "rv:work": Type.Array(Type.String({}), { minItems: 1, maxItems: 1 }), "rv:hostingPolicy": Type.Array(Type.Literal("https://rezics.com/vocab/MetadataOnly"), { minItems: 1, maxItems: 1 }) }, { additionalProperties: true });
+
+export type WorkMetadataV2MainVersionShape = Static<typeof WorkMetadataV2MainVersionShapeSchema>;
 
 export const WorkNativeChildV1ChildShapeSchema = Type.Object({ "@id": Type.String({ minLength: 1 }), "rdf:type": Type.Array(Type.String({}), { minItems: 1, contains: Type.Literal("https://rezics.com/vocab/NativeChild") }), "rv:childRevision": Type.Array(Type.String({}), { minItems: 1, maxItems: 1 }), "rv:retiredBy": Type.Optional(Type.Array(Type.String({}), { maxItems: 1 })), "rv:work": Type.Array(Type.String({}), { minItems: 1, maxItems: 1 }), "rv:childField": Type.Array(Type.String({"maxLength":100}), { minItems: 1, maxItems: 1 }), "rv:sourceKey": Type.Array(Type.String({"maxLength":200}), { minItems: 1, maxItems: 1 }), "schema:position": Type.Array(Type.Integer({"minimum":0,"maximum":127}), { minItems: 1, maxItems: 1 }), "rv:editControl": Type.Array(Type.Literal("https://rezics.com/vocab/HumanConfirmed"), { maxItems: 1, minItems: 1 }), "rv:rightsStatus": Type.Array(Type.Literal("https://rezics.com/vocab/Undetermined"), { maxItems: 1, minItems: 1 }) }, { additionalProperties: true });
 
@@ -1167,6 +1199,8 @@ export const shapeSchemas = {
   "https://rezics.com/definition/relation-occurrence-v1/occurrence-shape": RelationOccurrenceV1OccurrenceShapeSchema,
   "https://rezics.com/definition/relation-occurrence-v1/participation-shape": RelationOccurrenceV1ParticipationShapeSchema,
   "https://rezics.com/definition/relation-occurrence-v1/revision-shape": RelationOccurrenceV1RevisionShapeSchema,
+  "https://rezics.com/definition/release-v1/release-shape": ReleaseV1ReleaseShapeSchema,
+  "https://rezics.com/definition/release-v1/revision-shape": ReleaseV1RevisionShapeSchema,
   "https://rezics.com/definition/rights-offering-v1/declaration-shape": RightsOfferingV1DeclarationShapeSchema,
   "https://rezics.com/definition/rights-offering-v1/slot-shape": RightsOfferingV1SlotShapeSchema,
   "https://rezics.com/definition/rights-offering-v1/offering-shape": RightsOfferingV1OfferingShapeSchema,
@@ -1229,6 +1263,8 @@ export const shapeSchemas = {
   "https://rezics.com/definition/value-exact-v1/temporal-shape": ValueExactV1TemporalShapeSchema,
   "https://rezics.com/definition/value-exact-v1/directional-text-shape": ValueExactV1DirectionalTextShapeSchema,
   "https://rezics.com/definition/value-exact-v1/external-reference-shape": ValueExactV1ExternalReferenceShapeSchema,
+  "https://rezics.com/definition/web-publication-v1/publication-shape": WebPublicationV1PublicationShapeSchema,
+  "https://rezics.com/definition/web-snapshot-v1/snapshot-shape": WebSnapshotV1SnapshotShapeSchema,
   "https://rezics.com/definition/work-address-claim-v1/binding-shape": WorkAddressClaimV1BindingShapeSchema,
   "https://rezics.com/definition/work-address-claim-v1/revision-shape": WorkAddressClaimV1RevisionShapeSchema,
   "https://rezics.com/definition/work-address-disposition-v1/merged-route-shape": WorkAddressDispositionV1MergedRouteShapeSchema,
@@ -1249,8 +1285,12 @@ export const shapeSchemas = {
   "https://rezics.com/definition/work-metadata-details-v1/work-shape": WorkMetadataDetailsV1WorkShapeSchema,
   "https://rezics.com/definition/work-metadata-details-v1/component-shape": WorkMetadataDetailsV1ComponentShapeSchema,
   "https://rezics.com/definition/work-metadata-details-v1/revision-shape": WorkMetadataDetailsV1RevisionShapeSchema,
+  "https://rezics.com/definition/work-metadata-details-v2/component-shape": WorkMetadataDetailsV2ComponentShapeSchema,
+  "https://rezics.com/definition/work-metadata-details-v2/revision-shape": WorkMetadataDetailsV2RevisionShapeSchema,
   "https://rezics.com/definition/work-metadata-v1/work-shape": WorkMetadataV1WorkShapeSchema,
   "https://rezics.com/definition/work-metadata-v1/main-version-shape": WorkMetadataV1MainVersionShapeSchema,
+  "https://rezics.com/definition/work-metadata-v2/work-shape": WorkMetadataV2WorkShapeSchema,
+  "https://rezics.com/definition/work-metadata-v2/main-version-shape": WorkMetadataV2MainVersionShapeSchema,
   "https://rezics.com/definition/work-native-child-v1/child-shape": WorkNativeChildV1ChildShapeSchema,
   "https://rezics.com/definition/work-native-child-v1/revision-shape": WorkNativeChildV1RevisionShapeSchema,
   "https://rezics.com/definition/work-title-control-v1/control-shape": WorkTitleControlV1ControlShapeSchema,

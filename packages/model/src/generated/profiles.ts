@@ -794,6 +794,18 @@ export const profileRegistry = {
       "revision"
     ]
   },
+  "release-v1": {
+    "sha256": "e0018a2144113c2c3cc6bfcdc3951f1ce282c919859950c0811aa018c4a1c92c",
+    "file": "shapes/release-v1.ttl",
+    "shapes": [
+      "https://rezics.com/definition/release-v1/release-shape",
+      "https://rezics.com/definition/release-v1/revision-shape"
+    ],
+    "focusRoles": [
+      "release",
+      "revision"
+    ]
+  },
   "rights-offering-v1": {
     "sha256": "dd10150cfac446923dbb9ac8501f47a0a24bb292dd0eb4ddbad9449ed1746f85",
     "file": "shapes/rights-offering-v1.ttl",
@@ -1100,6 +1112,26 @@ export const profileRegistry = {
       "external-reference"
     ]
   },
+  "web-publication-v1": {
+    "sha256": "66ec301e867ac91a0e349d6411f2617f15196440b8520d2b56b9c43fdbc29fea",
+    "file": "shapes/web-publication-v1.ttl",
+    "shapes": [
+      "https://rezics.com/definition/web-publication-v1/publication-shape"
+    ],
+    "focusRoles": [
+      "publication"
+    ]
+  },
+  "web-snapshot-v1": {
+    "sha256": "97defb2563a74cc56ae4dad08e8b6c75165c31c2b23574cb70d734d0b891365d",
+    "file": "shapes/web-snapshot-v1.ttl",
+    "shapes": [
+      "https://rezics.com/definition/web-snapshot-v1/snapshot-shape"
+    ],
+    "focusRoles": [
+      "snapshot"
+    ]
+  },
   "work-address-claim-v1": {
     "sha256": "0447720e2e33c0f1a71259488f1710c0c837039a1a4f1931c8c1bed92f2848df",
     "file": "shapes/work-address-claim-v1.ttl",
@@ -1220,12 +1252,36 @@ export const profileRegistry = {
       "revision"
     ]
   },
+  "work-metadata-details-v2": {
+    "sha256": "7ed4adc3c3f9379e5ce7c0b80a38ff2c602df761a5ffcfcf655ae3d6831e6ae6",
+    "file": "shapes/work-metadata-details-v2.ttl",
+    "shapes": [
+      "https://rezics.com/definition/work-metadata-details-v2/component-shape",
+      "https://rezics.com/definition/work-metadata-details-v2/revision-shape"
+    ],
+    "focusRoles": [
+      "component",
+      "revision"
+    ]
+  },
   "work-metadata-v1": {
     "sha256": "ac918cf0458150520bf03f9683e6a363ad702376ebc50eaa729f98d84b3b8760",
     "file": "shapes/work-metadata-v1.ttl",
     "shapes": [
       "https://rezics.com/definition/work-metadata-v1/work-shape",
       "https://rezics.com/definition/work-metadata-v1/main-version-shape"
+    ],
+    "focusRoles": [
+      "work",
+      "main-version"
+    ]
+  },
+  "work-metadata-v2": {
+    "sha256": "5f2a13cf49bf5d8692bf4a57d5d7e10c080f916d63f5e29c7c16dc217799f866",
+    "file": "shapes/work-metadata-v2.ttl",
+    "shapes": [
+      "https://rezics.com/definition/work-metadata-v2/work-shape",
+      "https://rezics.com/definition/work-metadata-v2/main-version-shape"
     ],
     "focusRoles": [
       "work",
