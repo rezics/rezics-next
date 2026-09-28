@@ -112149,6 +112149,10 @@
               "application/json": {
                 "schema": {
                   "properties": {
+                    "contentEpoch": {
+                      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                      "type": "string"
+                    },
                     "contentOperation": {
                       "type": "string"
                     },
@@ -112285,6 +112289,7 @@
                     "revision",
                     "variant",
                     "contentOperation",
+                    "contentEpoch",
                     "sourceTreeSha256",
                     "name",
                     "description",
@@ -112305,6 +112310,10 @@
               "application/json": {
                 "schema": {
                   "properties": {
+                    "contentEpoch": {
+                      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                      "type": "string"
+                    },
                     "contentOperation": {
                       "type": "string"
                     },
@@ -112441,6 +112450,7 @@
                     "revision",
                     "variant",
                     "contentOperation",
+                    "contentEpoch",
                     "sourceTreeSha256",
                     "name",
                     "description",
@@ -112766,6 +112776,10 @@
               "application/json": {
                 "schema": {
                   "properties": {
+                    "contentEpoch": {
+                      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                      "type": "string"
+                    },
                     "contentOperation": {
                       "type": "string"
                     },
@@ -112902,6 +112916,7 @@
                     "revision",
                     "variant",
                     "contentOperation",
+                    "contentEpoch",
                     "sourceTreeSha256",
                     "name",
                     "description",
@@ -146401,6 +146416,318 @@
             "bearerAuth": []
           }
         ]
+      }
+    },
+    "/v1/mod-compatibility/{work}": {
+      "get": {
+        "operationId": "getV1Mod-compatibilityByWork",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "work",
+            "required": true,
+            "schema": {
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "capturedAt": {
+                      "type": "string"
+                    },
+                    "game": {
+                      "const": "Minecraft",
+                      "type": "string"
+                    },
+                    "gameVersions": {
+                      "items": {
+                        "maxLength": 32,
+                        "type": "string"
+                      },
+                      "maxItems": 1,
+                      "type": "array"
+                    },
+                    "latestRelease": {
+                      "~elyTyp": 7,
+                      "maxLength": 64,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "loaders": {
+                      "items": {
+                        "enum": [
+                          "Fabric",
+                          "Forge",
+                          "NeoForge"
+                        ],
+                        "type": "string"
+                      },
+                      "maxItems": 1,
+                      "type": "array"
+                    },
+                    "profile": {
+                      "const": "mod-work-card-v1",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "profile",
+                    "game",
+                    "gameVersions",
+                    "loaders",
+                    "latestRelease",
+                    "capturedAt"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 200"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 400,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 400"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 401,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 401"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 403,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 403"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 404,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 404"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 500,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 500"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 503,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 503"
+          }
+        }
       }
     },
     "/v1/moderation/decisions": {
@@ -183219,6 +183546,498 @@
               }
             },
             "description": "Response for status 404"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 500,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 500"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 503,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 503"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/v1/package-resolutions/mods/{resolution}/work-binding": {
+      "post": {
+        "operationId": "postV1Package-resolutionsModsByResolutionWork-binding",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "resolution",
+            "required": true,
+            "schema": {
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 128,
+              "minLength": 1,
+              "pattern": "^[A-Za-z0-9:_./-]{1,128}$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "actingSubject": {
+                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                    "type": "string"
+                  },
+                  "work": {
+                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "work",
+                  "actingSubject"
+                ],
+                "type": "object"
+              }
+            },
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "actingSubject": {
+                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                    "type": "string"
+                  },
+                  "work": {
+                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "work",
+                  "actingSubject"
+                ],
+                "type": "object"
+              }
+            },
+            "multipart/form-data": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "actingSubject": {
+                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                    "type": "string"
+                  },
+                  "work": {
+                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "work",
+                  "actingSubject"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "capturedAt": {
+                      "type": "string"
+                    },
+                    "game": {
+                      "const": "Minecraft",
+                      "type": "string"
+                    },
+                    "gameVersions": {
+                      "items": {
+                        "maxLength": 32,
+                        "type": "string"
+                      },
+                      "maxItems": 1,
+                      "type": "array"
+                    },
+                    "latestRelease": {
+                      "~elyTyp": 7,
+                      "maxLength": 64,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "loaders": {
+                      "items": {
+                        "enum": [
+                          "Fabric",
+                          "Forge",
+                          "NeoForge"
+                        ],
+                        "type": "string"
+                      },
+                      "maxItems": 1,
+                      "type": "array"
+                    },
+                    "profile": {
+                      "const": "mod-work-card-v1",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "profile",
+                    "game",
+                    "gameVersions",
+                    "loaders",
+                    "latestRelease",
+                    "capturedAt"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 200"
+          },
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "capturedAt": {
+                      "type": "string"
+                    },
+                    "game": {
+                      "const": "Minecraft",
+                      "type": "string"
+                    },
+                    "gameVersions": {
+                      "items": {
+                        "maxLength": 32,
+                        "type": "string"
+                      },
+                      "maxItems": 1,
+                      "type": "array"
+                    },
+                    "latestRelease": {
+                      "~elyTyp": 7,
+                      "maxLength": 64,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "loaders": {
+                      "items": {
+                        "enum": [
+                          "Fabric",
+                          "Forge",
+                          "NeoForge"
+                        ],
+                        "type": "string"
+                      },
+                      "maxItems": 1,
+                      "type": "array"
+                    },
+                    "profile": {
+                      "const": "mod-work-card-v1",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "profile",
+                    "game",
+                    "gameVersions",
+                    "loaders",
+                    "latestRelease",
+                    "capturedAt"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 201"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 400,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 400"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 401,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 401"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 403,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 403"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 409,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 409"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 422,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 422"
           },
           "500": {
             "content": {
@@ -233382,6 +234201,10 @@
                     "content": {
                       "type": "string"
                     },
+                    "contentEpoch": {
+                      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                      "type": "string"
+                    },
                     "createdAt": {
                       "type": "string"
                     },
@@ -233438,6 +234261,7 @@
                     "revision",
                     "variant",
                     "predecessor",
+                    "contentEpoch",
                     "content",
                     "parameterSchema",
                     "examples",
@@ -233480,6 +234304,10 @@
                     "content": {
                       "type": "string"
                     },
+                    "contentEpoch": {
+                      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                      "type": "string"
+                    },
                     "createdAt": {
                       "type": "string"
                     },
@@ -233536,6 +234364,7 @@
                     "revision",
                     "variant",
                     "predecessor",
+                    "contentEpoch",
                     "content",
                     "parameterSchema",
                     "examples",
@@ -233883,6 +234712,10 @@
                     "content": {
                       "type": "string"
                     },
+                    "contentEpoch": {
+                      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                      "type": "string"
+                    },
                     "createdAt": {
                       "type": "string"
                     },
@@ -233939,6 +234772,7 @@
                     "revision",
                     "variant",
                     "predecessor",
+                    "contentEpoch",
                     "content",
                     "parameterSchema",
                     "examples",
@@ -289644,6 +290478,57 @@
                             "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                             "type": "string"
                           },
+                          "hub": {
+                            "~elyTyp": 7,
+                            "nullable": true,
+                            "properties": {
+                              "copyText": {
+                                "maxLength": 65536,
+                                "type": "string"
+                              },
+                              "declaredModels": {
+                                "items": {
+                                  "type": "string"
+                                },
+                                "maxItems": 64,
+                                "type": "array"
+                              },
+                              "kind": {
+                                "enum": [
+                                  "prompt",
+                                  "skill-package"
+                                ],
+                                "type": "string"
+                              },
+                              "preview": {
+                                "maxLength": 240,
+                                "type": "string"
+                              },
+                              "profile": {
+                                "const": "hub-work-card-v1",
+                                "type": "string"
+                              },
+                              "testedModels": {
+                                "items": {
+                                  "type": "string"
+                                },
+                                "maxItems": 64,
+                                "type": "array"
+                              }
+                            },
+                            "required": [
+                              "profile",
+                              "kind",
+                              "declaredModels",
+                              "testedModels",
+                              "preview",
+                              "copyText"
+                            ],
+                            "type": [
+                              "object",
+                              "null"
+                            ]
+                          },
                           "id": {
                             "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                             "type": "string"
@@ -289660,6 +290545,62 @@
                           "mainVersion": {
                             "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                             "type": "string"
+                          },
+                          "mod": {
+                            "~elyTyp": 7,
+                            "nullable": true,
+                            "properties": {
+                              "capturedAt": {
+                                "type": "string"
+                              },
+                              "game": {
+                                "const": "Minecraft",
+                                "type": "string"
+                              },
+                              "gameVersions": {
+                                "items": {
+                                  "type": "string"
+                                },
+                                "maxItems": 1,
+                                "type": "array"
+                              },
+                              "latestRelease": {
+                                "~elyTyp": 7,
+                                "nullable": true,
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              },
+                              "loaders": {
+                                "items": {
+                                  "enum": [
+                                    "Fabric",
+                                    "Forge",
+                                    "NeoForge"
+                                  ],
+                                  "type": "string"
+                                },
+                                "maxItems": 1,
+                                "type": "array"
+                              },
+                              "profile": {
+                                "const": "mod-work-card-v1",
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "profile",
+                              "game",
+                              "gameVersions",
+                              "loaders",
+                              "latestRelease",
+                              "capturedAt"
+                            ],
+                            "type": [
+                              "object",
+                              "null"
+                            ]
                           },
                           "primaryCredits": {
                             "items": {
@@ -289934,7 +290875,9 @@
                           "primaryCredits",
                           "evidence",
                           "dataEpoch",
-                          "sequence"
+                          "sequence",
+                          "mod",
+                          "hub"
                         ],
                         "type": "object"
                       },
@@ -291542,6 +292485,57 @@
                             "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                             "type": "string"
                           },
+                          "hub": {
+                            "~elyTyp": 7,
+                            "nullable": true,
+                            "properties": {
+                              "copyText": {
+                                "maxLength": 65536,
+                                "type": "string"
+                              },
+                              "declaredModels": {
+                                "items": {
+                                  "type": "string"
+                                },
+                                "maxItems": 64,
+                                "type": "array"
+                              },
+                              "kind": {
+                                "enum": [
+                                  "prompt",
+                                  "skill-package"
+                                ],
+                                "type": "string"
+                              },
+                              "preview": {
+                                "maxLength": 240,
+                                "type": "string"
+                              },
+                              "profile": {
+                                "const": "hub-work-card-v1",
+                                "type": "string"
+                              },
+                              "testedModels": {
+                                "items": {
+                                  "type": "string"
+                                },
+                                "maxItems": 64,
+                                "type": "array"
+                              }
+                            },
+                            "required": [
+                              "profile",
+                              "kind",
+                              "declaredModels",
+                              "testedModels",
+                              "preview",
+                              "copyText"
+                            ],
+                            "type": [
+                              "object",
+                              "null"
+                            ]
+                          },
                           "id": {
                             "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                             "type": "string"
@@ -291558,6 +292552,62 @@
                           "mainVersion": {
                             "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                             "type": "string"
+                          },
+                          "mod": {
+                            "~elyTyp": 7,
+                            "nullable": true,
+                            "properties": {
+                              "capturedAt": {
+                                "type": "string"
+                              },
+                              "game": {
+                                "const": "Minecraft",
+                                "type": "string"
+                              },
+                              "gameVersions": {
+                                "items": {
+                                  "type": "string"
+                                },
+                                "maxItems": 1,
+                                "type": "array"
+                              },
+                              "latestRelease": {
+                                "~elyTyp": 7,
+                                "nullable": true,
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              },
+                              "loaders": {
+                                "items": {
+                                  "enum": [
+                                    "Fabric",
+                                    "Forge",
+                                    "NeoForge"
+                                  ],
+                                  "type": "string"
+                                },
+                                "maxItems": 1,
+                                "type": "array"
+                              },
+                              "profile": {
+                                "const": "mod-work-card-v1",
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "profile",
+                              "game",
+                              "gameVersions",
+                              "loaders",
+                              "latestRelease",
+                              "capturedAt"
+                            ],
+                            "type": [
+                              "object",
+                              "null"
+                            ]
                           },
                           "primaryCredits": {
                             "items": {
@@ -291832,7 +292882,9 @@
                           "primaryCredits",
                           "evidence",
                           "dataEpoch",
-                          "sequence"
+                          "sequence",
+                          "mod",
+                          "hub"
                         ],
                         "type": "object"
                       },
@@ -353594,8 +354646,27 @@
                       "type": "string"
                     },
                     "titleLanguage": {
-                      "const": "en",
                       "type": "string"
+                    },
+                    "titleLanguageAtActivation": {
+                      "type": "string"
+                    },
+                    "titleLanguageBasis": {
+                      "enum": [
+                        "explicit",
+                        "work",
+                        "edition",
+                        "inferred"
+                      ],
+                      "type": "string"
+                    },
+                    "titleLanguageObservation": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
                     },
                     "work": {
                       "type": "string"
@@ -353614,6 +354685,9 @@
                     "adoptedFields",
                     "title",
                     "titleLanguage",
+                    "titleLanguageAtActivation",
+                    "titleLanguageBasis",
+                    "titleLanguageObservation",
                     "rightsStatus",
                     "work",
                     "mainVersion",
@@ -353910,15 +354984,16 @@
                     "type": "string"
                   },
                   "titleLanguage": {
-                    "const": "en",
+                    "maxLength": 35,
+                    "minLength": 2,
+                    "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$",
                     "type": "string"
                   }
                 },
                 "required": [
                   "profile",
                   "actingSubject",
-                  "confirmedTitle",
-                  "titleLanguage"
+                  "confirmedTitle"
                 ],
                 "type": "object"
               }
@@ -353948,15 +355023,16 @@
                     "type": "string"
                   },
                   "titleLanguage": {
-                    "const": "en",
+                    "maxLength": 35,
+                    "minLength": 2,
+                    "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$",
                     "type": "string"
                   }
                 },
                 "required": [
                   "profile",
                   "actingSubject",
-                  "confirmedTitle",
-                  "titleLanguage"
+                  "confirmedTitle"
                 ],
                 "type": "object"
               }
@@ -353986,15 +355062,16 @@
                     "type": "string"
                   },
                   "titleLanguage": {
-                    "const": "en",
+                    "maxLength": 35,
+                    "minLength": 2,
+                    "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$",
                     "type": "string"
                   }
                 },
                 "required": [
                   "profile",
                   "actingSubject",
-                  "confirmedTitle",
-                  "titleLanguage"
+                  "confirmedTitle"
                 ],
                 "type": "object"
               }
@@ -354081,8 +355158,27 @@
                           "type": "string"
                         },
                         "titleLanguage": {
-                          "const": "en",
                           "type": "string"
+                        },
+                        "titleLanguageAtActivation": {
+                          "type": "string"
+                        },
+                        "titleLanguageBasis": {
+                          "enum": [
+                            "explicit",
+                            "work",
+                            "edition",
+                            "inferred"
+                          ],
+                          "type": "string"
+                        },
+                        "titleLanguageObservation": {
+                          "~elyTyp": 7,
+                          "nullable": true,
+                          "type": [
+                            "string",
+                            "null"
+                          ]
                         },
                         "work": {
                           "type": "string"
@@ -354101,6 +355197,9 @@
                         "adoptedFields",
                         "title",
                         "titleLanguage",
+                        "titleLanguageAtActivation",
+                        "titleLanguageBasis",
+                        "titleLanguageObservation",
                         "rightsStatus",
                         "work",
                         "mainVersion",
@@ -354204,8 +355303,27 @@
                           "type": "string"
                         },
                         "titleLanguage": {
-                          "const": "en",
                           "type": "string"
+                        },
+                        "titleLanguageAtActivation": {
+                          "type": "string"
+                        },
+                        "titleLanguageBasis": {
+                          "enum": [
+                            "explicit",
+                            "work",
+                            "edition",
+                            "inferred"
+                          ],
+                          "type": "string"
+                        },
+                        "titleLanguageObservation": {
+                          "~elyTyp": 7,
+                          "nullable": true,
+                          "type": [
+                            "string",
+                            "null"
+                          ]
                         },
                         "work": {
                           "type": "string"
@@ -354224,6 +355342,9 @@
                         "adoptedFields",
                         "title",
                         "titleLanguage",
+                        "titleLanguageAtActivation",
+                        "titleLanguageBasis",
+                        "titleLanguageObservation",
                         "rightsStatus",
                         "work",
                         "mainVersion",
