@@ -140,17 +140,22 @@ test('STUDIO01: a writer builds a chaptered book, writes through offline and a s
         await expect(page.getByRole('link', { name: `Write “${chapter}”` })).toBeVisible({ timeout: 30_000 });
       }).toPass({ timeout: 90_000 });
     }
-    await page.getByRole('button', { name: 'Move “第三章 最后一班车” up' }).click();
-    await expect(page.getByRole('status').filter({ hasText: 'Moved “第三章 最后一班车” to position 2.' })).toBeAttached(
-      { timeout: 30_000 });
+    // A chapter moves from its handle's menu (the keyboard's way) as well as by dragging the handle.
+    const move = async (chapter: string, how: string) => {
+      await page.getByRole('button', { name: `Move “${chapter}”`, exact: true }).click();
+      await page.getByRole('menuitem', { name: how }).click();
+      await expect(page.getByRole('status').filter({ hasText: `Moved “${chapter}”` })).toBeAttached({ timeout: 30_000 });
+    };
+    await move('第三章 最后一班车', 'Move “第三章 最后一班车” up');
     await page.reload();
     const chapters = page.getByRole('region', { name: 'Chapters' });
     await expect(chapters.getByRole('listitem').nth(1)).toContainText('第三章 最后一班车');
     // Main says where each chapter stands: nothing is written yet.
     await expect(chapters.getByRole('listitem').filter({ hasText: '第一章 雨夜' })).toContainText('Not started',
       { timeout: 30_000 });
-    await page.getByRole('button', { name: 'Move “第三章 最后一班车” down' }).click();
-    await expect(page.getByRole('status').filter({ hasText: 'to position 3.' })).toBeAttached({ timeout: 30_000 });
+    await move('第三章 最后一班车', 'Move “第三章 最后一班车” down');
+    await page.reload();
+    await expect(chapters.getByRole('listitem').nth(2)).toContainText('第三章 最后一班车');
     await shoot(page, info, 'studio-chapters');
 
     // Writing a chapter: the first pause saves its draft, and the address pins the saved revision.
@@ -199,6 +204,32 @@ test('STUDIO01: a writer builds a chaptered book, writes through offline and a s
     await page.goto(`${workPage}?tab=chapters`);
     await expect(page.getByRole('region', { name: 'Chapters' }).getByRole('listitem').filter({ hasText: '第一章 雨夜' }))
       .toContainText('Published');
+
+    // Volumes: made in place, chapters moved into them by menu and by drag, and a new chapter added to a chosen one.
+    const volume = async (name: string) => {
+      await page.getByRole('button', { name: 'New volume' }).click();
+      await page.getByRole('textbox', { name: /^Title/ }).fill(name);
+      await page.getByRole('button', { name: 'Create', exact: true }).click();
+      await expect(chapters.getByRole('button', { name: new RegExp(`^${name}`) })).toBeVisible({ timeout: 30_000 });
+    };
+    await volume('第一卷 雨夜');
+    await page.getByRole('button', { name: 'Move “第一章 雨夜”', exact: true }).click();
+    await page.getByRole('menuitem', { name: 'Move to' }).click();
+    await page.getByRole('menuitem', { name: '第一卷 雨夜' }).click();
+    await expect(chapters.getByRole('button', { name: /^第一卷 雨夜/ })).toContainText('1 chapter', { timeout: 30_000 });
+    await page.getByRole('button', { name: 'Move “第二章 未寄出的信”', exact: true })
+      .dragTo(chapters.getByRole('button', { name: /^第一卷 雨夜/ }));
+    await expect(chapters.getByRole('button', { name: /^第一卷 雨夜/ })).toContainText('2 chapters', { timeout: 30_000 });
+    await volume('第二卷 末班车');
+    await expect(page.getByRole('combobox', { name: 'Add to' })).toContainText('第二卷 末班车');
+    await page.getByRole('textbox', { name: 'New chapter' }).fill('第四章 站台');
+    await page.getByRole('button', { name: 'Add chapter' }).click();
+    await expect(chapters.getByRole('button', { name: /^第二卷 末班车/ })).toContainText('1 chapter', { timeout: 30_000 });
+    await page.reload();
+    // Numbers run through the book in reading order: the chapter left at the top level stands before the volumes.
+    await expect(chapters.getByRole('button', { name: /^第一卷 雨夜/ })).toContainText('Volume 1 · 2 chapters');
+    await expect(chapters.getByRole('listitem').filter({ hasText: '第四章 站台' })).toContainText('4');
+    await shoot(page, info, 'studio-volumes');
 
     // The book's introduction is its own text: what readers see first and what a Realm reviews.
     await page.goto(`${workPage}?tab=text`);
@@ -255,9 +286,13 @@ test('STUDIO01: a writer builds a chaptered book, writes through offline and a s
       await expect(page.getByRole('region', { name: 'Writing as' })).toBeVisible({ timeout: 5_000 });
     }).toPass({ timeout: 30_000 });
     if (await page.getByRole('heading', { level: 1, name: title }).isVisible()) {
-      const rows = page.getByRole('region', { name: 'Chapters' }).getByRole('listitem');
-      await expect(rows.filter({ hasText: '第一章 雨夜' })).toContainText('Written as Studio Writer 书生', { timeout: 30_000 });
-      await expect(rows.filter({ hasText: '第二章 未寄出的信' })).toContainText('Written as Studio Writer 书生');
+      const region = page.getByRole('region', { name: 'Chapters' });
+      // The volume being written (the last) opens by itself; the first opens on request.
+      await region.getByRole('button', { name: /^第一卷 雨夜/ }).click();
+      const rows = region.getByRole('listitem');
+      await expect(rows.filter({ hasText: '第一章 雨夜' }).last()).toContainText('Written as Studio Writer 书生',
+        { timeout: 30_000 });
+      await expect(rows.filter({ hasText: '第二章 未寄出的信' }).last()).toContainText('Written as Studio Writer 书生');
       await shoot(page, info, 'studio-chapters-written-as');
       await page.getByRole('link', { name: 'Switch to Studio Writer 书生 to write “第一章 雨夜”' }).click();
       await page.waitForURL(url => url.pathname.startsWith(`${studio}/works/${work}/chapters/`));
