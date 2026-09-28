@@ -6,7 +6,8 @@ import { signInAtAccounts } from './account-sign-in.ts';
 // empty or full, so these check the frame and the rules that hold either way:
 // the sort is always in view, filters live in the URL and survive the simple
 // choices, an empty filtered view names its cause without widening itself,
-// and a new person meets the interest picker instead of an empty Following.
+// a new person is invited to set up Home instead of meeting an empty Following,
+// and Home's current Filters become a pinned tab that can be taken off again.
 
 function member(): { email: string; password: string } {
   const path = process.env.REZICS_WEB_AUTH_PRIVATE_PATH;
@@ -74,24 +75,47 @@ test('signed out, notifications ask for sign-in and return there', async ({ page
     .toHaveAttribute('href', '/auth/start?next=%2Fen%2Fnotifications');
 });
 
-test('a new person meets the interest picker, can skip it, and finds it waiting as a card', async ({ page }) => {
+test('G-431: a new person is invited to set up Home, can put it off, and pins the current filters as a tab', async ({ page }) => {
   await signInAtAccounts(page, '/en', member());
-  const picker = page.getByRole('region', { name: 'What do you come to REZICS for?' });
-  if (await picker.isVisible()) {
-    const books = picker.getByRole('button', { name: 'Books & web novels' });
+  const invite = page.getByRole('region', { name: 'Make Home yours' });
+  if (await invite.getByRole('button', { name: 'Not now' }).isVisible()) {
+    await expect(invite.getByRole('link', { name: 'Choose topics' })).toHaveAttribute('href', '/en/welcome?next=%2Fen');
     await expect(async () => {
-      if (await books.getAttribute('aria-pressed') !== 'true') await books.click();
-      await expect(books).toHaveAttribute('aria-pressed', 'true', { timeout: 1_000 });
+      if (await invite.getByRole('button', { name: 'Not now' }).isVisible()) {
+        await invite.getByRole('button', { name: 'Not now' }).click();
+      }
+      await expect(invite).toContainText('Pin topics as tabs', { timeout: 1_000 });
     }).toPass();
-    await picker.getByRole('button', { name: 'Next' }).click();
-    await expect(page.getByRole('region', { name: 'Which languages do you read?' })).toBeVisible();
-    await page.getByRole('button', { name: 'Skip for now' }).click();
-    await expect(page.getByRole('region', { name: 'Make Home yours' })).toBeVisible();
     await page.reload();
-    await expect(page.getByRole('region', { name: 'Make Home yours' })).toBeVisible();
+    await expect(page.getByRole('region', { name: 'Make Home yours' })).toContainText('Pin topics as tabs');
   }
   // Following or All is one tap away either way.
-  await expect(posts(page).getByRole('navigation', { name: 'Feed' }).getByRole('link', { name: 'All' })).toBeVisible();
+  const tabs = posts(page).getByRole('navigation', { name: 'Feed' });
+  await expect(tabs.getByRole('link', { name: 'All' })).toBeVisible();
+
+  // The Filters Home shows now become a named tab after Following and All, with its own address.
+  await page.goto('/en?tab=all&lang=ja');
+  const pin = tabs.getByRole('button', { name: /^Pin a topic/ });
+  const dialog = page.getByRole('dialog', { name: 'Pin to Home' });
+  await expect(async () => {
+    if (!await dialog.isVisible()) await pin.click();
+    await expect(dialog).toBeVisible({ timeout: 1_000 });
+  }).toPass();
+  const form = dialog.getByRole('form', { name: 'Save these filters as a tab' });
+  const name = `Japanese ${Date.now().toString(36)}`;
+  await form.getByRole('textbox', { name: 'Name' }).fill(name);
+  await form.getByRole('button', { name: 'Save as tab' }).click();
+  const tab = tabs.getByRole('link', { name });
+  await expect(tab).toHaveAttribute('aria-current', 'page', { timeout: 30_000 });
+  await expect(page).toHaveURL(/\/en\?tab=[0-9a-f-]{36}/);
+  // A pinned tab is its own filter: the sort stays, the Filters button does not.
+  await expect(posts(page).getByRole('button', { name: /^Sort:/ })).toBeVisible();
+  await expect(posts(page).getByRole('button', { name: /^Filters/ })).toHaveCount(0);
+
+  await tabs.getByRole('button', { name: `Options for ${name}` }).click();
+  await page.getByRole('menuitem', { name: 'Remove from Home' }).click();
+  await expect(tabs.getByRole('link', { name })).toHaveCount(0, { timeout: 30_000 });
+  await expect(tabs.getByRole('link', { name: 'All' })).toHaveAttribute('aria-current', 'page');
 
   await page.goto('/en/notifications');
   await expect(page.getByRole('heading', { level: 1, name: 'Notifications' })).toBeVisible();

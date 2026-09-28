@@ -10,6 +10,8 @@ async function captureVariants(page: Page, info: TestInfo, screen: 'onboarding' 
   for (const locale of ['en', 'zh-Hans'] as const) {
     for (const theme of ['light', 'dark'] as const) {
       await page.context().addCookies([{ name: 'rezics_theme', value: theme, url: origin }]);
+      // Signed in, the Account's display mode (system for a new person) wins over the cookie.
+      await page.emulateMedia({ colorScheme: theme });
       for (const [size, width, height] of [['desktop', 1440, 900], ['phone', 390, 844]] as const) {
         await page.setViewportSize({ width, height });
         await page.goto(`/${locale}/${screen}${screen === 'onboarding' ? '?next=%2Fen' : ''}`);
@@ -19,18 +21,44 @@ async function captureVariants(page: Page, info: TestInfo, screen: 'onboarding' 
           .toBeVisible();
         await expect(page.getByRole('textbox', { name: locale === 'en' ? 'Your handle' : '您的用户名' }))
           .toHaveAttribute('data-hydrated', 'true', { timeout: 20_000 });
-        await expect(page.getByRole('main').getByRole('status')).toHaveText(screen === 'onboarding'
+        // Settings has other status lines; the handle's is the one that names it.
+        await expect(page.getByRole('main').getByRole('status').filter({ hasText: screen === 'onboarding'
           ? locale === 'en' ? 'This handle is available.' : '此用户名可用。'
-          : locale === 'en' ? 'This is your current handle.' : '这是您当前的用户名。', { timeout: 20_000 });
-        await expect(page.locator('html')).toHaveClass(new RegExp(theme));
+          : locale === 'en' ? 'This is your current handle.' : '这是您当前的用户名。' })).toBeVisible({ timeout: 20_000 });
+        await expect(page.locator('html')).toHaveClass(new RegExp(`^(${theme})?$`));
         expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
         await page.screenshot({ path: info.outputPath(`${screen}-${locale}-${theme}-${size}.png`), fullPage: true });
       }
     }
   }
   await page.context().addCookies([{ name: 'rezics_theme', value: 'light', url: origin }]);
+  await page.emulateMedia({ colorScheme: 'light' });
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto(`/en/${screen}${screen === 'onboarding' ? '?next=%2Fen' : ''}`);
+}
+
+/** The setup's first step in both locales, themes and sizes; it fits a phone without sideways scrolling. */
+async function captureSetup(page: Page, info: TestInfo) {
+  const origin = process.env.REZICS_WEB_E2E_BASE_URL ?? 'http://127.0.0.1:3000';
+  for (const locale of ['en', 'zh-Hans'] as const) {
+    for (const theme of ['light', 'dark'] as const) {
+      await page.context().addCookies([{ name: 'rezics_theme', value: theme, url: origin }]);
+      await page.emulateMedia({ colorScheme: theme });
+      for (const [size, width, height] of [['desktop', 1440, 900], ['phone', 390, 844]] as const) {
+        await page.setViewportSize({ width, height });
+        await page.goto(`/${locale}/welcome?next=${encodeURIComponent(`/${locale}`)}`);
+        await expect(page.getByRole('heading', { level: 2, name: locale === 'en' ? 'Which languages do you read?'
+          : '你读哪些语言？' })).toBeVisible();
+        await expect(page.locator('html')).toHaveAttribute('lang', locale);
+        expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
+        await page.screenshot({ path: info.outputPath(`welcome-${locale}-${theme}-${size}.png`), fullPage: true });
+      }
+    }
+  }
+  await page.context().addCookies([{ name: 'rezics_theme', value: 'light', url: origin }]);
+  await page.emulateMedia({ colorScheme: 'light' });
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto('/en/welcome?next=%2Fen');
 }
 
 async function verificationLink(email: string): Promise<string> {
@@ -47,7 +75,7 @@ async function verificationLink(email: string): Promise<string> {
   return link;
 }
 
-test('new person chooses a handle, returns home and keeps the acting profile after sign-in', async ({ page }, info) => {
+test('new person chooses a handle, sets up Home, returns home and keeps the acting profile after sign-in', async ({ page }, info) => {
   test.setTimeout(240_000);
   const suffix = randomBytes(6).toString('hex');
   const person = { name: `Reader ${suffix}`, email: `onboarding-${suffix}@example.test`,
@@ -70,24 +98,49 @@ test('new person chooses a handle, returns home and keeps the acting profile aft
   const verify = new URL(await verificationLink(person.email));
   if (signUpOrigin) await page.goto(`${signUpOrigin}${verify.pathname}${verify.search}`);
   else await page.goto(verify.toString());
-  await page.getByRole('link', { name: 'Sign in to continue' }).click();
-  // A shared Accounts frontend older than this worktree still preserves
-  // prompt=create after verification. Reauthorize to exercise the new person.
-  if (!signUpOrigin && await page.getByRole('heading', { name: 'Create your REZICS Account' }).isVisible()) {
-    await page.goto('/auth/start?next=%2Fen');
+  // Verification signs the new person in and returns to REZICS; an older Accounts asks them to sign in again.
+  const signIn = page.getByRole('link', { name: 'Sign in to continue' });
+  await expect(signIn.or(page.getByRole('textbox', { name: 'Your handle' }))).toBeVisible({ timeout: 60_000 });
+  if (await signIn.isVisible()) {
+    await signIn.click();
+    // A shared Accounts frontend older than this worktree still preserves
+    // prompt=create after verification. Reauthorize to exercise the new person.
+    if (!signUpOrigin && await page.getByRole('heading', { name: 'Create your REZICS Account' }).isVisible()) {
+      await page.goto('/auth/start?next=%2Fen');
+    }
+    await page.locator('html[data-hydrated]').waitFor({ timeout: 60_000 });
+    await page.getByRole('textbox', { name: 'Email' }).fill(person.email);
+    await page.getByRole('button', { name: 'Next' }).click();
+    await page.getByLabel('Enter your password').fill(person.password);
+    await page.getByRole('button', { name: 'Next' }).click();
   }
-  await page.locator('html[data-hydrated]').waitFor({ timeout: 60_000 });
-  await page.getByRole('textbox', { name: 'Email' }).fill(person.email);
-  await page.getByRole('button', { name: 'Next' }).click();
-  await page.getByLabel('Enter your password').fill(person.password);
-  await page.getByRole('button', { name: 'Next' }).click();
-  await expect(page).toHaveURL(/\/en\/onboarding\?next=/, { timeout: 60_000 });
+  // G-431: after the handle comes Home's setup, then where the person was going.
+  await expect(page).toHaveURL(`/en/onboarding?next=${encodeURIComponent('/en/welcome?next=%2Fen')}`,
+    { timeout: 60_000 });
+  const handleStep = page.url();
   await expect(page.getByRole('main').getByText(person.name)).toBeVisible();
   await captureVariants(page, info, 'onboarding');
+  await page.goto(handleStep);
   await page.getByRole('textbox', { name: 'Your handle' }).fill(person.handle);
-  await expect(page.getByRole('status')).toHaveText('This handle is available.');
-  await page.getByRole('button', { name: 'Continue to home' }).click();
-  await expect(page).toHaveURL('/en');
+  await expect(page.getByRole('main').getByRole('status').filter({ hasText: 'This handle is available.' })).toBeVisible();
+  await page.getByRole('button', { name: 'Continue' }).click();
+  // G-431: a first visit continues into Home's setup: languages, topics that become tabs, then communities.
+  await expect(page).toHaveURL('/en/welcome?next=%2Fen');
+  await captureSetup(page, info);
+  const setup = page.getByRole('main');
+  await expect(setup.getByRole('heading', { level: 2, name: 'Which languages do you read?' })).toBeVisible();
+  await expect(setup.getByRole('region', { name: 'Your languages, first choice first' })).toContainText('English');
+  await setup.getByRole('button', { name: 'Next' }).click();
+  await expect(setup.getByRole('heading', { level: 2, name: 'Pick a few topics' })).toBeVisible();
+  const topic = setup.locator('button[aria-pressed]').first();
+  if (await topic.isVisible()) {
+    await topic.click();
+    await expect(topic).toHaveAttribute('aria-pressed', 'true');
+    await setup.getByRole('button', { name: 'Next' }).click();
+  } else await setup.getByRole('button', { name: 'Skip', exact: true }).click();
+  await expect(setup.getByRole('heading', { level: 2, name: 'Follow a few communities' })).toBeVisible();
+  await setup.getByRole('button', { name: /finish$|^Finish$/ }).click();
+  await expect(page).toHaveURL('/en', { timeout: 30_000 });
   await expect(page.getByRole('banner').getByRole('button', { name: 'Account menu' }))
     .toContainText(`@${person.handle}`);
   await page.reload();
@@ -100,9 +153,9 @@ test('new person chooses a handle, returns home and keeps the acting profile aft
   await expect(page).toHaveURL('/en/settings');
   await expect(page.getByRole('main').getByText(`@${person.handle}`)).toBeVisible();
   await page.getByRole('textbox', { name: 'Your handle' }).fill(`another_${suffix}`);
-  await expect(page.getByRole('status')).toHaveText('This handle is available.');
+  await expect(page.getByRole('main').getByRole('status').filter({ hasText: 'This handle is available.' })).toBeVisible();
   await page.getByRole('button', { name: 'Change handle' }).click();
-  await expect(page.getByRole('status').filter({ hasText: 'You can change your handle again 30 days' }))
+  await expect(page.getByRole('main').getByRole('status').filter({ hasText: 'You can change your handle again 30 days' }))
     .toBeVisible();
   await expect(page.getByRole('textbox', { name: 'Your handle' })).toHaveAttribute('data-hydrated', 'true');
   if (process.env.REZICS_AGE_HANDLE === '1') {
@@ -122,9 +175,9 @@ test('new person chooses a handle, returns home and keeps the acting profile aft
     } finally { await db.end(); }
     currentHandle = `another_${suffix}`;
     await page.getByRole('textbox', { name: 'Your handle' }).fill(currentHandle);
-    await expect(page.getByRole('status').filter({ hasText: 'This handle is available.' })).toBeVisible();
+    await expect(page.getByRole('main').getByRole('status').filter({ hasText: 'This handle is available.' })).toBeVisible();
     await page.getByRole('button', { name: 'Change handle' }).click();
-    await expect(page.getByRole('status').filter({ hasText: 'Your handle was changed.' })).toBeVisible();
+    await expect(page.getByRole('main').getByRole('status').filter({ hasText: 'Your handle was changed.' })).toBeVisible();
     const oldAddress = await page.request.get(`http://127.0.0.1:3001/v1/handles/${person.handle}`);
     expect(oldAddress.status()).toBe(200);
     expect(await oldAddress.json()).toMatchObject({ resolution: {
@@ -135,7 +188,7 @@ test('new person chooses a handle, returns home and keeps the acting profile aft
   await page.getByRole('textbox', { name: 'Display name' }).fill(publicName);
   await page.getByRole('textbox', { name: 'Bio' }).fill('Reading and writing on REZICS.');
   await page.getByRole('button', { name: 'Save public profile' }).click();
-  await expect(page.getByRole('status').filter({ hasText: 'Your public profile was updated.' }))
+  await expect(page.getByRole('main').getByRole('status').filter({ hasText: 'Your public profile was updated.' }))
     .toBeVisible({ timeout: 30_000 });
   await expect(page.getByRole('textbox', { name: 'Display name' })).toHaveValue(publicName);
   await page.reload();
@@ -169,13 +222,13 @@ test('new person chooses a handle, returns home and keeps the acting profile aft
     }
     await page.getByRole('button', { name: 'Save public profile' }).click();
     if (process.env.REZICS_EXPECT_AVATAR_FAILURE === '1') {
-      await expect(page.getByRole('status').filter({ hasText: /An avatar cannot be set|Avatar service is unavailable/ }))
+      await expect(page.getByRole('main').getByRole('status').filter({ hasText: /An avatar cannot be set|Avatar service is unavailable/ }))
         .toBeVisible({ timeout: 30_000 });
       await expect(page.getByRole('textbox', { name: 'Bio' }))
         .toHaveValue('Keep this text when avatar upload fails.');
       await expect(page.getByText('portrait.png')).toBeVisible();
     } else {
-      await expect(page.getByRole('status').filter({ hasText: 'Your public profile was updated.' }))
+      await expect(page.getByRole('main').getByRole('status').filter({ hasText: 'Your public profile was updated.' }))
         .toBeVisible({ timeout: 30_000 });
       await expect(page.getByRole('main').locator('img')).toBeVisible();
     }

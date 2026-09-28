@@ -18,7 +18,10 @@ const budgets = browserBudgets(counts.playwright, counts.storybook);
 const authDir = join(root, '.temp', 'stack', `rezics-qa-${runId}`, 'web-auth');
 const runtime = readEnv(join(authDir, 'runtime.env'));
 const publicConfig = JSON.parse(readFileSync(join(authDir, 'public.json'), 'utf8')) as { clientId: string };
+// Journeys that verify an email read this stack's Mailpit, not the shared dev stack's.
+const compose = readEnv(join(root, '.temp', 'stack', `rezics-qa-${runId}`, 'compose.env'));
 const env: NodeJS.ProcessEnv = { ...process.env, ...apps, ...runtime, WEB_OAUTH_CLIENT_ID: publicConfig.clientId,
+  ...(compose.MAILPIT_HTTP_PORT ? { MAILPIT_URL: `http://127.0.0.1:${compose.MAILPIT_HTTP_PORT}` } : {}),
   REZICS_QA_RUN_ID: runId,
   REZICS_WEB_AUTH_PUBLIC_PATH: join(authDir, 'public.json'),
   REZICS_WEB_AUTH_PRIVATE_PATH: join(authDir, 'private.json') };
