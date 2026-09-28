@@ -144,6 +144,22 @@ the route. Signed out, a language select and a theme button sit in the header;
 signed in, they live in the avatar menu and settings. Zones may carry their
 own themes, which people can turn off.
 
+**Names show in the reader's language, one at a time** (maintainer,
+2026-09-28, after "Fiction · 小说" appeared site-wide). Realm, Zone,
+Organization and Concept names, rule titles and descriptions are stored per
+language (open BCP 47 tags, one marked original), never glued into one string.
+A read picks each field independently in this order: the page's explicit
+`?language=`, the reader's ordered content languages, the UI locale, the
+browser's languages, then the object's original name. A tag matches exactly
+first, then by language and script (`zh-TW` is `zh-Hant`), then by primary
+language (`zh-Hant` may show a `zh-Hans` name). Reads return the chosen
+value with its language, direction and whether it was a fallback, so pages
+set `lang`/`dir`. The original appears as a quiet second line only where
+identity matters (a Work's or Realm's own page), never in lists. People keep
+the one display name they choose; a romanization is an alias on the author
+page. The old site's order (`../rezics`, `use-localization-languages.ts`)
+is the precedent; unlike it, fields fall back one by one.
+
 ## Identity and administration
 
 The Studio Agent switcher, the publish dialog and Realm role impact previews
