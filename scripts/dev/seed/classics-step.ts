@@ -7,6 +7,7 @@ import { grantImportedWorkSeedAuthority } from './operator.ts';
 import { openLibraryFixtureFetch } from './open-library-fixtures.ts';
 import { SeedApiError } from './api.ts';
 import { seedKey } from './plan.ts';
+import { seedClassicTexts } from './classics-text-step.ts';
 import type { SeedState, WorkReceipt } from './state.ts';
 
 const shortId = (uri: string) => uri.slice(-36);
@@ -108,4 +109,5 @@ export async function seedClassics(state: SeedState): Promise<void> {
     console.log(`Classic ${classic.id}: ${receipt.work} via ${classic.work}; acquisition ${
       shortId(observation.observation)}${capture.replayed ? ' (replayed)' : ''}`);
   }
+  await seedClassicTexts(state);
 }
