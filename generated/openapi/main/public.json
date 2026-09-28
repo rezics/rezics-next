@@ -35628,6 +35628,475 @@
         ]
       }
     },
+    "/v1/agents/{id}/realm-contributions": {
+      "get": {
+        "operationId": "getV1AgentsByIdRealm-contributions",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "kind",
+            "required": true,
+            "schema": {
+              "enum": [
+                "posts",
+                "comments"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "maxLength": 2048,
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "actingSubject",
+            "required": false,
+            "schema": {
+              "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "items": {
+                      "items": {
+                        "properties": {
+                          "excerpt": {
+                            "type": "string"
+                          },
+                          "parent": {
+                            "~elyTyp": 7,
+                            "nullable": true,
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "realm": {
+                            "type": "string"
+                          },
+                          "reply": {
+                            "type": "string"
+                          },
+                          "time": {
+                            "type": "string"
+                          },
+                          "title": {
+                            "~elyTyp": 7,
+                            "nullable": true,
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "reply",
+                          "realm",
+                          "parent",
+                          "time",
+                          "title",
+                          "excerpt"
+                        ],
+                        "type": "object"
+                      },
+                      "maxItems": 8,
+                      "type": "array"
+                    },
+                    "kind": {
+                      "enum": [
+                        "posts",
+                        "comments"
+                      ],
+                      "type": "string"
+                    },
+                    "nextCursor": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "profile": {
+                      "const": "agent-realm-contributions-v1",
+                      "type": "string"
+                    },
+                    "sourcePosition": {
+                      "properties": {
+                        "dataEpoch": {
+                          "type": "string"
+                        },
+                        "datasetId": {
+                          "type": "string"
+                        },
+                        "sequence": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "datasetId",
+                        "dataEpoch",
+                        "sequence"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "profile",
+                    "kind",
+                    "items",
+                    "nextCursor",
+                    "sourcePosition"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 200"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 400,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 400"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 401,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 401"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 403,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 403"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 404,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 404"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 409,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 409"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 422,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 422"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 500,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 500"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 503,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 503"
+          }
+        },
+        "security": [
+          {},
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
     "/v1/agents/{id}/shelves": {
       "get": {
         "operationId": "getV1AgentsByIdShelves",
@@ -54067,6 +54536,232 @@
       }
     },
     "/v1/classification-vocabulary": {
+      "get": {
+        "operationId": "getV1Classification-vocabulary",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "language",
+            "required": false,
+            "schema": {
+              "maxLength": 35,
+              "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "maxLength": 80,
+              "minLength": 1,
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "hasMore": {
+                      "type": "boolean"
+                    },
+                    "items": {
+                      "items": {
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "label": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "label"
+                        ],
+                        "type": "object"
+                      },
+                      "maxItems": 20,
+                      "type": "array"
+                    },
+                    "profile": {
+                      "const": "shared-vocabulary-v1",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "profile",
+                    "items",
+                    "hasMore"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 200"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 400,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 400"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 409,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 409"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 422,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 422"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 503,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 503"
+          }
+        }
+      },
       "post": {
         "operationId": "postV1Classification-vocabulary",
         "parameters": [
@@ -304152,7 +304847,8 @@
               "enum": [
                 "activity",
                 "members",
-                "newest"
+                "newest",
+                "growing"
               ],
               "type": "string"
             }
@@ -338178,6 +338874,9 @@
                               "null"
                             ]
                           },
+                          "blocked": {
+                            "type": "boolean"
+                          },
                           "body": {
                             "maxLength": 20000,
                             "type": "string"
@@ -338309,6 +339008,9 @@
                               "object",
                               "null"
                             ]
+                          },
+                          "blocked": {
+                            "type": "boolean"
                           },
                           "body": {
                             "maxLength": 20000,
