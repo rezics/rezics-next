@@ -207,11 +207,12 @@ test('GOV05: unsubscribe, subject access loss, deactivation and rotation are app
 
     // Losing access to the exact subject before delivery sends nothing.
     const [second] = await s.store.enqueue(s.event([a], r1));
+    expect(second!.deliveries).toBe(1); // The saved email choice routes its copy into the digest.
     s.disclosed.delete(`${a}:${r1}`);
     await s.revokeWorkRead(accessGrant);
     const sendsBefore = s.provider.calls.send;
-    expect(await s.productionDispatcher.runOnce()).toMatchObject({ claimed: 2, delivered: 0, cancelled: 2 });
-    expect((await s.deliveries(second!.itemId)).map(d => d.cancel_reason)).toEqual(['undisclosed', 'undisclosed']);
+    expect(await s.productionDispatcher.runOnce()).toMatchObject({ claimed: 1, delivered: 0, cancelled: 1 });
+    expect((await s.deliveries(second!.itemId)).map(d => d.cancel_reason)).toEqual(['undisclosed']);
     expect(s.provider.calls.send).toBe(sendsBefore);
 
     // Security messages ignore optional preferences but still respect disclosure and endpoint state.

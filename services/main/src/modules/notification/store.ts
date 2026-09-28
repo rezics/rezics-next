@@ -315,6 +315,8 @@ export class NotificationStore {
         if (event.display) await client.query(`INSERT INTO access.notification_display_context
           (item_id, kind, actor_agent, realm, group_key) VALUES ($1, $2, $3, $4, $5)`,
         [itemId, event.display.kind, event.display.actorAgent, event.display.realm, event.display.groupKey]);
+        // A saved email choice uses the digest path above; an unset choice keeps
+        // explicitly registered direct email endpoints eligible.
         const inserted = await client.query(`INSERT INTO access.notification_delivery (id, item_id, principal_id,
             endpoint_id, channel, endpoint_generation, next_attempt_at, expires_at)
           SELECT gen_random_uuid(), $1, e.principal_id, e.id, e.channel, e.generation, clock_timestamp(),
@@ -324,7 +326,8 @@ export class NotificationStore {
           WHERE $3 IN ('security', 'account') OR NOT EXISTS (
             SELECT 1 FROM access.notification_preference p
             WHERE p.principal_id = e.principal_id AND p.purpose = $3 AND p.topic = $4
-              AND p.channel = e.channel AND p.state = 'disabled')`,
+              AND p.channel = e.channel
+              AND (p.state = 'disabled' OR (e.channel = 'email' AND p.state = 'enabled')))`,
         [itemId, principalId, event.purpose, event.topic, NOTIFICATION_LIMITS.deliveryTtlMs,
           NOTIFICATION_LIMITS.endpointsPerRecipient]);
         results.push({ principalId, itemId, generation: stream.generation, sequence,
