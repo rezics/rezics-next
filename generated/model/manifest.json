@@ -659,6 +659,11 @@
       "file": "shapes/space-realm-v1.ttl"
     },
     {
+      "id": "space-realm-v2",
+      "sha256": "6bcaa955e1c473f450b97d2d50afad3205d0136447b7dd11e30650a888045185",
+      "file": "shapes/space-realm-v2.ttl"
+    },
+    {
       "id": "statement-cutover-v1",
       "sha256": "e2ae65228aa4e311c183d230f96530358c88e7bd4e09928f482f394f1fda8daa",
       "file": "shapes/statement-cutover-v1.ttl"
@@ -998,6 +1003,16 @@
       "type": "https://rezics.com/vocab/Space",
       "routes": [
         {
+          "profile": "space-realm-v2",
+          "shape": "https://rezics.com/definition/space-realm-v2/space-shape",
+          "when": [
+            {
+              "path": "https://rezics.com/vocab/definitionProfile",
+              "value": "https://rezics.com/definition/space-realm-v2"
+            }
+          ]
+        },
+        {
           "profile": "space-realm-v1",
           "shape": "https://rezics.com/definition/space-realm-v1/space-shape",
           "when": []
@@ -1007,6 +1022,16 @@
     {
       "type": "https://rezics.com/vocab/Realm",
       "routes": [
+        {
+          "profile": "space-realm-v2",
+          "shape": "https://rezics.com/definition/space-realm-v2/realm-shape",
+          "when": [
+            {
+              "path": "https://rezics.com/vocab/definitionProfile",
+              "value": "https://rezics.com/definition/space-realm-v2"
+            }
+          ]
+        },
         {
           "profile": "space-realm-v1",
           "shape": "https://rezics.com/definition/space-realm-v1/realm-shape",
@@ -2858,6 +2883,7 @@
     "contexts/source-open-library-work-v1.jsonld": "7f19c2c76b00224ad9037200f328e60e78b19f6857006d3001212d1ee7ac8b22",
     "contexts/source-reification-v1.jsonld": "8bbf1269642d326a80b8d660e8933b14653aaaad3a5531187771aad0bdd15f8c",
     "contexts/space-realm-v1.jsonld": "dfc2510565ef3f19f574e8095a1da78473d325d04b6e38e4d0787ed3e1b30841",
+    "contexts/space-realm-v2.jsonld": "7cb505e0b8306f000767dec99b76565f654471ee7a8f57478404984b77badecf",
     "contexts/statement-cutover-v1.jsonld": "6bafd791bb47c90b3411bd1592324dd9b16417df27fea0fa34f51ac9c2ed5e9a",
     "contexts/statement-decision-v1.jsonld": "6fde37ebce49b673eca2752de6e7041553b3d2f2a7fdcbf26b6466b2c6af32fd",
     "contexts/statement-v1.jsonld": "cfa9f2493ab50152388e2158a1771d418bbfba84e42ddd46a6aeb069c25f87de",
@@ -2954,6 +2980,7 @@
     "shapes/source-open-library-work-v1.ttl": "708b975233ceb3e4dc670ff4821011ba91c938a73c9739cfe94052ebdf22ce07",
     "shapes/source-reification-v1.ttl": "57e5a667cb62b1b72357b77aa2c7ac6133ed4f729732e681817ad1c537839100",
     "shapes/space-realm-v1.ttl": "74a39bad65c0fd259f557146bed386843c5919fac3491b7503032d1ce9e370c2",
+    "shapes/space-realm-v2.ttl": "6bcaa955e1c473f450b97d2d50afad3205d0136447b7dd11e30650a888045185",
     "shapes/statement-cutover-v1.ttl": "e2ae65228aa4e311c183d230f96530358c88e7bd4e09928f482f394f1fda8daa",
     "shapes/statement-decision-v1.ttl": "f5d5c72e0473c6abd0816c0cddceb6c70c8075a47a4d2eeb81b28f9e598b2490",
     "shapes/statement-v1.ttl": "da4cf542d30ca2d0af244fa86efd53e4a8780a7b8feae260abc05168c358aa2a",
@@ -2982,9 +3009,9 @@
     "shapes/work-type-v2.ttl": "94ef660d31ca8af44f51d5ecc6ad767ea97c6c39d1dcbf7db4321b1152632b2f",
     "shapes/zone-capability-v1.ttl": "c518389e8a7777b2358a5ed98f6016e77a803aa8c9336fefc40201fb38df4f65",
     "shapes/zone-presentation-v1.ttl": "3d63c448965591516514a0323e77500e3a8b0d95da0a2c0abdd2af4110e063e2",
-    "packages/model/src/generated/arbitraries.ts": "6399d34a3b0ef55d9a59cd1b17332527fedc51069b938887639fe2c802cdc413",
-    "packages/model/src/generated/profiles.ts": "5279620f61d0ad46e0b1c0214f0e52303734faef3970999178ed429e8966ea98",
-    "packages/model/src/generated/schemas.ts": "8b4dee91645ad949e4f93087b590a45f469308eef2f4689e780f7ddb49fbe04e",
-    "packages/model/src/generated/vocabulary.ts": "803c2d5b2ffd369dd0692f80374acd9ca29131a8924710b3836d62bbca99cefa"
+    "packages/model/src/generated/arbitraries.ts": "460f75ae2516f97a4fe20b2b48169a71928f642f1e358f6b1fc03fe151eeb687",
+    "packages/model/src/generated/profiles.ts": "3901cd69be3b8b19974c5804270d20004d574fbd5d92e9547f944963d25b553b",
+    "packages/model/src/generated/schemas.ts": "e6a4df610e676c08bf1ce5ab4ea40d3294fb99459c662f092d65debb5e5db753",
+    "packages/model/src/generated/vocabulary.ts": "307c04d8114eff13cdd4e4392c63fc71b33d12d5a921d856e3c6ba733e4a6fbe"
   }
 }

@@ -302202,6 +302202,15 @@
           },
           {
             "in": "query",
+            "name": "topic",
+            "required": false,
+            "schema": {
+              "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
             "name": "sort",
             "required": false,
             "schema": {
@@ -302277,6 +302286,15 @@
                             ],
                             "type": [
                               "object",
+                              "null"
+                            ]
+                          },
+                          "handle": {
+                            "~elyTyp": 7,
+                            "nullable": true,
+                            "pattern": "^[a-z][a-z0-9-]{2,29}$",
+                            "type": [
+                              "string",
                               "null"
                             ]
                           },
@@ -302494,6 +302512,7 @@
                           "id",
                           "space",
                           "name",
+                          "handle",
                           "reviewMode",
                           "icon",
                           "description",
@@ -302531,10 +302550,60 @@
                         "sequence"
                       ],
                       "type": "object"
+                    },
+                    "topic": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "properties": {
+                        "id": {
+                          "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                          "type": "string"
+                        },
+                        "label": {
+                          "properties": {
+                            "basis": {
+                              "enum": [
+                                "requested",
+                                "fallback"
+                              ],
+                              "type": "string"
+                            },
+                            "direction": {
+                              "enum": [
+                                "ltr",
+                                "rtl"
+                              ],
+                              "type": "string"
+                            },
+                            "language": {
+                              "type": "string"
+                            },
+                            "value": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "value",
+                            "language",
+                            "direction",
+                            "basis"
+                          ],
+                          "type": "object"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "label"
+                      ],
+                      "type": [
+                        "object",
+                        "null"
+                      ]
                     }
                   },
                   "required": [
                     "profile",
+                    "topic",
                     "items",
                     "nextCursor",
                     "sourcePosition",
@@ -338419,6 +338488,202 @@
               }
             },
             "description": "Response for status 422"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 500,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 500"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 503,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 503"
+          }
+        }
+      }
+    },
+    "/v1/realms/by-handle/{handle}": {
+      "get": {
+        "operationId": "getV1RealmsBy-handleByHandle",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "handle",
+            "required": true,
+            "schema": {
+              "pattern": "^[a-z][a-z0-9-]{2,29}$",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "handle": {
+                      "type": "string"
+                    },
+                    "realm": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "realm",
+                    "handle"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 200"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 400,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 400"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 404,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 404"
           },
           "500": {
             "content": {
@@ -395856,125 +396121,298 @@
               "pattern": "^[A-Za-z0-9:_./-]{1,128}$",
               "type": "string"
             }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 128,
+              "minLength": 1,
+              "pattern": "^[A-Za-z0-9:_./-]{1,128}$",
+              "type": "string"
+            }
           }
         ],
         "requestBody": {
           "content": {
             "application/json": {
               "schema": {
-                "additionalProperties": false,
-                "properties": {
-                  "actingSubject": {
-                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
-                    "type": "string"
-                  },
-                  "capabilities": {
-                    "items": false,
-                    "minItems": 1,
-                    "prefixItems": [
-                      {
-                        "const": "realm",
+                "anyOf": [
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "actingSubject": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      },
+                      "capabilities": {
+                        "items": false,
+                        "minItems": 1,
+                        "prefixItems": [
+                          {
+                            "const": "realm",
+                            "type": "string"
+                          }
+                        ],
+                        "type": "array"
+                      },
+                      "name": {
+                        "maxLength": 120,
+                        "minLength": 1,
+                        "pattern": "^[^\\u0000-\\u001f\\u007f]+$",
+                        "type": "string"
+                      },
+                      "profile": {
+                        "const": "space-realm-v1",
                         "type": "string"
                       }
+                    },
+                    "required": [
+                      "profile",
+                      "name",
+                      "capabilities",
+                      "actingSubject"
                     ],
-                    "type": "array"
+                    "type": "object"
                   },
-                  "name": {
-                    "maxLength": 120,
-                    "minLength": 1,
-                    "pattern": "^[^\\u0000-\\u001f\\u007f]+$",
-                    "type": "string"
-                  },
-                  "profile": {
-                    "const": "space-realm-v1",
-                    "type": "string"
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "actingSubject": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      },
+                      "capabilities": {
+                        "items": false,
+                        "minItems": 1,
+                        "prefixItems": [
+                          {
+                            "const": "realm",
+                            "type": "string"
+                          }
+                        ],
+                        "type": "array"
+                      },
+                      "handle": {
+                        "pattern": "^[a-z][a-z0-9-]{2,29}$",
+                        "type": "string"
+                      },
+                      "name": {
+                        "maxLength": 120,
+                        "minLength": 1,
+                        "pattern": "^[^\\u0000-\\u001f\\u007f]+$",
+                        "type": "string"
+                      },
+                      "profile": {
+                        "const": "space-realm-v2",
+                        "type": "string"
+                      },
+                      "topics": {
+                        "items": {
+                          "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                          "type": "string"
+                        },
+                        "maxItems": 3,
+                        "type": "array",
+                        "uniqueItems": true
+                      }
+                    },
+                    "required": [
+                      "profile",
+                      "name",
+                      "capabilities",
+                      "actingSubject"
+                    ],
+                    "type": "object"
                   }
-                },
-                "required": [
-                  "profile",
-                  "name",
-                  "capabilities",
-                  "actingSubject"
-                ],
-                "type": "object"
+                ]
               }
             },
             "application/x-www-form-urlencoded": {
               "schema": {
-                "additionalProperties": false,
-                "properties": {
-                  "actingSubject": {
-                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
-                    "type": "string"
-                  },
-                  "capabilities": {
-                    "items": false,
-                    "minItems": 1,
-                    "prefixItems": [
-                      {
-                        "const": "realm",
+                "anyOf": [
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "actingSubject": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      },
+                      "capabilities": {
+                        "items": false,
+                        "minItems": 1,
+                        "prefixItems": [
+                          {
+                            "const": "realm",
+                            "type": "string"
+                          }
+                        ],
+                        "type": "array"
+                      },
+                      "name": {
+                        "maxLength": 120,
+                        "minLength": 1,
+                        "pattern": "^[^\\u0000-\\u001f\\u007f]+$",
+                        "type": "string"
+                      },
+                      "profile": {
+                        "const": "space-realm-v1",
                         "type": "string"
                       }
+                    },
+                    "required": [
+                      "profile",
+                      "name",
+                      "capabilities",
+                      "actingSubject"
                     ],
-                    "type": "array"
+                    "type": "object"
                   },
-                  "name": {
-                    "maxLength": 120,
-                    "minLength": 1,
-                    "pattern": "^[^\\u0000-\\u001f\\u007f]+$",
-                    "type": "string"
-                  },
-                  "profile": {
-                    "const": "space-realm-v1",
-                    "type": "string"
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "actingSubject": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      },
+                      "capabilities": {
+                        "items": false,
+                        "minItems": 1,
+                        "prefixItems": [
+                          {
+                            "const": "realm",
+                            "type": "string"
+                          }
+                        ],
+                        "type": "array"
+                      },
+                      "handle": {
+                        "pattern": "^[a-z][a-z0-9-]{2,29}$",
+                        "type": "string"
+                      },
+                      "name": {
+                        "maxLength": 120,
+                        "minLength": 1,
+                        "pattern": "^[^\\u0000-\\u001f\\u007f]+$",
+                        "type": "string"
+                      },
+                      "profile": {
+                        "const": "space-realm-v2",
+                        "type": "string"
+                      },
+                      "topics": {
+                        "items": {
+                          "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                          "type": "string"
+                        },
+                        "maxItems": 3,
+                        "type": "array",
+                        "uniqueItems": true
+                      }
+                    },
+                    "required": [
+                      "profile",
+                      "name",
+                      "capabilities",
+                      "actingSubject"
+                    ],
+                    "type": "object"
                   }
-                },
-                "required": [
-                  "profile",
-                  "name",
-                  "capabilities",
-                  "actingSubject"
-                ],
-                "type": "object"
+                ]
               }
             },
             "multipart/form-data": {
               "schema": {
-                "additionalProperties": false,
-                "properties": {
-                  "actingSubject": {
-                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
-                    "type": "string"
-                  },
-                  "capabilities": {
-                    "items": false,
-                    "minItems": 1,
-                    "prefixItems": [
-                      {
-                        "const": "realm",
+                "anyOf": [
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "actingSubject": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      },
+                      "capabilities": {
+                        "items": false,
+                        "minItems": 1,
+                        "prefixItems": [
+                          {
+                            "const": "realm",
+                            "type": "string"
+                          }
+                        ],
+                        "type": "array"
+                      },
+                      "name": {
+                        "maxLength": 120,
+                        "minLength": 1,
+                        "pattern": "^[^\\u0000-\\u001f\\u007f]+$",
+                        "type": "string"
+                      },
+                      "profile": {
+                        "const": "space-realm-v1",
                         "type": "string"
                       }
+                    },
+                    "required": [
+                      "profile",
+                      "name",
+                      "capabilities",
+                      "actingSubject"
                     ],
-                    "type": "array"
+                    "type": "object"
                   },
-                  "name": {
-                    "maxLength": 120,
-                    "minLength": 1,
-                    "pattern": "^[^\\u0000-\\u001f\\u007f]+$",
-                    "type": "string"
-                  },
-                  "profile": {
-                    "const": "space-realm-v1",
-                    "type": "string"
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "actingSubject": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      },
+                      "capabilities": {
+                        "items": false,
+                        "minItems": 1,
+                        "prefixItems": [
+                          {
+                            "const": "realm",
+                            "type": "string"
+                          }
+                        ],
+                        "type": "array"
+                      },
+                      "handle": {
+                        "pattern": "^[a-z][a-z0-9-]{2,29}$",
+                        "type": "string"
+                      },
+                      "name": {
+                        "maxLength": 120,
+                        "minLength": 1,
+                        "pattern": "^[^\\u0000-\\u001f\\u007f]+$",
+                        "type": "string"
+                      },
+                      "profile": {
+                        "const": "space-realm-v2",
+                        "type": "string"
+                      },
+                      "topics": {
+                        "items": {
+                          "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                          "type": "string"
+                        },
+                        "maxItems": 3,
+                        "type": "array",
+                        "uniqueItems": true
+                      }
+                    },
+                    "required": [
+                      "profile",
+                      "name",
+                      "capabilities",
+                      "actingSubject"
+                    ],
+                    "type": "object"
                   }
-                },
-                "required": [
-                  "profile",
-                  "name",
-                  "capabilities",
-                  "actingSubject"
-                ],
-                "type": "object"
+                ]
               }
             }
           },

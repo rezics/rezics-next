@@ -722,6 +722,14 @@ export const SpaceRealmV1RealmShapeSchema = Type.Object({ "@id": Type.String({ m
 
 export type SpaceRealmV1RealmShape = Static<typeof SpaceRealmV1RealmShapeSchema>;
 
+export const SpaceRealmV2SpaceShapeSchema = Type.Object({ "@id": Type.String({ minLength: 1 }), "rdf:type": Type.Array(Type.String({}), { minItems: 1, contains: Type.Literal("https://rezics.com/vocab/Space") }), "rv:definitionProfile": Type.Array(Type.Literal("https://rezics.com/definition/space-realm-v2"), { maxItems: 1, minItems: 1 }), "rv:owner": Type.Array(Type.String({}), { minItems: 1, maxItems: 1 }), "rv:realmCapability": Type.Array(Type.String({}), { minItems: 1, maxItems: 1 }), "rv:disclosure": Type.Optional(Type.Array(Type.Union([Type.Literal("https://rezics.com/vocab/Public"), Type.Literal("https://rezics.com/vocab/Private")]), { maxItems: 1 })) }, { additionalProperties: true });
+
+export type SpaceRealmV2SpaceShape = Static<typeof SpaceRealmV2SpaceShapeSchema>;
+
+export const SpaceRealmV2RealmShapeSchema = Type.Object({ "@id": Type.String({ minLength: 1 }), "rdf:type": Type.Array(Type.String({}), { minItems: 1, contains: Type.Literal("https://rezics.com/vocab/Realm") }), "rv:definitionProfile": Type.Array(Type.Literal("https://rezics.com/definition/space-realm-v2"), { maxItems: 1, minItems: 1 }), "rv:space": Type.Array(Type.String({}), { minItems: 1, maxItems: 1 }), "rv:communityHandle": Type.Optional(Type.Array(Type.String({}), { maxItems: 1 })), "rv:topic": Type.Optional(Type.Array(Type.String({}), { maxItems: 3 })), "rv:realmState": Type.Array(Type.String({}), { minItems: 1, contains: Type.Literal("https://rezics.com/vocab/Active") }), "rv:selectionPolicy": Type.Array(Type.String({}), { minItems: 1, contains: Type.Literal("https://rezics.com/definition/realm-manager-fixed-main-fallback-v1") }), "rv:membershipPolicy": Type.Array(Type.String({}), { minItems: 1, contains: Type.Literal("https://rezics.com/definition/realm-closed-v1") }), "rv:reviewPolicy": Type.Array(Type.Union([Type.Literal("https://rezics.com/definition/realm-manager-reviewed-v1"), Type.Literal("https://rezics.com/definition/realm-members-direct-v1"), Type.Literal("https://rezics.com/definition/realm-open-v1")]), { minItems: 1, maxItems: 1 }), "rv:visibility": Type.Optional(Type.Array(Type.Union([Type.Literal("public"), Type.Literal("restricted"), Type.Literal("private")]), { maxItems: 1 })), "rv:reviewMode": Type.Optional(Type.Array(Type.Union([Type.Literal("mandatory"), Type.Literal("trusted-members"), Type.Literal("open")]), { maxItems: 1 })), "rv:realmPolicyHead": Type.Optional(Type.Array(Type.String({}), { maxItems: 1 })) }, { additionalProperties: true });
+
+export type SpaceRealmV2RealmShape = Static<typeof SpaceRealmV2RealmShapeSchema>;
+
 export const StatementCutoverV1CutoverShapeSchema = Type.Object({ "@id": Type.String({ minLength: 1 }), "rdf:type": Type.Array(Type.Union([Type.Literal("https://rezics.com/vocab/StatementCutover"), Type.Literal("https://rezics.com/vocab/RevisionAnchor")]), { minItems: 2, maxItems: 2 }), "rv:component": Type.Array(Type.String({}), { minItems: 1, maxItems: 1 }), "rv:recordedBy": Type.Array(Type.String({}), { minItems: 1, maxItems: 1 }), "rv:operation": Type.Array(Type.String({}), { minItems: 1, maxItems: 1 }), "rv:modelRevision": Type.Array(Type.Literal("https://rezics.com/definition/statement-cutover-v1"), { maxItems: 1, minItems: 1 }), "rv:shapeRevision": Type.Array(Type.Literal("https://rezics.com/definition/statement-cutover-v1"), { maxItems: 1, minItems: 1 }), "rv:manifest": Type.Array(Type.String({}), { minItems: 1, maxItems: 1 }), "rv:dataEpoch": Type.Array(Type.String({}), { minItems: 1, maxItems: 1 }), "rv:sequence": Type.Array(Type.Integer({"minimum":1}), { minItems: 1, maxItems: 1 }) }, { additionalProperties: true });
 
 export type StatementCutoverV1CutoverShape = Static<typeof StatementCutoverV1CutoverShapeSchema>;
@@ -1171,6 +1179,8 @@ export const shapeSchemas = {
   "https://rezics.com/definition/source-reification-v1/statement-shape": SourceReificationV1StatementShapeSchema,
   "https://rezics.com/definition/space-realm-v1/space-shape": SpaceRealmV1SpaceShapeSchema,
   "https://rezics.com/definition/space-realm-v1/realm-shape": SpaceRealmV1RealmShapeSchema,
+  "https://rezics.com/definition/space-realm-v2/space-shape": SpaceRealmV2SpaceShapeSchema,
+  "https://rezics.com/definition/space-realm-v2/realm-shape": SpaceRealmV2RealmShapeSchema,
   "https://rezics.com/definition/statement-cutover-v1/cutover-shape": StatementCutoverV1CutoverShapeSchema,
   "https://rezics.com/definition/statement-decision-v1/slot-shape": StatementDecisionV1SlotShapeSchema,
   "https://rezics.com/definition/statement-decision-v1/decision-shape": StatementDecisionV1DecisionShapeSchema,

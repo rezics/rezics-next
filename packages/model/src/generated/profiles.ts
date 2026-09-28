@@ -906,6 +906,18 @@ export const profileRegistry = {
       "realm"
     ]
   },
+  "space-realm-v2": {
+    "sha256": "6bcaa955e1c473f450b97d2d50afad3205d0136447b7dd11e30650a888045185",
+    "file": "shapes/space-realm-v2.ttl",
+    "shapes": [
+      "https://rezics.com/definition/space-realm-v2/space-shape",
+      "https://rezics.com/definition/space-realm-v2/realm-shape"
+    ],
+    "focusRoles": [
+      "space",
+      "realm"
+    ]
+  },
   "statement-cutover-v1": {
     "sha256": "e2ae65228aa4e311c183d230f96530358c88e7bd4e09928f482f394f1fda8daa",
     "file": "shapes/statement-cutover-v1.ttl",
