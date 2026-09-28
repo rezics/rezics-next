@@ -106,13 +106,15 @@ export default async function StudioWorkPage(props: Params) {
     readWorkLanguages(agent.iri, header)]);
   // Who writes each chapter and where it stands streams in after the list.
   const facts = readChapterFacts(agent, agents, header.id, chapters);
-  const offset = cursor ? Math.max(0, Number.parseInt(query.from ?? '0', 10) || 0) : 0;
-  const next = chapters.page.ok ? chapters.page.data.nextCursor : null;
-  const shown = chapters.page.ok ? chapters.page.data.items.length : 0;
-  const moreHref = next ? `${workHref(agent, header.id, 'chapters')}&cursor=${encodeURIComponent(next)}&from=${offset + shown}`
-    : null;
+  // The volume being written opens with its chapters: the last volume or part, as in an author's back end.
+  const groups = chapters.page.ok ? chapters.page.data.items.filter(item => item.role === 'group') : [];
+  const current = groups.filter(item => item.division !== 'extras').at(-1) ?? groups.at(-1);
+  const inside = current ? await readChapters(agent.iri, header, { parent: current.occurrence, agents,
+    readAs: chapters.readAs }) : null;
+  const opened = current && inside?.page.ok ? { occurrence: current.occurrence, page: inside.page.data,
+    facts: readChapterFacts(agent, agents, header.id, inside) } : null;
   return <StudioWorkFrame {...frame} languages={languages.all}>
     <WorkTabBody agent={agent} work={loaded.data} language={chapters.language} locale={locale} messages={messages}
-      content={{ tab, chapters: { page: chapters.page, offset, moreHref, facts } }} />
+      content={{ tab, chapters: { page: chapters.page, facts, opened, agents, readAs: chapters.readAs } }} />
   </StudioWorkFrame>;
 }

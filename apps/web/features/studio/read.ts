@@ -3,6 +3,7 @@ import type { UiLocale } from '../../i18n/define.ts';
 import { mainApi, mainApiWithToken } from '../api/main.ts';
 import type { AgentOption } from '../auth/acting-identity.ts';
 import { chapterVariant } from './content-api.ts';
+import { type ChapterFacts, chapterFacts, type RawFact } from './outline.ts';
 import { canonicalLanguage, type ClassificationPage, type ContentsItem, type ContentsPage, directionOf,
   failureOf, idOf, iri, type InventoryPage, type InventoryState, type InventoryWork, type Loaded, type MainClient, type MyText,
   type NativeVariants, type RealmChoice, type ReviewMode, workKind, type Submission, type TextDraft, type TextHead,
@@ -232,8 +233,9 @@ export interface BookChaptersView {
   page: Loaded<ContentsPage> | { ok: false; failure: 'none' };
   /** The language the chapters are written and published in. */
   language: string;
-  facts: Array<{ occurrence: string; writer: string | null; otherIdentity: boolean;
-    state: ChapterState | null; target: string | null; label: ContentsItem['label']; language: string | null }>;
+  facts: RawFact[];
+  /** The identity Main read the chapters as: this Agent, or another of this person's that writes the Book. */
+  readAs: string;
 }
 
 /**
@@ -241,13 +243,16 @@ export interface BookChaptersView {
  * One request carries the language Studio writes in and the page cursor.
  */
 export async function readChapters(actingSubject: string, header: Pick<WorkHeader, 'id' | 'mainVersion' | 'title'>,
-  { cursor, main: client, agents = [] }: { cursor?: string; main?: MainClient; agents?: readonly AgentOption[] } = {}):
+  { cursor, parent, main: client, agents = [], readAs }: { cursor?: string; parent?: string; main?: MainClient;
+    agents?: readonly AgentOption[]; readAs?: string } = {}):
   Promise<BookChaptersView> {
   const main = client ?? await mainApi();
   const { own: language } = await readWorkLanguages(actingSubject, header, main);
   const chapterPage = (agent: string) => settle(() => main.v1.me.agents({ agent: idOf(agent) })
-    .works({ id: idOf(header.id) }).chapters.get({ query: { language, ...(cursor ? { cursor } : {}) } }));
-  let loaded = await chapterPage(actingSubject);
+    .works({ id: idOf(header.id) }).chapters.get({ query: { language, ...(cursor ? { cursor } : {}),
+      ...(parent ? { parent } : {}) } }));
+  let reader = readAs ?? actingSubject;
+  let loaded = await chapterPage(reader);
   // The same person may open a writer's Book through another of their identities.
   // Main's Studio chapter read is fenced to the Book's maintainer, so resolve one credited
   // author among the identities this person controls when the current identity is refused.
@@ -256,45 +261,23 @@ export async function readChapters(actingSubject: string, header: Pick<WorkHeade
       .get({ query: { actingSubject } }));
     const writer = credits.ok && credits.data.items.find(credit => credit.role === 'author'
       && credit.agent !== actingSubject && agents.some(agent => agent.iri === credit.agent));
-    if (writer) loaded = await chapterPage(writer.agent);
+    if (writer) {
+      reader = writer.agent;
+      loaded = await chapterPage(reader);
+    }
   }
   const page = loaded.ok ? { ok: true as const, data: loaded.data.page }
-    : !cursor && loaded.failure === 'missing' ? { ok: false as const, failure: 'none' as const } : loaded;
-  return { language, page, facts: loaded.ok ? loaded.data.facts : [] };
+    : !cursor && !parent && loaded.failure === 'missing' ? { ok: false as const, failure: 'none' as const } : loaded;
+  return { language, page, facts: loaded.ok ? loaded.data.facts : [], readAs: reader };
 }
 
-export type ChapterState = 'empty' | 'draft' | 'published' | 'changed';
-
-/** Who writes a chapter, of the identities this person acts as. */
-export type ChapterWriter = { kind: 'self' } | { kind: 'agent'; agent: AgentOption } | { kind: 'unknown' };
-
-export interface ChapterFact {
-  writer: ChapterWriter;
-  /** Where the chapter stands for its writer, from its Content variants; null when Main didn't say. */
-  state: ChapterState | null;
-  /** The chapter and its title as its writer sees them, when the Studio Agent can't see them. */
-  target?: string;
-  label?: ContentsItem['label'];
-}
-
-/** What Studio learned about each chapter on a page, by occurrence. */
-export type ChapterFacts = Record<string, ChapterFact>;
+export type { ChapterFact, ChapterFacts, ChapterState, ChapterWriter } from './outline.ts';
 
 /** Names an owned writer from this person's current identity list. */
 export async function readChapterFacts(agent: AgentOption, agents: readonly AgentOption[], book: string,
   chapters: BookChaptersView): Promise<ChapterFacts> {
   void book;
-  return Object.fromEntries(chapters.facts.map(fact => {
-    // A chapter page may have been read as another controlled writer; Main's
-    // otherIdentity flag is relative to that reader, not the Studio page's Agent.
-    const other = agents.find(option => option.iri === fact.writer && option.iri !== agent.iri);
-    const writer: ChapterWriter = fact.writer === agent.iri ? { kind: 'self' }
-      : other ? { kind: 'agent', agent: other } : { kind: 'unknown' };
-    const hidden = chapters.page.ok && !chapters.page.data.items.find(item => item.occurrence === fact.occurrence)?.target;
-    return [fact.occurrence, { writer, state: fact.state,
-      ...(hidden && fact.target ? { target: fact.target } : {}),
-      ...(hidden && fact.label ? { label: fact.label } : {}) }];
-  }));
+  return chapterFacts(agent, agents, chapters.page.ok ? chapters.page.data : null, chapters.facts);
 }
 
 /** The Studio Agent's texts of one Work, one per language. */

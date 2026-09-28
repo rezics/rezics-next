@@ -1,6 +1,6 @@
 import { browserMainApi } from '../api/browser.ts';
 import type { SaveOutcome } from './autosave.ts';
-import { idOf, type MainClient } from './types.ts';
+import { directionOf, idOf, type MainClient } from './types.ts';
 
 // The browser side of a Book's chapters: the Book's composition orders them,
 // each chapter is a Work of its own, and its text is a Content draft in one
@@ -157,6 +157,22 @@ export async function readCompositionHead(actingSubject: string, book: string, l
   return read.error?.status === 404 ? null : 'unavailable';
 }
 
+/** The Book's composition, made first when it has none; another tab's composition is read and used. */
+export async function ensureComposition(input: { actingSubject: string; book: string; mainVersion: string;
+  language?: string; key: string }, main: MainClient = browserMainApi()):
+  Promise<{ structure: string; head: string } | Refusal> {
+  const created = await settled(() => main.v1.compositions.post({ profile: 'book-composition', work: input.book,
+    mainVersion: input.mainVersion, actingSubject: input.actingSubject },
+  { headers: { 'idempotency-key': `${input.key}:composition` } }));
+  if (created.data && !('operationId' in created.data) && created.data.revision) {
+    return { structure: created.data.structure, head: created.data.revision };
+  }
+  if (!created.error) return 'pending';
+  const found = created.error.status === 409
+    ? await readCompositionHead(input.actingSubject, input.book, input.language, main) : null;
+  return found && found !== 'unavailable' ? found : commandOf(created.error);
+}
+
 /**
  * Adds a chapter at the end of a Book: the Book's composition first when it has
  * none, then the chapter's Work, then its place in the composition. The chapter
@@ -167,23 +183,14 @@ export async function readCompositionHead(actingSubject: string, book: string, l
  * chapter; the placement's key names the head it was made on.
  */
 export async function createChapter(input: { actingSubject: string; book: string; mainVersion: string;
-  composition: { structure: string; head: string } | null; title: string; language: string; key: string },
+  composition: { structure: string; head: string } | null; title: string; language: string; key: string;
+  /** The volume, part or extras to add it at the end of; the Book's top level by default. */
+  parent?: string | null },
 main: MainClient = browserMainApi()): Promise<ChapterCommand & { chapter?: string; structure?: string;
   /** The chapter's place in the composition, when Main's answer names it (a replayed answer may not). */
   occurrence?: string }> {
   const headers = (step: string) => ({ headers: { 'idempotency-key': `${input.key}:${step}` } });
-  const composition = input.composition ?? await (async (): Promise<{ structure: string; head: string } | Refusal> => {
-    const created = await settled(() => main.v1.compositions.post({ profile: 'book-composition', work: input.book,
-      mainVersion: input.mainVersion, actingSubject: input.actingSubject }, headers('composition')));
-    if (created.data && !('operationId' in created.data) && created.data.revision) {
-      return { structure: created.data.structure, head: created.data.revision };
-    }
-    if (!created.error) return 'pending';
-    // Another tab made the composition first: read it and carry on.
-    const found = created.error.status === 409
-      ? await readCompositionHead(input.actingSubject, input.book, input.language, main) : null;
-    return found && found !== 'unavailable' ? found : commandOf(created.error);
-  })();
+  const composition = input.composition ?? await ensureComposition(input, main);
   if (typeof composition === 'string') return { outcome: composition };
   const { structure } = composition;
   const work = await settled(() => main.v1.works.post({ profile: 'metadata-only-v1', title: input.title,
@@ -193,11 +200,62 @@ main: MainClient = browserMainApi()): Promise<ChapterCommand & { chapter?: strin
   const chapter = work.data.work;
   const placed = await settled(() => main.v1.compositions({ id: idOf(structure) }).changes.post({
     profile: 'book-composition', expectedHead: composition.head, actingSubject: input.actingSubject,
-    operations: [{ op: 'insert', parent: structure, position: 'last', role: 'chapter', target: chapter,
+    operations: [{ op: 'insert', parent: input.parent ?? structure, position: 'last', role: 'chapter', target: chapter,
       label: { value: input.title, language: input.language } }] }, headers(`insert:${idOf(composition.head)}`)));
   if (placed.error) return { outcome: commandOf(placed.error), chapter, structure };
   if (!placed.data || 'operationId' in placed.data || !placed.data.revision) return { outcome: 'pending', chapter, structure };
   return { outcome: 'done', head: placed.data.revision, chapter, structure, occurrence: placed.data.occurrences?.[0] };
+}
+
+/** One change to a Book's composition as Main takes it (`POST /v1/compositions/{id}/changes`). */
+export type CompositionOperation = NonNullable<Parameters<ReturnType<MainClient['v1']['compositions']>['changes']['post']>[0]>['operations'][number];
+
+/**
+ * Applies one change to the Book's composition on its head. When another tab
+ * changed the Book first, the change is made once more on the head Main names
+ * now, with a key of its own, since the intent (this chapter into that volume)
+ * still holds; Main refuses it if it no longer can.
+ */
+export async function changeComposition(input: { actingSubject: string; book: string; language?: string;
+  composition: { structure: string; head: string }; operations: CompositionOperation[]; key: string },
+main: MainClient = browserMainApi()): Promise<ChapterCommand & { occurrences?: string[] }> {
+  const send = async (head: string, key: string) => {
+    const changed = await settled(() => main.v1.compositions({ id: idOf(input.composition.structure) }).changes.post({
+      profile: 'book-composition', expectedHead: head, actingSubject: input.actingSubject,
+      operations: input.operations }, { headers: { 'idempotency-key': key } }));
+    if (changed.error) return { outcome: commandOf(changed.error) };
+    if (!changed.data || 'operationId' in changed.data || !changed.data.revision) return { outcome: 'pending' as const };
+    return { outcome: 'done' as const, head: changed.data.revision, occurrences: changed.data.occurrences ?? [] };
+  };
+  const first = await send(input.composition.head, input.key);
+  if (first.outcome !== 'stale') return first;
+  const current = await readCompositionHead(input.actingSubject, input.book, input.language, main);
+  if (!current || current === 'unavailable' || current.head === input.composition.head) return first;
+  return send(current.head, `${input.key}:${idOf(current.head)}`);
+}
+
+/**
+ * Publishes the draft a chapter's writer last saved in one language, as the
+ * editor's Publish does, for publishing several chapters at once. Main names
+ * the draft head, its bytes and the publication it replaces; one key per
+ * revision, so a retry replays instead of publishing twice.
+ */
+export async function publishLatest(input: { actingSubject: string; chapter: string; language: string },
+  main: MainClient = browserMainApi()): Promise<PublishOutcome | 'nothing'> {
+  const variant = await chapterVariant(input.chapter, input.language);
+  const listed = await main.v1.works({ id: idOf(input.chapter) })['content-variants'].get({
+    query: { actingSubject: input.actingSubject } });
+  if (listed.error || !listed.data) return listed.error?.status === 403 ? 'denied' : 'failed';
+  const current = listed.data.items.find(item => item.variantId === variant);
+  if (!current?.draftHead) return 'nothing';
+  const exact = await readChapterRevision(input.actingSubject, current.draftHead, main);
+  if (!exact) return 'failed';
+  const published = await publishChapter({ target: { actingSubject: input.actingSubject, chapter: input.chapter, variant,
+    language: input.language, direction: directionOf(input.language) },
+  basis: { head: current.draftHead, digest: exact.digest, epoch: listed.data.sourcePosition.dataEpoch },
+  current: current.publicationHead ? { publication: current.publicationHead, eligibility: current.eligibilityHead } : null,
+  key: `studio-publish:${idOf(input.chapter)}:${current.draftHead}` }, main);
+  return published.outcome;
 }
 
 /** Moves one chapter to the top of the Book or after another chapter. */
