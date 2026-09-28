@@ -265,6 +265,7 @@ function discussionPost(item: FeedItem & { realm: NonNullable<FeedItem['realm']>
     vote: { id: item.id, vote: item.vote, score: item.score, revision: item.voteRevision },
     realm: item.realm, author: { name: item.actor.name, handle: item.actor.handle }, time: item.time,
     title: item.post.title, body: item.post.excerpt ?? '', language: item.post.language,
+    showSpoilers: item.viewerState.status === 'available' && item.viewerState.spoiler.policy === 'show',
     work: target.work ? { id: target.work, title: target.title, cover: target.cover, types: target.types,
       byline: authorLine(item.authors) } : null,
     comments: item.kind === 'discussion' ? item.comments : null,

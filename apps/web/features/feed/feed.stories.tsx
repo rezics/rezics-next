@@ -215,6 +215,25 @@ export const Discussions: Story = {
   },
 };
 
+/** Main's show-spoilers choice opens an announced discussion in Home. */
+export const DiscussionsVeiled: Story = {
+  args: { initial: { ok: true, data: page(everyKind.filter(item => item.kind === 'discussion'
+    && item.post.title?.startsWith('【剧透】'))) }, api: memoryFeed() },
+};
+
+/** Main's show-spoilers choice opens an announced discussion in Home. */
+export const DiscussionsWithSpoilersShown: Story = {
+  args: { initial: { ok: true, data: page(everyKind.filter(item => item.kind === 'discussion'
+    && item.post.title?.startsWith('【剧透】')).map(item => ({ ...item,
+    viewerState: { status: 'available' as const, shelf: null, progress: null,
+      spoiler: { policy: 'show' as const, hidden: false } } }))) }, api: memoryFeed() },
+  async play({ canvasElement }) {
+    const spoiler = article(within(canvasElement), '【剧透】《雨夜书店》第二章：那张旧车票');
+    await expect(spoiler).toHaveTextContent('二十年前的车票');
+    await expect(within(spoiler).queryByRole('button', { name: 'Show spoiler' })).toBeNull();
+  },
+};
+
 export const HideAndUndo: Story = {
   args: { api: memoryFeed() },
   async play({ canvasElement, args }) {

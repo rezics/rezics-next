@@ -299,6 +299,22 @@ export function collapseWorkCards(items: FeedItem[]): FeedItem[] {
   return result;
 }
 
+/** A reader's review or public collection is activity about what they read. */
+export function readingActivityVisible(source: Pick<FeedSource, 'kind' | 'actor'>,
+  viewer: string | null, hidden: ReadonlySet<string>): boolean {
+  return !(['review', 'collection'] as readonly string[]).includes(source.kind)
+    || source.actor === viewer || !hidden.has(source.actor);
+}
+export function personFeedSourceVisible(source: Pick<FeedSource, 'kind' | 'actor'>,
+  viewer: string | null, blocked: readonly string[], hidden: ReadonlySet<string>): boolean {
+  return !blocked.includes(source.actor) && readingActivityVisible(source, viewer, hidden);
+}
+export function contentLanguageVisible(language: string | null,
+  filters: readonly (readonly string[] | undefined)[]): boolean {
+  return filters.every(languages => !languages?.length || !!language
+    && languages.some(item => item.toLowerCase() === language.toLowerCase()));
+}
+
 const normalized = (query: FeedQuery) => [
   [...(query.kinds ?? [])].sort(), [...new Set((query.contentLanguages ?? []).map(value => value.toLowerCase()))].sort(),
   [...(query.realms ?? [])].sort(), [...(query.concepts ?? [])].sort(), query.language?.toLowerCase() ?? null,
@@ -317,7 +333,7 @@ export async function readFeed(session: WorkReadSession, query: FeedQuery, reade
   if (!store || !follows) throw new WorkReadUnavailable('Feed owner is unavailable');
   const homePersonal = session.deps.homePersonal;
   if (reader && !homePersonal) throw new WorkReadUnavailable('Home preferences are unavailable');
-  if (reader && !session.deps.personPreferences) throw new WorkReadUnavailable('Person preferences are unavailable');
+  if (!session.deps.personPreferences) throw new WorkReadUnavailable('Person preferences are unavailable');
   if (query.scope === 'following' && !reader) throw new WorkReadInvalid('Following requires authentication');
   const [personal, checkpoint, following, personSettings] = await inOrder(
     reader ? homePersonal!.read(reader.principal, reader.agent) : null,
@@ -370,6 +386,9 @@ export async function readFeed(session: WorkReadSession, query: FeedQuery, reade
   const withinWindow = page.filter(row => row.sort_time.getTime() >= cutoff && row.sort_time.getTime() <= asOf);
   const memberRows = await store.members(session.position.dataEpoch, withinWindow.flatMap(row => row.group_members));
   const sources = await visibleFeedSources(session, memberRows);
+  const hiddenReading = await session.deps.personPreferences.hiddenReadingActors(
+    [...new Set(sources.filter(source => ['review', 'collection'].includes(source.kind))
+      .map(source => source.actor))]);
   const summaryIds = [...new Set(sources.flatMap(source => [source.work, source.realm].filter((id): id is string => !!id)))];
   const more = rows.length > page.length;
   /** Groups, collapses and selects the disclosed cards. Pure over its input:
@@ -436,7 +455,8 @@ export async function readFeed(session: WorkReadSession, query: FeedQuery, reade
   // Selection waits only for interest kinds and tag rules, so without them
   // the card parts start alongside the page's presentation batches.
   const candidatesRead = kindsRead.then(async workKinds => {
-    const filtered = sources.filter(source => !personSettings?.blockedPeople.includes(source.actor)
+    const filtered = sources.filter(source => personFeedSourceVisible(source, reader?.agent ?? null,
+      personSettings?.blockedPeople ?? [], hiddenReading)
       && !(personal && excludedFeedSource(source, personal.exclusions))
       && !(query.kinds && !query.kinds.includes(source.kind)) && matchesFeedInterest(source, interests, workKinds)
       && !(query.realms && (!source.realm || !query.realms.includes(source.realm))));
@@ -493,11 +513,8 @@ export async function readFeed(session: WorkReadSession, query: FeedQuery, reade
       const followed = matches?.reasons[sources.indexOf(source)]?.[0];
       item.reason = followed ? { kind: 'followed', target: followed.target, targetKind: followed.kind }
         : { kind: 'recommended', basis: scope === 'following' ? 'thin-following' : 'all' };
-      const matchesLanguages = (languages: readonly string[] | undefined) => !languages?.length
-        || !!item.post.language && languages.some(language =>
-          language.toLowerCase() === item.post.language!.toLowerCase());
-      if (!matchesLanguages(query.contentLanguages)
-        || !matchesLanguages(personSettings?.contentLanguages)) continue;
+      if (!contentLanguageVisible(item.post.language,
+        [query.contentLanguages, personSettings?.contentLanguages])) continue;
       if (query.concepts) {
         if (!source.work) continue;
         const senses = unwrap(acceptedTags.get(tagKey(source))!);
@@ -541,13 +558,17 @@ export async function readFeed(session: WorkReadSession, query: FeedQuery, reade
     Promise.all(items.map((item, index) => fenceCards(item) && item.kind !== 'review'
       ? settle(feedCardData(session, itemSources[index]!, item.target, item.links.target,
         undefined, personSettings?.spoilerPolicy === 'show')) : null)));
-  const graphFields = (source: FeedSource) => JSON.stringify([source.id, source.kind, source.target, source.work,
+  const graphFields = (source: FeedSource) => JSON.stringify([source.id, source.kind, source.actor, source.target, source.work,
     source.realm, source.zone, source.language, source.occurrence, source.contentTarget, source.reply,
     source.contentRevision, source.review]);
   const disclosed: FeedItem[] = [];
+  const hiddenReadingNow = await session.deps.personPreferences.hiddenReadingActors(
+    [...new Set(items.filter(item => ['review', 'collection'].includes(item.kind))
+      .map(item => item.actor.id))]);
   for (const [index, item] of items.entries()) {
     const finalSource = final.get(item.id);
-    if (!finalSource) continue;
+    if (!finalSource || !personFeedSourceVisible(finalSource, reader?.agent ?? null,
+      personSettings?.blockedPeople ?? [], hiddenReadingNow)) continue;
     try {
       const actor = finalActors.get(item.actor.id);
       if (!actor) throw new WorkReadMissing('Agent unavailable');

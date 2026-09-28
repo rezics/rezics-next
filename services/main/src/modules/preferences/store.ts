@@ -19,7 +19,7 @@ export interface PersonPreferences extends PersonChoices { profile: 'person-pref
 export const DEFAULT_PERSON_CHOICES: PersonChoices = { profileVisibility: 'public', followPolicy: 'everyone',
   hideReadingActivity: false, contentLanguages: [], spoilerPolicy: 'hide-unread', adultContent: false };
 /** One bounded settings row and at most 500 blocks; page admission checks at most 128 actors. */
-export const PERSON_PREFERENCES_COST = { blocks: 500, actors: 128, readStatements: 4,
+export const PERSON_PREFERENCES_COST = { blocks: 500, actors: 128, readingActors: 256, readStatements: 4,
   writeStatements: 9 } as const;
 const keyPattern = /^[A-Za-z0-9:_./-]{1,128}$/;
 const languagePattern = /^[a-z]{2,3}(?:-[A-Za-z0-9]{1,8})*$/;
@@ -34,7 +34,7 @@ function choices(row?: Row): PersonChoices {
 function valid(value: PersonChoices): boolean {
   return !!value && ['public', 'private'].includes(value.profileVisibility)
     && ['everyone', 'nobody'].includes(value.followPolicy)
-    && typeof value.hideReadingActivity === 'boolean' && typeof value.adultContent === 'boolean'
+    && typeof value.hideReadingActivity === 'boolean' && value.adultContent === false
     && ['hide-unread', 'show'].includes(value.spoilerPolicy)
     && Array.isArray(value.contentLanguages) && value.contentLanguages.length <= 8
     && new Set(value.contentLanguages).size === value.contentLanguages.length
@@ -150,6 +150,21 @@ export class PersonPreferencesStore {
       const rows = await client.query<{ target_agent: string }>(`SELECT target_agent FROM access.person_block
         WHERE principal_id = $1 AND target_agent = ANY($2::text[])`, [owner, actors]);
       return new Set(rows.rows.map(row => row.target_agent));
+    });
+  }
+
+  /** Home asks once for its bounded source authors, then once at disclosure. */
+  async hiddenReadingActors(actors: readonly string[]): Promise<Set<string>> {
+    if (actors.length > PERSON_PREFERENCES_COST.readingActors
+      || actors.some(actor => !agentPattern.test(actor))) {
+      throw new ControlInvalid('Reading activity actor batch exceeds budget');
+    }
+    if (!actors.length) return new Set();
+    return controlRead(this.pool, async client => {
+      const rows = await client.query<{ agent_id: string }>(`SELECT agent_id
+        FROM access.person_preferences WHERE agent_id = ANY($1::text[])
+          AND hide_reading_activity = true`, [actors]);
+      return new Set(rows.rows.map(row => row.agent_id));
     });
   }
 

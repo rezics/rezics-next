@@ -27,6 +27,8 @@ export interface DiscussionPost {
   /** The words after the title, or all of a reply's. */
   body: string;
   language: string | null;
+  /** Main's current reader preference for Home; thread pages keep their own veil. */
+  showSpoilers?: boolean;
   work: AttachedWork | null;
   comments: { value: number; kind: 'exact' | 'lower-bound' } | null;
   /** Discussions Home grouped under this one, and where to find them. */
@@ -85,7 +87,7 @@ export function DiscussionCard({ post, menu, position, total }: { post: Discussi
     ]} end={<>{post.realm ? <JoinButton realm={post.realm} /> : null}{menu}</>} />}
     title={post.kind === 'discussion' ? title || t.untitled : null} titleLang={post.language ?? undefined}
     label={t.replyIn}
-    preview={words ? spoiler ? <SpoilerVeil>{words}</SpoilerVeil> : words : null}
+    preview={words ? spoiler && !post.showSpoilers ? <SpoilerVeil>{words}</SpoilerVeil> : words : null}
     below={post.more?.count ? <LocalizedLink href={post.more.href} className={cn(rowLink, 'w-fit font-medium',
       'text-primary text-xs underline-offset-4')}>{t.moreDiscussions(post.more.count)}</LocalizedLink> : null}
     attachment={post.work ? <WorkAttachment work={post.work} /> : null}

@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
 import type { Pool } from 'pg';
-import { ControlDenied, ControlStale } from '../src/modules/access/topology-control.ts';
+import { ControlDenied, ControlInvalid, ControlStale } from '../src/modules/access/topology-control.ts';
 import { FollowsStore } from '../src/modules/follows/store.ts';
 import { DEFAULT_PERSON_CHOICES, PersonPreferencesStore } from '../src/modules/preferences/store.ts';
 
@@ -98,4 +98,10 @@ test('a person who accepts nobody cannot acquire a new follower', async () => {
     .rejects.toBeInstanceOf(ControlDenied);
   expect(statements.some(sql => sql.includes('INSERT INTO access.follow ('))).toBe(false);
   expect(statements).toContain('ROLLBACK');
+});
+
+test('adult-content opt-in is denied until a source classification can enforce it', async () => {
+  const store = new PersonPreferencesStore({} as Pool);
+  await expect(store.write(principal, agent, { ...DEFAULT_PERSON_CHOICES, adultContent: true },
+    0, 'adult:1')).rejects.toBeInstanceOf(ControlInvalid);
 });
