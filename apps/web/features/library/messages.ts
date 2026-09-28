@@ -60,7 +60,6 @@ export const messages = {
     { count: asValue(number()), shelf: String }),
   someFailed: plural({ one: insert('{{count}} work couldn’t be changed. Try again.'),
     other: insert('{{count}} works couldn’t be changed. Try again.') }, { count: asValue(number()) }),
-  changeFailed: 'Couldn’t change the shelf. Try again.',
   movedOne: insert('“{{title}}” is now on {{shelf}}.', { title: String, shelf: String }),
   removedOne: insert('“{{title}}” left your library.', { title: String }),
 
@@ -68,7 +67,6 @@ export const messages = {
   lastRead: insert('Last read {{date}}', { date: String }),
   started: 'Started',
   finished: 'Finished',
-  notSet: 'Not set',
   editDates: 'Edit dates',
   addDates: 'Add dates',
   datesFor: insert('Reading dates for “{{title}}”', { title: String }),
@@ -79,7 +77,6 @@ export const messages = {
   datesMoved: 'This work moved to another shelf in the meantime.',
 
   yourRating: 'Your rating',
-  rateWork: insert('Rate “{{title}}”', { title: String }),
   ratingFailed: 'Couldn’t save your rating. Try again.',
 
   writeReview: 'Write a review',
@@ -97,7 +94,6 @@ export const messages = {
   reviewUnavailable: 'Couldn’t load your review.',
 
   continue: 'Continue',
-  continueWork: insert('Continue “{{title}}”', { title: String }),
   nextChapter: insert('Next: {{chapter}}', { chapter: String }),
   nextUp: 'Next chapter',
   chaptersLeft: plural({ one: insert('{{count}} chapter left'), other: insert('{{count}} chapters left') },

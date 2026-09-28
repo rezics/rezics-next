@@ -1,10 +1,14 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
+import { materializeData } from 'native-i18n';
 import { createContext, type ReactNode, use, useMemo, useState } from 'react';
+import type { UiLocale } from '../../i18n/define.ts';
 import { type ReaderActions, ReaderActionsProvider, type ReadingStatus } from '../catalogue/reader-actions.tsx';
 import { createReaderStore, type ReaderSeed } from '../catalogue/reader-store.ts';
 import { type LibraryApi, mainLibraryApi } from './api.ts';
+import { statusLabel } from './labels.ts';
+import type { LibraryMessages } from './messages.ts';
 
 type ReadyActions = Extract<ReaderActions, { kind: 'ready' }>;
 
@@ -38,9 +42,12 @@ export function useLibrary(): LibraryContextValue {
  * rates many Works and reads each one's Main Version when it is rated. Stories
  * pass `api` and `readerActions` to run against memory.
  */
-export function LibraryProvider({ actingSubject, seed, ratingContext, api, readerActions, children }: {
-  actingSubject: string; seed: ReaderSeed; ratingContext: string | null; api?: LibraryApi;
-  readerActions?: ReadyActions; children: ReactNode;
+export function LibraryProvider({ actingSubject, seed, ratingContext, titles, api, readerActions, locale, messages,
+  children }: {
+  actingSubject: string; seed: ReaderSeed; ratingContext: string | null;
+  /** The shown Works' titles, so a move made from a row can say which Work went where. */
+  titles: Record<string, string>;
+  api?: LibraryApi; readerActions?: ReadyActions; locale: UiLocale; messages: LibraryMessages; children: ReactNode;
 }) {
   const router = useRouter();
   const [library] = useState(() => api ?? mainLibraryApi(actingSubject));
@@ -51,8 +58,14 @@ export function LibraryProvider({ actingSubject, seed, ratingContext, api, reade
     const reader: ReadyActions = { ...store,
       async setStatus(work, status) {
         const saved = await store.setStatus(work, status);
-        if (saved) refresh();
-        return saved;
+        if (!saved) return false;
+        // The row may leave this shelf when the page reads again; say where the Work went.
+        const t = materializeData(messages, { locale });
+        const title = titles[work];
+        if (title) announce({ tone: 'default', text: status ? t.movedOne({ title, shelf: statusLabel(status, t) })
+          : t.removedOne({ title }) });
+        refresh();
+        return true;
       },
       rate: ratingContext ? async (work, value) => {
         if (value === null) return false;
@@ -68,7 +81,7 @@ export function LibraryProvider({ actingSubject, seed, ratingContext, api, reade
       return refused;
     }
     return { api: library, reader, ratingContext, refresh, moveWorks, notice, announce };
-  }, [library, store, ratingContext, router, notice]);
+  }, [library, store, ratingContext, router, notice, titles, locale, messages]);
   return <LibraryContext value={value}>
     <ReaderActionsProvider signedIn signInHref="/" actions={value.reader}>{children}</ReaderActionsProvider>
   </LibraryContext>;

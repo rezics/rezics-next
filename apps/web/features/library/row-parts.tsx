@@ -210,7 +210,8 @@ export function ReviewCell({ row, locale, messages }: { row: LibraryRow; locale:
   }
 
   if (editing) {
-    const unrated = row.rating === null;
+    // Only a Work Main says is unrated asks for stars first; when Main could not say, Main decides on save.
+    const unrated = row.stateRead === true && row.rating === null;
     return <form noValidate onSubmit={event => { event.preventDefault(); void save(); }}
       className="grid max-w-2xl gap-3 rounded-2xl bg-muted/50 p-4">
       <Field invalid={error !== null}>

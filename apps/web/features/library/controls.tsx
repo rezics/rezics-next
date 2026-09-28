@@ -19,7 +19,9 @@ import type { LibraryVisibility, Loaded, Visibility } from './types.ts';
 
 type T = ReturnType<typeof materializeData<LibraryMessages>>;
 
-const visibilities = ['public', 'followers', 'private'] as const satisfies readonly Visibility[];
+// Main keeps Followers reserved and refuses it (`AgentLibraryVisibilityStore`), so it is offered
+// only to show a library already set to it.
+const writable = ['public', 'private'] as const satisfies readonly Visibility[];
 const visibilityIcon = { public: GlobeIcon, followers: UsersIcon, private: LockIcon };
 const visibilityLabel = (value: Visibility, t: T) =>
   value === 'public' ? t.visibilityPublic : value === 'followers' ? t.visibilityFollowers : t.visibilityPrivate;
@@ -71,7 +73,7 @@ export function VisibilityControl({ initial, locale, messages }: {
         <ChevronDownIcon aria-hidden="true" /></MenuTrigger>
       <MenuContent className="w-72">
         <MenuRadioGroup value={shown.visibility} heading={t.visibility}>
-          {visibilities.map(value => {
+          {(shown.visibility === 'followers' ? ['public', 'followers', 'private'] as const : writable).map(value => {
             const ItemIcon = visibilityIcon[value];
             return <MenuRadioItem key={value} value={value} className="items-start py-2">
               <span className="grid gap-0.5">
@@ -84,7 +86,9 @@ export function VisibilityControl({ initial, locale, messages }: {
         </MenuRadioGroup>
       </MenuContent>
     </Menu>
-    <p className="text-pretty text-muted-foreground text-xs">{visibilityHelp(shown.visibility, t)} {t.visibilityNote}</p>
+    {/* On a phone the menu explains each choice; the line would push the shelves down. */}
+    <p className="hidden text-pretty text-muted-foreground text-xs sm:block">{visibilityHelp(shown.visibility, t)}
+      {' '}{t.visibilityNote}</p>
     {note ? <p role={note.tone === 'destructive' ? 'alert' : 'status'} className={cn('text-xs',
       note.tone === 'destructive' ? 'text-destructive-foreground' : 'text-muted-foreground')}>{note.text}</p> : null}
   </div>;

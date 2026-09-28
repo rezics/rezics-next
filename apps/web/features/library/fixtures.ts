@@ -30,7 +30,7 @@ const serial = byTitle(chinese, '雨夜书店');
 function item(work: CatalogueWork, status: ShelfStatus | null, shelved: number, extra: Partial<LibraryRow> = {}):
   LibraryRow {
   return { work: { ...work, rating: null, tagline: null }, status, version: 3, shelvedAt: hoursAgo(shelved),
-    startedOn: null, finishedOn: null, rating: null, lastReadAt: null, customShelves: [], ...extra };
+    startedOn: null, finishedOn: null, rating: null, lastReadAt: null, customShelves: [], stateRead: true, ...extra };
 }
 
 function review(work: CatalogueWork, text: string, language: string, rating: number, spoiler = false): Loaded<Review> {
@@ -127,7 +127,7 @@ export function memoryLibraryApi(options: { fail?: boolean; stale?: boolean } = 
     setVisibility(next, expectedVersion) {
       if (stale) {
         stale = false;
-        visibility = { visibility: 'followers', version: visibility.version + 1, changedAt: hoursAgo(0) };
+        visibility = { visibility: 'private', version: visibility.version + 1, changedAt: hoursAgo(0) };
         calls.push({ name: 'setVisibility', args: [next, expectedVersion] });
         return Promise.resolve({ ok: false, failure: 'moved' });
       }

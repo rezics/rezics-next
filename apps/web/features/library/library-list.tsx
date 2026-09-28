@@ -17,6 +17,7 @@ import { slotRatio } from '../catalogue/work.ts';
 import { CoverLink, WorkTile, workTitle } from '../catalogue/work-tile.tsx';
 import Link from '../shell/localized-link.tsx';
 import { formatDay } from './format.ts';
+import { statusLabel } from './labels.ts';
 import { useLibrary } from './library-context.tsx';
 import type { LibraryMessages } from './messages.ts';
 import { OwnRating, ReadDates, ReadingProgress, ReviewCell } from './row-parts.tsx';
@@ -24,10 +25,6 @@ import { type LibraryShelf, libraryHref, parseLibraryState, statusShelves } from
 import type { CustomShelf, LibraryRow, ShelfStatus } from './types.ts';
 
 type T = ReturnType<typeof materializeData<LibraryMessages>>;
-
-export function statusLabel(status: ShelfStatus, t: T): string {
-  return status === 'reading' ? t.reading : status === 'read' ? t.read : t.wantToRead;
-}
 
 const shelfHref = (id: string) => libraryHref(parseLibraryState({}), { shelf: { kind: 'custom', id: id.slice(-36) } });
 
@@ -85,7 +82,7 @@ function Row({ row, selecting, selected, onSelect, now, avatarQuery, locale, mes
         </div>
         {row.status === 'reading' ? <ReadingProgress row={row} locale={locale} messages={messages} /> : null}
         {row.status === 'read' ? <ReadDates row={row} now={now} locale={locale} messages={messages} /> : null}
-        {row.status === 'read' || row.rating !== null
+        {row.stateRead && (row.status === 'read' || row.rating !== null)
           ? <OwnRating row={row} locale={locale} messages={messages} /> : null}
         {row.status === 'read' ? <ReviewCell row={row} locale={locale} messages={messages} /> : null}
         <RowMeta row={row} now={now} locale={locale} t={t} />
@@ -144,6 +141,9 @@ function SelectionBar({ selected, rows, shelf, custom, customShelves, clear, loc
   const t = materializeData(messages, { locale });
   const { api, moveWorks, refresh, announce } = useLibrary();
   const [busy, setBusy] = useState(false);
+  // The bar fades out after the selection clears; it keeps the last count rather than read "0 selected".
+  const [count, setCount] = useState(selected.size);
+  if (selected.size && selected.size !== count) setCount(selected.size);
   // Clear of the phone's bottom navigation.
   const onPhone = useSyncExternalStore(subscribePhone, () => matchMedia(phone).matches, () => false);
   const works = rows.filter(row => selected.has(row.work.id));
@@ -177,7 +177,7 @@ function SelectionBar({ selected, rows, shelf, custom, customShelves, clear, loc
     positioning={{ placement: 'bottom', gutter: onPhone ? '84px' : '16px' }}>
     <ActionBarContent aria-label={t.selectionActions} aria-busy={busy || undefined} className="max-w-full">
       <ActionBarBody className="flex-wrap justify-center">
-        <ActionBarValue count={selected.size}>{t.selected(selected.size)}</ActionBarValue>
+        <ActionBarValue count={count}>{t.selected(count)}</ActionBarValue>
         <ActionBarSeparator />
         <Menu onSelect={({ value }) => void move(value as ShelfStatus)}>
           <MenuTrigger disabled={busy} className={buttonVariants({ variant: 'ghost', size: 'sm' })}>

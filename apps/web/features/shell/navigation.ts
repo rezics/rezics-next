@@ -21,7 +21,7 @@ export const navigation: readonly NavigationItem[] = [
   { href: '/discover', icon: Compass, bottom: true, label: localeText({ en: 'Discover', 'zh-Hans': '发现' }) },
   { href: '/studio', icon: Plus, bottom: true, emphasized: true, label: localeText({ en: 'Create', 'zh-Hans': '创作' }) },
   { href: '/notifications', icon: Bell, bottom: true, label: localeText({ en: 'Notifications', 'zh-Hant': '通知', 'zh-Hans': '通知', ja: '通知', ko: '알림', de: 'Benachrichtigungen', fr: 'Notifications', es: 'Notificaciones' }) },
-  // Opens the reader's shelves on their profile until Library has a page of its own (app/[locale]/library).
+  // The reader's own shelves, progress and read history (app/[locale]/library).
   { href: '/library', icon: LibraryBig, bottom: true, label: localeText({ en: 'Library', 'zh-Hans': '书架' }) },
 ];
 

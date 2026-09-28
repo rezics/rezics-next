@@ -82,12 +82,14 @@ export const ReadHistory: Story = {
     await userEvent.type(within(dates).getByLabelText('Finished'), '2026-05-20');
     await userEvent.click(within(dates).getByRole('button', { name: 'Save' }));
     await expect(await canvas.findByText('Read May 10 – 20, 2026', {}, { timeout: 3000 })).toBeVisible();
+    // The editor closes before the page takes presses again.
+    await waitFor(() => expect(page().queryByRole('dialog')).toBeNull(), { timeout: 3000 });
     // A review needs stars first; rating unlocks it.
     await userEvent.click(canvas.getByRole('button', { name: 'Write a review — Frankenstein; or, The Modern Prometheus' }));
-    const editor = canvas.getByRole('textbox', { name: /Your review of “Frankenstein/ });
+    const editor = await canvas.findByRole('textbox', { name: /Your review of “Frankenstein/ });
     await userEvent.type(editor, 'The monster’s account is the best part.');
     await expect(canvas.getByText('Rate this work first; your review goes with your rating.')).toBeVisible();
-    await expect(canvas.getByRole('button', { name: 'Save review' })).toBeDisabled();
+    await expect(await canvas.findByRole('button', { name: 'Save review' })).toBeDisabled();
   },
 };
 
@@ -134,13 +136,27 @@ export const MoveSeveral: Story = {
     await userEvent.click(canvas.getByRole('checkbox', { name: 'Select “Little Women”' }));
     await userEvent.click(canvas.getByRole('checkbox', { name: 'Select “聊斋志异”' }));
     const bar = await page().findByRole('toolbar', { name: 'Selected works' });
-    await expect(within(bar).getByText('2 selected')).toBeVisible();
+    // The bar fades in.
+    await waitFor(() => expect(within(bar).getByText('2 selected')).toBeVisible());
     await userEvent.click(within(bar).getByRole('button', { name: 'Move to' }));
     // The shelf the Works are on is not offered.
     await expect(page().queryByRole('menuitem', { name: 'Want to read' })).toBeNull();
     await choose('menuitem', 'Currently reading');
     await expect(await canvas.findByText('Moved 2 works to Currently reading.', {}, { timeout: 3000 })).toBeVisible();
     await waitFor(() => expect(page().queryByRole('toolbar', { name: 'Selected works' })).toBeNull());
+  },
+};
+
+/** A row's own shelf button moves one Work, and the page says where it went before the row leaves. */
+export const MoveOne: Story = {
+  args: { state: libraryState({ shelf: 'read' }), view: { ok: true, data: storyView(libraryState({ shelf: 'read' })) },
+    reading: [] },
+  parameters: { route: { pathname: '/en/library', search: '?shelf=read' } },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await userEvent.click(canvas.getByRole('button', { name: 'Read — Shelve “西游记”' }));
+    await choose('menuitemradio', 'Currently reading');
+    await expect(await canvas.findByText('“西游记” is now on Currently reading.', {}, { timeout: 3000 })).toBeVisible();
   },
 };
 
@@ -154,7 +170,7 @@ export const AddToShelf: Story = {
     await userEvent.click(canvas.getByRole('button', { name: 'Select' }));
     await userEvent.click(canvas.getByRole('checkbox', { name: 'Select all on this page' }));
     const bar = await page().findByRole('toolbar', { name: 'Selected works' });
-    await expect(within(bar).getByText('4 selected')).toBeVisible();
+    await waitFor(() => expect(within(bar).getByText('4 selected')).toBeVisible());
     await userEvent.click(within(bar).getByRole('button', { name: 'Add to shelf' }));
     await choose('menuitem', /Comfort reads/);
     await expect(await canvas.findByText('Added 4 works to Comfort reads.', {}, { timeout: 3000 })).toBeVisible();
@@ -210,14 +226,17 @@ export const Privacy: Story = {
 
 /** Another device changed the setting first: Library shows what Main holds now and says so. */
 export const PrivacyChangedElsewhere: Story = {
-  args: { api: memoryLibraryApi({ stale: true }) },
+  args: { overview: { ok: true, data: storyOverview(libraryItems, { visibility: { ok: true,
+    data: { visibility: 'private', version: 1, changedAt: null } } }) }, api: memoryLibraryApi({ stale: true }) },
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
-    await userEvent.click(canvas.getByRole('button', { name: 'Who can see your reading shelves: Everyone' }));
-    await choose('menuitemradio', /^Only you/);
+    await userEvent.click(canvas.getByRole('button', { name: 'Who can see your reading shelves: Only you' }));
+    // Followers is not offered while Main keeps it reserved.
+    await expect(page().queryByRole('menuitemradio', { name: /^Followers/ })).toBeNull();
+    await choose('menuitemradio', /^Everyone/);
     await expect(await canvas.findByText('Changed on another device; this is the current setting.', {},
       { timeout: 3000 })).toBeVisible();
-    await expect(canvas.getByRole('button', { name: 'Who can see your reading shelves: Followers' })).toBeVisible();
+    await expect(canvas.getByRole('button', { name: 'Who can see your reading shelves: Only you' })).toBeVisible();
   },
 };
 

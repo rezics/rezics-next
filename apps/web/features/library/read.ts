@@ -7,6 +7,7 @@ import { settle } from '../feed/types.ts';
 import { shelfCard } from '../profile/cards.ts';
 import { shellReader } from '../shell/communities-read.ts';
 import { workHref } from '../work-page/route.ts';
+import { dayText, momentText } from './format.ts';
 import { type LibraryShelf, type LibraryState, pageOf, sortLibrary, statusShelves } from './state.ts';
 import type { ContinueItem, CustomShelf, LibraryItem, LibraryOverview, LibraryRow, Loaded, ReaderStateItem,
   ReadingProgress, Review, ShelfStatus, StatusShelfItem } from './types.ts';
@@ -112,27 +113,37 @@ function statusItem(item: StatusShelfItem): LibraryItem {
   const work = item.card ? shelfCard(item.card)
     : { id: item.work, href: workHref(item.work.slice(-36)), title: null, cover: null, kind: 'book', authors: [],
       rating: null } satisfies CatalogueWork;
-  return { work, status: item.status, version: item.version, shelvedAt: item.changedAt,
-    startedOn: item.startedOn, finishedOn: item.finishedOn, rating: null, lastReadAt: null, customShelves: [] };
+  return { work, status: item.status, version: item.version, shelvedAt: momentText(item.changedAt),
+    startedOn: dayText(item.startedOn), finishedOn: dayText(item.finishedOn), rating: null, lastReadAt: null,
+    customShelves: [] };
 }
 
-/** Reader state for Works, in Main's batches; Works Main could not answer are left out. */
-async function readStates(main: MainClient, actingSubject: string, works: readonly string[]):
+/**
+ * Reader state for Works, in Main's batches. One Work Main cannot answer fails
+ * its whole batch; with `alone`, such a batch is read again a Work at a time,
+ * so the others still show their state. Works Main could not answer are left out.
+ */
+async function readStates(main: MainClient, actingSubject: string, works: readonly string[], alone = false):
   Promise<Map<string, ReaderStateItem>> {
+  const read = (batch: readonly string[]) => settle(() => main.v1.me['work-states'].get({ query: {
+    works: batch.join(','), actingSubject } }));
   const batches = Array.from({ length: Math.ceil(works.length / READER_BATCH) },
     (_, index) => works.slice(index * READER_BATCH, (index + 1) * READER_BATCH));
-  const answers = await pooled(batches, batch => settle(() => main.v1.me['work-states'].get({ query: {
-    works: batch.join(','), actingSubject } })));
-  return new Map(answers.flatMap(answer => (answer.ok ? answer.data.items : []).map(item => [item.work, item])));
+  const answers = await pooled(batches, async batch => {
+    const answer = await read(batch);
+    if (answer.ok || !alone || batch.length === 1 || answer.failure === 'sign-in') return [answer];
+    return pooled(batch, work => read([work]));
+  });
+  return new Map(answers.flat().flatMap(answer => (answer.ok ? answer.data.items : []).map(item => [item.work, item])));
 }
 
 function withState(item: LibraryItem, state: ReaderStateItem | undefined): LibraryItem {
   if (!state) return item;
   const own = state.rating.global;
-  return { ...item, status: state.status.status ?? item.status, version: state.status.version,
-    shelvedAt: state.status.changedAt ?? item.shelvedAt, startedOn: state.status.startedOn,
-    finishedOn: state.status.finishedOn, rating: own?.availability === 'available' ? own.value : null,
-    lastReadAt: state.progress?.changedAt ?? null, customShelves: state.customShelves };
+  return { ...item, stateRead: true, status: state.status.status ?? item.status, version: state.status.version,
+    shelvedAt: momentText(state.status.changedAt) ?? item.shelvedAt, startedOn: dayText(state.status.startedOn),
+    finishedOn: dayText(state.status.finishedOn), rating: own?.availability === 'available' ? own.value : null,
+    lastReadAt: momentText(state.progress?.changedAt), customShelves: state.customShelves };
 }
 
 /** One Work's own read, shared by the rows that need its chapter count or card within a request. */
@@ -279,7 +290,7 @@ export async function readShelfView(state: LibraryState, locale: UiLocale): Prom
     page = pageOf(items, state.page);
   }
   const missing = page.items.filter(item => !states.has(item.work.id) && item.work.title).map(item => item.work.id);
-  if (missing.length) for (const [work, item] of await readStates(reader.main, reader.actingSubject, missing)) {
+  if (missing.length) for (const [work, item] of await readStates(reader.main, reader.actingSubject, missing, true)) {
     states.set(work, item);
   }
   const shown = page.items.map(item => withState(item, states.get(item.work.id)));
@@ -288,9 +299,11 @@ export async function readShelfView(state: LibraryState, locale: UiLocale): Prom
     state.layout === 'list' && overview.data.ratingContext
       ? readReviews(reader, shown, overview.data.ratingContext) : Promise.resolve(new Map()),
   ]);
+  // Shelf buttons show the status the shelf read gave when Main could not answer the rest.
   const seed: ReaderSeed = Object.fromEntries(shown.flatMap(item => {
     const known = states.get(item.work.id);
-    return known ? [[item.work.id, readerEntry(known)]] : [];
+    if (known) return [[item.work.id, readerEntry(known)]];
+    return item.status ? [[item.work.id, { status: item.status, version: item.version, rating: null }]] : [];
   }));
   return { ok: true, data: { shelf: state.shelf, custom, total, page: page.page, pages: page.pages,
     truncated, seed, rows: shown.map(item => ({ ...item,
@@ -309,7 +322,7 @@ export async function readCurrentlyReading(locale: UiLocale): Promise<LibraryRow
   if (!shelf.ok) return [];
   const items = shelf.data.map(statusItem);
   const states = await readStates(reader.main, reader.actingSubject,
-    items.filter(item => item.work.title).map(item => item.work.id));
+    items.filter(item => item.work.title).map(item => item.work.id), true);
   const shown = sortLibrary(items.map(item => withState(item, states.get(item.work.id))), 'last-read', 'desc', locale)
     .slice(0, 6);
   const progress = await readProgress(shown, locale);

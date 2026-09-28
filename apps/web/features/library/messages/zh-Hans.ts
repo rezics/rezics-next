@@ -55,7 +55,6 @@ export default {
   addedTo: plural({ other: insert('已将 {{count}} 部作品加入“{{shelf}}”。') },
     { count: asValue(number()), shelf: String }),
   someFailed: plural({ other: insert('有 {{count}} 部作品未能更改，请重试。') }, { count: asValue(number()) }),
-  changeFailed: '未能更改书架，请重试。',
   movedOne: insert('《{{title}}》已移到“{{shelf}}”。', { title: String, shelf: String }),
   removedOne: insert('《{{title}}》已移出书架。', { title: String }),
 
@@ -63,7 +62,6 @@ export default {
   lastRead: insert('{{date}}读过', { date: String }),
   started: '开始阅读',
   finished: '读完',
-  notSet: '未设置',
   editDates: '修改日期',
   addDates: '添加日期',
   datesFor: insert('《{{title}}》的阅读日期', { title: String }),
@@ -74,7 +72,6 @@ export default {
   datesMoved: '这部作品已在别处移到其他书架。',
 
   yourRating: '我的评分',
-  rateWork: insert('为《{{title}}》评分', { title: String }),
   ratingFailed: '未能保存评分，请重试。',
 
   writeReview: '写书评',
@@ -92,7 +89,6 @@ export default {
   reviewUnavailable: '未能加载你的书评。',
 
   continue: '继续阅读',
-  continueWork: insert('继续阅读《{{title}}》', { title: String }),
   nextChapter: insert('下一章：{{chapter}}', { chapter: String }),
   nextUp: '下一章',
   chaptersLeft: plural({ other: insert('还剩 {{count}} 章') }, { count: asValue(number()) }),

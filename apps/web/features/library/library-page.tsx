@@ -16,7 +16,8 @@ import { PageContainer } from '../shell/page.tsx';
 import type { LibraryApi } from './api.ts';
 import { NewShelf, SortControl, VisibilityControl } from './controls.tsx';
 import { LibraryProvider } from './library-context.tsx';
-import { LibraryList, statusLabel } from './library-list.tsx';
+import { statusLabel } from './labels.ts';
+import { LibraryList } from './library-list.tsx';
 import type { LibraryMessages } from './messages.ts';
 import type { ShelfView } from './read.ts';
 import { ReadingProgress } from './row-parts.tsx';
@@ -96,9 +97,12 @@ function CurrentlyReading({ rows, total, state, avatarQuery, locale, messages }:
         {t.all} {count(total, locale)}<ChevronRightIcon aria-hidden="true" className="size-4 rtl:rotate-180" /></Link>
         : null}
     </header>
-    <ul className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-      {rows.map(row => <li key={row.work.id} className="group/tile flex gap-4 rounded-2xl bg-muted/50 p-4">
-        <CoverLink work={row.work} avatarQuery={avatarQuery} className="w-16 shrink-0 self-start" />
+    {/* A row that scrolls on a phone, so the shelf below stays in reach; a grid on wider screens. */}
+    <ul className="-mx-4 flex snap-x snap-mandatory scroll-px-4 gap-3 overflow-x-auto px-4 pb-1 [scrollbar-width:none]
+      sm:mx-0 sm:grid sm:grid-cols-2 sm:gap-4 sm:overflow-visible sm:px-0 xl:grid-cols-3">
+      {rows.map(row => <li key={row.work.id} className="group/tile flex w-[85%] shrink-0 snap-start gap-4 rounded-2xl
+        bg-muted/50 p-4 sm:w-auto">
+        <CoverLink work={row.work} avatarQuery={avatarQuery} className="w-20 shrink-0 self-start" />
         <div className="grid min-w-0 flex-1 content-start gap-3">
           <h3 lang={row.work.title?.language} className="line-clamp-2 font-medium font-work-title text-base/snug">
             <Link href={row.work.href} className="rounded-sm outline-none hover:underline focus-visible:ring-2
@@ -265,8 +269,11 @@ export function LibraryPage({ state, overview, view, reading, now, avatarQuery, 
   const { data } = overview;
   const total = statusShelves.reduce((sum, status) => sum + data.counts[status], 0);
   const firstUse = total === 0 && data.customShelves.length === 0;
+  const titles = Object.fromEntries([...reading, ...view.ok ? view.data.rows : []]
+    .map(row => [row.work.id, workTitle(row.work, locale)]));
   return <LibraryProvider actingSubject={data.agent} seed={view.ok ? view.data.seed : {}}
-    ratingContext={data.ratingContext} api={api} readerActions={readerActions}>
+    ratingContext={data.ratingContext} titles={titles} api={api} readerActions={readerActions} locale={locale}
+    messages={messages}>
     {/* Titles mix Latin and CJK; space them apart. */}
     <PageContainer className="grid gap-8 [text-autospace:normal]">
       <header className="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">

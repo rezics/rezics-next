@@ -42,6 +42,11 @@ export interface LibraryItem {
   /** When the reader last saved reading progress. */
   lastReadAt: string | null;
   customShelves: readonly ShelfMembership[];
+  /**
+   * Whether Main answered the reader-state read for this Work. Without it the
+   * reader's stars, last read and custom shelves are unknown, not empty.
+   */
+  stateRead?: boolean;
   /** On a custom shelf, the member's occurrence, which removal names. */
   occurrence?: string;
 }
