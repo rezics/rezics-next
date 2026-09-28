@@ -41,10 +41,11 @@ export function ContinueStrip({ items, locale, messages }: { items: readonly Con
   }
 
   if (!shown.length && !last) return null;
-  return <section aria-labelledby="continue-title" className="grid gap-3 px-3 sm:px-0">
+  // On phones the strip runs to the screen's edges but snaps to the posts' 16 px side.
+  return <section aria-labelledby="continue-title" className="grid gap-3 px-4 sm:px-0">
     <h2 id="continue-title" className="font-semibold text-lg">{t.continueTitle}</h2>
-    <ul className="-mx-3 flex snap-x snap-mandatory gap-4 overflow-x-auto px-3 pb-2 [scrollbar-width:thin] sm:mx-0
-      sm:px-0">
+    <ul className="-mx-4 flex snap-x snap-mandatory scroll-px-4 gap-4 overflow-x-auto px-4 pb-2 [scrollbar-width:thin]
+      sm:mx-0 sm:scroll-px-0 sm:px-0">
       {shown.map(item => {
         const title = item.title.value;
         const unread = item.unreadCount.kind === 'exact' ? t.newChapters(item.unreadCount.value)
