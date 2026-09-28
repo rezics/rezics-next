@@ -9,7 +9,7 @@ import { homedir } from 'node:os';
 import { basename, dirname, isAbsolute, join, resolve } from 'node:path';
 
 export type State = 'running' | 'exited' | 'conflict' | 'merged' | 'stopped' | 'verified' | 'cancelled';
-export type Engine = 'claude' | 'codex' | 'luna' | 'astra' | 'grok' | 'cursor';
+export type Engine = 'claude' | 'fable' | 'codex' | 'luna' | 'astra' | 'grok' | 'cursor';
 export interface Brief {
   id: string; title: string; effort: string; engine?: Engine; cases: string[]; paths: string[];
   migrations: string[]; shared: string[]; depends: string[];
@@ -42,12 +42,15 @@ export interface AccountUsage {
 // Worker engines and the efforts each CLI and model accepts. Which engine and effort a task gets is
 // the manager's decision from the need and the remaining usage (docs/goals/manager.md), not a rule here.
 export const MODEL = 'claude-opus-5-5';
+// Fable runs through Claude Code on its own usage allowance, so the Opus 5h/7d gate does not apply to it.
+export const FABLE_MODEL = 'claude-fable-5-1';
 export const CODEX_MODEL = 'gpt-6-sol';
 export const LUNA_MODEL = 'gpt-6-luna';
 export const ASTRA_MODEL = 'gpt-6-astra';
 export const GROK_MODEL = 'grok-4.7';
 const ENGINE_EFFORTS: Record<Engine, string[]> = {
   claude: ['low', 'medium', 'high', 'xhigh', 'max'],
+  fable: ['low', 'medium', 'high', 'xhigh', 'max'],
   codex: ['low', 'medium', 'high', 'xhigh', 'max', 'ultra'],
   luna: ['low', 'medium', 'high', 'xhigh', 'max'],
   astra: ['low', 'medium', 'high', 'xhigh', 'max', 'ultra'],
@@ -62,13 +65,15 @@ export const DEFAULT_ENGINE: Engine = (process.env.GOAL_ENGINE as Engine | undef
 export const CODEX_HOME = process.env.GOAL_CODEX_HOME ?? join(homedir(), '.codex');
 export const ASTRA_HOME = process.env.GOAL_ASTRA_CODEX_HOME ?? join(homedir(), '.codex-1');
 const engineOf = (item: { engine?: Engine }): Engine => item.engine ?? 'claude';
-const MODELS: Record<Engine, string> = { claude: MODEL, codex: CODEX_MODEL, luna: LUNA_MODEL, astra: ASTRA_MODEL,
+const MODELS: Record<Engine, string> = { claude: MODEL, fable: FABLE_MODEL, codex: CODEX_MODEL, luna: LUNA_MODEL, astra: ASTRA_MODEL,
   grok: GROK_MODEL, cursor: `${GROK_MODEL} (Cursor)` };
 const modelOf = (engine: Engine): string => MODELS[engine];
 const effortsOf = (engine: Engine): string[] => ENGINE_EFFORTS[engine] ?? [];
 const isCodex = (engine: Engine): boolean => engine === 'codex' || engine === 'luna' || engine === 'astra';
+const isClaudeCode = (engine: Engine): boolean => engine === 'claude' || engine === 'fable';
 // Process name that /proc/<pid>/cmdline carries for a live worker of each engine.
-const programOf = (engine: Engine): string => isCodex(engine) ? 'codex' : engine === 'cursor' ? 'cursor-agent' : engine;
+const programOf = (engine: Engine): string =>
+  isCodex(engine) ? 'codex' : engine === 'cursor' ? 'cursor-agent' : isClaudeCode(engine) ? 'claude' : engine;
 const engineEnv = (engine: Engine): Record<string, string> =>
   engine === 'astra' ? { CODEX_HOME: ASTRA_HOME } : isCodex(engine) ? { CODEX_HOME } : {};
 const HOLDING: State[] = ['running', 'exited', 'conflict', 'merged', 'stopped'];
@@ -346,7 +351,7 @@ export function launchCommand(options: { id: string; effort: string; session: st
     return ['codex', resume ? ['exec', 'resume', session, ...common, prompt]
       : ['exec', ...common, '-C', options.worktree ?? '.', prompt]];
   }
-  return ['claude', ['-p', prompt, '--model', MODEL, '--effort', effort, '--dangerously-skip-permissions',
+  return ['claude', ['-p', prompt, '--model', MODELS[engine], '--effort', effort, '--dangerously-skip-permissions',
     ...(resume ? ['--resume', session] : ['--session-id', session]), '-n', id.toLowerCase(),
     '--output-format', 'json']];
 }
@@ -636,7 +641,7 @@ async function dispatch(briefPath: string, flags: Set<string>): Promise<void> {
     const task: Task = { ...brief, brief: absolute, worktree, branch, base: git(root, ['rev-parse', 'main']),
       state: 'running', attempts: [] };
     const manager = ledger.manager ?? process.env.GOAL_MANAGER ?? 'goal-manager';
-    task.attempts.push(launch(task, brief.effort, engine === 'claude' ? randomUUID() : '',
+    task.attempts.push(launch(task, brief.effort, isClaudeCode(engine) ? randomUUID() : '',
       workerPrompt(task, manager, engine), false, manager, engine));
     ledger.tasks[brief.id] = task;
     ledger.startedAt ??= new Date().toISOString();
@@ -701,7 +706,7 @@ async function resumeTask(id: string, args: string[]): Promise<void> {
       && (attempt.session || readResult(attempt).session));
     const previousSession = sameEngine ? sameEngine.session || readResult(sameEngine).session || '' : '';
     const continuing = !fresh && !!previousSession;
-    const session = continuing ? previousSession : nextEngine === 'claude' ? randomUUID() : '';
+    const session = continuing ? previousSession : isClaudeCode(nextEngine) ? randomUUID() : '';
     const prompt = continuing ? message
       : `${workerPrompt(task, manager, nextEngine, nextEffort)}\n\nManager note:\n${message}`;
     task.attempts.push(launch(task, nextEffort, session, prompt, continuing, manager, nextEngine));

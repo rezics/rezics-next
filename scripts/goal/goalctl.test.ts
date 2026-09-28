@@ -149,6 +149,14 @@ describe('goalctl runtime policy', () => {
       .toEqual(expect.arrayContaining(['--resume', 's']));
   });
 
+  test('runs Fable through Claude Code with its own model and a named session', () => {
+    const [program, args] = launchCommand({ id: 'G-041', effort: 'xhigh', session: 's', prompt: 'p', resume: false,
+      engine: 'fable' });
+    expect(program).toBe('claude');
+    expect(args).toEqual(expect.arrayContaining(['--model', 'claude-fable-5-1', '--effort', 'xhigh',
+      '--session-id', 's', '-n', 'g-041']));
+  });
+
   test('pins GPT-6 Sol and the reasoning effort for Codex workers in their worktree', () => {
     const [program, args] = launchCommand({ id: 'G-081', effort: 'xhigh', session: '', prompt: 'p', resume: false,
       engine: 'codex', worktree: '/w', lastMessage: '/r/last.md' });
@@ -191,6 +199,7 @@ describe('goalctl runtime policy', () => {
       parseBrief(`---\nid: G-081\ntitle: t\neffort: ${effort}\nengine: ${engine}\n---\n`);
     expect(validateBrief(brief('codex', 'ultra'))).toEqual([]);
     expect(validateBrief(brief('claude', 'max'))).toEqual([]);
+    expect(validateBrief(brief('fable', 'max'))).toEqual([]);
     expect(validateBrief(brief('cursor', 'xhigh'))).toEqual([]);
     expect(validateBrief(brief('luna', 'ultra')).join()).toContain('luna effort');
     expect(validateBrief(brief('grok', 'xhigh')).join()).toContain('grok effort');

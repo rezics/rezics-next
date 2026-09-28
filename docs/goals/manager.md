@@ -76,6 +76,7 @@ Maintainer directions of 2026-09-27. They bind until the maintainer changes them
 | Engine (`goalctl`) | Model | Account and usage readout | Efforts |
 | --- | --- | --- | --- |
 | `claude` | Claude Opus 5.5 | Claude subscription shared with the manager; 5-hour and 7-day windows from the status line (`goalctl usage`) | `low`–`max` |
+| `fable` | Claude Fable 5.1 | Its own Claude allowance, separate from Opus's 5-hour and 7-day windows (maintainer, 2026-09-28); goalctl does not gate it, so watch its pace | `low`–`max` |
 | `astra` | GPT-6 Astra | Codex account in `~/.codex-1` (the `codex-1` wrapper); weekly window from its session rollouts | `low`–`ultra` |
 | `codex` | GPT-6 Sol | Default Codex account in `~/.codex`; weekly window | `low`–`ultra` |
 | `luna` | GPT-6 Luna | Same account as `codex` | `low`–`max` |
