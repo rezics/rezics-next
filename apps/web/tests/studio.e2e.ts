@@ -30,11 +30,21 @@ async function shoot(page: Page, info: TestInfo, name: string) {
   await page.screenshot({ path: info.outputPath(`${name}.png`), fullPage: true });
 }
 
-/** Every theme and size for one Studio page: 1440×900 and 390×844, light and dark. */
+/**
+ * Every theme and size for one Studio page: 1440×900 and 390×844, light and dark. The theme cookie paints the
+ * first render and the shell then adopts the account's own display preference, so both name the theme captured.
+ */
 async function shootAll(page: Page, context: BrowserContext, info: TestInfo, path: string, name: string) {
-  for (const theme of ['light', 'dark'] as const) {
+  let theme: 'light' | 'dark' = 'light';
+  await page.route('**/api/preferences', async route => {
+    if (route.request().method() !== 'GET') return route.continue();
+    const response = await route.fetch();
+    const json = await response.json().catch(() => null) as Record<string, unknown> | null;
+    return json ? route.fulfill({ response, json: { ...json, displayMode: theme } }) : route.fulfill({ response });
+  });
+  for (const current of ['light', 'dark'] as const) {
+    theme = current;
     for (const viewport of [{ width: 1440, height: 900 }, { width: 390, height: 844 }]) {
-      // One site-wide cookie, set before each load: the shell syncs the account's own preference into it afterwards.
       await context.addCookies([{ name: 'rezics_theme', value: theme, url: new URL('/', page.url()).toString() }]);
       await page.setViewportSize(viewport);
       await page.goto(path);
@@ -42,6 +52,7 @@ async function shootAll(page: Page, context: BrowserContext, info: TestInfo, pat
       await shoot(page, info, `${name}-${theme}-${viewport.width}`);
     }
   }
+  await page.unroute('**/api/preferences');
   await context.addCookies([{ name: 'rezics_theme', value: 'light', url: new URL('/', page.url()).toString() }]);
   await page.setViewportSize({ width: 1440, height: 900 });
 }
