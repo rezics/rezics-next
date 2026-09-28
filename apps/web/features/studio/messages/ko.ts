@@ -17,6 +17,8 @@ export default {
   homeDescription: insert('{{agent}} 프로필로 쓰는 작품입니다.', { agent: String }),
   newWork: '새 작품',
   viewsLabel: '작품 보기', viewAll: '모든 작품', viewDrafts: '초안', viewPublished: '공개됨', viewReview: '검토 중',
+  viewCurated: '가져오기·큐레이션', curatedBadge: '가져왔거나 큐레이션한 작품', openWork: '열기',
+  curatedEmpty: '가져왔거나 큐레이션한 작품이 없습니다. 직접 쓴 작품은 ‘모든 작품’에 있습니다.',
   worksEmpty: '이 페이지에 작품이 없습니다. 챕터는 해당 책 안에 표시됩니다.',
   draftsEmpty: '초안이 없습니다. 아직 공개하지 않은 본문이 있는 작품이 여기에 표시됩니다.',
   publishedEmpty: '아직 공개한 작품이 없습니다.',

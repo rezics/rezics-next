@@ -22,7 +22,8 @@ export default async function StudioHomePage({ params, searchParams }: {
   const [content, messages] = await Promise.all([
     view === 'review'
       ? readReviewPage(agent.iri, cursor, locale).then((review): HomeContent => ({ view, review }))
-      : readInventory(agent.iri, view === 'all' ? undefined : view, cursor).then((works): HomeContent => ({ view, works })),
+      : readInventory(agent.iri, view === 'curated' ? { view: 'curated' } : { view: 'authored',
+        ...(view === 'all' ? {} : { state: view }) }, cursor).then((works): HomeContent => ({ view, works })),
     getMessages('studio', locale)]);
   const next = content.view === 'review' ? content.review.submissions.ok ? content.review.submissions.data.nextCursor : null
     : content.works.ok ? content.works.data.page.nextCursor : null;

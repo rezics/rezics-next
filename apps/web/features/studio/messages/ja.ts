@@ -17,6 +17,8 @@ export default {
   homeDescription: insert('{{agent}} として執筆している作品です。', { agent: String }),
   newWork: '新しい作品',
   viewsLabel: '表示する作品', viewAll: 'すべての作品', viewDrafts: '下書き', viewPublished: '公開済み', viewReview: '審査中',
+  viewCurated: 'インポート・キュレーション', curatedBadge: 'インポートまたはキュレーション', openWork: '開く',
+  curatedEmpty: 'インポートまたはキュレーションしている作品はありません。自分で書いた作品は「すべての作品」にあります。',
   worksEmpty: 'このページに作品はありません。章はそれぞれの本の中に表示されます。',
   draftsEmpty: '下書きはありません。まだ公開していない本文がある作品がここに表示されます。',
   publishedEmpty: 'まだ何も公開していません。',

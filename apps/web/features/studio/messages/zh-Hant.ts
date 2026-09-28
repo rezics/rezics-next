@@ -17,6 +17,8 @@ export default {
   homeDescription: insert('你以 {{agent}} 身分創作的作品。', { agent: String }),
   newWork: '新作品',
   viewsLabel: '顯示作品', viewAll: '全部作品', viewDrafts: '草稿', viewPublished: '已發布', viewReview: '審核中',
+  viewCurated: '匯入與收錄', curatedBadge: '匯入或收錄', openWork: '開啟',
+  curatedEmpty: '沒有你匯入或收錄的作品。你自己創作的作品在「全部作品」中。',
   worksEmpty: '這一頁沒有作品。章節會列在所屬的書中。',
   draftsEmpty: '沒有草稿。正文尚未發布的作品會顯示在這裡。',
   publishedEmpty: '還沒有發布任何作品。',

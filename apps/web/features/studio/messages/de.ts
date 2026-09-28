@@ -17,6 +17,8 @@ export default {
   homeDescription: insert('Werke, die du als {{agent}} schreibst.', { agent: String }),
   newWork: 'Neues Werk',
   viewsLabel: 'Werke anzeigen', viewAll: 'Alle Werke', viewDrafts: 'Entwürfe', viewPublished: 'Veröffentlicht', viewReview: 'In Prüfung',
+  viewCurated: 'Importiert & kuratiert', curatedBadge: 'Importiert oder kuratiert', openWork: 'Öffnen',
+  curatedEmpty: 'Keine importierten oder kuratierten Werke. Selbst geschriebene Werke stehen unter „Alle Werke“.',
   worksEmpty: 'Keine Werke auf dieser Seite. Deine Kapitel findest du in ihren Büchern.',
   draftsEmpty: 'Keine Entwürfe. Hier erscheinen Werke mit einem Text, den du noch nicht veröffentlicht hast.',
   publishedEmpty: 'Noch nichts veröffentlicht.',

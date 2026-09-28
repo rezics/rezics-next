@@ -185,7 +185,7 @@ main: MainClient = browserMainApi()): Promise<ChapterCommand & { chapter?: strin
   if (typeof composition === 'string') return { outcome: composition };
   const { structure } = composition;
   const work = await settled(() => main.v1.works.post({ profile: 'metadata-only-v1', title: input.title,
-    language: input.language, actingSubject: input.actingSubject }, headers('work')));
+    language: input.language, authoring: 'own-work', actingSubject: input.actingSubject }, headers('work')));
   if (work.error) return { outcome: commandOf(work.error), structure };
   if (!work.data || 'operationId' in work.data) return { outcome: 'pending', structure };
   const chapter = work.data.work;

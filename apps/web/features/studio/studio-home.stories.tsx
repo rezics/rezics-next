@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import type { ComponentProps } from 'react';
 import { expect, userEvent, within } from 'storybook/test';
-import { agents, inventory, now, review } from './fixtures.ts';
+import { agents, curated, inventory, now, review } from './fixtures.ts';
 import { messages } from './messages.ts';
 import zhHans from './messages/zh-Hans.ts';
 import { StudioFrame, StudioIdentityMissing } from './studio-frame.tsx';
@@ -32,7 +32,6 @@ export const Works: Story = {
     const list = canvas.getByRole('region', { name: 'All works' });
     const items = within(list).getAllByRole('listitem');
     await expect(items).toHaveLength(3);
-    await expect(within(list).queryByText('第一章 雨夜')).toBeNull();
     await expect(items[0]).toHaveTextContent(/3 chapters·2 published/);
     await expect(items[0]).toHaveTextContent('1 Realm reviewing');
     await expect(within(items[0]!).getByRole('link', { name: 'Chapters' })).toHaveAttribute('href',
@@ -60,9 +59,23 @@ export const InReview: Story = {
   },
 };
 
+/** Works this Agent imported or curates are kept apart, and Studio never offers to write in someone else's text. */
+export const Curated: Story = {
+  args: { content: { view: 'curated', works: { ok: true, data: curated } } },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    const list = canvas.getByRole('region', { name: 'Imported & curated' });
+    await expect(within(list).getAllByRole('listitem')).toHaveLength(2);
+    await expect(within(list).getAllByText('Imported or curated')).toHaveLength(2);
+    await expect(within(list).queryByRole('link', { name: 'Continue writing' })).toBeNull();
+    await expect(within(list).getAllByRole('link', { name: 'Open' })[0]).toHaveAttribute('href',
+      `${home}/works/00000000-0000-4000-8000-000000000105`);
+  },
+};
+
 export const DraftsEmpty: Story = {
   args: { content: { view: 'draft', works: { ok: true, data: { ...inventory, page: { ...inventory.page, items: [] },
-    books: {}, chapters: [] } } } },
+    books: {} } } } },
   async play({ canvasElement }) {
     await expect(within(canvasElement).getByText(/No drafts/)).toBeInTheDocument();
   },
@@ -71,7 +84,7 @@ export const DraftsEmpty: Story = {
 /** A new writer: nothing to list yet, and one clear way to start. */
 export const Empty: Story = {
   args: { content: { view: 'all', works: { ok: true, data: { ...inventory, page: { ...inventory.page, items: [] },
-    books: {}, chapters: [] } } } },
+    books: {} } } } },
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     await expect(canvas.getByRole('heading', { name: 'Your Studio is ready' })).toBeInTheDocument();

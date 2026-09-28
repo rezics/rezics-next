@@ -28,7 +28,8 @@ export const ids = { serial: id(101), story: id(103), recipe: id(104), chapters:
 function item(n: number, work: string, title: string, language: string, kind: keyof typeof types, state: InventoryWork['state'],
   extra: Partial<InventoryWork> = {}): InventoryWork {
   return { id: work, mainVersion: id(600 + n), workRevision: id(700 + n), mainRevision: id(800 + n),
-    title: { value: title, language }, cover: cover(`key-${n}`), types: types[kind], disclosure: 'restricted', state,
+    title: { value: title, language }, relationship: 'authored', cover: cover(`key-${n}`), types: types[kind],
+    disclosure: 'restricted', state,
     texts: [], submissions: [], createdAt: at(10 + n), updatedAt: at(20 + n), ...extra } as InventoryWork;
 }
 
@@ -40,15 +41,22 @@ export const inventory: InventoryView = {
     item(1, ids.serial, '雨夜书店', 'zh-hans', 'book', 'published', { disclosure: 'public',
       texts: [text(ids.texts.serial, 'zh-Hans', id(303), true)],
       submissions: [{ id: id(501).slice(-36), realm: ids.realms[1]!, state: 'pending', openedAt: at(24), updatedAt: at(25) }] }),
-    // A chapter is a Work of its own in Main's inventory; the home lists it in its Book.
-    item(2, ids.chapters[0]!, '第一章 雨夜', 'zh-hans', 'chapter', 'empty'),
     item(3, ids.story, 'The Cartographer of Tides', 'en', 'document', 'draft',
       { texts: [text(ids.texts.story, 'en', id(301), false)] }),
     item(4, ids.recipe, 'Ginger lemon tea', 'en', 'recipe', 'published', { disclosure: 'public',
       texts: [text(ids.texts.recipe, 'en', id(302), true)] }),
-  ], nextCursor: null, sourcePosition: position, count: { value: 4, kind: 'exact-page', total: null } } as never,
+  ], nextCursor: null, sourcePosition: position, count: { value: 3, kind: 'exact-page', total: null } } as never,
   books: { [ids.serial]: { count: 3, more: false, published: 2 } },
-  chapters: [ids.chapters[0]!],
+};
+
+/** Works the Agent imported or curates: other people wrote them, so Studio only opens them. */
+export const curated: InventoryView = {
+  page: { items: [
+    item(5, id(105), 'Pride and Prejudice', 'en', 'book', 'published', { relationship: 'curated', disclosure: 'public',
+      texts: [text(id(205), 'en', id(305), true)] }),
+    item(6, id(106), '西游记', 'zh-hans', 'book', 'published', { relationship: 'curated', disclosure: 'public' }),
+  ], nextCursor: null, sourcePosition: position, count: { value: 2, kind: 'exact-page', total: null } } as never,
+  books: {},
 };
 
 const submission = (n: number, work: string, realm: string, state: Submission['state'], publicReason: string | null = null):

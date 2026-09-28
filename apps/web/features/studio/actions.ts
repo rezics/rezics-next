@@ -40,8 +40,9 @@ export async function createWork(previous: NewWorkState, form: FormData): Promis
   }
   const agent = await studioAgent(form);
   const main = await mainApi();
+  // The Studio Agent writes this Work: Main records it as the Work's author.
   const response = await main.v1.works.post({ profile: 'metadata-only-v1', title, language: writing,
-    semanticTypes: [workTypes[type]],
+    semanticTypes: [workTypes[type]], authoring: 'own-work',
     actingSubject: agent.iri }, { headers: { 'idempotency-key': key } });
   if (response.error) {
     const denied = response.error.status === 401 || response.error.status === 403;

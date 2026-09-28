@@ -20,9 +20,10 @@ import { canonicalLanguage, idOf, type InventoryState, type InventoryWork, type 
 
 type T = ContractOf<StudioMessages>;
 
-export type HomeView = 'all' | InventoryState | 'review';
-/** The views a Studio home address may name; `empty` Works show under All. */
-export const homeViews = ['all', 'draft', 'published', 'review'] as const;
+/** The Agent's own Works (all, drafts, published), what Realms review, and Works it imported or curates. */
+export type HomeView = 'all' | Exclude<InventoryState, 'empty'> | 'review' | 'curated';
+/** The views a Studio home address may name; Works not started yet show under All. */
+export const homeViews = ['all', 'draft', 'published', 'review', 'curated'] as const;
 
 export type HomeContent =
   | { view: Exclude<HomeView, 'review'>; works: Loaded<InventoryView> }
@@ -33,8 +34,9 @@ function WorkItem({ work, chapters, agent, now, locale, t }: {
 }) {
   const kind = workKind(work.types);
   const open = work.submissions.filter(item => openStates.has(item.state as never)).length;
-  // A book is written chapter by chapter; other Works go straight back to their latest text.
-  const latest = kind === 'book' ? undefined : work.texts[0];
+  const own = work.relationship === 'authored';
+  // A book is written chapter by chapter; the Agent's other Works go straight back to their latest text.
+  const latest = kind === 'book' || !own ? undefined : work.texts[0];
   const languages = [...new Set(work.texts.map(text => languageName(text.language, locale)))];
   return <li className="grid grid-cols-[4rem_minmax(0,1fr)] items-start gap-x-4 gap-y-3 rounded-2xl border
     border-border/60 bg-card p-3 shadow-(--aura-shadow-card) sm:grid-cols-[4rem_minmax(0,1fr)_auto] sm:items-center sm:p-4">
@@ -53,13 +55,14 @@ function WorkItem({ work, chapters, agent, now, locale, t }: {
         <time dateTime={work.updatedAt}>{t.updated({ time: relativeTime(work.updatedAt, now, locale, 'long') })}</time>
       </p>
       <p className="flex flex-wrap items-center gap-1.5">
-        <StateBadge state={work.state} t={t} />
+        {own ? <StateBadge state={work.state} t={t} /> : <Badge variant="secondary">{t.curatedBadge}</Badge>}
         {work.disclosure === 'public' ? <Badge variant="soft">{t.publicWork}</Badge> : null}
         {open ? <Badge variant="info"><SendIcon aria-hidden="true" />{t.openSubmissions(open)}</Badge> : null}
       </p>
     </div>
     <div className="col-span-2 flex flex-wrap gap-2 sm:col-span-1 sm:justify-end">
-      {kind === 'book' ? <Link href={workHref(agent, work.id, 'chapters')}
+      {!own ? <Link href={workHref(agent, work.id)} className={buttonVariants({ variant: 'outline', size: 'sm' })}>
+        {t.openWork}</Link> : kind === 'book' ? <Link href={workHref(agent, work.id, 'chapters')}
         className={buttonVariants({ variant: 'outline', size: 'sm' })}>
         <ListOrderedIcon aria-hidden="true" />{t.tabChapters}</Link>
         : <Link href={latest ? textHref(agent, work.id, latest.contribution, latest.draftHead)
@@ -78,12 +81,12 @@ function Works({ works, view, agent, now, locale, t }: {
     return works.failure === 'denied' ? <Failure title={t.worksDenied} help={t.worksDeniedHelp} retry={false} t={t} />
       : <Failure title={t.worksFailed} retry t={t} />;
   }
-  // Chapters are Works of their own; they are listed in their Book, not here.
-  const chapters = new Set(works.data.chapters);
-  const items = works.data.page.items.filter(work => workKind(work.types) !== 'chapter' && !chapters.has(work.id));
+  // Chapters are listed in their Book, not here.
+  const items = works.data.page.items.filter(work => workKind(work.types) !== 'chapter');
   if (!items.length) {
     return <p className="rounded-2xl border border-border/80 border-dashed px-4 py-8 text-center text-muted-foreground text-sm">
-      {view === 'draft' ? t.draftsEmpty : view === 'published' ? t.publishedEmpty : t.worksEmpty}</p>;
+      {view === 'draft' ? t.draftsEmpty : view === 'published' ? t.publishedEmpty : view === 'curated' ? t.curatedEmpty
+        : t.worksEmpty}</p>;
   }
   return <ul className="grid gap-3">{items.map(work =>
     <WorkItem key={work.id} work={work} chapters={works.data.books[work.id]} agent={agent} now={now} locale={locale}
@@ -134,7 +137,8 @@ export function StudioHome({ agent, content, moreHref, now, locale, messages }: 
 }) {
   const t = materializeData(messages, { locale });
   const views: Array<{ view: HomeView; label: string }> = [{ view: 'all', label: t.viewAll },
-    { view: 'draft', label: t.viewDrafts }, { view: 'published', label: t.viewPublished }, { view: 'review', label: t.viewReview }];
+    { view: 'draft', label: t.viewDrafts }, { view: 'published', label: t.viewPublished }, { view: 'review', label: t.viewReview },
+    { view: 'curated', label: t.viewCurated }];
   const nothing = content.view === 'all' && content.works.ok && !content.works.data.page.items.length && !moreHref;
   return <PageContainer className="grid gap-6">
     <PageHeader title={t.studio} description={t.homeDescription({ agent: studioAgentName(agent, t) })}

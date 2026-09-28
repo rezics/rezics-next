@@ -17,6 +17,8 @@ export default {
   homeDescription: insert('你以 {{agent}} 身份创作的作品。', { agent: String }),
   newWork: '新作品',
   viewsLabel: '显示作品', viewAll: '全部作品', viewDrafts: '草稿', viewPublished: '已发布', viewReview: '审核中',
+  viewCurated: '导入与收录', curatedBadge: '导入或收录', openWork: '打开',
+  curatedEmpty: '没有你导入或收录的作品。你自己创作的作品在“全部作品”中。',
   worksEmpty: '这一页没有作品。章节列在所属的书中。',
   draftsEmpty: '没有草稿。有尚未发布的正文的作品会显示在这里。',
   publishedEmpty: '还没有发布作品。',

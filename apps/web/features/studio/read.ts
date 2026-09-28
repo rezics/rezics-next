@@ -3,7 +3,7 @@ import type { UiLocale } from '../../i18n/define.ts';
 import { mainApi, mainApiWithToken } from '../api/main.ts';
 import { chapterVariant } from './content-api.ts';
 import { canonicalLanguage, type ClassificationPage, type ContentsPage, directionOf, failureOf, idOf, iri,
-  type InventoryPage, type InventoryState, type Loaded, type MainClient, type MyText, type NativeVariants,
+  type InventoryPage, type InventoryState, type InventoryWork, type Loaded, type MainClient, type MyText, type NativeVariants,
   type RealmChoice, type ReviewMode, workKind, type Submission, type TextDraft, type TextHead, type WorkHeader,
   type WorkMetadata } from './types.ts';
 
@@ -75,35 +75,32 @@ export interface InventoryView {
   page: InventoryPage;
   /** Chapter counts per Book on the page. */
   books: Record<string, BookChapters>;
-  /** Works on the page that are chapters of a Book on the page; they are listed in their Book. */
-  chapters: string[];
 }
 
 /**
- * One page of the Studio Agent's Works, all of them or those in one state, with
- * each Book's chapters counted. Main's inventory lists a chapter as a Work of
- * its own and names no Book for it, so Studio reads the contents of the Books
- * on the page (one bounded read each) and folds their chapters into them.
+ * One page of the Studio Agent's Works: those it wrote (its author credit
+ * names it), in one state or all, or those it imported or curates. Main lists
+ * a Book, never its chapters; each Book's chapters are counted from its
+ * contents (one bounded read per Book on the page).
  */
-export async function readInventory(actingSubject: string, state: InventoryState | undefined, cursor: string | undefined):
-  Promise<Loaded<InventoryView>> {
+export async function readInventory(actingSubject: string, filter: { state?: InventoryState; view?: InventoryWork['relationship'] },
+  cursor: string | undefined): Promise<Loaded<InventoryView>> {
   const main = await mainApi();
   const page = await settle(() => main.v1.me.agents({ agent: idOf(actingSubject) }).works.get({ query: { limit: 20,
-    ...(state ? { state } : {}), ...(cursor ? { cursor } : {}) } }));
+    view: filter.view ?? 'authored', ...(filter.state ? { state: filter.state } : {}), ...(cursor ? { cursor } : {}) } }));
   if (!page.ok) return page;
-  const books = page.data.items.filter(item => workKind(item.types) === 'book');
+  const items = page.data.items.map(item => ({ ...item, createdAt: iso(item.createdAt), updatedAt: iso(item.updatedAt),
+    submissions: item.submissions.map(submissionTimes) }));
+  const books = items.filter(item => workKind(item.types) === 'book');
   const contents = await Promise.all(books.map(async book => [book.id, await settle(() =>
     main.v1.works({ id: idOf(book.id) }).contents.get({ query: { actingSubject, language: writingLanguageOf(book),
       limit: 20 } }))] as const));
-  const items = page.data.items.map(item => ({ ...item, createdAt: iso(item.createdAt), updatedAt: iso(item.updatedAt),
-    submissions: item.submissions.map(submissionTimes) }));
-  const view: InventoryView = { page: { ...page.data, items }, books: {}, chapters: [] };
+  const view: InventoryView = { page: { ...page.data, items }, books: {} };
   for (const [book, loaded] of contents) {
     if (!loaded.ok) continue;
     const chapters = loaded.data.items.filter(item => item.role === 'chapter');
     view.books[book] = { count: chapters.length, more: Boolean(loaded.data.nextCursor),
       published: chapters.filter(item => item.availability === 'available').length };
-    view.chapters.push(...chapters.flatMap(item => item.target && item.target !== book ? [item.target] : []));
   }
   return { ok: true, data: view };
 }

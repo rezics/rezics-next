@@ -18,6 +18,8 @@ export const messages = {
   homeDescription: insert('Works you write as {{agent}}.', { agent: String }),
   newWork: 'New work',
   viewsLabel: 'Show works', viewAll: 'All works', viewDrafts: 'Drafts', viewPublished: 'Published', viewReview: 'In review',
+  viewCurated: 'Imported & curated', curatedBadge: 'Imported or curated', openWork: 'Open',
+  curatedEmpty: 'No works you imported or curate. Works you write yourself are under All works.',
   worksEmpty: 'No works on this page. Your chapters are listed in their books.',
   draftsEmpty: 'No drafts. Works with a text you haven’t published yet show here.',
   publishedEmpty: 'Nothing published yet.',

@@ -17,6 +17,8 @@ export default {
   homeDescription: insert('Les œuvres que vous écrivez en tant que {{agent}}.', { agent: String }),
   newWork: 'Nouvelle œuvre',
   viewsLabel: 'Afficher les œuvres', viewAll: 'Toutes les œuvres', viewDrafts: 'Brouillons', viewPublished: 'Publiées', viewReview: 'En examen',
+  viewCurated: 'Importées et sélectionnées', curatedBadge: 'Importée ou sélectionnée', openWork: 'Ouvrir',
+  curatedEmpty: 'Aucune œuvre importée ou sélectionnée. Les œuvres que vous écrivez vous-même sont dans « Toutes les œuvres ».',
   worksEmpty: 'Aucune œuvre sur cette page. Vos chapitres figurent dans leurs livres.',
   draftsEmpty: 'Aucun brouillon. Les œuvres dont un texte n’est pas encore publié apparaissent ici.',
   publishedEmpty: 'Rien de publié pour le moment.',

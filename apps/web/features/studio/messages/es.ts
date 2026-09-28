@@ -17,6 +17,8 @@ export default {
   homeDescription: insert('Obras que escribes como {{agent}}.', { agent: String }),
   newWork: 'Nueva obra',
   viewsLabel: 'Mostrar obras', viewAll: 'Todas las obras', viewDrafts: 'Borradores', viewPublished: 'Publicadas', viewReview: 'En revisión',
+  viewCurated: 'Importadas y seleccionadas', curatedBadge: 'Importada o seleccionada', openWork: 'Abrir',
+  curatedEmpty: 'No hay obras importadas ni seleccionadas. Las obras que escribes tú están en «Todas las obras».',
   worksEmpty: 'No hay obras en esta página. Tus capítulos aparecen dentro de sus libros.',
   draftsEmpty: 'No hay borradores. Aquí aparecen las obras con un texto que aún no has publicado.',
   publishedEmpty: 'Todavía no has publicado nada.',
