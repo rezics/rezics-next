@@ -552,7 +552,7 @@ After B00/B23. Email provider/domain rollout is an operator decision, not satisf
 
 ### B25 — Encode query and recommendation descriptors
 
-Document claims: `docs/contracts/filter-documents.md`, `docs/contracts/relationship-graph.md`, `docs/contracts/recommendations.md`, `docs/testing/relationship-graph.md`, `docs/testing/recommendations.md`.
+Document claims: `docs/contracts/queries.md`, `docs/contracts/relationship-graph.md`, `docs/contracts/recommendations.md`, `docs/testing/relationship-graph.md`, `docs/testing/recommendations.md`.
 
 Additional claimable paths: `services/main/src/modules/graph-query/**`; `services/main/src/modules/graph-layout/**`; `services/main/src/modules/recommendation/**`; `scripts/qa/cases/graph.ts` (new); `scripts/qa/cases/recommendations.ts` (new).
 
@@ -562,7 +562,7 @@ After B00/B04/B19. Advanced filter editor preservation is frontend-owned and req
 
 | Page | Lines | Verdict | Code owner or replacement target | Reason / surviving content |
 | --- | ---: | --- | --- | --- |
-| `docs/contracts/filter-documents.md` | 56 | `encode` | `services/main/src/modules/graph-query/schema.ts`; `services/main/src/modules/work/search-grouped.ts`; new filter round-trip tests in `apps/web/features/` | Encode sparse descriptors, same-occurrence predicates and fixed-scope intersection; frontend-owned advanced-editor preservation must precede retirement. |
+| `docs/contracts/queries.md` | 56 | `encode` | `services/main/src/modules/graph-query/schema.ts`; `services/main/src/modules/work/search-grouped.ts`; new filter round-trip tests in `apps/web/features/` | Encode sparse descriptors, same-occurrence predicates and fixed-scope intersection; frontend-owned advanced-editor preservation must precede retirement. |
 | `docs/contracts/relationship-graph.md` | 50 | `encode` | `services/main/src/modules/graph-query/schema.ts`; `services/main/src/modules/graph-layout/schema.ts`; `tests/qa/unit/graph-query.test.ts` | Typed relation roles, bounded frontier/completeness and independent layout state belong in query schemas and private-intermediate-node tests. |
 | `docs/contracts/recommendations.md` | 34 | `encode` | `services/main/src/modules/recommendation/derived-generation.ts`, ranking-schema.ts, semantic-basis.ts; `tests/qa/integration/recommendation-context.test.ts` | Put signal populations, semantic/preference separation, generation activation and disclosure-qualified fallback in schemas and tests. |
 | `docs/testing/relationship-graph.md` | 37 | `encode` | `scripts/qa/cases/graph.ts` (new); `scripts/qa/coverage/graph.ts`; `tests/qa/unit/graph-query.test.ts`; `tests/qa/integration/relation-change.test.ts` | Transfer GRAPH01–06 and graph/text correlation, private paths and layout-independence scenarios into executable cases. |

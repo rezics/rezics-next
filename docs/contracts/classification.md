@@ -8,6 +8,11 @@ a universal Sense wrapper. A named concept and a contextual interpretation are
 independent editorial choices. Creating `真後宮` does not rename, delete or settle
 anyone's contextual use of `後宮`.
 
+Classification is this write side: stating Concepts about a Resource and
+accepting them in a Context. Reads of those Statements, like reads of types,
+relations and characters, go through [Facets](queries.md); a product grouping
+is a Saved Filter, not a Concept.
+
 A Statement identifies its speaker, exact subject grain, relation and applied
 definitions, value, qualifiers, semantic Context revision and evidence. Its
 existence is separate from acceptance. Different sources can support one exact

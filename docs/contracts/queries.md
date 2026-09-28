@@ -1,0 +1,121 @@
+# Queries, facets and filters
+
+## Vocabulary
+
+Decided by the maintainer on 2026-09-28. The terms follow RDF, SKOS and faceted
+search. Anything a reader can filter by is a Resource; what differs is the path
+from the queried Resource to it.
+
+| Term | Meaning |
+| --- | --- |
+| Resource | Anything with an IRI: a Work, a class such as `schema:Book`, a Concept, a franchise such as Blue Archive, a character, a value such as Female. |
+| Type | A Resource's `rdf:type`. It selects shapes and admitted operations: a Book has compositions and chapters, a SoftwareApplication has releases. |
+| Concept | A `skos:Concept` in a vocabulary, such as a genre, form, trope or theme: Fiction, Web novel, 後宮. |
+| Statement, relation occurrence | An attributed claim, and an identified association with roles, such as one character's appearance in one Work ([classification](classification.md), [relationship graph](relationship-graph.md)). |
+| Context | Whose accepted Statements a read uses: Global or a Realm's ([Context](context.md)). |
+| Facet | One admitted, versioned path from the queried Resource to a value, with labels, value domain, operators, Statement source and cost. `rdf:type` is one Facet; genre, based-on, author, language, rating and character appearance are others. |
+| Condition | A Facet, an operator and values, or a group of Conditions bound to one occurrence. |
+| Filter | A boolean combination of Conditions: the FilterDocument below. |
+| Query | A Filter with text, scope (such as a Realm), Context, sort and page. |
+| Saved Filter | A Filter with its own identity and name, such as "Female lead" or a Zone's scope. |
+
+For example, fiction based on Blue Archive with a female lead, as Global reads it
+(Facets are DefinitionRefs; short names stand in for them here):
+
+```jsonc
+{ "context": "global", "filter": { "all": [
+  { "facet": "type", "any": ["schema:Book"] },
+  { "facet": "genre", "any": ["<Fiction>"] },
+  { "facet": "basedOn", "any": ["<Blue Archive>"] },
+  { "facet": "appearance", "where": { "all": [   // one appearance of one character
+    { "facet": "role", "any": ["<Lead>"] },
+    { "facet": "gender", "any": ["<Female>"] } ] } } ] } }
+```
+
+## Decisions
+
+- **Type is structure, not grouping.** A distinction that changes neither shape
+  nor operations is not a type. Genre, form and topic are Concepts: a web novel
+  is a Book carrying a form Concept. A class used as a subject heading forks
+  shapes whenever the heading changes, and a heading made a class cannot be
+  attributed, contested or read per Context. schema.org likewise separates
+  `@type` from `genre`, `about` and `isBasedOn`, and Wikidata separates
+  *instance of* from *genre* and *form of creative work*.
+- **Querying is not classification.** Classification is the write-side flow of
+  stating Concepts about a Resource and accepting them in a Context. Every read
+  goes through Facets, whatever the value is: a type, a Concept, another Work or
+  a character.
+- **Groupings are Saved Filters.** A product grouping such as "Books & web
+  novels" is a Saved Filter with its own name and visible Conditions, not a
+  Concept and not a fixed enum. Zone scopes, onboarding choices and feed
+  filters are Saved Filters. A grouping made a Concept would add a false claim
+  to each Work; an enum has no identity, labels or history.
+- **Every displayed name belongs to something.** A filter reads as its Facet's
+  label and its value Resource's label, or as a Saved Filter's name. Clients keep
+  no private tables of type or grouping names.
+- **Facets define queries; data never references them.** They add none of the
+  Facet, Path or Sense wrappers that [presentation](presentation.md) rejects.
+
+Retired words: *kind* for a Work's type; *interest* for a grouping; *Sense* for a
+Concept; *category* and *typed predicate* for a Facet; *tag* except for a
+source's unmapped term or an author's proposed Concept. TypeScript
+discriminants named `kind` are unaffected. A persisted profile id such as
+`work-kind-v1` changes only through a new profile revision.
+
+## Filter contract
+
+FilterDocument is the shared descriptor for ordinary and advanced editors. It
+has no deployed schema or round-trip client test yet, so this section remains
+until both editors preserve fields their UI does not support. An empty document
+supplies no hidden query, sort or page defaults. It contains sparse Conditions
+and controls; editors group Facets for display without changing meaning. Server
+field and Work policies set privileges and budgets; a Saved Filter cannot
+enlarge either.
+
+The compiler must intersect site, resource and user scopes, including a
+mandatory fixed-Realm site boundary. Named terms resolve through an explicit,
+speaker, entry or Global policy before compiling their admitted definitions;
+equal-priority meanings remain ambiguous. Saved Filters retain exact
+DefinitionRefs and Context revisions. A new Concept cannot erase another's
+contextual uses, and labels or navigation cannot choose meaning. Semantic
+selection, preference, disclosure, populations and acceptance scopes remain
+separate. The compiler binds Context roles, Main Version, rating policy and
+semantic match intent. It canonicalizes identical Conditions without losing
+meaningful multiplicity. Conditions that describe one participant or
+occurrence must bind to that same occurrence. Count grain, display groups and
+optional self-filter-excluding facet counts follow
+[statement aggregation](search.md#statement-aggregation).
+
+Admission must check descriptor shape, node count, Facet/operator
+applicability, depth, sources and the parent budget of any nested Block before
+Jena execution. Candidate scans, graph expansion, time, memory and bytes need
+bounds. Saved query state excludes cursors; continuations bind policy,
+semantic, preference and disclosure revisions and report actual selection,
+data/index generations and completeness. Text hit limits cannot substitute for
+final post-filter limits or a snapshot across ordinary SPARQL offset requests.
+Temporal controls preserve possible and definite time plus calendar semantics.
+Rating controls preserve question, population, scale, time basis and
+aggregation. A display edit cannot create a rating Context or recast a
+correction as a new vote. Restore rechecks format and capability eligibility.
+Private text and unsupported query shapes fail explicitly: an unsupported
+Condition combination is a typed refusal, never an empty result. Each client
+adapter must verify scope intersection, empty and advanced documents, stale
+cursors and graph/text semantics.
+
+## Moving to this contract
+
+Querying is spread over separate shapes today. Each public search profile in
+[the search route](../../services/main/src/routes/search.ts) fixes one
+combination of type, Concept (still named `sense`), author, language, Realm and
+rating. The [grouped Statement read](../../services/main/src/modules/work/search-grouped.ts)
+has generic Conditions with role binding, and the
+[graph query schema](../../services/main/src/modules/graph-query/schema.ts) reads
+relations. The feed and onboarding use a fixed interest enum
+([Work kinds](../../services/main/src/modules/work/work-kinds.ts)) that also
+matches Concept labels as strings, which this contract rejects. The web keeps
+its own tables of type names and cover forms.
+
+The direction: Facet definitions in `model/definitions`, generated like
+profiles; one Query input that Main compiles onto admitted, bounded templates,
+with today's profiles as the first templates; Saved Filters for groupings; and
+labels read from the Resources themselves.
