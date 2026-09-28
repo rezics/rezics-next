@@ -149,8 +149,11 @@ export async function enrichSearchCardPage<T extends { resultGrain: string;
       session.summaries(ids), searchPageSerial(session, ids), searchPageAuthors(session, ids),
       searchPageRatings(session, matches, page.context),
     ]);
-    if (summaries.some(summary => summary.status !== 'available'
-      || summary.type !== 'work' || summary.disclosure !== 'public')) {
+    const publicCard = (summary: ResourceSummary) => summary.status === 'available'
+      && summary.type === 'work' && summary.disclosure === 'public';
+    // A Realm may select a public contribution without adopting it globally.
+    // Keep that search result, but do not attach the Work's private metadata.
+    if (typeof page.context !== 'object' && summaries.some(summary => !publicCard(summary))) {
       throw new SearchSnapshotMoved('Search card disclosure changed');
     }
     const fenced: ResourceSummary[] = [];
@@ -160,18 +163,19 @@ export async function enrichSearchCardPage<T extends { resultGrain: string;
     if (summaries.some((summary, index) => JSON.stringify(summary) !== JSON.stringify(fenced[index]))) {
       throw new SearchSnapshotMoved('Search card disclosure changed during hydration');
     }
-    return new Map(ids.map((id, index) => {
+    return new Map(ids.flatMap((id, index) => {
       const summary = summaries[index]!;
+      if (!publicCard(summary)) return [];
       const value = serial.get(id);
       if (summary.status !== 'available' || !value) throw new WorkReadUnavailable('Search card is incomplete');
-      return [id, { title: summary.name, cover: summary.avatar,
+      return [[id, { title: summary.name, cover: summary.avatar,
         rating: ratings.values.get(id) ?? null,
         ratingStatus: ratings.values.has(id) || matches.some(match => match.work === id && match.rating)
           ? 'available' : ratings.status === 'selected' ? 'unrated' : ratings.status,
         tagline: value.tagline, completionStatus: value.completionStatus,
         chapterCount: value.chapterCount, wordCount: value.wordCount,
         lastUpdatedAt: value.lastUpdatedAt,
-        primaryCredits: authors.get(id)! }];
+        primaryCredits: authors.get(id)! }] as const];
     }));
   }).catch((error: unknown) => {
     if (error instanceof WorkReadMoved) throw new SearchSnapshotMoved(error.message);

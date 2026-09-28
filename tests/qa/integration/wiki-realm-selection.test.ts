@@ -61,6 +61,10 @@ test('WIKI05: Realm serving text and search keep its accepted draft while the so
     expect(oldResults.total).toBe(1);
     expect(oldResults.results[0]).toMatchObject({ work: work.work,
       revision: draft.draftRevision, selection: adopted.selection });
+    // Realm selection does not make the source Work's metadata globally public.
+    expect(oldResults.results[0]).not.toHaveProperty('title');
+    expect(oldResults.results[0]).not.toHaveProperty('cover');
+    expect(JSON.stringify(oldResults)).not.toContain('Accepted source');
     expect((await search(nextTerm)).total).toBe(0);
     expect((await f.call('POST', '/v1/publication-selections', {
       profile: 'realm-local-selection-v1', context: { kind: 'realm-local', id: space.realm },
