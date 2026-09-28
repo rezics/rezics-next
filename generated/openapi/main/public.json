@@ -159033,6 +159033,426 @@
         }
       }
     },
+    "/v1/mod-compatibility/{work}/exact": {
+      "get": {
+        "operationId": "getV1Mod-compatibilityByWorkExact",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "work",
+            "required": true,
+            "schema": {
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "game",
+            "required": true,
+            "schema": {
+              "const": "Minecraft",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "gameVersion",
+            "required": true,
+            "schema": {
+              "pattern": "^[0-9A-Za-z][0-9A-Za-z.+-]{0,31}$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "loader",
+            "required": true,
+            "schema": {
+              "enum": [
+                "Fabric",
+                "Forge",
+                "NeoForge"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "side",
+            "required": true,
+            "schema": {
+              "enum": [
+                "client",
+                "server"
+              ],
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "profile": {
+                      "const": "mod-exact-compatibility-v1",
+                      "type": "string"
+                    },
+                    "release": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "properties": {
+                        "channel": {
+                          "~elyTyp": 7,
+                          "enum": [
+                            "release",
+                            "beta",
+                            "alpha"
+                          ],
+                          "nullable": true,
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "dependencies": {
+                          "~elyTyp": 7,
+                          "items": {
+                            "properties": {
+                              "id": {
+                                "maxLength": 160,
+                                "type": "string"
+                              },
+                              "range": {
+                                "~elyTyp": 7,
+                                "maxLength": 128,
+                                "nullable": true,
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              },
+                              "requirement": {
+                                "enum": [
+                                  "required",
+                                  "optional",
+                                  "incompatible",
+                                  "embedded"
+                                ],
+                                "type": "string"
+                              },
+                              "side": {
+                                "~elyTyp": 7,
+                                "enum": [
+                                  "client",
+                                  "server"
+                                ],
+                                "nullable": true,
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "requirement",
+                              "range",
+                              "side"
+                            ],
+                            "type": "object"
+                          },
+                          "maxItems": 32,
+                          "nullable": true,
+                          "type": [
+                            "array",
+                            "null"
+                          ]
+                        },
+                        "publishedAt": {
+                          "type": "string"
+                        },
+                        "version": {
+                          "~elyTyp": 7,
+                          "maxLength": 64,
+                          "nullable": true,
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "version",
+                        "publishedAt",
+                        "channel",
+                        "dependencies"
+                      ],
+                      "type": [
+                        "object",
+                        "null"
+                      ]
+                    },
+                    "state": {
+                      "enum": [
+                        "compatible",
+                        "stale",
+                        "unknown",
+                        "incompatible"
+                      ],
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "profile",
+                    "state",
+                    "release"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 200"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 400,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 400"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 401,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 401"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 403,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 403"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 404,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 404"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 500,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 500"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 503,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 503"
+          }
+        }
+      }
+    },
     "/v1/mod-releases/{work}": {
       "get": {
         "operationId": "getV1Mod-releasesByWork",
@@ -159081,6 +159501,19 @@
                           "changelog": {
                             "~elyTyp": 7,
                             "maxLength": 4000,
+                            "nullable": true,
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "channel": {
+                            "~elyTyp": 7,
+                            "enum": [
+                              "release",
+                              "beta",
+                              "alpha"
+                            ],
                             "nullable": true,
                             "type": [
                               "string",
@@ -159232,7 +159665,8 @@
                           "dependencies",
                           "changelog",
                           "capturedAt",
-                          "publishedAt"
+                          "publishedAt",
+                          "channel"
                         ],
                         "type": "object"
                       },
@@ -282462,6 +282896,57 @@
                                   "maxItems": 60,
                                   "type": "array"
                                 },
+                                "modRequiredDependency": {
+                                  "items": {
+                                    "properties": {
+                                      "count": {
+                                        "minimum": 0,
+                                        "type": "integer"
+                                      },
+                                      "name": {
+                                        "properties": {
+                                          "basis": {
+                                            "enum": [
+                                              "requested",
+                                              "fallback"
+                                            ],
+                                            "type": "string"
+                                          },
+                                          "direction": {
+                                            "enum": [
+                                              "ltr",
+                                              "rtl"
+                                            ],
+                                            "type": "string"
+                                          },
+                                          "language": {
+                                            "type": "string"
+                                          },
+                                          "value": {
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "value",
+                                          "language",
+                                          "direction",
+                                          "basis"
+                                        ],
+                                        "type": "object"
+                                      },
+                                      "value": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "value",
+                                      "count"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  "maxItems": 60,
+                                  "type": "array"
+                                },
                                 "status": {
                                   "items": {
                                     "properties": {
@@ -282572,7 +283057,8 @@
                                 "length",
                                 "modLoader",
                                 "modGameVersion",
-                                "modEnvironment"
+                                "modEnvironment",
+                                "modRequiredDependency"
                               ],
                               "type": "object"
                             },
@@ -282814,6 +283300,153 @@
                                       "profile": {
                                         "const": "mod-work-card-v2",
                                         "type": "string"
+                                      },
+                                      "selected": {
+                                        "~elyTyp": 7,
+                                        "nullable": true,
+                                        "properties": {
+                                          "channel": {
+                                            "~elyTyp": 7,
+                                            "enum": [
+                                              "release",
+                                              "beta",
+                                              "alpha"
+                                            ],
+                                            "nullable": true,
+                                            "type": [
+                                              "string",
+                                              "null"
+                                            ]
+                                          },
+                                          "dependencies": {
+                                            "~elyTyp": 7,
+                                            "items": {
+                                              "properties": {
+                                                "id": {
+                                                  "maxLength": 160,
+                                                  "type": "string"
+                                                },
+                                                "range": {
+                                                  "~elyTyp": 7,
+                                                  "maxLength": 128,
+                                                  "nullable": true,
+                                                  "type": [
+                                                    "string",
+                                                    "null"
+                                                  ]
+                                                },
+                                                "requirement": {
+                                                  "enum": [
+                                                    "required",
+                                                    "optional",
+                                                    "incompatible",
+                                                    "embedded"
+                                                  ],
+                                                  "type": "string"
+                                                },
+                                                "side": {
+                                                  "~elyTyp": 7,
+                                                  "enum": [
+                                                    "client",
+                                                    "server"
+                                                  ],
+                                                  "nullable": true,
+                                                  "type": [
+                                                    "string",
+                                                    "null"
+                                                  ]
+                                                }
+                                              },
+                                              "required": [
+                                                "id",
+                                                "requirement",
+                                                "range",
+                                                "side"
+                                              ],
+                                              "type": "object"
+                                            },
+                                            "maxItems": 32,
+                                            "nullable": true,
+                                            "type": [
+                                              "array",
+                                              "null"
+                                            ]
+                                          },
+                                          "environment": {
+                                            "~elyTyp": 7,
+                                            "enum": [
+                                              "client",
+                                              "server",
+                                              "client-and-server"
+                                            ],
+                                            "nullable": true,
+                                            "type": [
+                                              "string",
+                                              "null"
+                                            ]
+                                          },
+                                          "gameVersions": {
+                                            "items": {
+                                              "maxLength": 32,
+                                              "type": "string"
+                                            },
+                                            "maxItems": 16,
+                                            "type": "array"
+                                          },
+                                          "loaders": {
+                                            "items": {
+                                              "enum": [
+                                                "Fabric",
+                                                "Forge",
+                                                "NeoForge"
+                                              ],
+                                              "type": "string"
+                                            },
+                                            "maxItems": 3,
+                                            "type": "array"
+                                          },
+                                          "publishedAt": {
+                                            "type": "string"
+                                          },
+                                          "side": {
+                                            "enum": [
+                                              "client",
+                                              "server"
+                                            ],
+                                            "type": "string"
+                                          },
+                                          "state": {
+                                            "enum": [
+                                              "compatible",
+                                              "stale"
+                                            ],
+                                            "type": "string"
+                                          },
+                                          "version": {
+                                            "~elyTyp": 7,
+                                            "maxLength": 64,
+                                            "nullable": true,
+                                            "type": [
+                                              "string",
+                                              "null"
+                                            ]
+                                          }
+                                        },
+                                        "required": [
+                                          "version",
+                                          "gameVersions",
+                                          "loaders",
+                                          "environment",
+                                          "side",
+                                          "publishedAt",
+                                          "channel",
+                                          "dependencies",
+                                          "state"
+                                        ],
+                                        "type": [
+                                          "object",
+                                          "null"
+                                        ]
                                       },
                                       "updatedAt": {
                                         "type": "string"
@@ -283171,7 +283804,8 @@
                                                   "status",
                                                   "modLoader",
                                                   "modGameVersion",
-                                                  "modEnvironment"
+                                                  "modEnvironment",
+                                                  "modRequiredDependency"
                                                 ],
                                                 "type": "string"
                                               }
@@ -283179,6 +283813,27 @@
                                             "required": [
                                               "facet",
                                               "any"
+                                            ],
+                                            "type": "object"
+                                          },
+                                          {
+                                            "properties": {
+                                              "facet": {
+                                                "const": "concept",
+                                                "type": "string"
+                                              },
+                                              "none": {
+                                                "items": {
+                                                  "type": "string"
+                                                },
+                                                "maxItems": 8,
+                                                "minItems": 1,
+                                                "type": "array"
+                                              }
+                                            },
+                                            "required": [
+                                              "facet",
+                                              "none"
                                             ],
                                             "type": "object"
                                           },
@@ -283211,7 +283866,7 @@
                                           }
                                         ]
                                       },
-                                      "maxItems": 7,
+                                      "maxItems": 9,
                                       "type": "array"
                                     }
                                   },
@@ -309435,6 +310090,21 @@
           },
           {
             "in": "query",
+            "name": "excludeConcept",
+            "required": false,
+            "schema": {
+              "items": {
+                "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                "type": "string"
+              },
+              "maxItems": 8,
+              "minItems": 1,
+              "type": "array",
+              "uniqueItems": true
+            }
+          },
+          {
+            "in": "query",
             "name": "status",
             "required": false,
             "schema": {
@@ -309505,6 +310175,21 @@
                   "client",
                   "server"
                 ],
+                "type": "string"
+              },
+              "maxItems": 8,
+              "minItems": 1,
+              "type": "array",
+              "uniqueItems": true
+            }
+          },
+          {
+            "in": "query",
+            "name": "requiredDependency",
+            "required": false,
+            "schema": {
+              "items": {
+                "pattern": "^[a-z0-9][a-z0-9_.-]{0,159}$",
                 "type": "string"
               },
               "maxItems": 8,
@@ -309798,6 +310483,57 @@
                           "maxItems": 60,
                           "type": "array"
                         },
+                        "modRequiredDependency": {
+                          "items": {
+                            "properties": {
+                              "count": {
+                                "minimum": 0,
+                                "type": "integer"
+                              },
+                              "name": {
+                                "properties": {
+                                  "basis": {
+                                    "enum": [
+                                      "requested",
+                                      "fallback"
+                                    ],
+                                    "type": "string"
+                                  },
+                                  "direction": {
+                                    "enum": [
+                                      "ltr",
+                                      "rtl"
+                                    ],
+                                    "type": "string"
+                                  },
+                                  "language": {
+                                    "type": "string"
+                                  },
+                                  "value": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "value",
+                                  "language",
+                                  "direction",
+                                  "basis"
+                                ],
+                                "type": "object"
+                              },
+                              "value": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "value",
+                              "count"
+                            ],
+                            "type": "object"
+                          },
+                          "maxItems": 60,
+                          "type": "array"
+                        },
                         "status": {
                           "items": {
                             "properties": {
@@ -309908,7 +310644,8 @@
                         "length",
                         "modLoader",
                         "modGameVersion",
-                        "modEnvironment"
+                        "modEnvironment",
+                        "modRequiredDependency"
                       ],
                       "type": "object"
                     },
@@ -310150,6 +310887,153 @@
                               "profile": {
                                 "const": "mod-work-card-v2",
                                 "type": "string"
+                              },
+                              "selected": {
+                                "~elyTyp": 7,
+                                "nullable": true,
+                                "properties": {
+                                  "channel": {
+                                    "~elyTyp": 7,
+                                    "enum": [
+                                      "release",
+                                      "beta",
+                                      "alpha"
+                                    ],
+                                    "nullable": true,
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ]
+                                  },
+                                  "dependencies": {
+                                    "~elyTyp": 7,
+                                    "items": {
+                                      "properties": {
+                                        "id": {
+                                          "maxLength": 160,
+                                          "type": "string"
+                                        },
+                                        "range": {
+                                          "~elyTyp": 7,
+                                          "maxLength": 128,
+                                          "nullable": true,
+                                          "type": [
+                                            "string",
+                                            "null"
+                                          ]
+                                        },
+                                        "requirement": {
+                                          "enum": [
+                                            "required",
+                                            "optional",
+                                            "incompatible",
+                                            "embedded"
+                                          ],
+                                          "type": "string"
+                                        },
+                                        "side": {
+                                          "~elyTyp": 7,
+                                          "enum": [
+                                            "client",
+                                            "server"
+                                          ],
+                                          "nullable": true,
+                                          "type": [
+                                            "string",
+                                            "null"
+                                          ]
+                                        }
+                                      },
+                                      "required": [
+                                        "id",
+                                        "requirement",
+                                        "range",
+                                        "side"
+                                      ],
+                                      "type": "object"
+                                    },
+                                    "maxItems": 32,
+                                    "nullable": true,
+                                    "type": [
+                                      "array",
+                                      "null"
+                                    ]
+                                  },
+                                  "environment": {
+                                    "~elyTyp": 7,
+                                    "enum": [
+                                      "client",
+                                      "server",
+                                      "client-and-server"
+                                    ],
+                                    "nullable": true,
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ]
+                                  },
+                                  "gameVersions": {
+                                    "items": {
+                                      "maxLength": 32,
+                                      "type": "string"
+                                    },
+                                    "maxItems": 16,
+                                    "type": "array"
+                                  },
+                                  "loaders": {
+                                    "items": {
+                                      "enum": [
+                                        "Fabric",
+                                        "Forge",
+                                        "NeoForge"
+                                      ],
+                                      "type": "string"
+                                    },
+                                    "maxItems": 3,
+                                    "type": "array"
+                                  },
+                                  "publishedAt": {
+                                    "type": "string"
+                                  },
+                                  "side": {
+                                    "enum": [
+                                      "client",
+                                      "server"
+                                    ],
+                                    "type": "string"
+                                  },
+                                  "state": {
+                                    "enum": [
+                                      "compatible",
+                                      "stale"
+                                    ],
+                                    "type": "string"
+                                  },
+                                  "version": {
+                                    "~elyTyp": 7,
+                                    "maxLength": 64,
+                                    "nullable": true,
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "version",
+                                  "gameVersions",
+                                  "loaders",
+                                  "environment",
+                                  "side",
+                                  "publishedAt",
+                                  "channel",
+                                  "dependencies",
+                                  "state"
+                                ],
+                                "type": [
+                                  "object",
+                                  "null"
+                                ]
                               },
                               "updatedAt": {
                                 "type": "string"
@@ -310507,7 +311391,8 @@
                                           "status",
                                           "modLoader",
                                           "modGameVersion",
-                                          "modEnvironment"
+                                          "modEnvironment",
+                                          "modRequiredDependency"
                                         ],
                                         "type": "string"
                                       }
@@ -310515,6 +311400,27 @@
                                     "required": [
                                       "facet",
                                       "any"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  {
+                                    "properties": {
+                                      "facet": {
+                                        "const": "concept",
+                                        "type": "string"
+                                      },
+                                      "none": {
+                                        "items": {
+                                          "type": "string"
+                                        },
+                                        "maxItems": 8,
+                                        "minItems": 1,
+                                        "type": "array"
+                                      }
+                                    },
+                                    "required": [
+                                      "facet",
+                                      "none"
                                     ],
                                     "type": "object"
                                   },
@@ -310547,7 +311453,7 @@
                                   }
                                 ]
                               },
-                              "maxItems": 7,
+                              "maxItems": 9,
                               "type": "array"
                             }
                           },
@@ -313813,6 +314719,153 @@
                                 "const": "mod-work-card-v2",
                                 "type": "string"
                               },
+                              "selected": {
+                                "~elyTyp": 7,
+                                "nullable": true,
+                                "properties": {
+                                  "channel": {
+                                    "~elyTyp": 7,
+                                    "enum": [
+                                      "release",
+                                      "beta",
+                                      "alpha"
+                                    ],
+                                    "nullable": true,
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ]
+                                  },
+                                  "dependencies": {
+                                    "~elyTyp": 7,
+                                    "items": {
+                                      "properties": {
+                                        "id": {
+                                          "maxLength": 160,
+                                          "type": "string"
+                                        },
+                                        "range": {
+                                          "~elyTyp": 7,
+                                          "maxLength": 128,
+                                          "nullable": true,
+                                          "type": [
+                                            "string",
+                                            "null"
+                                          ]
+                                        },
+                                        "requirement": {
+                                          "enum": [
+                                            "required",
+                                            "optional",
+                                            "incompatible",
+                                            "embedded"
+                                          ],
+                                          "type": "string"
+                                        },
+                                        "side": {
+                                          "~elyTyp": 7,
+                                          "enum": [
+                                            "client",
+                                            "server"
+                                          ],
+                                          "nullable": true,
+                                          "type": [
+                                            "string",
+                                            "null"
+                                          ]
+                                        }
+                                      },
+                                      "required": [
+                                        "id",
+                                        "requirement",
+                                        "range",
+                                        "side"
+                                      ],
+                                      "type": "object"
+                                    },
+                                    "maxItems": 32,
+                                    "nullable": true,
+                                    "type": [
+                                      "array",
+                                      "null"
+                                    ]
+                                  },
+                                  "environment": {
+                                    "~elyTyp": 7,
+                                    "enum": [
+                                      "client",
+                                      "server",
+                                      "client-and-server"
+                                    ],
+                                    "nullable": true,
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ]
+                                  },
+                                  "gameVersions": {
+                                    "items": {
+                                      "maxLength": 32,
+                                      "type": "string"
+                                    },
+                                    "maxItems": 16,
+                                    "type": "array"
+                                  },
+                                  "loaders": {
+                                    "items": {
+                                      "enum": [
+                                        "Fabric",
+                                        "Forge",
+                                        "NeoForge"
+                                      ],
+                                      "type": "string"
+                                    },
+                                    "maxItems": 3,
+                                    "type": "array"
+                                  },
+                                  "publishedAt": {
+                                    "type": "string"
+                                  },
+                                  "side": {
+                                    "enum": [
+                                      "client",
+                                      "server"
+                                    ],
+                                    "type": "string"
+                                  },
+                                  "state": {
+                                    "enum": [
+                                      "compatible",
+                                      "stale"
+                                    ],
+                                    "type": "string"
+                                  },
+                                  "version": {
+                                    "~elyTyp": 7,
+                                    "maxLength": 64,
+                                    "nullable": true,
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "version",
+                                  "gameVersions",
+                                  "loaders",
+                                  "environment",
+                                  "side",
+                                  "publishedAt",
+                                  "channel",
+                                  "dependencies",
+                                  "state"
+                                ],
+                                "type": [
+                                  "object",
+                                  "null"
+                                ]
+                              },
                               "updatedAt": {
                                 "type": "string"
                               }
@@ -315835,6 +316888,153 @@
                               "profile": {
                                 "const": "mod-work-card-v2",
                                 "type": "string"
+                              },
+                              "selected": {
+                                "~elyTyp": 7,
+                                "nullable": true,
+                                "properties": {
+                                  "channel": {
+                                    "~elyTyp": 7,
+                                    "enum": [
+                                      "release",
+                                      "beta",
+                                      "alpha"
+                                    ],
+                                    "nullable": true,
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ]
+                                  },
+                                  "dependencies": {
+                                    "~elyTyp": 7,
+                                    "items": {
+                                      "properties": {
+                                        "id": {
+                                          "maxLength": 160,
+                                          "type": "string"
+                                        },
+                                        "range": {
+                                          "~elyTyp": 7,
+                                          "maxLength": 128,
+                                          "nullable": true,
+                                          "type": [
+                                            "string",
+                                            "null"
+                                          ]
+                                        },
+                                        "requirement": {
+                                          "enum": [
+                                            "required",
+                                            "optional",
+                                            "incompatible",
+                                            "embedded"
+                                          ],
+                                          "type": "string"
+                                        },
+                                        "side": {
+                                          "~elyTyp": 7,
+                                          "enum": [
+                                            "client",
+                                            "server"
+                                          ],
+                                          "nullable": true,
+                                          "type": [
+                                            "string",
+                                            "null"
+                                          ]
+                                        }
+                                      },
+                                      "required": [
+                                        "id",
+                                        "requirement",
+                                        "range",
+                                        "side"
+                                      ],
+                                      "type": "object"
+                                    },
+                                    "maxItems": 32,
+                                    "nullable": true,
+                                    "type": [
+                                      "array",
+                                      "null"
+                                    ]
+                                  },
+                                  "environment": {
+                                    "~elyTyp": 7,
+                                    "enum": [
+                                      "client",
+                                      "server",
+                                      "client-and-server"
+                                    ],
+                                    "nullable": true,
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ]
+                                  },
+                                  "gameVersions": {
+                                    "items": {
+                                      "maxLength": 32,
+                                      "type": "string"
+                                    },
+                                    "maxItems": 16,
+                                    "type": "array"
+                                  },
+                                  "loaders": {
+                                    "items": {
+                                      "enum": [
+                                        "Fabric",
+                                        "Forge",
+                                        "NeoForge"
+                                      ],
+                                      "type": "string"
+                                    },
+                                    "maxItems": 3,
+                                    "type": "array"
+                                  },
+                                  "publishedAt": {
+                                    "type": "string"
+                                  },
+                                  "side": {
+                                    "enum": [
+                                      "client",
+                                      "server"
+                                    ],
+                                    "type": "string"
+                                  },
+                                  "state": {
+                                    "enum": [
+                                      "compatible",
+                                      "stale"
+                                    ],
+                                    "type": "string"
+                                  },
+                                  "version": {
+                                    "~elyTyp": 7,
+                                    "maxLength": 64,
+                                    "nullable": true,
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "version",
+                                  "gameVersions",
+                                  "loaders",
+                                  "environment",
+                                  "side",
+                                  "publishedAt",
+                                  "channel",
+                                  "dependencies",
+                                  "state"
+                                ],
+                                "type": [
+                                  "object",
+                                  "null"
+                                ]
                               },
                               "updatedAt": {
                                 "type": "string"
