@@ -21,15 +21,17 @@ test('G205 activity: private paginated events, coarse devices, failure summary a
       device: { browser: 'Chrome', platform: 'macOS' } } });
     expect((await f.request(`/api/account/security-activity?cursor=${encodeURIComponent(first.nextCursor)}`, undefined, peer.cookie)).status).toBe(400);
     const sessions = await (await f.request('/api/account/sessions', undefined, currentCookie)).json() as {
-      items: { id: string; thisDevice: boolean; token?: string }[] };
-    expect(sessions.items).toHaveLength(2);
+      items: { id: string; groupKey: string; thisDevice: boolean; token?: string }[] };
+    expect(sessions.items).toHaveLength(3);
     expect(sessions.items.filter(item => item.thisDevice)).toHaveLength(1);
+    expect(new Set(sessions.items.map(item => item.groupKey)).size).toBe(2);
+    expect(new Set(sessions.items.filter(item => !item.thisDevice).map(item => item.groupKey)).size).toBe(1);
     expect(sessions.items.every(item => item.token === undefined)).toBe(true);
     const victim = sessions.items.find(item => !item.thisDevice)!;
     expect(await (await f.request('/api/account/sessions/revoke', { sessionId: victim.id }, peer.cookie)).json()).toEqual({ revoked: 0 });
     const race = await Promise.all([1, 2].map(() => f.request('/api/account/sessions/revoke', { others: true }, currentCookie)));
     const counts = await Promise.all(race.map(async response => (await response.json() as { revoked: number }).revoked));
-    expect(counts.sort()).toEqual([0, 1]);
+    expect(counts.sort()).toEqual([0, 2]);
     expect(await (await f.request('/api/auth/get-session', undefined, member.cookie)).json()).toBeNull();
     expect((await f.request('/api/auth/sign-out', {}, currentCookie)).status).toBe(200);
     await expect(f.pool.query('DELETE FROM rezics_account_security_event WHERE user_id = $1', [member.id])).rejects.toThrow('append-only');

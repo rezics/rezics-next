@@ -16,7 +16,7 @@ const TABLES = [
   'oauthClientResource', 'oauthConsent', 'oauthRefreshToken', 'oauthResource',
   'rezics_account_recovery_activation', 'rezics_account_recovery_approval',
   'rezics_account_recovery_claim', 'rezics_account_recovery_policy',
-  'rezics_oauth_code_basis', 'rezics_oauth_installation', 'rezics_signing_key',
+  'rezics_oauth_code_basis', 'rezics_oauth_first_party_client', 'rezics_oauth_installation', 'rezics_signing_key',
   'session', 'user', 'verification',
   'passkey', 'twoFactor', 'rezics_account_email', 'rezics_account_rate_limit',
   'rezics_account_pending_consent', 'rezics_account_step_up', 'rezics_account_security_event',
@@ -44,6 +44,7 @@ const KEYS: Record<string, [string, string][]> = {
   rezics_account_operator_job_item: [['job_id', 'uuid'], ['position', 'integer']],
   rezics_display_preferences: [['user_id', 'text']],
   rezics_account_email_change: [['user_id', 'text']],
+  rezics_oauth_first_party_client: [['client_id', 'text']],
 };
 
 /** Offline coverage of every private Account table at one UTC snapshot. */

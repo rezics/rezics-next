@@ -6,6 +6,11 @@ import type { AccountAuth } from './http.ts';
 export async function recordSessionClient(auth: AccountAuth, pool: Pool, request: Request,
   response: Response, clientId: string | null): Promise<void> {
   if (!clientId || response.status !== 302) return;
+  const location = response.headers.get('location');
+  if (!location) return;
+  const redirect = new URL(location, request.url);
+  if (redirect.searchParams.getAll('code').length !== 1 || !redirect.searchParams.get('code')
+    || redirect.searchParams.has('error')) return;
   const current = await auth.api.getSession({ headers: request.headers });
   if (!current) return;
   await pool.query(`UPDATE "session" SET rezics_client_id = $1

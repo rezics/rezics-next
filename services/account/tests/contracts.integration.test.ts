@@ -2,6 +2,7 @@ import { expect, test } from 'bun:test';
 import { treaty } from '@elysia/eden';
 import type { AccountApp } from '@rezics/account/app';
 import { accountFixture } from './account-fixture.ts';
+import { oauthFixture } from './oauth-fixture.ts';
 import { accountRecoveryCoverage, assertAccountRecoveryCoverage } from '../src/recovery-coverage.ts';
 
 test('G205 contract: typed Eden responses, OpenAPI, stable errors and complete new-table recovery coverage', async () => {
@@ -28,6 +29,31 @@ test('G205 contract: typed Eden responses, OpenAPI, stable errors and complete n
     await assertAccountRecoveryCoverage(f.pool, manifest);
     await f.pool.query('UPDATE rezics_account_security SET generation = generation + 1 WHERE user_id = $1', [member.id]);
     await expect(assertAccountRecoveryCoverage(f.pool, manifest)).rejects.toThrow('Account rows differ');
+  } finally { await f.close(); }
+}, 60_000);
+
+test('Account recovery coverage includes first-party clients and the session client column', async () => {
+  const f = await accountFixture();
+  try {
+    const member = await f.signup('recovery-client@example.test');
+    const oauth = await oauthFixture(f);
+    const client = await oauth.createClient(true);
+    const beforeMarker = await accountRecoveryCoverage(f.pool);
+    await f.pool.query('INSERT INTO rezics_oauth_first_party_client (client_id) VALUES ($1)',
+      [client.client_id]);
+    const withMarker = await accountRecoveryCoverage(f.pool);
+    expect(BigInt(withMarker.rowCount)).toBe(BigInt(beforeMarker.rowCount) + 1n);
+    expect(withMarker.rowDigest).not.toBe(beforeMarker.rowDigest);
+    await expect(assertAccountRecoveryCoverage(f.pool, beforeMarker))
+      .rejects.toThrow('Account rows differ from retained recovery coverage');
+
+    await f.pool.query(`UPDATE "session" SET rezics_client_id = $1 WHERE "userId" = $2`,
+      [client.client_id, member.id]);
+    const withSessionClient = await accountRecoveryCoverage(f.pool);
+    expect(withSessionClient.rowCount).toBe(withMarker.rowCount);
+    expect(withSessionClient.rowDigest).not.toBe(withMarker.rowDigest);
+    await expect(assertAccountRecoveryCoverage(f.pool, withMarker))
+      .rejects.toThrow('Account rows differ from retained recovery coverage');
   } finally { await f.close(); }
 }, 60_000);
 
