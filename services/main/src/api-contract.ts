@@ -83,7 +83,7 @@ export function problemResult<const Status extends number>(status: Status) {
     code: t.String(), currentHead: t.Optional(t.Nullable(t.String())) });
 }
 
-const phraseMatch = t.Object({
+export const phraseMatch = t.Object({
   matchUnit: t.String(), work: t.String(), mainVersion: t.String(),
   contribution: t.String(), revision: t.String(), selection: t.String(),
   language: t.String(), score: t.Number(), types: t.Array(t.String(), { maxItems: 3 }),
