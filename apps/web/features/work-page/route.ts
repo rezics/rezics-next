@@ -46,12 +46,18 @@ export type WorkScope = { kind: 'global' } | { kind: 'realm'; realm: string } | 
 type SearchParams = Record<string, string | string[] | undefined>;
 const single = (value: string | string[] | undefined) => (Array.isArray(value) ? undefined : value);
 
+/**
+ * Everyone's view as one shared value: reads are cached per request by
+ * argument identity, so the frame, the rating line and reviews share one read.
+ */
+export const EVERYONE: WorkScope = Object.freeze({ kind: 'global' });
+
 /** The URL's scope; null when `scope` names no scope this page can show, which the page says. */
 export function parseScope(params: SearchParams): WorkScope | null {
   if (Array.isArray(params.scope) || Array.isArray(params.realm)) return null;
   const scope = single(params.scope);
   const realm = single(params.realm);
-  if (scope === undefined || scope === 'global') return realm === undefined ? { kind: 'global' } : null;
+  if (scope === undefined || scope === 'global') return realm === undefined ? EVERYONE : null;
   if (scope === 'mine') return realm === undefined ? { kind: 'mine' } : null;
   if (scope === 'realm' && realm && uuid.test(realm)) return { kind: 'realm', realm };
   return null;

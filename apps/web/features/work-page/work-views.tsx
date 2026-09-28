@@ -18,7 +18,8 @@ import { readAdoptions, readAgentCredits, readAgentWorks, readClassifications, r
   readStart, readVersions } from './read.ts';
 import { RegionSkeleton } from './region.tsx';
 import { WorkRecord } from './record.tsx';
-import { type ContentsQuery, type HistoryFilter, idOf, type VersionQuery, type WorkScope, workHref } from './route.ts';
+import { type ContentsQuery, EVERYONE, type HistoryFilter, idOf, type VersionQuery, type WorkScope, workHref }
+  from './route.ts';
 import { ScopeBar, ScopeBarSkeleton, type ScopeRealm, type ScopeView } from './scope-bar.tsx';
 import { ReviewsSection } from './reviews.tsx';
 import type { WorkHeader as Header, Reviewer } from './types.ts';
@@ -53,7 +54,7 @@ async function Credits({ id, locale, messages }: Common & { id: string }) {
 
 /** Everyone's rating summary for the header, on the Work's first rating question. */
 async function RatingLineSlot({ id, locale, messages }: Common & { id: string }) {
-  return <RatingLine ratings={await readRatings(id, { kind: 'global' }, undefined)} locale={locale} messages={messages} />;
+  return <RatingLine ratings={await readRatings(id, EVERYONE, undefined)} locale={locale} messages={messages} />;
 }
 
 /** "Read": the next unread chapter or chapter 1, read after the page has started to stream. */
@@ -67,7 +68,7 @@ export async function WorkFrameView({ workRef, id, work, locale, messages, child
   workRef: string; id: string; work: Header; children: ReactNode;
 }) {
   const [{ signedIn, actingSubject }, { avatarQuery }, seed, ratings] = await Promise.all([readingAgent(), browseReader(),
-    readReaderState(id), readRatings(id, { kind: 'global' }, undefined)]);
+    readReaderState(id), readRatings(id, EVERYONE, undefined)]);
   // The stars answer everyone's first rating question for the Main Version shown, as the summary above them does.
   const context = ratings.ok ? ratings.data.context : null;
   const ratingTarget = context ? { work: work.id, context: context.context, mainVersion: work.mainVersion,
@@ -133,8 +134,8 @@ async function Author({ id, locale, messages }: Common & { id: string }) {
 async function Reviews({ workRef, id, work, scope, context: chosen, locale, messages }: ScopedProps & {
   work: Header; context: string | undefined }) {
   const [ratings, everyone, { signedIn, actingSubject }] = await Promise.all([
-    readRatings(id, scope.kind === 'mine' ? { kind: 'global' } : scope, chosen),
-    readRatings(id, { kind: 'global' }, undefined), readingAgent()]);
+    readRatings(id, scope.kind === 'mine' ? EVERYONE : scope, chosen),
+    readRatings(id, EVERYONE, undefined), readingAgent()]);
   const question = ratings.ok ? ratings.data.context : null;
   if (!question) return null;
   const initial = await readReviews(id, { context: question.context, sort: 'helpful', limit: 10 });

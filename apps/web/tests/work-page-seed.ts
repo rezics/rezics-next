@@ -156,8 +156,9 @@ try {
     if (body === null) return target.work;
     await a!.grant(`content:draft:${target.work}`, 'content.draft');
     const variant = `urn:rezics:variant:${randomUUID()}`;
-    await a!.grant(`content:publish:${variant}`, 'content.publish');
-    await a!.grant(`content:search-eligibility:${variant}`, 'content.search-eligibility');
+    // The admitted publication and eligibility routes ask for authority on the Work, not the variant.
+    await a!.grant(`content:publish:${target.work}`, 'content.publish');
+    await a!.grant(`content:search-eligibility:${target.work}`, 'content.search-eligibility');
     const saved = await created<{ revisionId: string; sourcePosition: { dataEpoch: string } }>(await a!.send('POST',
       '/v1/content-drafts', { profile: 'content-text-v1', resourceId: target.work, variantId: variant,
         language: { kind: 'tag', tag: 'en', originalTag: 'en' }, direction: 'ltr', expectedHead: null, body,
