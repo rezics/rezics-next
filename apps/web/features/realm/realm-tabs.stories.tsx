@@ -1,13 +1,18 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, within } from 'storybook/test';
 import type { UiLocale } from '../../i18n/define.ts';
+import { ZoneBrowse } from '../zones/browse.tsx';
+import { parseBrowseState } from '../zones/browse-state.ts';
+import { browseModel } from '../zones/browse-view.ts';
 import { decisions, fictionZone, works, zoneMessagesFor } from '../zones/fixtures.ts';
+import { browseCounts } from '../zones/official-fixtures.ts';
 import { presetTokens } from '../zones/presentation.ts';
+import { cardRenderer } from '../zones/zone-home.tsx';
 import { RealmNotFound, RealmUnavailable } from './states.tsx';
 import { RealmPageStory, realmMessagesFor } from './story-page.tsx';
-import { type AboutPerson, ListFailure, RealmAbout, RealmDecisions, RealmWorks } from './views.tsx';
+import { type AboutPerson, ListFailure, RealmAbout, RealmDecisions } from './views.tsx';
 
-type Tab = 'works' | 'decisions' | 'about' | 'works-moved';
+type Tab = 'browse' | 'decisions' | 'about' | 'browse-moved';
 
 const person = (id: string, name: string, handle: string | null, featured = false): AboutPerson => ({
   id: `https://rezics.com/id/00000000-0000-7000-8000-${id.padStart(12, '0')}`, name,
@@ -22,11 +27,15 @@ function TabPage({ tab, locale }: { tab: Tab; locale: UiLocale }) {
   const messages = realmMessagesFor(locale);
   const zoneMessages = zoneMessagesFor(locale);
   const zone = { ...fictionZone(locale, presetTokens.serial), slug: 'fiction' };
+  const state = parseBrowseState({ view: 'grid' });
   const content = {
-    works: <RealmWorks realmName={zone.name.value} works={works} next="/en/r/fiction/works?cursor=2" first={null}
-      locale={locale} messages={messages} zoneMessages={zoneMessages} />,
-    'works-moved': <div className="mx-auto max-w-6xl px-4 py-6 sm:px-6 lg:px-10"><ListFailure failure="moved"
-      firstPage="/en/r/fiction/works" messages={messages} /></div>,
+    browse: <ZoneBrowse card={cardRenderer(zone, null, locale, zoneMessages)} messages={zoneMessages}
+      model={browseModel({ base: `/${locale}/r/fiction/browse`, zoneName: zone.name.value, state, locale,
+        messages: zoneMessages, admitted: new Map(), page: { items: works, facets: browseCounts(works),
+          matches: { value: works.length, kind: 'exact' }, window: { scanned: works.length, complete: true },
+          tags: 'current', nextCursor: 'page-2', sort: 'newest' } })} />,
+    'browse-moved': <div className="mx-auto max-w-6xl px-4 py-6 sm:px-6 lg:px-10"><ListFailure failure="moved"
+      firstPage="/en/r/fiction/browse" messages={messages} /></div>,
     decisions: <RealmDecisions decisions={decisions} next={null} first="/en/r/fiction/decisions" locale={locale}
       messages={messages} zoneMessages={zoneMessages} />,
     about: <RealmAbout realmName={zone.name.value} description={zone.description} locale={locale} messages={messages}
@@ -46,33 +55,35 @@ function TabPage({ tab, locale }: { tab: Tab; locale: UiLocale }) {
 const meta = {
   title: 'Realm/Tabs',
   component: TabPage,
-  args: { tab: 'works', locale: 'en' },
-  parameters: { route: { pathname: '/en/r/fiction/works' } },
+  args: { tab: 'browse', locale: 'en' },
+  parameters: { route: { pathname: '/en/r/fiction/browse' } },
   render: (args, { globals }) => <TabPage {...args} locale={(globals.locale as UiLocale | undefined) ?? args.locale} />,
 } satisfies Meta<typeof TabPage>;
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-export const Works: Story = {
+/** Browse, where the Works tab was: every adopted Work, here in the grid the former Works tab showed. */
+export const Browse: Story = {
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
-    await expect(canvas.getByRole('link', { name: 'Works' })).toHaveAttribute('aria-current', 'page');
-    await expect(canvas.getByRole('heading', { level: 2, name: 'Works in Fiction 小说' })).toBeVisible();
-    await expect(canvas.getByRole('link', { name: /Next page/ })).toHaveAttribute('href', '/en/r/fiction/works?cursor=2');
+    await expect(canvas.getByRole('link', { name: 'Browse' })).toHaveAttribute('aria-current', 'page');
+    await expect(canvas.getByRole('link', { name: 'Grid' })).toHaveAttribute('aria-current', 'true');
+    await expect(canvas.getByRole('link', { name: /Next/ })).toHaveAttribute('href',
+      '/en/r/fiction/browse?view=grid&cursor=page-2');
     await expect(canvas.getAllByRole('link', { name: /^Why .* is here$/ })).toHaveLength(works.length);
   },
 };
 
-export const WorksChineseDark: Story = { globals: { locale: 'zh-Hans', theme: 'dark' } };
-export const WorksPhone: Story = { globals: { viewport: { value: 'phone' } } };
+export const BrowseChineseDark: Story = { globals: { locale: 'zh-Hans', theme: 'dark' } };
+export const BrowsePhone: Story = { globals: { viewport: { value: 'phone' } } };
 
 /** The list moved under its cursor: say so and start over, never splice pages. */
-export const WorksMoved: Story = {
-  args: { tab: 'works-moved' },
+export const BrowseMoved: Story = {
+  args: { tab: 'browse-moved' },
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     await expect(canvas.getByRole('status')).toHaveTextContent('This list changed while you were browsing');
-    await expect(canvas.getByRole('link', { name: 'Start over' })).toHaveAttribute('href', '/en/r/fiction/works');
+    await expect(canvas.getByRole('link', { name: 'Start over' })).toHaveAttribute('href', '/en/r/fiction/browse');
   },
 };
 

@@ -2,8 +2,8 @@ import { Badge } from '@rezics/ui/badge';
 import { buttonVariants } from '@rezics/ui/button';
 import { cn } from '@rezics/ui/utils';
 import type { ZoneDecision, ZoneWork } from '@rezics/zone-sdk';
-import { ArrowLeftIcon, ArrowRightIcon, BookOpenTextIcon, GavelIcon, LandmarkIcon, PlusIcon, RotateCwIcon,
-  ScaleIcon, ShieldIcon, TagIcon, TriangleAlertIcon, XIcon } from 'lucide-react';
+import { ArrowLeftIcon, ArrowRightIcon, GavelIcon, LandmarkIcon, PlusIcon, RotateCwIcon, ScaleIcon, ShieldIcon,
+  TagIcon, TriangleAlertIcon, XIcon } from 'lucide-react';
 import { materializeData } from 'native-i18n';
 import type { ReactNode } from 'react';
 import type { UiLocale } from '../../i18n/define.ts';
@@ -11,8 +11,6 @@ import { ProfileAvatar } from '../profile/profile-avatar.tsx';
 import { EmptyState } from '../shell/empty-state.tsx';
 import LocalizedLink from '../shell/localized-link.tsx';
 import { PageContainer } from '../shell/page.tsx';
-import { slotRatio } from '../catalogue/work.ts';
-import { ZoneWorkCard } from '../zones/card.tsx';
 import type { ZoneMessages } from '../zones/messages.ts';
 import { ModuleHeading } from '../zones/module-frame.tsx';
 import { decisionText } from '../zones/modules.tsx';
@@ -54,31 +52,6 @@ function Pager({ next, first, messages }: { next: string | null; first: string |
     {next ? <LocalizedLink href={next} className={buttonVariants({ variant: 'outline' })}>
       {messages.showMore}<ArrowRightIcon aria-hidden="true" className="rtl:rotate-180" /></LocalizedLink> : null}
   </nav>;
-}
-
-/** The Works tab: every Work the Realm adopted, covers first, a page at a time. */
-export function RealmWorks({ realmName, works, next, first, locale, messages, zoneMessages, avatarQuery }: {
-  realmName: string; works: readonly ZoneWork[]; next: string | null; first: string | null;
-  locale: UiLocale; messages: RealmMessages; zoneMessages: ZoneMessages; avatarQuery?: string;
-}) {
-  const slot = slotRatio(works);
-  const t = materializeData(messages, { locale });
-  return <PageContainer className="grid grid-cols-1 gap-6">
-    <section aria-labelledby="realm-works" className="grid grid-cols-1 gap-5 rounded-(--zone-radius-card) bg-(--zone-panel)
-      p-(--zone-panel-pad)">
-      <ViewHeader id="realm-works" title={t.worksTitle({ realm: realmName })} intro={messages.worksIntro}>
-        {works.length ? <p className="text-muted-foreground text-sm">{t.worksCount(works.length)}</p> : null}
-      </ViewHeader>
-      {works.length ? <ul className="grid grid-cols-2 gap-x-(--zone-shelf-gap) gap-y-8 sm:grid-cols-3 md:grid-cols-4
-        lg:grid-cols-5">
-        {works.map(work => <li key={work.id} className="min-w-0">
-          <ZoneWorkCard work={work} slot={slot} locale={locale} messages={zoneMessages} avatarQuery={avatarQuery} />
-        </li>)}
-      </ul> : <EmptyState icon={BookOpenTextIcon} title={messages.worksEmpty} description={messages.worksEmptyBody}
-        headingLevel={3} />}
-    </section>
-    <Pager next={next} first={first} messages={messages} />
-  </PageContainer>;
 }
 
 const kindIcons = { adoption: PlusIcon, classification: TagIcon, 'semantic-rule-change': ScaleIcon } as const;

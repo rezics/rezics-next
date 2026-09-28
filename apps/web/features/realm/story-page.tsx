@@ -1,4 +1,4 @@
-import type { ZoneContext, ZonePackage } from '@rezics/zone-sdk';
+import type { ZoneBrowseEntry, ZoneContext, ZonePackage } from '@rezics/zone-sdk';
 import { LibraryBigIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
 import type { UiLocale } from '../../i18n/define.ts';
@@ -26,12 +26,14 @@ export const realmMessagesFor = (locale: UiLocale): RealmMessages => locale === 
  */
 export function RealmPageStory({ zone, modules = [], pkg = null, execution = { mode: 'fallback', reason: 'none-approved' },
   look = true, reader = 'light', members = null, navigation = [], membership = null,
-  membershipActions = { kind: 'signed-out', signInHref: '/auth/start' }, locale, children }: {
+  membershipActions = { kind: 'signed-out', signInHref: '/auth/start' }, browse, locale, children }: {
   zone: ZoneContext; modules?: readonly PlacedModule[]; pkg?: ZonePackage | null; execution?: Execution;
   look?: boolean; reader?: ReaderTheme; members?: string | null;
   navigation?: readonly { label: string; href: string }[];
   /** The reader's membership; signed out by default, as a first visit. */
   membership?: Membership | null; membershipActions?: MembershipActions;
+  /** The search and filters the home leads with. */
+  browse?: ZoneBrowseEntry;
   locale: UiLocale; children?: ReactNode;
 }) {
   const zoneMessages = zoneMessagesFor(locale);
@@ -56,6 +58,7 @@ export function RealmPageStory({ zone, modules = [], pkg = null, execution = { m
     {/* Signed out, as a first visit: shelf controls lead to sign-in. */}
     <ReaderActionsProvider signedIn={false} signInHref="/auth/start">
       {children ?? <ZoneHome modules={modules} zone={zone} pkg={pkg} locale={locale} messages={zoneMessages}
+        browse={browse}
         empty={<EmptyState icon={LibraryBigIcon} title={messages.emptyHomeTitle} description={messages.emptyHomeBody} />} />}
     </ReaderActionsProvider>
   </ZoneFrame>;

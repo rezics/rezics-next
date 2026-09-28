@@ -25,7 +25,8 @@ export const ReaderCharts: Story = {
     const region = within(canvasElement).getByRole('region', { name: 'Readers’ charts' });
     await expect(within(region).getByText('Ranked by reads')).toBeVisible();
     await expect(within(region).getByRole('tab', { name: 'Today' })).toHaveAttribute('aria-selected', 'true');
-    await expect(within(region).getAllByRole('listitem')).toHaveLength(5);
+    // Five ranked rows; each row lists its own facts too.
+    await expect(within(region).getAllByRole('list')[0]!.children).toHaveLength(5);
     await expect(within(region).getAllByText('Completed')[0]).toBeVisible();
     await expect(within(region).getByRole('link', { name: 'Why Jane Eyre is here' })).toBeVisible();
     await userEvent.click(within(region).getByRole('tab', { name: 'This month' }));

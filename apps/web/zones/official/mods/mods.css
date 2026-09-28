@@ -135,11 +135,14 @@
       padding-inline-end: 1.5rem;
     }
 
-    .mh-title {
+    .mh-name {
       display: flex;
       flex-wrap: wrap;
       align-items: baseline;
       gap: 0 0.5rem;
+    }
+
+    .mh-title {
       font-size: 1.0625rem;
       font-weight: 650;
       line-height: 1.3;

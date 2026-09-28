@@ -6,7 +6,8 @@ import books from '../../zones/official/books/index.tsx';
 import mods from '../../zones/official/mods/index.tsx';
 import type { UiLocale } from '../../i18n/define.ts';
 import { RealmPageStory } from '../realm/story-page.tsx';
-import { type Catalogue, officialModules, officialWorks, officialZone, type OfficialSlug } from './official-fixtures.ts';
+import { type Catalogue, officialBrowse, officialModules, officialWorks, officialZone, type OfficialSlug }
+  from './official-fixtures.ts';
 
 const packages: Record<OfficialSlug, ZonePackage> = { books, mods, 'ai-workshop': aiWorkshop };
 
@@ -17,6 +18,7 @@ function Page({ slug, look, catalogue, locale }: {
   const pkg = look === 'package' ? packages[slug] : null;
   return <RealmPageStory zone={officialZone(slug, locale)} modules={officialModules(slug, locale, catalogue)}
     locale={locale} members={locale === 'zh-Hans' ? '3,204 位成员' : '3,204 members'} pkg={pkg}
+    browse={officialBrowse(slug, locale, catalogue)}
     execution={pkg ? { mode: 'package', slug } : { mode: 'fallback', reason: 'none-approved' }} />;
 }
 
@@ -168,7 +170,11 @@ export const BooksFallbackPhoneDark: Story = {
 
 const modsRoute = { route: { pathname: '/en/r/mods' } };
 
-/** The mod hub: games and loaders up front, a trending board and download-first cards with what each runs on. */
+/**
+ * Mods as Modrinth lists them: search and filters first, then every pick as a
+ * result row with what it runs on and when it changed. No row offers a
+ * download or counts one, since REZICS counts none.
+ */
 export const Mods: Story = {
   args: { slug: 'mods' },
   parameters: modsRoute,
@@ -178,28 +184,26 @@ export const Mods: Story = {
     await packageRuns(canvasElement, 'mods');
     await expect(canvas.getByRole('heading', { level: 1, name: 'Mods' })).toBeVisible();
     await expect(canvas.getByRole('button', { name: 'Page style' })).toBeVisible();
+    // The home leads with search and one-filter links into Browse, each with its count.
+    const search = canvas.getByRole('search', { name: 'Search Mods' });
+    await expect(search).toHaveAttribute('action', '/en/r/mods/browse');
+    await expect(canvas.getByRole('link', { name: 'Fabric 2' })).toHaveAttribute('href', '/en/r/mods/browse?loader=fabric');
+    await expect(canvas.getByRole('link', { name: 'Client 4' })).toHaveAttribute('href', '/en/r/mods/browse?env=client');
     const featured = canvas.getByRole('region', { name: 'Featured' });
-    await expect(within(featured).getByRole('link', { name: 'Get Lumen Lanterns' })).toBeVisible();
-    // The spotlight leads with the bound release: game and version, loader, release and when it changed.
-    const spotlight = within(featured.querySelector<HTMLElement>('.mh-spotlight')!);
-    for (const fact of ['Minecraft 1.21.1', 'Fabric', 'v1.3.0', 'Updated yesterday']) {
-      await expect(spotlight.getByText(fact)).toBeVisible();
+    const lumen = within(featured).getByRole('heading', { level: 3, name: /Lumen Lanterns/ }).closest('article')!;
+    for (const fact of ['Client', 'Fabric', '1.21.1', '1.20.1', 'Updated yesterday']) {
+      await expect(within(lumen).getByText(fact)).toBeVisible();
     }
-    // Rail entries keep one line of it.
-    await expect(within(featured).getAllByText('Minecraft 1.21.1 · Forge')).toHaveLength(2);
+    await expect(canvas.queryByRole('link', { name: /^Get / })).toBeNull();
     await expect(within(canvas.getByRole('navigation', { name: 'Games and loaders' })).getAllByRole('link'))
       .toHaveLength(7);
     const trending = canvas.getByRole('region', { name: 'Trending' });
     await expect(within(trending).getByRole('tab', { name: 'Today' })).toHaveAttribute('aria-selected', 'true');
-    await expect(within(trending).getByText('Stardew Valley 1.6')).toBeVisible();
-    await expect(within(trending).getByText('SMAPI')).toBeVisible();
+    await expect(within(trending).getAllByText('SMAPI').length).toBeGreaterThan(0);
     await userEvent.click(within(trending).getByRole('tab', { name: 'This month' }));
     await expect(within(trending).getByRole('tab', { name: 'This month' })).toHaveAttribute('aria-selected', 'true');
-    // Lumen Lanterns, Chunk Weaver, the shader guide and the Stardew farm changed this week; mods count their release.
-    await expect(within(canvas.getByRole('region', { name: 'Latest' })).getByText('4 updated this week'))
-      .toBeVisible();
     const collection = canvas.getByRole('region', { name: 'Editors’ picks' });
-    await expect(within(collection).getByText('Collection · 4 picks')).toBeVisible();
+    await expect(within(collection).getByText('· 4 picks')).toBeVisible();
     await holds('mods')(context);
   },
 };
@@ -214,8 +218,8 @@ export const ModsChinese: Story = {
   async play(context) {
     const canvas = within(context.canvasElement);
     await expect(canvas.getByRole('heading', { level: 1, name: '模组' })).toBeVisible();
-    await expect(within(canvas.getByRole('region', { name: '精选' }))
-      .getByRole('link', { name: '获取 Lumen Lanterns' })).toBeVisible();
+    await expect(canvas.getByRole('search', { name: '搜索模组' })).toBeVisible();
+    await expect(within(canvas.getByRole('region', { name: '精选' })).getAllByText('客户端').length).toBeGreaterThan(0);
     await expect(within(canvas.getByRole('region', { name: '精选' })).getByText('昨天更新')).toBeVisible();
     await expect(canvas.getByRole('tab', { name: '今日' })).toHaveAttribute('aria-selected', 'true');
     await holds('mods')(context);
@@ -230,21 +234,17 @@ export const ModsPhoneChineseDark: Story = {
 };
 
 /**
- * The demo: four mods, each bound to one verified release when it was seeded,
- * beside guides without authors, states or update times. Mod cards show what
- * they run on; every card keeps Get and the stamp.
+ * The demo: four mods, each with one verified release, beside guides without
+ * authors, states or update times. Mod rows show what they run on.
  */
 export const ModsAsSeeded: Story = {
   args: { slug: 'mods', catalogue: 'seeded' },
   parameters: modsRoute,
   async play(context) {
     const latest = within(within(context.canvasElement).getByRole('region', { name: 'Latest' }));
-    await expect(latest.getByText('4 updated this week')).toBeVisible();
-    await expect(latest.getAllByText('Minecraft 1.21.1')).toHaveLength(4);
     await expect(latest.getAllByText('Forge')).toHaveLength(2);
-    await expect(latest.getByText('v1.4.2')).toBeVisible();
-    // The shelf lists its first six rows, each with Get.
-    await expect(latest.getAllByRole('link', { name: /^Get / })).toHaveLength(6);
+    await expect(latest.getAllByText('Fabric')).toHaveLength(2);
+    await expect(latest.getByRole('link', { name: 'Minecraft shaders: a gentle first setup' })).toBeVisible();
     await holds('mods')(context);
   },
 };
@@ -254,7 +254,8 @@ export const ModsFallback: Story = {
   parameters: modsRoute,
   async play(context) {
     await fallbackRuns(context.canvasElement, 'mods');
-    await expect(within(context.canvasElement).queryByRole('link', { name: /^Get / })).toBeNull();
+    // The platform's rows carry the same facts: where a mod runs, its loaders and versions.
+    await expect(within(context.canvasElement).getAllByText('Fabric').length).toBeGreaterThan(0);
     await holds('mods')(context);
   },
 };
@@ -292,7 +293,7 @@ export const AiWorkshop: Story = {
     await packageRuns(canvasElement, 'ai-workshop');
     await expect(canvas.getByRole('heading', { level: 1, name: 'AI Workshop' })).toBeVisible();
     await expect(canvas.getByRole('link', { name: 'Browse every prompt and skill' }))
-      .toHaveAttribute('href', '/en/r/ai-workshop/works');
+      .toHaveAttribute('href', '/en/r/ai-workshop/browse');
     const featured = canvas.getByRole('region', { name: 'Featured' });
     const spotlight = within(featured.querySelector<HTMLElement>('.aw-spotlight')!);
     await expect(spotlight.getByText('Prompt')).toBeVisible();

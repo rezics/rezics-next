@@ -2,8 +2,6 @@ import { cn } from '@rezics/ui/utils';
 import { BoxIcon, TriangleAlertIcon } from 'lucide-react';
 import { materializeData } from 'native-i18n';
 import type { UiLocale } from '../../i18n/define.ts';
-import { getMessages } from '../../i18n/server.ts';
-import { readModReleases } from '../realm/read.ts';
 import type { ModReleasePage } from '../realm/types.ts';
 import { agoText } from './card.tsx';
 import type { ZoneMessages } from './messages.ts';
@@ -16,7 +14,6 @@ import type { ZoneMessages } from './messages.ts';
 
 export type ModRelease = ModReleasePage['items'][number];
 
-const MOD_PACKAGE = 'https://rezics.com/vocab/ModPackage';
 const pill = 'inline-flex h-7 items-center rounded-full border border-border/80 bg-card px-2.5 text-sm';
 
 /** Game versions newest first: numeric segments compare as numbers (`1.21.10` after `1.21.9`). */
@@ -103,7 +100,9 @@ export function ModSections({ releases, failed, locale, messages }: {
         </div> : <p className="text-muted-foreground text-sm">{messages.modNoDependencies}</p>}
     </Section>
     <Section id="mod-versions" title={messages.modVersions}>
-      <div className="overflow-x-auto rounded-2xl border border-border/70 bg-card">
+      {/* Wide on phones, so it scrolls; the scroller takes focus to scroll by keyboard. */}
+      <div tabIndex={0} className="overflow-x-auto rounded-2xl border
+        border-border/70 bg-card outline-none focus-visible:ring-2 focus-visible:ring-ring">
         <table className="w-full min-w-[32rem] text-sm">
           <thead className="text-muted-foreground text-start">
             <tr className="border-border/60 border-b">
@@ -142,18 +141,4 @@ export function ModSections({ releases, failed, locale, messages }: {
       </ol> : <p className="text-muted-foreground text-sm">{messages.modNoNotes}</p>}
     </Section>
   </div>;
-}
-
-/**
- * A Work's sections for its type: a mod's releases today. Rendered on the
- * Work page after its description; other types have none yet.
- */
-export async function WorkTypeSections({ work, types, locale }: {
-  /** The Work's UUID. */
-  work: string; types: readonly string[]; locale: UiLocale;
-}) {
-  if (!types.includes(MOD_PACKAGE)) return null;
-  const [page, messages] = await Promise.all([readModReleases(work), getMessages('zones', locale)]);
-  return <ModSections releases={page.ok ? page.data.items : []} failed={!page.ok && page.failure !== 'missing'}
-    locale={locale} messages={messages} />;
 }

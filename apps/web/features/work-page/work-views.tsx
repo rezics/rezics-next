@@ -34,7 +34,7 @@ import type { WorkHeader as Header, Reviewer } from './types.ts';
 import { VersionsRegion } from './versions.tsx';
 import { InvalidScope, OverviewLayout, ReadButton, WorkFrame, WorkPageCover } from './work-frame.tsx';
 import { WorkAbout } from './work-header.tsx';
-import { WorkTypeSections } from '../zones/mod-sections.tsx';
+import { WorkTypeSections } from '../zones/work-sections.tsx';
 
 // Server compositions for the `/w/[ref]` routes: each region reads Main on its
 // own under Suspense, so the page streams as answers arrive and one failure

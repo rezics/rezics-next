@@ -1,6 +1,9 @@
-import type { ZoneContext, ZoneDecision, ZoneModule, ZoneModuleType, ZonePerson, ZoneText, ZoneTokens, ZoneWork }
-  from '@rezics/zone-sdk';
+import type { ZoneBrowseEntry, ZoneContext, ZoneDecision, ZoneModule, ZoneModuleType, ZonePerson, ZoneText, ZoneTokens,
+  ZoneWork } from '@rezics/zone-sdk';
 import type { UiLocale } from '../../i18n/define.ts';
+import { parseBrowseState } from './browse-state.ts';
+import { browseEntry, type BrowseModel, browseModel, type FacetCounts } from './browse-view.ts';
+import { zoneMessagesFor } from './fixtures.ts';
 import { presetTokens } from './presentation.ts';
 import type { ModuleState, PlacedModule } from './zone-home.tsx';
 
@@ -312,4 +315,56 @@ function bookPeople(locale: UiLocale): ZonePerson[] {
     person('mary-shelley', 'Mary Shelley', 'en', { en: 'Began Frankenstein at nineteen, on a dare.',
       'zh-Hans': '十九岁时因一场打赌写下《弗兰肯斯坦》。' }),
   ];
+}
+
+const typeOf = { book: 'https://schema.org/Book', document: 'https://schema.org/DigitalDocument',
+  recipe: 'https://schema.org/Recipe', package: 'https://rezics.com/vocab/ModPackage' } as const;
+const mainLoaders = ['Fabric', 'Forge', 'NeoForge'];
+
+/** What Main's browse read would match for each Facet value among `works`, most common first. */
+export function browseCounts(works: readonly ZoneWork[]): FacetCounts {
+  const tally = (values: (work: ZoneWork) => readonly string[]) => {
+    const found = new Map<string, number>();
+    for (const work of works) for (const value of new Set(values(work))) found.set(value, (found.get(value) ?? 0) + 1);
+    return [...found].map(([value, count]) => ({ value, count }))
+      .sort((a, b) => b.count - a.count || a.value.localeCompare(b.value));
+  };
+  // Main lists Minecraft releases only (`mod-work-card-v2`).
+  const minecraft = (work: ZoneWork) => work.mod?.game === 'Minecraft' ? work.mod : null;
+  return { modLoader: tally(work => minecraft(work)?.loaders.filter(loader => mainLoaders.includes(loader)) ?? []),
+    modGameVersion: tally(work => minecraft(work)?.gameVersions ?? []),
+    modEnvironment: tally(work => { const environment = minecraft(work)?.environment;
+      return !environment ? [] : environment === 'client-and-server' ? ['client', 'server'] : [environment]; }),
+    concept: [], status: tally(work => work.status ? [work.status] : []), length: [],
+    type: tally(work => [typeOf[work.kind]]) };
+}
+
+/** The search and filters an official Zone's home leads with. */
+export function officialBrowse(slug: OfficialSlug, locale: UiLocale, catalogue: Catalogue = 'rich'): ZoneBrowseEntry {
+  return browseEntry({ base: `/${locale}/r/${slug}/browse`, zoneName: officialZone(slug, locale).name.value,
+    counts: browseCounts(officialWorks(slug, locale, catalogue)), locale, messages: zoneMessagesFor(locale) });
+}
+
+/** An official Zone's browse page for URL parameters, filtered as Main filters its window. */
+export function officialBrowseModel(slug: OfficialSlug, locale: UiLocale, params: Record<string, string | string[]> = {},
+  catalogue: Catalogue = 'rich'): BrowseModel {
+  const state = parseBrowseState(params);
+  const works = officialWorks(slug, locale, catalogue);
+  const holds = (work: ZoneWork, except?: string) => Object.entries(state.filter).every(([facet, values]) =>
+    facet === except || values.some(value => ({
+      modLoader: () => work.mod?.loaders.includes(value), modGameVersion: () => work.mod?.gameVersions.includes(value),
+      modEnvironment: () => work.mod?.environment === value || work.mod?.environment === 'client-and-server',
+      status: () => work.status === value, type: () => typeOf[work.kind] === value,
+    } as Record<string, () => boolean | undefined>)[facet]?.() ?? false));
+  const found = works.filter(work => holds(work) && (!state.text
+    || work.title?.value.toLowerCase().includes(state.text.toLowerCase())));
+  const all = browseCounts(works.filter(work => holds(work)));
+  // Each Facet counts with the other Facets' Conditions only, as Main's do.
+  const facets = Object.fromEntries(Object.keys(all).map(facet => [facet,
+    browseCounts(works.filter(work => holds(work, facet)))[facet as keyof FacetCounts]])) as FacetCounts;
+  return browseModel({ base: `/${locale}/r/${slug}/browse`, zoneName: officialZone(slug, locale).name.value, state,
+    admitted: new Map([['type', zh(locale) ? '种类' : 'Type'], ['concept', zh(locale) ? '标签' : 'Tags']]), locale,
+    messages: zoneMessagesFor(locale), page: { items: found.slice(0, 20), facets,
+      matches: { value: found.length, kind: 'exact' }, window: { scanned: works.length, complete: true },
+      tags: 'current', nextCursor: null, sort: state.sort ?? (state.text ? 'relevance' : 'newest') } });
 }

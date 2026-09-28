@@ -60,10 +60,10 @@ export function ModsCard({ zone, work, layout, rank, Link, fallback }: WorkCardS
     <Link href={work.href} tabIndex={-1} aria-hidden="true" className="mh-icon">
       <WorkCover {...workCoverProps(work)} loading="lazy" /></Link>
     <div className="mh-body">
-      <h3 className="mh-title">
-        <Link href={work.href} lang={work.title?.lang} dir={work.title?.dir}>{title}</Link>
+      <div className="mh-name">
+        <h3 className="mh-title"><Link href={work.href} lang={work.title?.lang} dir={work.title?.dir}>{title}</Link></h3>
         {layout === 'row' ? <Byline work={work} t={t} Link={Link} /> : null}
-      </h3>
+      </div>
       {work.tagline && layout === 'row' ? <p lang={work.tagline.lang} dir={work.tagline.dir} className="mh-summary">
         {work.tagline.value}</p> : null}
       {work.mod ? <Compatibility mod={work.mod} t={t} limit={layout === 'rail' ? 1 : 3} /> : null}
