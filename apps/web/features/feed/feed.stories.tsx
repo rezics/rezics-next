@@ -66,18 +66,19 @@ export const EveryKind: Story = {
     const feed = canvas.getByRole('feed', { name: 'Posts' });
     await expect(within(feed).getAllByRole('article')).toHaveLength(everyKind.length);
 
-    // Three chapters from one day arrive as one post; its action opens the first of them.
-    const serial = article(canvas, '雨夜书店');
-    await expect(serial).toHaveTextContent('Chapters 212–214');
-    await expect(within(serial).getByRole('heading', { name: '雨夜书店' })).toHaveAttribute('lang', 'zh-Hans');
+    // Three chapters from one day arrive as one post titled by the range; its action opens the first of them.
+    // The Work is attached, as a link post names its source.
+    const serial = article(canvas, 'Chapters 212–214');
+    await expect(within(serial).getByRole('link', { name: /^雨夜书店/ })).toHaveAttribute('href',
+      expect.stringMatching(/^\/en\/w\//));
     await expect(within(serial).getByRole('link', { name: 'Read chapter 212' })).toHaveAttribute('href',
       expect.stringMatching(/^\/en\/w\/.+\/read\//));
     await expect(within(serial).getByRole('link', { name: '41 comments' })).toBeVisible();
 
     // Past the reader's position, a chapter's text stays hidden.
-    const behind = article(canvas, 'The Last Lantern');
-    await expect(behind).toHaveTextContent('Chapter 58');
+    const behind = article(canvas, 'Chapter 58');
     await expect(behind).toHaveTextContent('Hidden until you catch up');
+    await expect(behind).toHaveTextContent('The Last Lantern');
 
     // Counts Main cannot prove exactly say "at least"; big scores are compact.
     const novel = article(canvas, 'Middlemarch: A Study of Provincial Life');
@@ -85,9 +86,9 @@ export const EveryKind: Story = {
     await expect(within(novel).getByLabelText('1,830 points')).toHaveTextContent('1.8K');
 
     // Each kind's own action.
-    await expect(within(article(canvas, 'Crop Planner for Stardew Valley')).getByRole('link', { name: 'Install' }))
-      .toBeVisible();
-    await expect(article(canvas, 'Crop Planner for Stardew Valley')).toHaveTextContent('Version 2.4.0');
+    const release = article(canvas, 'Version 2.4.0');
+    await expect(within(release).getByRole('link', { name: 'Install' })).toBeVisible();
+    await expect(release).toHaveTextContent('Crop Planner for Stardew Valley');
     await expect(within(article(canvas, 'Bilingual book club discussion prompt')).getByRole('link', { name: 'Use prompt' }))
       .toBeVisible();
     await expect(within(novel).getByRole('button', { name: 'Want to read' })).toBeVisible();
@@ -95,7 +96,9 @@ export const EveryKind: Story = {
     // A pick is the Realm's act: the curator is not named where the Work's author would be; the author is.
     // A card gives one reason, and the pick outranks the Work being new.
     const pick = article(canvas, 'Jane Eyre');
-    await expect(pick).toHaveTextContent('Picked by Classic Literature');
+    // The meta line names the Realm once, so its pick says only that it picked the Work.
+    await expect(pick).toHaveTextContent('Classic Literature');
+    await expect(pick).toHaveTextContent('Picked');
     await expect(pick).not.toHaveTextContent('New work');
     await expect(within(pick).queryByText('Daniel Chen')).toBeNull();
     await expect(pick).toHaveTextContent('by Charlotte Brontë');
@@ -111,13 +114,15 @@ export const EveryKind: Story = {
       .toHaveAttribute('href', '/en/@lin_mei');
 
     // A review: the reader's stars and opening lines, leading to the review on the Work page.
-    const review = article(canvas, 'Persuasion');
+    // A review is titled by its stars and opening line; the Work it reviews is attached.
+    const review = article(canvas, /Austen’s quietest novel/);
     await expect(review).toHaveTextContent('Rated 4 out of 5');
-    await expect(review).toHaveTextContent('Anne Elliot has already lost once');
+    await expect(review).toHaveTextContent('Persuasion');
     await expect(review).toHaveTextContent('12 found this helpful');
     await expect(within(review).getByRole('link', { name: 'Read review' })).toHaveAttribute('href',
       expect.stringMatching(/^\/en\/w\/.+#review-/));
-    const spoiler = article(canvas, '长夜将明');
+    const spoiler = article(canvas, /Rated 9 out of 10/);
+    await expect(spoiler).toHaveTextContent('长夜将明');
     await expect(spoiler).toHaveTextContent('This review discusses the plot');
     await expect(spoiler).toHaveTextContent('+2 more reviews');
     await expect(spoiler).toHaveTextContent('9/10');
@@ -148,7 +153,7 @@ export const EveryKind: Story = {
 export const Voting: Story = {
   args: { api: memoryFeed() },
   async play({ canvasElement, args }) {
-    const post = article(within(canvasElement), '雨夜书店');
+    const post = article(within(canvasElement), 'Chapters 212–214');
     const up = within(post).getByRole('button', { name: 'Upvote' });
     await userEvent.click(up);
     await waitFor(() => expect(up).toHaveAttribute('aria-pressed', 'true'));
@@ -163,7 +168,7 @@ export const Voting: Story = {
 export const VoteRefused: Story = {
   args: { api: memoryFeed({ refuse: 'moved' }) },
   async play({ canvasElement }) {
-    const post = article(within(canvasElement), '雨夜书店');
+    const post = article(within(canvasElement), 'Chapters 212–214');
     await userEvent.click(within(post).getByRole('button', { name: 'Downvote' }));
     await waitFor(() => expect(within(post).getByRole('status')).toHaveTextContent('Couldn’t save your vote'));
     await expect(within(post).getByRole('button', { name: 'Downvote' })).toHaveAttribute('aria-pressed', 'false');
@@ -186,7 +191,8 @@ export const Discussions: Story = {
     const bennet = article(canvas, 'Is Mr. Bennet a good father?');
     await expect(within(bennet).getByRole('link', { name: 'Is Mr. Bennet a good father?' })).toHaveAttribute('href', thread);
     await expect(bennet).toHaveTextContent('Chapter 2 makes me think he enjoys');
-    await expect(within(bennet).getByRole('link', { name: 'On Pride and Prejudice' })).toBeVisible();
+    await expect(within(bennet).getByRole('link', { name: /^Pride and Prejudice/ })).toHaveAttribute('href',
+      expect.stringMatching(/^\/en\/w\//));
     await expect(within(bennet).getByRole('link', { name: '17 comments' })).toHaveAttribute('href', `${thread}#comments`);
     await expect(within(bennet).getByRole('link', { name: 'Reply' })).toHaveAttribute('href', `${thread}#reply`);
 
@@ -245,7 +251,7 @@ export const SuggestionInFollowing: Story = {
     const canvas = within(canvasElement);
     await expect(within(article(canvas, 'Weekend buttermilk pancakes')).getByText('Suggested'))
       .toHaveAttribute('title', 'Suggested while your communities are quiet');
-    await expect(article(canvas, '雨夜书店')).not.toHaveTextContent('Suggested');
+    await expect(article(canvas, 'Chapters 212–214')).not.toHaveTextContent('Suggested');
   },
 };
 
@@ -273,7 +279,7 @@ export const BecauseYouFollow: Story = {
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     await expect(article(canvas, 'Sanditon')).toHaveTextContent('Because you follow Jane Austen');
-    await expect(article(canvas, '雨夜书店')).toHaveTextContent('Because you follow Lin Mei 林梅');
+    await expect(article(canvas, 'Chapter 3')).toHaveTextContent('Because you follow Lin Mei 林梅');
     await expect(article(canvas, 'The Last Lantern')).not.toHaveTextContent('Because you follow');
   },
 };
@@ -290,7 +296,7 @@ export const BecauseYouFollowChinese: Story = {
 export const SignedOut: Story = {
   args: { signedIn: false, tab: 'all', followedRealms: null },
   async play({ canvasElement }) {
-    const post = article(within(canvasElement), '雨夜书店');
+    const post = article(within(canvasElement), 'Chapters 212–214');
     await expect(within(post).getByRole('link', { name: 'Upvote — Sign in to vote, join and save' }))
       .toHaveAttribute('href', signInHref);
     await expect(within(post).getByRole('link', { name: /^Join .+ — Sign in/ })).toHaveAttribute('href', signInHref);
@@ -371,10 +377,9 @@ export const Chinese: Story = {
   args: { locale: 'zh-Hans' },
   globals: { locale: 'zh-Hans' },
   async play({ canvasElement }) {
-    const serial = article(within(canvasElement), '雨夜书店');
-    await expect(serial).toHaveTextContent('第 212–214 章');
+    const serial = article(within(canvasElement), '第 212–214 章');
     await expect(within(serial).getByRole('link', { name: '阅读第 212 章' })).toBeVisible();
-    await expect(article(within(canvasElement), 'The Last Lantern')).toHaveTextContent('读到这里前先隐藏');
+    await expect(article(within(canvasElement), '第 58 章')).toHaveTextContent('读到这里前先隐藏');
   },
 };
 

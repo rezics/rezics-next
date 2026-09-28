@@ -3,7 +3,7 @@
 import { buttonVariants } from '@rezics/ui/button';
 import { cn } from '@rezics/ui/utils';
 import { EyeIcon, EyeOffIcon, MessageCircleIcon, ReplyIcon } from 'lucide-react';
-import { type ReactNode, useId, useState } from 'react';
+import { type ReactNode, useState } from 'react';
 import { CommunityIcon } from '../shell/community-icon.tsx';
 import LocalizedLink from '../shell/localized-link.tsx';
 import { JoinButton, ShareButton, type VoteTarget, VoteControl } from './actions.tsx';
@@ -37,12 +37,12 @@ export interface DiscussionPost {
 export function SpoilerVeil({ children, className }: { children: ReactNode; className?: string }) {
   const { t } = useFeed();
   const [shown, setShown] = useState(false);
-  const id = useId();
-  if (shown) return <div id={id} className={className}>{children}</div>;
+  // The words take the veil's place, so the button controls nothing that stays.
+  if (shown) return <div className={className}>{children}</div>;
   return <div className={cn('flex flex-wrap items-center gap-x-2 gap-y-1 text-sm', className)}>
     <EyeOffIcon aria-hidden="true" className="size-3.5 shrink-0 text-muted-foreground" />
     <span className="text-muted-foreground">{t.spoilerAnnounced}</span>
-    <button type="button" aria-controls={id} onClick={() => setShown(true)}
+    <button type="button" onClick={() => setShown(true)}
       className={cn(buttonVariants({ variant: 'outline', size: 'xs', pill: true }), 'relative z-10 h-6')}>
       <EyeIcon aria-hidden="true" />{t.showSpoiler}</button>
   </div>;

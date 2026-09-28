@@ -77,7 +77,7 @@ export const SignedOut: Story = {
     await expect(canvas.queryByRole('navigation', { name: 'Feed' })).toBeNull();
     await userEvent.click(canvas.getByRole('button', { name: 'Sort: Best' }));
     await expect(await screen.findByRole('menuitemradio', { name: /^Best/ })).toBeChecked();
-    await expect(screen.getByRole('menuitemradio', { name: /^Top/ })).toBeVisible();
+    await waitFor(() => expect(screen.getByRole('menuitemradio', { name: /^Top/ })).toBeVisible());
     await userEvent.keyboard('{Escape}');
     const rail = canvas.getByRole('complementary', { name: 'More on REZICS' });
     await expect(within(rail).getByRole('region', { name: 'Popular Realms' })).toBeVisible();
@@ -112,7 +112,7 @@ export const ReturningReader: Story = {
     await expect(within(tabs).getByRole('link', { name: 'Following' })).toHaveAttribute('aria-current', 'page');
     // Top ranks across REZICS, so Following offers Best and New.
     await userEvent.click(canvas.getByRole('button', { name: 'Sort: Best' }));
-    await expect(await screen.findByRole('menuitemradio', { name: /^New/ })).toBeVisible();
+    await waitFor(() => expect(screen.getByRole('menuitemradio', { name: /^New/ })).toBeVisible());
     await expect(screen.queryByRole('menuitemradio', { name: /^Top/ })).toBeNull();
     await userEvent.keyboard('{Escape}');
     const queue = canvas.getByRole('region', { name: 'Your moderation queue' });

@@ -1,5 +1,14 @@
 import { ChevronDownIcon, ScrollTextIcon, UsersRoundIcon } from 'lucide-react';
+import type { ReactNode } from 'react';
 import LocalizedLink from '../shell/localized-link.tsx';
+import { PageContainer } from '../shell/page.tsx';
+
+/** A discussion page's columns: the posts, and the community rail beside them (below them on phones). */
+export function DiscussionColumns({ rail, children }: { rail: ReactNode; children: ReactNode }) {
+  return <PageContainer className="grid grid-cols-1 items-start gap-6 lg:grid-cols-[minmax(0,1fr)_18rem] xl:gap-8">
+    <div className="min-w-0">{children}</div>{rail}
+  </PageContainer>;
+}
 
 export interface RailRule { id: string; title: string; body: string; lang: string }
 

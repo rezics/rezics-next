@@ -128,6 +128,27 @@ function excerptOf(item: FeedItem): string | null {
   return item.target.excerpt;
 }
 
+/**
+ * The Work's credited authors under its title, where readers look for them.
+ * Authors on REZICS and Open Library authors link to their pages; the poster
+ * or the curator is never named here.
+ */
+function Authors({ authors }: { authors: FeedItem['authors'] }) {
+  const { t } = useFeed();
+  const named = authors.filter((author): author is typeof author & { displayName: string } => author.displayName !== null);
+  if (!named.length) return null;
+  const separator = authorSeparator(named.map(author => author.displayName));
+  const marker = '\u2063';
+  const [before = '', after = ''] = t.writtenBy({ names: marker }).split(marker);
+  return <span className="block truncate">{before}{named.map((author, index) => {
+    const href = author.handle ? authorHref({ kind: 'agent', handle: author.handle })
+      : author.provider === 'open-library' && author.key ? authorHref({ kind: 'external', key: author.key }) : null;
+    return <span key={author.id}>{index ? separator : null}{href
+      ? <LocalizedLink href={href} className={cn(rowLink, 'text-foreground')}>{author.displayName}</LocalizedLink>
+      : <span className="text-foreground">{author.displayName}</span>}</span>;
+  })}{after}</span>;
+}
+
 /** The Work's credited authors as a line of names, the poster or curator never among them. */
 function authorLine(authors: FeedItem['authors']): string | null {
   const named = authors.flatMap(author => author.displayName ? [author.displayName] : []);
@@ -221,16 +242,18 @@ function Withheld({ title, body }: { title: string; body: string }) {
 function ListPreview({ card }: { card: Extract<FeedItem['card'], { kind: 'list' }> }) {
   const { t, avatarQuery } = useFeed();
   if (!card.works.length) return null;
-  return <span className="mt-1 flex items-end gap-2">
-    <span className="sr-only">{t.listPreview}</span>
-    {card.works.map(work => <LocalizedLink key={work.id} href={`/w/${work.id.slice(-36)}`} aria-label={work.title.value}
-      className="relative z-10 block rounded-[0.1875rem] outline-none focus-visible:ring-2 focus-visible:ring-ring">
-      <CatalogueCover work={{ id: work.id, title: work.title, cover: work.cover, kind: coverKindOf(work.types),
-        authors: [] }} avatarQuery={avatarQuery} size="xs" />
-    </LocalizedLink>)}
+  return <div className="mt-1 flex items-end gap-2">
+    <ul aria-label={t.listPreview} className="flex items-end gap-2">
+      {card.works.map(work => <li key={work.id}><LocalizedLink href={`/w/${work.id.slice(-36)}`}
+        aria-label={work.title.value} className="relative z-10 block rounded-[0.1875rem] outline-none
+          focus-visible:ring-2 focus-visible:ring-ring">
+        <CatalogueCover work={{ id: work.id, title: work.title, cover: work.cover, kind: coverKindOf(work.types),
+          authors: [] }} avatarQuery={avatarQuery} size="xs" />
+      </LocalizedLink></li>)}
+    </ul>
     <span className="text-muted-foreground text-sm">{card.count.kind === 'exact' ? t.listWorks(card.count.value)
       : t.listWorksAtLeast(card.count.value)}</span>
-  </span>;
+  </div>;
 }
 
 /** A discussion or reply from Home, as the post it is: its thread is where it leads. */
@@ -291,7 +314,7 @@ function FeedPost({ item, position, total }: { item: FeedItem; position?: number
     cover: item.target.cover, types: item.target.types, byline } : null;
   const contentLang = item.target.language ?? undefined;
   const text = (value: string) => <span lang={contentLang} className="whitespace-pre-line">{value}</span>;
-  const factLine = facts.length ? <span className="me-1.5 text-muted-foreground/90">{facts.join(' · ')}</span> : null;
+  const factLine = facts.length ? <span className="me-1.5 text-muted-foreground">{facts.join(' · ')}</span> : null;
   // A chapter, release or review is about its Work, attached below; any other post is the Work, cover beside it.
   let title: ReactNode = workTitle, titleLang = lang, titleClass = 'font-work-title font-medium';
   let preview: ReactNode = null, about: AttachedWork | null = null;
@@ -308,17 +331,17 @@ function FeedPost({ item, position, total }: { item: FeedItem; position?: number
     const review = reviewHeading(card, t, locale);
     title = review.title; titleLang = contentLang; titleClass = '';
     preview = card.opening ? review.body ? <>{factLine}{text(review.body)}</> : factLine
-      : card.spoiler ? <Withheld title={t.reviewSpoilerTitle} body={t.reviewSpoilerBody} /> : factLine;
+      : card.spoiler ? <>{factLine ? <span className="block">{facts.join(' · ')}</span> : null}
+        <Withheld title={t.reviewSpoilerTitle} body={t.reviewSpoilerBody} /></> : factLine;
     about = attached;
   } else if (card.kind === 'list') {
     titleLang = item.target.title.language; titleClass = '';
     preview = <ListPreview card={card} />;
   } else if (card.kind === 'prompt' && card.preview) {
-    preview = <>{byline ? <span className="block">{t.writtenBy({ names: byline })}</span> : null}
+    preview = <><Authors authors={item.authors} />
       <code lang={contentLang} className="font-mono text-code-foreground text-xs">{card.preview}</code></>;
   } else {
-    preview = <>{byline ? <span className="block">{t.writtenBy({ names: byline })}</span> : null}
-      {factLine}{excerpt ? text(excerpt) : null}</>;
+    preview = <><Authors authors={item.authors} />{factLine}{excerpt ? text(excerpt) : null}</>;
   }
   const comments = item.target.work ? item.links.comments : null;
   const count = new Intl.NumberFormat(locale, { notation: 'compact' }).format(item.comments.value);

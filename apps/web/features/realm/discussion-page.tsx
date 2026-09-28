@@ -11,13 +11,12 @@ import { signInPath } from '../auth/paths.ts';
 import { FeedProvider } from '../feed/feed-context.tsx';
 import type { FeedMessages } from '../feed/messages.ts';
 import type { ReplyMode } from '../feed/reply-composer.tsx';
-import { PageContainer } from '../shell/page.tsx';
 import { offerOf } from './membership-state.ts';
 import { loadRealmView, membersText, RealmFrame, type RealmView } from './realm-page.tsx';
 import { resolveRealm } from './read.ts';
 import { parseRealmRef, realmHref } from './route.ts';
 import { RealmUnavailable } from './states.tsx';
-import { ThreadRail } from './thread-rail.tsx';
+import { DiscussionColumns, ThreadRail } from './thread-rail.tsx';
 
 // What a Realm's Discussions tab and its thread pages share: the Realm frame
 // with the Discussions tab current, a community rail beside the posts, and
@@ -81,17 +80,16 @@ export async function DiscussionFrame({ view, locale, feed, search, here, childr
     <FeedProvider locale={locale} messages={feed} now={Date.now()} signedIn={view.reader.signedIn}
       actingSubject={view.reader.actingSubject} signInHref={signInPath(localizedPath(here, locale))}
       avatarQuery={view.reader.avatarQuery} tab="all" followedRealms={null} realmSegments={segments}>
-      <PageContainer className="grid grid-cols-1 items-start gap-6 lg:grid-cols-[minmax(0,1fr)_18rem] xl:gap-8">
-        <div className="min-w-0">{children}</div>
-        <ThreadRail name={{ value: view.zone.name.value, lang: view.zone.name.lang }}
+      <DiscussionColumns rail={<ThreadRail name={{ value: view.zone.name.value, lang: view.zone.name.lang }}
           description={view.zone.description ? { value: view.zone.description.value,
             lang: view.zone.description.lang } : null}
           members={membersText(header.membership.count, locale, view.messages)}
           aboutHref={realmHref(locale, view.realm.ref, 'about')}
           rules={header.rules?.map(rule => ({ id: rule.id, title: rule.title.value, body: rule.body.value,
             lang: rule.title.language })) ?? []}
-          labels={{ about: t.aboutCommunity, rules: t.communityRules, more: t.moreAboutCommunity }} />
-      </PageContainer>
+          labels={{ about: t.aboutCommunity, rules: t.communityRules, more: t.moreAboutCommunity }} />}>
+        {children}
+      </DiscussionColumns>
     </FeedProvider>
   </RealmFrame>;
 }

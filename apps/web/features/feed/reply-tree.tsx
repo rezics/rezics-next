@@ -57,8 +57,8 @@ export function ReplyByline({ reply, opener, id }: { reply: ThreadReply; opener:
     {reply.author ? <LocalizedLink href={`/@${reply.author.handle}`} className="truncate font-semibold text-foreground
       outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring">{reply.author.name}</LocalizedLink>
       : <span className="italic">{t.someone}</span>}
-    {reply.author && reply.author.id === opener ? <abbr title={t.originalPoster} className="rounded bg-primary/10 px-1
-      font-semibold text-[11px] text-primary no-underline">{t.op}</abbr> : null}
+    {reply.author && reply.author.id === opener ? <abbr title={t.originalPoster} className="rounded bg-info/10 px-1
+      font-semibold text-[11px] text-info-foreground no-underline">{t.op}</abbr> : null}
     <span aria-hidden="true">·</span>
     <time dateTime={reply.time} title={absoluteTime(reply.time, locale)} suppressHydrationWarning>
       {relativeTime(reply.time, now, locale)}</time>
