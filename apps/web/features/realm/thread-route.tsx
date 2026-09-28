@@ -31,7 +31,7 @@ const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 function readThread(main: ReturnType<typeof mainApiWithToken>, view: RealmView, thread: string, sort: ThreadSort):
   Promise<Loaded<ThreadRead>> {
   return settle(() => main.v1.realms({ realm: view.realm.realm }).threads({ reply: thread }).get({ query: { sort,
-    language: view.context.locale, ...view.reader.actingSubject ? { actingSubject: view.reader.actingSubject } : {} } }));
+    ...view.reader.actingSubject ? { actingSubject: view.reader.actingSubject } : {} } }));
 }
 
 export async function realmThreadMetadata({ params }: Pick<ThreadRouteProps, 'params'>): Promise<Metadata> {
@@ -40,7 +40,7 @@ export async function realmThreadMetadata({ params }: Pick<ThreadRouteProps, 'pa
   const resolved = await resolveRealm(realm, locale);
   if (resolved.kind !== 'realm') return {};
   const read = await settle(() => mainApiWithToken(undefined).v1.realms({ realm: resolved.realm })
-    .threads({ reply: thread }).get({ query: { language: locale } }));
+    .threads({ reply: thread }).get());
   if (!read.ok) return { title: resolved.header.name.value };
   const opening = read.data.focus === read.data.thread ? read.data.items[0] : read.data.ancestors[0];
   const title = opening?.title ?? '';

@@ -48,7 +48,7 @@ async function directory(locale: UiLocale, q: string, sort: Sort, topic?: string
   Promise<{ ok: true; page: RealmDirectoryPage } | { ok: false }> {
   const main = mainApiWithToken(undefined);
   try {
-    const call = () => main.v1.realms.get({ query: { language: locale, limit: 20, sort, ...(q ? { q } : {}),
+    const call = () => main.v1.realms.get({ query: { limit: 20, sort, ...(q ? { q } : {}),
       ...(topic ? { topic } : {}),
       ...(cursor ? { cursor } : {}) } });
     let result = await call();

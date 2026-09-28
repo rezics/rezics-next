@@ -95,7 +95,7 @@ export function ConditionBar({ selection, href, fixed, values = EMPTY_VALUES, su
     if (!missing.length) return;
     let active = true;
     void browserMainApi().v1.resources.summaries.post({ profile: 'resource-summary-batch-v1',
-      resources: missing.map(iriOf), language: locale,
+      resources: missing.map(iriOf),
       ...(actingSubject ? { actingSubject } : {}) }).then(result => {
         if (!active) return;
         setNames((result.data?.summaries ?? []).flatMap(item => item.status === 'available'

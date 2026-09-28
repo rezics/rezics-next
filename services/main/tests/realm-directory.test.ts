@@ -51,7 +51,7 @@ test('Realm directory is a public typed Main route', () => {
 
 test('community topics use the current shared vocabulary and match both languages', async () => {
   const id = 'https://rezics.com/id/00000000-0000-4000-8000-000000000001';
-  const session = { options: { language: 'zh-CN' }, query: async (sparql: string) => {
+  const session = { displayLanguages: ['zh-CN'], query: async (sparql: string) => {
     expect(sparql).toContain('rv:VocabularyDefinition');
     return [{ concept: { value: id }, label: { value: 'Mystery', 'xml:lang': 'en' } },
       { concept: { value: id }, label: { value: '悬疑', 'xml:lang': 'zh-Hans' } }];

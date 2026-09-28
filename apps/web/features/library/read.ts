@@ -166,9 +166,9 @@ function withState(item: LibraryItem, state: ReaderStateItem | undefined): Libra
 }
 
 /** One Work's own read, shared by the rows that need its chapter count or card within a request. */
-const readWork = cache(async (work: string, locale: UiLocale) => {
+const readWork = cache(async (work: string, _locale: UiLocale) => {
   const reader = await libraryReader();
-  return reader ? settle(() => reader.main.v1.works({ id: work.slice(-36) }).get({ query: { language: locale,
+  return reader ? settle(() => reader.main.v1.works({ id: work.slice(-36) }).get({ query: {
     actingSubject: reader.actingSubject } })) : { ok: false as const, failure: 'sign-in' as const };
 });
 
@@ -366,11 +366,11 @@ export async function readCurrentlyReading(locale: UiLocale): Promise<LibraryRow
  * time), each with their newest Work on REZICS. Main answers 409 when the
  * follows changed during the read; it is read again, once.
  */
-export async function readFollowedAuthors(locale: UiLocale): Promise<Loaded<FollowedAuthors>> {
+export async function readFollowedAuthors(_locale: UiLocale): Promise<Loaded<FollowedAuthors>> {
   const reader = await libraryReader();
   if (!reader) return { ok: false, failure: 'sign-in' };
   const read = () => settle(() => reader.main.v1.me.follows.authors.get({ query: {
-    actingSubject: reader.actingSubject, language: locale } }));
+    actingSubject: reader.actingSubject } }));
   const first = await read();
   return !first.ok && first.failure === 'moved' ? read() : first;
 }

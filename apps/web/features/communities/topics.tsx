@@ -25,7 +25,7 @@ export function TopicPicker({ locale, value, onChange, max = 3 }: { locale: UiLo
       try {
         const { data, error } = await browserMainApi().v1['classification-vocabulary'].get({
           query: { ...(query.trim() ? { q: query.trim() } : {}),
-            language: locale === 'zh-Hans' ? 'zh-CN' : 'en' },
+            },
         });
         if (!current) return;
         if (error || !data) { setState('failed'); return; }

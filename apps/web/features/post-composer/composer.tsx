@@ -67,7 +67,7 @@ export function PostComposer({ locale, actingSubject, initial = null }: { locale
     const timer = window.setTimeout(() => { void (async () => {
       setCommunityState('loading');
       try {
-        const { data } = await browserMainApi().v1.realms.get({ query: { language: locale,
+        const { data } = await browserMainApi().v1.realms.get({ query: {
           limit: 20, sort: 'activity', ...(communityQuery.trim() ? { q: communityQuery.trim() } : {}) } });
         if (!current) return;
         if (!data) { setCommunityState('failed'); return; }
@@ -85,7 +85,7 @@ export function PostComposer({ locale, actingSubject, initial = null }: { locale
       setWorkState('loading');
       try {
         const { data } = await browserMainApi().v1.search.typeahead.get({
-          query: { prefix: workQuery.trim(), language: locale },
+          query: { prefix: workQuery.trim() },
         });
         if (!current) return;
         if (!data) { setWorkState('failed'); return; }
@@ -106,7 +106,7 @@ export function PostComposer({ locale, actingSubject, initial = null }: { locale
     void (async () => {
       try {
         const main = browserMainApi();
-        const { data } = await main.v1.realms({ realm: id }).get({ query: { language: locale, actingSubject } });
+        const { data } = await main.v1.realms({ realm: id }).get({ query: { actingSubject } });
         if (!current) return;
         if (!data) { setHeaderState('failed'); return; }
         setHeader(data);

@@ -621,9 +621,22 @@ async function editorLists(o: Official) {
       await o.state.optional('Official editors’ list', async () => {
         const collection = editorList(id, list.id);
         const members = list.works.flatMap(work => { const found = publicWork(o, work); return found ? [found.work.work] : []; });
-        await granted(() => o.api.post('/v1/collections', { collection, name: list.name, disclosure: 'public',
+        // Preserve the original create request digest on already seeded stacks; the name revision below replaces it.
+        const createName = list.name.labels.en && list.name.labels['zh-Hans']
+          ? `${list.name.labels.en} · ${list.name.labels['zh-Hans']}`
+          : list.name.labels[list.name.original]!;
+        await granted(() => o.api.post('/v1/collections', { collection, name: createName, disclosure: 'public',
           actingSubject: steward.actingSubject }, steward.token, seedKey('official-list', `${id}:${list.id}`)),
         () => grantCuratedCollectionSeed(o.input(steward, steward.actingSubject), collection));
+        const namePath = `/v1/collections/${short(collection)}/name`;
+        const currentName = await o.read<{ revision: string | null; name: typeof list.name }>(namePath);
+        if (!currentName) throw new Error(`Editors’ list ${id}:${list.id} name is unreadable`);
+        if (JSON.stringify(currentName.name) !== JSON.stringify(list.name)) {
+          await granted(() => o.api.put(namePath, { profile: 'collection-public-name-v1',
+            expectedHead: currentName.revision, actingSubject: steward.actingSubject, name: list.name },
+          steward.token, seedKey('official-list-name', `${id}:${list.id}:${currentName.revision ?? 'first'}`)),
+          () => grantCuratedCollectionSeed(o.input(steward, steward.actingSubject), collection));
+        }
         const current = await o.read<{ structure: string; revision: string;
           occurrences: { occurrence: string; role: string; target: string | null }[] }>(
           `/v1/collections/${short(collection)}?actingSubject=${encodeURIComponent(steward.actingSubject)}&limit=100`,

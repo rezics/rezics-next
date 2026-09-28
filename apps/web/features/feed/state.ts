@@ -110,7 +110,6 @@ export function feedQuery(state: FeedState, input: { actingSubject?: string; lan
   const pinned = state.tab === 'pinned' && state.filter;
   return {
     scope: pinned ? 'all' : state.tab === 'following' ? 'following' : 'all', sort: state.sort,
-    language: input.language,
     ...(state.sort === 'top' ? { window: state.window } : {}),
     ...(pinned ? { savedFilter: state.filter! } : {}),
     ...(!pinned && state.languages.length ? { contentLanguages: state.languages } : {}),

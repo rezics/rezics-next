@@ -35,12 +35,12 @@ type Named = { name: WorkName; avatar: WorkCover };
  * response typed. Its availability and media URL are still checked before display.
  * Null when Main could not answer: the results still stand, without names.
  */
-export async function readSummaries(main: MainClient, resources: readonly string[], language: string,
+export async function readSummaries(main: MainClient, resources: readonly string[], _language: string,
   actingSubject?: string): Promise<Map<string, Named> | null> {
   if (!resources.length) return new Map();
   try {
     const { data, error } = await main.v1.resources.summaries.post({ profile: 'resource-summary-batch-v1',
-      resources: [...resources], language, ...(actingSubject ? { actingSubject } : {}) });
+      resources: [...resources], ...(actingSubject ? { actingSubject } : {}) });
     if (error || !data) return null;
     const named = new Map<string, Named>();
     for (const item of data.summaries) {

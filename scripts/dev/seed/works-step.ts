@@ -58,9 +58,10 @@ export async function seedWorks(state: SeedState) {
         localized: { language: string; title: string | null; description: string | null;
           mainVersionLabel: string | null; tagline?: string | null }[] }>(
         `${path}?actingSubject=${encodeURIComponent(author ?? owner.actingSubject)}`, session.token);
-      if (!current.localized.some(row => row.language === work.language && row.title === work.title)) {
-        const localized = current.localized.filter(row => row.language !== work.language);
-        const previous = current.localized.find(row => row.language === work.language);
+      if (!current.localized.some(row => row.language.toLowerCase() === work.language.toLowerCase()
+        && row.title === work.title)) {
+        const localized = current.localized.filter(row => row.language.toLowerCase() !== work.language.toLowerCase());
+        const previous = current.localized.find(row => row.language.toLowerCase() === work.language.toLowerCase());
         localized.push({ language: work.language, title: work.title,
           description: previous?.description ?? null, mainVersionLabel: previous?.mainVersionLabel ?? null,
           tagline: previous?.tagline ?? null });

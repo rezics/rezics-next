@@ -1,5 +1,4 @@
-import { Value } from 'typebox/value';
-import { checkedProfile, publicProfile, type PublicProfile } from '../realm-profile/schema.ts';
+import { currentProfile, type PublicProfile } from '../realm-profile/schema.ts';
 import { readEpochOrder } from '../discovery/lineage.ts';
 import { GRAPHS, iri, lit } from '../work/activate.ts';
 import { publicWork, WorkReadUnavailable, type WorkReadSession } from '../work/read-session.ts';
@@ -38,7 +37,7 @@ export async function directorySource(session: WorkReadSession,
       ?realm a rv:Realm ; rv:realmState rv:Active ; rv:space ?space ; rv:head ?head .
       ?space a rv:Space ; rv:realmCapability ?realm ; rv:disclosure rv:Public .
       OPTIONAL { ?realm rv:publicProfileHead ?profileHead }
-      OPTIONAL { ?space rdfs:label ?label . FILTER(LANG(?label) = "en") }
+      OPTIONAL { ?space rdfs:label ?label }
     }
     GRAPH ${iri(GRAPHS.revisions)} { ?head a rv:RevisionAnchor ; rv:component ?realm ;
       rv:dataEpoch ?revisionEpoch ; rv:sequence ?created }
@@ -93,9 +92,8 @@ export async function directorySource(session: WorkReadSession,
       seen.add(id);
       let parsed: unknown;
       try { parsed = JSON.parse(row.payload.value); } catch { /* rejected below */ }
-      if (!Value.Check(publicProfile, parsed)) throw new WorkReadUnavailable('Realm profile is invalid');
       const candidate = candidates.get(id)!;
-      try { candidate.profile = checkedProfile(parsed); }
+      try { candidate.profile = currentProfile(parsed); }
       catch { throw new WorkReadUnavailable('Realm profile is invalid'); }
       const published = ranked(row.sequence?.value, row.epochOrder?.value);
       if (published > candidate.activity) candidate.activity = published;
@@ -127,8 +125,8 @@ export async function directorySource(session: WorkReadSession,
   }
   for (const candidate of candidates.values()) {
     const profile = candidate.profile;
-    candidate.search = (profile ? [profile.name.en, profile.name['zh-CN'],
-      profile.description.en, profile.description['zh-CN']] : [candidate.label])
+    candidate.search = (profile ? [...Object.values(profile.name.labels),
+      ...Object.values(profile.description.labels)] : [candidate.label])
       .join('\n').normalize('NFKC').toLowerCase();
   }
   return [...candidates.values()];

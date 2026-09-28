@@ -298,44 +298,49 @@ export const officialHubItems = [
     content: 'Ask for the reader’s notes. Group the notes by theme, write a short recap, and list open questions. Do not add events or quotations absent from the notes.' },
 ] as const;
 
+const listName = (first: string, simplified?: string): { original: string; labels: Record<string, string> } => simplified
+  ? { original: 'en', labels: { en: first, 'zh-Hans': simplified } }
+  : { original: 'zh-Hans', labels: { 'zh-Hans': first } };
+
 /** Which public Works each official Realm adopts, and the editors' lists its Zone shows. */
 export const zoneContent: Record<OfficialRealmId, { adopt: readonly string[];
-  lists: readonly { id: string; name: string; works: readonly string[] }[] }> = {
+  lists: readonly { id: string; name: { original: string; labels: Record<string, string> };
+    works: readonly string[] }[] }> = {
   fiction: {
     // New adoptions lead the Zone's picks, so the serials adopted last open the page.
     adopt: ['journey-west', 'red-chamber', 'ferry', 'salt', 'bell', 'heron', 'metro', 'crane', 'light', 'cat',
       'candy', 'chef', 'moon', 'tides', 'inn', 'sword-tea', 'serial', 'taoist', 'shop'],
     lists: [
-      { id: 'rainy-day', name: '【雨天限定】适合下雨天读的故事', works: ['serial', 'metro', 'light', 'crane', 'ferry', 'cat'] },
-      { id: 'weekend', name: '周末一口气读完：完结好书', works: ['sword-tea', 'light', 'heron', 'salt', 'journey-west', 'red-chamber'] },
+      { id: 'rainy-day', name: listName('【雨天限定】适合下雨天读的故事'), works: ['serial', 'metro', 'light', 'crane', 'ferry', 'cat'] },
+      { id: 'weekend', name: listName('周末一口气读完：完结好书'), works: ['sword-tea', 'light', 'heron', 'salt', 'journey-west', 'red-chamber'] },
     ],
   },
   books: { adopt: ['pride', 'alice', 'jane-eyre', 'frankenstein', 'little-women', 'secret-garden', 'sherlock'],
-    lists: [{ id: 'start-here', name: 'Classics to start with · 从这里开始读经典',
+    lists: [{ id: 'start-here', name: listName('Classics to start with', '从这里开始读经典'),
       works: ['pride', 'jane-eyre', 'little-women', 'secret-garden', 'alice', 'frankenstein'] }] },
   mods: { adopt: ['mod-guide', 'stardew-farm', 'shader-guide',
     'lumen-fabric', 'weaver-forge', 'tidy-fabric', 'quiet-forge'],
-    lists: [{ id: 'first-mods', name: 'First mods · 第一次装模组',
+    lists: [{ id: 'first-mods', name: listName('First mods', '第一次装模组'),
       works: ['lumen-fabric', 'weaver-forge', 'tidy-fabric', 'quiet-forge'] }] },
   'ai-workshop': { adopt: ['club-prompt-v1', 'glossary-prompt-v1', 'recipe-skill-v1', 'reading-skill-v1'],
     lists: [
-      { id: 'reading-prompts', name: 'Prompts for readers · 读书人的提示词',
+      { id: 'reading-prompts', name: listName('Prompts for readers', '读书人的提示词'),
         works: ['club-prompt-v1', 'reading-skill-v1'] },
-      { id: 'writing-prompts', name: 'Writing and translation · 写作与翻译',
+      { id: 'writing-prompts', name: listName('Writing and translation', '写作与翻译'),
         works: ['glossary-prompt-v1', 'recipe-skill-v1'] },
     ] },
   software: { adopt: softwareCatalogue.map(app => app.id),
-    lists: [{ id: 'creative', name: 'Creative tools · 创作工具',
+    lists: [{ id: 'creative', name: listName('Creative tools', '创作工具'),
       works: ['app-blender', 'app-krita', 'app-gimp', 'app-inkscape', 'app-kdenlive'] },
-    { id: 'everyday', name: 'Everyday essentials · 日常工具',
+    { id: 'everyday', name: listName('Everyday essentials', '日常工具'),
       works: ['app-firefox', 'app-libreoffice', 'app-vlc', 'app-obs'] }] },
   kitchen: { adopt: ['dumplings', 'noodles', 'pancakes', 'tea'],
-    lists: [{ id: 'weeknight', name: 'Weeknight dinners · 下班后的晚饭', works: ['noodles', 'dumplings', 'pancakes', 'tea'] }] },
+    lists: [{ id: 'weeknight', name: listName('Weeknight dinners', '下班后的晚饭'), works: ['noodles', 'dumplings', 'pancakes', 'tea'] }] },
   games: { adopt: gamesCatalogue.map(game => game.id),
-    lists: [{ id: 'recent', name: 'Newly picked · 新近推荐',
+    lists: [{ id: 'recent', name: listName('Newly picked', '新近推荐'),
       works: ['game-hades-2', 'game-minecraft', 'game-baldurs-gate-3'] },
-    { id: 'upcoming', name: 'Coming up · 即将推出', works: ['game-witchbrook', 'game-light-no-fire'] },
-    { id: 'explore', name: 'Worlds to explore · 探索世界',
+    { id: 'upcoming', name: listName('Coming up', '即将推出'), works: ['game-witchbrook', 'game-light-no-fire'] },
+    { id: 'explore', name: listName('Worlds to explore', '探索世界'),
       works: ['game-outer-wilds', 'game-hollow-knight', 'game-terraria', 'game-stardew'] }] },
 };
 

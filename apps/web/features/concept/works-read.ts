@@ -22,11 +22,11 @@ export async function settle<T>(call: () => Promise<Answer<T>>): Promise<Loaded<
  * One page of the Works the Condition bar selects. A first page cannot have
  * moved under a cursor, so Main is asked again once when the graph moved while it read.
  */
-export async function readConceptWorks(main: MainClient, state: ConceptState, locale: UiLocale,
+export async function readConceptWorks(main: MainClient, state: ConceptState, _locale: UiLocale,
   cursor?: string): Promise<Loaded<ConceptWorksPage>> {
   const query = conceptQuery(state, cursor);
   const read = async (): Promise<Loaded<ConceptWorksPage>> => {
-    const response = await settle(() => main.v1.query.post(query, { headers: { 'accept-language': locale } }));
+    const response = await settle(() => main.v1.query.post(query));
     return response.ok ? response.data.result.profile === 'concept-works-v1'
       ? { ok: true, data: response.data.result } : { ok: false, failure: 'invalid' } : response;
   };

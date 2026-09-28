@@ -25,8 +25,8 @@ export async function readDiscovery(main: MainClient, query: DiscoveryQuery): Pr
 }
 
 /** A public Realm's header, for its name in the scope bar and shelf titles. */
-export function readRealm(main: MainClient, realm: string, language: string): Promise<Loaded<RealmHeader>> {
-  return settle(() => main.v1.realms({ realm }).get({ query: { language } }));
+export function readRealm(main: MainClient, realm: string, _language: string): Promise<Loaded<RealmHeader>> {
+  return settle(() => main.v1.realms({ realm }).get({ query: {} }));
 }
 
 /**

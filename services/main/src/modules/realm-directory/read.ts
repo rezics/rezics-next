@@ -1,5 +1,6 @@
 import type { Static } from 'typebox';
-import { fallbackAvatar, selectName } from '../media/summary.ts';
+import { fallbackAvatar } from '../media/summary.ts';
+import { selectDisplayName } from '../display-language/select.ts';
 import { DEFAULT_MEDIA_CONTEXT } from '../media/store.ts';
 import type { PublicProfile } from '../realm-profile/schema.ts';
 import { pageResult, WorkReadInvalid, WorkReadMoved, WorkReadUnavailable,
@@ -11,9 +12,8 @@ export type { RealmDirectorySort } from './index.ts';
 export { searchText } from './source.ts';
 
 type Item = Static<typeof realmDirectoryItem>;
-function localized(profile: PublicProfile, language: string | undefined, field: 'name' | 'description') {
-  const selected = selectName(new Map([['en', profile[field].en], ['zh-cn', profile[field]['zh-CN']]]),
-    language?.toLowerCase() ?? null)!;
+function localized(profile: PublicProfile, languages: readonly string[], field: 'name' | 'description') {
+  const selected = selectDisplayName(profile[field], languages)!;
   return field === 'description' ? { ...selected, value: [...selected.value.trim()].slice(0, 200).join('') } : selected;
 }
 
@@ -36,7 +36,7 @@ export async function readRealmDirectory(session: WorkReadSession,
     if (!labels.length) throw new WorkReadInvalid('Topic is unavailable');
     const names = new Map(labels.flatMap(row => row.label?.['xml:lang']
       ? [[row.label['xml:lang'].toLowerCase(), row.label.value] as const] : []));
-    const label = selectName(names, session.options.language?.toLowerCase() ?? null);
+    const label = selectDisplayName(names, session.displayLanguages);
     if (!label) throw new WorkReadInvalid('Topic has no public label');
     topic = { id: input.topic, label };
   }
@@ -76,8 +76,8 @@ export async function readRealmDirectory(session: WorkReadSession,
     return { id: candidate.realm, space: candidate.space,
       handle: handleByRealm.get(candidate.realm) ?? null,
       reviewMode: modeByRealm.get(candidate.realm)! as Item['reviewMode'],
-      name: profile ? localized(profile, session.options.language, 'name') : summary.name,
-      icon, description: profile ? localized(profile, session.options.language, 'description') : null,
+      name: profile ? localized(profile, session.displayLanguages, 'name') : summary.name,
+      icon, description: profile ? localized(profile, session.displayLanguages, 'description') : null,
       membership: { count: profile?.count.kind === 'exact'
         ? { kind: 'exact', value: Number(candidate.count_value), revision: candidate.count_revision }
         : profile?.count ?? { kind: 'unknown', value: null } },

@@ -45,8 +45,8 @@ export type RealmResolution =
 const officialZone = cache(async (segment: string): Promise<Loaded<OfficialZone>> =>
   settle(() => main().v1.zones['by-segment']({ segment }).get()));
 
-export const readRealmHeader = cache(async (realm: string, locale: UiLocale): Promise<Loaded<RealmHeader>> =>
-  settle(() => main().v1.realms({ realm }).get({ query: { language: locale } })));
+export const readRealmHeader = cache(async (realm: string, _locale: UiLocale): Promise<Loaded<RealmHeader>> =>
+  settle(() => main().v1.realms({ realm }).get({ query: {} })));
 
 const readRealmZone = cache(async (realm: string): Promise<Loaded<RealmZoneRead>> =>
   settle(() => main().v1.realms({ realm }).zone.get({ query: {} })));
@@ -94,9 +94,9 @@ export const resolveRealm = cache(async (ref: string, locale: UiLocale): Promise
 export const readPresentation = cache(async (zone: string): Promise<Loaded<ZonePresentationRead>> =>
   settle(() => main().v1.zones({ id: zone }).presentation.get({ query: {} })));
 
-export const readRealmWorks = cache(async (realm: string, locale: UiLocale, cursor?: string):
+export const readRealmWorks = cache(async (realm: string, _locale: UiLocale, cursor?: string):
   Promise<Loaded<RealmWorksPage>> =>
-  settle(() => main().v1.realms({ realm }).works.get({ query: { language: locale, cursor } }), cursor));
+  settle(() => main().v1.realms({ realm }).works.get({ query: { cursor } }), cursor));
 
 export const readRealmDecisions = cache(async (realm: string, cursor?: string): Promise<Loaded<RealmDecisionsPage>> =>
   settle(() => main().v1.realms({ realm }).decisions.get({ query: { cursor } }), cursor));
@@ -104,44 +104,44 @@ export const readRealmDecisions = cache(async (realm: string, cursor?: string): 
 export const readRealmDecision = cache(async (realm: string, decision: string): Promise<Loaded<RealmDecisionRead>> =>
   settle(() => main().v1.realms({ realm }).decisions({ decision }).get({ query: {} })));
 
-export const readNewAdoptions = cache(async (realm: string, locale: UiLocale): Promise<Loaded<ZoneWorkPage>> =>
-  settle(() => main().v1.realms({ realm }).modules['new-adoptions'].get({ query: { language: locale } })));
+export const readNewAdoptions = cache(async (realm: string, _locale: UiLocale): Promise<Loaded<ZoneWorkPage>> =>
+  settle(() => main().v1.realms({ realm }).modules['new-adoptions'].get({ query: {} })));
 
-export const readRecentlyCompleted = cache(async (realm: string, locale: UiLocale): Promise<Loaded<ZoneWorkPage>> =>
-  settle(() => main().v1.realms({ realm }).modules['recently-completed'].get({ query: { language: locale } })));
+export const readRecentlyCompleted = cache(async (realm: string, _locale: UiLocale): Promise<Loaded<ZoneWorkPage>> =>
+  settle(() => main().v1.realms({ realm }).modules['recently-completed'].get({ query: {} })));
 
-export const readLatestChapters = cache(async (realm: string, locale: UiLocale): Promise<Loaded<ZoneChapterPage>> =>
-  settle(() => main().v1.realms({ realm }).modules['latest-chapters'].get({ query: { language: locale } })));
+export const readLatestChapters = cache(async (realm: string, _locale: UiLocale): Promise<Loaded<ZoneChapterPage>> =>
+  settle(() => main().v1.realms({ realm }).modules['latest-chapters'].get({ query: {} })));
 
 /** One page of the Realm's chart for an interval: the most-read Works first. */
-export const readRankings = cache(async (realm: string, locale: UiLocale, interval: 'day' | 'week' | 'month',
+export const readRankings = cache(async (realm: string, _locale: UiLocale, interval: 'day' | 'week' | 'month',
   metric: RankingMetric): Promise<Loaded<RankingPage>> =>
-  settle(() => main().v1.realms({ realm }).rankings.get({ query: { metric, interval, language: locale, limit: 10 } })));
+  settle(() => main().v1.realms({ realm }).rankings.get({ query: { metric, interval, limit: 10 } })));
 
 /** Works gaining readers fastest against the previous interval. */
-export const readRising = cache(async (realm: string, locale: UiLocale): Promise<Loaded<RankingPage>> =>
-  settle(() => main().v1.realms({ realm }).modules.rising.get({ query: { interval: 'week', language: locale,
+export const readRising = cache(async (realm: string, _locale: UiLocale): Promise<Loaded<RankingPage>> =>
+  settle(() => main().v1.realms({ realm }).modules.rising.get({ query: { interval: 'week',
     limit: 8 } })));
 
 export const readRecentDecisions = cache(async (realm: string): Promise<Loaded<ZoneDecisionPage>> =>
   settle(() => main().v1.realms({ realm }).modules['recent-decisions'].get({ query: {} })));
 
-export const readZoneQuotes = cache(async (realm: string, locale: UiLocale): Promise<Loaded<ZoneReplyPage>> =>
-  settle(() => main().v1.realms({ realm }).modules['reader-quotes'].get({ query: { language: locale } })));
+export const readZoneQuotes = cache(async (realm: string, _locale: UiLocale): Promise<Loaded<ZoneReplyPage>> =>
+  settle(() => main().v1.realms({ realm }).modules['reader-quotes'].get({ query: {} })));
 
-export const readZoneDiscussions = cache(async (realm: string, locale: UiLocale): Promise<Loaded<ZoneReplyPage>> =>
-  settle(() => main().v1.realms({ realm }).modules.discussions.get({ query: { language: locale } })));
+export const readZoneDiscussions = cache(async (realm: string, _locale: UiLocale): Promise<Loaded<ZoneReplyPage>> =>
+  settle(() => main().v1.realms({ realm }).modules.discussions.get({ query: {} })));
 
-export const readZoneEditorLists = cache(async (realm: string, locale: UiLocale): Promise<Loaded<ZoneEditorLists>> =>
-  settle(() => main().v1.realms({ realm }).modules['editor-lists'].get({ query: { language: locale } })));
+export const readZoneEditorLists = cache(async (realm: string, _locale: UiLocale): Promise<Loaded<ZoneEditorLists>> =>
+  settle(() => main().v1.realms({ realm }).modules['editor-lists'].get({ query: {} })));
 
-export const readZoneGenres = cache(async (realm: string, context: string, locale: UiLocale):
+export const readZoneGenres = cache(async (realm: string, context: string, _locale: UiLocale):
   Promise<Loaded<ZoneGenrePage>> =>
-  settle(() => main().v1.realms({ realm }).modules.genres({ context }).get({ query: { language: locale } })));
+  settle(() => main().v1.realms({ realm }).modules.genres({ context }).get({ query: {} })));
 
-const browsePage = cache(async (realm: string, locale: UiLocale, query: string): Promise<Loaded<ZoneBrowsePage>> => {
+const browsePage = cache(async (realm: string, _locale: UiLocale, query: string): Promise<Loaded<ZoneBrowsePage>> => {
   const parsed = JSON.parse(query) as ZoneBrowseQuery;
-  return settle(() => main().v1.realms({ realm }).modules.browse.get({ query: { ...parsed, language: locale } }),
+  return settle(() => main().v1.realms({ realm }).modules.browse.get({ query: parsed }),
     parsed.cursor);
 });
 
@@ -163,8 +163,8 @@ export const readModExact = cache(async (work: string, gameVersion: string,
   main().v1['mod-compatibility']({ work }).exact.get({ query: { game: 'Minecraft', gameVersion, loader, side } })));
 
 /** A few active public Realms, for "Other communities". */
-export const readRealmDirectory = cache(async (locale: UiLocale): Promise<Loaded<RealmDirectoryPage>> =>
-  settle(() => main().v1.realms.get({ query: { language: locale, limit: 6, sort: 'activity' } })));
+export const readRealmDirectory = cache(async (_locale: UiLocale): Promise<Loaded<RealmDirectoryPage>> =>
+  settle(() => main().v1.realms.get({ query: { limit: 6, sort: 'activity' } })));
 
 /** The members who chose to be listed (G-314's public roster), featured first by the moderators' choice. */
 export const readRoster = cache(async (realm: string): Promise<Loaded<RealmRoster>> =>

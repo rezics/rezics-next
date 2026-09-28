@@ -415,10 +415,8 @@ export async function readResourceSummaries(env: WorkActivationEnvironment, medi
       ? contextBatch.contexts.get(input.context) : undefined;
     return { reference, status: 'available', type: row.type,
       disclosure: row.public ? 'public' : 'restricted',
-      name: { ...(row.type === 'realm'
-        ? selectDisplayName(row.localizedName ?? row.labels,
-          input.languages ?? readerLanguages(input.language))!
-        : selectName(row.labels, input.language)!),
+      name: { ...selectDisplayName(row.localizedName ?? row.labels,
+        input.languages ?? readerLanguages(input.language))!,
         ...(selectedContext?.preferenceRevision
           ? { context: input.context, preferenceRevision: selectedContext.preferenceRevision } : {}) },
       avatar: avatar(row.type, reference, avatars.get(reference)) };

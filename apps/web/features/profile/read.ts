@@ -54,9 +54,9 @@ export type ProfileResolution =
   | { kind: 'unavailable' };
 
 /** The Agent behind a handle, shared by a profile page and its metadata. */
-export const resolveProfile = cache(async (handle: string, locale: UiLocale): Promise<ProfileResolution> => {
+export const resolveProfile = cache(async (handle: string, _locale: UiLocale): Promise<ProfileResolution> => {
   const { main, actingSubject } = await profileReader();
-  const read = await settle(() => main.v1.handles({ handle }).get({ query: { language: locale, actingSubject } }));
+  const read = await settle(() => main.v1.handles({ handle }).get({ query: { actingSubject } }));
   if (!read.ok) return { kind: read.failure === 'missing' || read.failure === 'invalid' ? 'missing' : 'unavailable' };
   return read.data.resolution?.redirect && read.data.handle !== handle ? { kind: 'moved', handle: read.data.handle }
     : { kind: 'profile', profile: read.data };
@@ -73,17 +73,17 @@ const standingContext = cache(async (): Promise<string | undefined> => {
 });
 
 /** Works the Agent is credited on, with card fields and Global ratings. */
-export const readProfileWorks = cache(async (agent: string, locale: UiLocale, limit: number, cursor?: string):
+export const readProfileWorks = cache(async (agent: string, _locale: UiLocale, limit: number, cursor?: string):
   Promise<Loaded<AgentWorksPage>> => {
   const [{ main, actingSubject }, context] = await Promise.all([profileReader(), standingContext()]);
-  return settle(() => main.v1.agents({ id: agent.slice(-36) }).works.get({ query: { language: locale, actingSubject,
+  return settle(() => main.v1.agents({ id: agent.slice(-36) }).works.get({ query: { actingSubject,
     context, limit, cursor } }), cursor);
 });
 
 /** Followers, and whether the reader follows, for the follow button. */
-export const readFollowState = cache(async (agent: string, locale: UiLocale): Promise<Loaded<FollowState>> => {
+export const readFollowState = cache(async (agent: string, _locale: UiLocale): Promise<Loaded<FollowState>> => {
   const { main, actingSubject } = await profileReader();
-  return settle(() => main.v1.follows({ id: agent.slice(-36) }).get({ query: { kind: 'agent', language: locale,
+  return settle(() => main.v1.follows({ id: agent.slice(-36) }).get({ query: { kind: 'agent',
     actingSubject } }));
 });
 

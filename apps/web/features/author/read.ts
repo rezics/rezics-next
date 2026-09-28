@@ -39,29 +39,29 @@ async function settle<T>(call: () => Promise<Answer<T>>, cursor?: string): Promi
 }
 
 /** The author, their facts and totals, and their first `limit` Works (most rated first). */
-export const readOpenLibraryAuthor = cache(async (key: string, locale: UiLocale, limit: number):
+export const readOpenLibraryAuthor = cache(async (key: string, _locale: UiLocale, limit: number):
   Promise<Loaded<ExternalAuthor>> => {
   const { main, actingSubject } = await authorReader();
   return settle(() => main.v1.authors['open-library']({ author: key.slice('/authors/'.length) })
-    .get({ query: { language: locale, actingSubject, limit } }));
+    .get({ query: { actingSubject, limit } }));
 });
 
 /** One page of the author's Works, in the author page's order. */
-export const readOpenLibraryAuthorWorks = cache(async (key: string, locale: UiLocale, limit: number, cursor?: string):
+export const readOpenLibraryAuthorWorks = cache(async (key: string, _locale: UiLocale, limit: number, cursor?: string):
   Promise<Loaded<AuthorWorksPage>> => {
   const { main, actingSubject } = await authorReader();
   return settle(() => main.v1.authors['open-library']({ author: key.slice('/authors/'.length) }).works
-    .get({ query: { language: locale, actingSubject, limit, cursor } }), cursor);
+    .get({ query: { actingSubject, limit, cursor } }), cursor);
 });
 
 /**
  * Followers, and as a signed-in reader whether they follow the author, for
  * the follow button. Main shows everyone the same count and never who.
  */
-export const readAuthorFollow = cache(async (key: string, locale: UiLocale): Promise<Loaded<AuthorFollowState>> => {
+export const readAuthorFollow = cache(async (key: string, _locale: UiLocale): Promise<Loaded<AuthorFollowState>> => {
   const { main, actingSubject } = await authorReader();
   return settle(() => main.v1.authors['open-library']({ author: key.slice('/authors/'.length) }).follow
-    .get({ query: { language: locale, actingSubject } }));
+    .get({ query: { actingSubject } }));
 });
 
 /** The reader's shelf state for the Works on the page, so shelf buttons render settled. */

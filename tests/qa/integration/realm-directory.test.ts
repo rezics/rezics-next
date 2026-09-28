@@ -42,9 +42,9 @@ test('Realm directory: public profiles, activity/member/newest pages, CJK search
       await editor.grant(`realm:profile:${realm}`, 'realm.profile.publish');
       return json<{ revision: string }>(await editor.send('PUT',
         `/v1/realms/${realm.slice(-36)}/profile`, {
-          profile: 'realm-public-profile-v1', expectedHead: null, actingSubject: editor.actor,
-          publication: { name: { en, 'zh-CN': zh },
-            description: { en: `Reading in ${en}`, 'zh-CN': `一起阅读${zh}` },
+          profile: 'realm-public-profile-v2', expectedHead: null, actingSubject: editor.actor,
+          publication: { name: { original: 'en', labels: { en, 'zh-Hans': zh } },
+            description: { original: 'en', labels: { en: `Reading in ${en}`, 'zh-Hans': `一起阅读${zh}` } },
             iconSelection: null, bannerSelection: null, rules: [],
             count: { kind: 'estimated', value: count }, moderators: [] },
         }), 201);
@@ -54,7 +54,7 @@ test('Realm directory: public profiles, activity/member/newest pages, CJK search
     const get = (path: string) => stack.call('GET', path);
     const beforeCalls = stack.fuseki.queries;
     const activity = await json<DirectoryPage>(await get('/v1/realms?limit=1'));
-    expect(stack.fuseki.queries - beforeCalls).toBeLessThanOrEqual(14);
+    expect(stack.fuseki.queries - beforeCalls).toBeLessThanOrEqual(15);
     expect(activity.items.map(item => item.id)).toEqual([second.realm]);
     expect(activity.items[0]?.reviewMode).toBe('mandatory');
     await stack.fuseki.update(`PREFIX rv: <${RV}> DELETE { GRAPH ${iri(GRAPHS.current)} {
@@ -74,8 +74,11 @@ test('Realm directory: public profiles, activity/member/newest pages, CJK search
     expect((await json<DirectoryPage>(await get('/v1/realms?sort=newest'))).items.map(item => item.id))
       .toEqual([third.realm, second.realm, first.realm]);
     const chinese = await json<DirectoryPage>(await get(`/v1/realms?q=${encodeURIComponent('阅读读者')}&language=zh-CN`));
-    expect(chinese.items).toMatchObject([{ id: first.realm, name: { value: '读者公会', language: 'zh-cn' },
+    expect(chinese.items).toMatchObject([{ id: first.realm, name: { value: '读者公会', language: 'zh-Hans' },
       description: { value: '一起阅读读者公会' }, icon: { kind: 'fallback' } }]);
+    const preference = await json<DirectoryPage>(await stack.main.handle(new Request(
+      'http://main.local/v1/realms?q=Book', { headers: { 'x-rezics-display-languages': 'zh-Hant,zh-Hans,en' } })));
+    expect(preference.items[0]?.name).toMatchObject({ value: '图书圈', language: 'zh-Hans' });
     expect((await json<DirectoryPage>(await get('/v1/realms?q=ｇｕｉｌｄ'))).items.map(item => item.id))
       .toEqual([first.realm]);
     expect((await json<DirectoryPage>(await get('/v1/realms?q=Unpublished'))).items.map(item => item.id))
@@ -153,9 +156,9 @@ test('Realm directory: public profiles, activity/member/newest pages, CJK search
       .toBe(third.realm);
     expect((await get(`/v1/realms?sort=growing&limit=1&cursor=${growingMembers.nextCursor}`)).status)
       .toBe(409);
-    const exactBody = { profile: 'realm-public-profile-v1', expectedHead: secondProfile.revision,
-      actingSubject: editor.actor, publication: { name: { en: 'Book Circle', 'zh-CN': '图书圈' },
-        description: { en: 'Together', 'zh-CN': '一起阅读' }, iconSelection: null, bannerSelection: null,
+    const exactBody = { profile: 'realm-public-profile-v2', expectedHead: secondProfile.revision,
+      actingSubject: editor.actor, publication: { name: { original: 'en', labels: { en: 'Book Circle', 'zh-Hans': '图书圈' } },
+        description: { original: 'en', labels: { en: 'Together', 'zh-Hans': '一起阅读' } }, iconSelection: null, bannerSelection: null,
         rules: [], moderators: [], count: { kind: 'exact', value: null } } };
     expect((await editor.send('PUT', `/v1/realms/${second.realm.slice(-36)}/profile`, {
       ...exactBody, publication: { ...exactBody.publication, count: { kind: 'exact', value: 999 } } })).status).toBe(400);

@@ -91,9 +91,9 @@ export const resolveWorkRef = cache(async (ref: WorkRef): Promise<ResolvedRef> =
   }
 });
 
-export const readWorkHeader = cache(async (id: string, locale: UiLocale): Promise<Loaded<WorkHeader>> => {
+export const readWorkHeader = cache(async (id: string, _locale: UiLocale): Promise<Loaded<WorkHeader>> => {
   const { main, actingSubject } = await reader();
-  return settle(() => main.v1.works({ id }).get({ query: { language: locale, actingSubject } }));
+  return settle(() => main.v1.works({ id }).get({ query: { actingSubject } }));
 });
 
 export async function readRecipeWorkPage(id: string, servings?: number): Promise<Loaded<RecipeWorkPage | null>> {
@@ -149,14 +149,14 @@ export const readCredits = cache(async (id: string): Promise<Loaded<CreditPage>>
   return settle(() => main.v1.works({ id }).credits.get({ query: { actingSubject } }));
 });
 
-export const readAdoptions = cache(async (id: string, locale: UiLocale): Promise<Loaded<AdoptionPage>> => {
+export const readAdoptions = cache(async (id: string, _locale: UiLocale): Promise<Loaded<AdoptionPage>> => {
   const { main, actingSubject } = await reader();
-  return settle(() => main.v1.works({ id }).adoptions.get({ query: { language: locale, actingSubject } }));
+  return settle(() => main.v1.works({ id }).adoptions.get({ query: { actingSubject } }));
 });
 
-export const readRealm = cache(async (realm: string, locale: UiLocale): Promise<Loaded<RealmHeader>> => {
+export const readRealm = cache(async (realm: string, _locale: UiLocale): Promise<Loaded<RealmHeader>> => {
   const { main } = await reader();
-  return settle(() => main.v1.realms({ realm }).get({ query: { language: locale } }));
+  return settle(() => main.v1.realms({ realm }).get({ query: {} }));
 });
 
 /** Mine needs a signed-in person acting as an Agent; say which step is missing before asking Main. */
@@ -166,11 +166,11 @@ async function scopeReader(scope: WorkScope) {
   return { ...current, failure: (current.signedIn ? 'identity' : 'sign-in') as ReadFailure };
 }
 
-export const readClassifications = cache(async (id: string, locale: UiLocale, scope: WorkScope):
+export const readClassifications = cache(async (id: string, _locale: UiLocale, scope: WorkScope):
   Promise<Loaded<ClassificationPage>> => {
   const { main, actingSubject } = await reader();
   return settle(() => main.v1.works({ id }).classifications.get({
-    query: { language: locale, actingSubject, ...mainScope(scope) } }));
+    query: { actingSubject, ...mainScope(scope) } }));
 });
 
 /**
@@ -192,9 +192,9 @@ export const readRatings = cache(async (id: string, scope: WorkScope, contextId:
   return summary.ok ? { ok: true, data: { contexts: items, context, summary: summary.data } } : summary;
 });
 
-export async function readVersions(id: string, locale: UiLocale, filter: VersionQuery): Promise<Loaded<VersionPage>> {
+export async function readVersions(id: string, _locale: UiLocale, filter: VersionQuery): Promise<Loaded<VersionPage>> {
   const { main, actingSubject } = await reader();
-  return settle(() => main.v1.works({ id }).versions.get({ query: { language: locale, actingSubject,
+  return settle(() => main.v1.works({ id }).versions.get({ query: { actingSubject,
     kind: filter.kind, contentLanguage: filter.language, cursor: filter.cursor } }), filter.cursor);
 }
 
@@ -214,9 +214,9 @@ export async function readDiscussion(id: string, realm: string | undefined, curs
 }
 
 /** Works an Agent is credited on, newest first, for "More by" on a Work page. */
-export const readAgentWorks = cache(async (agent: string, locale: UiLocale): Promise<Loaded<AgentWorksPage>> => {
+export const readAgentWorks = cache(async (agent: string, _locale: UiLocale): Promise<Loaded<AgentWorksPage>> => {
   const { main, actingSubject } = await reader();
-  return settle(() => main.v1.agents({ id: agent.slice(-36) }).works.get({ query: { language: locale, actingSubject,
+  return settle(() => main.v1.agents({ id: agent.slice(-36) }).works.get({ query: { actingSubject,
     limit: 12 } }));
 });
 
@@ -235,9 +235,9 @@ export const readWorkStats = cache(async (id: string, context: string | undefine
  * read it, each card saying which (`basis`). One page of twelve: three pages
  * of the row on a wide screen.
  */
-export const readAlsoEnjoyed = cache(async (id: string, locale: UiLocale): Promise<Loaded<AlsoEnjoyedPage>> => {
+export const readAlsoEnjoyed = cache(async (id: string, _locale: UiLocale): Promise<Loaded<AlsoEnjoyedPage>> => {
   const { main, actingSubject } = await reader();
-  return settle(() => main.v1.works({ id })['also-enjoyed'].get({ query: { language: locale, actingSubject,
+  return settle(() => main.v1.works({ id })['also-enjoyed'].get({ query: { actingSubject,
     limit: 12 } }));
 });
 

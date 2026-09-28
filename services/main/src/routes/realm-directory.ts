@@ -19,6 +19,14 @@ const query = t.Object({ limit: pageQuery.limit, cursor: pageQuery.cursor,
     t.Literal('growing')])) },
 { additionalProperties: false });
 const headers = { 'cache-control': 'no-store' };
+function publicRequest(request: Request): Request {
+  const languageHeaders = new Headers();
+  for (const name of ['accept-language', 'x-rezics-display-languages']) {
+    const value = request.headers.get(name);
+    if (value) languageHeaders.set(name, value);
+  }
+  return new Request(request.url, { headers: languageHeaders });
+}
 
 function directoryError(error: unknown): Response {
   if (error instanceof WorkReadInvalid) return problem(400, 'invalid_realm_directory', error.message);
@@ -41,7 +49,7 @@ export function realmDirectoryRoutes(work: MainWorkDependencies) {
       items: t.Array(t.Object({ id: t.String(), label: t.String() }),
         { maxItems: SHARED_VOCABULARY_COST.page }), hasMore: t.Boolean() }), ...errors },
   }, async ({ request, query: options }) => {
-    try { return Response.json(await workRead(work, new Request(request.url), options,
+    try { return Response.json(await workRead(work, publicRequest(request), options,
       session => readSharedVocabulary(session, options.q)), { headers }); }
     catch (error) { return directoryError(error); }
   }).get('/v1/realms', { query,
@@ -49,7 +57,7 @@ export function realmDirectoryRoutes(work: MainWorkDependencies) {
   }, async ({ request, query: options }) => {
     try {
       // A directory is public even if the caller carries an unrelated bearer token.
-      return Response.json(await workRead(work, new Request(request.url), options,
+      return Response.json(await workRead(work, publicRequest(request), options,
         session => readRealmDirectory(session, { sort: options.sort ?? 'activity', q: options.q,
           topic: options.topic })), { headers });
     } catch (error) { return directoryError(error); }

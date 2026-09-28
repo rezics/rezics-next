@@ -1,4 +1,5 @@
 import { Elysia, t } from 'elysia';
+import { publicLanguageRequest } from '../modules/display-language/public-request.ts';
 import { websocket } from 'elysia/websocket';
 import type { FusekiClient } from '../infrastructure/fuseki.ts';
 import type { VerifiedPrincipal } from '../modules/access/admission.ts';
@@ -218,7 +219,7 @@ export function searchRoutes(fuseki: FusekiClient, work: SearchRouteDependencies
           // A suggestion names what the Work is and who wrote it, as a search card does.
           const types = await phraseWorkTypes(work.environment, page.map(row => ({ work: row.work, language: '' })),
             position);
-          const items = await workRead(work, new Request(request.url), { language: query.language }, async session => {
+          const items = await workRead(work, publicLanguageRequest(request), { language: query.language }, async session => {
             if (session.position.dataEpoch !== position.dataEpoch || session.position.sequence !== position.sequence) {
               throw new SearchSnapshotMoved('Typeahead moved during hydration');
             }

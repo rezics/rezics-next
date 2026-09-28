@@ -14,8 +14,8 @@ export async function seedAccounts(state: SeedState) {
     if (agent.state !== 'active') throw new Error(`Agent for ${person.id} is not active`);
     if (person.seedName) {
       const path = `/v1/agents/${agent.agent.slice(-36)}`;
-      const current = await api.get<{ revision: string; displayName: string;
-        avatarSelection: string | null; bio: { text: string; language: string } | null }>(path, token);
+      const current = await api.getPublic<{ revision: string; displayName: string;
+        avatarSelection: string | null; bio: { text: string; language: string } | null }>(path);
       if (current.displayName !== person.name) await api.put(`${path}/profile`, {
         profile: 'agent-public-profile-v1', expectedHead: current.revision,
         displayName: person.name, avatarSelection: current.avatarSelection, bio: current.bio,
@@ -42,10 +42,10 @@ export async function seedAccounts(state: SeedState) {
     if (agent?.state === 'active') {
       if (seedName) {
         const path = `/v1/agents/${agent.agent.slice(-36)}`;
-        const current = await api.get<{ revision: string; displayName: string;
+        const current = await api.getPublic<{ revision: string; displayName: string;
           originalDisplayName?: string;
           localizedNames?: { original: string; labels: Record<string, string> } | null;
-          avatarSelection: string | null; bio: { text: string; language: string } | null }>(path, owner.token);
+          avatarSelection: string | null; bio: { text: string; language: string } | null }>(path);
         if ((current.originalDisplayName ?? current.displayName) !== displayName || localizedName &&
           current.localizedNames?.labels['zh-Hans'] !== localizedName.labels['zh-Hans']) {
           await api.put(`${path}/profile`, {

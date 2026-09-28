@@ -12,7 +12,6 @@ import { currentNotificationAgentReader } from '../../../services/main/src/modul
 import { readMainOutboxEnvelope } from '../../../services/main/src/modules/outbox/relay.ts';
 import { hash } from '../../../services/main/src/modules/work/activate.ts';
 import { png, sha, startMediaStack } from './media-support.ts';
-import { PersonPreferencesStore } from '../../../services/main/src/modules/preferences/store.ts';
 
 type Json = Record<string, unknown>;
 async function json(response: Response, status: number): Promise<Json> {
@@ -33,7 +32,7 @@ test('G-300: controlled profile CAS, receipts, public reads and event survive co
       return principal;
     } };
     const app = createMainApp(stack.fuseki, { environment: stack.env, access: stack.access,
-      account, media: stack.media, profiles: new ProfilesAccess(stack.accessPool), personPreferences: new PersonPreferencesStore(stack.accessPool),
+      account, media: stack.media, profiles: new ProfilesAccess(stack.accessPool),
       agentProvisioning: new AgentProvisioning(stack.accessPool, stack.env),
       agentProfiles: new AgentPublicProfiles(stack.accessPool, stack.env, stack.media.store),
       personPreferences: new PersonPreferencesStore(stack.accessPool),
@@ -174,7 +173,7 @@ test('G-300: controlled profile CAS, receipts, public reads and event survive co
     }
     const faulted = new LostReplyFuseki(Bun.env.FUSEKI_URL!);
     const recoveryApp = createMainApp(stack.fuseki, { environment: stack.env, access: stack.access,
-      account, media: stack.media, profiles: new ProfilesAccess(stack.accessPool), personPreferences: new PersonPreferencesStore(stack.accessPool),
+      account, media: stack.media, profiles: new ProfilesAccess(stack.accessPool),
       agentProfiles: new AgentPublicProfiles(stack.accessPool, { ...stack.env, fuseki: faulted }, stack.media.store),
       personPreferences: new PersonPreferencesStore(stack.accessPool),
       agentHandles: new AgentVanityHandles(stack.accessPool) });

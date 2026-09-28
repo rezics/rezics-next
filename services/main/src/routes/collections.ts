@@ -7,6 +7,9 @@ import { CompositionConflict, InvalidCompositionChange, StaleCompositionHead }
 import { CompositionCorrupt, CompositionUnavailable, readCompositionHeader }
   from '../modules/structure/graph.ts';
 import { readVisibleCompositionPage } from '../modules/collection/visible-page.ts';
+import { CollectionNameInvalid, CollectionNameStale, CollectionNameUnavailable,
+  publishCollectionName, readCollectionName } from '../modules/collection/names.ts';
+import type { LocalizedText } from '../modules/display-language/select.ts';
 import { canReadStructureTarget, structureProfileFor } from '../modules/structure/profiles.ts';
 import { StructureObjectCorrupt, StructureObjectUnavailable }
   from '../modules/structure/tree.ts';
@@ -67,6 +70,8 @@ interface CaptureBody { definitionRevision: string; collection: string; name: st
 
 export const openApiOperations = {
   '/v1/collections': { post: { bearer: true, idempotencyKey: true } },
+  '/v1/collections/{id}/name': { get: { bearer: false },
+    put: { bearer: true, idempotencyKey: true } },
   '/v1/collections/{id}/changes': { post: { bearer: true, idempotencyKey: true } },
   '/v1/collections/{id}/display-groups/{group}/moves': {
     post: { bearer: true, idempotencyKey: true } },
@@ -85,6 +90,9 @@ function key(request: Request) {
 }
 
 function routeError(error: unknown): Response {
+  if (error instanceof CollectionNameInvalid) return problem(400, 'invalid_collection_name', error.message);
+  if (error instanceof CollectionNameStale) return problem(409, 'stale_collection_name', error.message);
+  if (error instanceof CollectionNameUnavailable) return problem(404, 'collection_name_unavailable', error.message);
   if (error instanceof InvalidCompositionChange) return problem(400, 'invalid_collection_change', error.message);
   if (error instanceof InvalidDynamicCollection || error instanceof InvalidPublicQuery) {
     return problem(400, 'invalid_dynamic_collection', error.message);
@@ -315,6 +323,33 @@ export function collectionRoutes(fuseki: FusekiClient, work: MainWorkDependencie
         return Response.json({ collection: result.owner, structure: result.structure,
           revision: result.revision, receipt: result.structureReceipt, replayed: result.replayed },
         { status: result.replayed ? 200 : 201, headers: { 'cache-control': 'no-store' } });
+      } catch (error) { return routeError(error); }
+    })
+    .get('/v1/collections/:id/name', { params: t.Object({ id: groupUuid }),
+      response: { 200: t.Any(), ...errors } }, async ({ params }: { params: { id: string } }) => {
+      try { return Response.json(await readCollectionName(work.environment,
+        `https://rezics.com/id/${params.id}`), { headers: { 'cache-control': 'no-store' } }); }
+      catch (error) { return routeError(error); }
+    })
+    .put('/v1/collections/:id/name', { params: t.Object({ id: groupUuid }),
+      body: t.Object({ profile: t.Literal('collection-public-name-v1'),
+        expectedHead: t.Nullable(ref), actingSubject: ref,
+        name: t.Object({ original: t.String({ minLength: 2, maxLength: 35 }),
+          labels: t.Record(t.String(), t.String({ minLength: 1, maxLength: 300 })) },
+        { additionalProperties: false }) }, { additionalProperties: false }),
+      response: { 200: t.Any(), 201: t.Any(), 202: pendingOperation, ...errors } },
+    async ({ request, params, body }: { request: Request; params: { id: string };
+      body: { profile: 'collection-public-name-v1'; expectedHead: string | null;
+        actingSubject: string; name: LocalizedText } }) => {
+      const idempotencyKey = key(request);
+      if (!idempotencyKey) return problem(400, 'invalid_idempotency_key', 'A valid Idempotency-Key is required');
+      try {
+        const result = await publishCollectionName(work.environment, work.account, work.access,
+          request, { collection: `https://rezics.com/id/${params.id}`,
+            actingSubject: body.actingSubject, expectedHead: body.expectedHead,
+            name: body.name, idempotencyKey });
+        return Response.json(result, { status: result.replayed ? 200 : 201,
+          headers: { 'cache-control': 'no-store' } });
       } catch (error) { return routeError(error); }
     })
     .post('/v1/collections/:id/changes', { params: t.Object({ id: groupUuid }),

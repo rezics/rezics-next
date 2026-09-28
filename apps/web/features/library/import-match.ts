@@ -31,9 +31,9 @@ export function matchImportedBook(book: ImportedBook, candidates: readonly Impor
 }
 
 /** Main's public title search supplies candidates. Edition ISBNs break exact-title ties. */
-export async function lookupImportedBook(book: ImportedBook, locale: string,
+export async function lookupImportedBook(book: ImportedBook, _locale: string,
   main: () => MainClient = browserMainApi): Promise<ImportCandidate[]> {
-  const query = await main().v1.search.typeahead.get({ query: { prefix: book.title.slice(0, 80), language: locale } });
+  const query = await main().v1.search.typeahead.get({ query: { prefix: book.title.slice(0, 80) } });
   if (!query.data) throw new Error('Search unavailable');
   const candidates = query.data.items.slice(0, 10);
   const result: ImportCandidate[] = [];

@@ -45,7 +45,7 @@ async function Threads({ view, sort, window, cursor, feed }: { view: RealmView; 
   const path = realmPathOf(view);
   const main = await readerMain(view);
   const page = await settle(() => main.v1.realms({ realm: view.realm.realm }).threads.get({ query: { sort,
-    ...sort === 'top' ? { window } : {}, ...cursor ? { cursor } : {}, language: locale,
+    ...sort === 'top' ? { window } : {}, ...cursor ? { cursor } : {},
     ...view.reader.actingSubject ? { actingSubject: view.reader.actingSubject } : {} } }));
   const top = listHref(path, sort, window);
   if (!page.ok) {
