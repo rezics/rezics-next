@@ -5,7 +5,7 @@ import { memoryReaderActions } from '../catalogue/fixtures.ts';
 import { ReaderActionsProvider } from '../catalogue/reader-actions.tsx';
 import { FeedProvider } from './feed-context.tsx';
 import { FeedList } from './feed-list.tsx';
-import { everyKind, memoryFeed, type MemoryFeed, NOW, page, post, realms, storyId, suggestion } from './fixtures.ts';
+import { everyKind, memoryFeed, type MemoryFeed, NOW, page, people, post, realms, storyId, suggestion } from './fixtures.ts';
 import { messages } from './messages.ts';
 import zhHans from './messages/zh-Hans.ts';
 import type { FeedTab } from './state.ts';
@@ -110,9 +110,10 @@ export const EveryKind: Story = {
     await expect(alice).toHaveTextContent('Added to REZICS');
     await expect(alice).toHaveTextContent('by Lewis Carroll');
     await expect(alice).not.toHaveTextContent('New work');
-    // An author on REZICS links to their profile.
-    await expect(within(article(canvas, '雨夜书店 · 番外')).getByRole('link', { name: 'Lin Mei 林梅' }))
-      .toHaveAttribute('href', '/en/@lin_mei');
+    // An author on REZICS links to their profile, from the byline and from the meta line where they posted.
+    const mine = within(article(canvas, '雨夜书店 · 番外')).getAllByRole('link', { name: 'Lin Mei 林梅' });
+    await expect(mine).toHaveLength(2);
+    for (const link of mine) await expect(link).toHaveAttribute('href', '/en/@lin_mei');
 
     // A review: the reader's stars and opening lines, leading to the review on the Work page.
     // A review is titled by its stars and opening line; the Work it reviews is attached.
@@ -293,14 +294,60 @@ const authorNews = page([
   post(42, { target: { title: title('The Last Lantern') } }),
 ]);
 
-/** In Following, an author's news says whose it is; a followed community's post needs no such note. */
+/** The first link in a post's meta line: who or where it leads with. */
+const leading = (canvas: ReturnType<typeof within>, title: string) =>
+  within(article(canvas, title)).getAllByRole('link')[0]!;
+
+/**
+ * In Following, an author's news says whose Work it is. A followed poster
+ * needs no such note: the post leads with them. Nor does a followed community.
+ */
 export const BecauseYouFollow: Story = {
   args: { initial: { ok: true, data: authorNews } },
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     await expect(article(canvas, 'Sanditon')).toHaveTextContent('Because you follow Jane Austen');
-    await expect(article(canvas, 'Chapter 3')).toHaveTextContent('Because you follow Lin Mei 林梅');
+    await expect(article(canvas, 'Chapter 3')).not.toHaveTextContent('Because you follow');
+    await expect(leading(canvas, 'Chapter 3')).toHaveTextContent('Lin Mei 林梅');
     await expect(article(canvas, 'The Last Lantern')).not.toHaveTextContent('Because you follow');
+  },
+};
+
+const everyone = { kind: 'recommended', basis: 'all' } as const;
+/** A followed person's post, a stranger's, one with no Realm, a pick by someone followed, and a followed author's news. */
+const whoLeads = page([
+  post(43, { realm: realms.classics, actor: people.leo, target: { title: title('Persuasion') },
+    reason: { kind: 'followed', target: people.leo.id, targetKind: 'agent' } }),
+  post(44, { realm: realms.classics, actor: people.daniel, reason: everyone, target: { title: title('Emma') } }),
+  post(45, { realm: null, actor: people.aria, reason: everyone, target: { title: title('Mansfield Park') } }),
+  post(46, { kind: 'adoption', realm: realms.classics, actor: people.daniel, target: { title: title('Northanger Abbey') },
+    reasons: [{ kind: 'realm-pick', realm: realms.classics.id, curator: people.daniel.id }],
+    reason: { kind: 'followed', target: people.daniel.id, targetKind: 'agent' } }),
+  { ...authorNews.items[0]!, id: storyId(47) },
+]);
+
+/**
+ * Who a post leads with (docs/plan/frontend.md, "Who a post leads with"): the
+ * person is the speaker and the Realm the venue, so a post leads with the
+ * person the reader follows, or the person when there is no Realm, and
+ * otherwise with the Realm. Every name leads to its page.
+ */
+export const WhoLeads: Story = {
+  args: { initial: { ok: true, data: whoLeads }, tab: 'all', query: { scope: 'all', sort: 'best' } },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await expect(leading(canvas, 'Persuasion')).toHaveTextContent('Leo Sun');
+    await expect(leading(canvas, 'Persuasion')).toHaveAttribute('href', '/en/@leo_sun');
+    // A stranger's name says nothing yet, so the Realm leads; the person is still one link away.
+    await expect(leading(canvas, 'Emma')).toHaveTextContent('Classic Literature');
+    await expect(within(article(canvas, 'Emma')).getByRole('link', { name: 'Daniel Chen' }))
+      .toHaveAttribute('href', '/en/@daniel_chen');
+    await expect(leading(canvas, 'Mansfield Park')).toHaveTextContent('Aria Wang 王雅');
+    // A pick is the Realm's act: it leads, and the curator stays unnamed even to a follower.
+    await expect(leading(canvas, 'Northanger Abbey')).toHaveTextContent('Classic Literature');
+    await expect(article(canvas, 'Northanger Abbey')).not.toHaveTextContent('Daniel Chen');
+    // All is REZICS-wide, so no card there says why it is here.
+    await expect(canvas.getByRole('feed', { name: 'Posts' })).not.toHaveTextContent('Because you follow');
   },
 };
 

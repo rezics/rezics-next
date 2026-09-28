@@ -79,6 +79,30 @@ next chapter, then to keep up with communities, then to discover.
   not a feed mode. Repeated updates collapse into
   one post; shelving and ratings without text never become posts; chapter
   posts hide spoilers past the reader's position.
+- **Who a post leads with** (maintainer, 2026-09-28). REZICS is not purely
+  Realm-centric. Reddit locks a person's identity inside subreddits, which is
+  why no CEO's official account, head of state or individual creator is known
+  there; on REZICS the person is the speaker and the Realm the venue that
+  hosts them. A post's meta line shows both, and either may come first; the
+  one that leads gets the icon, the first place and bold type:
+  1. the person, when the reader follows them;
+  2. *future feature*: the person, when they are a verified or notable
+     identity, for every reader (a manually granted flag at first, later a
+     follower threshold computed offline; Main has no such flag yet);
+  3. the person, when the post has no Realm;
+  4. otherwise the Realm: a stranger's name says nothing yet, and Join sits on
+     the same line.
+
+  A Realm's own acts (picks and decisions) lead with the Realm, and a pick
+  never names its curator. The rule is deterministic and cheap: Main matches
+  a page's cards against the reader's follows in one bounded read, in All as
+  in Following, and puts a followed poster ahead of a followed Realm
+  (`followIdentities`). A random or weighted choice was rejected: the same
+  post would change shape between visits, and readers scan by position.
+  Personalising the lead per reader waits for behaviour data. Every person's
+  name links to their profile, so a person is as reachable as a Realm. The
+  reason pill stays rare: only inside Following, for a followed author's
+  news and for suggestions.
 - **Never empty.** Signed out: All · Best. A new person picks languages and
   Concepts, which become follows and pinned tabs, and follows suggested Realms
   in one step. Broad fields are Zones, listed in the left navigation; Home has

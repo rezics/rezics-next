@@ -37,8 +37,14 @@ test('G-397 an author\'s news answers first to the authors its card credits, in 
   expect(followIdentities(source, authors)).toEqual([id(5), 'open-library:OL21594A', id(4), id(1), id(2), id(3)]);
   expect(followIdentities({ ...source, kind: 'contribution' }, authors)[1]).toBe('open-library:OL21594A');
   expect(followIdentities({ ...source, kind: 'added' }, authors)[0]).toBe(id(5));
-  // Talk about a Work, a pick or a review is not its author's news.
-  for (const kind of ['discussion', 'reply', 'adoption', 'decision', 'review'] as const) {
+  expect(followIdentities({ ...source, kind: 'work' }, authors.slice(0, 2)))
+    .toEqual([id(5), 'open-library:OL21594A', id(4), id(1), id(2), id(3)]);
+  // Talk about a Work or a review is not its author's news; a followed poster outranks a followed Realm.
+  for (const kind of ['discussion', 'reply', 'review'] as const) {
+    expect(followIdentities({ ...source, kind }, authors)).toEqual([id(4), id(1), id(2), id(3)]);
+  }
+  // A pick or a decision is the Realm's act, so its Realm comes before whoever carried it out.
+  for (const kind of ['adoption', 'decision'] as const) {
     expect(followIdentities({ ...source, kind }, authors)).toEqual([id(1), id(2), id(3), id(4)]);
   }
   expect(followIdentities({ kind: 'collection', realm: null, zone: null, work: null, actor: id(4) })).toEqual([id(4)]);

@@ -488,8 +488,9 @@ export async function readFeed(session: WorkReadSession, query: FeedQuery, reade
   });
   const presentationRead = feedWorkPresentations(session, sources.flatMap(source => source.work ? [source.work] : []));
   // A Work's news also answers to follows of the authors its card credits,
-  // which the page's presentation batch already holds.
-  const matchesRead = reader && scope === 'following' ? presentationRead.then(batch => follows.matches(
+  // which the page's presentation batch already holds. All matches too, so a
+  // card there leads with the person the reader follows; one bounded read.
+  const matchesRead = reader ? presentationRead.then(batch => follows.matches(
     reader.principal, reader.agent, sources.map(source => followIdentities(source,
       source.work ? batch.items.get(source.work)?.authors : undefined)))) : Promise.resolve(null);
   const [initialChapters, workKinds, summaries, presentationBatch, matches, candidates,

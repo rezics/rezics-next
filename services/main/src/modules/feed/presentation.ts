@@ -34,18 +34,24 @@ export const AUTHOR_NEWS_KINDS: readonly FeedKind[] = ['work', 'added', 'contrib
 /** A credit as the author a reader follows: the Agent, or the keyed Open Library author. */
 export interface CreditedAuthor { agent: string | null; key: string | null }
 
+/** Card kinds that are a Realm's own act, whoever carried it out: a pick or a decision. */
+const REALM_ACT_KINDS: readonly FeedKind[] = ['adoption', 'decision'];
+
 /**
  * What a follow can match on a card, the first match being its reason: for
- * an author's news the authors the card credits, in credit order, then its
- * Realm, Zone, Work and actor. At most `FOLLOWS_COST.matchIdentities`.
+ * an author's news the authors the card credits, in credit order, then the
+ * poster, then its Realm, Zone and Work. A followed person outranks a
+ * followed Realm, so the card can lead with them; a Realm's own act answers
+ * to the Realm before whoever acted for it. At most `FOLLOWS_COST.matchIdentities`.
  */
 export function followIdentities(source: Pick<FeedSource, 'kind' | 'realm' | 'zone' | 'work' | 'actor'>,
   authors: readonly CreditedAuthor[] = []): string[] {
   const credited = AUTHOR_NEWS_KINDS.includes(source.kind)
     ? authors.slice(0, DISCOVERY_COST.primaryCredits).map(author => author.agent
       ?? (author.key ? externalAuthorFollow(author.key) : null)) : [];
-  const ids = [...new Set([...credited, source.realm, source.zone, source.work, source.actor]
-    .filter((id): id is string => !!id))];
+  const act = REALM_ACT_KINDS.includes(source.kind);
+  const ids = [...new Set([...credited, act ? null : source.actor, source.realm, source.zone, source.work,
+    act ? source.actor : null].filter((id): id is string => !!id))];
   if (ids.length > FOLLOWS_COST.matchIdentities) throw new WorkReadUnavailable('Feed follow match exceeds its bound');
   return ids;
 }

@@ -18,7 +18,7 @@ export const realms = {
   mods: { id: storyId(904, 'aaaa'), name: name('Stardew Mods'), icon: fallbackCover('mods') },
 };
 
-const people = {
+export const people = {
   mei: { id: storyId(801, 'bbbb'), name: 'Lin Mei 林梅', handle: 'lin_mei' },
   daniel: { id: storyId(802, 'bbbb'), name: 'Daniel Chen', handle: 'daniel_chen' },
   aria: { id: storyId(803, 'bbbb'), name: 'Aria Wang 王雅', handle: 'aria_wang' },

@@ -5,10 +5,13 @@ import type { ReactNode } from 'react';
 import { useId } from 'react';
 import { CatalogueCover } from '../catalogue/cover.tsx';
 import { coverKindOf } from '../catalogue/work.ts';
+import { authorHref } from '../author/route.ts';
+import { CommunityIcon } from '../shell/community-icon.tsx';
 import LocalizedLink from '../shell/localized-link.tsx';
 import { useFeed } from './feed-context.tsx';
+import type { MetaLead } from './lead.ts';
 import { absoluteTime, relativeTime } from './time.ts';
-import type { Avatar, Name } from './types.ts';
+import type { Avatar, FeedItem, Name } from './types.ts';
 
 /**
  * CJK running text: the taller line the frontend direction sets, and spacing
@@ -74,6 +77,46 @@ export function MetaLine({ icon, parts, end }: { icon: ReactNode; parts: readonl
     </p>
     {end ? <div className="relative z-10 flex shrink-0 items-center gap-1">{end}</div> : null}
   </div>;
+}
+
+const leading = 'font-semibold text-foreground';
+
+type Person = Pick<FeedItem['actor'], 'name' | 'handle'>;
+
+/** People's names as one list in the reader's language ("Mei, Leo and Aria"), each leading to their profile. */
+function People({ people, className }: { people: readonly Person[]; className?: string }) {
+  const { locale } = useFeed();
+  let next = 0;
+  return new Intl.ListFormat(locale, { style: 'long', type: 'conjunction' })
+    .formatToParts(people.map(person => person.name)).map((part, index) => {
+      if (part.type === 'literal') return <span key={index}>{part.value}</span>;
+      const person = people[next++]!;
+      return <LocalizedLink key={person.handle} href={authorHref({ kind: 'agent', handle: person.handle })}
+        className={cn(rowLink, className)}>{part.value}</LocalizedLink>;
+    });
+}
+
+/**
+ * The meta line's face and first parts: the leading identity in bold with
+ * its icon, then the other, still a link. `people` is null where the card
+ * leaves them unnamed, and empty where the author is gone, which `someone`
+ * then says.
+ */
+export function useIdentity({ lead, realm, people, someone }: { lead: MetaLead; realm: FeedItem['realm'];
+  people: readonly Person[] | null; someone?: string }): { icon: ReactNode; parts: MetaPart[] } {
+  const { avatarQuery, realmPath } = useFeed();
+  const venue = lead === 'realm' ? realm : null;
+  const realmPart: MetaPart[] = realm ? [{ name: true, node: <LocalizedLink href={realmPath(realm.id)}
+    lang={realm.name.language} dir={realm.name.direction}
+    className={cn(rowLink, venue && leading)}>{realm.name.value}</LocalizedLink> }] : [];
+  const peoplePart: MetaPart[] = !people ? []
+    : people.length ? [{ name: true, node: <People people={people} className={venue ? undefined : leading} /> }]
+      : someone ? [{ name: true, node: <span className="italic">{someone}</span> }] : [];
+  return {
+    icon: venue ? <CommunityIcon icon={venue.icon} name={venue.name.value} avatarQuery={avatarQuery} size="xs" />
+      : <CommunityIcon icon={null} name={people?.[0]?.name ?? '·'} person size="xs" />,
+    parts: venue ? [...realmPart, ...peoplePart] : [...peoplePart, ...realmPart],
+  };
 }
 
 export interface AttachedWork { id: string; title: Name; cover: Avatar; types: readonly string[]; byline: string | null }

@@ -4,12 +4,12 @@ import { buttonVariants } from '@rezics/ui/button';
 import { cn } from '@rezics/ui/utils';
 import { EyeIcon, EyeOffIcon, MessageCircleIcon, ReplyIcon } from 'lucide-react';
 import { type ReactNode, useState } from 'react';
-import { CommunityIcon } from '../shell/community-icon.tsx';
 import LocalizedLink from '../shell/localized-link.tsx';
 import { JoinButton, ShareButton, type VoteTarget, VoteControl } from './actions.tsx';
 import { announcesSpoilers } from './discussion.ts';
 import { useFeed } from './feed-context.tsx';
-import { type AttachedWork, barAction, MetaLine, PostRow, PostTime, rowLink, WorkAttachment } from './post-row.tsx';
+import type { MetaLead } from './lead.ts';
+import { type AttachedWork, barAction, MetaLine, PostRow, PostTime, rowLink, useIdentity, WorkAttachment } from './post-row.tsx';
 import type { FeedItem } from './types.ts';
 
 /** A discussion or a reply as a post, wherever it is listed: Home, a Realm's Discussions, a Work's. */
@@ -20,6 +20,8 @@ export interface DiscussionPost {
   vote: VoteTarget;
   /** The Realm it was posted in; left out where the page is the Realm's own. */
   realm: FeedItem['realm'];
+  /** Who the meta line leads with, as Home decides it; elsewhere the Realm, where it is shown. */
+  lead?: MetaLead;
   author: { name: string; handle: string } | null;
   time: string;
   /** A discussion's title, its author's first line as Main reads it; a reply has none. */
@@ -65,23 +67,17 @@ export function SpoilerTag() {
 export function DiscussionCard({ post, menu, position, total }: { post: DiscussionPost;
   /** The feed's hide and mute menu, where the post came from Home. */
   menu?: ReactNode; position?: number; total?: number }) {
-  const { t, locale, avatarQuery, realmPath } = useFeed();
+  const { t, locale } = useFeed();
   const title = post.title ?? '', body = post.body.trim();
   const spoiler = post.kind === 'discussion' && announcesSpoilers(title);
   const count = post.comments ? new Intl.NumberFormat(locale, { notation: 'compact' }).format(post.comments.value) : null;
   const words = body ? <span lang={post.language ?? undefined} className={cn('whitespace-pre-line',
     post.kind === 'reply' && 'text-foreground')}>{body}</span> : null;
-  const author = post.author
-    ? <LocalizedLink href={`/@${post.author.handle}`} className={cn(rowLink,
-      !post.realm && 'font-semibold text-foreground')}>{post.author.name}</LocalizedLink>
-    : <span className="italic">{t.someone}</span>;
+  const identity = useIdentity({ lead: post.lead ?? 'realm', realm: post.realm,
+    people: post.author ? [post.author] : [], someone: t.someone });
   return <PostRow kind={post.kind} href={post.href} position={position} total={total}
-    meta={<MetaLine icon={post.realm ? <CommunityIcon icon={post.realm.icon} name={post.realm.name.value}
-      avatarQuery={avatarQuery} size="xs" /> : <CommunityIcon icon={null} name={post.author?.name ?? '·'} person size="xs" />}
-    parts={[
-      post.realm ? { name: true, node: <LocalizedLink href={realmPath(post.realm.id)} lang={post.realm.name.language}
-        className={cn(rowLink, 'font-semibold text-foreground')}>{post.realm.name.value}</LocalizedLink> } : null,
-      { name: true, node: author }, { keep: true, node: <PostTime time={post.time} /> },
+    meta={<MetaLine icon={identity.icon} parts={[
+      ...identity.parts, { keep: true, node: <PostTime time={post.time} /> },
       post.kind === 'reply' ? { node: t.replied } : null,
       spoiler ? { keep: true, node: <SpoilerTag /> } : null,
     ]} end={<>{post.realm ? <JoinButton realm={post.realm} /> : null}{menu}</>} />}

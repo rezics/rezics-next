@@ -10,7 +10,11 @@ export type FeedKind = Static<typeof feedKind>;
 export const feedSort = t.Union([t.Literal('best'), t.Literal('new'), t.Literal('top')]);
 export const feedWindow = t.Union([t.Literal('week'), t.Literal('month'), t.Literal('all')]);
 export const feedReason = t.Union([
-  /** The first follow the card answers to. An author's news answers to its credited authors before its Realm. */
+  /**
+   * The first follow the card answers to, in Following and All alike: an
+   * author's news to its credited authors, then any card to its poster before
+   * its Realm, except a Realm's own act (see `followIdentities`).
+   */
   t.Object({ kind: t.Literal('followed'), target: followTargetId, targetKind: followKind }),
   t.Object({ kind: t.Literal('recommended'), basis: t.Union([t.Literal('all'), t.Literal('thin-following')]) }),
   t.Object({ kind: t.Literal('trending-in-realm'), realm: readId }),

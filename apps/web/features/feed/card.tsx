@@ -9,13 +9,13 @@ import { StarMeter } from '../catalogue/rating.tsx';
 import { CatalogueCover } from '../catalogue/cover.tsx';
 import { authorSeparator, type CoverWork, coverKindOf } from '../catalogue/work.ts';
 import { authorHref } from '../author/route.ts';
-import { CommunityIcon } from '../shell/community-icon.tsx';
 import LocalizedLink from '../shell/localized-link.tsx';
 import { type Dismissal, DismissedPost, JoinButton, MoreMenu, PrimaryAction, ShareButton, VoteControl } from './actions.tsx';
 import { DiscussionCard, type DiscussionPost } from './discussion-card.tsx';
 import { threadPath } from './discussion.ts';
 import { useFeed } from './feed-context.tsx';
-import { type AttachedWork, barAction, MetaLine, PostRow, PostTime, rowLink, WorkAttachment } from './post-row.tsx';
+import { followsPoster, metaLead } from './lead.ts';
+import { type AttachedWork, barAction, MetaLine, PostRow, PostTime, rowLink, useIdentity, WorkAttachment } from './post-row.tsx';
 import type { FeedItem } from './types.ts';
 
 type T = ReturnType<typeof useFeed>['t'];
@@ -156,34 +156,32 @@ function authorLine(authors: FeedItem['authors']): string | null {
 }
 
 /**
- * The followed author a card answers to, named as the card names them: one
- * of its credited authors, or who posted it. Main puts an author's news under
- * their follow before the Realm's, so this is the reason worth saying.
+ * The followed author of the Work a card answers to, named as the card names
+ * them. Main puts an author's news under their follow before the Realm's, so
+ * this is the reason worth saying. A followed poster needs no such note: the
+ * card leads with them. Nor does a curator, whom a pick never names.
  */
 function followedAuthor(item: FeedItem): string | null {
   const reason = item.reason;
-  if (reason.kind !== 'followed') return null;
+  if (reason.kind !== 'followed' || followsPoster(item)) return null;
   if (reason.targetKind === 'external-author') {
     const id = reason.target.slice('open-library:'.length);
     return item.authors.find(author => author.provider === 'open-library' && author.key === `/authors/${id}`)
       ?.displayName ?? id;
   }
   if (reason.targetKind !== 'agent') return null;
-  return item.authors.find(author => author.agent === reason.target)?.displayName
-    ?? item.group.actors.find(actor => actor.id === reason.target)?.name
-    ?? (item.actor.id === reason.target ? item.actor.name : null);
+  return item.authors.find(author => author.agent === reason.target)?.displayName ?? null;
 }
 
 /**
- * The one meta line: Realm · person · time · what happened, then Join and the
- * post's menu. A pick is the Realm's act, so its curator is not named as if
- * they wrote the Work; reasons show only where they are exceptions.
+ * The one meta line: who and where, in the order `metaLead` picks, then time
+ * and what happened, then Join and the post's menu. A pick is the Realm's act,
+ * so its curator is not named as if they wrote the Work; reasons show only
+ * where they are exceptions, which is only ever inside Following.
  */
 function FeedMeta({ item, end }: { item: FeedItem; end: ReactNode }) {
-  const { t, locale, now, avatarQuery, tab, realmPath } = useFeed();
-  const names = new Intl.ListFormat(locale, { style: 'long', type: 'conjunction' })
-    .format(item.group.actors.map(actor => actor.name));
-  const author = followedAuthor(item);
+  const { t, now, tab } = useFeed();
+  const author = tab === 'following' ? followedAuthor(item) : null;
   const reason = author ? t.becauseYouFollow({ name: author })
     : item.reason.kind === 'trending-in-realm' ? t.trending({ realm: item.realm?.name.value ?? '' })
     : item.reason.kind === 'editorial' ? t.editorial
@@ -191,16 +189,11 @@ function FeedMeta({ item, end }: { item: FeedItem; end: ReactNode }) {
       : item.reason.kind === 'recommended' && tab === 'following' ? t.suggested : null;
   const why = item.reason.kind === 'recommended'
     ? item.reason.basis === 'thin-following' ? t.suggestedThin : t.suggestedAll : undefined;
-  const people = item.reasons.some(candidate => candidate.kind === 'realm-pick') || item.kind === 'adoption' && item.realm
-    ? null : names;
+  const hidden = item.reasons.some(candidate => candidate.kind === 'realm-pick') || item.kind === 'adoption' && item.realm;
+  const identity = useIdentity({ lead: metaLead(item), realm: item.realm, people: hidden ? null : item.group.actors });
   const { icon: Icon, text } = kicker(item, now, t);
-  return <MetaLine icon={item.realm ? <CommunityIcon icon={item.realm.icon} name={item.realm.name.value}
-    avatarQuery={avatarQuery} size="xs" /> : <CommunityIcon icon={null} name={item.actor.name} person size="xs" />}
-  parts={[
-    item.realm ? { name: true, node: <LocalizedLink href={realmPath(item.realm.id)} lang={item.realm.name.language}
-      className={cn(rowLink, 'font-semibold text-foreground')}>{item.realm.name.value}</LocalizedLink> } : null,
-    people ? { name: true, node: <span className={cn(!item.realm && 'font-semibold text-foreground')}>{people}</span> }
-      : null,
+  return <MetaLine icon={identity.icon} parts={[
+    ...identity.parts,
     { keep: true, node: <PostTime time={item.time} /> },
     { node: <span className="inline-flex items-center gap-1"><Icon aria-hidden="true" className="size-3.5 shrink-0" />
       {text}</span> },
@@ -263,7 +256,7 @@ function discussionPost(item: FeedItem & { realm: NonNullable<FeedItem['realm']>
   return { kind: item.kind === 'reply' ? 'reply' : 'discussion',
     href: threadPath(realmPath(item.realm.id), target.id),
     vote: { id: item.id, vote: item.vote, score: item.score, revision: item.voteRevision },
-    realm: item.realm, author: { name: item.actor.name, handle: item.actor.handle }, time: item.time,
+    realm: item.realm, lead: metaLead(item), author: { name: item.actor.name, handle: item.actor.handle }, time: item.time,
     title: item.post.title, body: item.post.excerpt ?? '', language: item.post.language,
     showSpoilers: item.viewerState.status === 'available' && item.viewerState.spoiler.policy === 'show',
     work: target.work ? { id: target.work, title: target.title, cover: target.cover, types: target.types,
