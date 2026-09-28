@@ -71,6 +71,7 @@ test('SEARCH01/SEARCH04: one native graph/text read preserves scores across thre
         rv:decisionHead ${iri(decision)} .
     }
     GRAPH ${iri(GRAPHS.revisions)} {
+      ${iri(selection)} a rv:PublicationSelection ; rv:mainVersion ${iri(main)} ; rv:language "zh" .
       ${iri(statementHead)} a rv:StatementRevision, rv:RevisionAnchor ; rv:component ${iri(statement)} .
       ${additionalSupport ? `${iri(additionalHead!)} a rv:StatementRevision, rv:RevisionAnchor ;
         rv:component ${iri(additionalSupport)} .` : ''}

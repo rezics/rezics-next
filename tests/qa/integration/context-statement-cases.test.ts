@@ -12,10 +12,6 @@ import { definitionStateRequest }
   from '../../../services/main/src/modules/context/definition-state.ts';
 import { mainSelectionDigest, selectMainDefault }
   from '../../../services/main/src/modules/work/select-main.ts';
-import { createRatingContext, ratingContextDigest }
-  from '../../../services/main/src/modules/rating/context.ts';
-import { setStandingRating, standingRatingDigest }
-  from '../../../services/main/src/modules/rating/observation.ts';
 import { GRAPHS, iri } from '../../../services/main/src/modules/work/activate.ts';
 import { readMainOutboxEnvelope, readNextMainOutboxBatch }
   from '../../../services/main/src/modules/outbox/relay.ts';
@@ -96,14 +92,16 @@ test('CTX02/CTX09: v1 heads migrate exactly before the Statement decision fence 
     expect((await f.json<Search>(await classified('realm'), 200)).results[0]?.classification.decision)
       .toBe(old.decision);
     const ratingInput = { realm: realm.realm, question: 'Migration quality', actingSubject: f.actorA };
-    const rating = await createRatingContext(f.env,
-      f.admission(`rating:context:${realm.realm}`, 'rating.context.create',
-        ratingContextDigest(ratingInput)), ratingInput);
+    // The joined Statement reader verifies Access's sealed inventory as well
+    // as graph receipts. Synthetic graph-only admissions cannot seed it.
+    await f.grant(`rating:context:${realm.realm}`, 'rating.context.create');
+    const rating = await f.json<{ context: string }>(await f.call('POST', '/v1/rating-contexts', {
+      profile: 'realm-standing-rating-context-v1', ...ratingInput }), 201);
     const standingInput = { context: rating.context!, work: work.work!, mainVersion: work.mainVersion!,
       expectedRevisionHead: null, value: 9, actingSubject: f.actorA };
-    const standing = await setStandingRating(f.env, f.admission(`rating:observe:${rating.context}`,
-      'rating.observation.set', standingRatingDigest(standingInput)), standingInput);
-    expect(standing.outcome).toBe('succeeded');
+    await f.grant(`rating:observe:${rating.context}`, 'rating.observation.set');
+    await f.json(await f.call('POST', '/v1/rating-observations', {
+      profile: 'realm-standing-rating-observation-v1', ...standingInput }), 201);
     const joined = () => search({
       profile: 'public-realm-classified-rated-phrase-v1', phrase, language: 'en', sense,
       context: { kind: 'realm-local', id: realm.realm }, ratingContext: rating.context,
@@ -161,7 +159,7 @@ test('CTX02/CTX09: v1 heads migrate exactly before the Statement decision fence 
     const newJoined = await f.json<Search>(await joined(), 200);
     expect(newJoined.results[0]?.classification).toMatchObject({ decision: migrated.decision,
       application: null, source: 'inherited-global' });
-    expect(f.queries()).toBeLessThanOrEqual(36);
+    const migrationReadQueries = f.queries();
     expect((await f.call('POST', '/v1/classification-decisions',
       { profile: 'classification-direct-decision-v1', ...decisionInput })).status).toBe(410);
     const mapped = await f.env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?statement ?revision WHERE {
@@ -217,6 +215,8 @@ test('CTX02/CTX09: v1 heads migrate exactly before the Statement decision fence 
     expect((await f.json<Resolution>(await f.call('POST', '/v1/statement-resolutions', {
       profile: 'statement-resolution-v1', target: { kind: 'qualified-fact', meaningKey },
       acceptance: { kind: 'global' } }), 200)).result.state).toBe('unavailable');
+    // Keep the existing cost assertion, after exercising all migration outcomes.
+    expect(migrationReadQueries).toBeLessThanOrEqual(36);
   } finally { await f.close(); }
 }, 120_000);
 
