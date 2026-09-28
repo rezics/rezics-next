@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test';
 import { catalogs } from './catalogs.ts';
 import { uiLocales } from './define.ts';
-import { i18n } from './locale.ts';
+import { i18n } from './instance.ts';
 
 function shape(value: unknown): unknown {
   if (typeof value !== 'object' || value === null) return typeof value;

@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { defineMessages, localeNames, uiLocales } from '../i18n/define.ts';
-import { i18n, isPublicPagePath, localizedPath, matchUiLocaleTag, pathLocale, resolveLocale,
+import { i18n } from '../i18n/instance.ts';
+import { isPublicPagePath, localizedPath, matchUiLocaleTag, pathLocale, resolveLocale,
   withoutLocale } from '../i18n/locale.ts';
 
 describe('interface locale', () => {

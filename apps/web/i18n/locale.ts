@@ -1,9 +1,9 @@
-import { create, parseAcceptLanguage } from 'native-i18n';
+import { parseAcceptLanguage } from 'native-i18n';
 import { isUiLocale, type UiLocale } from './define.ts';
-import { resources } from './resources.ts';
 
+// Locale paths and matching, shared by the proxy, routes and client components.
+// The translator lives in instance.ts, away from this client-reachable module.
 export const LOCALE_COOKIE = 'rezics_locale';
-export const i18n = create(resources);
 const localePrefix = /^\/(en|zh-Hant|zh-Hans|ja|ko|de|fr|es)(?=\/|[?#]|$)/;
 
 export function pathLocale(pathname: string): UiLocale | null {

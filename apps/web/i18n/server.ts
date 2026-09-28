@@ -1,7 +1,8 @@
 import { cookies, headers } from 'next/headers';
 import type { NamespaceOf, NamespaceSource } from 'native-i18n';
 import type { UiLocale } from './define.ts';
-import { LOCALE_COOKIE, i18n, resolveLocale, pathLocale } from './locale.ts';
+import { i18n } from './instance.ts';
+import { LOCALE_COOKIE, resolveLocale, pathLocale } from './locale.ts';
 import type { resources } from './resources.ts';
 
 export async function requestLocale() {

@@ -1,4 +1,4 @@
-import { sameOriginWrite } from './origins.ts';
+import { sameOriginWrite } from './same-origin.ts';
 
 export interface DisplayPreferences {
   revision: number;
