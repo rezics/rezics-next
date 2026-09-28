@@ -13,35 +13,42 @@ import { commandKey } from './api.ts';
 import { useFeed } from './feed-context.tsx';
 import type { FeedbackKind, FeedbackStrength, FeedItem, Vote } from './types.ts';
 
-const pill = 'inline-flex h-9 items-center gap-1.5 rounded-full px-3 font-medium text-muted-foreground text-sm '
+export const pill = 'inline-flex h-9 items-center gap-1.5 rounded-full px-3 font-medium text-muted-foreground text-sm '
   + 'outline-none transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:ring-2 '
   + 'focus-visible:ring-ring';
+
+/** What a vote acts on: a feed activity (a post, a discussion or a reply's placement) and its standing. */
+export interface VoteTarget {
+  id: string; vote: Vote; score: number; revision: string | null;
+  /** False where Main takes no vote on it; the score still shows. */
+  open?: boolean;
+}
 
 /**
  * Up, score, down. The vote shows at once and settles on Main's receipt; a
  * refused vote returns to what Main last had and says so. Signed out, both
- * arrows lead to sign-in.
+ * arrows lead to sign-in. `plain` drops the pill for dense rows such as replies.
  */
-function VoteControl({ item }: { item: FeedItem }) {
+export function VoteControl({ target, plain = false }: { target: VoteTarget; plain?: boolean }) {
   const { t, locale, api, signedIn, actingSubject, signInHref } = useFeed();
-  const [state, setState] = useState({ vote: item.vote, score: item.score, revision: item.voteRevision });
+  const [state, setState] = useState({ vote: target.vote, score: target.score, revision: target.revision });
   const [busy, setBusy] = useState(false);
   const [failed, setFailed] = useState(false);
   const score = new Intl.NumberFormat(locale, { notation: 'compact', maximumFractionDigits: 1 }).format(state.score);
-  const arrow = 'grid size-8 place-items-center rounded-full outline-none transition-colors '
-    + 'hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring';
-  if (!signedIn || !actingSubject) {
-    // Signed out, the arrows lead to sign-in; signed in without an Agent to act as, only the score shows.
-    const arrowFor = (label: string, Icon: typeof ArrowBigUpIcon) => signedIn
-      ? <span aria-hidden="true" className="grid size-8 place-items-center">
-        <Icon className="size-5 text-muted-foreground/60" /></span>
+  const arrow = cn('grid place-items-center rounded-full outline-none transition-colors hover:bg-accent '
+    + 'focus-visible:ring-2 focus-visible:ring-ring', plain ? 'size-7' : 'size-8');
+  const frame = cn('inline-flex items-center rounded-full', !plain && 'bg-muted/70');
+  const count = <span className="min-w-6 text-center font-semibold text-sm tabular-nums" aria-label={t.score(state.score)}
+    aria-live="polite">{score}</span>;
+  if (!signedIn || !actingSubject || target.open === false) {
+    // Signed out, the arrows lead to sign-in; without an Agent to act as, or where Main takes no vote, only the score shows.
+    const arrowFor = (label: string, Icon: typeof ArrowBigUpIcon) => signedIn || target.open === false
+      ? <span aria-hidden="true" className={cn('grid place-items-center', plain ? 'size-7' : 'size-8')}>
+        <Icon className="size-5 text-muted-foreground/50" /></span>
       : <a href={signInHref} aria-label={`${label} — ${t.signInToTakePart}`} className={arrow}>
         <Icon aria-hidden="true" className="size-5 text-muted-foreground" /></a>;
-    return <div className="inline-flex items-center rounded-full bg-muted/70">
-      {arrowFor(t.upvote, ArrowBigUpIcon)}
-      <span className="min-w-6 text-center font-semibold text-sm tabular-nums" aria-label={t.score(state.score)}>
-        {score}</span>
-      {arrowFor(t.downvote, ArrowBigDownIcon)}
+    return <div className={frame} title={target.open === false ? t.votesClosed : undefined}>
+      {arrowFor(t.upvote, ArrowBigUpIcon)}{count}{arrowFor(t.downvote, ArrowBigDownIcon)}
     </div>;
   }
   async function cast(direction: Exclude<Vote, 0>) {
@@ -50,21 +57,20 @@ function VoteControl({ item }: { item: FeedItem }) {
     setState({ ...state, vote: value, score: state.score - state.vote + value });
     setBusy(true);
     setFailed(false);
-    const receipt = await api().vote(item.id, { value, expectedRevision: before.revision,
+    const receipt = await api().vote(target.id, { value, expectedRevision: before.revision,
       actingSubject: actingSubject! }, commandKey());
     if (receipt.ok) setState({ vote: receipt.data.value, score: receipt.data.score, revision: receipt.data.revision });
     else { setState(before); setFailed(true); }
     setBusy(false);
   }
   return <div className="inline-flex items-center gap-1">
-    <div aria-busy={busy || undefined} className={cn('inline-flex items-center rounded-full bg-muted/70',
-      state.vote === 1 && 'bg-brand/10', state.vote === -1 && 'bg-vote-down/10')}>
+    <div aria-busy={busy || undefined} className={cn(frame, !plain && state.vote === 1 && 'bg-brand/10',
+      !plain && state.vote === -1 && 'bg-vote-down/10')}>
       <button type="button" aria-label={t.upvote} aria-pressed={state.vote === 1} disabled={busy}
         onClick={() => void cast(1)} className={arrow}>
         <ArrowBigUpIcon aria-hidden="true" className={cn('size-5', state.vote === 1
           ? 'fill-brand text-brand' : 'text-muted-foreground')} /></button>
-      <span className="min-w-6 text-center font-semibold text-sm tabular-nums" aria-label={t.score(state.score)}
-        aria-live="polite">{score}</span>
+      {count}
       <button type="button" aria-label={t.downvote} aria-pressed={state.vote === -1} disabled={busy}
         onClick={() => void cast(-1)} className={arrow}>
         <ArrowBigDownIcon aria-hidden="true" className={cn('size-5', state.vote === -1
@@ -109,7 +115,7 @@ async function sharePage(href: string, title: string, locale: string): Promise<'
 }
 
 /** Share, beside the other actions from `sm` up; on phones it lives in the post's menu so the bar fits one row. */
-function ShareButton({ href, title }: { href: string; title: string }) {
+export function ShareButton({ href, title }: { href: string; title: string }) {
   const { t, locale } = useFeed();
   const [copied, setCopied] = useState(false);
   return <button type="button" onClick={() => void sharePage(href, title, locale).then(done => setCopied(done === 'copied'))}
@@ -127,7 +133,7 @@ export interface Dismissal {
   undo: { kind: FeedbackKind; target: string } | null;
 }
 
-function MoreMenu({ item, share, onDismiss }: { item: FeedItem; share: { href: string; title: string } | null;
+export function MoreMenu({ item, share, onDismiss }: { item: FeedItem; share: { href: string; title: string } | null;
   onDismiss: (dismissal: Dismissal) => void }) {
   const { t, api, actingSubject, locale } = useFeed();
   const [failed, setFailed] = useState(false);
@@ -199,7 +205,7 @@ export function EngagementBar({ item, title, href, onDismiss }: {
   const commentLabel = item.comments.kind === 'exact' ? t.comments(item.comments.value)
     : t.commentsAtLeast(item.comments.value);
   return <div role="group" aria-label={t.actions} className="-ms-1 flex flex-wrap items-center gap-1.5">
-    <VoteControl item={item} />
+    <VoteControl target={{ id: item.id, vote: item.vote, score: item.score, revision: item.voteRevision }} />
     {comments ? <LocalizedLink href={comments} aria-label={commentLabel} className={pill}>
       <MessageCircleIcon aria-hidden="true" className="size-4" />
       <span aria-hidden="true" className="tabular-nums">{count}{item.comments.kind === 'exact' ? '' : '+'}</span>

@@ -5,9 +5,9 @@ import { decisions, fictionZone, works, zoneMessagesFor } from '../zones/fixture
 import { presetTokens } from '../zones/presentation.ts';
 import { RealmNotFound, RealmUnavailable } from './states.tsx';
 import { RealmPageStory, realmMessagesFor } from './story-page.tsx';
-import { type AboutPerson, ListFailure, RealmAbout, RealmDecisions, RealmDiscussions, RealmWorks } from './views.tsx';
+import { type AboutPerson, ListFailure, RealmAbout, RealmDecisions, RealmWorks } from './views.tsx';
 
-type Tab = 'works' | 'decisions' | 'discussions' | 'about' | 'works-moved';
+type Tab = 'works' | 'decisions' | 'about' | 'works-moved';
 
 const person = (id: string, name: string, handle: string | null, featured = false): AboutPerson => ({
   id: `https://rezics.com/id/00000000-0000-7000-8000-${id.padStart(12, '0')}`, name,
@@ -29,8 +29,6 @@ function TabPage({ tab, locale }: { tab: Tab; locale: UiLocale }) {
       firstPage="/en/r/fiction/works" messages={messages} /></div>,
     decisions: <RealmDecisions decisions={decisions} next={null} first="/en/r/fiction/decisions" locale={locale}
       messages={messages} zoneMessages={zoneMessages} />,
-    discussions: <RealmDiscussions works={works.slice(0, 8)} locale={locale} messages={messages}
-      zoneMessages={zoneMessages} />,
     about: <RealmAbout realmName={zone.name.value} description={zone.description} locale={locale} messages={messages}
       members={locale === 'zh-Hans' ? '12,408 位成员' : '12,408 members'} moderators={moderators}
       listed={{ more: true, people: listed }}
@@ -93,16 +91,6 @@ export const Decisions: Story = {
 
 export const DecisionsChinese: Story = { args: { tab: 'decisions' }, globals: { locale: 'zh-Hans' },
   parameters: { route: { pathname: '/zh-Hans/r/fiction/decisions' } } };
-
-export const Discussions: Story = {
-  args: { tab: 'discussions' },
-  parameters: { route: { pathname: '/en/r/fiction/discussions' } },
-  async play({ canvasElement }) {
-    const canvas = within(canvasElement);
-    await expect(canvas.getByRole('link', { name: 'Open discussion: 雨夜书店' }))
-      .toHaveAttribute('href', expect.stringMatching(/^\/en\/w\/[0-9a-f-]+\/discussion\?scope=realm&realm=/));
-  },
-};
 
 export const About: Story = {
   args: { tab: 'about' },

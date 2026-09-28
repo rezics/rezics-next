@@ -172,6 +172,42 @@ export const VoteRefused: Story = {
 };
 
 /** Hiding a post leaves one line that says so, with Undo. */
+/**
+ * Discussions read as Reddit posts: the author's first line is the title and
+ * leads to the thread, the Work it is about names its source, an announced
+ * spoiler stays veiled until asked for, and a reply opens its place in the thread.
+ */
+export const Discussions: Story = {
+  args: { initial: { ok: true, data: page(everyKind.filter(item => item.kind === 'discussion' || item.kind === 'reply')) },
+    api: memoryFeed() },
+  async play({ canvasElement, args }) {
+    const canvas = within(canvasElement);
+    const thread = `/en/r/${realms.classics.id.slice(-36)}/discussions/${storyId(7, 'dddd').slice(-36)}`;
+    const bennet = article(canvas, 'Is Mr. Bennet a good father?');
+    await expect(within(bennet).getByRole('link', { name: 'Is Mr. Bennet a good father?' })).toHaveAttribute('href', thread);
+    await expect(bennet).toHaveTextContent('Chapter 2 makes me think he enjoys');
+    await expect(within(bennet).getByRole('link', { name: 'On Pride and Prejudice' })).toBeVisible();
+    await expect(within(bennet).getByRole('link', { name: '17 comments' })).toHaveAttribute('href', `${thread}#comments`);
+    await expect(within(bennet).getByRole('link', { name: 'Reply' })).toHaveAttribute('href', `${thread}#reply`);
+
+    // The author announced a spoiler: the words stay out of the page until the reader asks.
+    const spoiler = article(canvas, '【剧透】《雨夜书店》第二章：那张旧车票');
+    await expect(spoiler).not.toHaveTextContent('二十年前的车票');
+    await userEvent.click(within(spoiler).getByRole('button', { name: 'Show spoiler' }));
+    await expect(spoiler).toHaveTextContent('二十年前的车票');
+    await expect(within(spoiler).getByRole('link', { name: '2 more discussions about this work' }))
+      .toHaveAttribute('href', `/en/r/${realms.fiction.id.slice(-36)}/discussions`);
+
+    const reply = article(canvas, 'A reply in a discussion');
+    await expect(reply).toHaveTextContent('第一章很短');
+    await expect(within(reply).getByRole('link', { name: 'View in thread' })).toHaveAttribute('href',
+      `/en/r/${realms.fiction.id.slice(-36)}/discussions/${storyId(16, 'dddd').slice(-36)}#reply`);
+
+    await userEvent.click(within(bennet).getByRole('button', { name: 'Upvote' }));
+    await waitFor(() => expect(args.api!.calls).toContain(`vote:${storyId(7).slice(-4)}:1`));
+  },
+};
+
 export const HideAndUndo: Story = {
   args: { api: memoryFeed() },
   async play({ canvasElement, args }) {

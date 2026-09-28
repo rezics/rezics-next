@@ -17,7 +17,7 @@ import { loadRealmView, membersText, RealmFrame, type RealmView } from './realm-
 import { idOf, parseCursor, parseDecision, parseRealmRef, type RealmTab, realmHref } from './route.ts';
 import { RealmUnavailable } from './states.tsx';
 import type { ReadFailure } from './types.ts';
-import { type AboutPerson, ListFailure, RealmAbout, RealmDecisions, RealmDiscussions, RealmWorks } from './views.tsx';
+import { type AboutPerson, ListFailure, RealmAbout, RealmDecisions, RealmWorks } from './views.tsx';
 import { profileHref } from '../profile/route.ts';
 
 // The `/r/{realm}` routes are thin: each resolves the Realm view, renders the
@@ -114,15 +114,6 @@ export function RealmDecisionsRoute(props: RealmRouteProps) {
     return <RealmDecisions locale={locale} messages={view.messages} zoneMessages={view.zoneMessages}
       {...paging(view, 'decisions', cursor, page.data.nextCursor)}
       decisions={page.data.items.map(item => zoneDecision(item, view.context, titled))} />;
-  });
-}
-
-export function RealmDiscussionsRoute(props: RealmRouteProps) {
-  return realmRoute(props, 'discussions', async (view, locale) => {
-    const page = await readRealmWorks(view.context.realm, locale);
-    if (!page.ok) return failure(view, 'discussions', page.failure);
-    return <RealmDiscussions locale={locale} messages={view.messages} zoneMessages={view.zoneMessages}
-      avatarQuery={view.reader.avatarQuery} works={page.data.items.map(item => zoneWork(item, view.context, item.selection))} />;
   });
 }
 

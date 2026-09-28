@@ -2,8 +2,8 @@ import { Badge } from '@rezics/ui/badge';
 import { buttonVariants } from '@rezics/ui/button';
 import { cn } from '@rezics/ui/utils';
 import type { ZoneDecision, ZoneWork } from '@rezics/zone-sdk';
-import { ArrowLeftIcon, ArrowRightIcon, BookOpenTextIcon, GavelIcon, LandmarkIcon, MessagesSquareIcon,
-  PlusIcon, RotateCwIcon, ScaleIcon, ShieldIcon, TagIcon, TriangleAlertIcon, XIcon } from 'lucide-react';
+import { ArrowLeftIcon, ArrowRightIcon, BookOpenTextIcon, GavelIcon, LandmarkIcon, PlusIcon, RotateCwIcon,
+  ScaleIcon, ShieldIcon, TagIcon, TriangleAlertIcon, XIcon } from 'lucide-react';
 import { materializeData } from 'native-i18n';
 import type { ReactNode } from 'react';
 import type { UiLocale } from '../../i18n/define.ts';
@@ -12,7 +12,7 @@ import { EmptyState } from '../shell/empty-state.tsx';
 import LocalizedLink from '../shell/localized-link.tsx';
 import { PageContainer } from '../shell/page.tsx';
 import { slotRatio } from '../catalogue/work.ts';
-import { workTitle, ZoneWorkCard, ZoneWorkRow } from '../zones/card.tsx';
+import { ZoneWorkCard } from '../zones/card.tsx';
 import type { ZoneMessages } from '../zones/messages.ts';
 import { ModuleHeading } from '../zones/module-frame.tsx';
 import { decisionText } from '../zones/modules.tsx';
@@ -129,36 +129,6 @@ export function RealmDecisions({ decisions, next, first, locale, messages, zoneM
 }
 
 /** The Discussions tab: conversations live on each Work, read in this Realm's scope. */
-export function RealmDiscussions({ works, locale, messages, zoneMessages, avatarQuery }: {
-  works: readonly ZoneWork[]; locale: UiLocale; messages: RealmMessages; zoneMessages: ZoneMessages;
-  avatarQuery?: string;
-}) {
-  return <PageContainer className="grid grid-cols-1 gap-6">
-    <section aria-labelledby="realm-discussions" className="grid grid-cols-1 gap-5 rounded-(--zone-radius-card) bg-(--zone-panel)
-      p-(--zone-panel-pad)">
-      <ViewHeader id="realm-discussions" title={messages.discussionsTitle} intro={messages.discussionsIntro} />
-      {works.length ? <ul className="grid grid-cols-1 gap-x-8 gap-y-5 sm:grid-cols-2">
-        {works.map(work => <li key={work.id} className="flex min-w-0 items-center gap-3">
-          <div className="min-w-0 flex-1"><ZoneWorkRow work={work} locale={locale} messages={zoneMessages}
-            avatarQuery={avatarQuery} /></div>
-          <LocalizedLink href={discussionHref(work)} aria-label={`${messages.openDiscussion}: ${workTitle(work,
-            zoneMessages)}`} className={cn(buttonVariants({ variant: 'outline', size: 'sm', pill: true }),
-            'relative z-10 shrink-0')}>
-            <MessagesSquareIcon aria-hidden="true" /><span className="max-sm:sr-only">{messages.openDiscussion}</span>
-          </LocalizedLink>
-        </li>)}
-      </ul> : <EmptyState icon={MessagesSquareIcon} title={messages.worksEmpty} description={messages.worksEmptyBody}
-        headingLevel={3} />}
-    </section>
-  </PageContainer>;
-}
-
-/** A Work's discussion tab in the same Realm scope as the card's Work link. */
-function discussionHref(work: ZoneWork): string {
-  const [path, query] = work.href.split('?');
-  return `${path}/discussion${query ? `?${query}` : ''}`;
-}
-
 export interface AboutRule { id: string; title: string; body: string; governed: boolean; lang: string }
 
 /** Someone the About tab names: a moderator, or a member who chose to be listed. */

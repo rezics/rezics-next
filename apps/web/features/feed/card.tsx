@@ -12,15 +12,14 @@ import { authorSeparator, type CoverWork, coverKindOf } from '../catalogue/work.
 import { authorHref } from '../author/route.ts';
 import { CommunityIcon } from '../shell/community-icon.tsx';
 import LocalizedLink from '../shell/localized-link.tsx';
-import { type Dismissal, DismissedPost, EngagementBar, JoinButton } from './actions.tsx';
+import { type Dismissal, DismissedPost, EngagementBar, JoinButton, MoreMenu } from './actions.tsx';
+import { DiscussionCard, type DiscussionPost, readableText } from './discussion-card.tsx';
+import { discussionText, threadPath } from './discussion.ts';
 import { useFeed } from './feed-context.tsx';
 import { absoluteTime, relativeTime } from './time.ts';
 import type { FeedItem } from './types.ts';
 
 type T = ReturnType<typeof useFeed>['t'];
-
-/** CJK body text: a taller line and spacing between Han and Latin runs. */
-const readableText = '[text-autospace:normal] [&:is(:lang(zh),:lang(ja),:lang(ko))]:leading-[1.8]';
 
 /** Where the post's title leads: its Work or thread. Lists have no page yet, so they lead nowhere. */
 function targetHref(item: FeedItem): string | null {
@@ -236,12 +235,6 @@ function ReviewBody({ card, lang }: { card: Extract<FeedItem['card'], { kind: 'r
 }
 
 /**
- * One post, in the same anatomy for every kind: who and where, what happened,
- * the content, then the engagement bar. Repeated updates arrive grouped from
- * Main and read as one post ("Chapters 212–214"); a chapter past the reader's
- * position keeps its text hidden.
- */
-/**
  * A list's first Works as small covers, each leading to its page, and how
  * many the list holds, so a list reads as its contents rather than a title.
  */
@@ -263,7 +256,46 @@ function ListPreview({ card }: { card: Extract<FeedItem['card'], { kind: 'list' 
   </div>;
 }
 
+/** A discussion or reply from Home, as the post it is: its thread is where it leads. */
+function discussionPost(item: FeedItem & { realm: NonNullable<FeedItem['realm']> },
+  realmPath: (realm: string) => string): DiscussionPost {
+  const { target } = item;
+  return { kind: item.kind === 'reply' ? 'reply' : 'discussion',
+    href: threadPath(realmPath(item.realm.id), target.id),
+    vote: { id: item.id, vote: item.vote, score: item.score, revision: item.voteRevision },
+    realm: item.realm, author: { name: item.actor.name, handle: item.actor.handle }, time: item.time,
+    text: target.excerpt ?? '', language: target.language,
+    work: target.work ? { id: target.work, title: target.title, cover: target.cover, types: target.types } : null,
+    comments: item.kind === 'discussion' ? item.comments : null,
+    // Home groups a Realm's discussions of one Work on one day; the rest are on the Realm's Discussions tab.
+    more: item.group.count > 1 ? { count: item.group.count - 1, href: `${realmPath(item.realm.id)}/discussions` } : null };
+}
+
+function FeedDiscussion({ item, position, total }: { item: FeedItem & { realm: NonNullable<FeedItem['realm']> };
+  position?: number; total?: number }) {
+  const { realmPath } = useFeed();
+  const [dismissed, setDismissed] = useState<Dismissal | null>(null);
+  if (dismissed) return <DismissedPost dismissal={dismissed} onUndo={() => setDismissed(null)} />;
+  const post = discussionPost(item, realmPath);
+  const title = post.kind === 'discussion' ? discussionText(post.text).title : post.text;
+  return <DiscussionCard post={post} position={position} total={total}
+    menu={<MoreMenu item={item} share={{ href: post.href, title }} onDismiss={setDismissed} />} />;
+}
+
 export function FeedCard({ item, position, total }: { item: FeedItem; position?: number; total?: number }) {
+  if ((item.kind === 'discussion' || item.kind === 'reply') && item.realm) {
+    return <FeedDiscussion item={{ ...item, realm: item.realm }} position={position} total={total} />;
+  }
+  return <FeedPost item={item} position={position} total={total} />;
+}
+
+/**
+ * One post, in the same anatomy for every kind: who and where, what happened,
+ * the content, then the engagement bar. Repeated updates arrive grouped from
+ * Main and read as one post ("Chapters 212–214"); a chapter past the reader's
+ * position keeps its text hidden.
+ */
+function FeedPost({ item, position, total }: { item: FeedItem; position?: number; total?: number }) {
   const { t, locale, now, avatarQuery } = useFeed();
   const titleId = useId();
   const [dismissed, setDismissed] = useState<Dismissal | null>(null);
