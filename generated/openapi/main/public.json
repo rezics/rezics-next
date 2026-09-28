@@ -289021,6 +289021,10 @@
                     "items": {
                       "items": {
                         "properties": {
+                          "concept": {
+                            "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                            "type": "string"
+                          },
                           "id": {
                             "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                             "type": "string"
@@ -289059,6 +289063,7 @@
                         },
                         "required": [
                           "id",
+                          "concept",
                           "name"
                         ],
                         "type": "object"

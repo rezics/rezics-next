@@ -132,6 +132,16 @@ export const profileRegistry = {
       "decision"
     ]
   },
+  "classification-global-context-v1": {
+    "sha256": "b54360592563a2f10b526fc9f8f6441727da2b941d351d31720e675df9242f07",
+    "file": "shapes/classification-global-context-v1.ttl",
+    "shapes": [
+      "https://rezics.com/definition/classification-global-context-v1/global-shape"
+    ],
+    "focusRoles": [
+      "global"
+    ]
+  },
   "classification-proposition-v1": {
     "sha256": "8bc799783d7d2c43da737b01d2b1f10bba4dc643716f1ac09524d1ef0e86dbd0",
     "file": "shapes/classification-proposition-v1.ttl",

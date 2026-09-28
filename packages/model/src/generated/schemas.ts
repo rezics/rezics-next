@@ -106,6 +106,10 @@ export const ClassificationDirectDecisionV1DecisionShapeSchema = Type.Object({ "
 
 export type ClassificationDirectDecisionV1DecisionShape = Static<typeof ClassificationDirectDecisionV1DecisionShapeSchema>;
 
+export const ClassificationGlobalContextV1GlobalShapeSchema = Type.Object({ "@id": Type.String({ minLength: 1 }), "rdf:type": Type.Array(Type.String({}), { minItems: 1, contains: Type.Literal("https://rezics.com/vocab/ClassificationContext") }), "rv:contextRole": Type.Array(Type.Literal("https://rezics.com/vocab/GlobalClassification"), { maxItems: 1, minItems: 1 }), "rv:contextState": Type.Array(Type.Literal("https://rezics.com/vocab/Active"), { maxItems: 1, minItems: 1 }), "rv:inheritancePolicy": Type.Array(Type.Literal("https://rezics.com/definition/classification-isolate-v1"), { maxItems: 1, minItems: 1 }), "rv:fallbackContext": Type.Optional(Type.Array(Type.Unknown(), { maxItems: 0 })), "rv:realm": Type.Optional(Type.Array(Type.Unknown(), { maxItems: 0 })) }, { additionalProperties: true });
+
+export type ClassificationGlobalContextV1GlobalShape = Static<typeof ClassificationGlobalContextV1GlobalShapeSchema>;
+
 export const ClassificationPropositionV1SchemeShapeSchema = Type.Object({ "@id": Type.String({ minLength: 1 }), "rdf:type": Type.Array(Type.String({}), { minItems: 1, contains: Type.Literal("http://www.w3.org/2004/02/skos/core#ConceptScheme") }), "rv:schemeState": Type.Array(Type.Literal("https://rezics.com/vocab/Active"), { maxItems: 1, minItems: 1 }) }, { additionalProperties: true });
 
 export type ClassificationPropositionV1SchemeShape = Static<typeof ClassificationPropositionV1SchemeShapeSchema>;
@@ -965,6 +969,7 @@ export const shapeSchemas = {
   "https://rezics.com/definition/classification-direct-decision-v1/context-shape": ClassificationDirectDecisionV1ContextShapeSchema,
   "https://rezics.com/definition/classification-direct-decision-v1/application-shape": ClassificationDirectDecisionV1ApplicationShapeSchema,
   "https://rezics.com/definition/classification-direct-decision-v1/decision-shape": ClassificationDirectDecisionV1DecisionShapeSchema,
+  "https://rezics.com/definition/classification-global-context-v1/global-shape": ClassificationGlobalContextV1GlobalShapeSchema,
   "https://rezics.com/definition/classification-proposition-v1/scheme-shape": ClassificationPropositionV1SchemeShapeSchema,
   "https://rezics.com/definition/classification-proposition-v1/concept-shape": ClassificationPropositionV1ConceptShapeSchema,
   "https://rezics.com/definition/classification-proposition-v1/path-shape": ClassificationPropositionV1PathShapeSchema,
