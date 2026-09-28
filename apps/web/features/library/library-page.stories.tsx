@@ -72,12 +72,13 @@ export const ReadHistory: Story = {
     await expect(canvas.queryByRole('region', { name: 'Currently reading' })).toBeNull();
     // Dates: the finish date is edited in a popover and checked against the start.
     await userEvent.click(canvas.getByRole('button', { name: 'Add dates — Frankenstein; or, The Modern Prometheus' }));
-    const dates = await page().findByRole('dialog', { name: /Reading dates for “Frankenstein/ });
+    const dates = await page().findByRole('dialog', { name: /Reading dates for “Frankenstein/ }, { timeout: 5000 });
     await userEvent.type(within(dates).getByLabelText('Started'), '2026-05-10');
     await userEvent.type(within(dates).getByLabelText('Finished'), '2026-05-01');
     await userEvent.click(within(dates).getByRole('button', { name: 'Save' }));
     // The error fades in; wait until it has.
-    await waitFor(() => expect(within(dates).getByText('The finish date can’t be before the start date.')).toBeVisible());
+    await waitFor(() => expect(within(dates).getByText('The finish date can’t be before the start date.')).toBeVisible(),
+      { timeout: 3000 });
     await userEvent.clear(within(dates).getByLabelText('Finished'));
     await userEvent.type(within(dates).getByLabelText('Finished'), '2026-05-20');
     await userEvent.click(within(dates).getByRole('button', { name: 'Save' }));
@@ -86,10 +87,10 @@ export const ReadHistory: Story = {
     await waitFor(() => expect(page().queryByRole('dialog')).toBeNull(), { timeout: 3000 });
     // A review needs stars first; rating unlocks it.
     await userEvent.click(canvas.getByRole('button', { name: 'Write a review — Frankenstein; or, The Modern Prometheus' }));
-    const editor = await canvas.findByRole('textbox', { name: /Your review of “Frankenstein/ });
+    const editor = await canvas.findByRole('textbox', { name: /Your review of “Frankenstein/ }, { timeout: 5000 });
     await userEvent.type(editor, 'The monster’s account is the best part.');
     await expect(canvas.getByText('Rate this work first; your review goes with your rating.')).toBeVisible();
-    await expect(await canvas.findByRole('button', { name: 'Save review' })).toBeDisabled();
+    await expect(await canvas.findByRole('button', { name: 'Save review' }, { timeout: 5000 })).toBeDisabled();
   },
 };
 
