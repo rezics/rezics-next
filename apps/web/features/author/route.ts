@@ -14,12 +14,7 @@ export function parseOpenLibraryAuthor(segment: string): string | null {
 
 export type AuthorView = { kind: 'overview' } | { kind: 'works' };
 
-/**
- * An Open Library author page's address from their key (`/authors/OL21594A`),
- * before the locale prefix. `/authors` is not yet one of the public page paths
- * `LocalizedLink` prefixes (`i18n/locale.ts`), so links add the prefix with
- * `localizedPath` themselves until it is.
- */
+/** An Open Library author page's address from their key (`/authors/OL21594A`), before the locale prefix. */
 export function openLibraryAuthorHref(key: string, view: AuthorView = { kind: 'overview' }, cursor?: string): string {
   const path = `/authors/open-library/${key.replace(/^\/authors\//, '')}${view.kind === 'works' ? '/works' : ''}`;
   return cursor ? `${path}?${new URLSearchParams({ cursor })}` : path;

@@ -194,7 +194,7 @@ function AuthorRecord({ author, locale, messages }: { author: ExternalAuthor; lo
     <p className="text-pretty text-muted-foreground text-xs leading-relaxed">
       {retrieved ? t.sourceNote({ date: retrieved }) : t.sourceNoteUndated}{' '}
       <a href={author.record} rel="noreferrer"
-        className="rounded-sm font-medium text-foreground underline underline-offset-4 outline-none
+        className="whitespace-nowrap rounded-sm font-medium text-foreground underline underline-offset-4 outline-none
           focus-visible:ring-2 focus-visible:ring-ring">{t.viewRecord}</a>
     </p>
   </aside>;
@@ -236,7 +236,7 @@ export function AuthorPage({ author, reader, alsoEnjoyed, readerActions, locale,
             <header className="flex items-end justify-between gap-4 border-border/70 border-b pb-4">
               <h2 id="author-works" className="text-balance font-semibold text-2xl tracking-tight">
                 {t.worksHeading({ name })}</h2>
-              {author.works.nextCursor ? <Link href={localizedPath(openLibraryAuthorHref(author.key, { kind: 'works' }), locale)}
+              {author.works.nextCursor ? <Link href={openLibraryAuthorHref(author.key, { kind: 'works' })}
                 className="inline-flex shrink-0 items-center gap-0.5 rounded-sm font-medium text-primary text-sm
                   outline-none underline-offset-4 hover:underline focus-visible:ring-2 focus-visible:ring-ring">
                 {t.allWorks}<ChevronRightIcon aria-hidden="true" className="size-4 rtl:rotate-180" /></Link> : null}
@@ -260,7 +260,7 @@ export function AuthorUnavailable({ authorKey, locale, messages }: { authorKey: 
   return <PageContainer>
     <EmptyState icon={TriangleAlertIcon} tone="destructive" role="alert" headingLevel={1} title={t.unavailableTitle}
       description={t.unavailableBody}>
-      <Link href={localizedPath(openLibraryAuthorHref(authorKey), locale)} className={buttonVariants()}>
+      <Link href={openLibraryAuthorHref(authorKey)} className={buttonVariants()}>
         <RotateCwIcon aria-hidden="true" />{t.retry}</Link>
     </EmptyState>
   </PageContainer>;
@@ -276,7 +276,7 @@ export function AuthorWorksListPage({ author, works, cursor, reader, readerActio
   const view: AuthorView = { kind: 'works' };
   const title = t.worksHeading({ name });
   const nextCursor = works.ok ? works.data.nextCursor : null;
-  const page = (target: AuthorView, at?: string) => localizedPath(openLibraryAuthorHref(author.key, target, at), locale);
+  const page = (target: AuthorView, at?: string) => openLibraryAuthorHref(author.key, target, at);
   return <ReaderActionsProvider signedIn={reader.signedIn} actions={readerActions}
     signInHref={signInPath(localizedPath(openLibraryAuthorHref(author.key, view, cursor), locale))}
     actingSubject={reader.seed === null ? null : reader.actingSubject} seed={reader.seed ?? undefined}>

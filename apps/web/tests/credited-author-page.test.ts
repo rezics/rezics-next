@@ -6,6 +6,7 @@ import zhHans from '../features/author/messages/zh-Hans.ts';
 import { authorJsonLd, authorMetadata } from '../features/author/metadata.ts';
 import { authorHref, openLibraryAuthorHref, parseCursor, parseOpenLibraryAuthor } from '../features/author/route.ts';
 import { materializeData } from 'native-i18n';
+import { isPublicPagePath } from '../i18n/locale.ts';
 
 const zh = { ...messages, ...zhHans };
 const facts = (author: typeof janeAusten) => author.facts!;
@@ -24,6 +25,10 @@ describe('author addresses', () => {
       .toBe('/authors/open-library/OL21594A/works?cursor=a+b');
     expect(authorHref({ kind: 'external', key: '/authors/OL161167A' })).toBe('/authors/open-library/OL161167A');
     expect(authorHref({ kind: 'agent', handle: 'lin_mei' })).toBe('/@lin_mei');
+    // A public page: links gain the locale prefix and unprefixed addresses redirect to one.
+    expect(isPublicPagePath('/authors/open-library/OL21594A')).toBe(true);
+    expect(isPublicPagePath('/zh-Hans/authors/open-library/OL21594A/works')).toBe(true);
+    expect(isPublicPagePath('/authorsx')).toBe(false);
     expect(parseCursor(['a'])).toBeUndefined();
     expect(parseCursor('x'.repeat(2049))).toBeUndefined();
   });

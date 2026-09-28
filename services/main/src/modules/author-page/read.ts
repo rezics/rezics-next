@@ -146,7 +146,7 @@ function totals(session: WorkReadSession, listed: Awaited<ReturnType<typeof list
   session.checkDeadline();
   return { works: { value: listed.works.length, kind },
     ratings: count && scale ? { context: rated[0]!.context, count: { value: count, kind },
-      mean: rated.reduce((total, rating) => total + rating.sum, 0) / count, scale } : null,
+      mean: rated.reduce((total, rating) => total + rating.sum, 0) / count, scale: { min: 1, max: scale.max } } : null,
     readers: readers && !listed.complete ? { ...readers, kind: 'lower-bound' } : readers };
 }
 
