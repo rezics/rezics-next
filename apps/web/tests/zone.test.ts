@@ -3,6 +3,7 @@ import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { gzipSync } from 'node:zlib';
 import { packageDigest, workCoverProps, ZONE_PACKAGE_BUDGET, zonePresets, type ZoneTokens } from '@rezics/zone-sdk';
+import type { ReactNode } from 'react';
 import { ZONE_PRESETS } from '../../../services/main/src/modules/zone/presentation-format.ts';
 import { zoneWorkCards } from '../features/zones/adapt-cards.ts';
 import { contrast, inkOn, mix, parseHex, readableOn, toHex } from '../features/zones/color.ts';
@@ -10,8 +11,17 @@ import { isZonePage, zoneCsp, zoneNonce } from '../features/zones/csp.ts';
 import { decideExecution, isSafeMode, zoneLookEnabled } from '../features/zones/execution.ts';
 import { defaultPresentation, feedOf, placedModule, presetTokens, realmFeeds } from '../features/zones/presentation.ts';
 import { accentRoles, auraSurfaces, weakestContrast, zoneScheme, zoneTheme } from '../features/zones/theme.ts';
+import type { CopyButton } from '../zones/official/ai-workshop/copy-button.tsx';
+import type { ShelfCarousel } from '../zones/official/books/carousel.tsx';
 
 const web = join(import.meta.dir, '..');
+
+/** What a server component may hand a client component: data and elements, never functions. */
+type ServerSent = ReactNode | readonly ServerSent[] | { readonly [key: string]: ServerSent };
+type TakesOnlyData<Component extends (props: never) => unknown> =
+  Parameters<Component>[0] extends { readonly [key: string]: ServerSent } ? true : false;
+// Slots render on the server; a function prop makes React refuse the client component.
+const clientComponentsTakeData: [TakesOnlyData<typeof CopyButton>, TakesOnlyData<typeof ShelfCarousel>] = [true, true];
 
 describe('Zone color arithmetic', () => {
   test('WCAG contrast matches the reference values', () => {
@@ -224,6 +234,14 @@ describe('Official Zone packages', () => {
         expect(specifier, `${slug}/${path}`).toMatch(/^(?:react|@rezics\/zone-sdk|@rezics\/ui\/[a-z-]+|lucide-react|\.\/[\w-]+\.(?:tsx?|css\?raw))$/);
       }
     }
+  });
+
+  test('slots render on the server, so a package’s client components take only data', () => {
+    expect(clientComponentsTakeData).toEqual([true, true]);
+    const clients = officialSlugs.flatMap(slug => Object.entries(packageFiles(slug))
+      .filter(([, source]) => source.startsWith("'use client'")).map(([path]) => `${slug}/${path}`));
+    // A new client component joins the type check above.
+    expect(clients.sort()).toEqual(['ai-workshop/copy-button.tsx', 'books/carousel.tsx']);
   });
 
   test.each(officialSlugs)('%s reaches no network, credentials, storage or dynamic code', slug => {
