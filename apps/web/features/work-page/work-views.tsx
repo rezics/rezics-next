@@ -14,6 +14,8 @@ import { authorSeparator, coverKindOf } from '../catalogue/work.ts';
 import { AdoptionRegion } from './adoption.tsx';
 import { AlsoEnjoyedSection } from './also-enjoyed.tsx';
 import { AuthorSection } from './author.tsx';
+import { classificationFacet, facetLabel } from '../concept/facets.ts';
+import { readFacets } from '../concept/read.ts';
 import { ClassificationRegion, type CommunityGenres } from './classification.tsx';
 import { WorkCredits, WorkCreditsSkeleton } from './credits.tsx';
 import { HistoryRegion } from './history.tsx';
@@ -200,8 +202,9 @@ async function Reviews({ workRef, id, work, scope, context: chosen, locale, mess
 }
 
 async function Classification(props: ScopedProps) {
-  const [scopeView, classifications] = await Promise.all([view(props), props.scope.kind === 'mine' ? null
-    : readClassifications(props.id, props.locale, props.scope)]);
+  const [scopeView, classifications, facets] = await Promise.all([view(props), props.scope.kind === 'mine' ? null
+    : readClassifications(props.id, props.locale, props.scope), readFacets()]);
+  const facet = classificationFacet(facets.ok ? facets.data : null);
   // Nobody tagged it for everyone: show what the first two communities featuring it chose, named as theirs.
   const untagged = props.scope.kind === 'global' && classifications?.ok && !classifications.data.items.length;
   const communities: CommunityGenres[] = untagged ? await Promise.all(scopeView.realms.slice(0, 2).map(async realm => {
@@ -209,6 +212,7 @@ async function Classification(props: ScopedProps) {
     return { realm, items: chosen.ok ? chosen.data.items.filter(item => item.source === 'local') : [] };
   })) : [];
   return <ClassificationRegion classifications={classifications} view={scopeView} communities={communities}
+    facet={facet ? { id: facet.id, label: facetLabel(facet, props.locale) } : null}
     locale={props.locale} messages={props.messages} />;
 }
 

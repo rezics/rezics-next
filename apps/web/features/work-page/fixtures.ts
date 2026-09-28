@@ -138,7 +138,7 @@ let senses = 0;
 type Level = 'central' | 'substantial' | 'incidental';
 const chip = (value: string, source: 'local' | 'global', language = 'en', level: Level | null = null) => ({
   sense: iri(`0d5e6f70-8192-4a3b-8c4d-${(++senses).toString().padStart(12, '0')}`),
-  concept: iri('a0b1c2d3-e4f5-4a6b-8c7d-9e0f1a2b3c4d'), name: name(value, language), source,
+  concept: iri(`a0b1c2d3-e4f5-4a6b-8c7d-${senses.toString().padStart(12, '0')}`), name: name(value, language), source,
   relevanceRevision: level ? iri('c2d3e4f5-a6b7-4c8d-9e0f-1a2b3c4d5e6f') : null,
   relevanceStatus: level ? 'recorded' as const : 'unrecorded' as const,
   relevance: level ? { level, policy: 'work-editor-topical-relevance-v1' as const,
@@ -151,7 +151,7 @@ export const realmClassifications = ok<ClassificationPage>({ ...page([chip('Estu
   chip('Book club pick 2026', 'local'), chip('Adventure', 'global'), chip('Maritime fiction', 'global')]),
 scope: { kind: 'realm', realm: iri(realmA) } });
 export const noClassifications = ok<ClassificationPage>({ ...page([]), scope: { kind: 'global', realm: null } });
-/** Genres the two communities featuring the Work chose, for everyone's view when everyone chose none. */
+/** Concepts the two communities featuring the Work accepted, for everyone's view when everyone accepted none. */
 export const communityGenres: CommunityGenres[] = [
   { realm: realms[0]!, items: [chip('Estuary cycle', 'local'), chip('Book club pick 2026', 'local', 'en', 'central')] },
   { realm: realms[1]!, items: [chip('海洋文学', 'local', 'zh-Hans')] },

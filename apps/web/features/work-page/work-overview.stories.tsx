@@ -8,6 +8,8 @@ import { AlsoEnjoyedSection } from './also-enjoyed.tsx';
 import { AuthorSection, type WorkAuthor } from './author.tsx';
 import { janeAusten } from '../author/fixtures.ts';
 import { authorHref } from '../author/route.ts';
+import { conceptFacet } from '../concept/fixtures.ts';
+import { facetLabel } from '../concept/facets.ts';
 import { ClassificationRegion, type CommunityGenres } from './classification.tsx';
 import { WorkCredits } from './credits.tsx';
 import * as fixture from './fixtures.ts';
@@ -28,7 +30,7 @@ interface OverviewArgs {
   ratings: Loaded<RatingRead>; classifications: Loaded<ClassificationPage> | null; adoptions: Loaded<AdoptionPage>;
   /** The header's reader numbers and the rows of Works to read next. */
   stats?: Loaded<WorkStats>; alsoEnjoyed?: Loaded<AlsoEnjoyedPage>;
-  /** Genres the Work's communities chose, which everyone's view shows when everyone chose none. */
+  /** Concepts the Work's communities accepted, which everyone's view shows when everyone accepted none. */
   communities?: CommunityGenres[];
   locale: UiLocale; readerActions?: ReaderActions;
   authorOverride?: WorkAuthor;
@@ -60,7 +62,8 @@ function Overview({ work, agentCredits, credits, scope, realms, ratings, classif
       ratings={view ? <RatingSummaryRegion ratings={ratings} view={view} scopeBar={scopeBar} locale={locale}
         messages={t} /> : null}
       classification={view ? <ClassificationRegion classifications={classifications} view={view}
-        communities={communities} locale={locale} messages={t} /> : null}
+        communities={communities} facet={{ id: conceptFacet.id, label: facetLabel(conceptFacet, locale) }}
+        locale={locale} messages={t} /> : null}
       adoption={view ? <AdoptionRegion adoptions={adoptions} view={view} locale={locale} messages={t} /> : null}
       record={<WorkRecord work={work} locale={locale} messages={t}
         citation={`${work.title.value}. Maren Osei. REZICS. https://rezics.com/${locale}/w/${fixture.workRef}`} />}
@@ -131,13 +134,16 @@ export const Global: Story = {
     await expect(within(ratings).getByRole('list', { name: 'Rating distribution' })).toHaveTextContent('5 stars');
     await expect(within(ratings).getByRole('link', { name: 'How good is this Work overall?' }))
       .toHaveAttribute('aria-current', 'true');
-    const genres = canvas.getByRole('region', { name: 'Genres' });
-    const chips = within(genres).getAllByRole('listitem');
-    // Recorded relevance orders the genres, most central first; unrecorded ones keep Main's order after them.
+    // Accepted Concepts are grouped by the Facet they are read through, labelled as Main names it.
+    const values = canvas.getByRole('region', { name: 'Classification' });
+    await expect(within(values).getByRole('term')).toHaveTextContent('Tags');
+    const chips = within(within(values).getByRole('list', { name: 'Tags' })).getAllByRole('listitem');
+    // Recorded relevance orders the values, most central first; unrecorded ones keep Main's order after them.
     await expect(chips.map(chip => chip.textContent)).toEqual(['Maritime fictionRelevance: Central',
       'AdventureRelevance: Substantial', 'Coming of ageRelevance: Incidental', 'Maps and cartography', '海洋']);
-    await expect(within(genres).getByRole('link', { name: 'Adventure' }))
-      .toHaveAttribute('href', expect.stringMatching(/^\/en\/discover\?term=[0-9a-f-]{36}$/));
+    // Each opens its Concept's page.
+    await expect(within(values).getByRole('link', { name: 'Adventure' }))
+      .toHaveAttribute('href', expect.stringMatching(/^\/en\/concepts\/[0-9a-f-]{36}$/));
     // What readers also enjoyed follows the details, before the ratings, as on Goodreads.
     const regions = canvas.getAllByRole('region').map(region => region.getAttribute('aria-labelledby'));
     await expect(regions.indexOf('work-also-co-readers')).toBeLessThan(regions.indexOf('work-ratings'));
@@ -203,9 +209,12 @@ export const Realm: Story = {
     await expect(within(scope).getByRole('link', { name: 'Community: Tidewater Readers' }))
       .toHaveAttribute('aria-current', 'true');
     await expect(within(ratings).getByRole('list', { name: 'Rating distribution' }).children).toHaveLength(10);
-    const genres = canvas.getByRole('region', { name: 'Genres' });
-    await expect(within(genres).getByRole('list', { name: 'Chosen in Tidewater Readers' })).toBeVisible();
-    await expect(within(genres).getByRole('list', { name: 'Chosen by everyone' })).toBeVisible();
+    const values = canvas.getByRole('region', { name: 'Classification' });
+    const local = within(values).getByRole('list', { name: 'Accepted in Tidewater Readers' });
+    await expect(within(values).getByRole('list', { name: 'Accepted by everyone' })).toBeVisible();
+    // In a community, every value opens its Concept page in that community.
+    await expect(within(local).getByRole('link', { name: 'Estuary cycle' })).toHaveAttribute('href',
+      expect.stringMatching(new RegExp(`^/en/concepts/[0-9a-f-]{36}\\?scope=realm&realm=${fixture.realms[0]!.id}$`)));
     await expect(canvas.getByRole('region', { name: 'Communities' })).toHaveTextContent('Showing');
     // The chosen scope travels with the tabs.
     await expect(canvas.getByRole('link', { name: 'Versions' }))
@@ -220,7 +229,7 @@ export const MineSignedOut: Story = {
     const canvas = within(canvasElement);
     await expect(canvas.getByRole('link', { name: 'Sign in' }))
       .toHaveAttribute('href', `/auth/start?next=${encodeURIComponent(`/en/w/${fixture.workRef}?scope=mine`)}`);
-    await expect(canvas.getByRole('region', { name: 'Genres' })).toHaveTextContent('Genres aren’t personal');
+    await expect(canvas.getByRole('region', { name: 'Classification' })).toHaveTextContent('Classification isn’t personal');
     await expect(canvas.getByRole('link', { name: 'See everyone' })).toBeVisible();
   },
 };
@@ -248,24 +257,24 @@ export const EmptyGlobal: Story = {
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     await expect(within(canvas.getByRole('region', { name: 'Ratings' })).getByText('No ratings yet')).toBeVisible();
-    // Everyone's view without genres leaves the section out rather than lead with an empty box.
-    await expect(canvas.queryByRole('region', { name: 'Genres' })).toBeNull();
+    // Everyone's view with nothing classified leaves the section out rather than lead with an empty box.
+    await expect(canvas.queryByRole('region', { name: 'Classification' })).toBeNull();
     // Everyone's view offers the first community that features the Work, never silently switching to it.
     await expect(canvas.getAllByRole('link', { name: 'See Tidewater Readers' })).toHaveLength(1);
   },
 };
 
-/** Nobody tagged the Work for everyone, but its communities did: their genres show, each named, opening their shelf. */
+/** Nobody classified the Work for everyone, but its communities did: their Concepts show, each named, opening their page there. */
 export const CommunityGenresOnly: Story = {
   args: { classifications: fixture.noClassifications, communities: fixture.communityGenres },
   async play({ canvasElement }) {
-    const genres = within(canvasElement).getByRole('region', { name: 'Genres' });
-    const tidewater = within(genres).getByRole('list', { name: 'Chosen in Tidewater Readers' });
+    const values = within(canvasElement).getByRole('region', { name: 'Classification' });
+    const tidewater = within(values).getByRole('list', { name: 'Accepted in Tidewater Readers' });
     await expect(within(tidewater).getAllByRole('listitem').map(item => item.textContent))
       .toEqual(['Book club pick 2026Relevance: Central', 'Estuary cycle']);
     await expect(within(tidewater).getByRole('link', { name: 'Estuary cycle' })).toHaveAttribute('href',
-      expect.stringMatching(new RegExp(`^/en/discover\\?scope=realm&realm=${fixture.realms[0]!.id}&term=[0-9a-f-]{36}$`)));
-    await expect(within(genres).getByRole('list', { name: 'Chosen in 海洋文学研究会' })).toHaveTextContent('海洋文学');
+      expect.stringMatching(new RegExp(`^/en/concepts/[0-9a-f-]{36}\\?scope=realm&realm=${fixture.realms[0]!.id}$`)));
+    await expect(within(values).getByRole('list', { name: 'Accepted in 海洋文学研究会' })).toHaveTextContent('海洋文学');
   },
 };
 
@@ -303,7 +312,7 @@ export const EmptyRealm: Story = {
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     await expect(canvas.getByText('No ratings in Tidewater Readers yet')).toBeVisible();
-    await expect(canvas.getByText('Tidewater Readers hasn’t tagged this Work')).toBeVisible();
+    await expect(canvas.getByText('Tidewater Readers hasn’t classified this Work')).toBeVisible();
     await expect(canvas.getAllByRole('link', { name: 'See everyone' })[0]).toHaveAttribute('href', `/en/w/${fixture.workRef}`);
   },
 };
@@ -327,7 +336,7 @@ export const PartialFailure: Story = {
       expect.stringContaining('Communities unavailable')]);
     await expect(canvas.getAllByRole('button', { name: 'Retry' })).toHaveLength(3);
     // The regions that loaded are unaffected.
-    await expect(within(canvas.getByRole('region', { name: 'Genres' })).getAllByRole('listitem')).toHaveLength(5);
+    await expect(within(canvas.getByRole('region', { name: 'Classification' })).getAllByRole('listitem')).toHaveLength(5);
   },
 };
 
@@ -431,7 +440,7 @@ export const Chinese: Story = {
     const canvas = within(canvasElement);
     await expect(within(canvas.getByRole('navigation', { name: '社区' })).getByRole('link', { name: '社区: Tidewater Readers' }))
       .toHaveAttribute('aria-current', 'true');
-    await expect(canvas.getByRole('region', { name: '类型' })).toHaveTextContent('Tidewater Readers选定');
+    await expect(canvas.getByRole('region', { name: '分类' })).toHaveTextContent('Tidewater Readers接受');
   },
 };
 
