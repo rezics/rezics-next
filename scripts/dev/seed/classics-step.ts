@@ -5,6 +5,7 @@ import type { FixtureLock } from '../../fixtures/pull.ts';
 import { demoClassics } from '../../../tests/fixtures/sources/open-library.ts';
 import { grantImportedWorkSeedAuthority } from './operator.ts';
 import { openLibraryFixtureFetch } from './open-library-fixtures.ts';
+import { SeedApiError } from './api.ts';
 import { seedKey } from './plan.ts';
 import type { SeedState, WorkReceipt } from './state.ts';
 
@@ -63,11 +64,19 @@ export async function seedClassics(state: SeedState): Promise<void> {
       `/v1/sources/conversions/${shortId(conversion.conversion)}/proposals/native-work`,
       { profile: 'open-library-native-work-proposal-v1' }, token,
       seedKey('source-proposal', classic.id))).proposal;
+    const adoptionPath = `/v1/sources/proposals/${shortId(proposal.proposal)}/adoption/native-work`;
+    const adoptionBody = { profile: 'source-native-work-adoption-v1', actingSubject: actor,
+      confirmedTitle: proposal.candidateTitle };
     const adopted = await api.post<{ adoption: WorkReceipt; replayed: boolean }>(
-      `/v1/sources/proposals/${shortId(proposal.proposal)}/adoption/native-work`,
-      { profile: 'source-native-work-adoption-v1', actingSubject: actor,
-        confirmedTitle: proposal.candidateTitle },
-      token, seedKey('source-adoption', classic.id));
+      adoptionPath, adoptionBody, token, seedKey('source-adoption', classic.id))
+      .catch(async (error: unknown) => {
+        // Stacks seeded before adoption kept the source language recorded these
+        // intents with titleLanguage 'en'; replay that exact body to reuse them.
+        // A clean `task dev:reset` gives every classic its source language.
+        if (!(error instanceof SeedApiError) || error.status !== 409) throw error;
+        return api.post<{ adoption: WorkReceipt; replayed: boolean }>(adoptionPath,
+          { ...adoptionBody, titleLanguage: 'en' }, token, seedKey('source-adoption', classic.id));
+      });
     const receipt = { ...adopted.adoption, replayed: adopted.replayed };
     state.created.set(classic.id, receipt);
     await grantImportedWorkSeedAuthority(state.operatorInput, receipt.work, receipt.mainVersion);
