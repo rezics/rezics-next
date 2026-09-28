@@ -140,6 +140,8 @@ test('OPS03: recovery coverage discovers a new owner schema table and owner-row 
     const outboxBeforeFence = await accessOutboxCoverage(accessPool);
     const revisionBeforeFence = BigInt((await accessPool.query<{ revision: string }>(
       'SELECT revision::text FROM access.discovery_source_fence WHERE id')).rows[0]!.revision);
+    const alsoEnjoyedBefore = BigInt((await accessPool.query<{ revision: string }>(
+      'SELECT revision::text FROM access.also_enjoyed_source_fence WHERE id')).rows[0]!.revision);
     await engageAccessRecoveryFence(accessPool);
     const afterFence = await accessStateTables(accessPool);
     expect(BigInt((await accessPool.query<{ revision: string }>(
@@ -147,8 +149,15 @@ test('OPS03: recovery coverage discovers a new owner schema table and owner-row 
       .toBe(revisionBeforeFence + 1n);
     expect(afterFence.tables['access.discovery_source_fence']?.digest)
       .not.toBe(accessBaseline.tables['access.discovery_source_fence']?.digest);
+    expect(BigInt((await accessPool.query<{ revision: string }>(
+      'SELECT revision::text FROM access.also_enjoyed_source_fence WHERE id')).rows[0]!.revision))
+      .toBe(alsoEnjoyedBefore + 1n);
+    expect(afterFence.tables['access.also_enjoyed_source_fence']?.digest)
+      .not.toBe(accessBaseline.tables['access.also_enjoyed_source_fence']?.digest);
     for (const [name, coverage] of Object.entries(accessBaseline.tables)) {
-      if (name !== 'access.discovery_source_fence') expect(afterFence.tables[name]).toEqual(coverage);
+      if (!['access.discovery_source_fence', 'access.also_enjoyed_source_fence'].includes(name)) {
+        expect(afterFence.tables[name]).toEqual(coverage);
+      }
     }
     expect(await accessOutboxCoverage(accessPool)).toEqual(outboxBeforeFence);
     expect(afterFence.state).toEqual(await accessStateCoverage(accessPool));

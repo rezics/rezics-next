@@ -104,7 +104,7 @@ test('OPS03/IAM07/IAM06/IAM21/IAM23/IAM24/IAM25/IAM26: archived Access WAL resto
       requestDigest: createHash('sha256').update('before-backup').digest('hex') };
     await primary.query('INSERT INTO access.principal (id, account_issuer, account_subject) VALUES ($1, $2, $3)',
       [principalId, principal.issuer, principal.subject]);
-    await primary.query("INSERT INTO access.scope_gate (id) VALUES ('work:create:root')");
+    await primary.query("INSERT INTO access.scope_gate (id) VALUES ('work:create:root') ON CONFLICT DO NOTHING");
     await primary.query("INSERT INTO access.authority_subject (id, kind) VALUES ($1, 'agent')", [actingSubject]);
     await primary.query(`INSERT INTO access.representation
       (id, principal_id, subject_id, action, valid_until)

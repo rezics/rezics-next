@@ -5,7 +5,7 @@ import { mkdirSync, rmSync } from 'node:fs';
 import { createServer } from 'node:net';
 import { join, resolve } from 'node:path';
 import { Pool } from 'pg';
-import { ContentCore } from '../../../services/content/src/core.ts';
+import { ContentCore, contentDraftIntentDigest } from '../../../services/content/src/core.ts';
 import { migrateContent } from '../../../services/content/src/migrate.ts';
 import type { FusekiClient } from '../../../services/main/src/infrastructure/fuseki.ts';
 import { RealmReplyContentStore } from '../../../services/main/src/modules/realm-reply/content-store.ts';
@@ -55,13 +55,18 @@ test('SUB08: a pre-revocation Content restore cannot pass the retained review cu
     const variantId = `urn:rezics:variant:${randomUUID()}`;
     const actor = `https://rezics.com/id/${randomUUID()}`;
     const rootTarget = `https://rezics.com/id/${randomUUID()}`;
+    const rootRevision = `https://rezics.com/id/${randomUUID()}`;
     const realm = `https://rezics.com/id/${randomUUID()}`;
-    const saved = await content.saveDraft({ operationId: randomUUID(), variant: {
+    const draft = { operationId: randomUUID(), variant: {
       id: variantId, resourceId: reply,
-      language: { kind: 'tag', tag: 'en', originalTag: 'en' }, direction: 'ltr',
-    }, expectedHead: null, model: 'content-text-v1', sourceRevision: null,
-    provenance: { kind: 'qa-realm-reply-restore' },
-    serializedJson: JSON.stringify({ body: 'approved before restore' }) });
+      language: { kind: 'tag' as const, tag: 'en', originalTag: 'en' }, direction: 'ltr' as const,
+    }, expectedHead: null, model: 'member-reply-v1', sourceRevision: rootRevision,
+    serializedJson: JSON.stringify({ rootTarget, rootRevision, body: 'approved before restore', deleted: false }) };
+    // Since 8ecbc155, Realm review consumes an author-bound reply draft.
+    const saved = await content.saveDraft({ ...draft, provenance: {
+      kind: 'admitted-original-contribution-v1', author: actor, admissionId: randomUUID(),
+      authorityEpoch: '1', scope: `content:draft:${reply}`, expectedHead: null,
+      rightsBasis: 'original-contribution', requestDigest: contentDraftIntentDigest(draft, actor) } });
     if (!saved.revisionId) throw new Error('missing revision');
     const revisionDigest = (await live.query<{ byte_digest: string }>(
       'SELECT byte_digest FROM content.revision WHERE id = $1', [saved.revisionId])).rows[0]!.byte_digest;
@@ -73,7 +78,7 @@ test('SUB08: a pre-revocation Content restore cannot pass the retained review cu
     });
     await owner.createReply(admission('reply.create', `reply:create:${rootTarget}`), {
       reply, variantId, revisionId: saved.revisionId, author: actor,
-      rootTarget, rootRevision: 'root-revision-1', parentReply: null,
+      rootTarget, rootRevision, parentReply: null,
       parentRevision: null, contextRevision: null });
     const approved = await owner.decideReview(admission('review.decide', `review:decide:${realm}`), {
       realm, reply, revisionId: saved.revisionId, revisionDigest,

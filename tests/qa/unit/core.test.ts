@@ -258,8 +258,10 @@ test('QA shards: graph reset, outbox gap and fresh-graph files get singleton int
   const recoveryPlan = planStackProjects(recoveryFiles, 2, 'fault/recovery');
   expect(recoveryPlan.flat().sort()).toEqual([...recoveryFiles.keys()].sort());
   expect(recoveryPlan.filter(project => project.some(file => selfManagedFaultFiles.has(file))))
-    .toEqual([['tests/qa/fault-recovery/content-rebuild.test.ts',
-      'tests/qa/fault-recovery/search-ops-lock.test.ts']]);
+    .toEqual([['tests/qa/fault-recovery/content-rebuild.test.ts'],
+      ['tests/qa/fault-recovery/search-ops-lock.test.ts']]);
+  expect(recoveryPlan[0]).toEqual(['tests/qa/fault-recovery/zone-wiki.test.ts']);
+  expect(planStackProjects(new Map([...recoveryFiles].reverse()), 2, 'fault/recovery')).toEqual(recoveryPlan);
   expect(recoveryPlan).toContainEqual(['tests/qa/fault-recovery/zone-wiki.test.ts']);
   expect(recoveryPlan).toContainEqual(['tests/qa/fault-recovery/partition-relocation.test.ts']);
   const one = new Map([['tests/qa/integration/validation-command.test.ts', 1]]);

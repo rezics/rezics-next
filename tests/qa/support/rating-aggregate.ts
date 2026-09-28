@@ -236,7 +236,7 @@ export async function exerciseRatingAggregates(f: Fixture) {
 
   // Independent Context, Realm and target populations remain separate.
   const otherCreated = await success<{ work: string; mainVersion: string }>(await post('/v1/works', {
-    profile: 'metadata-only-v1', title: 'Other Rating target', actingSubject: personaA }));
+    profile: 'metadata-only-v1', title: 'Other Rating target', language: 'en', actingSubject: personaA }));
   const otherWork = { work: otherCreated.work, mainVersion: otherCreated.mainVersion };
   await success(await post('/v1/rating-observations', body(1, randomUUID(), null, personaA, { context, ...otherWork })));
   expect((await all('other-target', [1, 1, 1], { context, ...otherWork }))[0]!.population.observations).toBe(1);

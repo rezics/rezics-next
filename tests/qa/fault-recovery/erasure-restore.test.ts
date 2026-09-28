@@ -229,8 +229,10 @@ test('OPS11/OPS12/IAM11/SEARCH20: restored backups keep erased payloads and cred
           contentPool: restored.content,
           ...(deletionSet ? { deletions: { accountPool: restored.account,
             hmacKey: recoveryKey, sealedSets: [deletionSet] } } : {}) });
-      await releaseAccessRecoveryFence(restored.access, fence);
+      // Keep the restored cut offline until erasure reconciliation. Reopening
+      // and closing it would advance derived-source fences beyond the signed cut.
       const restoredFence = await engageAccessRecoveryFence(restored.access);
+      expect(restoredFence).toBe(fence);
       await releaseAccessRecoveryFence(access, fence);
       lineage = next;
       const expiresAt = new Date(Date.now() + 14 * 24 * 60 * 60_000);

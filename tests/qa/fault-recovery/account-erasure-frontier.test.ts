@@ -193,7 +193,8 @@ test('IAM11/OPS03: deletion frontiers preserve unrelated public Work and Content
     const expectedUnaffectedAccount = { issuer, subject: unaffected.id, accountAuthMode: 'trusted',
       accountAudiences: [apps.ACCOUNT_MAIN_RESOURCE!, `${baseURL}/api/auth/oauth2/userinfo`],
       accountClientId: browserClient.client_id, accountConsentGeneration: undefined,
-      accountConsentId: undefined, accountScopes: ['openid', 'work:create', 'work:edit'] };
+      accountConsentId: undefined, accountScopes: ['openid', 'work:create', 'work:edit'],
+      accountDisplayName: undefined, currentAssertion: expect.any(Function) };
     expect(await verifierAccount.verify(request, ['work:create']))
       .toEqual(expectedUnaffectedAccount);
     const publicPrincipal = randomUUID();

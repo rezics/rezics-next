@@ -485,12 +485,16 @@ export function planStackProjects(estimates: ReadonlyMap<string, number>, count:
   if (tier === 'fault/recovery') {
     const selfManaged = new Map([...shared].filter(([file]) => selfManagedFaultFiles.has(file)));
     const harnessManaged = new Map([...shared].filter(([file]) => !selfManagedFaultFiles.has(file)));
-    const selfSlots = Math.max(1, count - Number(harnessManaged.size > 0));
-    const selfPlans = selfManaged.size ? planShards(selfManaged, selfSlots) : [];
+    // Each self-managed file already starts its own projects. Give it a fresh
+    // command deadline too: a late file must not inherit an almost-spent shard
+    // timeout and strand its setup. Longest first keeps the same bounded worker
+    // pool busy; the tier still reports its unchanged overall wall-time budget.
+    const selfPlans = [...selfManaged].sort(([a, left], [b, right]) => right - left || a.localeCompare(b))
+      .map(([file]) => [file]);
     const harnessPlans = harnessManaged.size ? planShards(harnessManaged, selfManaged.size ? 1 : count) : [];
     // Keep the harness-managed files running beside the long drills; queuing
     // their full stack until a long drill ends would extend the tier wall time.
-    return [...selfPlans, ...harnessPlans, ...isolated.map(file => [file])];
+    return [...harnessPlans, ...selfPlans, ...isolated.map(file => [file])];
   }
   const sharedSlots = Math.max(1, count - Number(isolated.length > 0 && shared.size > 0));
   return [...(shared.size ? planShards(shared, sharedSlots) : []), ...isolated.map(file => [file])];
