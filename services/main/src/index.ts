@@ -7,6 +7,7 @@ import { createMainApp } from './app.ts';
 import { openLibraryFixtureFetch } from '../../../scripts/dev/seed/open-library-fixtures.ts';
 import { ContentProjectionWorker } from './content-projection-worker.ts';
 import { AuthorReaders } from './modules/author-page/readers.ts';
+import { WorkReaderStats } from './modules/work/read-stats.ts';
 import { DiscoveryProjection } from './modules/discovery/store.ts';
 import { AlsoEnjoyedStore } from './modules/also-enjoyed/store.ts';
 import { FollowsStore } from './modules/follows/store.ts';
@@ -318,6 +319,7 @@ const app = createMainApp(fuseki, {
   agentProfiles: new AgentPublicProfiles(pool, environment, media.store),
   libraryStatus: new ReaderLibraryStatusStore(contentPool),
   authorReaders: new AuthorReaders(contentPool, pool),
+  workStats: new WorkReaderStats(contentPool, pool),
   libraryRatings: new ReaderLibraryRatings(pool),
   agentProvisioning: new AgentProvisioning(pool, environment),
   environment,

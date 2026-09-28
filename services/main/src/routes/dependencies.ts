@@ -111,6 +111,7 @@ export interface MainWorkDependencies {
   studioAccess?: import('../modules/studio/access.ts').StudioAccess;
   libraryStatus?: ReaderLibraryStatusStore;
   authorReaders?: import('../modules/author-page/readers.ts').AuthorReaders;
+  workStats?: import('../modules/work/read-stats.ts').WorkReaderStats;
   libraryRatings?: ReaderLibraryRatings;
   agentProvisioning?: AgentProvisioning;
   agentHandles?: AgentVanityHandles;

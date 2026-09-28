@@ -68,6 +68,7 @@ import { themeRoutes } from './routes/themes.ts';
 import { contentPrivateSearchRoutes } from './routes/content-private-search.ts';
 import { workReadRoutes } from './routes/work-reads.ts';
 import { alsoEnjoyedRoutes } from './routes/also-enjoyed.ts';
+import { workStatsRoutes } from './routes/work-stats.ts';
 import { realmReadRoutes } from './routes/realm-reads.ts';
 import { zoneModuleRoutes } from './routes/zone-modules.ts';
 import { rankingRoutes } from './routes/rankings.ts';
@@ -220,7 +221,8 @@ function extraRoutes6(fuseki: FusekiClient, work: SearchRouteDependencies) {
     .use(relationRoutes(fuseki, work))
     .use(hubRoutes(work))
     .use(authorRoutes(work))
-    .use(progressRoutes(fuseki, work));
+    .use(progressRoutes(fuseki, work))
+    .use(workStatsRoutes(work));
 }
 
 /** Composition root: each domain plugin under `routes/` owns its registrations. */
