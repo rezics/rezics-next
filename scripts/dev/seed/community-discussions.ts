@@ -73,9 +73,10 @@ async function discuss(state: SeedState, realm: { realm: string; owner: Session 
 
 /**
  * A vote needs Home's projection of the placement, which follows the relay: an
- * unprojected activity answers 404 (or 503 while the read catches up) until the
- * shared deadline passes, and the next run casts what is left. A 409 means the
- * voter already holds a vote on it.
+ * unprojected activity answers 404 until the shared deadline passes, and the
+ * next run casts what is left. A 409 means the voter already holds a vote on it.
+ * A 503 is Main's vote admission running out of its read deadline, which
+ * waiting does not cure, so it is reported at once.
  */
 async function vote(api: SeedApi, voter: Session, placement: string, value: 1 | -1, key: string, deadline: number) {
   for (;;) {
@@ -85,7 +86,7 @@ async function vote(api: SeedApi, voter: Session, placement: string, value: 1 | 
       return;
     } catch (error) {
       if (error instanceof SeedApiError && error.status === 409) return;
-      if (!(error instanceof SeedApiError) || ![404, 503].includes(error.status) || Date.now() > deadline) throw error;
+      if (!(error instanceof SeedApiError) || error.status !== 404 || Date.now() > deadline) throw error;
       await new Promise(resolve => setTimeout(resolve, 1000));
     }
   }
@@ -136,7 +137,7 @@ export async function seedCommunityDiscussions(state: SeedState) {
 /** Members' votes on the discussions, a few steps after placing them so Home's projection has caught up. */
 export async function seedCommunityVotes(state: SeedState) {
   const votes = state.discussionVotes;
-  let voted = 0, waiting = 0;
+  let voted = 0, waiting = 0, refused = 0;
   const deadline = Date.now() + 90_000, lanes = 4;
   await Promise.all(Array.from({ length: lanes }, async (_, lane) => {
     for (let index = lane; index < votes.length; index += lanes) {
@@ -146,11 +147,13 @@ export async function seedCommunityVotes(state: SeedState) {
         await vote(state.api, person(state, item.voter), item.placement, item.value, item.key, deadline);
         voted++;
       } catch (error) {
-        if (error instanceof SeedApiError && [404, 503].includes(error.status)) waiting++;
+        if (error instanceof SeedApiError && error.status === 404) waiting++;
+        else if (error instanceof SeedApiError && error.status === 503) refused++;
         else state.findings.add(`Community discussion vote: ${error instanceof Error ? error.message : String(error)}`);
       }
     }
   }));
-  if (waiting) state.findings.add(`Community discussions: ${waiting} votes wait for Home's projection; run the seed again`);
+  if (waiting) state.findings.add(`Community votes: ${waiting} wait for Home's projection; run the seed again`);
+  if (refused) state.findings.add(`Community votes: ${refused} refused with 503, Main's vote admission exceeding its read deadline`);
   console.log(`Community votes: ${voted}/${votes.length} cast.`);
 }

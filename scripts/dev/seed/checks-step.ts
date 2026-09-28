@@ -29,7 +29,8 @@ async function checkCommunity(state: SeedState) {
   }
   let posts = 0, cursor: string | null = null;
   const realms = new Set([...state.communityRealms.values()].map(item => item.realm));
-  for (let page = 0; page < 3 && !posts; page++) {
+  // A filtered New page can be empty with a cursor: Main filters a bounded candidate page.
+  for (let page = 0; page < 12 && !posts; page++) {
     const feed: { items: { realm: { id: string } | null }[]; nextCursor: string | null } = await api.getPublic(
       `/v1/feed?sort=new&kinds=discussion&limit=20${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`);
     posts += feed.items.filter(item => item.realm && realms.has(item.realm.id)).length;
