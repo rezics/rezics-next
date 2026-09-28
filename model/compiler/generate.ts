@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
+import { facetId, renderFacetRegistry, type FacetDefinition } from './facet.ts';
 import { renderProfile, type ProfileDefinition } from './ir.ts';
 import { artifactDigests, buildModelOutputs } from './outputs.ts';
 import { buildCommandRegistry, shapeRole, type RegistryOptions } from './registry.ts';
@@ -13,22 +14,31 @@ export interface ProfileArtifact {
   focusRoles: string[];
 }
 
+const definitionModules: readonly (readonly [file: string, exports: Record<string, unknown>])[] = await (async () => {
+  const directory = join(import.meta.dir, '../definitions');
+  const found: (readonly [string, Record<string, unknown>])[] = [];
+  for (const file of [...new Bun.Glob('*.ts').scanSync({ cwd: directory })].sort()) {
+    found.push([file, await import(join(directory, file)) as Record<string, unknown>]);
+  }
+  return found;
+})();
+
+const authored = <T>(suffix: string) => definitionModules.flatMap(([file, module]) =>
+  Object.entries(module).flatMap(([name, value]) =>
+    name.endsWith(suffix) && value && typeof value === 'object' ? [[file, value as T] as const] : []));
+
 /**
  * Source of truth for the authored profiles: every `model/definitions/*.ts` module's exported
  * `*Profile` definitions, discovered so parallel profile work never edits one shared list.
  */
-export const authoredProfiles: readonly ProfileDefinition[] = await (async () => {
-  const directory = join(import.meta.dir, '../definitions');
-  const files = [...new Bun.Glob('*.ts').scanSync({ cwd: directory })].sort();
-  const found: ProfileDefinition[] = [];
-  for (const file of files) {
-    const module = await import(join(directory, file)) as Record<string, unknown>;
-    for (const [name, value] of Object.entries(module)) {
-      if (name.endsWith('Profile') && value && typeof value === 'object') found.push(value as ProfileDefinition);
-    }
-  }
-  return found;
-})();
+export const authoredProfiles: readonly ProfileDefinition[] = authored<ProfileDefinition>('Profile')
+  .map(([, profile]) => profile);
+
+/** Exported `*Facet` definitions, one version per `definitions/facet-<name>-v<version>.ts`. */
+export const authoredFacets: readonly FacetDefinition[] = authored<FacetDefinition>('Facet').map(([file, facet]) => {
+  if (file !== `${facetId(facet)}.ts`) throw new Error(`definitions/${file} must hold only ${facetId(facet)}`);
+  return facet;
+});
 
 function profileShapes(source: string, id: string): string[] {
   const shapes = [...source.matchAll(/^<([^>]+)>\s+a\s+sh:NodeShape\s*;/gm)].map(match => match[1]!);
@@ -104,6 +114,9 @@ export function buildArtifacts(_root: string): Map<string, string> {
     ...command.manifest,
     artifacts: artifactDigests(artifacts),
   }, null, 2)}\n`);
+  // Facets are Main's query vocabulary, not command-module input: they stay out of the
+  // manifest the Fuseki image copies, so a Facet change never rebuilds Fuseki.
+  artifacts.set('packages/model/src/generated/facets.ts', renderFacetRegistry(authoredFacets));
   return artifacts;
 }
 

@@ -23,7 +23,11 @@ The same run generates:
 - `packages/model/src/generated/arbitraries.ts`: fast-check candidates for each
   named shape, sampled with an explicit seed in tests;
 - `generated/model/manifest.json`: the unchanged profile shape digests and a
-  SHA-256 entry for every other generated artifact.
+  SHA-256 entry for every other generated artifact except Facets;
+- `packages/model/src/generated/facets.ts`: the admitted
+  [Facets](../docs/contracts/queries.md) from `definitions/facet-*.ts`, which Main
+  serves at `GET /v1/facets`. They define queries, not shapes, so they stay out of
+  the manifest and the Fuseki image.
 
 `@rezics/model` exports those generated values and
 `checkNodeLocalCandidate(shapeIri, candidate)`. This checker is useful for
