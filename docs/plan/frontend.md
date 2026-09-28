@@ -65,6 +65,18 @@ and how Reddit, Discourse, Fandom, Tumblr and Shopify admit custom code.
 - **A Zone is a Realm's publication**, built from named editorial modules that
   read the Realm's curation; every pick links to the decision behind it, and
   covers carry a one-line hook, as KadoKado's do.
+- **Each Zone presents information the way its field's best site does**
+  (maintainer, 2026-09-28). The point of a Zone is its information layout,
+  not its colours, and it is never Home's post feed. Fiction and Books follow
+  novel sites such as 起点, 晋江, KadoKado and Royal Road: rankings, categories,
+  update lists with the latest chapter, status and length. Games follow Steam.
+  Mods follow the best mod platform, Modrinth before CurseForge and Nexus:
+  search-first browsing by game version, loader and category, with versions
+  and dependencies. Software follows the best software directories. Each
+  vertical needs its own listing, browse and detail presentation, and the
+  fields to fill them come from Main.
+- **One visual language.** Zones use REZICS's shared visual language for now.
+  A Zone changes colours or type only when it explicitly asks to.
 - **Customization tiers.** Every Zone gets theme-token presets and a module
   layout; filtered community CSS is deferred. **Official Zones** may ship full
   CSS and JS as reviewed first-party packages in this repository, rendered
