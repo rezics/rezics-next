@@ -47,12 +47,16 @@ test('G-397 readers follow native and Open Library authors, hear of their new Wo
         actingSubject: seeded.reader, following, expectedRevision }, token, key);
       const state = (path: string, signed = false) => call('GET', signed ? seeded.signed(path) : path, undefined,
         signed ? token : undefined);
-      const followingFeed = async () => {
+      // The feed is global across the QA project's files. Reading only the kinds asserted on keeps
+      // another file's cards, whose owners this stack does not wire, out of the hydrated page.
+      const news = ['work', 'added', 'contribution'], talk = ['discussion', 'reply'];
+      const followingFeed = async (kinds = news) => {
         const items: FeedItem[] = [];
         let cursor: string | null = null;
         for (let page = 0; page < 12; page++) {
           const read: FeedPage = await json<FeedPage>(await call('GET', seeded.signed(`/v1/feed?scope=following&sort=new${
-            cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`), undefined, token));
+            kinds.map(kind => `&kinds=${kind}`).join('')}${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`),
+          undefined, token));
           items.push(...read.items);
           if (!read.nextCursor) return items;
           cursor = read.nextCursor;
@@ -122,17 +126,16 @@ test('G-397 readers follow native and Open Library authors, hear of their new Wo
       // The Following feed carries each author's news with the author as its reason:
       // a new Work by either, and the new chapters of the Open Library author's book.
       const after = await followingFeed();
-      const news = becauseOf(after, target);
-      expect(news.filter(item => item.target.work === novel!.work).map(item => item.reason.targetKind))
+      const authorNews = becauseOf(after, target);
+      expect(authorNews.filter(item => item.target.work === novel!.work).map(item => item.reason.targetKind))
         .toEqual(['external-author']);
-      expect(news.some(item => item.target.work === book!.work && item.card.kind === 'chapter')).toBe(true);
+      expect(authorNews.some(item => item.target.work === book!.work && item.card.kind === 'chapter')).toBe(true);
       expect(becauseOf(after, credited).map(item => [item.target.work, item.reason.targetKind]))
         .toEqual([[story!.work, 'agent']]);
       // Talk about an author's Work is not their news: it answers to the followed Realm alone.
-      expect(news.every(item => ['work', 'added', 'contribution'].includes(item.kind))).toBe(true);
-      const talk = after.filter(item => item.target.work === discussed!.work && ['discussion', 'reply'].includes(item.kind));
-      expect(talk.length).toBeGreaterThan(0);
-      expect(talk.every(item => item.reason.kind === 'followed' && item.reason.targetKind === 'realm')).toBe(true);
+      const discussion = (await followingFeed(talk)).filter(item => item.target.work === discussed!.work);
+      expect(discussion.length).toBeGreaterThan(0);
+      expect(discussion.every(item => item.reason.kind === 'followed' && item.reason.targetKind === 'realm')).toBe(true);
 
       // Unfollowing both takes them out of the feed, the list and the count.
       await json(await follow(target, 'external-author', false, followed.revision));
