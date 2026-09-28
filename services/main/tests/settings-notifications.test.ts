@@ -1,0 +1,47 @@
+import { expect, test } from 'bun:test';
+import type { Pool } from 'pg';
+import { NotificationStore, SETTINGS_NOTIFICATION_TOPICS } from '../src/modules/notification/store.ts';
+
+const principal = { issuer: 'https://account.rezics.test', subject: 'daniel' };
+const principalId = '00000000-0000-4000-8000-000000000001';
+
+test('settings list has one bounded read and preserves saved channel revisions', async () => {
+  const statements: string[] = [];
+  const client = { query: async (sql: string, args?: unknown[]) => {
+    statements.push(sql);
+    if (sql.includes('FROM access.recovery_fence')) return { rows: [{ open: true }] };
+    if (sql.includes('FROM access.principal')) return { rows: [{ id: principalId, active: true }] };
+    if (sql.includes('FROM access.notification_preference')) {
+      expect(args?.[1]).toEqual(SETTINGS_NOTIFICATION_TOPICS.map(item => item.topic));
+      return { rows: [{ purpose: 'social', topic: 'reply', channel: 'inbox',
+        state: 'disabled', revision: '3' }] };
+    }
+    return { rows: [] };
+  }, release: () => {} };
+  const store = new NotificationStore({ connect: async () => client } as unknown as Pool);
+  const choices = await store.readSettingsPreferences(principal);
+  expect(choices).toHaveLength(SETTINGS_NOTIFICATION_TOPICS.length * 2);
+  expect(choices.find(item => item.topic === 'reply' && item.channel === 'inbox')).toEqual({
+    purpose: 'social', topic: 'reply', channel: 'inbox', state: 'disabled', revision: '3' });
+  expect(choices.find(item => item.topic === 'reply' && item.channel === 'email')).toEqual({
+    purpose: 'social', topic: 'reply', channel: 'email', state: 'enabled', revision: null });
+  expect(statements.filter(sql => sql.includes('FROM access.notification_preference'))).toHaveLength(1);
+});
+
+test('a disabled reply preference prevents the producer from adding an inbox item', async () => {
+  const statements: string[] = [];
+  const client = { query: async (sql: string) => {
+    statements.push(sql);
+    if (sql.includes('FROM access.recovery_fence')) return { rows: [{ open: true }] };
+    if (sql.includes('AS active') && sql.includes('access.notification_preference')) {
+      return { rows: [{ active: false }] };
+    }
+    return { rows: [] };
+  }, release: () => {} };
+  const store = new NotificationStore({ connect: async () => client } as unknown as Pool);
+  const result = await store.enqueue({ sourceOwner: 'graph', sourceEvent: 'reply:1',
+    purpose: 'social', topic: 'reply', subject: { owner: 'graph', ref: 'reply:1', revision: null },
+    disclosureBasis: 'realm-reply-v1', recipients: [principalId] });
+  expect(result).toEqual([]);
+  expect(statements.some(sql => sql.includes('INSERT INTO access.notification_item'))).toBe(false);
+});

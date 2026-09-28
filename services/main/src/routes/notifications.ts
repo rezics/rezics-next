@@ -20,7 +20,7 @@ export const openApiOperations = {
   '/v1/me/notifications/hint': { get: { bearer: true } },
   '/v1/me/notification-read-watermarks/inbox': { put: { bearer: true } },
   '/v1/me/notification-streams/inbox/resets': { post: { bearer: true } },
-  '/v1/me/notification-preferences': { put: { bearer: true, idempotencyKey: true } },
+  '/v1/me/notification-preferences': { get: { bearer: true }, put: { bearer: true, idempotencyKey: true } },
   '/v1/me/notification-endpoints/push': { put: { bearer: true } },
   '/v1/deliveries/{delivery}': { get: { bearer: true } },
 } as const;
@@ -69,6 +69,9 @@ const watermark = t.Object({ profile: t.Literal('notification-read-watermark-v1'
   readThrough: t.String() });
 const preference = t.Object({ profile: t.Literal('notification-preference-v1'), purpose: t.String(),
   topic: t.String(), channel: t.String(), state: t.String(), revision: t.String(), replayed: t.Boolean() });
+const settingsPreferences = t.Object({ profile: t.Literal('notification-settings-v1'),
+  items: t.Array(t.Object({ purpose: t.String(), topic: t.String(), channel: t.String(),
+    state: t.String(), revision: t.Nullable(t.String()) }), { maxItems: 18 }) });
 const endpoint = t.Object({ profile: t.Literal('notification-endpoint-v1'), id: t.String(),
   generation: t.String(), retiredDeliveries: t.Number() });
 const delivery = t.Object({ profile: t.Literal('notification-delivery-v1'), id: t.String(), itemId: t.String(),
@@ -216,6 +219,16 @@ export function notificationRoutes(work: MainWorkDependencies) {
         const result = await owner.store.resetStream(principal, body.expectedGeneration);
         return Response.json({ profile: 'notification-stream-hint-v1', generation: result.generation, head: '0' },
           noStore);
+      } catch (error) { return notificationError(error); }
+    })
+    .get('/v1/me/notification-preferences', {
+      response: { 200: settingsPreferences, ...authorizedReadProblems },
+    }, async ({ request }) => {
+      try {
+        const principal = await work.account.verify(request, [NOTIFICATION_SCOPE]);
+        if (!owner) return unavailable();
+        return Response.json({ profile: 'notification-settings-v1',
+          items: await owner.store.readSettingsPreferences(principal) }, noStore);
       } catch (error) { return notificationError(error); }
     })
     .put('/v1/me/notification-preferences', {

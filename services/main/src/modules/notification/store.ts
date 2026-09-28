@@ -69,6 +69,24 @@ export interface PreferenceChange {
 export interface Preference { purpose: string; topic: string; channel: string; state: string; revision: string;
   replayed: boolean }
 
+/** Settings show only topics with an active producer. Keep this list in producer contract order. */
+export const SETTINGS_NOTIFICATION_TOPICS = [
+  { purpose: 'social', topic: 'reply' },
+  { purpose: 'social', topic: 'review-helpful' },
+  { purpose: 'social', topic: 'review' },
+  { purpose: 'governance', topic: 'submission-decision' },
+  { purpose: 'governance', topic: 'moderation-outcome' },
+  { purpose: 'governance', topic: 'realm-role-change' },
+  { purpose: 'governance', topic: 'realm-membership-change' },
+  { purpose: 'governance', topic: 'realm-invitation' },
+  { purpose: 'governance', topic: 'claim-correction' },
+] as const;
+/** One recovery check, one principal read, one indexed preference read; 3 purposes × 9 topics × 2 channels. */
+export const NOTIFICATION_SETTINGS_COST = { readStatements: 3, maxRows: 54,
+  responseItems: SETTINGS_NOTIFICATION_TOPICS.length * 2 } as const;
+export interface SettingsPreference { purpose: OptionalPurpose; topic: string;
+  channel: 'inbox' | 'email'; state: 'enabled' | 'disabled'; revision: string | null }
+
 export interface StreamItem {
   id: string; sequence: string; purpose: string; topic: string; state: 'active' | 'withdrawn' | 'erased';
   read: boolean;
@@ -295,6 +313,24 @@ export class NotificationStore {
         `SELECT account_issuer, account_subject FROM access.principal
          WHERE id = $1 AND active FOR SHARE`, [principalId])).rows[0];
       return row ? { issuer: row.account_issuer, subject: row.account_subject } : null;
+    });
+  }
+
+  /** One bounded settings read; absent choices retain the default enabled state. */
+  async readSettingsPreferences(principal: VerifiedPrincipal): Promise<SettingsPreference[]> {
+    return this.transaction(async client => {
+      const principalId = await this.reader(client, principal);
+      const rows = principalId ? (await client.query<{ purpose: OptionalPurpose; topic: string;
+        channel: 'inbox' | 'email'; state: 'enabled' | 'disabled'; revision: string }>(
+        `SELECT purpose, topic, channel, state, revision::text FROM access.notification_preference
+         WHERE principal_id = $1 AND channel IN ('inbox', 'email')
+           AND topic = ANY($2::text[])`,
+        [principalId, SETTINGS_NOTIFICATION_TOPICS.map(item => item.topic)])).rows : [];
+      const known = new Map(rows.map(row => [`${row.purpose}:${row.topic}:${row.channel}`, row]));
+      return SETTINGS_NOTIFICATION_TOPICS.flatMap(item => (['inbox', 'email'] as const).map(channel => {
+        const saved = known.get(`${item.purpose}:${item.topic}:${channel}`);
+        return { ...item, channel, state: saved?.state ?? 'enabled', revision: saved?.revision ?? null };
+      }));
     });
   }
 

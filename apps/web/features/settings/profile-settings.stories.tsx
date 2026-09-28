@@ -10,7 +10,8 @@ const profile: PublicAgentProfile = { id: person.iri, displayName: 'Ada Lovelace
   revision: 'https://rezics.com/id/00000000-0000-4000-8000-000000000002',
   bio: { text: 'Reader and writer', language: 'en' }, avatarSelection: null, avatarUrl: null };
 const meta = { title: 'Settings/Profile', component: ProfileSettings,
-  args: { agent: person, profile, locale: 'en', error: null, updated: null },
+  args: { agent: person, profile, locale: 'en', error: null, updated: null, preview: true,
+    accountOrigin: 'https://account.rezics.test' },
 } satisfies Meta<typeof ProfileSettings>;
 export default meta;
 type Story = StoryObj<typeof meta>;
@@ -28,6 +29,12 @@ export const Person: Story = {
     await expect(canvas.getByText(/30 days/)).toBeVisible();
     await expect(canvas.getByRole('status')).toHaveTextContent('current handle');
     await expect(canvas.getByRole('button', { name: 'Change handle' })).toBeDisabled();
+    await expect(canvas.getByRole('heading', { name: 'Notifications' })).toBeVisible();
+    await expect(canvas.getByRole('switch', { name: 'Replies · In-app' })).toBeVisible();
+    await expect(canvas.getByRole('combobox', { name: 'Library and shelves' })).toBeVisible();
+    await expect(canvas.getByRole('combobox', { name: 'Theme' })).toBeVisible();
+    await expect(canvas.getByRole('link', { name: 'Open Accounts' }))
+      .toHaveAttribute('href', 'https://account.rezics.test');
   },
 };
 
@@ -73,6 +80,8 @@ export const ChinesePhone: Story = {
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     await expect(canvas.getByRole('heading', { name: '个人资料设置' })).toBeVisible();
+    await expect(canvas.getByRole('heading', { name: '隐私' })).toBeVisible();
+    await expect(canvas.getByRole('combobox', { name: '书库和书架' })).toBeVisible();
     await expect(canvas.getByText('选择图片')).toBeVisible();
     await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
   },

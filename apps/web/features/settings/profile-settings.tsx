@@ -14,13 +14,16 @@ import { type UiLocale } from '../../i18n/define.ts';
 import { localizedPath } from '../../i18n/locale.ts';
 import { messages } from './messages.ts';
 import { ProfileEditForm } from './profile-edit-form.tsx';
+import { SettingsSections } from './settings-sections.tsx';
 
-export function ProfileSettings({ agent, profile, locale, error, updated }: {
+export function ProfileSettings({ agent, profile, locale, error, updated, accountOrigin, preview }: {
   agent: AgentOption | null;
   profile: PublicAgentProfile | null;
   locale: UiLocale;
   error: string | null;
   updated: 'handle' | 'profile' | null;
+  accountOrigin?: string;
+  preview?: boolean;
 }) {
   const t = messages[locale];
   const ownPerson = agent?.kind === 'person' && agent.path === 'direct-principal';
@@ -31,14 +34,26 @@ export function ProfileSettings({ agent, profile, locale, error, updated }: {
   const errorText = error ? errors[error] ?? t.failed : null;
   return <PageContainer className="grid max-w-2xl gap-6 py-8 sm:py-12">
     <header className="grid gap-2">
-      <h1 className="font-semibold text-3xl">{t.title}</h1>
-      <p className="text-muted-foreground">{t.description}</p>
+      <h1 className="font-semibold text-3xl">{t.pageTitle}</h1>
+      <p className="text-muted-foreground">{t.pageDescription}</p>
     </header>
+    <nav aria-label={t.pageTitle} className="flex flex-wrap gap-x-4 gap-y-2 text-sm">
+      {(['notifications', 'privacy', 'reading', 'display', 'profile', 'account'] as const)
+        .filter(section => !!agent || section !== 'privacy' && section !== 'reading').map(section =>
+        <a key={section} href={`#${section}`} className="text-primary underline-offset-4 hover:underline">
+          {section === 'notifications' ? t.notificationsTitle : section === 'privacy' ? t.privacyTitle
+            : section === 'reading' ? t.readingTitle : section === 'display' ? t.displayTitle
+              : section === 'profile' ? t.title : t.accountTitle}</a>)}
+    </nav>
     {errorText || updated ? <Alert variant={errorText ? 'warning' : 'info'}>
       <AlertDescription role="status">{errorText ?? (updated === 'profile' ? t.profileSaved : t.saved)}</AlertDescription>
     </Alert> : null}
-    {agent ? <>
-      <Card><CardContent className="grid gap-5 p-6">
+    <SettingsSections agent={agent?.iri ?? null} locale={locale} t={t}
+      accountOrigin={accountOrigin ?? 'https://account.rezics.com'} preview={preview}>
+      {agent ? <>
+      <Card id="profile"><CardContent className="grid gap-5 p-6">
+        <div className="grid gap-1"><h2 className="font-semibold text-xl">{t.title}</h2>
+          <p className="text-muted-foreground text-sm">{t.description}</p></div>
         <p className="text-muted-foreground text-sm">{t.actingAs}</p>
         <div className="flex min-w-0 items-center gap-3">
           <Avatar size="lg">
@@ -62,8 +77,9 @@ export function ProfileSettings({ agent, profile, locale, error, updated }: {
           <input type="hidden" name="expectedHandle" value={agent.handle ?? ''} />
         </HandleField>
       </CardContent></Card>
-    </> : <Card><CardContent className="p-6"><LocalizedLink
+    </> : <Card id="profile"><CardContent className="p-6"><LocalizedLink
       href={localizedPath('/identity', locale)} className="text-primary underline underline-offset-4">
       {t.choose}</LocalizedLink></CardContent></Card>}
+    </SettingsSections>
   </PageContainer>;
 }
