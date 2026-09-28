@@ -443,30 +443,30 @@ test('G282: follows and home feed use real receipts, relay progress, public read
     const reply = await makeReply('A reviewed response', discussion);
     await approve(reply);
     // A second discussion of the same Work in the same Realm on the same day is a post of its own.
-    const another = await makeReply('Another discussion\nOf the same Work, on the same day');
-    await approve(another);
+    const sibling = await makeReply('Another discussion\nOf the same Work, on the same day');
+    await approve(sibling);
     const unreviewed = await makeReply('Secret unreviewed reply text');
     await drain(); await refresh();
     const discussions = await collect('kinds=discussion');
-    expect(discussions.map(item => item.target.id).sort()).toEqual([discussion.reply, another.reply].sort());
+    expect(discussions.map(item => item.target.id).sort()).toEqual([discussion.reply, sibling.reply].sort());
     expect(discussions.every(item => item.group.count === 1)).toBe(true);
     const opened = discussions.find(item => item.target.id === discussion.reply)!;
     expect(opened.target).toMatchObject({ id: discussion.reply, excerpt: 'A reviewed discussion', language: 'en' });
     // The post is titled by its first line, apart from its Work, and counts only its own thread's replies.
     expect(opened.post).toEqual({ title: 'A reviewed discussion', excerpt: null, language: 'en' });
     expect(opened.comments).toEqual({ value: 1, kind: 'exact' });
-    expect(discussions.find(item => item.target.id === another.reply)).toMatchObject({
+    expect(discussions.find(item => item.target.id === sibling.reply)).toMatchObject({
       post: { title: 'Another discussion', excerpt: 'Of the same Work, on the same day' }, comments: { value: 0, kind: 'exact' } });
     const replies = await collect('kinds=reply');
     expect(replies.map(item => item.target.id)).toEqual([reply.reply]);
     expect(replies[0]?.post).toEqual({ title: null, excerpt: 'A reviewed response', language: 'en' });
     expect((await collect('interests=discussions')).map(item => item.target.id).sort())
-      .toEqual([discussion.reply, another.reply, reply.reply].sort());
+      .toEqual([discussion.reply, sibling.reply, reply.reply].sort());
     expect((await collect('')).some(item => item.target.id === unreviewed.reply)).toBe(false);
     await json(await call('POST', '/v1/realm-reply-reviews', { ...accepted.review, outcome: 'revoked',
       expectedGeneration: '1', supersedes: accepted.approved.decisionId, reasonReference: 'review-revoked' }, a.token), 201);
     // Suppressed even before projection catches up.
-    expect((await collect('kinds=discussion')).map(item => item.target.id)).toEqual([another.reply]);
+    expect((await collect('kinds=discussion')).map(item => item.target.id)).toEqual([sibling.reply]);
 
     // A new selected contribution becomes activity; an unselected draft did not.
     const next = await stack.contribution(second.work, author, 'zh-Hans', 'Reviewed next chapter');
