@@ -20,6 +20,7 @@ export const hiddenCommand = t.Object({ actingSubject: readId, hidden: t.Boolean
 export const hiddenResult = t.Object({ profile: t.Literal('home-exclusion-v1'), actingSubject: readId,
   kind: t.Literal('continue'), target: readId,
   strength: t.Union([t.Literal('hide'), t.Literal('clear')]), revision: readUuid, replayed: t.Boolean() });
-/** Two bounded candidate seeks and at most sixteen composition reads. */
-export const CONTINUE_COST = { candidatesPerSource: 8, maxCandidates: 16, chaptersPerWork: 20,
+/** Two candidate seeks, one metadata and progress batch, and at most three
+ * position reads per Book. Exact counts retain the former small-Book ceiling. */
+export const CONTINUE_COST = { candidatesPerSource: 8, maxCandidates: 16, exactCountPlacements: 20,
   responseBytes: 64 * 1024 } as const;

@@ -1,14 +1,13 @@
 import type { VerifiedPrincipal } from '../access/admission.ts';
 import { readFollowTargets } from '../follows/read.ts';
-import { readChapter, readContents } from '../work-contents/read.ts';
-import { WorkReadMissing, WorkReadMoved, WorkReadSession, WorkReadUnavailable } from '../work/read-session.ts';
+import { WorkReadMoved, WorkReadSession, WorkReadUnavailable } from '../work/read-session.ts';
 import { GRAPHS, iri, MAX_WORK_SEMANTIC_TYPES, WORK_SEMANTIC_TYPES } from '../work/activate.ts';
 import { inOrder, settle, unwrap } from '../feed/settled.ts';
 import { CONTINUE_COST } from './contract.ts';
+import { continueChapters } from './chapters.ts';
 
-/** The owner heads load together, every candidate's public target is one
- * batch, and each Work's contents and progress load concurrently. Items are
- * sorted after, so read order never changes the result. */
+/** Owner heads, public targets, compositions and progress load in bounded batches.
+ * Items are sorted after, so read order never changes the result. */
 export async function readContinue(session: WorkReadSession, principal: VerifiedPrincipal,
   agent: string, limit = 6) {
   const { follows, libraryStatus: status, homePersonal } = session.deps;
@@ -32,58 +31,23 @@ export async function readContinue(session: WorkReadSession, principal: Verified
   const candidates = works.filter(work => !hidden.has(work)
     && (statuses.get(work)?.status === 'reading' || followedSet.has(work)));
   const targets = await readFollowTargets(publicSession, candidates, 'work');
-  const privateSession = new WorkReadSession(session.deps, session.request,
-    { actingSubject: agent, limit: CONTINUE_COST.chaptersPerWork }, session.position);
-  privateSession.principal = principal;
-  const read = await inOrder(...candidates.map(async work => {
+  const { chapters, progress } = await continueChapters(session, principal,
+    candidates.filter(work => targets.has(work)));
+  const read = candidates.flatMap(work => {
     const target = targets.get(work);
-    if (!target) return null;
+    const next = chapters.get(work);
+    if (!target || !next) return [];
     const state = statuses.get(work);
-    try {
-      const page = await readContents(privateSession, work, {});
-      let chapterItems = page.items;
-      if (!chapterItems.some(item => item.role === 'chapter' && item.availability === 'available')) {
-        const group = chapterItems.find(item => item.role === 'group');
-        if (group) {
-          const nested = await readContents(privateSession, work, { parent: group.occurrence });
-          chapterItems = nested.items;
-        }
-      }
-      const chapters = chapterItems.filter(item => item.role === 'chapter' && item.availability === 'available');
-      const progress = (await status.progress(principal, [page.composition])).get(page.composition);
-      const index = progress ? chapters.findIndex(item => item.occurrence === progress.occurrence) : -1;
-      const nextIndex = progress ? index + Number(progress.completed) : 0;
-      let next = chapters[nextIndex] ? { occurrence: chapters[nextIndex]!.occurrence,
-        title: chapters[nextIndex]!.label?.value ?? null } : null;
-      let unread = chapters.length - nextIndex;
-      let countKind: 'exact' | 'lower-bound' = page.nextCursor || page.items.some(item => item.role === 'group')
-        ? 'lower-bound' : 'exact';
-      if (progress && (index < 0 || !next && page.nextCursor)) {
-        // Exact chapter reads navigate from the saved occurrence even when it
-        // is beyond this first page. Their single-neighbor result is a lower bound.
-        const current = await readChapter(privateSession, progress.occurrence, { language: page.language ?? undefined });
-        const selected = progress.completed && current.next
-          ? await readChapter(privateSession, current.next, { language: page.language ?? undefined }) : current;
-        next = progress.completed && !current.next ? null
-          : { occurrence: selected.occurrence, title: selected.label?.value ?? null };
-        unread = 1; countKind = 'lower-bound';
-      }
-      if (!next) return null;
-      return { work, title: target.name, cover: target.icon,
+    const saved = progress.get(work);
+    return [{ work, title: target.name, cover: target.icon,
         source: state?.status === 'reading' ? 'reading' as const : 'followed' as const,
-        lastPosition: progress ? { occurrence: progress.occurrence, position: progress.position,
-          completed: progress.completed, updatedAt: progress.changedAt } : null,
+        lastPosition: saved ? { occurrence: saved.occurrence, position: saved.position,
+          completed: saved.completed, updatedAt: saved.changedAt } : null,
         nextUnread: { occurrence: next.occurrence, title: next.title,
-          href: `/w/${work.slice(-36)}/read/${next.occurrence.slice(-36)}${page.language
-            ? `?language=${encodeURIComponent(page.language)}` : ''}` },
-        unreadCount: { value: unread, kind: countKind },
-        updatedAt: progress?.changedAt ?? state?.changedAt ?? new Date(0).toISOString() };
-    } catch (error) {
-      if (!(error instanceof WorkReadMissing)) throw error;
-      return null;
-    }
-  }));
-  const items = read.filter(item => item !== null);
+          href: `/w/${work.slice(-36)}/read/${next.occurrence.slice(-36)}?language=${encodeURIComponent(next.language)}` },
+        unreadCount: next.unreadCount,
+        updatedAt: saved?.changedAt ?? state?.changedAt ?? new Date(0).toISOString() }];
+  });
   const [fenced, personalNow, followsNow, stillAllowed] = await inOrder(status.fence(agent),
     homePersonal.read(principal, agent), follows.read(principal, agent, '', 'work', 1),
     canRead.call(session.deps.access, principal, agent));
@@ -91,9 +55,9 @@ export async function readContinue(session: WorkReadSession, principal: Verified
     || !stillAllowed) {
     throw new WorkReadMoved('Continue changed');
   }
-  items.sort((a, b) => Number(b.source === 'reading') - Number(a.source === 'reading')
+  read.sort((a, b) => Number(b.source === 'reading') - Number(a.source === 'reading')
     || b.updatedAt.localeCompare(a.updatedAt) || b.work.localeCompare(a.work));
-  const shown = items.slice(0, limit);
+  const shown = read.slice(0, limit);
   // One type batch, so each Work keeps the cover it has on every other page.
   const typeRows = shown.length ? await publicSession.query(`SELECT ?work ?type WHERE {
     VALUES ?work { ${shown.map(item => iri(item.work)).join(' ')} }
