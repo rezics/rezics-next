@@ -2,6 +2,7 @@ import { DATASET, GRAPHS, RV, iri, lit,
   type WorkActivationEnvironment } from '../work/activate.ts';
 import { assertGraphAdmissionOpen } from '../work/restore-lineage.ts';
 import { CLASSIFICATION_PROPOSITION_PROFILE } from './proposition.ts';
+import { classificationModelRevisions } from './vocabulary.ts';
 import { CLASSIFICATION_INHERIT_POLICY, CLASSIFICATION_ISOLATE_POLICY,
   GLOBAL_CLASSIFICATION_CONTEXT } from './context.ts';
 import { CLASSIFICATION_DIRECT_DECISION_PROFILE, classificationDecisionSlotIri,
@@ -64,7 +65,7 @@ export async function resolveClassification(env: WorkActivationEnvironment,
       }
       GRAPH ${iri(GRAPHS.revisions)} { ?senseRevision a rv:RevisionAnchor ;
         rv:component ${iri(input.sense)} ;
-        rv:modelRevision ${iri(CLASSIFICATION_PROPOSITION_PROFILE)} . }
+        rv:modelRevision ?senseModel . ${classificationModelRevisions('?senseModel')} }
     }`);
   const baseRows = base.results?.bindings ?? [];
   if (baseRows.length === 0) throw new ClassificationTargetUnavailable('classification target is unavailable');

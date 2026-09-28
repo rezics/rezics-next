@@ -1,20 +1,30 @@
 import { fictionWorks } from './official-plan.ts';
 import { works } from './plan.ts';
 
-// A modest vocabulary for the actual books in the demo. Each value is a
-// Concept; the legacy proposition API currently gives each its own scheme.
+// Scheme order is append order: a broader Concept appears before its children.
 export const genreConcepts = {
-  classics: 'Classics', fantasy: 'Fantasy · 玄幻', xianxia: 'Xianxia · 仙侠',
-  urban: 'Urban · 都市', mystery: 'Mystery · 悬疑', romance: 'Romance · 言情',
-  scienceFiction: 'Science fiction · 科幻', horror: 'Horror · 恐怖',
-  gothic: 'Gothic', satire: 'Satire', comingOfAge: 'Coming of age',
-  historical: 'Historical fiction', adventure: 'Adventure',
+  fiction: { en: 'Fiction', zh: '小说', broader: null },
+  classics: { en: 'Classics', zh: '经典', broader: null },
+  fantasy: { en: 'Fantasy', zh: '玄幻', broader: 'fiction' },
+  xianxia: { en: 'Xianxia', zh: '仙侠', broader: 'fantasy' },
+  urban: { en: 'Urban', zh: '都市', broader: 'fiction' },
+  mystery: { en: 'Mystery', zh: '悬疑', broader: 'fiction' },
+  romance: { en: 'Romance', zh: '言情', broader: 'fiction' },
+  scienceFiction: { en: 'Science fiction', zh: '科幻', broader: 'fiction' },
+  horror: { en: 'Horror', zh: '恐怖', broader: 'fiction' },
+  gothic: { en: 'Gothic', zh: '哥特', broader: 'classics' },
+  satire: { en: 'Satire', zh: '讽刺', broader: 'classics' },
+  comingOfAge: { en: 'Coming of age', zh: '成长', broader: 'fiction' },
+  historical: { en: 'Historical fiction', zh: '历史小说', broader: 'fiction' },
+  adventure: { en: 'Adventure', zh: '冒险', broader: 'fiction' },
 } as const;
 
 export const freeConcepts = {
-  bookshops: 'Bookshops · 书店', letters: 'Letters · 书信',
-  family: 'Family · 家人', friendship: 'Friendship · 友情',
-  folklore: 'Folklore · 民间传说',
+  bookshops: { en: 'Bookshops', zh: '书店' },
+  letters: { en: 'Letters', zh: '书信' },
+  family: { en: 'Family', zh: '家人' },
+  friendship: { en: 'Friendship', zh: '友情' },
+  folklore: { en: 'Folklore', zh: '民间传说' },
 } as const;
 
 export type BookConcept = keyof typeof genreConcepts | keyof typeof freeConcepts;
@@ -54,6 +64,6 @@ export const bookConcepts: Readonly<Record<string, readonly BookConcept[]>> = {
 };
 
 export const seededBookIds = [
-  ...works.filter(work => work.type === 'book').map(work => work.id),
-  ...fictionWorks.map(work => work.id),
+  ...works.filter((work) => work.type === 'book').map((work) => work.id),
+  ...fictionWorks.map((work) => work.id),
 ];

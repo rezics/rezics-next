@@ -1,6 +1,6 @@
 import { ContextNotFound, readContextRevision } from '../context/read.ts';
 import { readRealmZone } from '../realm-reads/read-zone.ts';
-import { CLASSIFICATION_PROPOSITION_PROFILE } from '../classification/proposition.ts';
+import { classificationModelRevisions } from '../classification/vocabulary.ts';
 import type { OwnedDiscoveryBasis } from '../discovery/contract.ts';
 import { GRAPHS, iri, lit } from '../work/activate.ts';
 import { decodeReadCursor, encodeReadCursor, pageResult, WorkReadMissing, WorkReadUnavailable,
@@ -44,7 +44,7 @@ export async function readZoneGenres(session: WorkReadSession, realm: string, co
   const candidates = entries.length ? await session.query(`SELECT DISTINCT ?sense ?concept WHERE {
     VALUES (?concept ?revision) { ${entries.map(entry => `(${iri(entry.target)} ${iri(entry.definition!)})`).join(' ')} }
     GRAPH ${iri(GRAPHS.revisions)} { ?revision rv:component ?sense ;
-      rv:modelRevision ${iri(CLASSIFICATION_PROPOSITION_PROFILE)} . }
+      rv:modelRevision ?senseModel . ${classificationModelRevisions('?senseModel')} }
     GRAPH ${iri(GRAPHS.current)} {
       ?sense a rv:ClassificationSense ; rv:senseState rv:Active ; rv:head ?revision ; rv:expression ?expression .
       ?expression rv:assertedConcept ?concept ; rv:expressionState rv:Active .

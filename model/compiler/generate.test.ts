@@ -308,14 +308,30 @@ const manifestOf = (artifacts: Map<string, string>) =>
 
 test('G-071: the generated registry keeps the historical canonical routes and binding demands', () => {
   const manifest = manifestOf(buildArtifacts(repo));
-  // Historical types keep their exact routes and order; later profiles are appended after them.
-  expect(manifest.canonical.slice(0, historicalCanonical.length).map(entry => [entry.type, ...entry.routes.map(route =>
+  // Historical routes remain the fallbacks for subjects without the v2 discriminator.
+  expect(manifest.canonical.slice(0, historicalCanonical.length).map(entry => [entry.type, ...entry.routes
+    .filter(route => route.profile !== 'classification-proposition-v2').map(route =>
     [`${route.profile}/${shapeRole(route.profile, route.shape)}`,
       ...route.when.map(condition => `${local(condition.path)}=${local(condition.value)}`)].join(' '))]))
     .toEqual(historicalCanonical.map(([type, ...routes]) => [vocabulary(type), ...routes]));
+  for (const [type, role] of [
+    ['ClassificationSense', 'sense'], ['ConceptPath', 'path'], ['ClassificationExpression', 'expression'],
+    ['http://www.w3.org/2004/02/skos/core#Concept', 'concept'],
+    ['http://www.w3.org/2004/02/skos/core#ConceptScheme', 'scheme'],
+  ]) {
+    const routes = manifest.canonical.find(entry => entry.type === vocabulary(type))!.routes;
+    expect(routes[0]).toMatchObject({ profile: 'classification-proposition-v2',
+      shape: `https://rezics.com/definition/classification-proposition-v2/${role}-shape`,
+      when: [{ path: 'https://rezics.com/vocab/definitionProfile',
+        value: 'https://rezics.com/definition/classification-proposition-v2' }] });
+    expect(routes[1]?.profile).toBe('classification-proposition-v1');
+  }
   const demands = historicalDemands.flatMap(([profile, ...types]) =>
     types.map(type => ({ type: vocabulary(type), profile })));
-  expect(manifest.bindingDemands.slice(0, demands.length)).toEqual(demands);
+  expect(manifest.bindingDemands.filter(entry => entry.type !== vocabulary('VocabularyDefinition'))
+    .slice(0, demands.length)).toEqual(demands);
+  expect(manifest.bindingDemands.find(entry => entry.type === vocabulary('VocabularyDefinition'))?.profile)
+    .toBe('classification-proposition-v2');
   const bound = manifest.profiles.filter(profile => profile.binding).map(profile => profile.id);
   expect(bound).toEqual(expect.arrayContaining(historicalDemands.map(([profile]) => profile)));
   const credit = manifest.profiles.find(profile => profile.id === 'work-author-credit-v1')!.binding!;

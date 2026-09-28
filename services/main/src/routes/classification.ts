@@ -9,6 +9,7 @@ import { GLOBAL_CLASSIFICATION_CONTEXT, CLASSIFICATION_INHERIT_POLICY,
 import { createAdmittedClassificationProposition }
   from '../modules/classification/proposition-admitted.ts';
 import { CLASSIFICATION_PROPOSITION_PROFILE } from '../modules/classification/proposition.ts';
+import { defineAdmittedVocabularyConcept, InvalidVocabularyInput } from '../modules/classification/vocabulary.ts';
 import { setAdmittedClassificationDecision } from '../modules/classification/decision-admitted.ts';
 import { statementCutoverActive } from '../modules/statement/migrate-v1.ts';
 import { resolveClassification } from '../modules/classification/resolve.ts';
@@ -28,10 +29,52 @@ import { tagProposalInput, tagProposalResult, tagProposalRequest, recordTagPropo
 
 export const openApiOperations = {
   '/v1/tag-proposals': { post: { bearer: true, idempotencyKey: true } },
+  '/v1/classification-vocabulary': { post: { bearer: true, idempotencyKey: true } },
 } as const;
+
+const vocabularyLabel = t.Object({ language: t.String({ minLength: 2, maxLength: 40 }),
+  value: t.String({ minLength: 1, maxLength: 120 }) }, { additionalProperties: false });
+const vocabularyRef = t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' });
+const vocabularyDefinition = t.Object({ profile: t.Literal('classification-proposition-v2'),
+  scheme: t.Nullable(t.Object({ id: vocabularyRef, expectedHead: vocabularyRef },
+    { additionalProperties: false })),
+  labels: t.Array(vocabularyLabel, { minItems: 1, maxItems: 8 }),
+  alternativeLabels: t.Array(vocabularyLabel, { maxItems: 16 }),
+  broader: t.Array(vocabularyRef, { maxItems: 8, uniqueItems: true }),
+  narrower: t.Array(vocabularyRef, { maxItems: 8, uniqueItems: true }),
+  actingSubject: vocabularyRef,
+}, { additionalProperties: false });
+const vocabularyResult = t.Object({ scheme: vocabularyRef, schemeHead: vocabularyRef,
+  concept: vocabularyRef, conceptHead: vocabularyRef, path: vocabularyRef,
+  expression: vocabularyRef, sense: vocabularyRef, definitionRevision: vocabularyRef,
+  profile: t.Literal('classification-proposition-v2'), interpretationScope: t.String(),
+  sourcePosition: t.Object({ datasetId: t.Literal('product'), dataEpoch: t.String(),
+    sequence: t.String() }), replayed: t.Boolean() });
 
 export function classificationRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
   return new Elysia()
+    .post('/v1/classification-vocabulary', { body: vocabularyDefinition,
+      response: { 200: vocabularyResult, 201: vocabularyResult, 202: pendingOperation,
+        ...writeProblems } }, async ({ request, body }) => {
+      const idempotencyKey = request.headers.get('idempotency-key');
+      if (!idempotencyKey || !/^[A-Za-z0-9:_./-]{1,128}$/.test(idempotencyKey)) {
+        return problem(400, 'invalid_idempotency_key', 'A valid Idempotency-Key header is required');
+      }
+      try {
+        const receipt = await defineAdmittedVocabularyConcept(work.environment,
+          work.account, work.access, request, { ...body, idempotencyKey });
+        return Response.json({ ...receipt.definitions!, schemeHead: receipt.schemeHead!,
+          conceptHead: receipt.conceptHead!, definitionRevision: receipt.revision!,
+          profile: 'classification-proposition-v2', interpretationScope: GLOBAL_CLASSIFICATION_CONTEXT,
+          sourcePosition: { datasetId: 'product', dataEpoch: receipt.dataEpoch,
+            sequence: receipt.sequence }, replayed: receipt.replayed }, {
+          status: receipt.replayed ? 200 : 201, headers: { 'cache-control': 'no-store' },
+        });
+      } catch (error) {
+        if (error instanceof InvalidVocabularyInput) return problem(400, 'invalid_vocabulary', error.message);
+        return commandError(error);
+      }
+    })
     .post('/v1/tag-proposals', { body: tagProposalInput,
       response: { 200: tagProposalResult, 201: tagProposalResult, 202: pendingOperation, ...writeProblems } },
     async ({ request, body }) => {

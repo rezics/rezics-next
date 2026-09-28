@@ -36,7 +36,8 @@ export const bindingDemandOrder: readonly Term[] = [
   rv('ExperienceRatingObservationRevision'), rv('ExperienceRatingContext'),
   rv('DailyRatingObservation'), rv('DailyRatingObservationRevision'), rv('DailyRatingContext'),
   rv('RatingObservation'), rv('RatingObservationRevision'), rv('RatingContext'), rv('TranslationLink'),
-  rv('WorkDerivation'), rv('FixedRelease'), rv('ClassificationContext'), rv('ClassificationSense'),
+  rv('WorkDerivation'), rv('FixedRelease'), rv('ClassificationContext'),
+  rv('VocabularyDefinition'), rv('ClassificationSense'),
   rv('ConceptPath'), rv('ClassificationExpression'), skos('Concept'), skos('ConceptScheme'),
 ];
 

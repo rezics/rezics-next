@@ -1,6 +1,6 @@
 import { profileValidations } from '../../infrastructure/profile.ts';
 import type { RegisteredAdmission } from '../access/admission.ts';
-import { CLASSIFICATION_PROPOSITION_PROFILE } from '../classification/proposition.ts';
+import { classificationModelRevisions } from '../classification/vocabulary.ts';
 import { ContextCommandUnavailable, InvalidContextCommand, checkedCommandReceipt,
   commandReceiptIri, commitCommand, readCommandReceipt, sealCommandTerminal, term } from '../context/command.ts';
 import { DATASET, GRAPHS, ID, RV, hash, iri, lit, prepareComponent,
@@ -104,7 +104,7 @@ export async function migrateV1Decision(env: WorkActivationEnvironment, admissio
     }
     GRAPH ${iri(GRAPHS.revisions)} {
       ?senseRevision a rv:RevisionAnchor ; rv:component ?sense ;
-        rv:modelRevision ${iri(CLASSIFICATION_PROPOSITION_PROFILE)} .
+        rv:modelRevision ?senseModel . ${classificationModelRevisions('?senseModel')}
       ?decision a rv:ClassificationDecision, rv:RevisionAnchor ;
         rv:component ${iri(input.application)} ; rv:application ${iri(input.application)} ;
         rv:outcome ?outcome ; rv:decisionBasis ?basis ; rv:decidedBy ?decidedBy .
@@ -179,7 +179,7 @@ export async function migrateV1Decision(env: WorkActivationEnvironment, admissio
     rv:decisionPolicy <https://rezics.com/definition/classification-direct-decision-v1>
     ${slot.contextRevision ? `; rv:contextRevision ${iri(slot.contextRevision)}` : ''} .
     ${iri(slot.senseRevision)} a rv:RevisionAnchor ; rv:component ${iri(value('sense')!)} ;
-      rv:modelRevision ${iri(CLASSIFICATION_PROPOSITION_PROFILE)} . }
+      rv:modelRevision ?senseModel . ${classificationModelRevisions('?senseModel')} }
   FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.receipts)} { ?cutover a rv:OperationReceipt ;
     rv:commandFamily ${lit(CUTOVER_FAMILY)} ; rv:outcome rv:Succeeded ;
     rv:decisionModel ${term(DECISION_MODEL)} . } }

@@ -7,7 +7,7 @@ import { grantImportedWorkSeedAuthority } from './operator.ts';
 import { openLibraryFixtureFetch } from './open-library-fixtures.ts';
 import { SeedApiError, type SeedApi } from './api.ts';
 import { seedKey, works } from './plan.ts';
-import { seedClassicTexts } from './classics-text-step.ts';
+import { ensureClassicBookType, seedClassicTexts } from './classics-text-step.ts';
 import type { SeedState, WorkReceipt } from './state.ts';
 
 const shortId = (uri: string) => uri.slice(-36);
@@ -110,6 +110,9 @@ export async function seedClassics(state: SeedState): Promise<void> {
         baseSupport: null, correspondence: null, confirmedUse: 'factual-reference-only',
       }, token, seedKey('source-author-credit', `${classic.id}-${ordinal}`));
     }
+    await ensureClassicBookType({ read: () => api.get(
+      `/v1/works/${shortId(receipt.work)}?actingSubject=${encodeURIComponent(actor)}`, token),
+    api, book: classic.id, work: receipt.work, actor, token });
     console.log(`Classic ${classic.id}: ${receipt.work} via ${classic.work}; acquisition ${
       shortId(observation.observation)}${capture.replayed ? ' (replayed)' : ''}`);
   }

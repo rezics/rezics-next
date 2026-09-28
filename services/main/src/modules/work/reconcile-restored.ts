@@ -62,6 +62,8 @@ import { CLASSIFICATION_CONTEXT_PROFILE, CLASSIFICATION_INHERIT_POLICY,
 import { CLASSIFICATION_PROPOSITION_PROFILE, classificationPropositionDigest,
   classificationPropositionReceiptIri, readClassificationPropositionReceipt,
   type PropositionDefinitions } from '../classification/proposition.ts';
+import { VOCABULARY_PROFILE, VOCABULARY_REVISION_PROFILE, vocabularyDigest, classificationModelRevisions,
+  type DefineVocabularyConceptInput } from '../classification/vocabulary.ts';
 import { CLASSIFICATION_DIRECT_DECISION_PROFILE, classificationDecisionDigest,
   classificationDecisionReceiptIri, classificationDecisionSlotIri,
   readClassificationDecisionReceipt, type SetClassificationDecisionInput } from '../classification/decision.ts';
@@ -1661,6 +1663,10 @@ export async function reconcileRetainedClassificationProposition(
     || !/^urn:rezics:sha256:[0-9a-f]{64}$/.test(receipt.definitionManifest)) {
     throw new RetainedEffectConflict('retained classification definition references are invalid');
   }
+  const vocabulary = retainedReleaseState(env.objectDirectory, receipt.definitionManifest,
+    definitions.sense, VOCABULARY_PROFILE);
+  if (vocabulary) return reconcileRetainedVocabularyProposition(env, accessPool, coverage, sequence,
+    eventId, data, receipt, definitions, vocabulary);
   const state = readComponentState(env.objectDirectory, receipt.definitionManifest,
     definitions.sense, CLASSIFICATION_PROPOSITION_PROFILE);
   if (ids.some((id, index) => state[Object.keys(definitions)[index]!] !== id)
@@ -1814,6 +1820,305 @@ export async function reconcileRetainedClassificationProposition(
     try { await client.query('ROLLBACK'); } catch { /* retain original error */ }
     throw error;
   } finally { client.release(); }
+}
+
+/** Replay v2's scheme append and Concept identity from the three exact retained manifests. */
+async function reconcileRetainedVocabularyProposition(
+  env: WorkActivationEnvironment,
+  accessPool: Pool,
+  coverage: RelayCoverage,
+  sequence: string,
+  eventId: string,
+  data: MainCloudEvent['data'],
+  receipt: RetainedReceipt,
+  definitions: PropositionDefinitions,
+  state: Record<string, unknown>,
+): Promise<{ receipt: string; sense: string; replayed: boolean }> {
+  const native = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
+  const manifest = /^urn:rezics:sha256:[0-9a-f]{64}$/;
+  if (
+    Object.entries(definitions).some(([key, value]) => state[key] !== value) ||
+    state.profile !== VOCABULARY_PROFILE ||
+    state.scope !== GLOBAL_CLASSIFICATION_CONTEXT ||
+    !native.test(String(state.schemeHead)) ||
+    !native.test(String(state.conceptHead)) ||
+    (state.previousSchemeHead !== null && !native.test(String(state.previousSchemeHead))) ||
+    !manifest.test(String(state.schemeManifest)) ||
+    !manifest.test(String(state.conceptManifest)) ||
+    !Array.isArray(state.labels) ||
+    !Array.isArray(state.alternativeLabels) ||
+    !Array.isArray(state.broader) ||
+    !Array.isArray(state.narrower) ||
+    typeof state.actingSubject !== 'string'
+  ) {
+    throw new RetainedEffectConflict('retained vocabulary payload is invalid');
+  }
+  const schemeHead = state.schemeHead as string,
+    conceptHead = state.conceptHead as string;
+  const previous = state.previousSchemeHead as string | null;
+  const input: DefineVocabularyConceptInput = {
+    scheme: previous ? { id: definitions.scheme, expectedHead: previous } : null,
+    labels: state.labels as DefineVocabularyConceptInput['labels'],
+    alternativeLabels: state.alternativeLabels as DefineVocabularyConceptInput['alternativeLabels'],
+    broader: state.broader as string[],
+    narrower: state.narrower as string[],
+    actingSubject: state.actingSubject,
+  };
+  let digest: string;
+  try {
+    digest = vocabularyDigest(input);
+  } catch {
+    throw new RetainedEffectConflict('retained vocabulary input is invalid');
+  }
+  if (digest !== receipt.requestDigest)
+    throw new RetainedEffectConflict('retained vocabulary digest differs');
+  const schemeState = readComponentState(
+    env.objectDirectory,
+    state.schemeManifest as string,
+    definitions.scheme,
+    VOCABULARY_PROFILE,
+  );
+  const conceptState = readComponentState(
+    env.objectDirectory,
+    state.conceptManifest as string,
+    definitions.concept,
+    VOCABULARY_PROFILE,
+  );
+  if (
+    schemeState.profile !== VOCABULARY_PROFILE ||
+    schemeState.scheme !== definitions.scheme ||
+    schemeState.previousHead !== previous ||
+    schemeState.addedConcept !== definitions.concept ||
+    schemeState.actingSubject !== input.actingSubject ||
+    conceptState.profile !== VOCABULARY_PROFILE ||
+    conceptState.concept !== definitions.concept ||
+    conceptState.scheme !== definitions.scheme ||
+    conceptState.actingSubject !== input.actingSubject ||
+    JSON.stringify(conceptState.labels) !== JSON.stringify(input.labels) ||
+    JSON.stringify(conceptState.alternativeLabels) !== JSON.stringify(input.alternativeLabels) ||
+    JSON.stringify(conceptState.broader) !== JSON.stringify(input.broader) ||
+    JSON.stringify(conceptState.narrower) !== JSON.stringify(input.narrower)
+  ) {
+    throw new RetainedEffectConflict('retained vocabulary manifests differ');
+  }
+  const client = await accessPool.connect();
+  try {
+    await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ');
+    const fence = await client.query<{ open: boolean }>(
+      'SELECT open FROM access.recovery_fence WHERE id = true FOR SHARE',
+    );
+    if (fence.rows[0]?.open !== false)
+      throw new RetainedEffectConflict('Access recovery fence is not held');
+    const access = await client.query<AccessEffectRow & { acting_subject: string }>(
+      `SELECT action, state, scope_id, request_digest, authority_epoch, acting_subject,
+         graph_receipt, graph_outcome, graph_data_epoch, graph_sequence
+       FROM access.admission WHERE id = $1`,
+      [receipt.admissionId],
+    );
+    const admitted = access.rows[0];
+    if (
+      !admitted ||
+      admitted.action !== 'classification.proposition.define' ||
+      admitted.state !== 'sealed' ||
+      admitted.scope_id !== receipt.scope ||
+      admitted.request_digest !== digest ||
+      admitted.authority_epoch !== receipt.authorityEpoch ||
+      admitted.acting_subject !== input.actingSubject ||
+      admitted.graph_receipt !== receipt.id ||
+      admitted.graph_outcome !== 'succeeded' ||
+      admitted.graph_data_epoch !== coverage.dataEpoch ||
+      admitted.graph_sequence !== sequence
+    ) {
+      throw new RetainedEffectConflict('Access admission does not prove retained vocabulary');
+    }
+    const marker = `urn:rezics:restore:${env.lineage.dataEpoch}`;
+    const revision = receipt.definitionRevision!;
+    const relationGuard = [...input.broader, ...input.narrower]
+      .map(
+        (id) =>
+          `GRAPH ${iri(GRAPHS.current)} { ${iri(id)} a skos:Concept ;
+        skos:inScheme ${iri(definitions.scheme)} ; rv:conceptState rv:Active . }`,
+      )
+      .join('\n');
+    const schemeGuard = previous
+      ? `GRAPH ${iri(GRAPHS.current)} { ${iri(definitions.scheme)} a skos:ConceptScheme ;
+          rv:schemeState rv:Active ; rv:schemeRevisionHead ${iri(previous)} . }`
+      : `FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} { ${iri(definitions.scheme)} ?p ?o } }`;
+    const schemeCurrent = previous
+      ? `${iri(definitions.scheme)} rv:schemeRevisionHead ${iri(schemeHead)} .`
+      : `${iri(definitions.scheme)} a skos:ConceptScheme, rv:VocabularyDefinition ;
+          rv:definitionProfile ${iri(VOCABULARY_PROFILE)} ; rv:schemeState rv:Active ;
+          rv:schemeRevisionHead ${iri(schemeHead)} .`;
+    const anchor = (
+      id: string,
+      component: string,
+      objectManifest: string,
+      predecessor: string | null,
+    ) =>
+      `${iri(id)} a rv:RevisionAnchor ; rv:component ${iri(component)} ;
+        rv:operation ${iri(receipt.operation!)} ; rv:recordedBy ${iri(input.actingSubject)} ;
+        rv:manifest ${iri(objectManifest)} ; rv:modelRevision ${iri(VOCABULARY_PROFILE)} ;
+        rv:shapeRevision ${iri(VOCABULARY_PROFILE)} ; rv:datasetId ${iri(DATASET)} ;
+        rv:dataEpoch ${lit(coverage.dataEpoch)} ; rv:sequence ${sequence}${
+          predecessor ? ` ; rv:predecessor ${iri(predecessor)}` : ''
+        } .`;
+    const update = `PREFIX rv: <${RV}> PREFIX skos: <http://www.w3.org/2004/02/skos/core#>
+      DELETE { GRAPH ${iri(GRAPHS.control)} { ${iri(marker)} rv:reconciledPriorSequence ?last }
+        ${previous ? `GRAPH ${iri(GRAPHS.current)} { ${iri(definitions.scheme)} rv:schemeRevisionHead ${iri(previous)} }` : ''} }
+      INSERT {
+        GRAPH ${iri(GRAPHS.control)} { ${iri(marker)} rv:reconciledPriorSequence ${sequence} }
+        GRAPH ${iri(GRAPHS.current)} {
+          ${schemeCurrent}
+          ${iri(definitions.concept)} a skos:Concept, rv:VocabularyDefinition ;
+            rv:definitionProfile ${iri(VOCABULARY_PROFILE)} ; skos:inScheme ${iri(definitions.scheme)} ;
+            rv:conceptState rv:Active ; rv:head ${iri(conceptHead)} ;
+            skos:prefLabel ${input.labels.map((item) => `${lit(item.value)}@${item.language}`).join(', ')} .
+          ${input.alternativeLabels.map((item) => `${iri(definitions.concept)} skos:altLabel ${lit(item.value)}@${item.language} .`).join('\n')}
+          ${input.broader.map((id) => `${iri(definitions.concept)} skos:broader ${iri(id)} .`).join('\n')}
+          ${input.narrower.map((id) => `${iri(definitions.concept)} skos:narrower ${iri(id)} .`).join('\n')}
+          ${iri(definitions.path)} a rv:ConceptPath, rv:VocabularyDefinition ;
+            rv:definitionProfile ${iri(VOCABULARY_PROFILE)} ; rv:pathKind rv:SingleConcept ;
+            rv:pathLength 1 ; rv:terminalConcept ${iri(definitions.concept)} ; rv:pathState rv:Active .
+          ${iri(definitions.expression)} a rv:ClassificationExpression, rv:VocabularyDefinition ;
+            rv:definitionProfile ${iri(VOCABULARY_PROFILE)} ; rv:path ${iri(definitions.path)} ;
+            rv:propositionKind rv:ConceptAssertion ; rv:assertedConcept ${iri(definitions.concept)} ;
+            rv:expressionState rv:Active .
+          ${iri(definitions.sense)} a rv:ClassificationSense, rv:VocabularyDefinition ;
+            rv:definitionProfile ${iri(VOCABULARY_PROFILE)} ; rv:path ${iri(definitions.path)} ;
+            rv:expression ${iri(definitions.expression)} ; rv:interpretationScope ${iri(GLOBAL_CLASSIFICATION_CONTEXT)} ;
+            rv:senseState rv:Active ; rv:head ${iri(revision)} . }
+        GRAPH ${iri(GRAPHS.revisions)} {
+          ${anchor(schemeHead, definitions.scheme, state.schemeManifest as string, previous)}
+          ${anchor(conceptHead, definitions.concept, state.conceptManifest as string, null)}
+          ${anchor(revision, definitions.sense, receipt.definitionManifest!, null)} }
+        GRAPH ${iri(GRAPHS.receipts)} {
+          ${iri(receipt.id)} a rv:OperationReceipt ; rv:operation ${iri(receipt.operation!)} ;
+            rv:requestDigest ${lit(digest)} ; rv:admissionId ${lit(receipt.admissionId)} ;
+            rv:authorityEpoch ${lit(receipt.authorityEpoch)} ; rv:admittedScope ${lit(receipt.scope)} ;
+            rv:outcome rv:Succeeded ; rv:scheme ${iri(definitions.scheme)} ;
+            rv:concept ${iri(definitions.concept)} ; rv:path ${iri(definitions.path)} ;
+            rv:expression ${iri(definitions.expression)} ; rv:sense ${iri(definitions.sense)} ;
+            rv:definitionRevision ${iri(revision)} ; rv:schemeRevision ${iri(schemeHead)} ;
+            rv:conceptRevision ${iri(conceptHead)} ; rv:datasetId ${iri(DATASET)} ;
+            rv:dataEpoch ${lit(coverage.dataEpoch)} ; rv:sequence ${sequence} . }
+        GRAPH ${iri(GRAPHS.outbox)} {
+          ${iri(data.batchId)} a rv:OutboxBatch ; rv:dataEpoch ${lit(coverage.dataEpoch)} ;
+            rv:sequence ${sequence} ; rv:eventCount 1 ; rv:event ${iri(eventId)} .
+          ${iri(eventId)} a rv:ClassificationPropositionDefinedEvent ; rv:ordinal 0 ;
+            rv:action "classification.proposition.define" ; rv:receipt ${iri(receipt.id)} ;
+            rv:operation ${iri(receipt.operation!)} . }
+      }
+      WHERE {
+        GRAPH ${iri(GRAPHS.control)} {
+          ${iri(DATASET)} rv:dataEpoch ${lit(env.lineage.dataEpoch)} ;
+            rv:routingEpoch ${lit(env.lineage.routingEpoch)} ; rv:sequence 0 ;
+            rv:restoreCutover ${iri(marker)} ; rv:restoreHold true .
+          ${iri(marker)} rv:priorDataEpoch ${lit(coverage.dataEpoch)} ; rv:priorSequence ?saved .
+          OPTIONAL { ${iri(marker)} rv:reconciledPriorSequence ?last }
+          BIND(COALESCE(?last, ?saved) AS ?prior)
+          FILTER(?prior + 1 = ${sequence}) }
+        GRAPH ${iri(GRAPHS.current)} { ${iri(GLOBAL_CLASSIFICATION_CONTEXT)} a rv:ClassificationContext ;
+          rv:contextRole rv:GlobalClassification ; rv:contextState rv:Active ;
+          rv:inheritancePolicy ${iri(CLASSIFICATION_ISOLATE_POLICY)} . }
+        ${schemeGuard}
+        ${relationGuard}
+        ${Object.entries(definitions)
+          .filter(([key]) => key !== 'scheme')
+          .map(
+            ([, id]) => `FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} { ${iri(id)} ?p ?o } }`,
+          )
+          .join('\n')}
+        ${[schemeHead, conceptHead, revision].map(id =>
+          `FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.revisions)} { ${iri(id)} ?p ?o } }`).join('\n')}
+        FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt.id)} ?p ?o } }
+        FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.outbox)} {
+          ?otherBatch rv:dataEpoch ${lit(coverage.dataEpoch)} ; rv:sequence ${sequence} . } }
+      }`;
+    const existing = await readClassificationPropositionReceipt(env, receipt.admissionId);
+    let updateError: unknown;
+    if (!existing) {
+      try {
+        const current = await profileValidations(
+          env.fuseki,
+          'classification-proposition-v2',
+          (Object.entries(definitions) as [string, string][]).map(([role, focus]) => ({
+            shape: `${VOCABULARY_PROFILE}/${role}-shape`,
+            focus: [focus],
+            graphs: [GRAPHS.current],
+          })),
+          { ...definitions },
+        );
+        const revisions = await profileValidations(
+          env.fuseki,
+          'concept-scheme-revision-v1',
+          [schemeHead, conceptHead, revision].map((focus) => ({
+            shape: `${VOCABULARY_REVISION_PROFILE}/anchor-shape`,
+            focus: [focus],
+            graphs: [GRAPHS.revisions],
+          })),
+        );
+        const result = await env.fuseki.commandWithReceipt({
+          receipt: receipt.id,
+          digest: receipt.requestDigest,
+          update,
+          validations: [...current, ...revisions],
+          deadlineMs: 10_000,
+        });
+        if (result.status === 'invalid' || result.status === 'unknown-profile') {
+          throw new Error(`retained vocabulary validation ${result.status}`);
+        }
+      } catch (error) {
+        updateError = error;
+      }
+    }
+    const terminal = await readClassificationPropositionReceipt(env, receipt.admissionId);
+    const cursor = await reconciledCursor(env, marker);
+    const graph =
+      await env.fuseki.query(`PREFIX rv: <${RV}> PREFIX skos: <http://www.w3.org/2004/02/skos/core#> ASK {
+      GRAPH ${iri(GRAPHS.current)} { ${iri(definitions.concept)} a skos:Concept ;
+        skos:inScheme ${iri(definitions.scheme)} ; rv:head ${iri(conceptHead)} .
+        ${iri(definitions.sense)} rv:head ${iri(revision)} . }
+      GRAPH ${iri(GRAPHS.revisions)} { ${iri(revision)} rv:component ${iri(definitions.sense)} ;
+        rv:manifest ${iri(receipt.definitionManifest!)} .
+        ${iri(schemeHead)} rv:component ${iri(definitions.scheme)} ;
+          rv:manifest ${iri(state.schemeManifest as string)} .
+        ${iri(conceptHead)} rv:component ${iri(definitions.concept)} ;
+          rv:manifest ${iri(state.conceptManifest as string)} . }
+      GRAPH ${iri(GRAPHS.outbox)} { ${iri(data.batchId)} rv:event ${iri(eventId)} ;
+        rv:sequence ${sequence} . }
+    }`);
+    if (
+      !terminal ||
+      terminal.outcome !== 'succeeded' ||
+      terminal.receipt !== receipt.id ||
+      terminal.requestDigest !== digest ||
+      terminal.schemeHead !== schemeHead ||
+      terminal.conceptHead !== conceptHead ||
+      terminal.revision !== revision ||
+      terminal.definitions?.concept !== definitions.concept ||
+      terminal.definitions.scheme !== definitions.scheme ||
+      cursor === null ||
+      cursor < BigInt(sequence) ||
+      graph.boolean !== true
+    ) {
+      throw new RetainedEffectConflict(
+        updateError
+          ? 'retained vocabulary update outcome is unknown'
+          : 'retained vocabulary did not reconcile',
+      );
+    }
+    await client.query('COMMIT');
+    return { receipt: receipt.id, sense: definitions.sense, replayed: !!existing };
+  } catch (error) {
+    try {
+      await client.query('ROLLBACK');
+    } catch {
+      /* retain original error */
+    }
+    throw error;
+  } finally {
+    client.release();
+  }
 }
 
 /** Rebuild one accepted or rejected curated Application head from sealed evidence. */
@@ -2016,7 +2321,7 @@ export async function reconcileRetainedClassificationDecision(
         }
         GRAPH ${iri(GRAPHS.revisions)} {
           ${iri(senseRevision)} a rv:RevisionAnchor ; rv:component ${iri(receipt.sense)} ;
-            rv:modelRevision ${iri(CLASSIFICATION_PROPOSITION_PROFILE)} . }
+            rv:modelRevision ?senseModel . ${classificationModelRevisions('?senseModel')} }
         ${priorGuard}
         FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt.id)} ?p ?o } }
         FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.revisions)} { ${iri(decision)} ?p ?o } }

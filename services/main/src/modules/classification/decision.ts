@@ -4,7 +4,7 @@ import { assertNotInvalidProfileReceipt, validatedCommand } from '../../infrastr
 import type { RegisteredAdmission } from '../access/admission.ts';
 import { DATASET, GRAPHS, ID, RV, hash, iri, lit, prepareComponent,
   IdempotencyConflict, PendingActivation, type WorkActivationEnvironment } from '../work/activate.ts';
-import { CLASSIFICATION_PROPOSITION_PROFILE } from './proposition.ts';
+import { classificationModelRevisions } from './vocabulary.ts';
 import { CLASSIFICATION_INHERIT_POLICY, CLASSIFICATION_ISOLATE_POLICY,
   GLOBAL_CLASSIFICATION_CONTEXT } from './context.ts';
 
@@ -194,7 +194,7 @@ async function readDependencies(env: WorkActivationEnvironment,
     }
     GRAPH ${iri(GRAPHS.revisions)} { ?senseRevision a rv:RevisionAnchor ;
       rv:component ${iri(input.sense)} ;
-      rv:modelRevision ${iri(CLASSIFICATION_PROPOSITION_PROFILE)} . }
+      rv:modelRevision ?senseModel . ${classificationModelRevisions('?senseModel')} }
   }`);
   const rows = contextRows.results?.bindings ?? [];
   if (rows.length !== 1 || !rows[0]?.context || !rows[0].senseRevision
@@ -459,7 +459,7 @@ export async function setClassificationDecision(env: WorkActivationEnvironment,
       GRAPH ${iri(GRAPHS.revisions)} {
         ${iri(dependencies.senseRevision)} a rv:RevisionAnchor ;
           rv:component ${iri(input.sense)} ;
-          rv:modelRevision ${iri(CLASSIFICATION_PROPOSITION_PROFILE)} .
+          rv:modelRevision ?senseModel . ${classificationModelRevisions('?senseModel')}
       }
       ${createGuard}
       FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:restoreHold true } }

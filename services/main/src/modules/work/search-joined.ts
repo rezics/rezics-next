@@ -8,6 +8,7 @@ import { assertPublicTextReady, assertQuerySnapshotMoved, assertSameTextInstance
   PHRASE_HIT_PROBE } from './search-readiness.ts';
 import { SELECTION_POLICY } from '../space/create.ts';
 import { CLASSIFICATION_PROPOSITION_PROFILE } from '../classification/proposition.ts';
+import { classificationModelRevisions } from '../classification/vocabulary.ts';
 import { CLASSIFICATION_DIRECT_DECISION_PROFILE } from '../classification/decision.ts';
 import { CLASSIFICATION_INHERIT_POLICY, CLASSIFICATION_ISOLATE_POLICY,
   GLOBAL_CLASSIFICATION_CONTEXT } from '../classification/context.ts';
@@ -120,7 +121,7 @@ export async function queryPublicRealmClassifiedRatedPhrase(env: WorkActivationE
         ?classificationContextRevision a rv:RevisionAnchor ;
           rv:component ?classificationContext .
         ?senseRevision a rv:RevisionAnchor ; rv:component ${iri(input.sense)} ;
-          rv:modelRevision ${iri(CLASSIFICATION_PROPOSITION_PROFILE)} .
+          rv:modelRevision ?senseModel . ${classificationModelRevisions('?senseModel')}
         ?ratingContextRevision a rv:RevisionAnchor ;
           rv:component ${iri(input.ratingContext)} .
       }

@@ -7,6 +7,7 @@ import { assertPublicTextReady, assertSameTextInstance, assertSnapshotMoved,
   MAX_SEARCH_RESPONSE_BYTES, PHRASE_HIT_PROBE, SearchSnapshotMoved } from './search-readiness.ts';
 import { SELECTION_POLICY } from '../space/create.ts';
 import { CLASSIFICATION_PROPOSITION_PROFILE } from '../classification/proposition.ts';
+import { classificationModelRevisions } from '../classification/vocabulary.ts';
 import { CLASSIFICATION_DIRECT_DECISION_PROFILE, classificationDecisionSlotIri }
   from '../classification/decision.ts';
 import { CLASSIFICATION_INHERIT_POLICY, CLASSIFICATION_ISOLATE_POLICY,
@@ -379,7 +380,7 @@ async function assertClassificationQueryScope(env: WorkActivationEnvironment,
     }
     GRAPH ${iri(GRAPHS.revisions)} {
       ?senseRevision a rv:RevisionAnchor ; rv:component ${iri(sense)} ;
-        rv:modelRevision ${iri(CLASSIFICATION_PROPOSITION_PROFILE)} .
+        rv:modelRevision ?senseModel . ${classificationModelRevisions('?senseModel')}
       ${realm ? `?contextRevision a rv:RevisionAnchor ; rv:component ?context .` : ''}
     }
     BIND(EXISTS { GRAPH ${iri(GRAPHS.receipts)} { ?cutoverReceipt a rv:OperationReceipt ;

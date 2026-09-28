@@ -29,6 +29,8 @@ export interface ClassificationPropositionReceipt {
   scope: string; dataEpoch: string; sequence: string;
   definitions?: PropositionDefinitions;
   revision?: string;
+  schemeHead?: string;
+  conceptHead?: string;
 }
 
 export function classificationPropositionDigest(input: CreateClassificationPropositionInput): string {
@@ -48,13 +50,15 @@ export async function readClassificationPropositionReceipt(env: WorkActivationEn
   admissionId: string): Promise<ClassificationPropositionReceipt | null> {
   const receipt = classificationPropositionReceiptIri(admissionId);
   const result = await env.fuseki.query(`PREFIX rv: <${RV}> SELECT
-    ?outcome ?digest ?id ?epoch ?scope ?dataEpoch ?sequence ?scheme ?concept ?path ?expression ?sense ?revision WHERE {
+    ?outcome ?digest ?id ?epoch ?scope ?dataEpoch ?sequence ?scheme ?concept ?path ?expression ?sense ?revision
+    ?schemeHead ?conceptHead WHERE {
     GRAPH ${iri(GRAPHS.receipts)} {
       ${iri(receipt)} a rv:OperationReceipt ; rv:outcome ?outcome ;
         rv:requestDigest ?digest ; rv:admissionId ?id ; rv:authorityEpoch ?epoch ;
         rv:admittedScope ?scope ; rv:dataEpoch ?dataEpoch ; rv:sequence ?sequence .
       OPTIONAL { ${iri(receipt)} rv:scheme ?scheme ; rv:concept ?concept ; rv:path ?path ;
         rv:expression ?expression ; rv:sense ?sense ; rv:definitionRevision ?revision }
+      OPTIONAL { ${iri(receipt)} rv:schemeRevision ?schemeHead ; rv:conceptRevision ?conceptHead }
     }
   }`);
   const rows = result.results?.bindings ?? [];
@@ -67,7 +71,8 @@ export async function readClassificationPropositionReceipt(env: WorkActivationEn
   if (rows.length !== 1 || !outcome || !value('digest') || !value('id') || !value('epoch')
     || !value('scope') || !value('dataEpoch') || !/^[0-9]+$/.test(value('sequence') ?? '')
     || (outcome === 'succeeded' && refs.some((name) => !value(name)))
-    || (outcome === 'cancelled' && refs.some((name) => value(name)))) {
+    || (outcome === 'cancelled' && (refs.some((name) => value(name)) || value('schemeHead') || value('conceptHead')))
+    || (!!value('schemeHead') !== !!value('conceptHead'))) {
     throw new Error('classification proposition receipt is incomplete');
   }
   return { outcome, receipt, admissionId: value('id')!, requestDigest: value('digest')!,
@@ -75,7 +80,8 @@ export async function readClassificationPropositionReceipt(env: WorkActivationEn
     sequence: value('sequence')!, ...(outcome === 'succeeded' ? {
       definitions: { scheme: value('scheme')!, concept: value('concept')!,
         path: value('path')!, expression: value('expression')!, sense: value('sense')! },
-      revision: value('revision')! } : {}) };
+      revision: value('revision')!, ...(value('schemeHead') ? {
+        schemeHead: value('schemeHead')!, conceptHead: value('conceptHead')! } : {}) } : {}) };
 }
 
 function checked(receipt: ClassificationPropositionReceipt, admission: RegisteredAdmission,
