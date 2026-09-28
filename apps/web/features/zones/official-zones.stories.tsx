@@ -368,7 +368,8 @@ export const AiWorkshopFallback: Story = {
   parameters: workshopRoute,
   async play(context) {
     await fallbackRuns(context.canvasElement, 'ai-workshop');
-    await expect(within(context.canvasElement).queryByRole('button', { name: /^Copy / })).toBeNull();
+    // The package's copy-first cards are gone; the platform hero still offers a prompt its own verb, "Copy prompt".
+    await expect(context.canvasElement.querySelector('.aw-copy')).toBeNull();
     await holds('ai-workshop')(context);
   },
 };

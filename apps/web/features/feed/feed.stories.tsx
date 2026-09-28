@@ -92,10 +92,11 @@ export const EveryKind: Story = {
       .toBeVisible();
     await expect(within(novel).getByRole('button', { name: 'Want to read' })).toBeVisible();
 
-    // A pick is the Realm's act: the curator is not named where the Work's author would be; the author is,
-    // and a pick of a new Work says both.
+    // A pick is the Realm's act: the curator is not named where the Work's author would be; the author is.
+    // A card gives one reason, and the pick outranks the Work being new.
     const pick = article(canvas, 'Jane Eyre');
-    await expect(pick).toHaveTextContent('Picked by Classic Literature · New work');
+    await expect(pick).toHaveTextContent('Picked by Classic Literature');
+    await expect(pick).not.toHaveTextContent('New work');
     await expect(within(pick).queryByText('Daniel Chen')).toBeNull();
     await expect(pick).toHaveTextContent('by Charlotte Brontë');
     await expect(article(canvas, 'Middlemarch: A Study of Provincial Life')).toHaveTextContent('by George Eliot');
@@ -121,10 +122,21 @@ export const EveryKind: Story = {
     await expect(spoiler).toHaveTextContent('+2 more reviews');
     await expect(spoiler).toHaveTextContent('9/10');
 
-    // A list has no page yet, so its title is text, and it has no comments.
+    // "New" lasts a few days; after that the Work was simply published.
+    await expect(article(canvas, '雨夜书店 · 番外')).toHaveTextContent('New work');
+    const older = article(canvas, 'North and South');
+    await expect(older).toHaveTextContent('Published');
+    await expect(older).not.toHaveTextContent('New work');
+
+    // A list has no page yet, so its title is text, and it has no comments. It shows its first covers and its size.
     const list = article(canvas, 'Autumn reading: slow novels');
     await expect(within(list).queryByRole('link', { name: 'Autumn reading: slow novels' })).toBeNull();
     await expect(within(list).queryByRole('link', { name: /comment/ })).toBeNull();
+    const inList = within(list).getByRole('list', { name: 'In this list' });
+    await expect(within(inList).getAllByRole('link').map(link => link.getAttribute('aria-label')))
+      .toEqual(['Middlemarch', '雨夜书店', 'Ginger lemon tea']);
+    await expect(inList.querySelectorAll('[data-slot="work-cover"][data-kind="recipe"]')).toHaveLength(1);
+    await expect(list).toHaveTextContent('12 works');
 
     // Model words never reach readers.
     await expect(feed).not.toHaveTextContent(/contribution|adoption|text version|lower-bound/i);

@@ -3,7 +3,7 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, userEvent, within } from 'storybook/test';
 import fiction from '../../zones/official/fiction/index.tsx';
 import type { UiLocale } from '../../i18n/define.ts';
-import { communityModules, failedRanking, fictionModules, fictionZone, zoneMessagesFor } from './fixtures.ts';
+import { communityModules, failedRanking, fictionModules, fictionZone, works, zoneMessagesFor } from './fixtures.ts';
 import { presetTokens } from './presentation.ts';
 import { zoneTheme } from './theme.ts';
 import { isType, type PlacedModule, ZoneHome } from './zone-home.tsx';
@@ -59,6 +59,31 @@ export const HeroPicks: Story = {
   },
 };
 
+/** Each pick's one action in its kind's verb: open a recipe, copy a prompt, install a mod, read a book. */
+export const HeroPicksByKind: Story = {
+  args: { type: 'hero-carousel', preset: 'clean' },
+  render: (args, { globals }) => {
+    const [recipe, prompt, mod, book] = works;
+    const picks = [{ ...recipe!, kind: 'recipe' as const }, { ...prompt!, kind: 'document' as const,
+      hub: { kind: 'prompt' as const, preview: { value: 'Ask three questions…', lang: 'en', dir: 'ltr' as const },
+        copyText: 'Ask three questions about the chapter.', testedModels: [] } },
+    { ...mod!, kind: 'package' as const }, book!];
+    const placed = { module: { id: 'picks', type: 'hero-carousel', title: 'Featured', rail: false, layout: 'covers',
+      shuffle: false, more: null }, state: { state: 'ready', data: { banners: picks.map(work => ({ id: work.id,
+      title: work.title!, href: work.href, image: null, work })) } } } as PlacedModule;
+    return <Module {...args} locale={(globals.locale as UiLocale | undefined) ?? 'en'} placed={placed} />;
+  },
+  async play({ canvasElement }) {
+    const hero = within(canvasElement).getByRole('region', { name: 'Featured' });
+    const slides = within(hero).getAllByRole('listitem');
+    await expect(within(slides[0]!).getByRole('link', { name: 'Open recipe' })).toBeVisible();
+    await expect(within(slides[1]!).getByRole('button', { name: 'Copy prompt' })).toBeInTheDocument();
+    await expect(within(slides[2]!).getByRole('link', { name: 'Install' })).toBeInTheDocument();
+    await expect(within(slides[3]!).getByRole('link', { name: 'Start reading' })).toBeInTheDocument();
+    await expect(hero).not.toHaveTextContent(/Start reading.*Start reading/);
+  },
+};
+
 export const HeroPicksPhoneDark: Story = { ...HeroPicks, play: undefined,
   globals: { viewport: { value: 'phone' }, theme: 'dark' } };
 
@@ -79,12 +104,43 @@ export const Announcement: Story = {
   },
 };
 
+const overlaps = (a: DOMRect, b: DOMRect) => a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom;
+
+/**
+ * The Zone's marks, the chart position and the "Why here?" stamp, sit beside
+ * each tile's title and never on its cover, whose own title they would hide.
+ */
+async function marksBesideTitles(region: HTMLElement) {
+  const tiles = [...region.querySelectorAll<HTMLElement>('article')];
+  await expect(tiles.length).toBeGreaterThan(0);
+  for (const tile of tiles) {
+    const cover = tile.querySelector('[data-slot="work-cover"]')!.getBoundingClientRect();
+    const title = tile.querySelector('h3')!.getBoundingClientRect();
+    const stamp = within(tile).queryByRole('link', { name: /^Why .* is here$/ });
+    const rank = within(tile).queryByText(/^No\. \d+$/)?.parentElement;
+    for (const mark of [stamp, rank]) {
+      if (!mark) continue;
+      const box = mark.getBoundingClientRect();
+      await expect(overlaps(box, cover)).toBe(false);
+      // Beside the title: on its line, not under the author or the hook.
+      await expect(box.top).toBeLessThan(title.bottom);
+    }
+  }
+}
+
 /** An editors' shelf with "Shuffle": the next seven picks, like KadoKado's 换一换. */
 export const ShelfWithShuffle: Story = {
   args: { type: 'shelf' },
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     const shelf = canvas.getByRole('region', { name: 'Can’t-miss picks (✧∇✧)' });
+    await marksBesideTitles(shelf);
+    // The stamp carries its words, "Why it’s here", shown on hover and focus (CSS, which a synthetic hover cannot
+    // reach) and kept out of its accessible name, which names the Work.
+    const stamp = within(shelf).getAllByRole('link', { name: /^Why .* is here$/ })[0]!;
+    const label = within(stamp).getByText('Why it’s here');
+    await expect(label).toHaveAttribute('aria-hidden', 'true');
+    await expect(getComputedStyle(label).opacity).toBe('0');
     await expect(within(shelf).getByRole('heading', { level: 3, name: '星河旅店' })).toBeVisible();
     await userEvent.click(within(shelf).getByRole('button', { name: 'Shuffle' }));
     await expect(within(shelf).getByRole('heading', { level: 3, name: '玄门小道士' })).toBeVisible();
@@ -115,6 +171,7 @@ export const Rankings: Story = {
     const canvas = within(canvasElement);
     await expect(canvas.getByRole('tab', { name: 'Today' })).toHaveAttribute('aria-selected', 'true');
     await expect(canvas.getByText('No. 1')).toBeInTheDocument();
+    await marksBesideTitles(canvas.getByRole('tabpanel'));
     await userEvent.click(canvas.getByRole('tab', { name: 'This month' }));
     await expect(canvas.getByRole('tab', { name: 'This month' })).toHaveAttribute('aria-selected', 'true');
   },

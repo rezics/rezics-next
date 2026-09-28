@@ -38,6 +38,19 @@ export function usedUiComponents(): string[] {
 }
 
 /**
+ * Browser dependencies pre-bundled when the dev server starts. A dependency
+ * Vite first meets on a later page (an Ark UI entry only the Library's dialogs
+ * import) re-bundles them mid-session, and a page still holding the first
+ * bundle's React then renders Ark's Presence with a second React ("Invalid
+ * hook call"). Accounts and Storybook pre-bundle the same way.
+ */
+function browserDependencies(): string[] {
+  const ark = usedUiComponents().flatMap(name => [...readFileSync(join(components, `${name}.tsx`), 'utf8')
+    .matchAll(/from '(@ark-ui\/react(?:\/[\w-]+)?)'/g)].map(match => match[1]!));
+  return [...new Set(ark)].sort().concat(['@tanstack/react-query', 'lucide-react', 'native-i18n', 'tailwind-variants']);
+}
+
+/**
  * Production CSS carries only the Rezics UI components the app uses. Tailwind
  * generates a rule for every class it finds in its sources, and scanning all of
  * packages/ui added a third to the render-blocking stylesheet for components no
@@ -55,6 +68,7 @@ function usedUiSources(): Plugin {
 }
 
 export default defineConfig({
+  optimizeDeps: { include: browserDependencies() },
   plugins: [usedUiSources(), vinext({}), cloudflare({ viteEnvironment: { name: 'rsc', childEnvironments: ['ssr'] },
     // Web, Accounts and every worktree's dev servers run at once; the default
     // inspector port 9229 made whichever started second crash. Opt in per run.

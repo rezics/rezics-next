@@ -41,21 +41,22 @@ const shows = (placed: PlacedModule) => placed.state.state === 'ready' || placed
 
 /**
  * Renders Work cards: the platform card, or the package's `workCard` slot
- * wrapped so the "Why here?" stamp always stays with the card.
+ * wrapped so the "Why here?" stamp always stays with the card. Each card is
+ * keyed by its Work, since modules set cards out as lists.
  */
 export function cardRenderer(zone: ZoneContext, pkg: ZonePackage | null, locale: UiLocale, messages: ZoneMessages,
   avatarQuery?: string): CardRenderer {
   const Slot = pkg?.slots.workCard;
   const platform = (work: ZoneWork, options: ZoneCardOptions, whyHere: boolean) => options.layout === 'row'
     || options.layout === 'rail'
-    ? <ZoneWorkRow work={work} rank={options.rank} compact={options.layout === 'rail'} locale={locale}
+    ? <ZoneWorkRow key={work.id} work={work} rank={options.rank} compact={options.layout === 'rail'} locale={locale}
       messages={messages} avatarQuery={avatarQuery} whyHere={whyHere} />
-    : <ZoneWorkCard work={work} rank={options.rank} slot={options.slot} locale={locale} messages={messages}
-      avatarQuery={avatarQuery} whyHere={whyHere} />;
+    : <ZoneWorkCard key={work.id} work={work} rank={options.rank} slot={options.slot} locale={locale}
+      messages={messages} avatarQuery={avatarQuery} whyHere={whyHere} />;
   return (work, options = {}) => {
     if (!Slot) return platform(work, options, true);
     const fallback = platform(work, options, false);
-    return <div className="relative">
+    return <div key={work.id} className="relative">
       <SlotBoundary slot="workCard" fallback={fallback}>
         <Slot zone={zone} work={work} layout={options.layout ?? 'cover'} rank={options.rank} fallback={fallback}
           Link={LocalizedLink} />

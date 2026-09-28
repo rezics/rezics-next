@@ -90,6 +90,18 @@ export const KeepOrRemoveReport: Story = {
     await expect(await canvas.findByText(/the text is the 1894 illustrated one/)).toBeVisible();
     await expect(canvas.getAllByText('2 reports')[0]).toBeVisible();
     await expect(canvas.getAllByText('No details given.')[0]).toBeVisible();
+    // Each action shows the key that does the same, readable on its filled button.
+    const actions = within((await canvas.findAllByRole('group', { name: 'Decision' }))
+      .find(group => group.checkVisibility())!);
+    for (const [name, key] of [['Keep', 'A'], ['Remove', 'R']] as const) {
+      const hint = actions.getByRole('button', { name: new RegExp(`^${name}`) }).querySelector('kbd')!;
+      await expect(hint).toHaveTextContent(key);
+      await expect(getComputedStyle(hint).color).toBe(getComputedStyle(hint.parentElement!).color);
+    }
+    // Works show their covers, never a monogram.
+    const rows = list(canvas);
+    await expect(rows.querySelectorAll('[data-slot="work-cover"]').length).toBeGreaterThan(0);
+    await expect(within(rows).queryByText('PP')).toBeNull();
     await userEvent.keyboard('a');
     await expect(canvas.getByRole('status', { name: 'Decisions you can still undo' })).toHaveTextContent('Kept “Pride and Prejudice”');
     await waitFor(() => expect(recorded.commits).toEqual([expect.objectContaining({ id: queue[0]!.id, action: 'keep',

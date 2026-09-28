@@ -134,7 +134,10 @@ export const FollowersOnlyShelves: Story = {
   },
 };
 
-/** The owner sees their own non-public shelves, marked as visible only to them, and edits instead of following. */
+/**
+ * The owner sees their own non-public shelves, marked as visible only to them, and edits instead of following.
+ * Their own Works carry no "Want to read".
+ */
 export const OwnProfile: Story = {
   args: { reader: { signedIn: true, actingSubject: storyId(1), seed: {} }, library: publicLibrary(true),
     readerActions: memoryReaderActions(),
@@ -144,6 +147,19 @@ export const OwnProfile: Story = {
     await expect(canvas.getByRole('link', { name: 'Edit profile' })).toHaveAttribute('href', '/en/settings');
     await expect(canvas.queryByRole('button', { name: /^Follow/ })).toBeNull();
     await expect(canvas.getByText('Only you can see your bookshelves.')).toBeVisible();
+    const works = within(canvas.getByRole('region', { name: 'Works by Lin Mei 林梅' }));
+    await expect(works.queryByRole('button', { name: 'Want to read' })).toBeNull();
+  },
+};
+
+/** On someone else's profile the shelf button is a quiet outline, so the Works lead, not five blue pills. */
+export const ShelfButtonsAreQuiet: Story = {
+  args: { reader: signedIn, readerActions: memoryReaderActions() },
+  async play({ canvasElement }) {
+    const works = within(within(canvasElement).getByRole('region', { name: 'Works by Lin Mei 林梅' }));
+    const buttons = works.getAllByRole('button', { name: 'Want to read' });
+    await expect(buttons).toHaveLength(5);
+    for (const button of buttons) await expect(button).toHaveAttribute('data-variant', 'outline');
   },
 };
 

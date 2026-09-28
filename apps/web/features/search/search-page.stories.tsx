@@ -218,7 +218,8 @@ export const TypeaheadSuggestsTitles: Story = {
 };
 
 export const TypeaheadWaitsForComposition: Story = {
-  args: { parsed: state(''), initial: null, suggest: async prefix => prefix === '西' ? [suggestion(6, '西游记')] : [] },
+  args: { parsed: state(''), initial: null, suggest: async prefix => prefix === '西' ? [suggestion(6, '西游记', 'title', '西游记',
+    { authors: ['吴承恩'] })] : [] },
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     const box = canvas.getByRole<HTMLInputElement>('combobox', { name: 'Search phrase' });
@@ -232,7 +233,8 @@ export const TypeaheadWaitsForComposition: Story = {
     box.value = '西';
     box.dispatchEvent(new CompositionEvent('compositionend', { bubbles: true, data: '西' }));
     const list = await canvas.findByRole('listbox', { name: 'Suggested works' });
-    await expect(within(list).getByRole('option', { name: '西游记' })).toBeVisible();
+    // A suggestion is read out with what it is and who wrote it.
+    await expect(within(list).getByRole('option', { name: '西游记 Book · by 吴承恩' })).toBeVisible();
   },
 };
 
